@@ -675,14 +675,14 @@ function SubmitReportPage() {
         <div className="w-16 h-16 rounded-full bg-teal-100 flex items-center justify-center">
           <Check size={32} className="text-teal-600" />
         </div>
-        <h3 className="text-[20px] font-bold text-teal-700">
+        <h3 className="text-[22px] font-bold text-teal-700">
           匯報已{isUpdateMode ? '更新' : '提交'}！
         </h3>
-        <p className="text-[14px] text-muted-foreground">
+        <p className="text-[16px] text-muted-foreground">
           {`${formatDateFull(selectedDate)} 的工作匯報已成功${isUpdateMode ? '更新' : '提交'}。`}
         </p>
         {currentStaffName && (
-          <p className="text-[12px] text-teal-600">
+          <p className="text-[14px] text-teal-600">
             提交者：{currentStaffName}
           </p>
         )}
@@ -691,7 +691,7 @@ function SubmitReportPage() {
           setEntries([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
           setUnderHoursReason('');
           setSubmitError(null);
-        }} className="px-4 py-2 rounded-md border border-teal-200 text-teal-700 text-[13px] font-medium hover:bg-teal-50 transition-colors">
+        }} className="px-4 py-2 rounded-md border border-teal-200 text-teal-700 text-[15px] font-medium hover:bg-teal-50 transition-colors">
           繼續提交新匯報
         </button>
       </div>
@@ -707,17 +707,17 @@ function SubmitReportPage() {
             {/* Office Location Toggle */}
             <div className="flex items-center gap-2">
               <MapPin size={14} className="text-teal-600" />
-              <span className="text-[12px] font-semibold text-teal-700">辦公室：</span>
+              <span className="text-[14px] font-semibold text-teal-700">辦公室：</span>
               <div className="flex items-center gap-0.5 p-0.5 bg-teal-100/60 rounded-md">
                 <button 
                   onClick={() => { setOffice('hk'); setTargetHours(8); }} 
-                  className={cn('px-3 py-1.5 rounded text-[12px] font-medium transition-all', office === 'hk' ? 'bg-white shadow-sm text-teal-800' : 'text-teal-600 hover:text-teal-800')}
+                  className={cn('px-3 py-1.5 rounded text-[14px] font-medium transition-all', office === 'hk' ? 'bg-white shadow-sm text-teal-800' : 'text-teal-600 hover:text-teal-800')}
                 >
                   🇭🇰 香港
                 </button>
                 <button 
                   onClick={() => { setOffice('sz'); setTargetHours(7.5); }} 
-                  className={cn('px-3 py-1.5 rounded text-[12px] font-medium transition-all', office === 'sz' ? 'bg-white shadow-sm text-teal-800' : 'text-teal-600 hover:text-teal-800')}
+                  className={cn('px-3 py-1.5 rounded text-[14px] font-medium transition-all', office === 'sz' ? 'bg-white shadow-sm text-teal-800' : 'text-teal-600 hover:text-teal-800')}
                 >
                   🇨🇳 深圳
                 </button>
@@ -727,17 +727,17 @@ function SubmitReportPage() {
             {/* Mode Label */}
             <div className="flex items-center gap-2">
               <FileText size={14} className="text-teal-600" />
-              <span className="text-[12px] font-semibold text-teal-700">📝 工作匯報</span>
+              <span className="text-[14px] font-semibold text-teal-700">📝 工作匯報</span>
             </div>
           </div>
           
-          <button onClick={handleAutoPull} disabled={isPulling} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-teal-200 bg-white text-teal-700 text-[12px] font-medium hover:bg-teal-50 transition-all disabled:opacity-50">
+          <button onClick={handleAutoPull} disabled={isPulling} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-teal-200 bg-white text-teal-700 text-[14px] font-medium hover:bg-teal-50 transition-all disabled:opacity-50">
             <RefreshCw size={12} className={isPulling ? 'animate-spin' : ''} />
             {isPulling ? '拉取中...' : '一鍵拉取工作記錄'}
           </button>
         </div>
         
-        <p className="text-[11px] text-teal-600/70 mt-2">
+        <p className="text-[13px] text-teal-600/70 mt-2">
           {office === 'hk' ? '🇭🇰 香港辦公室 · 依據香港公眾假期' : '🇨🇳 深圳辦公室 · 依據中國法定假日'} · 
           可補交過去14天未匯報的工作日（含週六加班）
         </p>
@@ -748,9 +748,9 @@ function SubmitReportPage() {
           <div className="bg-white rounded-lg border border-border/60 px-4 py-3">
             <div className="flex items-center gap-2 mb-3">
               <CalendarDays size={14} className="text-teal-600" />
-              <span className="text-[12px] font-bold text-foreground">選擇匯報日期</span>
-              <span className="text-[11px] text-muted-foreground">（過去14天匯報情況一覽）</span>
-              <div className="ml-auto flex items-center gap-3 text-[11px] text-muted-foreground">
+              <span className="text-[14px] font-bold text-foreground">選擇匯報日期</span>
+              <span className="text-[13px] text-muted-foreground">（過去14天匯報情況一覽）</span>
+              <div className="ml-auto flex items-center gap-3 text-[13px] text-muted-foreground">
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-500 inline-block" /> 已報 ≥ 8h</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> 已報 &lt; 8h</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block" /> 未匯報</span>
@@ -763,7 +763,7 @@ function SubmitReportPage() {
               {isLoadingDbReports && (
                 <div className="col-span-7 flex items-center justify-center py-4">
                   <Loader2 size={16} className="animate-spin text-teal-600 mr-2" />
-                  <span className="text-[12px] text-muted-foreground">載入匯報狀態...</span>
+                  <span className="text-[14px] text-muted-foreground">載入匯報狀態...</span>
                 </div>
               )}
               {availableDates.map((d) => {
@@ -775,7 +775,7 @@ function SubmitReportPage() {
                     key={d.date}
                     onClick={() => setSelectedDate(d.date)}
                     className={cn(
-                      'px-1.5 py-2 rounded-lg border text-[11px] font-medium transition-all relative flex flex-col items-center gap-1',
+                      'px-1.5 py-2 rounded-lg border text-[13px] font-medium transition-all relative flex flex-col items-center gap-1',
                       selectedDate === d.date 
                         ? 'bg-teal-50 border-teal-400 text-teal-800 shadow-sm ring-2 ring-teal-200' 
                         : d.reported
@@ -793,34 +793,34 @@ function SubmitReportPage() {
                                   : 'bg-white border-border hover:border-teal-300 hover:bg-teal-50/30'
                     )}
                   >
-                    <span className={cn('text-[11px]', d.isToday && 'font-bold')}>{d.label}</span>
+                    <span className={cn('text-[13px]', d.isToday && 'font-bold')}>{d.label}</span>
                     
                     {/* Status row */}
                     <div className="flex items-center gap-0.5 flex-wrap justify-center min-h-[18px]">
-                      {d.isToday && <span className="text-[9px] px-1 py-0 rounded bg-teal-100 text-teal-700 font-semibold">今天</span>}
-                      {d.isHoliday && <span className="text-[9px] px-1 py-0 rounded bg-red-100 text-red-600">假日</span>}
-                      {d.isSat && !d.isHoliday && <span className="text-[9px] px-1 py-0 rounded bg-amber-100 text-amber-600">六</span>}
-                      {d.isSun && !d.isHoliday && <span className="text-[9px] px-1 py-0 rounded bg-gray-100 text-gray-500">日</span>}
+                      {d.isToday && <span className="text-[12px] px-1 py-0 rounded bg-teal-100 text-teal-700 font-semibold">今天</span>}
+                      {d.isHoliday && <span className="text-[12px] px-1 py-0 rounded bg-red-100 text-red-600">假日</span>}
+                      {d.isSat && !d.isHoliday && <span className="text-[12px] px-1 py-0 rounded bg-amber-100 text-amber-600">六</span>}
+                      {d.isSun && !d.isHoliday && <span className="text-[12px] px-1 py-0 rounded bg-gray-100 text-gray-500">日</span>}
                     </div>
                     
                     {/* Hours / Status indicator */}
                     {d.reported ? (
                       <div className="flex flex-col items-center gap-0.5">
-                        <span className={cn('text-[13px] font-bold', d.reportedHours >= 8 ? 'text-teal-600' : 'text-amber-600')}>
+                        <span className={cn('text-[15px] font-bold', d.reportedHours >= 8 ? 'text-teal-600' : 'text-amber-600')}>
                           {d.reportedHours}h
                         </span>
-                        <span className="text-[8px] px-1.5 py-0 rounded-full font-medium bg-teal-100 text-teal-700">
+                        <span className="text-[12px] px-1.5 py-0 rounded-full font-medium bg-teal-100 text-teal-700">
                           ✓ 已匯報
                         </span>
                       </div>
                     ) : (d.isHoliday || d.isSun) ? (
-                      <span className="text-[10px] text-gray-400">—</span>
+                      <span className="text-[12px] text-gray-400">—</span>
                     ) : d.isSat ? (
-                      <span className="text-[10px] text-amber-500/70">可匯報</span>
+                      <span className="text-[12px] text-amber-500/70">可匯報</span>
                     ) : isLoadingDbReports ? (
-                      <span className="text-[10px] text-muted-foreground">...</span>
+                      <span className="text-[12px] text-muted-foreground">...</span>
                     ) : (
-                      <span className="text-[10px] text-rose-500 font-medium">未匯報</span>
+                      <span className="text-[12px] text-rose-500 font-medium">未匯報</span>
                     )}
                   </button>
                 );
@@ -834,7 +834,7 @@ function SubmitReportPage() {
               const missingDays = workdays.filter(d => !d.reported);
               const totalReportedHours = reportedDays.reduce((s, d) => s + d.reportedHours, 0);
               return (
-                <div className="flex items-center gap-4 mt-2 pt-2 border-t border-border/30 text-[11px]">
+                <div className="flex items-center gap-4 mt-2 pt-2 border-t border-border/30 text-[13px]">
                   <span className="text-muted-foreground">
                     14天匯報率：<strong className="text-teal-700">{reportedDays.length}/{workdays.length}</strong> 工作日
                   </span>
@@ -855,7 +855,7 @@ function SubmitReportPage() {
           
             {/* Status info for selected date */}
             {(selectedDateIsHoliday || selectedDateIsSat || selectedDateIsSun) && (
-              <div className={cn('mt-2.5 px-3 py-2 rounded-md text-[12px] font-medium flex items-center gap-2',
+              <div className={cn('mt-2.5 px-3 py-2 rounded-md text-[14px] font-medium flex items-center gap-2',
                 selectedDateIsHoliday ? 'bg-red-50 text-red-700 border border-red-200' :
                 selectedDateIsSun ? 'bg-gray-50 text-gray-600 border border-gray-200' :
                 'bg-amber-50 text-amber-700 border border-amber-200'
@@ -873,8 +873,8 @@ function SubmitReportPage() {
             <div className="bg-white rounded-lg border border-border/60 px-4 py-3">
               <div className="flex items-center gap-2 mb-2.5">
                 <Sparkles size={14} className="text-amber-500" />
-                <span className="text-[12px] font-bold text-foreground">常用匯報項目</span>
-                <span className="text-[11px] text-muted-foreground">（根據你的歷史匯報自動推薦，點擊快速填入）</span>
+                <span className="text-[14px] font-bold text-foreground">常用匯報項目</span>
+                <span className="text-[13px] text-muted-foreground">（根據你的歷史匯報自動推薦，點擊快速填入）</span>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {recentFrequentItems.map((item, idx) => {
@@ -912,12 +912,12 @@ function SubmitReportPage() {
                         'bg-white border-border/60 hover:border-teal-300 hover:bg-teal-50/20'
                       )}
                     >
-                      <span className={cn('text-[10px] px-1.5 py-0.5 rounded shrink-0 mt-0.5', config.bg, config.color)}>
+                      <span className={cn('text-[12px] px-1.5 py-0.5 rounded shrink-0 mt-0.5', config.bg, config.color)}>
                         {config.icon}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[12px] font-medium text-foreground truncate">{item.relatedName}</div>
-                        <div className="text-[10px] text-muted-foreground truncate">{config.label} · {item.count}次 · {item.totalHours}h</div>
+                        <div className="text-[14px] font-medium text-foreground truncate">{item.relatedName}</div>
+                        <div className="text-[12px] text-muted-foreground truncate">{config.label} · {item.count}次 · {item.totalHours}h</div>
                       </div>
                       <Plus size={12} className="text-teal-500 shrink-0 mt-1" />
                     </button>
@@ -932,13 +932,13 @@ function SubmitReportPage() {
           {isLoadingExisting ? (
             <div className="flex flex-col items-center justify-center py-12 space-y-3">
               <Loader2 size={24} className="animate-spin text-teal-600" />
-              <p className="text-[13px] text-muted-foreground">載入匯報資料中...</p>
+              <p className="text-[15px] text-muted-foreground">載入匯報資料中...</p>
             </div>
           ) : (
           <>
           {/* Update mode indicator */}
           {isUpdateMode && (
-            <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-[12px] font-medium">
+            <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-[14px] font-medium">
               <RefreshCw size={13} />
               此日期已有匯報記錄，修改後點擊「更新匯報」即可覆蓋保存。
             </div>
@@ -946,16 +946,16 @@ function SubmitReportPage() {
           {/* Hours Status Bar */}
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-border/60">
-              <span className="text-[12px] font-medium text-muted-foreground">{formatDateShort(selectedDate)}</span>
-              {(selectedDateIsHoliday || selectedDateIsSun) && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">OT 日</span>}
-              {selectedDateIsSat && !selectedDateIsHoliday && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 font-medium">星期六</span>}
+              <span className="text-[14px] font-medium text-muted-foreground">{formatDateShort(selectedDate)}</span>
+              {(selectedDateIsHoliday || selectedDateIsSun) && <span className="text-[12px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">OT 日</span>}
+              {selectedDateIsSat && !selectedDateIsHoliday && <span className="text-[12px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 font-medium">星期六</span>}
             </div>
             
             {/* Right-aligned group: Target Hours + Total Filled */}
             <div className="ml-auto flex items-center gap-4">
               {/* Editable Target Hours */}
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-rose-50 border-2 border-rose-300">
-                <span className="text-[11px] font-semibold text-rose-700">目標工時：</span>
+                <span className="text-[13px] font-semibold text-rose-700">目標工時：</span>
                 <input 
                   type="number" 
                   step="0.5" 
@@ -969,25 +969,25 @@ function SubmitReportPage() {
                       setTargetHours(Math.round(val * 2) / 2);
                     }
                   }}
-                  className="w-14 px-2 py-1 border border-rose-300 rounded-md text-[14px] font-bold text-rose-700 text-center bg-white focus:ring-2 focus:ring-rose-200 focus:border-rose-400"
+                  className="w-14 px-2 py-1 border border-rose-300 rounded-md text-[16px] font-bold text-rose-700 text-center bg-white focus:ring-2 focus:ring-rose-200 focus:border-rose-400"
                 />
-                <span className="text-[14px] font-bold text-rose-700">h</span>
+                <span className="text-[16px] font-bold text-rose-700">h</span>
               </div>
 
               {/* Total Filled Progress */}
               <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-border/60">
               <Clock size={14} className="text-muted-foreground" />
-              <span className="text-[12px] text-muted-foreground">已填：</span>
-              <span className={cn('text-[18px] font-bold', 
+              <span className="text-[14px] text-muted-foreground">已填：</span>
+              <span className={cn('text-[20px] font-bold', 
                 hoursMatch ? 'text-teal-600' :
                 (selectedDateIsHoliday || selectedDateIsSun) ? 'text-amber-600' :
                 isOT ? 'text-amber-600' : 
                 totalHours > 0 ? 'text-rose-500' : 'text-gray-400'
               )}>
                 {totalHours}h
-                {hoursMatch && <span className="text-[11px] font-normal ml-1 text-teal-600">✓</span>}
+                {hoursMatch && <span className="text-[13px] font-normal ml-1 text-teal-600">✓</span>}
                 {(isOT || ((selectedDateIsHoliday || selectedDateIsSun) && totalHours > 0)) && 
-                  <span className="text-[11px] font-normal ml-1">
+                  <span className="text-[13px] font-normal ml-1">
                     OT {selectedDateIsHoliday || selectedDateIsSun ? `+${totalHours}h` : `+${otHours}h`}
                   </span>
                 }
@@ -1001,11 +1001,11 @@ function SubmitReportPage() {
                 )} style={{ width: `${Math.min((totalHours / Math.max(targetHours, 1)) * 100, 100)}%` }} />
               </div>
               {!hoursMatch && totalHours > 0 && (
-                <span className="text-[11px] text-rose-500 font-medium">
+                <span className="text-[13px] text-rose-500 font-medium">
                   {totalHours < targetHours ? `差 ${(targetHours - totalHours).toFixed(1)}h` : `超出 ${(totalHours - targetHours).toFixed(1)}h`}
                 </span>
               )}
-              {aiUsedInEntries && (<span className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-full bg-purple-50 text-purple-700 font-medium"><Bot size={11} /> AI 輔助</span>)}
+              {aiUsedInEntries && (<span className="flex items-center gap-1 text-[13px] px-2 py-1 rounded-full bg-purple-50 text-purple-700 font-medium"><Bot size={11} /> AI 輔助</span>)}
               </div>
             </div>
           </div>
@@ -1013,11 +1013,11 @@ function SubmitReportPage() {
           {/* Quick Templates */}
           <div className="bg-white rounded-lg border border-border/60 px-4 py-3">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="flex items-center gap-1 text-[12px] font-medium text-muted-foreground shrink-0"><Zap size={11} className="text-amber-500" />快速填入：</span>
+              <span className="flex items-center gap-1 text-[14px] font-medium text-muted-foreground shrink-0"><Zap size={11} className="text-amber-500" />快速填入：</span>
               {quickTemplates.map((tpl, idx) => {
                 const config = categoryConfig[tpl.category];
                 return (
-                  <button key={idx} onClick={() => applyQuickTemplate(tpl)} className={cn('flex items-center gap-1 px-2.5 py-1.5 rounded-md border text-[12px] hover:shadow-sm transition-all', config.bg, config.color, 'border-current/20 hover:scale-[1.02]')}>
+                  <button key={idx} onClick={() => applyQuickTemplate(tpl)} className={cn('flex items-center gap-1 px-2.5 py-1.5 rounded-md border text-[14px] hover:shadow-sm transition-all', config.bg, config.color, 'border-current/20 hover:scale-[1.02]')}>
                     <span>{config.icon}</span>
                     <span className="font-medium">{tpl.title}</span>
                     <span className="opacity-60">+</span>
@@ -1032,8 +1032,8 @@ function SubmitReportPage() {
             {entries.map((entry, idx) => (
               <div key={idx} className="p-4 rounded-lg border border-border/60 bg-white hover:border-teal-200 transition-colors shadow-sm">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-[12px] font-bold text-teal-600 uppercase tracking-wide flex items-center gap-1.5">
-                    <span className="w-6 h-6 rounded-full bg-teal-100 flex items-center justify-center text-[12px]">{idx + 1}</span>
+                  <span className="text-[14px] font-bold text-teal-600 uppercase tracking-wide flex items-center gap-1.5">
+                    <span className="w-6 h-6 rounded-full bg-teal-100 flex items-center justify-center text-[14px]">{idx + 1}</span>
                     工作項目
                   </span>
                   <div className="flex items-center gap-2">
@@ -1044,14 +1044,14 @@ function SubmitReportPage() {
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2.5 mb-3">
                   <div className="lg:col-span-2">
-                    <label className="text-[11px] font-semibold text-muted-foreground block mb-1">工作類別 *</label>
-                    <select value={entry.category} onChange={(e) => updateEntry(idx, 'category', e.target.value)} className="w-full px-2.5 py-2 border border-border rounded-md text-[13px] bg-white focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all">
+                    <label className="text-[13px] font-semibold text-muted-foreground block mb-1">工作類別 *</label>
+                    <select value={entry.category} onChange={(e) => updateEntry(idx, 'category', e.target.value)} className="w-full px-2.5 py-2 border border-border rounded-md text-[15px] bg-white focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all">
                       <option value="">選擇類別...</option>
                       {Object.entries(categoryConfig).map(([k, v]) => (<option key={k} value={k}>{v.icon} {v.label}</option>))}
                     </select>
                   </div>
                   <div className="lg:col-span-2">
-                    <label className="text-[11px] font-semibold text-muted-foreground block mb-1">
+                    <label className="text-[13px] font-semibold text-muted-foreground block mb-1">
                       {entry.category && defaultCategoryRelationMap[entry.category as WorkCategory] === 'internal_project'
                         ? '關聯內部項目'
                         : entry.category && defaultCategoryRelationMap[entry.category as WorkCategory] === 'none'
@@ -1090,87 +1090,87 @@ function SubmitReportPage() {
                     )}
                   </div>
                   <div className="lg:col-span-1">
-                    <label className="text-[11px] font-semibold text-muted-foreground block mb-1">工時(h) *</label>
-                    <input type="number" step="0.5" min="0.5" max="12" value={entry.hours || ''} onChange={(e) => { const val = parseFloat(e.target.value); updateEntry(idx, 'hours', isNaN(val) ? 0 : Math.round(val * 2) / 2); }} className="w-full px-2.5 py-2 border border-border rounded-md text-[13px]" placeholder="0" />
+                    <label className="text-[13px] font-semibold text-muted-foreground block mb-1">工時(h) *</label>
+                    <input type="number" step="0.5" min="0.5" max="12" value={entry.hours || ''} onChange={(e) => { const val = parseFloat(e.target.value); updateEntry(idx, 'hours', isNaN(val) ? 0 : Math.round(val * 2) / 2); }} className="w-full px-2.5 py-2 border border-border rounded-md text-[15px]" placeholder="0" />
                   </div>
                   <div className="lg:col-span-3">
-                    <label className="text-[11px] font-semibold text-muted-foreground block mb-1">工作內容 *</label>
-                    <input value={entry.title} onChange={(e) => updateEntry(idx, 'title', e.target.value)} className="w-full px-2.5 py-2 border border-border rounded-md text-[13px]" placeholder="簡述工作內容..." />
+                    <label className="text-[13px] font-semibold text-muted-foreground block mb-1">工作內容 *</label>
+                    <input value={entry.title} onChange={(e) => updateEntry(idx, 'title', e.target.value)} className="w-full px-2.5 py-2 border border-border rounded-md text-[15px]" placeholder="簡述工作內容..." />
                   </div>
                 </div>
                 {/* AI Tools - Permanent Three-Category Layout */}
                 <div className="mb-3 p-3 rounded-md bg-purple-50/50 border border-purple-100">
                   <div className="flex items-center gap-1.5 mb-2.5">
                     <Bot size={13} className="text-purple-600" />
-                    <span className="text-[12px] font-bold text-purple-700">AI 工具</span>
+                    <span className="text-[14px] font-bold text-purple-700">AI 工具</span>
                   </div>
                   {/* Category 1: 文案工具 */}
                   <div className="mb-2">
-                    <span className="text-[11px] font-semibold text-purple-600 block mb-1.5">1. 文案工具：</span>
+                    <span className="text-[13px] font-semibold text-purple-600 block mb-1.5">1. 文案工具：</span>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                       {['Perplexity', 'Grok', 'Gemini', 'Deepseek', '豆包', 'Claude', 'GPT'].map((tool) => (
                         <label key={tool} className="flex items-center gap-1 cursor-pointer">
                           <input type="checkbox" checked={entry.aiToolsV2.copywriting.includes(tool)} onChange={(e) => { const tools = e.target.checked ? [...entry.aiToolsV2.copywriting, tool] : entry.aiToolsV2.copywriting.filter(t => t !== tool); updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, copywriting: tools }); }} className="rounded w-3 h-3 accent-purple-500" />
-                          <span className="text-[11px] text-purple-700">{tool}</span>
+                          <span className="text-[13px] text-purple-700">{tool}</span>
                         </label>
                       ))}
                       <label className="flex items-center gap-1 cursor-pointer">
                         <input type="checkbox" checked={entry.aiToolsV2.copywriting.includes('其他')} onChange={(e) => { const tools = e.target.checked ? [...entry.aiToolsV2.copywriting, '其他'] : entry.aiToolsV2.copywriting.filter(t => t !== '其他'); updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, copywriting: tools, copywritingOther: e.target.checked ? entry.aiToolsV2.copywritingOther : '' }); }} className="rounded w-3 h-3 accent-purple-500" />
-                        <span className="text-[11px] text-purple-700">其他:</span>
+                        <span className="text-[13px] text-purple-700">其他:</span>
                       </label>
                       {entry.aiToolsV2.copywriting.includes('其他') && (
-                        <input value={entry.aiToolsV2.copywritingOther} onChange={(e) => { if (e.target.value.length <= 30) updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, copywritingOther: e.target.value }); }} className="px-2 py-0.5 border border-purple-200 rounded text-[11px] w-28 bg-white" placeholder="自定義工具..." maxLength={30} />
+                        <input value={entry.aiToolsV2.copywritingOther} onChange={(e) => { if (e.target.value.length <= 30) updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, copywritingOther: e.target.value }); }} className="px-2 py-0.5 border border-purple-200 rounded text-[13px] w-28 bg-white" placeholder="自定義工具..." maxLength={30} />
                       )}
                     </div>
                   </div>
                   {/* Category 2: 圖片工具 */}
                   <div className="mb-2">
-                    <span className="text-[11px] font-semibold text-purple-600 block mb-1.5">2. 圖片工具：</span>
+                    <span className="text-[13px] font-semibold text-purple-600 block mb-1.5">2. 圖片工具：</span>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                       {['Magnific(Freepik)', 'Genspark (Image2)', 'Gemini (Nano banana)', 'Skywork'].map((tool) => (
                         <label key={tool} className="flex items-center gap-1 cursor-pointer">
                           <input type="checkbox" checked={entry.aiToolsV2.image.includes(tool)} onChange={(e) => { const tools = e.target.checked ? [...entry.aiToolsV2.image, tool] : entry.aiToolsV2.image.filter(t => t !== tool); updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, image: tools }); }} className="rounded w-3 h-3 accent-purple-500" />
-                          <span className="text-[11px] text-purple-700">{tool}</span>
+                          <span className="text-[13px] text-purple-700">{tool}</span>
                         </label>
                       ))}
                       <label className="flex items-center gap-1 cursor-pointer">
                         <input type="checkbox" checked={entry.aiToolsV2.image.includes('其他')} onChange={(e) => { const tools = e.target.checked ? [...entry.aiToolsV2.image, '其他'] : entry.aiToolsV2.image.filter(t => t !== '其他'); updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, image: tools, imageOther: e.target.checked ? entry.aiToolsV2.imageOther : '' }); }} className="rounded w-3 h-3 accent-purple-500" />
-                        <span className="text-[11px] text-purple-700">其他:</span>
+                        <span className="text-[13px] text-purple-700">其他:</span>
                       </label>
                       {entry.aiToolsV2.image.includes('其他') && (
-                        <input value={entry.aiToolsV2.imageOther} onChange={(e) => { if (e.target.value.length <= 30) updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, imageOther: e.target.value }); }} className="px-2 py-0.5 border border-purple-200 rounded text-[11px] w-28 bg-white" placeholder="自定義工具..." maxLength={30} />
+                        <input value={entry.aiToolsV2.imageOther} onChange={(e) => { if (e.target.value.length <= 30) updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, imageOther: e.target.value }); }} className="px-2 py-0.5 border border-purple-200 rounded text-[13px] w-28 bg-white" placeholder="自定義工具..." maxLength={30} />
                       )}
                     </div>
                   </div>
                   {/* Category 3: 影片工具 */}
                   <div>
-                    <span className="text-[11px] font-semibold text-purple-600 block mb-1.5">3. 影片工具：</span>
+                    <span className="text-[13px] font-semibold text-purple-600 block mb-1.5">3. 影片工具：</span>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                       {['Capcut', 'Seedance', 'Kling', 'Magnific AI'].map((tool) => (
                         <label key={tool} className="flex items-center gap-1 cursor-pointer">
                           <input type="checkbox" checked={entry.aiToolsV2.video.includes(tool)} onChange={(e) => { const tools = e.target.checked ? [...entry.aiToolsV2.video, tool] : entry.aiToolsV2.video.filter(t => t !== tool); updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, video: tools }); }} className="rounded w-3 h-3 accent-purple-500" />
-                          <span className="text-[11px] text-purple-700">{tool}</span>
+                          <span className="text-[13px] text-purple-700">{tool}</span>
                         </label>
                       ))}
                       <label className="flex items-center gap-1 cursor-pointer">
                         <input type="checkbox" checked={entry.aiToolsV2.video.includes('其他')} onChange={(e) => { const tools = e.target.checked ? [...entry.aiToolsV2.video, '其他'] : entry.aiToolsV2.video.filter(t => t !== '其他'); updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, video: tools, videoOther: e.target.checked ? entry.aiToolsV2.videoOther : '' }); }} className="rounded w-3 h-3 accent-purple-500" />
-                        <span className="text-[11px] text-purple-700">其他:</span>
+                        <span className="text-[13px] text-purple-700">其他:</span>
                       </label>
                       {entry.aiToolsV2.video.includes('其他') && (
-                        <input value={entry.aiToolsV2.videoOther} onChange={(e) => { if (e.target.value.length <= 30) updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, videoOther: e.target.value }); }} className="px-2 py-0.5 border border-purple-200 rounded text-[11px] w-28 bg-white" placeholder="自定義工具..." maxLength={30} />
+                        <input value={entry.aiToolsV2.videoOther} onChange={(e) => { if (e.target.value.length <= 30) updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, videoOther: e.target.value }); }} className="px-2 py-0.5 border border-purple-200 rounded text-[13px] w-28 bg-white" placeholder="自定義工具..." maxLength={30} />
                       )}
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 pt-3 border-t border-border/30">
-                  <span className="text-[12px] font-bold text-teal-700 shrink-0">📌 成果：</span>
-                  <select value={entry.outcomeType} onChange={(e) => updateEntry(idx, 'outcomeType', e.target.value)} className="px-2.5 py-1.5 border border-border rounded-md text-[13px] bg-white w-32">
+                  <span className="text-[14px] font-bold text-teal-700 shrink-0">📌 成果：</span>
+                  <select value={entry.outcomeType} onChange={(e) => updateEntry(idx, 'outcomeType', e.target.value)} className="px-2.5 py-1.5 border border-border rounded-md text-[15px] bg-white w-32">
                     <option value="">類型...</option>
                     {Object.entries(outcomeTypeConfigV2).map(([k, v]) => (<option key={k} value={k}>{v.icon} {v.label}</option>))}
                   </select>
-                  {entry.outcomeType === 'url' && (<input value={entry.outcomeUrl} onChange={(e) => updateEntry(idx, 'outcomeUrl', e.target.value)} className="flex-1 px-2.5 py-1.5 border border-border rounded-md text-[13px]" placeholder="輸入成果URL連結..." />)}
-                  {entry.outcomeType === 'image' && (<input value={entry.outcomeImages.join(', ')} onChange={(e) => updateEntry(idx, 'outcomeImages', e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean))} className="flex-1 px-2.5 py-1.5 border border-border rounded-md text-[13px]" placeholder="輸入圖片URL（多張以逗號分隔）..." />)}
-                  {entry.outcomeType === 'growth_experience' && (<input value={entry.growthExperience} onChange={(e) => updateEntry(idx, 'growthExperience', e.target.value)} className="flex-1 px-2.5 py-1.5 border border-border rounded-md text-[13px]" placeholder="描述成長經驗與技能提升..." />)}
+                  {entry.outcomeType === 'url' && (<input value={entry.outcomeUrl} onChange={(e) => updateEntry(idx, 'outcomeUrl', e.target.value)} className="flex-1 px-2.5 py-1.5 border border-border rounded-md text-[15px]" placeholder="輸入成果URL連結..." />)}
+                  {entry.outcomeType === 'image' && (<input value={entry.outcomeImages.join(', ')} onChange={(e) => updateEntry(idx, 'outcomeImages', e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean))} className="flex-1 px-2.5 py-1.5 border border-border rounded-md text-[15px]" placeholder="輸入圖片URL（多張以逗號分隔）..." />)}
+                  {entry.outcomeType === 'growth_experience' && (<input value={entry.growthExperience} onChange={(e) => updateEntry(idx, 'growthExperience', e.target.value)} className="flex-1 px-2.5 py-1.5 border border-border rounded-md text-[15px]" placeholder="描述成長經驗與技能提升..." />)}
                 </div>
               </div>
             ))}
@@ -1181,44 +1181,44 @@ function SubmitReportPage() {
             <div className="p-4 rounded-lg bg-rose-50 border border-rose-200">
               <div className="flex items-center gap-2 mb-2">
                 <AlertTriangle size={14} className="text-rose-600" />
-                <span className="text-[13px] font-bold text-rose-700">⚠️ 工時未達標（需 = {targetHours}h，目前 {totalHours}h）</span>
+                <span className="text-[15px] font-bold text-rose-700">⚠️ 工時未達標（需 = {targetHours}h，目前 {totalHours}h）</span>
               </div>
-              <input value={underHoursReason} onChange={(e) => setUnderHoursReason(e.target.value)} className="w-full px-3 py-2 border border-rose-200 rounded-md text-[13px] bg-white" placeholder="請填寫未達標原因（必填方可提交）..." />
+              <input value={underHoursReason} onChange={(e) => setUnderHoursReason(e.target.value)} className="w-full px-3 py-2 border border-rose-200 rounded-md text-[15px] bg-white" placeholder="請填寫未達標原因（必填方可提交）..." />
             </div>
           )}
 
       {/* Action Bar */}
       <div className="flex flex-col gap-2 pt-4 border-t border-border/40 bg-white rounded-lg px-5 py-4 border border-border/60 shadow-sm sticky bottom-0">
         {submitError && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-rose-50 border border-rose-200 text-rose-700 text-[12px] font-medium">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-rose-50 border border-rose-200 text-rose-700 text-[14px] font-medium">
             <AlertTriangle size={12} />
             {submitError}
           </div>
         )}
         {currentStaffId && (
-          <div className="text-[11px] text-muted-foreground">
+          <div className="text-[13px] text-muted-foreground">
             提交者：<span className="font-medium text-teal-700">{currentStaffName || currentStaffId}</span>
           </div>
         )}
         <div className="flex items-center justify-between">
-        <button onClick={addEntry} className="text-[13px] text-teal-600 font-medium hover:text-teal-700 flex items-center gap-1 px-3 py-2 rounded-md hover:bg-teal-50 transition-colors border border-teal-200">
+        <button onClick={addEntry} className="text-[15px] text-teal-600 font-medium hover:text-teal-700 flex items-center gap-1 px-3 py-2 rounded-md hover:bg-teal-50 transition-colors border border-teal-200">
           <Plus size={13} /> 新增工作項目
         </button>
         <div className="flex items-center gap-3">
           {!canSubmit && totalHours > 0 && !hoursMatch && (
-            <span className="text-[12px] text-rose-500 font-medium bg-rose-50 px-3 py-1.5 rounded-md border border-rose-200">
+            <span className="text-[14px] text-rose-500 font-medium bg-rose-50 px-3 py-1.5 rounded-md border border-rose-200">
               ⚠️ 所有工作項目的工時總和必須等於目標工時（{targetHours}h），目前為 {totalHours}h
             </span>
           )}
           {!canSubmit && totalHours === 0 && (
-            <span className="text-[12px] text-gray-500 font-medium">
+            <span className="text-[14px] text-gray-500 font-medium">
               請填寫至少一個工作項目
             </span>
           )}
           <button
             onClick={handleSubmit}
             disabled={!canSubmit || isSubmitting}
-            className={cn('px-6 py-2.5 rounded-md text-[14px] font-medium text-white active:scale-[0.97] transition-all shadow-sm flex items-center gap-2', canSubmit && !isSubmitting ? 'bg-teal-600 hover:bg-teal-700' : 'bg-gray-300 cursor-not-allowed')}
+            className={cn('px-6 py-2.5 rounded-md text-[16px] font-medium text-white active:scale-[0.97] transition-all shadow-sm flex items-center gap-2', canSubmit && !isSubmitting ? 'bg-teal-600 hover:bg-teal-700' : 'bg-gray-300 cursor-not-allowed')}
           >
             {isSubmitting && <Loader2 size={14} className="animate-spin" />}
             {isSubmitting ? '提交中...' : isUpdateMode ? '更新匯報' : '提交匯報'}

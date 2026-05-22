@@ -98,7 +98,15 @@ export function TeamDashboard() {
   const [entries, setEntries] = useState<DayReportEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [expandedReport, setExpandedReport] = useState<string | null>(null);
+  const [expandedReports, setExpandedReports] = useState<Set<string>>(new Set());
+  const toggleExpandedReport = (id: string) => {
+    setExpandedReports(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
   const [viewTab, setViewTab] = useState<'missing' | 'all'>('all');
 
   const [currentDepartment, setCurrentDepartment] = useState<string | null>(null);
@@ -545,8 +553,8 @@ export function TeamDashboard() {
           staff={staff}
           getStaffName={getStaffName}
           getStaffAvatar={getStaffAvatar}
-          expandedReport={expandedReport}
-          setExpandedReport={setExpandedReport}
+          expandedReports={expandedReports}
+          toggleExpandedReport={toggleExpandedReport}
           statusColors={statusColors}
           statusLabels={statusLabels}
         />
@@ -630,8 +638,8 @@ interface ReportsPanelProps {
   staff?: StaffMember[];
   getStaffName: (id: string) => string;
   getStaffAvatar: (id: string) => string;
-  expandedReport: string | null;
-  setExpandedReport: (id: string | null) => void;
+  expandedReports: Set<string>;
+  toggleExpandedReport: (id: string) => void;
   statusColors: Record<string, string>;
   statusLabels: Record<string, string>;
 }
@@ -757,7 +765,7 @@ function AllReportsPanel(props: ReportsPanelProps) {
   );
 }
 
-function ReportsList({ reports, entries, getStaffName, getStaffAvatar, expandedReport, setExpandedReport, statusColors, statusLabels, title }: ReportsPanelProps & { title: string }) {
+function ReportsList({ reports, entries, getStaffName, getStaffAvatar, expandedReports, toggleExpandedReport, statusColors, statusLabels, title }: ReportsPanelProps & { title: string }) {
   return (
     <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between">
@@ -770,14 +778,14 @@ function ReportsList({ reports, entries, getStaffName, getStaffAvatar, expandedR
       <div className="divide-y divide-border/30">
         {reports.map(report => {
           const reportEntries = entries.filter(e => e.day_report_id === report.id);
-          const isExpanded = expandedReport === report.id;
+          const isExpanded = expandedReports.has(report.id);
 
           return (
             <div key={report.id} className="px-5 py-3.5 hover:bg-muted/10 transition-colors">
               {/* Report Header */}
               <div
                 className="flex items-center justify-between cursor-pointer"
-                onClick={() => setExpandedReport(isExpanded ? null : report.id)}
+                onClick={() => toggleExpandedReport(report.id)}
               >
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full bg-gradient-to-br from-teal-100 to-teal-200 flex items-center justify-center text-[13px] font-bold text-teal-700 shrink-0">
