@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "install": "npm install",
+    "start": "npm run dev -- --force"
+  },
   "typography": [
     {
       "name": "Header 1",

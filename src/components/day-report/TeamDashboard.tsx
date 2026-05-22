@@ -99,7 +99,7 @@ export function TeamDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedReport, setExpandedReport] = useState<string | null>(null);
-  const [viewTab, setViewTab] = useState<'missing' | 'all' | 'team-hours'>('missing');
+  const [viewTab, setViewTab] = useState<'missing' | 'all'>('all');
 
   const [currentDepartment, setCurrentDepartment] = useState<string | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null); // null = not yet initialized
@@ -506,9 +506,8 @@ export function TeamDashboard() {
         {/* Status filter tabs */}
         <div className="flex items-center gap-1 p-0.5 bg-muted rounded-md w-fit">
           {[
-            { id: 'missing' as const, label: '缺交名單', badge: missingStaffCount },
             { id: 'all' as const, label: '全部匯報', badge: totalReportsCount },
-            { id: 'team-hours' as const, label: '團隊工時', badge: null },
+            { id: 'missing' as const, label: '缺交名單', badge: missingStaffCount },
           ].map(tab => (
             <button
               key={tab.id}
@@ -553,9 +552,6 @@ export function TeamDashboard() {
         />
       )}
 
-      {viewTab === 'team-hours' && (
-        <TeamHoursPanel teamHoursData={teamHoursData} staff={staff} reports={reports} entries={entries} />
-      )}
     </div>
   );
 }

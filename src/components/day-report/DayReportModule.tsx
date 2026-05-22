@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Plus, Check, X, AlertTriangle, ChevronLeft, ChevronRight, Link, Sparkles, Clock, Users, BarChart3, Calendar, FileText, Zap, Bot, Trash2, RefreshCw, Eye, MapPin, CalendarDays, Loader2 } from 'lucide-react';
+import { Plus, Check, X, AlertTriangle, ChevronLeft, ChevronRight, Link, Sparkles, Clock, Users, BarChart3, Calendar, FileText, Zap, Bot, Trash2, RefreshCw, Eye, MapPin, CalendarDays, Loader2, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -176,12 +176,38 @@ function SubmitReportPage() {
   const [dbReports, setDbReports] = useState<Array<{ report_date: string; total_hours: number; status: string }>>([]);
   const [isLoadingDbReports, setIsLoadingDbReports] = useState(true);
 
-  // Set current staff from authenticated user (replaces old fallback logic)
+  // Set current staff from authenticated user. If bubble_staff_id is a placeholder
+  // (e.g. 'manual_super_admin_*' fallback), resolve the real ID from staff_directory by email.
   useEffect(() => {
-    if (systemUser) {
-      setCurrentStaffId(systemUser.bubble_staff_id);
+    let aborted = false;
+    async function resolveStaffId() {
+      if (!systemUser) return;
       setCurrentStaffName(systemUser.display_name);
+      const id = systemUser.bubble_staff_id || '';
+      const looksPlaceholder = !id || id.startsWith('manual_') || id.startsWith('ui_');
+      if (!looksPlaceholder) {
+        setCurrentStaffId(id);
+        return;
+      }
+      // Try email-based lookup in staff_directory
+      const email = (systemUser.email || '').toLowerCase().trim();
+      if (!email) {
+        setCurrentStaffId(id || null);
+        return;
+      }
+      const { data } = await supabase
+        .from('staff_directory')
+        .select('bubble_staff_id')
+        .ilike('work_email', email)
+        .limit(1)
+        .maybeSingle();
+      if (aborted) return;
+      const realId = data?.bubble_staff_id || id || null;
+      console.log('[SubmitReport] resolved staff_id:', realId, '(was placeholder:', id, ')');
+      setCurrentStaffId(realId);
     }
+    resolveStaffId();
+    return () => { aborted = true; };
   }, [systemUser]);
 
   // Fetch user's office from staff_directory to auto-set office location & target hours
@@ -1518,30 +1544,240 @@ function TodayTeamReports() {
 // ============================
 // Work Calendar
 // ============================
+interface WCStaff { bubble_staff_id: string; display_name: string; department: string | null; }
+interface WCReport { id: string; staff_id: string; report_date: string; total_hours: number; ot_hours: number; is_leave: boolean; status: string; }
+interface WCEntry { id: string; day_report_id: string; category: string; title: string | null; hours: number; outcome_url: string | null; growth_experience: string | null; is_ai_assisted: boolean | null; }
+
+const WC_DEPARTMENT_OPTIONS = [
+  { value: '__ALL__', label: '全部部門' },
+  { value: 'System', label: 'System' },
+  { value: 'FC', label: 'FC' },
+  { value: 'Wine', label: 'Wine' },
+  { value: 'Accounting & Admin', label: 'Accounting & Admin' },
+  { value: 'Marketing & Video', label: 'Marketing & Video' },
+];
+
 function WorkCalendar() {
-  const [currentMonth, setCurrentMonth] = useState(new Date(2025, 0));
+  const { systemUser } = useAuth();
+  const [currentMonth, setCurrentMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [staffList, setStaffList] = useState<WCStaff[]>([]);
+  const [reports, setReports] = useState<WCReport[]>([]);
+  const [entries, setEntries] = useState<WCEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [ownDepartment, setOwnDepartment] = useState<string | null>(null);
+  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
+  const [availableDepartments, setAvailableDepartments] = useState<string[]>([]);
+
+  const isSuperAdmin = useMemo(() => {
+    const role = (systemUser?.role || '').toLowerCase().replace(/[\s-]/g, '_');
+    return role === 'super_admin' || role === 'management' || role === 'administrator' || role === 'admin';
+  }, [systemUser]);
 
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDayOfWeek = new Date(year, month, 1).getDay();
   const monthName = currentMonth.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long' });
-  const selectedDayReports = selectedDate ? dailyReportsV2.filter(r => r.reportDate === selectedDate) : [];
   const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
-  const monthReports = dailyReportsV2.filter(r => r.reportDate.startsWith(monthStr));
-  const monthTotalHours = monthReports.reduce((s, r) => s + r.totalHours, 0);
-  const monthWorkDays = new Set(monthReports.map(r => r.reportDate)).size;
+
+  // Resolve current user's own department (locked for non-super-admins)
+  useEffect(() => {
+    let aborted = false;
+    async function resolveDept() {
+      if (!systemUser?.bubble_staff_id) return;
+      let dept: string | null = systemUser.department || null;
+      if (!dept) {
+        const { data: ui } = await supabase
+          .from('user_info').select('department')
+          .eq('staff_id', systemUser.bubble_staff_id).maybeSingle();
+        dept = ui?.department || null;
+      }
+      if (!dept) {
+        const { data: sd } = await supabase
+          .from('staff_directory').select('department')
+          .eq('bubble_staff_id', systemUser.bubble_staff_id).maybeSingle();
+        dept = sd?.department || null;
+      }
+      if (aborted) return;
+      setOwnDepartment(dept);
+      // Super-admins (incl. Management role) default to viewing ALL departments,
+      // since "Management" itself is excluded from the staff filter.
+      // Non-super-admins lock to their own department.
+      setSelectedDepartment(prev => {
+        if (prev !== null) return prev;
+        return isSuperAdmin ? '__ALL__' : dept;
+      });
+    }
+    resolveDept();
+    return () => { aborted = true; };
+  }, [systemUser?.bubble_staff_id, systemUser?.department, isSuperAdmin]);
+
+  // Build available departments list for super_admin dropdown from DB (distinct)
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    let aborted = false;
+    (async () => {
+      const { data } = await supabase
+        .from('staff_directory')
+        .select('department')
+        .eq('status', 'active')
+        .not('department', 'is', null)
+        .neq('department', '')
+        .neq('department', 'Management');
+      const set = new Set<string>();
+      (data || []).forEach((r: any) => { if (r.department) set.add(r.department); });
+      if (!aborted) setAvailableDepartments(Array.from(set).sort());
+    })();
+    return () => { aborted = true; };
+  }, [isSuperAdmin]);
+
+  // Fetch reports/entries for the active department & month
+  useEffect(() => {
+    let aborted = false;
+    async function load() {
+      if (!systemUser?.bubble_staff_id) return;
+      // For super-admins, default to __ALL__ when no selection yet so the calendar isn't blank.
+      // For non-super-admins, wait until ownDepartment resolves.
+      if (!isSuperAdmin && !ownDepartment) return;
+      setLoading(true);
+      console.log('[WorkCalendar] systemUser.role:', systemUser.role, 'isSuperAdmin:', isSuperAdmin, 'selectedDept:', selectedDepartment, 'ownDept:', ownDepartment);
+      try {
+        const activeDept = isSuperAdmin
+          ? (selectedDepartment === '__ALL__' ? null : selectedDepartment)
+          : ownDepartment; // non-super-admin locked to own department
+
+        // 1) Fetch active staff (filtered by department if applicable)
+        let staffQuery = supabase
+          .from('staff_directory')
+          .select('bubble_staff_id, display_name, department')
+          .eq('status', 'active')
+          .not('department', 'is', null)
+          .neq('department', '')
+          .neq('department', 'Management');
+        if (activeDept) staffQuery = staffQuery.eq('department', activeDept);
+        const { data: staffData } = await staffQuery;
+        const seen = new Set<string>();
+        const dedupStaff = (staffData || []).filter((s: any) => {
+          if (!s.bubble_staff_id || seen.has(s.bubble_staff_id)) return false;
+          seen.add(s.bubble_staff_id);
+          return true;
+        }) as WCStaff[];
+        if (aborted) return;
+        setStaffList(dedupStaff);
+
+        const allowed = dedupStaff.map(s => s.bubble_staff_id);
+        if (activeDept && allowed.length === 0) {
+          setReports([]);
+          setEntries([]);
+          return;
+        }
+
+        // 2) Reports for the month
+        // Use first day of NEXT month as exclusive upper bound to avoid edge cases when
+        // report_date is stored as timestamp (lte '2026-05-31' would cast to 00:00:00 and
+        // miss same-day rows). Then increase the row limit beyond Supabase's 1000 default.
+        const monthStart = `${monthStr}-01`;
+        const nextYear = month === 11 ? year + 1 : year;
+        const nextMonth = month === 11 ? 1 : month + 2;
+        const monthEndExclusive = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+        let rQuery = supabase
+          .from('day_reports')
+          .select('id, staff_id, report_date, total_hours, ot_hours, is_leave, status')
+          .gte('report_date', monthStart)
+          .lt('report_date', monthEndExclusive)
+          .limit(5000);
+        if (allowed.length > 0 && activeDept) rQuery = rQuery.in('staff_id', allowed);
+        const { data: rData, error: rErr } = await rQuery;
+        if (rErr) console.error('[WorkCalendar] day_reports error:', rErr);
+        console.log('[WorkCalendar] dept:', activeDept, 'range:', monthStart, '→', monthEndExclusive, 'reports:', rData?.length || 0);
+        const normalizedReports: WCReport[] = (rData || []).map((r: any) => ({
+          ...r,
+          report_date: r.report_date ? String(r.report_date).substring(0, 10) : r.report_date,
+          total_hours: Number(r.total_hours) || 0,
+          ot_hours: Number(r.ot_hours) || 0,
+          is_leave: !!r.is_leave,
+        }));
+        if (aborted) return;
+        setReports(normalizedReports);
+
+        // 3) Entries
+        if (normalizedReports.length > 0) {
+          const ids = normalizedReports.map(r => r.id);
+          const { data: eData, error: eErr } = await supabase
+            .from('day_report_entries')
+            .select('id, day_report_id, category, title, hours, outcome_url, growth_experience, is_ai_assisted')
+            .in('day_report_id', ids)
+            .limit(20000);
+          if (eErr) console.error('[WorkCalendar] day_report_entries error:', eErr);
+          console.log('[WorkCalendar] entries:', eData?.length || 0);
+          if (aborted) return;
+          setEntries((eData || []) as WCEntry[]);
+        } else {
+          setEntries([]);
+        }
+      } catch (err) {
+        console.error('[WorkCalendar] load error:', err);
+      } finally {
+        if (!aborted) setLoading(false);
+      }
+    }
+    load();
+    return () => { aborted = true; };
+  }, [systemUser?.bubble_staff_id, ownDepartment, selectedDepartment, isSuperAdmin, monthStr, year, month, daysInMonth]);
+
+  const staffNameById = useMemo(() => {
+    const m: Record<string, string> = {};
+    staffList.forEach(s => { m[s.bubble_staff_id] = s.display_name; });
+    return m;
+  }, [staffList]);
+
+  const reportsByDate = useMemo(() => {
+    const m: Record<string, WCReport[]> = {};
+    reports.forEach(r => { (m[r.report_date] = m[r.report_date] || []).push(r); });
+    return m;
+  }, [reports]);
+
+  const entriesByReport = useMemo(() => {
+    const m: Record<string, WCEntry[]> = {};
+    entries.forEach(e => { (m[e.day_report_id] = m[e.day_report_id] || []).push(e); });
+    return m;
+  }, [entries]);
+
+  const selectedDayReports = selectedDate ? (reportsByDate[selectedDate] || []) : [];
+  const monthTotalHours = reports.reduce((s, r) => s + r.total_hours, 0);
+  const monthWorkDays = new Set(reports.map(r => r.report_date)).size;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <button onClick={() => setCurrentMonth(new Date(year, month - 1))} className="p-1.5 rounded-md hover:bg-muted"><ChevronLeft size={16} /></button>
           <h3 className="text-[17px] font-bold">{monthName}</h3>
           <button onClick={() => setCurrentMonth(new Date(year, month + 1))} className="p-1.5 rounded-md hover:bg-muted"><ChevronRight size={16} /></button>
+          {isSuperAdmin && (
+            <div className="flex items-center gap-1.5 ml-1">
+              <Shield size={13} className="text-teal-600" />
+              <select
+                value={selectedDepartment ?? ''}
+                onChange={e => setSelectedDepartment(e.target.value)}
+                className="text-[12px] px-2 py-1 rounded-md border border-border bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
+              >
+                <option value="__ALL__">全部部門</option>
+                {(availableDepartments.length > 0
+                  ? availableDepartments
+                  : WC_DEPARTMENT_OPTIONS.filter(o => o.value !== '__ALL__').map(o => o.value)
+                ).map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3 text-[12px]">
+          {!isSuperAdmin && ownDepartment && (
+            <span className="px-2.5 py-1 rounded-md bg-slate-50 text-slate-700 font-medium">部門: {ownDepartment}</span>
+          )}
           <span className="px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 font-medium">{monthWorkDays} 工作天</span>
           <span className="px-2.5 py-1 rounded-md bg-teal-50 text-teal-700 font-medium">{monthTotalHours}h 總時</span>
         </div>
@@ -1557,11 +1793,12 @@ function WorkCalendar() {
               {Array.from({ length: daysInMonth }).map((_, i) => {
                 const day = i + 1;
                 const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                const dayReports = dailyReportsV2.filter(r => r.reportDate === dateStr);
-                const totalHours = dayReports.reduce((s, r) => s + r.totalHours, 0);
-                const hasOT = dayReports.some(r => r.otHours > 0);
-                const hasLeave = dayReports.some(r => r.isLeave);
-                const hasAI = dayReports.some(r => r.aiUsed);
+                const dayReports = reportsByDate[dateStr] || [];
+                const totalHours = dayReports.reduce((s, r) => s + r.total_hours, 0);
+                const hasOT = dayReports.some(r => r.ot_hours > 0);
+                const hasLeave = dayReports.some(r => r.is_leave);
+                const dayReportIds = new Set(dayReports.map(r => r.id));
+                const hasAI = entries.some(e => dayReportIds.has(e.day_report_id) && !!e.is_ai_assisted);
                 const isSelected = selectedDate === dateStr;
                 const isWeekend = (firstDayOfWeek + i) % 7 === 0 || (firstDayOfWeek + i) % 7 === 6;
                 return (
@@ -1573,9 +1810,10 @@ function WorkCalendar() {
                     {dayReports.length > 0 && (
                       <div className="mt-0.5 space-y-0.5">
                         {dayReports.slice(0, 2).map(r => {
-                          const mainCat = r.entries[0]?.category;
+                          const mainCat = (entriesByReport[r.id] || [])[0]?.category as WorkCategory | undefined;
                           const config = mainCat ? categoryConfig[mainCat] : null;
-                          return (<div key={r.id} className="flex items-center gap-0.5">{config && <span className={cn('text-[10px] px-1 py-0 rounded', config.bg, config.color)}>{r.userName.slice(0, 2)}</span>}{!config && r.isLeave && <span className="text-[10px] px-1 py-0 rounded bg-amber-100 text-amber-700">假</span>}</div>);
+                          const name = staffNameById[r.staff_id] || '';
+                          return (<div key={r.id} className="flex items-center gap-0.5">{config && <span className={cn('text-[10px] px-1 py-0 rounded', config.bg, config.color)}>{name.slice(0, 2)}</span>}{!config && r.is_leave && <span className="text-[10px] px-1 py-0 rounded bg-amber-100 text-amber-700">假</span>}</div>);
                         })}
                         {dayReports.length > 2 && <span className="text-[10px] text-muted-foreground">+{dayReports.length - 2}</span>}
                         <div className="flex items-center gap-0.5">{hasOT && <span className="text-[10px] font-bold text-amber-600">OT</span>}{hasAI && <Bot size={9} className="text-purple-500" />}</div>
@@ -1592,34 +1830,87 @@ function WorkCalendar() {
         </div>
         <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-5 h-fit sticky top-4">
           <h4 className="text-[15px] font-bold mb-3 flex items-center gap-2"><Calendar size={15} className="text-teal-600" />{selectedDate ? selectedDate : '選擇日期查看'}</h4>
-          {!selectedDate && <p className="text-[13px] text-muted-foreground">點擊日曆中的日期查看當日工作匯報詳情</p>}
-          {selectedDate && selectedDayReports.length === 0 && <p className="text-[13px] text-muted-foreground">此日無匯報記錄</p>}
-          {selectedDayReports.map(report => (
-            <div key={report.id} className="mb-4 last:mb-0">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-[13px] font-bold">{report.userName}</span>
-                <span className="text-[12px] text-muted-foreground">{report.totalHours}h</span>
-                {report.aiUsed && <Bot size={11} className="text-purple-500" />}
-              </div>
-              <div className="space-y-1.5">
-                {report.entries.map(entry => {
-                  const config = categoryConfig[entry.category];
-                  return (
-                    <div key={entry.id} className="p-2 rounded-md bg-muted/20 border border-border/30">
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className={cn('text-[11px] px-1.5 py-0.5 rounded', config.bg, config.color)}>{config.label}</span>
-                        <span className="text-[12px] font-medium">{entry.hours}h</span>
-                        {entry.isAiAssisted && <Bot size={10} className="text-purple-500" />}
-                      </div>
-                      <p className="text-[13px] font-medium">{entry.title}</p>
-                      {entry.outcomeUrl && (<p className="text-[12px] text-teal-600 mt-0.5 truncate flex items-center gap-0.5"><Link size={10} />{entry.outcomeUrl.length > 40 ? entry.outcomeUrl.slice(0, 40) + '...' : entry.outcomeUrl}</p>)}
-                      {entry.growthExperience && (<p className="text-[12px] text-emerald-600 mt-0.5 flex items-center gap-0.5"><Sparkles size={10} />{entry.growthExperience.length > 50 ? entry.growthExperience.slice(0, 50) + '...' : entry.growthExperience}</p>)}
+          {loading && <p className="text-[13px] text-muted-foreground flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" />載入中…</p>}
+          {!loading && !selectedDate && <p className="text-[13px] text-muted-foreground">點擊日曆中的日期查看當日工作匯報詳情</p>}
+          {!loading && selectedDate && selectedDayReports.length === 0 && <p className="text-[13px] text-muted-foreground">此日無匯報記錄</p>}
+          {!loading && selectedDayReports.map((report, idx) => {
+            const reportEntries = entriesByReport[report.id] || [];
+            const userName = staffNameById[report.staff_id] || report.staff_id;
+            const initials = userName
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 2)
+              .map(s => s[0]?.toUpperCase())
+              .join('') || userName.slice(0, 2).toUpperCase();
+            const usedAI = reportEntries.some(e => e.is_ai_assisted);
+            return (
+              <div
+                key={report.id}
+                className={cn(
+                  'pb-8 mb-8 last:pb-0 last:mb-0',
+                  idx < selectedDayReports.length - 1 && 'border-b-2 border-slate-300'
+                )}
+              >
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div className="w-8 h-8 rounded-full bg-teal-50 text-teal-700 flex items-center justify-center text-[12px] font-semibold shrink-0">
+                    {initials}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[15px] font-bold text-[#0d1a2d] leading-tight">{userName}</span>
+                      {usedAI && <Bot size={13} className="text-purple-500" />}
                     </div>
-                  );
-                })}
+                    <div className="text-[12px] text-muted-foreground mt-0.5">
+                      共 {reportEntries.length} 項 · <span className="text-teal-600 font-semibold">{report.total_hours}h</span>
+                      {report.ot_hours > 0 && <span className="text-rose-500 ml-1.5">+{report.ot_hours}h OT</span>}
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2 pl-1">
+                  {reportEntries.map(entry => {
+                    const config = categoryConfig[entry.category as WorkCategory];
+                    return (
+                      <div key={entry.id} className="p-2.5 rounded-md bg-muted/30 border border-border/40">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          {config && <span className={cn('text-[11px] px-1.5 py-0.5 rounded font-medium', config.bg, config.color)}>{config.label}</span>}
+                          <span className="text-[12px] font-semibold text-muted-foreground">{entry.hours}h</span>
+                          {entry.is_ai_assisted && <Bot size={11} className="text-purple-500" />}
+                        </div>
+                        {entry.title && <p className="text-[13px] font-medium text-[#0d1a2d] leading-snug whitespace-pre-wrap">{entry.title}</p>}
+                        {entry.outcome_url && (
+                          <a
+                            href={entry.outcome_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={entry.outcome_url}
+                            className="text-[12px] text-teal-600 hover:text-teal-700 hover:underline mt-1.5 flex items-center gap-1 max-w-full"
+                          >
+                            <Link size={11} className="shrink-0" />
+                            <span className="truncate">
+                              {(() => {
+                                try {
+                                  const u = new URL(entry.outcome_url);
+                                  return u.hostname.replace(/^www\./, '') + (u.pathname !== '/' ? u.pathname : '');
+                                } catch {
+                                  return entry.outcome_url;
+                                }
+                              })()}
+                            </span>
+                          </a>
+                        )}
+                        {entry.growth_experience && (
+                          <p className="text-[12px] text-emerald-700 mt-1.5 flex items-start gap-1 whitespace-pre-wrap leading-snug">
+                            <Sparkles size={11} className="mt-0.5 shrink-0" />
+                            <span>{entry.growth_experience}</span>
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
@@ -1857,21 +2148,6 @@ function WorkAnalysis() {
         </div>
       </div>
 
-      <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-5">
-        <h4 className="text-[16px] font-bold mb-4">同事效率排名</h4>
-        <div className="space-y-3">
-          {staffComparison.map((staff, idx) => (
-            <div key={staff.id} className="flex items-center gap-3 p-2.5 rounded-md hover:bg-muted/20 transition-colors">
-              <span className="text-[13px] font-bold text-muted-foreground w-5">{idx + 1}</span>
-              <div className="w-7 h-7 rounded-full bg-teal-100 flex items-center justify-center text-[11px] font-bold text-teal-700">{staff.name.slice(0, 1)}</div>
-              <span className="text-[13px] font-medium w-[60px] truncate">{staff.name}</span>
-              <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-teal-400 to-teal-600 rounded-full" style={{ width: `${Math.min((staff.avgHours / 10) * 100, 100)}%` }} /></div>
-              <span className="text-[13px] font-bold">{staff.avgHours.toFixed(1)}h/天</span>
-              <span className={cn('text-[11px] px-1.5 py-0.5 rounded font-medium flex items-center gap-0.5', staff.aiRate >= 50 ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-500')}><Bot size={9} />{staff.aiRate.toFixed(0)}%</span>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

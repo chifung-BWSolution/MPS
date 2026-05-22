@@ -22,9 +22,7 @@ interface FrequencyRow {
 const mockData: FrequencyRow[] = [
   { id: '1', brandName: 'BW 志豐企業', websiteName: 'bwdesign.hk', monthlyArticles: 8, weeklySocialPosts: 5, monthlyEdm: 2, quarterlyVideos: 6, hoursPerArticle: 4, hoursPerPost: 1.5, hoursPerEdm: 3, hoursPerVideo: 12 },
   { id: '2', brandName: 'ACI 亞洲信譽', websiteName: 'asiacredibility.com', monthlyArticles: 4, weeklySocialPosts: 3, monthlyEdm: 1, quarterlyVideos: 3, hoursPerArticle: 4, hoursPerPost: 1.5, hoursPerEdm: 3, hoursPerVideo: 12 },
-  { id: '3', brandName: 'FCC 法國酒莊', websiteName: 'frenchchateau.hk', monthlyArticles: 6, weeklySocialPosts: 4, monthlyEdm: 2, quarterlyVideos: 4, hoursPerArticle: 4, hoursPerPost: 1.5, hoursPerEdm: 3, hoursPerVideo: 12 },
   { id: '4', brandName: 'BSC 商業服務', websiteName: 'bsc-service.com', monthlyArticles: 2, weeklySocialPosts: 2, monthlyEdm: 1, quarterlyVideos: 1, hoursPerArticle: 4, hoursPerPost: 1.5, hoursPerEdm: 3, hoursPerVideo: 12 },
-  { id: '5', brandName: 'ZFT 志豐貿易', websiteName: 'zhifengtrade.com', monthlyArticles: 3, weeklySocialPosts: 3, monthlyEdm: 1, quarterlyVideos: 2, hoursPerArticle: 4, hoursPerPost: 1.5, hoursPerEdm: 3, hoursPerVideo: 12 },
 ];
 
 export function UpdateFrequency() {
