@@ -72,7 +72,7 @@ async function findSystemUserByEmail(email: string): Promise<{ data: SystemUserP
   });
 
   const lookupLogic = async (): Promise<{ data: SystemUserProfile | null; error: any }> => {
-    const queryWithTimeout = async <T>(queryPromise: Promise<T>, label: string, timeoutMs = 4000): Promise<T> => {
+    const queryWithTimeout = async <T,>(queryPromise: Promise<T>, label: string, timeoutMs = 4000): Promise<T> => {
       return Promise.race([
         queryPromise,
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs))
