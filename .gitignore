@@ -32,4 +32,7 @@ core
 
 .github/
 
+.env
+.env.*
+
 **/tempobook/**
