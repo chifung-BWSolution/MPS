@@ -6,7 +6,9 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ProjectType, ProjectPriority, BillingModel, BillingFrequency, ClientInfo, ServiceItem } from '@/types/app';
-import { companies, brands, projectTypeLabels } from '@/data/mockData';
+import { projectTypeLabels } from '@/data/mockData';
+import { useCompanies } from '@/hooks/useCompanies';
+import { useBrands } from '@/hooks/useBrands';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -140,6 +142,8 @@ const existingClients = [
 export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
   const { navigateTo } = useApp();
   const { addProject } = useDataStore();
+  const { companies } = useCompanies();
+  const { brands } = useBrands();
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<ClientFormData>(emptyForm);
   const [submitted, setSubmitted] = useState(false);
