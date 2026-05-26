@@ -1,6 +1,56 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { WorkCategoryConfig, CategoryRelationType, ProjectModuleGroup } from '@/components/day-report/WorkCategoriesManager';
+import { useAuth } from '@/context/AuthContext';
+import { categoryConfig } from '@/data/dayReportDataV2';
+
+const defaultRelation: Record<string, CategoryRelationType> = {
+  website_design: 'project_website',
+  website_dev: 'project_website',
+  article_writing: 'project_website',
+  video_shooting: 'project_website',
+  video_editing: 'project_website',
+  social_media: 'project_website',
+  edm: 'project_website',
+  paid_ads: 'project_website',
+  seo: 'project_website',
+  graphic_design: 'project_website',
+  client_meeting: 'project_website',
+  internal_meeting: 'internal_project',
+  training: 'none',
+};
+
+const defaultModules: Record<string, ProjectModuleGroup[]> = {
+  website_design: ['website_system'],
+  website_dev: ['website_system'],
+  article_writing: ['marketing', 'website_system'],
+  video_shooting: ['video_production'],
+  video_editing: ['video_production'],
+  social_media: ['marketing'],
+  edm: ['marketing'],
+  paid_ads: ['marketing'],
+  seo: ['website_system', 'marketing'],
+  graphic_design: ['marketing', 'website_system'],
+  client_meeting: ['website_system', 'marketing', 'video_production'],
+  internal_meeting: [],
+  training: [],
+};
+
+const staticTypes: WorkCategoryConfig[] = Object.entries(categoryConfig).map(
+  ([id, cfg], index) => ({
+    id,
+    category: id,
+    label: cfg.label,
+    icon: cfg.icon,
+    color: cfg.color,
+    bg: cfg.bg,
+    relationType: defaultRelation[id] ?? 'none',
+    description: cfg.label,
+    isActive: true,
+    sortOrder: index,
+    associatedModules: defaultModules[id] ?? [],
+  })
+);
 
 type DbRow = {
   id: string;
@@ -32,20 +82,30 @@ function mapRow(row: DbRow): WorkCategoryConfig {
 }
 
 export function useDayReportTypes() {
+  const { session } = useAuth();
   const [types, setTypes] = useState<WorkCategoryConfig[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!session) {
+      setTypes(staticTypes);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     supabase
       .from('day_report_type')
       .select('*')
       .order('sort_order')
       .then(({ data, error }) => {
-        if (!error && data) setTypes((data as DbRow[]).map(mapRow));
+        if (error || !data || data.length === 0) {
+          setTypes(staticTypes);
+        } else {
+          setTypes((data as DbRow[]).map(mapRow));
+        }
         setLoading(false);
       });
-  }, []);
+  }, [session]);
 
   const addType = useCallback(async (item: WorkCategoryConfig) => {
     const row = {

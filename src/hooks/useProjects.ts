@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Project } from '@/types/app';
+import { useAuth } from '@/context/AuthContext';
+import { projects as staticProjects } from '@/data/mockData';
 
 type DbRow = {
   id: string;
@@ -59,22 +61,34 @@ function mapRow(row: DbRow): Project {
 }
 
 export function useProjects() {
+  const { session } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!session) {
+      setProjects(staticProjects as Project[]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     supabase
       .from('projects_list')
       .select('*')
       .order('start_date', { ascending: false })
       .then(({ data, error }) => {
-        if (error) setError(error.message);
-        else setProjects((data as DbRow[]).map(mapRow));
+        if (error) {
+          setError(error.message);
+          setProjects(staticProjects as Project[]);
+        } else if (!data || data.length === 0) {
+          setProjects(staticProjects as Project[]);
+        } else {
+          setProjects((data as DbRow[]).map(mapRow));
+        }
         setLoading(false);
       });
-  }, []);
+  }, [session]);
 
   const addProject = useCallback(async (project: Project) => {
     const row = {

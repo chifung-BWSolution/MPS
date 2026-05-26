@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Brand } from '@/types/app';
+import { useAuth } from '@/context/AuthContext';
+import { brands as staticBrands } from '@/data/mockData';
 
 type DbRow = {
   id: string;
@@ -35,22 +37,34 @@ function mapRow(row: DbRow): Brand {
 }
 
 export function useBrands() {
+  const { session } = useAuth();
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!session) {
+      setBrands(staticBrands as Brand[]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     supabase
       .from('brand_list')
       .select('*')
       .order('brand_code')
       .then(({ data, error }) => {
-        if (error) setError(error.message);
-        else setBrands((data as DbRow[]).map(mapRow));
+        if (error) {
+          setError(error.message);
+          setBrands(staticBrands as Brand[]);
+        } else if (!data || data.length === 0) {
+          setBrands(staticBrands as Brand[]);
+        } else {
+          setBrands((data as DbRow[]).map(mapRow));
+        }
         setLoading(false);
       });
-  }, []);
+  }, [session]);
 
   const addBrand = useCallback(async (brand: Brand) => {
     const row = {

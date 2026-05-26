@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Company } from '@/types/app';
+import { useAuth } from '@/context/AuthContext';
+import { companies as staticCompanies } from '@/data/mockData';
 
 type DbRow = {
   id: string;
@@ -41,22 +43,34 @@ function mapRow(row: DbRow): Company {
 }
 
 export function useCompanies() {
+  const { session } = useAuth();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!session) {
+      setCompanies(staticCompanies as Company[]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     supabase
       .from('company_list')
       .select('*')
       .order('company_code')
       .then(({ data, error }) => {
-        if (error) setError(error.message);
-        else setCompanies((data as DbRow[]).map(mapRow));
+        if (error) {
+          setError(error.message);
+          setCompanies(staticCompanies as Company[]);
+        } else if (!data || data.length === 0) {
+          setCompanies(staticCompanies as Company[]);
+        } else {
+          setCompanies((data as DbRow[]).map(mapRow));
+        }
         setLoading(false);
       });
-  }, []);
+  }, [session]);
 
   const addCompany = useCallback(async (company: Company) => {
     const row = {
