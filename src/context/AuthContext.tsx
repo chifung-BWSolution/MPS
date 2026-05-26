@@ -466,6 +466,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 .limit(1)
                 .maybeSingle();
               setUserInfo(uInfo || null);
+              if (uInfo?.role_tag || uInfo?.classification) {
+                const enrichedRole = mapRoleToInternal(uInfo.role_tag, uInfo.classification);
+                setSystemUser(prev => prev ? { ...prev, role: enrichedRole } : prev);
+              }
             } catch {
               setUserInfo(null);
             }
@@ -607,6 +611,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               role_tag: uInfo.role_tag || mapRoleTagDisplay(uInfo.role_tag, uInfo.classification),
             };
             setUserInfo(mappedUInfo);
+
+            // Enrich systemUser.role from user_info.role_tag so permissions match staff directory
+            if (uInfo.role_tag || uInfo.classification) {
+              const enrichedRole = mapRoleToInternal(uInfo.role_tag, uInfo.classification);
+              console.log('[Auth] Enriching role from user_info:', uInfo.role_tag, '->', enrichedRole);
+              setSystemUser(prev => prev ? { ...prev, role: enrichedRole } : prev);
+            }
           } else {
             setUserInfo(null);
           }
@@ -767,6 +778,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 .limit(1)
                 .maybeSingle();
               setUserInfo(uInfo || null);
+              if (uInfo?.role_tag || uInfo?.classification) {
+                const enrichedRole = mapRoleToInternal(uInfo.role_tag, uInfo.classification);
+                setSystemUser(prev => prev ? { ...prev, role: enrichedRole } : prev);
+              }
             } catch {
               setUserInfo(null);
             }
@@ -889,6 +904,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .maybeSingle();
 
           setUserInfo(uInfo || null);
+
+          // Enrich systemUser.role from user_info.role_tag so permissions match staff directory
+          if (uInfo?.role_tag || uInfo?.classification) {
+            const enrichedRole = mapRoleToInternal(uInfo.role_tag, uInfo.classification);
+            console.log('[Auth] Dev bypass: enriching role from user_info:', uInfo.role_tag, '->', enrichedRole);
+            setSystemUser(prev => prev ? { ...prev, role: enrichedRole } : prev);
+          }
         } catch (uiErr) {
           console.warn('[Auth] user_info fetch failed (non-blocking):', uiErr);
           setUserInfo(null);

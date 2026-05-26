@@ -12,7 +12,9 @@ import {
   removeWebsiteFromArticle,
 } from '@/data/websiteData';
 import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
-import { companies, brands, projects as allProjectsData } from '@/data/mockData';
+import { useCompanies } from '@/hooks/useCompanies';
+import { useBrands } from '@/hooks/useBrands';
+import { projects as allProjectsData } from '@/data/mockData';
 import { ProjectCategoryBadge, getProjectCategory } from '@/components/ui/project-category-badge';
 import { useDataStore } from '@/context/DataStore';
 import {
@@ -813,6 +815,8 @@ function WebsiteFormModal({
   onSave: (data: WebsiteFormData) => void;
 }) {
   const [form, setForm] = useState<WebsiteFormData>(initialData || emptyFormData);
+  const { companies } = useCompanies();
+  const { brands } = useBrands();
 
   const filteredBrandsForForm = form.companyId
     ? brands.filter(b => b.companyId === form.companyId)
@@ -1091,6 +1095,8 @@ function WebsiteFormModal({
 function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site: WebsiteProfileFull) => void; profileTypeFilter?: 'all' | 'website' | 'system' }) {
   const { addWebsiteWithId: addWebsiteToStore, updateWebsite: updateWebsiteInStore } = useDataStore();
   const { profiles: websiteProfiles, loading: profilesLoading, addProfile, updateProfile } = useWebsiteProfiles();
+  const { companies } = useCompanies();
+  const { brands } = useBrands();
   const [searchQuery, setSearchQuery] = useState('');
   const [companyFilter, setCompanyFilter] = useState('all');
   const [brandFilter, setBrandFilter] = useState('all');
@@ -1162,6 +1168,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       devProgress: data.devProgress,
       launchDate: data.launchDate || undefined,
       notes: data.notes || undefined,
+      systemType: data.systemType,
     };
     await updateProfile(editingSite.id, updates);
     updateWebsiteInStore(editingSite.id, updates);

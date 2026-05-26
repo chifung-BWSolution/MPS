@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { Check, Building2, Tags, FileText, ChevronRight, ArrowLeft, Home, Sparkles, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ProjectType, ProjectCategory, ProjectPriority } from '@/types/app';
-import { companies, brands, projectTypeLabels } from '@/data/mockData';
+import { projectTypeLabels } from '@/data/mockData';
+import { useCompanies } from '@/hooks/useCompanies';
+import { useBrands } from '@/hooks/useBrands';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -64,6 +66,8 @@ const emptyForm: ProjectFormData = {
 export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
   const { navigateTo } = useApp();
   const { addProject } = useDataStore();
+  const { companies } = useCompanies();
+  const { brands } = useBrands();
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<ProjectFormData>(emptyForm);
   const [submitted, setSubmitted] = useState(false);
@@ -245,8 +249,8 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
                       {company.companyCode}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-[14px] font-bold text-[#0d1a2d] truncate">{company.companyNameZh}</h4>
-                      <span className="text-[11px] text-muted-foreground">{company.companyNameEn}</span>
+                      <h4 className="text-[14px] font-bold text-[#0d1a2d] truncate">{company.companyNameEn}</h4>
+                      <span className="text-[11px] text-muted-foreground">{company.companyNameZh}</span>
                     </div>
                     {formData.companyId === company.id && (
                       <div className="w-6 h-6 rounded-full bg-teal-600 text-white flex items-center justify-center flex-shrink-0">

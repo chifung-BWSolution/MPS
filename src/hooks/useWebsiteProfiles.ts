@@ -20,6 +20,10 @@ type DbRow = {
   company_id: string | null;
   brand_id: string | null;
   notes: string | null;
+  hosting_provider: string | null;
+  dev_progress: string | null;
+  launch_date: string | null;
+  system_type: string | null;
 };
 
 function mapRow(row: DbRow): WebsiteProfileFull {
@@ -35,7 +39,10 @@ function mapRow(row: DbRow): WebsiteProfileFull {
     brand: row.brand ?? '',
     level: row.level as WebsiteLevel,
     status: row.status as WebsiteProfileFull['status'],
-    devProgress: 'launched',
+    devProgress: (row.dev_progress as WebsiteProfileFull['devProgress']) ?? 'launched',
+    hostingProvider: row.hosting_provider ?? undefined,
+    launchDate: row.launch_date ?? undefined,
+    systemType: (row.system_type as WebsiteProfileFull['systemType']) ?? undefined,
     pagesCount: 0,
     articlesCount: row.articles_count,
     videosCount: row.videos_count,
@@ -90,6 +97,10 @@ export function useWebsiteProfiles() {
       company_id: site.companyId,
       brand_id: site.brandId,
       notes: site.notes ?? null,
+      hosting_provider: site.hostingProvider ?? null,
+      dev_progress: site.devProgress ?? null,
+      launch_date: site.launchDate ?? null,
+      system_type: site.systemType ?? null,
     };
     const { error } = await supabase.from('webandsystem_list').insert(row);
     if (!error) {
@@ -114,6 +125,10 @@ export function useWebsiteProfiles() {
     if (updates.companyId !== undefined) row.company_id = updates.companyId;
     if (updates.brandId !== undefined) row.brand_id = updates.brandId;
     if (updates.notes !== undefined) row.notes = updates.notes;
+    if (updates.hostingProvider !== undefined) row.hosting_provider = updates.hostingProvider ?? null;
+    if (updates.devProgress !== undefined) row.dev_progress = updates.devProgress;
+    if (updates.launchDate !== undefined) row.launch_date = updates.launchDate ?? null;
+    if (updates.systemType !== undefined) row.system_type = updates.systemType ?? null;
     row.updated_at = new Date().toISOString();
 
     const { error } = await supabase.from('webandsystem_list').update(row).eq('id', id);
