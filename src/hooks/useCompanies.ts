@@ -49,11 +49,6 @@ export function useCompanies() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!session) {
-      setCompanies(staticCompanies as Company[]);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     supabase
       .from('company_list')

@@ -67,11 +67,6 @@ export function useProjects() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!session) {
-      setProjects(staticProjects as Project[]);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     supabase
       .from('projects_list')

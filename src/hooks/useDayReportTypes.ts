@@ -87,11 +87,6 @@ export function useDayReportTypes() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!session) {
-      setTypes(staticTypes);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     supabase
       .from('day_report_type')

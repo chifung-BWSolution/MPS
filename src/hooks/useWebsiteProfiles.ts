@@ -66,13 +66,6 @@ export function useWebsiteProfiles() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // No real Supabase session (dev bypass) — use static data
-    if (!session) {
-      setProfiles(staticWebsiteProfiles as WebsiteProfileFull[]);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     supabase
       .from('webandsystem_list')
@@ -81,6 +74,8 @@ export function useWebsiteProfiles() {
       .then(({ data, error }) => {
         if (error) {
           setError(error.message);
+          setProfiles(staticWebsiteProfiles as WebsiteProfileFull[]);
+        } else if (!data || data.length === 0) {
           setProfiles(staticWebsiteProfiles as WebsiteProfileFull[]);
         } else {
           setProfiles((data as DbRow[]).map(mapRow));

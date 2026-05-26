@@ -43,11 +43,6 @@ export function useBrands() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!session) {
-      setBrands(staticBrands as Brand[]);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     supabase
       .from('brand_list')
