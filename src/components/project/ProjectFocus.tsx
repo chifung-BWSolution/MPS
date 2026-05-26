@@ -19,9 +19,21 @@ export function ProjectFocus({ onSelectProject }: { onSelectProject?: (projectId
   const [timeRange, setTimeRange] = useState<string>('14');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'internal' | 'client'>('all');
 
+  // Sample projects intentionally hidden from 近期焦點
+  const HIDDEN_PROJECT_NAMES = new Set([
+    'ZFT 品牌官網開發',
+    'BW Google Ads 投放',
+    'ACI 微信公眾號營運',
+    'BSC 企業形象影片',
+    'BW SEO 全面升級',
+    'FCC 紅酒品鑑會',
+    'ACI 品牌推廣活動',
+  ]);
+
   // Only show incomplete (active / planning / on_hold) projects
   const incompleteProjects = useMemo(() => {
     return allProjects.filter(p => {
+      if (HIDDEN_PROJECT_NAMES.has(p.name)) return false;
       if (p.status === 'completed' || p.status === 'cancelled') return false;
       if (selectedCompanyId && p.companyId !== selectedCompanyId) return false;
       if (selectedBrandId && p.brandId !== selectedBrandId) return false;
