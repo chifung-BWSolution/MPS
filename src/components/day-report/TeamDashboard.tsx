@@ -125,13 +125,6 @@ export function TeamDashboard() {
     { value: 'Marketing & Video', label: 'Marketing & Video' },
   ];
 
-  // Determine if current user is a super_admin (management role) — can switch departments
-  const isSuperAdmin = useMemo(() => {
-    if (!systemUser) return false;
-    const role = (systemUser.role || '').toLowerCase();
-    return role === 'management' || role === 'super_admin';
-  }, [systemUser]);
-
   // ============================
   // Initialize: Detect user's own department on mount
   // IMPORTANT: Even super_admin defaults to their own department (no bypass)
@@ -489,27 +482,25 @@ export function TeamDashboard() {
 
       {/* Tab Navigation with Department Selector */}
       <div className="flex items-center gap-3 flex-wrap">
-        {/* Department Dropdown (ALWAYS visible for super_admin / management — never hidden) */}
-        {(systemUser?.role === 'super_admin' || systemUser?.role === 'management' || isSuperAdmin) && (
-          <div className="flex items-center gap-2">
-            <label className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">部門:</label>
-            <select
-              value={selectedDepartment || 'System'}
-              onChange={(e) => {
-                console.log('[TeamDashboard] 🔄 Department changed to:', e.target.value);
-                setSelectedDepartment(e.target.value);
-                setLoading(true);
-              }}
-              className="h-[34px] px-3 py-1 rounded-md border border-teal-300 bg-white text-[12px] font-medium text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500 cursor-pointer min-w-[140px]"
-            >
-              {DEPARTMENT_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        {/* Department Dropdown — open to all authenticated users */}
+        <div className="flex items-center gap-2">
+          <label className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">部門:</label>
+          <select
+            value={selectedDepartment || 'System'}
+            onChange={(e) => {
+              console.log('[TeamDashboard] 🔄 Department changed to:', e.target.value);
+              setSelectedDepartment(e.target.value);
+              setLoading(true);
+            }}
+            className="h-[34px] px-3 py-1 rounded-md border border-teal-300 bg-white text-[12px] font-medium text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500 cursor-pointer min-w-[140px]"
+          >
+            {DEPARTMENT_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
         {/* Status filter tabs */}
         <div className="flex items-center gap-1 p-0.5 bg-muted rounded-md w-fit">

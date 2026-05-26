@@ -11,9 +11,29 @@ import { SampleDataManager } from './SampleDataManager';
 import { companies, brands } from '@/data/mockData';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { canAccessSettings } from '@/lib/permissions';
 
 export function SettingsModule({ subModule }: { subModule?: string }) {
+  const { systemUser } = useAuth();
   const activeTab = subModule || 'profile';
+
+  // Only the "個人設定" (profile) tab is open to everyone; the rest of
+  // 系統設定 is restricted to roles mapped to 管理層 or above.
+  if (activeTab !== 'profile' && !canAccessSettings(systemUser?.role)) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-[32px] font-bold tracking-tight">系統設定</h1>
+          <p className="text-[14px] text-muted-foreground mt-1">
+            此頁面僅限管理層或以上身份存取。
+          </p>
+        </div>
+        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6 text-[13px] text-muted-foreground">
+          您目前的身份標籤沒有權限查看此頁面。如需存取，請聯絡系統管理員。
+        </div>
+      </div>
+    );
+  }
 
   const getTitle = () => {
     switch (activeTab) {

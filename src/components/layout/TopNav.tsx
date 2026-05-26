@@ -1,5 +1,6 @@
 import { useApp, mainMenuItems } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
+import { canAccessSettings } from '@/lib/permissions';
 import { Search, Bell, Building2, ChevronDown, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -47,6 +48,10 @@ export function TopNav() {
 
   const selectedCompany = companies.find(c => c.id === selectedCompanyId);
   const selectedBrand = brands.find(b => b.id === selectedBrandId);
+
+  const visibleMenuItems = mainMenuItems.filter(
+    m => m.id !== 'settings' || canAccessSettings(systemUser?.role)
+  );
 
   const handleCompanyChange = (companyId: string | null) => {
     setSelectedCompanyId(companyId);
@@ -118,7 +123,7 @@ export function TopNav() {
 
       {/* Main Navigation */}
       <nav className="flex-1 flex items-center h-full px-1 overflow-x-auto scrollbar-hide">
-        {mainMenuItems.map((menuItem) => {
+        {visibleMenuItems.map((menuItem) => {
           const Icon = moduleIcons[menuItem.id] || LayoutDashboard;
           const isActive = currentModule === menuItem.id;
 
