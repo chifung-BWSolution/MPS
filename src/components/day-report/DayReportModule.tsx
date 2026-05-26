@@ -20,6 +20,7 @@ import { TeamDashboard } from '@/components/day-report/TeamDashboard';
 import { SearchableProjectSelect } from '@/components/day-report/SearchableProjectSelect';
 import { useDataStore } from '@/context/DataStore';
 import { useDayReportTypes } from '@/hooks/useDayReportTypes';
+import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
 
 // ============================
 // Office Location & Holiday Config
@@ -95,7 +96,8 @@ function getDateRange(startDate: string, endDate: string): string[] {
 // Submit Report Page (Redesigned)
 // ============================
 function SubmitReportPage() {
-  const { websites, projects } = useDataStore();
+  const { projects } = useDataStore();
+  const { profiles: websites } = useWebsiteProfiles();
   const { types: dynamicTypes } = useDayReportTypes();
   const [office, setOffice] = useState<OfficeLocation>('hk');
   
