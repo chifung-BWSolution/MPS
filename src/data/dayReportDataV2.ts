@@ -147,7 +147,6 @@ export const dailyReportsV2: (DailyReportV2 & { __sampleData: true })[] = [
     entries: [
       { id: 'we1', dailyReportId: 'dr1', category: 'website_design', relatedType: 'website', relatedId: 'ws1', relatedName: 'BW Design Centre', title: '首頁改版設計', description: '完成首頁 Hero Section 重新設計，包含動態輪播與 CTA 按鈕優化', hours: 3.5, outcomeType: 'url', outcomeUrl: 'https://staging.bwdesign.com.hk/homepage-v2', growthExperience: '學到了更好的視覺層次安排方法', isAiAssisted: true, aiTools: ['midjourney'], createdAt: '2025-01-20T10:00:00' },
       { id: 'we2', dailyReportId: 'dr1', category: 'article_writing', relatedType: 'website', relatedId: 'ws1', relatedName: 'BW Design Centre', title: 'SEO 文章撰寫', description: '完成「2025年網頁設計趨勢」文章 2000字，優化關鍵字密度', hours: 2.5, outcomeType: 'url', outcomeUrl: 'https://bwdesign.com.hk/blog/web-design-trends-2025', growthExperience: '利用 ChatGPT 加快大綱撰寫速度 3 倍', isAiAssisted: true, aiTools: ['chatgpt'], createdAt: '2025-01-20T14:00:00' },
-      { id: 'we3', dailyReportId: 'dr1', category: 'client_meeting', relatedType: 'project', relatedId: 'p2', relatedName: 'ACI 品牌推廣活動', title: 'ACI 客戶會議', description: '與 ACI 客戶討論品牌推廣活動的進度及修改方向', hours: 1.5, outcomeType: 'growth_experience', growthExperience: '學到客戶對色彩搭配的偏好，未來品牌設計需先確認色彩系統再開始版面設計', isAiAssisted: false, createdAt: '2025-01-20T16:00:00' },
       { id: 'we4', dailyReportId: 'dr1', category: 'training', title: 'Figma 進階功能學習', description: '學習 Figma Auto Layout 及 Component Variants 進階使用方法', hours: 1.0, outcomeType: 'growth_experience', growthExperience: '掌握了 Auto Layout 嵌套技巧，未來可節省 30% 排版時間', isAiAssisted: false, createdAt: '2025-01-20T17:30:00' },
     ],
   },
@@ -349,7 +348,6 @@ export const dailyReportsV2: (DailyReportV2 & { __sampleData: true })[] = [
     entries: [
       { id: 'we22', dailyReportId: 'dr8', category: 'website_design', relatedType: 'website', relatedId: 'ws1', relatedName: 'BW Design Centre', title: 'BW 服務頁面設計', description: '完成服務頁面整體版面設計及互動原型', hours: 4.0, outcomeType: 'url', outcomeUrl: 'https://figma.com/bw-services-v3', isAiAssisted: true, aiTools: ['midjourney'], createdAt: '2025-01-17T10:00:00' },
       { id: 'we23', dailyReportId: 'dr8', category: 'website_design', relatedType: 'website', relatedId: 'ws4', relatedName: 'BSC Tech Solutions', title: 'BSC 首頁設計稿', description: '完成 BSC 首頁線稿 3 個方案', hours: 3.0, outcomeType: 'image', outcomeImages: ['https://figma.com/bsc-homepage-drafts'], isAiAssisted: false, createdAt: '2025-01-17T14:00:00' },
-      { id: 'we24', dailyReportId: 'dr8', category: 'client_meeting', relatedType: 'project', relatedId: 'p5', relatedName: 'BSC 企業形象影片', title: 'BSC 客戶需求確認', description: '與創新科技客戶確認影片拍攝需求及時間表', hours: 2.0, outcomeType: 'growth_experience', growthExperience: '了解客戶希望強調「創新科技」形象，需在影片中加入科技元素特效', isAiAssisted: false, createdAt: '2025-01-17T16:30:00' },
     ],
   },
   {
@@ -447,7 +445,6 @@ export const dailyReportsV2: (DailyReportV2 & { __sampleData: true })[] = [
       { id: 'we36', dailyReportId: 'dr13', category: 'paid_ads', relatedType: 'website', relatedId: 'ws1', relatedName: 'BW Design Centre', title: 'BW 廣告投放優化', description: '調整廣告受眾及出價策略', hours: 3.0, outcomeType: 'url', outcomeUrl: 'https://ads.google.com/bw-optimize', isAiAssisted: true, aiTools: ['chatgpt'], createdAt: '2025-01-17T10:00:00' },
       { id: 'we37', dailyReportId: 'dr13', category: 'seo', relatedType: 'website', relatedId: 'ws5', relatedName: 'Wine Club HK', title: 'Wine Club SEO 報告', description: '撰寫月度 SEO 成效報告', hours: 2.5, outcomeType: 'url', outcomeUrl: 'https://docs.google.com/seo-report-wc', isAiAssisted: false, createdAt: '2025-01-17T14:00:00' },
       { id: 'we38', dailyReportId: 'dr13', category: 'social_media', relatedType: 'website', relatedId: 'ws2', relatedName: 'ACI Global', title: 'ACI 社媒排程', description: '排定下週社媒發佈計劃', hours: 2.0, outcomeType: 'url', outcomeUrl: 'https://business.suite.com/aci-schedule', isAiAssisted: false, createdAt: '2025-01-17T16:00:00' },
-      { id: 'we39', dailyReportId: 'dr13', category: 'client_meeting', relatedType: 'project', relatedId: 'p3', relatedName: 'Wine Club 線上商城', title: 'Wine Club 客戶匯報', description: '向客戶匯報本月行銷成效', hours: 1.0, outcomeType: 'growth_experience', growthExperience: '客戶對 ROAS 提升 40% 表示滿意', isAiAssisted: false, createdAt: '2025-01-17T17:30:00' },
     ],
   },
 ];

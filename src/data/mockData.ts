@@ -165,21 +165,7 @@ export const brands: (Brand & { __sampleData: true })[] = [
 
 export const projects: (Project & { __sampleData: true })[] = [
   { __sampleData: true, id: 'p1', name: 'BW 官網重建', clientName: undefined, companyId: 'c1', brandId: 'b1', projectType: 'web_design', projectCategory: 'internal', status: 'active', progress: 72, assignedPm: '陳小華', brand: 'BW', company: 'BWD', budgetTotal: 45000, budgetUsed: 32400, startDate: '2024-10-01', endDate: '2025-01-15', priority: 'high' },
-  { __sampleData: true, id: 'p2', name: 'ACI 品牌推廣活動', clientName: '環球貿易公司', companyId: 'c1', brandId: 'b2', projectType: 'event', projectCategory: 'client', status: 'active', progress: 45, assignedPm: '戴維斯', brand: 'ACI', company: 'BWD', budgetTotal: 120000, budgetUsed: 96000, startDate: '2024-11-01', endDate: '2025-02-28', priority: 'urgent', billingModel: 'one_time', serviceItems: [
-    { id: 'si1', serviceType: 'event', quantity: 2, unit: '項', deliveryDate: '2025-01-15', notes: '品牌發佈會' },
-    { id: 'si2', serviceType: 'graphic_design', quantity: 5, unit: '套', deliveryDate: '2024-12-20', notes: '宣傳物料設計' },
-    { id: 'si3', serviceType: 'video', quantity: 3, unit: '條', deliveryDate: '2025-02-10', notes: '活動宣傳短片' },
-  ] },
-  { __sampleData: true, id: 'p3', name: 'FCC 紅酒品鑑會', clientName: undefined, companyId: 'c2', brandId: 'b4', projectType: 'event', projectCategory: 'internal', status: 'planning', progress: 15, assignedPm: '朴賢俊', brand: 'FCC', company: 'ZF', budgetTotal: 85000, budgetUsed: 12750, startDate: '2025-01-15', endDate: '2025-03-31', priority: 'medium' },
-  { __sampleData: true, id: 'p4', name: 'BW SEO 全面升級', clientName: undefined, companyId: 'c1', brandId: 'b1', projectType: 'seo_upgrade', projectCategory: 'internal', status: 'active', progress: 60, assignedPm: '陳小華', brand: 'BW', company: 'BWD', budgetTotal: 35000, budgetUsed: 21000, startDate: '2024-12-01', endDate: '2025-04-30', priority: 'high' },
-  { __sampleData: true, id: 'p5', name: 'BSC 企業形象影片', clientName: '創新科技有限公司', companyId: 'c1', brandId: 'b3', projectType: 'video', projectCategory: 'client', status: 'on_hold', progress: 30, assignedPm: '戴維斯', brand: 'BSC', company: 'BWD', budgetTotal: 55000, budgetUsed: 16500, startDate: '2024-11-15', endDate: '2025-03-15', priority: 'medium', billingModel: 'recurring', billingFrequency: 'monthly', contractStartDate: '2024-11-01', contractDuration: 6, serviceItems: [
-    { id: 'si4', serviceType: 'video', quantity: 4, unit: '條', deliveryDate: '2025-01-30', notes: '企業形象片' },
-    { id: 'si5', serviceType: 'graphic_design', quantity: 2, unit: '套', deliveryDate: '2024-12-15', notes: '片頭片尾設計' },
-  ] },
-  { __sampleData: true, id: 'p6', name: 'ACI 微信公眾號營運', clientName: undefined, companyId: 'c1', brandId: 'b2', projectType: 'social_media', projectCategory: 'internal', status: 'active', progress: 88, assignedPm: '朴賢俊', brand: 'ACI', company: 'BWD', budgetTotal: 18000, budgetUsed: 15840, startDate: '2024-09-01', endDate: '2025-02-28', priority: 'low' },
   { __sampleData: true, id: 'p7', name: 'FCC 電商網站', clientName: undefined, companyId: 'c2', brandId: 'b4', projectType: 'web_design', projectCategory: 'internal', status: 'completed', progress: 100, assignedPm: '陳小華', brand: 'FCC', company: 'ZF', budgetTotal: 68000, budgetUsed: 65000, startDate: '2024-07-01', endDate: '2024-12-31', priority: 'high' },
-  { __sampleData: true, id: 'p8', name: 'BW Google Ads 投放', clientName: undefined, companyId: 'c1', brandId: 'b1', projectType: 'paid_ads', projectCategory: 'internal', status: 'active', progress: 50, assignedPm: '朴賢俊', brand: 'BW', company: 'BWD', budgetTotal: 25000, budgetUsed: 12500, startDate: '2025-01-01', endDate: '2025-06-30', priority: 'medium' },
-  { __sampleData: true, id: 'p9', name: 'ZFT 品牌官網開發', clientName: undefined, companyId: 'c2', brandId: 'b5', projectType: 'web_design', projectCategory: 'internal', status: 'active', progress: 25, assignedPm: '陳小華', brand: 'ZFT', company: 'ZF', budgetTotal: 38000, budgetUsed: 9500, startDate: '2025-01-10', endDate: '2025-05-30', priority: 'medium' },
 ];
 
 export const yearPlans: (YearPlan & { __sampleData: true })[] = [

@@ -100,7 +100,6 @@ export const dailyReports: (DailyReport & { __sampleData: true })[] = [
     entries: [
       { id: 'we1', dailyReportId: 'dr1', module: 'website', relatedId: 'ws1', relatedName: 'BW Design Centre', title: '首頁改版設計', description: '完成首頁 Hero Section 重新設計，包含動態輪播與 CTA 按鈕優化', hours: 3.5, outcomeType: 'url', outcomeValue: 'https://staging.bwdesign.com.hk/homepage-v2', createdAt: '2025-01-20T10:00:00' },
       { id: 'we2', dailyReportId: 'dr1', module: 'marketing', relatedId: 'ws1', relatedName: 'BW Design Centre', title: 'SEO 文章撰寫', description: '完成「2025年網頁設計趨勢」文章 2000字，優化關鍵字密度', hours: 2.5, outcomeType: 'url', outcomeValue: 'https://bwdesign.com.hk/blog/web-design-trends-2025', createdAt: '2025-01-20T14:00:00' },
-      { id: 'we3', dailyReportId: 'dr1', module: 'client_meeting', relatedId: 'p2', relatedName: 'ACI 品牌推廣活動', title: 'ACI 客戶會議', description: '與 ACI 客戶討論品牌推廣活動的進度及修改方向', hours: 1.5, outcomeType: 'growth_experience', outcomeValue: '學到客戶對色彩搭配的偏好，未來品牌設計需先確認色彩系統再開始版面設計', createdAt: '2025-01-20T16:00:00' },
       { id: 'we4', dailyReportId: 'dr1', module: 'training', title: 'Figma 進階功能學習', description: '學習 Figma Auto Layout 及 Component Variants 進階使用方法', hours: 1.0, outcomeType: 'growth_experience', outcomeValue: '掌握了 Auto Layout 嵌套技巧，未來可節省 30% 排版時間', createdAt: '2025-01-20T17:30:00' },
     ],
   },
@@ -221,7 +220,6 @@ export const dailyReports: (DailyReport & { __sampleData: true })[] = [
     entries: [
       { id: 'we22', dailyReportId: 'dr8', module: 'website', relatedId: 'ws1', relatedName: 'BW Design Centre', title: 'BW 服務頁面設計', description: '完成服務頁面整體版面設計及互動原型', hours: 4.0, outcomeType: 'url', outcomeValue: 'https://figma.com/bw-services-v3', createdAt: '2025-01-17T10:00:00' },
       { id: 'we23', dailyReportId: 'dr8', module: 'website', relatedId: 'ws4', relatedName: 'BSC Tech Solutions', title: 'BSC 首頁設計稿', description: '完成 BSC 首頁線稿 3 個方案', hours: 3.0, outcomeType: 'image', outcomeValue: 'https://figma.com/bsc-homepage-drafts', createdAt: '2025-01-17T14:00:00' },
-      { id: 'we24', dailyReportId: 'dr8', module: 'client_meeting', relatedId: 'p5', relatedName: 'BSC 企業形象影片', title: 'BSC 客戶需求確認', description: '與創新科技客戶確認影片拍攝需求及時間表', hours: 2.0, outcomeType: 'growth_experience', outcomeValue: '了解客戶希望強調「創新科技」形象，需在影片中加入科技元素特效', createdAt: '2025-01-17T16:30:00' },
     ],
   },
   {
