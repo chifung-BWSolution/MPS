@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useMemo, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useMemo, ReactNode, useCallback, useEffect } from 'react';
 import { User, UserRole } from '@/types/app';
 import { useAuth } from '@/context/AuthContext';
 
@@ -82,8 +82,6 @@ export const mainMenuItems: MainMenuItem[] = [
     label: '網站+系統',
     subMenus: [
       { id: 'list', label: '網站列表' },
-      { id: 'system-list', label: '系統列表' },
-      { id: 'featured', label: '重點網站' },
       { id: 'articles-list', label: '文章列表' },
       { id: 'pending', label: '待跟進項目' },
     ],
@@ -197,8 +195,32 @@ const AppContext = (globalThis as any)[APP_CONTEXT_KEY] as React.Context<AppCont
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const { systemUser, session } = useAuth();
-  const [currentModule, setCurrentModule] = useState('dashboard');
-  const [currentSubModule, setCurrentSubModule] = useState('overview');
+  // Parse module/submodule from hash: #module/submodule
+  const parseHash = () => {
+    const hash = window.location.hash.replace('#', '');
+    const [mod, sub] = hash.split('/');
+    return { mod: mod || 'dashboard', sub: sub || '' };
+  };
+
+  const [currentModule, setCurrentModule] = useState(() => parseHash().mod);
+  const [currentSubModule, setCurrentSubModule] = useState(() => {
+    const { mod, sub } = parseHash();
+    if (sub) return sub;
+    const menuItem = mainMenuItems.find(m => m.id === mod);
+    return menuItem?.subMenus[0]?.id || 'overview';
+  });
+
+  // Keep hash in sync when state changes externally (e.g. browser back/forward)
+  useEffect(() => {
+    const onHashChange = () => {
+      const { mod, sub } = parseHash();
+      setCurrentModule(mod);
+      const resolvedSub = sub || mainMenuItems.find(m => m.id === mod)?.subMenus[0]?.id || 'overview';
+      setCurrentSubModule(resolvedSub);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
@@ -224,25 +246,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [systemUser, session]);
 
   const navigateTo = useCallback((module: string, subModule?: string) => {
+    const resolvedSub = subModule || mainMenuItems.find(m => m.id === module)?.subMenus[0]?.id || 'overview';
     setCurrentModule(module);
-    if (subModule) {
-      setCurrentSubModule(subModule);
-    } else {
-      const menuItem = mainMenuItems.find(m => m.id === module);
-      if (menuItem && menuItem.subMenus.length > 0) {
-        setCurrentSubModule(menuItem.subMenus[0].id);
-      }
-    }
+    setCurrentSubModule(resolvedSub);
+    // Update the URL hash so refresh restores the same page
+    window.location.hash = `${module}/${resolvedSub}`;
   }, []);
+
+  // Hash-aware wrappers so any direct setCurrentModule/setCurrentSubModule call also updates the URL
+  const setModuleWithHash = useCallback((module: string) => {
+    setCurrentModule(module);
+    const sub = mainMenuItems.find(m => m.id === module)?.subMenus[0]?.id || 'overview';
+    setCurrentSubModule(sub);
+    window.location.hash = `${module}/${sub}`;
+  }, []);
+
+  const setSubModuleWithHash = useCallback((subModule: string) => {
+    setCurrentSubModule(subModule);
+    window.location.hash = `${currentModule}/${subModule}`;
+  }, [currentModule]);
 
   return (
     <AppContext.Provider
       value={{
         user: user,
         currentModule,
-        setCurrentModule,
+        setCurrentModule: setModuleWithHash,
         currentSubModule,
-        setCurrentSubModule,
+        setCurrentSubModule: setSubModuleWithHash,
         navigateTo,
         sidebarCollapsed,
         setSidebarCollapsed,

@@ -3,8 +3,8 @@ import { LayoutGrid, List, Plus, Search, Calendar, DollarSign, Edit, Trash2 } fr
 import { cn } from '@/lib/utils';
 import { Project } from '@/types/app';
 import { useApp } from '@/context/AppContext';
-import { useDataStore } from '@/context/DataStore';
 import { companies, brands, projectTypeLabels, statusConfig, priorityConfig } from '@/data/mockData';
+import { useProjects } from '@/hooks/useProjects';
 import { ProjectCategoryBadge } from '@/components/ui/project-category-badge';
 import {
   Select,
@@ -20,8 +20,8 @@ import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 
 export function ProjectPlanning({ onSelectProject, forcedCategory }: { onSelectProject?: (projectId: string) => void; forcedCategory?: 'internal' | 'client' }) {
   const { navigateTo, selectedCompanyId, selectedBrandId } = useApp();
-  const { projects, updateProject, deleteProject } = useDataStore();
-  const [viewMode, setViewMode] = useState<'card' | 'table'>(forcedCategory === 'client' ? 'table' : 'card');
+  const { projects, loading: projectsLoading, updateProject, deleteProject } = useProjects();
+  const [viewMode, setViewMode] = useState<'card' | 'table'>('table');
   const [filterBrand, setFilterBrand] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -39,9 +39,9 @@ export function ProjectPlanning({ onSelectProject, forcedCategory }: { onSelectP
     setShowEditModal(true);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (editingProject) {
-      updateProject(editingProject.id, editingProject);
+      await updateProject(editingProject.id, editingProject);
       setShowEditModal(false);
       setEditingProject(null);
     }
@@ -50,18 +50,13 @@ export function ProjectPlanning({ onSelectProject, forcedCategory }: { onSelectP
   const handleDeleteClick = (e: React.MouseEvent, project: Project) => {
     e.stopPropagation();
     setDeleteTarget(project);
-    // Pre-check by trying delete (it returns check result)
     setDeleteCheck({ canDelete: true, reasons: [] });
     setShowDeleteModal(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (deleteTarget) {
-      const result = deleteProject(deleteTarget.id);
-      if (!result.canDelete) {
-        setDeleteCheck(result);
-        return;
-      }
+      await deleteProject(deleteTarget.id);
     }
     setShowDeleteModal(false);
     setDeleteTarget(null);
@@ -93,6 +88,15 @@ export function ProjectPlanning({ onSelectProject, forcedCategory }: { onSelectP
 
   const activeCount = filteredProjects.filter(p => p.status === 'active').length;
   const completedCount = filteredProjects.filter(p => p.status === 'completed').length;
+
+  if (projectsLoading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-[13px] text-muted-foreground gap-2">
+        <span className="animate-spin inline-block w-4 h-4 border-2 border-teal-600 border-t-transparent rounded-full" />
+        從資料庫載入中…
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -174,11 +178,11 @@ export function ProjectPlanning({ onSelectProject, forcedCategory }: { onSelectP
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center border border-border rounded-md overflow-hidden">
-            <button onClick={() => setViewMode('card')} className={cn('p-1.5 transition-colors', viewMode === 'card' ? 'bg-teal-600 text-white' : 'text-muted-foreground hover:bg-muted')}>
-              <LayoutGrid size={16} />
-            </button>
             <button onClick={() => setViewMode('table')} className={cn('p-1.5 transition-colors', viewMode === 'table' ? 'bg-teal-600 text-white' : 'text-muted-foreground hover:bg-muted')}>
               <List size={16} />
+            </button>
+            <button onClick={() => setViewMode('card')} className={cn('p-1.5 transition-colors', viewMode === 'card' ? 'bg-teal-600 text-white' : 'text-muted-foreground hover:bg-muted')}>
+              <LayoutGrid size={16} />
             </button>
           </div>
           <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white gap-1.5" onClick={() => navigateTo('project', 'new')}>

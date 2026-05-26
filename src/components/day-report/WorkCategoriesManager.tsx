@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Plus, Edit2, Trash2, GripVertical, Globe, Building2, FolderOpen, Tag, Check, X, Info, Save, MonitorSmartphone, Megaphone, Video, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { categoryConfig, WorkCategory } from '@/data/dayReportDataV2';
+import { WorkCategory } from '@/data/dayReportDataV2';
 import { projects } from '@/data/mockData';
+import { useDayReportTypes } from '@/hooks/useDayReportTypes';
 
 // ============================
 // Work Category Type Definition
@@ -130,21 +131,7 @@ const availableColors = [
 // Main Work Categories Manager
 // ============================
 export function WorkCategoriesManager() {
-  const [categories, setCategories] = useState<WorkCategoryConfig[]>(
-    Object.entries(categoryConfig).map(([key, config], idx) => ({
-      id: key,
-      category: key as WorkCategory,
-      label: config.label,
-      icon: config.icon,
-      color: config.color,
-      bg: config.bg,
-      relationType: defaultCategoryRelationMap[key as WorkCategory],
-      description: getDefaultDescription(key as WorkCategory),
-      isActive: true,
-      sortOrder: idx,
-      associatedModules: defaultAssociatedModules[key as WorkCategory] || [],
-    }))
-  );
+  const { types: categories, loading, addType, updateType, deleteType } = useDayReportTypes();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{
     label: string;
@@ -199,11 +186,10 @@ export function WorkCategoriesManager() {
     });
   };
 
-  const saveEditing = () => {
+  const saveEditing = async () => {
     if (!editingId) return;
     if (!editForm.label.trim()) return;
-    setCategories(prev => prev.map(c => c.id === editingId ? {
-      ...c,
+    await updateType(editingId, {
       label: editForm.label,
       relationType: editForm.relationType,
       description: editForm.description,
@@ -211,7 +197,7 @@ export function WorkCategoriesManager() {
       color: editForm.color,
       bg: editForm.bg,
       associatedModules: editForm.associatedModules,
-    } : c));
+    });
     setEditingId(null);
     toast.success(`已更新「${editForm.label}」工作類型`, { description: '變更已儲存' });
   };
@@ -220,21 +206,20 @@ export function WorkCategoriesManager() {
     setEditingId(null);
   };
 
-  const toggleActive = (id: string) => {
+  const toggleActive = async (id: string) => {
     const cat = categories.find(c => c.id === id);
-    setCategories(prev => prev.map(c => c.id === id ? { ...c, isActive: !c.isActive } : c));
-    if (cat) {
-      toast.success(cat.isActive ? `已停用「${cat.label}」` : `已啟用「${cat.label}」`, {
-        description: cat.isActive ? '此類型將不會顯示在匯報表單中' : '此類型已恢復顯示',
-      });
-    }
+    if (!cat) return;
+    await updateType(id, { isActive: !cat.isActive });
+    toast.success(!cat.isActive ? `已啟用「${cat.label}」` : `已停用「${cat.label}」`, {
+      description: !cat.isActive ? '此類型已恢復顯示' : '此類型將不會顯示在匯報表單中',
+    });
   };
 
-  const addNewCategory = () => {
+  const addNewCategory = async () => {
     if (!newForm.label.trim()) return;
     const newId = `custom_${Date.now()}`;
     const newLabel = newForm.label;
-    setCategories(prev => [...prev, {
+    const newItem: WorkCategoryConfig = {
       id: newId,
       category: newId,
       label: newLabel,
@@ -244,17 +229,18 @@ export function WorkCategoriesManager() {
       relationType: newForm.relationType,
       description: newForm.description,
       isActive: true,
-      sortOrder: prev.length,
+      sortOrder: categories.length,
       associatedModules: newForm.associatedModules,
-    }]);
+    };
+    await addType(newItem);
     setNewForm({ label: '', description: '', icon: '📋', color: 'text-blue-700', bg: 'bg-blue-100', relationType: 'project_website', associatedModules: [] });
     setShowAddNew(false);
     toast.success(`已新增「${newLabel}」工作類型`, { description: '新類型已加入列表並預設啟用' });
   };
 
-  const deleteCategory = (id: string) => {
+  const deleteCategory = async (id: string) => {
     const cat = categories.find(c => c.id === id);
-    setCategories(prev => prev.filter(c => c.id !== id));
+    await deleteType(id);
     setDeleteConfirmId(null);
     if (cat) {
       toast.success(`已刪除「${cat.label}」工作類型`, { description: '此類型已從列表中移除' });
@@ -273,6 +259,15 @@ export function WorkCategoriesManager() {
 
   // Internal projects for preview
   const internalProjects = projects.filter(p => p.projectCategory === 'internal');
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-[13px] text-muted-foreground gap-2">
+        <span className="animate-spin inline-block w-4 h-4 border-2 border-teal-600 border-t-transparent rounded-full" />
+        從資料庫載入中…
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">

@@ -3,7 +3,6 @@ import { Globe, Plus, Search, ExternalLink, FileText, Video, Share2, Mail, Trend
 import { cn } from '@/lib/utils';
 import { WebsiteProfileFull, Article, WebsiteLevel, ProfileType, SystemType } from '@/types/app';
 import {
-  websiteProfiles,
   allArticles,
   getArticlesForWebsite,
   addArticleToWebsite,
@@ -11,9 +10,8 @@ import {
   getWebsitesForArticle,
   addWebsiteToArticle,
   removeWebsiteFromArticle,
-  addWebsiteProfile,
-  updateWebsiteProfile,
 } from '@/data/websiteData';
+import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
 import { companies, brands, projects as allProjectsData } from '@/data/mockData';
 import { ProjectCategoryBadge, getProjectCategory } from '@/components/ui/project-category-badge';
 import { useDataStore } from '@/context/DataStore';
@@ -1092,6 +1090,7 @@ function WebsiteFormModal({
 // ===== Website List =====
 function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site: WebsiteProfileFull) => void; profileTypeFilter?: 'all' | 'website' | 'system' }) {
   const { addWebsiteWithId: addWebsiteToStore, updateWebsite: updateWebsiteInStore } = useDataStore();
+  const { profiles: websiteProfiles, loading: profilesLoading, addProfile, updateProfile } = useWebsiteProfiles();
   const [searchQuery, setSearchQuery] = useState('');
   const [companyFilter, setCompanyFilter] = useState('all');
   const [brandFilter, setBrandFilter] = useState('all');
@@ -1101,8 +1100,6 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
   const [levelFilter, setLevelFilter] = useState<number[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingSite, setEditingSite] = useState<WebsiteProfileFull | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const filteredBrands = companyFilter === 'all' ? brands : brands.filter(b => b.companyId === companyFilter);
 
@@ -1112,7 +1109,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
 
   const getWebsiteProjectCategory = (ws: WebsiteProfileFull) => getProjectCategory(ws.projectId, allProjectsData);
 
-  const handleAddWebsite = (data: WebsiteFormData) => {
+  const handleAddWebsite = async (data: WebsiteFormData) => {
     const company = companies.find(c => c.id === data.companyId);
     const brand = brands.find(b => b.id === data.brandId);
     const newSite: WebsiteProfileFull = {
@@ -1143,17 +1140,15 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       deploymentEnv: data.deploymentEnv || undefined,
       apiDocUrl: data.apiDocUrl || undefined,
     };
-    addWebsiteProfile(newSite);
-    // Also add to DataStore so other modules (e.g., Day Report) see the new website reactively
+    await addProfile(newSite);
     addWebsiteToStore(newSite);
-    setRefreshKey(k => k + 1);
   };
 
-  const handleEditWebsite = (data: WebsiteFormData) => {
+  const handleEditWebsite = async (data: WebsiteFormData) => {
     if (!editingSite) return;
     const company = companies.find(c => c.id === data.companyId);
     const brand = brands.find(b => b.id === data.brandId);
-    updateWebsiteProfile(editingSite.id, {
+    const updates = {
       websiteName: data.websiteName,
       domainUrl: data.domainUrl,
       companyId: data.companyId,
@@ -1167,25 +1162,10 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       devProgress: data.devProgress,
       launchDate: data.launchDate || undefined,
       notes: data.notes || undefined,
-    });
-    // Also update in DataStore for reactive sync
-    updateWebsiteInStore(editingSite.id, {
-      websiteName: data.websiteName,
-      domainUrl: data.domainUrl,
-      companyId: data.companyId,
-      brandId: data.brandId,
-      platform: data.platform,
-      hostingProvider: data.hostingProvider,
-      company: company?.companyCode || '',
-      brand: brand?.brandCode || '',
-      level: data.level,
-      status: data.status,
-      devProgress: data.devProgress,
-      launchDate: data.launchDate || undefined,
-      notes: data.notes || undefined,
-    });
+    };
+    await updateProfile(editingSite.id, updates);
+    updateWebsiteInStore(editingSite.id, updates);
     setEditingSite(null);
-    setRefreshKey(k => k + 1);
   };
 
   const getEditFormData = (site: WebsiteProfileFull): WebsiteFormData => ({
@@ -1298,15 +1278,6 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
           <option value="maintenance">維護中</option>
           <option value="archived">已封存</option>
         </select>
-        {/* View Icons */}
-        <div className="flex items-center border border-border rounded-md overflow-hidden ml-auto">
-          <button className="p-1.5 text-muted-foreground hover:bg-muted">
-            <LayoutGrid size={15} />
-          </button>
-          <button className="p-1.5 bg-teal-600 text-white">
-            <List size={15} />
-          </button>
-        </div>
       </div>
 
       {/* Level Filter Buttons */}
@@ -1336,12 +1307,18 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
 
       {/* Results Count */}
       <div className="text-[12px] text-muted-foreground">
-        顯示 {filtered.length} 個{typeFilter === 'system' ? '系統' : typeFilter === 'website' ? '網站' : '項目'}
+        {profilesLoading ? '載入中…' : `顯示 ${filtered.length} 個${typeFilter === 'system' ? '系統' : typeFilter === 'website' ? '網站' : '項目'}`}
       </div>
 
       {/* Content - Table Only */}
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] overflow-hidden">
-        <table className="w-full">
+        {profilesLoading ? (
+          <div className="flex items-center justify-center py-16 text-[13px] text-muted-foreground gap-2">
+            <span className="animate-spin inline-block w-4 h-4 border-2 border-teal-600 border-t-transparent rounded-full" />
+            從資料庫載入中…
+          </div>
+        ) : null}
+        <table className="w-full" style={{ display: profilesLoading ? 'none' : undefined }}>
           <thead>
             <tr className="border-b border-border bg-muted/30">
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">名稱</th>
@@ -1517,6 +1494,7 @@ type FeaturedFilter = 'level_1_2' | 'all' | 'high_articles' | 'high_budget' | 'r
 
 // ===== Featured Websites =====
 function FeaturedWebsites({ onSelectSite }: { onSelectSite: (site: WebsiteProfileFull) => void }) {
+  const { profiles: websiteProfiles } = useWebsiteProfiles();
   const [activeFilter, setActiveFilter] = useState<FeaturedFilter>('level_1_2');
 
   const filters: { id: FeaturedFilter; label: string; desc: string }[] = [
@@ -1644,6 +1622,7 @@ function AddWebsiteToArticleModal({
   onClose: () => void;
   onAdd: (websiteIds: string[]) => void;
 }) {
+  const { profiles: websiteProfiles } = useWebsiteProfiles();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
@@ -1881,6 +1860,7 @@ function BatchAddToWebsiteModal({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const { profiles: websiteProfiles } = useWebsiteProfiles();
   const [selectedWebsiteIds, setSelectedWebsiteIds] = useState<string[]>([]);
   const [search, setSearch] = useState('');
 
@@ -2160,6 +2140,7 @@ function SubmitCompleteModal({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const { profiles: websiteProfiles } = useWebsiteProfiles();
   // Pre-select recommended website based on brand matching
   const recommended = websiteProfiles.filter(ws =>
     ws.brand === entry.brand || (ws.brand || '').toLowerCase().includes(entry.brand.toLowerCase().split(' ')[0])
