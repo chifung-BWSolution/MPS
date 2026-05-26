@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { Plus, Edit2, Trash2, GripVertical, Globe, Building2, FolderOpen, Tag, Check, X, Info, Save, MonitorSmartphone, Megaphone, Video, RefreshCw } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, Edit2, Trash2, GripVertical, Globe, Building2, FolderOpen, Tag, Check, X, Info, Save, MonitorSmartphone, Megaphone, Video, RefreshCw, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { WorkCategory } from '@/data/dayReportDataV2';
 import { projects } from '@/data/mockData';
 import { useDayReportTypes } from '@/hooks/useDayReportTypes';
+import { useAuth } from '@/context/AuthContext';
 
 // ============================
 // Work Category Type Definition
@@ -131,7 +132,13 @@ const availableColors = [
 // Main Work Categories Manager
 // ============================
 export function WorkCategoriesManager() {
+  const { systemUser } = useAuth();
   const { types: categories, loading, addType, updateType, deleteType } = useDayReportTypes();
+
+  const isAdmin = useMemo(() => {
+    const role = (systemUser?.role || '').toLowerCase().replace(/[\s-]/g, '_');
+    return role === 'management' || role === 'administrator' || role === 'admin' || role === 'super_admin';
+  }, [systemUser]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{
     label: string;
@@ -265,6 +272,20 @@ export function WorkCategoriesManager() {
       <div className="flex items-center justify-center py-20 text-[13px] text-muted-foreground gap-2">
         <span className="animate-spin inline-block w-4 h-4 border-2 border-teal-600 border-t-transparent rounded-full" />
         從資料庫載入中…
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+        <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center">
+          <Lock size={24} className="text-gray-400" />
+        </div>
+        <div>
+          <h3 className="text-[15px] font-bold text-gray-700">無法存取此頁面</h3>
+          <p className="text-[13px] text-muted-foreground mt-1">只有管理員或更高權限的帳戶才能管理工作類型。</p>
+        </div>
       </div>
     );
   }
