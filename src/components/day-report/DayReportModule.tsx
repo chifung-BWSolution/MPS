@@ -19,6 +19,7 @@ import { HolidaySettings } from '@/components/day-report/HolidaySettings';
 import { TeamDashboard } from '@/components/day-report/TeamDashboard';
 import { SearchableProjectSelect } from '@/components/day-report/SearchableProjectSelect';
 import { useDataStore } from '@/context/DataStore';
+import { useDayReportTypes } from '@/hooks/useDayReportTypes';
 
 // ============================
 // Office Location & Holiday Config
@@ -95,6 +96,7 @@ function getDateRange(startDate: string, endDate: string): string[] {
 // ============================
 function SubmitReportPage() {
   const { websites, projects } = useDataStore();
+  const { types: dynamicTypes } = useDayReportTypes();
   const [office, setOffice] = useState<OfficeLocation>('hk');
   
   // Date selection (single date, up to 14 days back) — always based on NOW (local date)
@@ -1047,47 +1049,46 @@ function SubmitReportPage() {
                     <label className="text-[13px] font-semibold text-muted-foreground block mb-1">工作類別 *</label>
                     <select value={entry.category} onChange={(e) => updateEntry(idx, 'category', e.target.value)} className="w-full px-2.5 py-2 border border-border rounded-md text-[15px] bg-white focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all">
                       <option value="">選擇類別...</option>
-                      {Object.entries(categoryConfig).map(([k, v]) => (<option key={k} value={k}>{v.icon} {v.label}</option>))}
+                      {(dynamicTypes.length > 0
+                        ? dynamicTypes.filter(t => t.isActive)
+                        : Object.entries(categoryConfig).map(([k, v]) => ({ id: k, icon: v.icon, label: v.label }))
+                      ).map(t => (<option key={t.id} value={t.id}>{t.icon} {t.label}</option>))}
                     </select>
                   </div>
                   <div className="lg:col-span-2">
-                    <label className="text-[13px] font-semibold text-muted-foreground block mb-1">
-                      {entry.category && defaultCategoryRelationMap[entry.category as WorkCategory] === 'internal_project'
-                        ? '關聯內部項目'
-                        : entry.category && defaultCategoryRelationMap[entry.category as WorkCategory] === 'none'
-                          ? '關聯項目（選填）'
-                          : '關聯項目/網站'}
-                    </label>
-                    {entry.category && defaultCategoryRelationMap[entry.category as WorkCategory] === 'none' ? (
-                      <SearchableProjectSelect
-                        items={[]}
-                        value=""
-                        onChange={() => {}}
-                        disabled={true}
-                      />
-                    ) : entry.category && defaultCategoryRelationMap[entry.category as WorkCategory] === 'internal_project' ? (
-                      <SearchableProjectSelect
-                        items={projects.filter(p => p.projectCategory === 'internal').map(p => ({ id: p.id, name: p.name }))}
-                        value={entry.relatedId}
-                        onChange={(id, name) => {
-                          updateEntry(idx, 'relatedId', id);
-                          updateEntry(idx, 'relatedName', name);
-                        }}
-                        placeholder="搜尋內部項目..."
-                        className="border-teal-200 bg-teal-50/30"
-                      />
-                    ) : (
-                      <SearchableProjectSelect
-                        items={entry.category ? getRelatedItemsLive(entry.category as WorkCategory) : []}
-                        value={entry.relatedId}
-                        onChange={(id, name) => {
-                          updateEntry(idx, 'relatedId', id);
-                          updateEntry(idx, 'relatedName', name);
-                        }}
-                        disabled={!entry.category}
-                        placeholder="搜尋項目/網站..."
-                      />
-                    )}
+                    {(() => {
+                      const dynType = entry.category ? dynamicTypes.find(t => t.id === entry.category) : null;
+                      const relationType = dynType?.relationType
+                        ?? (entry.category ? defaultCategoryRelationMap[entry.category as WorkCategory] : undefined);
+                      return (
+                        <>
+                          <label className="text-[13px] font-semibold text-muted-foreground block mb-1">
+                            {relationType === 'internal_project' ? '關聯內部項目'
+                              : relationType === 'none' ? '關聯項目（選填）'
+                              : '關聯項目/網站'}
+                          </label>
+                          {relationType === 'none' ? (
+                            <SearchableProjectSelect items={[]} value="" onChange={() => {}} disabled={true} />
+                          ) : relationType === 'internal_project' ? (
+                            <SearchableProjectSelect
+                              items={projects.filter(p => p.projectCategory === 'internal').map(p => ({ id: p.id, name: p.name }))}
+                              value={entry.relatedId}
+                              onChange={(id, name) => { updateEntry(idx, 'relatedId', id); updateEntry(idx, 'relatedName', name); }}
+                              placeholder="搜尋內部項目..."
+                              className="border-teal-200 bg-teal-50/30"
+                            />
+                          ) : (
+                            <SearchableProjectSelect
+                              items={entry.category ? getRelatedItemsLive(entry.category as WorkCategory) : []}
+                              value={entry.relatedId}
+                              onChange={(id, name) => { updateEntry(idx, 'relatedId', id); updateEntry(idx, 'relatedName', name); }}
+                              disabled={!entry.category}
+                              placeholder="搜尋項目/網站..."
+                            />
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                   <div className="lg:col-span-1">
                     <label className="text-[13px] font-semibold text-muted-foreground block mb-1">工時(h) *</label>
