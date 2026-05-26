@@ -819,8 +819,17 @@ export function VideoListModule() {
         </button>
       </div>
 
-      {/* Video Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Video List */}
+      <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-hidden">
+        <div className="grid grid-cols-[180px_1fr_140px_140px_120px_80px_80px] gap-4 px-4 py-2.5 border-b border-border bg-slate-50/60 text-[11px] font-medium text-muted-foreground">
+          <span>影片</span>
+          <span>標題 / 描述</span>
+          <span>公司 / 品牌</span>
+          <span>類型</span>
+          <span>狀態 / 進度</span>
+          <span className="text-right">時長</span>
+          <span className="text-right">剪輯工時</span>
+        </div>
         {filteredVideos.map((video) => {
           const config = statusConfig[video.status || 'planning'];
           const duration = video.durationSeconds
@@ -829,38 +838,44 @@ export function VideoListModule() {
           return (
             <div
               key={video.id}
-              className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-hidden hover:shadow-card-hover transition-all duration-200 cursor-pointer"
+              className="grid grid-cols-[180px_1fr_140px_140px_120px_80px_80px] gap-4 px-4 py-3 border-b border-border last:border-b-0 hover:bg-muted/20 transition-colors duration-150 cursor-pointer items-center"
               onClick={() => setSelectedVideo(video)}
             >
-              <div className="relative aspect-video bg-muted">
-                <div className="absolute inset-0 bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-                  <Play size={24} className="text-muted-foreground/50" />
-                </div>
+              <div className="relative aspect-video bg-gradient-to-br from-slate-100 to-slate-200 rounded overflow-hidden flex items-center justify-center">
+                <Play size={18} className="text-muted-foreground/50" />
                 {duration !== '—' && (
-                  <span className="absolute bottom-2 right-2 text-[11px] bg-black/70 text-white px-1.5 py-0.5 rounded">{duration}</span>
+                  <span className="absolute bottom-1 right-1 text-[10px] bg-black/70 text-white px-1 py-0.5 rounded">{duration}</span>
                 )}
-                <span className={cn('absolute top-2 left-2 text-[9px] font-medium px-1.5 py-0.5 rounded', config.bgColor, config.color)}>
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-[13px] font-medium truncate">{video.title}</h4>
+                {video.websiteName && (
+                  <p className="text-[11px] text-teal-600 truncate mt-0.5">{video.websiteName}</p>
+                )}
+              </div>
+              <div className="text-[12px] text-muted-foreground truncate">
+                <p className="truncate">{video.company || '—'}</p>
+                <p className="text-[11px] truncate">{video.brand || '—'}</p>
+              </div>
+              <div>
+                {video.videoType ? (
+                  <span className="text-[11px] bg-muted px-2 py-0.5 rounded">{videoTypeLabels[video.videoType] || video.videoType}</span>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground">—</span>
+                )}
+              </div>
+              <div>
+                <span className={cn('inline-block text-[10px] font-medium px-1.5 py-0.5 rounded mb-1', config.bgColor, config.color)}>
                   {config.label}
                 </span>
-              </div>
-              <div className="p-3">
-                <h4 className="text-[14px] font-medium mb-2">{video.title}</h4>
-                <div className="flex items-center gap-0.5 mb-2">
+                <div className="flex items-center gap-0.5">
                   {[1, 2, 3, 4, 5].map((step) => (
                     <div key={step} className={cn('h-1 flex-1 rounded-full', step <= config.step ? 'bg-teal-600' : 'bg-muted')} />
                   ))}
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                  <span className="text-teal-600 font-medium">{video.websiteName}</span>
-                  <span>{video.editingHours ? `${video.editingHours}h` : '—'}</span>
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-1">
-                  <span>{video.company} / {video.brand}</span>
-                  {video.videoType && (
-                    <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">{videoTypeLabels[video.videoType] || video.videoType}</span>
-                  )}
-                </div>
               </div>
+              <div className="text-right text-[12px] text-muted-foreground">{duration}</div>
+              <div className="text-right text-[12px] font-medium">{video.editingHours ? `${video.editingHours}h` : '—'}</div>
             </div>
           );
         })}
