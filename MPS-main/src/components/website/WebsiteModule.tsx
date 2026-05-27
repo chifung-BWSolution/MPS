@@ -15,6 +15,7 @@ import {
 import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useBrands } from '@/hooks/useBrands';
+import { useSystemOptions } from '@/hooks/useSystemOptions';
 import { projects as allProjectsData } from '@/data/mockData';
 import { ProjectCategoryBadge, getProjectCategory } from '@/components/ui/project-category-badge';
 import { useDataStore } from '@/context/DataStore';
@@ -771,7 +772,7 @@ interface WebsiteFormData {
   domainUrl: string;
   companyId: string;
   brandId: string;
-  platform: 'wordpress' | 'custom' | 'shopify' | 'wix' | 'framer' | 'other';
+  platform: string;
   hostingProvider: string;
   level: WebsiteLevel;
   status: 'development' | 'live' | 'maintenance' | 'archived';
@@ -790,7 +791,7 @@ const emptyFormData: WebsiteFormData = {
   domainUrl: '',
   companyId: '',
   brandId: '',
-  platform: 'wordpress',
+  platform: '',
   hostingProvider: '',
   level: 3,
   status: 'development',
@@ -818,6 +819,16 @@ function WebsiteFormModal({
   const [form, setForm] = useState<WebsiteFormData>(initialData || emptyFormData);
   const { companies } = useCompanies();
   const { brands } = useBrands();
+  const { byCategory: optionsByCategory } = useSystemOptions();
+  const platformOptions = optionsByCategory('platform');
+  // Determine if current platform is "custom" — i.e. selected option is Custom or value is not in list
+  const knownPlatformValues = platformOptions.map(p => p.value.toLowerCase());
+  const isCustomSelected = form.platform.toLowerCase() === 'custom'
+    || form.platform === '自訂'
+    || (form.platform !== '' && !knownPlatformValues.includes(form.platform.toLowerCase()));
+  const [customPlatform, setCustomPlatform] = useState(
+    isCustomSelected && form.platform.toLowerCase() !== 'custom' && form.platform !== '自訂' ? form.platform : ''
+  );
 
   const filteredBrandsForForm = form.companyId
     ? brands.filter(b => b.companyId === form.companyId)
@@ -930,17 +941,35 @@ function WebsiteFormModal({
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1">平台</label>
               <select
-                value={form.platform}
-                onChange={(e) => handleChange('platform', e.target.value)}
+                value={isCustomSelected ? '__custom__' : form.platform}
+                onChange={(e) => {
+                  if (e.target.value === '__custom__') {
+                    handleChange('platform', customPlatform || '');
+                  } else {
+                    handleChange('platform', e.target.value);
+                  }
+                }}
                 className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
               >
-                <option value="wordpress">WordPress</option>
-                <option value="custom">Custom</option>
-                <option value="shopify">Shopify</option>
-                <option value="framer">Framer</option>
-                <option value="wix">Wix</option>
-                <option value="other">Other</option>
+                <option value="">選擇平台</option>
+                {platformOptions.map(p => (
+                  <option key={p.id} value={p.value}>{p.value}</option>
+                ))}
+                <option value="__custom__">自訂</option>
               </select>
+              {isCustomSelected && (
+                <input
+                  value={customPlatform}
+                  onChange={(e) => {
+                    const v = e.target.value.slice(0, 10);
+                    setCustomPlatform(v);
+                    handleChange('platform', v);
+                  }}
+                  maxLength={10}
+                  placeholder="輸入自訂平台 (最多10字)"
+                  className="mt-2 w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                />
+              )}
             </div>
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1">主機商</label>
@@ -1140,7 +1169,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       brandId: data.brandId,
       websiteName: data.websiteName,
       domainUrl: data.domainUrl,
-      platform: data.platform,
+      platform: data.platform as WebsiteProfileFull['platform'],
       hostingProvider: data.hostingProvider,
       company: company?.companyCode || '',
       brand: brand?.brandCode || '',
@@ -1181,7 +1210,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       domainUrl: data.domainUrl,
       companyId: data.companyId,
       brandId: data.brandId,
-      platform: data.platform,
+      platform: data.platform as WebsiteProfileFull['platform'],
       hostingProvider: data.hostingProvider,
       company: company?.companyCode || '',
       brand: brand?.brandCode || '',
