@@ -30,6 +30,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useDataStore } from '@/context/DataStore';
+import { useProjects } from '@/hooks/useProjects';
 
 const statusConfig = {
   planning: { label: '規劃中', color: 'bg-blue-500', textColor: 'text-blue-700', bgColor: 'bg-blue-50' },
@@ -164,6 +165,7 @@ const tagColors: Record<string, string> = {
 
 export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBack?: () => void }) {
   const { getProjectById } = useDataStore();
+  const { projects: supabaseProjects } = useProjects();
   const [activeTab, setActiveTab] = useState('overview');
   const [tasks, setTasks] = useState<ProjectTask[]>(sampleTasks);
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -202,7 +204,7 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
     actualSocialPosts: 48,
   };
 
-  const project = (projectId ? getProjectById(projectId) : null) || sampleProject;
+  const project = (projectId ? (supabaseProjects.find(p => p.id === projectId) || getProjectById(projectId)) : null) || sampleProject;
   const budgetPercent = project.budgetTotal > 0 ? Math.round((project.budgetUsed / project.budgetTotal) * 100) : 0;
   const budgetAtRisk = budgetPercent >= 80;
   const config = statusConfig[project.status];
