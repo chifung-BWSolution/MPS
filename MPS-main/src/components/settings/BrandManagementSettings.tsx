@@ -22,7 +22,7 @@ import {
 export function BrandManagementSettings() {
   const { brands: brandsData, loading: brandsLoading, addBrand, updateBrand, deleteBrand } = useBrands();
   const { companies, loading: companiesLoading } = useCompanies();
-  const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
+  const [viewMode, setViewMode] = useState<'card' | 'table'>('table');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCompanyId, setFilterCompanyId] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -150,18 +150,18 @@ export function BrandManagementSettings() {
         <div className="flex items-center gap-2">
           <div className="flex items-center border border-border rounded-lg overflow-hidden">
             <button
-              onClick={() => setViewMode('card')}
-              className={cn('p-2 transition-colors', viewMode === 'card' ? 'bg-teal-50 text-teal-700' : 'text-muted-foreground hover:bg-muted')}
-              title="卡片檢視"
-            >
-              <LayoutGrid size={15} />
-            </button>
-            <button
               onClick={() => setViewMode('table')}
               className={cn('p-2 transition-colors', viewMode === 'table' ? 'bg-teal-50 text-teal-700' : 'text-muted-foreground hover:bg-muted')}
               title="表格檢視"
             >
               <List size={15} />
+            </button>
+            <button
+              onClick={() => setViewMode('card')}
+              className={cn('p-2 transition-colors', viewMode === 'card' ? 'bg-teal-50 text-teal-700' : 'text-muted-foreground hover:bg-muted')}
+              title="卡片檢視"
+            >
+              <LayoutGrid size={15} />
             </button>
           </div>
           <button
