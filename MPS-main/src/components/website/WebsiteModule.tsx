@@ -952,9 +952,11 @@ function WebsiteFormModal({
                 className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
               >
                 <option value="">選擇平台</option>
-                {platformOptions.map(p => (
-                  <option key={p.id} value={p.value}>{p.value}</option>
-                ))}
+                {platformOptions
+                  .filter(p => p.value.toLowerCase() !== 'custom' && p.value !== '自訂')
+                  .map(p => (
+                    <option key={p.id} value={p.value}>{p.value}</option>
+                  ))}
                 <option value="__custom__">自訂</option>
               </select>
               {isCustomSelected && (
