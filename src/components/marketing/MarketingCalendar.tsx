@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Plus, X, Calendar, Briefcase } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getCalendarEventsForMonth, CalendarEvent } from '@/data/marketingData';
 import { projects as allProjects, statusConfig } from '@/data/mockData';
+import { useUpcomingEvents } from '@/hooks/useUpcomingEvents';
 
 const calendarDays = ['一', '二', '三', '四', '五', '六', '日'];
 
@@ -49,7 +51,26 @@ export function MarketingCalendar() {
   const [filterCompany, setFilterCompany] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState<NewEventForm>(emptyForm());
-  const [customEvents, setCustomEvents] = useState<CustomEvent[]>([]);
+  const [saving, setSaving] = useState(false);
+  const { events: upcomingEvents, addEvent: addUpcomingEvent } = useUpcomingEvents();
+
+  const customEvents = useMemo<(CustomEvent & { _fullDate?: string })[]>(() =>
+    upcomingEvents.map(ev => {
+      const d = new Date(ev.date);
+      return {
+        id: ev.id,
+        day: d.getDate(),
+        title: ev.title,
+        type: ev.type as CalendarEvent['type'],
+        platform: ev.platform,
+        company: ev.company,
+        brand: ev.brand,
+        websiteName: '',
+        hours: ev.hours,
+        _fullDate: ev.date,
+      };
+    }),
+  [upcomingEvents]);
 
   const today = new Date();
 
@@ -165,22 +186,26 @@ export function MarketingCalendar() {
     setShowAddModal(true);
   }
 
-  function saveEvent() {
-    if (!addForm.title || !addForm.date) return;
-    const date = new Date(addForm.date);
-    const newEvent: CustomEvent & { _fullDate?: string } = {
-      id: `custom-${Date.now()}`,
-      day: date.getDate(),
+  async function saveEvent() {
+    if (!addForm.title || !addForm.date || saving) return;
+    setSaving(true);
+    const err = await addUpcomingEvent({
+      id: `evt_${Date.now()}`,
       title: addForm.title,
-      type: addForm.type as CalendarEvent['type'],
-      platform: addForm.platform || undefined,
+      type: addForm.type,
+      date: addForm.date,
       company: addForm.company,
       brand: addForm.brand,
-      websiteName: '',
+      platform: addForm.platform || undefined,
       hours: addForm.hours ? Number(addForm.hours) : undefined,
-      _fullDate: addForm.date,
-    };
-    setCustomEvents(prev => [...prev, newEvent]);
+      notes: addForm.notes || undefined,
+    });
+    setSaving(false);
+    if (err) {
+      toast.error('新增失敗', { description: err.message });
+      return;
+    }
+    toast.success('活動已新增');
     setShowAddModal(false);
     setAddForm(emptyForm());
   }
@@ -675,10 +700,10 @@ export function MarketingCalendar() {
               <button onClick={() => setShowAddModal(false)} className="px-4 py-2 border border-border rounded text-[12px] font-medium text-muted-foreground hover:bg-muted transition-colors">取消</button>
               <button
                 onClick={saveEvent}
-                disabled={!addForm.title || !addForm.date}
+                disabled={!addForm.title || !addForm.date || saving}
                 className="px-4 py-2 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
               >
-                <Plus size={13} /> 新增活動
+                <Plus size={13} /> {saving ? '儲存中...' : '新增活動'}
               </button>
             </div>
           </div>
