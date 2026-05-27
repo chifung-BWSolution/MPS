@@ -42,6 +42,7 @@ export interface Brand {
   brandNameEn: string;
   industry?: string;
   logoUrl?: string;
+  officialUrl?: string;
   primaryColor: string;
   description?: string;
   isActive: boolean;

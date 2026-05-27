@@ -12,6 +12,7 @@ type DbRow = {
   brand_name_en: string;
   industry: string | null;
   logo_url: string | null;
+  official_url: string | null;
   primary_color: string;
   description: string | null;
   is_active: boolean;
@@ -28,6 +29,7 @@ function mapRow(row: DbRow): Brand {
     brandNameEn: row.brand_name_en,
     industry: row.industry ?? '',
     logoUrl: row.logo_url ?? '',
+    officialUrl: row.official_url ?? '',
     primaryColor: row.primary_color,
     description: row.description ?? '',
     isActive: row.is_active,
@@ -70,6 +72,7 @@ export function useBrands() {
       brand_name_en: brand.brandNameEn,
       industry: brand.industry || null,
       logo_url: brand.logoUrl || null,
+      official_url: brand.officialUrl || null,
       primary_color: brand.primaryColor,
       description: brand.description || null,
       is_active: brand.isActive,
@@ -87,6 +90,7 @@ export function useBrands() {
     if (updates.brandNameEn !== undefined) row.brand_name_en = updates.brandNameEn;
     if (updates.industry !== undefined) row.industry = updates.industry || null;
     if (updates.logoUrl !== undefined) row.logo_url = updates.logoUrl || null;
+    if (updates.officialUrl !== undefined) row.official_url = updates.officialUrl || null;
     if (updates.primaryColor !== undefined) row.primary_color = updates.primaryColor;
     if (updates.description !== undefined) row.description = updates.description || null;
     if (updates.isActive !== undefined) row.is_active = updates.isActive;

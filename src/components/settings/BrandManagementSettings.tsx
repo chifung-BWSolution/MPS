@@ -77,6 +77,7 @@ export function BrandManagementSettings() {
         brandNameEn: formData.brandNameEn || '',
         industry: formData.industry || '',
         logoUrl: formData.logoUrl || '',
+        officialUrl: formData.officialUrl || '',
         primaryColor: formData.primaryColor || '#0D9488',
         description: formData.description || '',
         isActive: true,
@@ -555,6 +556,7 @@ function BrandModal({
     brandNameEn: brand?.brandNameEn || '',
     industry: brand?.industry || '',
     logoUrl: brand?.logoUrl || '',
+    officialUrl: brand?.officialUrl || '',
     primaryColor: brand?.primaryColor || '#0D9488',
     description: brand?.description || '',
   });
@@ -638,6 +640,7 @@ function BrandModal({
                   />
                 </div>
               </div>
+              <FieldInput label="官方網址" value={form.officialUrl || ''} onChange={(v) => updateField('officialUrl', v)} placeholder="https://..." className="md:col-span-2" />
               <FieldInput label="品牌 Logo URL" value={form.logoUrl || ''} onChange={(v) => updateField('logoUrl', v)} placeholder="https://..." className="md:col-span-2" />
             </div>
             <div className="mt-4">
