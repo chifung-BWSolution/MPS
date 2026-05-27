@@ -247,16 +247,32 @@ function bootstrapSystemUserFromUserInfo(uiRecord: any, email: string): SystemUs
   };
 }
 
+const DEV_BYPASS_STORAGE_KEY = 'mps_dev_bypass_session';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [systemUser, setSystemUser] = useState<SystemUserProfile | null>(null);
-  const [userInfo, setUserInfo] = useState<UserInfoProfile | null>(null);
+  const [systemUser, setSystemUser] = useState<SystemUserProfile | null>(() => {
+    try {
+      const raw = localStorage.getItem(DEV_BYPASS_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed.systemUser ?? null;
+    } catch { return null; }
+  });
+  const [userInfo, setUserInfo] = useState<UserInfoProfile | null>(() => {
+    try {
+      const raw = localStorage.getItem(DEV_BYPASS_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed.userInfo ?? null;
+    } catch { return null; }
+  });
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const verifyInProgressRef = useRef(false);
   // Track whether we've already successfully authenticated to prevent state clearing
-  const authSucceededRef = useRef(false);
+  const authSucceededRef = useRef(typeof window !== 'undefined' && !!localStorage.getItem(DEV_BYPASS_STORAGE_KEY));
 
   useEffect(() => {
     let subscription: { unsubscribe: () => void } | null = null;
@@ -360,6 +376,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription?.unsubscribe();
       if (loadingTimeoutId) clearTimeout(loadingTimeoutId);
     };
+  }, []);
+
+  // Persist dev-bypass session (no Supabase session, only local systemUser) to localStorage
+  // so F5 / refresh keeps the user logged in.
+  useEffect(() => {
+    try {
+      if (systemUser && !session) {
+        localStorage.setItem(DEV_BYPASS_STORAGE_KEY, JSON.stringify({ systemUser, userInfo }));
+      }
+    } catch {}
+  }, [systemUser, userInfo, session]);
+
+  // If we restored a dev-bypass session from localStorage, stop loading immediately.
+  useEffect(() => {
+    if (systemUser && !session && loading) {
+      setLoading(false);
+    }
   }, []);
 
   const verifyAndFetchUser = async (email?: string | null, authUserId?: string) => {
@@ -974,6 +1007,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     authSucceededRef.current = false; // Reset auth success flag on sign out
+    try { localStorage.removeItem(DEV_BYPASS_STORAGE_KEY); } catch {}
     await supabase.auth.signOut();
     setSession(null);
     setUser(null);

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { brands as mockBrands, projects } from '@/data/mockData';
 import { Company } from '@/types/app';
@@ -59,7 +60,9 @@ export function CompanyManagementSettings() {
 
   const handleSave = async (formData: Partial<Company>) => {
     if (editingCompany) {
-      await updateCompany(editingCompany.id, formData);
+      const err = await updateCompany(editingCompany.id, formData);
+      if (err) { toast.error('儲存失敗', { description: err.message }); return; }
+      toast.success('公司已更新');
     } else {
       const newCompany: Company = {
         id: `c${Date.now()}`,
@@ -80,7 +83,9 @@ export function CompanyManagementSettings() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      await addCompany(newCompany);
+      const err = await addCompany(newCompany);
+      if (err) { toast.error('新增失敗', { description: err.message }); return; }
+      toast.success('公司已新增');
     }
     setIsModalOpen(false);
     setEditingCompany(null);
