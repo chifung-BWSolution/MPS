@@ -821,14 +821,12 @@ function WebsiteFormModal({
   const { brands } = useBrands();
   const { byCategory: optionsByCategory } = useSystemOptions();
   const platformOptions = optionsByCategory('platform');
-  // Determine if current platform is "custom" — i.e. selected option is Custom or value is not in list
-  const knownPlatformValues = platformOptions.map(p => p.value.toLowerCase());
-  const isCustomSelected = form.platform.toLowerCase() === 'custom'
-    || form.platform === '自訂'
-    || (form.platform !== '' && !knownPlatformValues.includes(form.platform.toLowerCase()));
-  const [customPlatform, setCustomPlatform] = useState(
-    isCustomSelected && form.platform.toLowerCase() !== 'custom' && form.platform !== '自訂' ? form.platform : ''
-  );
+  const knownPlatformValues = platformOptions
+    .filter(p => p.value.toLowerCase() !== 'custom' && p.value !== '自訂')
+    .map(p => p.value);
+  const initialIsCustom = !!form.platform && !knownPlatformValues.some(v => v.toLowerCase() === form.platform.toLowerCase());
+  const [isCustomSelected, setIsCustomSelected] = useState(initialIsCustom);
+  const [customPlatform, setCustomPlatform] = useState(initialIsCustom ? form.platform : '');
 
   const filteredBrandsForForm = form.companyId
     ? brands.filter(b => b.companyId === form.companyId)
@@ -944,8 +942,11 @@ function WebsiteFormModal({
                 value={isCustomSelected ? '__custom__' : form.platform}
                 onChange={(e) => {
                   if (e.target.value === '__custom__') {
+                    setIsCustomSelected(true);
                     handleChange('platform', customPlatform || '');
                   } else {
+                    setIsCustomSelected(false);
+                    setCustomPlatform('');
                     handleChange('platform', e.target.value);
                   }
                 }}
