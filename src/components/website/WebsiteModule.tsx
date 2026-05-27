@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Globe, Plus, Search, ExternalLink, FileText, Video, Share2, Mail, TrendingUp, Puzzle, Link2, Calendar, X, Check, Trash2, LayoutGrid, List, ArrowLeft, Megaphone, Star, Sparkles, ChevronDown, Pencil, Monitor, Server } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WebsiteProfileFull, Article, WebsiteLevel, ProfileType, SystemType } from '@/types/app';
@@ -1146,8 +1147,14 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       deploymentEnv: data.deploymentEnv || undefined,
       apiDocUrl: data.apiDocUrl || undefined,
     };
-    await addProfile(newSite);
+    const err = await addProfile(newSite);
+    if (err) {
+      toast.error('新增失敗', { description: err.message });
+      return;
+    }
     addWebsiteToStore(newSite);
+    toast.success(data.profileType === 'system' ? '系統已新增' : '網站已新增');
+    setShowAddModal(false);
   };
 
   const handleEditWebsite = async (data: WebsiteFormData) => {
