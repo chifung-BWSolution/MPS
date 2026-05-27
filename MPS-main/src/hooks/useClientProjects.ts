@@ -70,7 +70,7 @@ export function useClientProjects() {
     supabase
       .from('client_project')
       .select('*')
-      .order('start_date', { ascending: false })
+      .order('created_at', { ascending: false })
       .then(({ data, error }) => {
         if (error) {
           setError(error.message);
