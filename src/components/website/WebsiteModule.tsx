@@ -824,6 +824,9 @@ function WebsiteFormModal({
   const knownPlatformValues = platformOptions
     .filter(p => p.value.toLowerCase() !== 'custom' && p.value !== '自訂')
     .map(p => p.value);
+  const canonicalPlatform = form.platform
+    ? (knownPlatformValues.find(v => v.toLowerCase() === form.platform.toLowerCase()) ?? form.platform)
+    : '';
   const initialIsCustom = !!form.platform && !knownPlatformValues.some(v => v.toLowerCase() === form.platform.toLowerCase());
   const [isCustomSelected, setIsCustomSelected] = useState(initialIsCustom);
   const [customPlatform, setCustomPlatform] = useState(initialIsCustom ? form.platform : '');
@@ -939,7 +942,7 @@ function WebsiteFormModal({
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1">平台</label>
               <select
-                value={isCustomSelected ? '__custom__' : form.platform}
+                value={isCustomSelected ? '__custom__' : canonicalPlatform}
                 onChange={(e) => {
                   if (e.target.value === '__custom__') {
                     setIsCustomSelected(true);
