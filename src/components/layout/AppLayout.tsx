@@ -2,7 +2,6 @@ import { ReactNode } from 'react';
 import { useApp } from '@/context/AppContext';
 import { Sidebar } from './Sidebar';
 import { TopNav } from './TopNav';
-import { SampleDataIndicator } from '@/components/settings/SampleDataManager';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -22,7 +21,6 @@ export function AppLayout({ children }: AppLayoutProps) {
           {children}
         </div>
       </main>
-      <SampleDataIndicator />
     </div>
   );
 }

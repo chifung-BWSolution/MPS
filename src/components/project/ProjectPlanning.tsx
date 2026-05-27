@@ -4,7 +4,6 @@ import { cn } from '@/lib/utils';
 import { Project } from '@/types/app';
 import { useApp } from '@/context/AppContext';
 import { companies, brands, projectTypeLabels, statusConfig, priorityConfig } from '@/data/mockData';
-import { useProjects } from '@/hooks/useProjects';
 import { ProjectCategoryBadge } from '@/components/ui/project-category-badge';
 import {
   Select,
@@ -18,9 +17,17 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 
-export function ProjectPlanning({ onSelectProject, forcedCategory }: { onSelectProject?: (projectId: string) => void; forcedCategory?: 'internal' | 'client' }) {
+type ProjectPlanningProps = {
+  onSelectProject?: (projectId: string) => void;
+  forcedCategory?: 'internal' | 'client';
+  projects: Project[];
+  loading: boolean;
+  updateProject: (id: string, updates: Partial<Project>) => Promise<unknown>;
+  deleteProject: (id: string) => Promise<unknown>;
+};
+
+export function ProjectPlanning({ onSelectProject, forcedCategory, projects, loading: projectsLoading, updateProject, deleteProject }: ProjectPlanningProps) {
   const { navigateTo, selectedCompanyId, selectedBrandId } = useApp();
-  const { projects, loading: projectsLoading, updateProject, deleteProject } = useProjects();
   const [viewMode, setViewMode] = useState<'card' | 'table'>('table');
   const [filterBrand, setFilterBrand] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');

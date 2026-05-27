@@ -2,9 +2,11 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useApp } from '@/context/AppContext';
 import { ProjectPlanning } from './ProjectPlanning';
+import { useCompanyProjects } from '@/hooks/useCompanyProjects';
 
 export function ProjectInternalList({ onSelectProject }: { onSelectProject?: (projectId: string) => void }) {
   const { navigateTo } = useApp();
+  const { projects, loading, updateProject, deleteProject } = useCompanyProjects();
 
   return (
     <div className="space-y-4">
@@ -19,7 +21,14 @@ export function ProjectInternalList({ onSelectProject }: { onSelectProject?: (pr
           新增內部項目
         </Button>
       </div>
-      <ProjectPlanning onSelectProject={onSelectProject} forcedCategory="internal" />
+      <ProjectPlanning
+        onSelectProject={onSelectProject}
+        forcedCategory="internal"
+        projects={projects}
+        loading={loading}
+        updateProject={updateProject}
+        deleteProject={deleteProject}
+      />
     </div>
   );
 }

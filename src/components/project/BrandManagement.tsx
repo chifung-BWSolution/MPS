@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Plus, Edit2, Check, X, Building2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Brand } from '@/types/app';
-import { companies, brands as initialBrands, projects, yearPlans } from '@/data/mockData';
+import { companies, projects, yearPlans } from '@/data/mockData';
+import { useBrands } from '@/hooks/useBrands';
 import {
   Dialog,
   DialogContent,
@@ -52,11 +54,12 @@ const emptyBrand: BrandFormData = {
 };
 
 export function BrandManagement({ onSelectBrand }: { onSelectBrand?: (brandId: string) => void }) {
-  const [brands, setBrands] = useState<Brand[]>(initialBrands);
+  const { brands, addBrand, updateBrand } = useBrands();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
   const [formData, setFormData] = useState<BrandFormData>(emptyBrand);
   const [filterCompany, setFilterCompany] = useState<string>('all');
+  const [saving, setSaving] = useState(false);
 
   const handleOpenNew = () => {
     setEditingBrand(null);
@@ -79,29 +82,38 @@ export function BrandManagement({ onSelectBrand }: { onSelectBrand?: (brandId: s
     setIsDialogOpen(true);
   };
 
-  const handleSave = () => {
-    if (editingBrand) {
-      setBrands(prev =>
-        prev.map(b => b.id === editingBrand.id ? {
-          ...b,
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      if (editingBrand) {
+        const err = await updateBrand(editingBrand.id, formData);
+        if (err) {
+          toast.error('儲存失敗', { description: err.message });
+          return;
+        }
+        toast.success('品牌已更新');
+      } else {
+        const newBrand: Brand = {
+          id: `brand_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           ...formData,
-        } : b)
-      );
-    } else {
-      const newBrand: Brand = {
-        id: String(Date.now()),
-        ...formData,
-        projectCount: 0,
-      };
-      setBrands(prev => [...prev, newBrand]);
+          projectCount: 0,
+        };
+        const err = await addBrand(newBrand);
+        if (err) {
+          toast.error('儲存失敗', { description: err.message });
+          return;
+        }
+        toast.success('品牌已新增');
+      }
+      setIsDialogOpen(false);
+    } finally {
+      setSaving(false);
     }
-    setIsDialogOpen(false);
   };
 
-  const handleToggleActive = (brand: Brand) => {
-    setBrands(prev =>
-      prev.map(b => b.id === brand.id ? { ...b, isActive: !b.isActive } : b)
-    );
+  const handleToggleActive = async (brand: Brand) => {
+    const err = await updateBrand(brand.id, { isActive: !brand.isActive });
+    if (err) toast.error('更新失敗', { description: err.message });
   };
 
   const filteredBrands = filterCompany === 'all' ? brands : brands.filter(b => b.companyId === filterCompany);
@@ -211,8 +223,8 @@ export function BrandManagement({ onSelectBrand }: { onSelectBrand?: (brandId: s
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="outline" size="sm" onClick={() => setIsDialogOpen(false)}>取消</Button>
-                  <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={handleSave} disabled={!formData.companyId || !formData.brandCode || !formData.brandNameZh || !formData.brandNameEn}>
-                    {editingBrand ? '保存' : '新增'}
+                  <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={handleSave} disabled={saving || !formData.companyId || !formData.brandCode || !formData.brandNameZh || !formData.brandNameEn}>
+                    {saving ? '儲存中...' : editingBrand ? '保存' : '新增'}
                   </Button>
                 </div>
               </div>

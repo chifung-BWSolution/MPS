@@ -2,9 +2,11 @@ import { Plus, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useApp } from '@/context/AppContext';
 import { ProjectPlanning } from './ProjectPlanning';
+import { useClientProjects } from '@/hooks/useClientProjects';
 
 export function ProjectClientList({ onSelectProject }: { onSelectProject?: (projectId: string) => void }) {
   const { navigateTo } = useApp();
+  const { projects, loading, updateProject, deleteProject } = useClientProjects();
 
   return (
     <div className="space-y-4">
@@ -25,7 +27,14 @@ export function ProjectClientList({ onSelectProject }: { onSelectProject?: (proj
           新增客戶項目
         </Button>
       </div>
-      <ProjectPlanning onSelectProject={onSelectProject} forcedCategory="client" />
+      <ProjectPlanning
+        onSelectProject={onSelectProject}
+        forcedCategory="client"
+        projects={projects}
+        loading={loading}
+        updateProject={updateProject}
+        deleteProject={deleteProject}
+      />
     </div>
   );
 }

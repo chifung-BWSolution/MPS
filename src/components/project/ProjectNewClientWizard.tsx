@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useApp } from '@/context/AppContext';
-import { useDataStore } from '@/context/DataStore';
+import { useClientProjects } from '@/hooks/useClientProjects';
 
 // Client tag presets
 const clientTagPresets = [
@@ -68,10 +68,22 @@ const priorityConfig: Record<ProjectPriority, { label: string; color: string; do
 };
 
 const pmOptions = [
-  { id: 'u1', name: '陳小華', role: 'project_manager' },
-  { id: 'u2', name: '戴維斯', role: 'project_manager' },
-  { id: 'u3', name: '朴賢俊', role: 'project_manager' },
-  { id: 'u4', name: '張偉明', role: 'management' },
+  { id: 'cfb_leo',     name: 'Leo Tse',       role: 'management' },
+  { id: 'manual_super_admin_lowell', name: 'Lowell Lo', role: 'management' },
+  { id: 'cfb_bis',     name: 'Bis Sit',       role: 'management' },
+  { id: 'cfb_yoko',    name: 'Yoko Cheung',   role: 'management' },
+  { id: 'cfb_mandy',   name: 'Mandy Mau',     role: 'management' },
+  { id: 'cfb_dynamic', name: 'Rebecca Cheng', role: 'management' },
+  { id: 'cfb_ivan',    name: 'Ivan Leung',    role: 'management' },
+  { id: 'cfb_m04',     name: 'Ada Ou',        role: 'management' },
+  { id: 'cfb_m10',     name: 'Frederick Lin', role: 'project_manager' },
+  { id: 'cfb_c02',     name: 'Mirana Chan',   role: 'designer' },
+  { id: 'cfb_c01',     name: 'KK Zhou',       role: 'designer' },
+  { id: 'cfb_v01',     name: 'Jasky Li',      role: 'video_editor' },
+  { id: 'cfb_m01',     name: 'Silvia Liang',  role: 'staff' },
+  { id: 'cfb_m02',     name: 'Jane Long',     role: 'staff' },
+  { id: 'cfb_m03',     name: 'Kisa Cen',      role: 'staff' },
+  { id: 'cfb_m05',     name: 'Michelle Chen', role: 'staff' },
 ];
 
 interface ClientFormData {
@@ -141,7 +153,7 @@ const existingClients = [
 
 export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
   const { navigateTo } = useApp();
-  const { addProject } = useDataStore();
+  const { addProject } = useClientProjects();
   const { companies } = useCompanies();
   const { brands } = useBrands();
   const [currentStep, setCurrentStep] = useState(1);
@@ -208,18 +220,18 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validateFinalForm()) return;
 
-    // Create the project
-    const newProject = addProject({
+    const newProject = {
+      id: `p_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       name: formData.name,
       clientName: formData.clientCompanyName,
       companyId: formData.companyId,
       brandId: formData.brandId,
       projectType: formData.projectType,
-      projectCategory: 'client',
-      status: 'planning',
+      projectCategory: 'client' as const,
+      status: 'planning' as const,
       progress: 0,
       assignedPm: formData.assignedPm,
       brand: selectedBrand?.brandCode,
@@ -245,10 +257,19 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
         tags: formData.clientTags,
       },
       serviceItems: formData.serviceItems.length > 0 ? formData.serviceItems : undefined,
-    });
+    };
+
+    const error = await addProject(newProject);
+    if (error) {
+      setErrors({ submit: `儲存失敗：${(error as { message?: string })?.message ?? '未知錯誤'}` });
+      return;
+    }
 
     setSubmitted(true);
     setShowQuotationPrompt(true);
+    setTimeout(() => {
+      navigateTo('project', 'client');
+    }, 2000);
   };
 
   const handleSelectExistingClient = (client: typeof existingClients[0]) => {
@@ -1244,6 +1265,12 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
           )}
         </div>
       </div>
+      {errors.submit && (
+        <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-300 rounded-md">
+          <AlertCircle size={14} className="text-rose-600 shrink-0 mt-0.5" />
+          <p className="text-[12px] text-rose-700">{errors.submit}</p>
+        </div>
+      )}
     </div>
   );
 }

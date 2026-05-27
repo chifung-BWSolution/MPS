@@ -8,9 +8,11 @@ import { ProjectProgress } from './ProjectProgress';
 import { ProjectFocus } from './ProjectFocus';
 import { ProjectInternalList } from './ProjectInternalList';
 import { ProjectClientList } from './ProjectClientList';
+import { useProjects } from '@/hooks/useProjects';
 
 export function ProjectModule({ subModule }: { subModule?: string }) {
   const { navigateTo } = useApp();
+  const { projects: allProjects, loading: allLoading, updateProject: allUpdate, deleteProject: allDelete } = useProjects();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [previousListSubModule, setPreviousListSubModule] = useState<string>('focus');
 
@@ -48,7 +50,7 @@ export function ProjectModule({ subModule }: { subModule?: string }) {
       case 'progress':
         return <ProjectProgress />;
       case 'planning':
-        return <ProjectPlanning />;
+        return <ProjectPlanning projects={allProjects} loading={allLoading} updateProject={allUpdate} deleteProject={allDelete} />;
       case 'detail':
         return <ProjectDetail projectId={selectedProjectId || undefined} onBack={handleBackToList} />;
       default:

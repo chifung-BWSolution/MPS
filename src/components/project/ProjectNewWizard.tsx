@@ -17,7 +17,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useApp } from '@/context/AppContext';
-import { useDataStore } from '@/context/DataStore';
+import { useCompanyProjects } from '@/hooks/useCompanyProjects';
+import { useClientProjects } from '@/hooks/useClientProjects';
 
 const priorityConfig: Record<ProjectPriority, { label: string; color: string; dotColor: string }> = {
   low: { label: '低', color: 'bg-green-100 text-green-700', dotColor: 'bg-green-500' },
@@ -27,10 +28,22 @@ const priorityConfig: Record<ProjectPriority, { label: string; color: string; do
 };
 
 const pmOptions = [
-  { id: 'u1', name: '陳小華', role: 'project_manager' },
-  { id: 'u2', name: '戴維斯', role: 'project_manager' },
-  { id: 'u3', name: '朴賢俊', role: 'project_manager' },
-  { id: 'u4', name: '張偉明', role: 'management' },
+  { id: 'cfb_leo',     name: 'Leo Tse',       role: 'management' },
+  { id: 'manual_super_admin_lowell', name: 'Lowell Lo', role: 'management' },
+  { id: 'cfb_bis',     name: 'Bis Sit',       role: 'management' },
+  { id: 'cfb_yoko',    name: 'Yoko Cheung',   role: 'management' },
+  { id: 'cfb_mandy',   name: 'Mandy Mau',     role: 'management' },
+  { id: 'cfb_dynamic', name: 'Rebecca Cheng', role: 'management' },
+  { id: 'cfb_ivan',    name: 'Ivan Leung',    role: 'management' },
+  { id: 'cfb_m04',     name: 'Ada Ou',        role: 'management' },
+  { id: 'cfb_m10',     name: 'Frederick Lin', role: 'project_manager' },
+  { id: 'cfb_c02',     name: 'Mirana Chan',   role: 'designer' },
+  { id: 'cfb_c01',     name: 'KK Zhou',       role: 'designer' },
+  { id: 'cfb_v01',     name: 'Jasky Li',      role: 'video_editor' },
+  { id: 'cfb_m01',     name: 'Silvia Liang',  role: 'staff' },
+  { id: 'cfb_m02',     name: 'Jane Long',     role: 'staff' },
+  { id: 'cfb_m03',     name: 'Kisa Cen',      role: 'staff' },
+  { id: 'cfb_m05',     name: 'Michelle Chen', role: 'staff' },
 ];
 
 interface ProjectFormData {
@@ -65,7 +78,8 @@ const emptyForm: ProjectFormData = {
 
 export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
   const { navigateTo } = useApp();
-  const { addProject } = useDataStore();
+  const { addProject: addCompanyProject } = useCompanyProjects();
+  const { addProject: addClientProject } = useClientProjects();
   const { companies } = useCompanies();
   const { brands } = useBrands();
   const [currentStep, setCurrentStep] = useState(1);
@@ -108,20 +122,20 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validateForm()) return;
 
-    // Create project in DataStore
     const selectedBrandData = brands.find(b => b.id === formData.brandId);
     const selectedCompanyData = companies.find(c => c.id === formData.companyId);
-    addProject({
+    const newProject = {
+      id: `p_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       name: formData.name,
       clientName: formData.clientName || undefined,
       companyId: formData.companyId,
       brandId: formData.brandId,
       projectType: formData.projectType,
       projectCategory: formData.projectCategory,
-      status: 'planning',
+      status: 'planning' as const,
       progress: 0,
       assignedPm: formData.assignedPm || undefined,
       brand: selectedBrandData?.brandCode || '',
@@ -132,14 +146,21 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
       endDate: formData.endDate || undefined,
       description: formData.description || undefined,
       priority: formData.priority,
-    });
+    };
+
+    const error = formData.projectCategory === 'client'
+      ? await addClientProject(newProject)
+      : await addCompanyProject(newProject);
+
+    if (error) {
+      setErrors({ submit: `儲存失敗：${(error as { message?: string })?.message ?? '未知錯誤'}` });
+      return;
+    }
 
     setSubmitted(true);
-
-    // Show success state briefly, then navigate back
     setTimeout(() => {
-      onBack();
-    }, 2000);
+      navigateTo('project', formData.projectCategory === 'client' ? 'client' : 'internal');
+    }, 1500);
   };
 
   const isFormValid = formData.name && formData.companyId && formData.brandId && formData.startDate;
@@ -538,6 +559,12 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
           )}
         </div>
       </div>
+      {errors.submit && (
+        <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-300 rounded-md">
+          <AlertCircle size={14} className="text-rose-600 shrink-0 mt-0.5" />
+          <p className="text-[12px] text-rose-700">{errors.submit}</p>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,7 +3,8 @@ import { TrendingUp, Clock, DollarSign, Eye, UserPlus, FileText, Flame, User } f
 import { cn } from '@/lib/utils';
 import { companies, brands, statusConfig } from '@/data/mockData';
 import { useApp } from '@/context/AppContext';
-import { useDataStore } from '@/context/DataStore';
+import { useClientProjects } from '@/hooks/useClientProjects';
+import { useCompanyProjects } from '@/hooks/useCompanyProjects';
 import { ProjectCategoryBadge } from '@/components/ui/project-category-badge';
 import {
   Select,
@@ -15,7 +16,9 @@ import {
 
 export function ProjectFocus({ onSelectProject }: { onSelectProject?: (projectId: string) => void }) {
   const { selectedCompanyId, selectedBrandId } = useApp();
-  const { projects: allProjects } = useDataStore();
+  const { projects: clientProjects } = useClientProjects();
+  const { projects: companyProjects } = useCompanyProjects();
+  const allProjects = useMemo(() => [...companyProjects, ...clientProjects], [companyProjects, clientProjects]);
   const [timeRange, setTimeRange] = useState<string>('14');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'internal' | 'client'>('all');
 
@@ -130,6 +133,12 @@ export function ProjectFocus({ onSelectProject }: { onSelectProject?: (projectId
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <h4 className="text-[14px] font-bold">{project.name}</h4>
+                    <span className={cn(
+                      'text-[10px] font-bold px-2 py-0.5 rounded',
+                      project.projectCategory === 'client' ? 'bg-purple-100 text-purple-700' : 'bg-sky-100 text-sky-700'
+                    )}>
+                      {project.projectCategory === 'client' ? '客戶項目' : '內部項目'}
+                    </span>
                     <span className={cn('text-[10px] font-medium px-2 py-0.5 rounded', sConfig.bgColor, sConfig.textColor)}>
                       {sConfig.label}
                     </span>

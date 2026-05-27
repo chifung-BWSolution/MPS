@@ -1,4 +1,25 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+
+const EMAIL_HISTORY_KEY = 'mps_dev_email_history';
+
+function loadEmailHistory(): string[] {
+  try {
+    const raw = localStorage.getItem(EMAIL_HISTORY_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveEmailToHistory(email: string) {
+  try {
+    const existing = loadEmailHistory().filter(e => e.toLowerCase() !== email.toLowerCase());
+    const next = [email, ...existing].slice(0, 10);
+    localStorage.setItem(EMAIL_HISTORY_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+}
 import { useAuth } from '@/context/AuthContext';
 import { Chrome, Shield, AlertCircle, Code2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -10,6 +31,11 @@ export function LoginPage({ authError }: { authError?: string | null }) {
   const [showDevInput, setShowDevInput] = useState(false);
   const [devEmail, setDevEmail] = useState('');
   const [devLoading, setDevLoading] = useState(false);
+  const [emailHistory, setEmailHistory] = useState<string[]>([]);
+
+  useEffect(() => {
+    setEmailHistory(loadEmailHistory());
+  }, []);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -34,7 +60,10 @@ export function LoginPage({ authError }: { authError?: string | null }) {
     setDevLoading(true);
     setError('');
     try {
-      await devBypassLogin(devEmail.trim());
+      const trimmed = devEmail.trim();
+      await devBypassLogin(trimmed);
+      saveEmailToHistory(trimmed);
+      setEmailHistory(loadEmailHistory());
     } catch (err: any) {
       console.error('Dev bypass failed:', err);
       setError(err.message || '驗證失敗');
@@ -96,21 +125,31 @@ export function LoginPage({ authError }: { authError?: string | null }) {
                 <span>Developer Bypass Login</span>
               </button>
             ) : (
-              <div className="space-y-3">
+              <form
+                className="space-y-3"
+                onSubmit={(e) => { e.preventDefault(); handleDevBypass(); }}
+              >
                 <p className="text-[11px] text-amber-600 font-medium text-center">
                   ⚠️ 開發模式 — 輸入已授權的電郵地址
                 </p>
                 <input
                   type="email"
+                  name="email"
+                  id="dev-bypass-email"
+                  autoComplete="email"
+                  list="dev-email-history"
                   placeholder="輸入電郵地址 (e.g. user@company.com)"
                   value={devEmail}
                   onChange={(e) => setDevEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleDevBypass()}
                   className="w-full px-3 py-2.5 border border-amber-200 rounded-lg text-[13px] bg-amber-50/50 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-amber-400 placeholder:text-amber-400"
                   autoFocus
                 />
+                <datalist id="dev-email-history">
+                  {emailHistory.map(em => <option key={em} value={em} />)}
+                </datalist>
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={() => {
                       setShowDevInput(false);
                       setDevEmail('');
@@ -121,14 +160,14 @@ export function LoginPage({ authError }: { authError?: string | null }) {
                     取消
                   </button>
                   <button
-                    onClick={handleDevBypass}
+                    type="submit"
                     disabled={devLoading || !devEmail.trim()}
                     className="flex-1 px-3 py-2 bg-amber-500 text-white rounded-lg text-[12px] font-medium hover:bg-amber-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {devLoading ? '驗證中...' : '驗證並登入'}
                   </button>
                 </div>
-              </div>
+              </form>
             )}
           </div>
 

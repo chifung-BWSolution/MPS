@@ -49,7 +49,11 @@ export const pitchingStatusConfig: Record<PitchingStatus, { label: string; color
   abandoned: { label: '已放棄', color: 'text-slate-500', bgColor: 'bg-slate-100' },
 };
 
-export const pitchingRecords: (PitchingRecord & { __sampleData: true })[] = [
+export const pitchingRecords: (PitchingRecord & { __sampleData: true })[] = [];
+
+// Archived sample records — kept for reference, not exported.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _archivedSamples: (PitchingRecord & { __sampleData: true })[] = [
   {
     __sampleData: true,
     id: 'pitch-1',
