@@ -28,10 +28,22 @@ const priorityConfig: Record<ProjectPriority, { label: string; color: string; do
 };
 
 const pmOptions = [
-  { id: 'u1', name: '陳小華', role: 'project_manager' },
-  { id: 'u2', name: '戴維斯', role: 'project_manager' },
-  { id: 'u3', name: '朴賢俊', role: 'project_manager' },
-  { id: 'u4', name: '張偉明', role: 'management' },
+  { id: 'cfb_leo',     name: 'Leo Tse',       role: 'management' },
+  { id: 'manual_super_admin_lowell', name: 'Lowell Lo', role: 'management' },
+  { id: 'cfb_bis',     name: 'Bis Sit',       role: 'management' },
+  { id: 'cfb_yoko',    name: 'Yoko Cheung',   role: 'management' },
+  { id: 'cfb_mandy',   name: 'Mandy Mau',     role: 'management' },
+  { id: 'cfb_dynamic', name: 'Rebecca Cheng', role: 'management' },
+  { id: 'cfb_ivan',    name: 'Ivan Leung',    role: 'management' },
+  { id: 'cfb_m04',     name: 'Ada Ou',        role: 'management' },
+  { id: 'cfb_m10',     name: 'Frederick Lin', role: 'project_manager' },
+  { id: 'cfb_c02',     name: 'Mirana Chan',   role: 'designer' },
+  { id: 'cfb_c01',     name: 'KK Zhou',       role: 'designer' },
+  { id: 'cfb_v01',     name: 'Jasky Li',      role: 'video_editor' },
+  { id: 'cfb_m01',     name: 'Silvia Liang',  role: 'staff' },
+  { id: 'cfb_m02',     name: 'Jane Long',     role: 'staff' },
+  { id: 'cfb_m03',     name: 'Kisa Cen',      role: 'staff' },
+  { id: 'cfb_m05',     name: 'Michelle Chen', role: 'staff' },
 ];
 
 interface ProjectFormData {
@@ -147,8 +159,8 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
 
     setSubmitted(true);
     setTimeout(() => {
-      onBack();
-    }, 2000);
+      navigateTo('project', formData.projectCategory === 'client' ? 'client' : 'internal');
+    }, 1500);
   };
 
   const isFormValid = formData.name && formData.companyId && formData.brandId && formData.startDate;
