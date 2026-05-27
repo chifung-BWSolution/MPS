@@ -1109,6 +1109,16 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
   const [editingSite, setEditingSite] = useState<WebsiteProfileFull | null>(null);
 
   const filteredBrands = companyFilter === 'all' ? brands : brands.filter(b => b.companyId === companyFilter);
+  // Deduplicate brands by brandCode for the filter dropdown
+  const uniqueBrandCodes = Array.from(
+    new Map(filteredBrands.filter(b => b.isActive).map(b => [b.brandCode, b])).values()
+  );
+  // Map of brandCode -> set of brand ids (so filtering matches all brands sharing the same code)
+  const brandIdsByCode = new Map<string, Set<string>>();
+  brands.forEach(b => {
+    if (!brandIdsByCode.has(b.brandCode)) brandIdsByCode.set(b.brandCode, new Set());
+    brandIdsByCode.get(b.brandCode)!.add(b.id);
+  });
 
   const toggleLevelFilter = (lvl: number) => {
     setLevelFilter(prev => prev.includes(lvl) ? prev.filter(l => l !== lvl) : [...prev, lvl]);
@@ -1207,7 +1217,10 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       if (wsType !== typeFilter) return false;
     }
     if (companyFilter !== 'all' && ws.companyId !== companyFilter) return false;
-    if (brandFilter !== 'all' && ws.brandId !== brandFilter) return false;
+    if (brandFilter !== 'all') {
+      const matchingIds = brandIdsByCode.get(brandFilter);
+      if (!matchingIds || !matchingIds.has(ws.brandId)) return false;
+    }
     if (statusFilter !== 'all' && ws.status !== statusFilter) return false;
     if (levelFilter.length > 0 && !levelFilter.includes(ws.level)) return false;
     if (categoryFilter !== 'all') {
@@ -1281,8 +1294,8 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
         </select>
         <select value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px]">
           <option value="all">所有品牌</option>
-          {filteredBrands.filter(b => b.isActive).map(b => (
-            <option key={b.id} value={b.id}>{b.brandCode}</option>
+          {uniqueBrandCodes.map(b => (
+            <option key={b.brandCode} value={b.brandCode}>{b.brandCode}</option>
           ))}
         </select>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px]">
