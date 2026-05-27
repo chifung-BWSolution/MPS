@@ -827,9 +827,17 @@ function WebsiteFormModal({
   const canonicalPlatform = form.platform
     ? (knownPlatformValues.find(v => v.toLowerCase() === form.platform.toLowerCase()) ?? form.platform)
     : '';
-  const initialIsCustom = !!form.platform && !knownPlatformValues.some(v => v.toLowerCase() === form.platform.toLowerCase());
-  const [isCustomSelected, setIsCustomSelected] = useState(initialIsCustom);
-  const [customPlatform, setCustomPlatform] = useState(initialIsCustom ? form.platform : '');
+  const initialIsCustom = !!form.platform && knownPlatformValues.length > 0 && !knownPlatformValues.some(v => v.toLowerCase() === form.platform.toLowerCase());
+  const [isCustomSelected, setIsCustomSelected] = useState(false);
+  const [customPlatform, setCustomPlatform] = useState('');
+
+  // Re-evaluate once platformOptions finish loading (they start as empty array)
+  useEffect(() => {
+    if (knownPlatformValues.length === 0) return;
+    const isCustom = !!form.platform && !knownPlatformValues.some(v => v.toLowerCase() === form.platform.toLowerCase());
+    setIsCustomSelected(isCustom);
+    setCustomPlatform(isCustom ? form.platform : '');
+  }, [knownPlatformValues.length]);
 
   const filteredBrandsForForm = form.companyId
     ? brands.filter(b => b.companyId === form.companyId)
