@@ -100,8 +100,8 @@ export function useWebsiteProfiles() {
       videos_count: site.videosCount,
       total_hours: site.totalHours,
       project_id: site.projectId ?? null,
-      company_id: site.companyId,
-      brand_id: site.brandId,
+      company_id: site.companyId || null,
+      brand_id: site.brandId || null,
       notes: site.notes ?? null,
       hosting_provider: site.hostingProvider ?? null,
       dev_progress: site.devProgress ?? null,
@@ -128,8 +128,8 @@ export function useWebsiteProfiles() {
     if (updates.articlesCount !== undefined) row.articles_count = updates.articlesCount;
     if (updates.videosCount !== undefined) row.videos_count = updates.videosCount;
     if (updates.totalHours !== undefined) row.total_hours = updates.totalHours;
-    if (updates.companyId !== undefined) row.company_id = updates.companyId;
-    if (updates.brandId !== undefined) row.brand_id = updates.brandId;
+    if (updates.companyId !== undefined) row.company_id = updates.companyId || null;
+    if (updates.brandId !== undefined) row.brand_id = updates.brandId || null;
     if (updates.notes !== undefined) row.notes = updates.notes;
     if (updates.hostingProvider !== undefined) row.hosting_provider = updates.hostingProvider ?? null;
     if (updates.devProgress !== undefined) row.dev_progress = updates.devProgress;
