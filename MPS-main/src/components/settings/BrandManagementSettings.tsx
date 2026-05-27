@@ -563,8 +563,7 @@ function BrandModal({
   const validate = () => {
     const errs: Record<string, string> = {};
     if (!form.companyId?.trim()) errs.companyId = '請選擇所屬公司';
-    if (!form.brandCode?.trim()) errs.brandCode = '必填';
-    else if (existingCodes.includes(form.brandCode.trim().toUpperCase())) {
+    if (form.brandCode?.trim() && existingCodes.includes(form.brandCode.trim().toUpperCase())) {
       errs.brandCode = '品牌編碼已存在';
     }
     setErrors(errs);
@@ -572,7 +571,7 @@ function BrandModal({
   };
 
   const handleSubmit = () => {
-    if (validate()) onSave({ ...form, brandCode: form.brandCode?.trim().toUpperCase() });
+    if (validate()) onSave({ ...form, brandCode: form.brandCode?.trim().toUpperCase() || '' });
   };
 
   const updateField = (field: keyof Brand, value: string) => {
@@ -613,9 +612,9 @@ function BrandModal({
           </div>
 
           <div>
-            <p className="text-[12px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">必填資料</p>
+            <p className="text-[12px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">品牌資料</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FieldInput label="品牌編碼" value={form.brandCode || ''} onChange={(v) => updateField('brandCode', v)} error={errors.brandCode} placeholder="如 BW, ACI" />
+              <FieldInput label="品牌編碼（選填）" value={form.brandCode || ''} onChange={(v) => updateField('brandCode', v)} error={errors.brandCode} placeholder="如 BW, ACI" />
               <FieldInput label="中文品牌名" value={form.brandNameZh || ''} onChange={(v) => updateField('brandNameZh', v)} placeholder="志豐企業" />
               <FieldInput label="英文品牌名" value={form.brandNameEn || ''} onChange={(v) => updateField('brandNameEn', v)} placeholder="BWDesign Centre" className="md:col-span-2" />
             </div>
