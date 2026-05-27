@@ -1108,7 +1108,12 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingSite, setEditingSite] = useState<WebsiteProfileFull | null>(null);
 
-  const filteredBrands = companyFilter === 'all' ? brands : brands.filter(b => b.companyId === companyFilter);
+  const filteredBrands = companyFilter === 'all'
+    ? brands
+    : brands.filter(b => {
+        const co = companies.find(c => c.id === b.companyId);
+        return co?.companyCode === companyFilter;
+      });
   // Deduplicate brands by brandCode for the filter dropdown
   const uniqueBrandCodes = Array.from(
     new Map(filteredBrands.filter(b => b.isActive).map(b => [b.brandCode, b])).values()
@@ -1216,7 +1221,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       const wsType = ws.profileType || 'website';
       if (wsType !== typeFilter) return false;
     }
-    if (companyFilter !== 'all' && ws.companyId !== companyFilter) return false;
+    if (companyFilter !== 'all' && (ws.company || '') !== companyFilter) return false;
     if (brandFilter !== 'all') {
       const matchingIds = brandIdsByCode.get(brandFilter);
       if (!matchingIds || !matchingIds.has(ws.brandId)) return false;
@@ -1288,8 +1293,8 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
         </div>
         <select value={companyFilter} onChange={(e) => { setCompanyFilter(e.target.value); setBrandFilter('all'); }} className="px-3 py-1.5 border border-border rounded-md text-[13px]">
           <option value="all">所有公司</option>
-          {companies.filter(c => c.isActive).map(c => (
-            <option key={c.id} value={c.id}>{c.companyCode}</option>
+          {Array.from(new Set(websiteProfiles.map(p => p.company || '').filter(Boolean))).sort().map(code => (
+            <option key={code} value={code}>{code}</option>
           ))}
         </select>
         <select value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px]">
