@@ -1,0 +1,1 @@
+ALTER TABLE day_report_entries ADD COLUMN IF NOT EXISTS ai_tools_v2 JSONB DEFAULT NULL;

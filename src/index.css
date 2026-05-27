@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 33% 98%;
+    --foreground: 213 67% 8%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 213 67% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 213 67% 8%;
+
+    --primary: 174 84% 32%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 33% 96%;
+    --secondary-foreground: 213 67% 8%;
+
+    --muted: 210 33% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 174 84% 32%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 347 77% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 213 20% 92%;
+    --input: 213 20% 92%;
+    --ring: 174 84% 32%;
+
+    --radius: 4px;
+
+    --sidebar-background: 213 67% 8%;
+    --sidebar-foreground: 210 33% 96%;
+    --sidebar-primary: 174 84% 32%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 213 50% 14%;
+    --sidebar-accent-foreground: 210 33% 96%;
+    --sidebar-border: 213 40% 16%;
+    --sidebar-ring: 174 84% 32%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --success: 174 84% 32%;
+    --success-foreground: 0 0% 100%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 15px;
+  }
+}
+
+@layer utilities {
+  .shadow-card {
+    box-shadow: 0 2px 6px rgba(0, 20, 40, 0.05);
+  }
+  .shadow-card-hover {
+    box-shadow: 0 4px 12px rgba(0, 20, 40, 0.10);
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
