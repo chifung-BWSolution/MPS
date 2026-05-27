@@ -2,6 +2,7 @@
 import { registerCanvasLoaders } from "./component-host";
 
 registerCanvasLoaders({
+  "designs/canvases/untitled-2/index.canvas.tsx": () => import("../designs/canvases/untitled-2/index.canvas"),
   "designs/canvases/untitled/index.canvas.tsx": () => import("../designs/canvases/untitled/index.canvas"),
 });
 

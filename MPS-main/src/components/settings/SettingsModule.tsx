@@ -12,6 +12,8 @@ import { companies, brands } from '@/data/mockData';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { canAccessSettings } from '@/lib/permissions';
+import { useSystemOptions } from '@/hooks/useSystemOptions';
+import { toast } from 'sonner';
 
 export function SettingsModule({ subModule }: { subModule?: string }) {
   const { systemUser } = useAuth();
@@ -1103,210 +1105,111 @@ function NotificationsSection() {
 }
 
 function OptionsSection() {
-  const [platforms, setPlatforms] = useState(['WordPress', 'Shopify', 'Wix', 'Custom', 'Squarespace']);
-  const [brandCategories, setBrandCategories] = useState(['BW', 'ACI', 'FCC', 'BSC', 'ChiFung']);
-  const [projectTypes, setProjectTypes] = useState(['web_design', 'system', 'event', 'wine', 'branding', 'marketing', 'video', 'social_media', 'edm', 'paid_ads', 'seo_upgrade', 'other']);
-  const [newPlatform, setNewPlatform] = useState('');
-  const [newBrand, setNewBrand] = useState('');
-  const [newProjectType, setNewProjectType] = useState('');
-  const [editingPlatform, setEditingPlatform] = useState<{ index: number; value: string } | null>(null);
-  const [editingBrandCat, setEditingBrandCat] = useState<{ index: number; value: string } | null>(null);
-  const [editingProjectType, setEditingProjectType] = useState<{ index: number; value: string } | null>(null);
+  const { byCategory, loading, addOption, updateOption, deleteOption } = useSystemOptions();
+  const [newValues, setNewValues] = useState<Record<string, string>>({ platform: '', brand_category: '', project_type: '' });
+  const [editing, setEditing] = useState<{ id: string; value: string } | null>(null);
 
-  const handleAddPlatform = () => {
-    if (newPlatform.trim()) {
-      setPlatforms([...platforms, newPlatform.trim()]);
-      setNewPlatform('');
+  const handleAdd = async (category: 'platform' | 'brand_category' | 'project_type') => {
+    const value = newValues[category];
+    if (!value.trim()) return;
+    const err = await addOption(category, value);
+    if (err) {
+      toast.error('新增失敗：' + (err as any).message);
+    } else {
+      toast.success('已新增');
+      setNewValues(prev => ({ ...prev, [category]: '' }));
     }
   };
 
-  const handleAddBrandCat = () => {
-    if (newBrand.trim()) {
-      setBrandCategories([...brandCategories, newBrand.trim()]);
-      setNewBrand('');
+  const handleSaveEdit = async () => {
+    if (!editing || !editing.value.trim()) {
+      setEditing(null);
+      return;
+    }
+    const err = await updateOption(editing.id, editing.value);
+    if (err) {
+      toast.error('更新失敗：' + (err as any).message);
+    } else {
+      toast.success('已更新');
+    }
+    setEditing(null);
+  };
+
+  const handleDelete = async (id: string) => {
+    const err = await deleteOption(id);
+    if (err) {
+      toast.error('刪除失敗：' + (err as any).message);
+    } else {
+      toast.success('已刪除');
     }
   };
 
-  const handleAddProjectType = () => {
-    if (newProjectType.trim()) {
-      setProjectTypes([...projectTypes, newProjectType.trim()]);
-      setNewProjectType('');
-    }
+  const renderSection = (
+    title: string,
+    category: 'platform' | 'brand_category' | 'project_type',
+    itemWidth: string,
+    inputWidth: string,
+    bold = false
+  ) => {
+    const items = byCategory(category);
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-[18px] font-bold">{title}</h3>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {items.map((item) => (
+            <div key={item.id} className="flex items-center gap-2 border border-border/50 rounded-md px-3 py-2 group">
+              {editing?.id === item.id ? (
+                <input
+                  className={`text-[13px] border-b border-teal-600 outline-none ${itemWidth}`}
+                  value={editing.value}
+                  onChange={(e) => setEditing({ ...editing, value: e.target.value })}
+                  onBlur={handleSaveEdit}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
+                  autoFocus
+                />
+              ) : (
+                <>
+                  <span className={bold ? 'text-[13px] font-medium' : 'text-[13px]'}>{item.value}</span>
+                  <button onClick={() => setEditing({ id: item.id, value: item.value })} className="text-muted-foreground hover:text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Edit size={11} />
+                  </button>
+                  <button onClick={() => handleDelete(item.id)} className="text-muted-foreground hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <X size={11} />
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+          <div className="flex items-center gap-1 border border-dashed border-teal-300 rounded-md px-3 py-2">
+            <input
+              className={`text-[13px] outline-none ${inputWidth} placeholder:text-muted-foreground`}
+              value={newValues[category]}
+              onChange={(e) => setNewValues(prev => ({ ...prev, [category]: e.target.value }))}
+              onKeyDown={(e) => e.key === 'Enter' && handleAdd(category)}
+              placeholder="新增..."
+            />
+            <button onClick={() => handleAdd(category)} className="text-teal-600 hover:text-teal-700">
+              <Plus size={13} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
-  const handleDeletePlatform = (index: number) => {
-    setPlatforms(platforms.filter((_, i) => i !== index));
-  };
-
-  const handleDeleteBrandCat = (index: number) => {
-    setBrandCategories(brandCategories.filter((_, i) => i !== index));
-  };
-
-  const handleDeleteProjectType = (index: number) => {
-    setProjectTypes(projectTypes.filter((_, i) => i !== index));
-  };
-
-  const handleSavePlatformEdit = () => {
-    if (editingPlatform && editingPlatform.value.trim()) {
-      setPlatforms(platforms.map((p, i) => (i === editingPlatform.index ? editingPlatform.value.trim() : p)));
-      setEditingPlatform(null);
-    }
-  };
-
-  const handleSaveBrandCatEdit = () => {
-    if (editingBrandCat && editingBrandCat.value.trim()) {
-      setBrandCategories(brandCategories.map((b, i) => (i === editingBrandCat.index ? editingBrandCat.value.trim() : b)));
-      setEditingBrandCat(null);
-    }
-  };
-
-  const handleSaveProjectTypeEdit = () => {
-    if (editingProjectType && editingProjectType.value.trim()) {
-      setProjectTypes(projectTypes.map((t, i) => (i === editingProjectType.index ? editingProjectType.value.trim() : t)));
-      setEditingProjectType(null);
-    }
-  };
+  if (loading) {
+    return <div className="text-[13px] text-muted-foreground">載入中...</div>;
+  }
 
   return (
     <div className="space-y-8">
-      {/* Platforms */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-[18px] font-bold">開發平台選項</h3>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {platforms.map((p, i) => (
-            <div key={`${p}-${i}`} className="flex items-center gap-2 border border-border/50 rounded-md px-3 py-2 group">
-              {editingPlatform?.index === i ? (
-                <input
-                  className="text-[13px] border-b border-teal-600 outline-none w-24"
-                  value={editingPlatform.value}
-                  onChange={(e) => setEditingPlatform({ ...editingPlatform, value: e.target.value })}
-                  onBlur={handleSavePlatformEdit}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSavePlatformEdit()}
-                  autoFocus
-                />
-              ) : (
-                <>
-                  <span className="text-[13px]">{p}</span>
-                  <button onClick={() => setEditingPlatform({ index: i, value: p })} className="text-muted-foreground hover:text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Edit size={11} />
-                  </button>
-                  <button onClick={() => handleDeletePlatform(i)} className="text-muted-foreground hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <X size={11} />
-                  </button>
-                </>
-              )}
-            </div>
-          ))}
-          <div className="flex items-center gap-1 border border-dashed border-teal-300 rounded-md px-3 py-2">
-            <input
-              className="text-[13px] outline-none w-20 placeholder:text-muted-foreground"
-              value={newPlatform}
-              onChange={(e) => setNewPlatform(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddPlatform()}
-              placeholder="新增..."
-            />
-            <button onClick={handleAddPlatform} className="text-teal-600 hover:text-teal-700">
-              <Plus size={13} />
-            </button>
-          </div>
-        </div>
-      </div>
-
+      {renderSection('開發平台選項', 'platform', 'w-24', 'w-20')}
       <div className="border-t border-border/50" />
-
-      {/* Brand Categories */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-[18px] font-bold">品牌分類選項</h3>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {brandCategories.map((b, i) => (
-            <div key={`${b}-${i}`} className="flex items-center gap-2 border border-border/50 rounded-md px-3 py-2 group">
-              {editingBrandCat?.index === i ? (
-                <input
-                  className="text-[13px] border-b border-teal-600 outline-none w-20"
-                  value={editingBrandCat.value}
-                  onChange={(e) => setEditingBrandCat({ ...editingBrandCat, value: e.target.value })}
-                  onBlur={handleSaveBrandCatEdit}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSaveBrandCatEdit()}
-                  autoFocus
-                />
-              ) : (
-                <>
-                  <span className="text-[13px] font-medium">{b}</span>
-                  <button onClick={() => setEditingBrandCat({ index: i, value: b })} className="text-muted-foreground hover:text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Edit size={11} />
-                  </button>
-                  <button onClick={() => handleDeleteBrandCat(i)} className="text-muted-foreground hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <X size={11} />
-                  </button>
-                </>
-              )}
-            </div>
-          ))}
-          <div className="flex items-center gap-1 border border-dashed border-teal-300 rounded-md px-3 py-2">
-            <input
-              className="text-[13px] outline-none w-20 placeholder:text-muted-foreground"
-              value={newBrand}
-              onChange={(e) => setNewBrand(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddBrandCat()}
-              placeholder="新增..."
-            />
-            <button onClick={handleAddBrandCat} className="text-teal-600 hover:text-teal-700">
-              <Plus size={13} />
-            </button>
-          </div>
-        </div>
-      </div>
-
+      {renderSection('品牌分類選項', 'brand_category', 'w-20', 'w-20', true)}
       <div className="border-t border-border/50" />
-
-      {/* Project Types */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-[18px] font-bold">項目類型選項</h3>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {projectTypes.map((t, i) => (
-            <div key={`${t}-${i}`} className="flex items-center gap-2 border border-border/50 rounded-md px-3 py-2 group">
-              {editingProjectType?.index === i ? (
-                <input
-                  className="text-[13px] border-b border-teal-600 outline-none w-24"
-                  value={editingProjectType.value}
-                  onChange={(e) => setEditingProjectType({ ...editingProjectType, value: e.target.value })}
-                  onBlur={handleSaveProjectTypeEdit}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSaveProjectTypeEdit()}
-                  autoFocus
-                />
-              ) : (
-                <>
-                  <span className="text-[13px]">{t}</span>
-                  <button onClick={() => setEditingProjectType({ index: i, value: t })} className="text-muted-foreground hover:text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Edit size={11} />
-                  </button>
-                  <button onClick={() => handleDeleteProjectType(i)} className="text-muted-foreground hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <X size={11} />
-                  </button>
-                </>
-              )}
-            </div>
-          ))}
-          <div className="flex items-center gap-1 border border-dashed border-teal-300 rounded-md px-3 py-2">
-            <input
-              className="text-[13px] outline-none w-24 placeholder:text-muted-foreground"
-              value={newProjectType}
-              onChange={(e) => setNewProjectType(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddProjectType()}
-              placeholder="新增..."
-            />
-            <button onClick={handleAddProjectType} className="text-teal-600 hover:text-teal-700">
-              <Plus size={13} />
-            </button>
-          </div>
-        </div>
-      </div>
+      {renderSection('項目類型選項', 'project_type', 'w-24', 'w-24')}
     </div>
   );
 }
