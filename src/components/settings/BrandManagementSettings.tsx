@@ -563,9 +563,6 @@ function BrandModal({
   const validate = () => {
     const errs: Record<string, string> = {};
     if (!form.companyId?.trim()) errs.companyId = '請選擇所屬公司';
-    if (form.brandCode?.trim() && existingCodes.includes(form.brandCode.trim().toUpperCase())) {
-      errs.brandCode = '品牌編碼已存在';
-    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
