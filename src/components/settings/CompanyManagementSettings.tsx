@@ -305,8 +305,8 @@ function CardView({
                       <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">已停用</span>
                     )}
                   </div>
-                  <h3 className="text-[14px] font-bold text-[#0d1a2d] mt-1 leading-tight">{company.companyNameZh}</h3>
-                  <p className="text-[11px] text-muted-foreground">{company.companyNameEn}</p>
+                  <h3 className="text-[14px] font-bold text-[#0d1a2d] mt-1 leading-tight">{company.companyNameEn}</h3>
+                  <p className="text-[11px] text-muted-foreground">{company.companyNameZh}</p>
                 </div>
               </div>
             </div>
@@ -419,8 +419,8 @@ function TableView({
                 </td>
                 <td className="px-4 py-3">
                   <div>
-                    <span className="font-medium text-[#0d1a2d]">{company.companyNameZh}</span>
-                    <p className="text-[11px] text-muted-foreground">{company.companyNameEn}</p>
+                    <span className="font-bold text-[#0d1a2d]">{company.companyNameEn}</span>
+                    <p className="text-[11px] text-muted-foreground">{company.companyNameZh}</p>
                   </div>
                 </td>
                 <td className="px-4 py-3 font-mono text-[12px]">{company.brNo}</td>
