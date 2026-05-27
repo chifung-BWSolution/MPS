@@ -559,6 +559,12 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
           )}
         </div>
       </div>
+      {errors.submit && (
+        <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-300 rounded-md">
+          <AlertCircle size={14} className="text-rose-600 shrink-0 mt-0.5" />
+          <p className="text-[12px] text-rose-700">{errors.submit}</p>
+        </div>
+      )}
     </div>
   );
 }
