@@ -183,8 +183,6 @@ export interface WebsiteProfile {
   brand?: string;
   level: WebsiteLevel;
   status: 'development' | 'live' | 'maintenance' | 'archived';
-  devProgress: 'planning' | 'design' | 'development' | 'testing' | 'launched';
-  launchDate?: string;
   assignedStaff?: { userId: string; role: string }[];
   externalLinks?: { label: string; url: string; type: string }[];
   notes?: string;
@@ -283,8 +281,6 @@ export interface WebsiteProfileFull {
   brand?: string;
   level: WebsiteLevel;
   status: 'development' | 'live' | 'maintenance' | 'archived';
-  devProgress: 'planning' | 'design' | 'development' | 'testing' | 'launched';
-  launchDate?: string;
   assignedStaff?: { userId: string; role: string; name: string }[];
   externalLinks?: { label: string; url: string }[];
   notes?: string;

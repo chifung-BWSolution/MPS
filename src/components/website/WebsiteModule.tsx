@@ -44,9 +44,6 @@ const articleStatusConfig = {
   published: { label: '已發佈', color: 'text-teal-700', bgColor: 'bg-teal-50' },
 };
 
-const progressSteps = ['planning', 'design', 'development', 'testing', 'launched'];
-const progressLabels: Record<string, string> = { planning: '規劃', design: '設計', development: '開發', testing: '測試', launched: '上線' };
-
 // ===== Level Config =====
 const levelConfig: Record<WebsiteLevel, { label: string; borderColor: string; textColor: string; bgColor: string; className: string }> = {
   1: { label: '主打', borderColor: 'border-amber-500', textColor: 'text-amber-800', bgColor: 'bg-gradient-to-r from-amber-50 to-yellow-50', className: 'border-amber-500 bg-gradient-to-r from-amber-50 to-yellow-50 text-amber-800' },
@@ -98,7 +95,6 @@ function ProfileTypeBadge({ profileType, size = 'default' }: { profileType?: Pro
 // ===== Website Card =====
 function WebsiteCard({ site, onClick }: { site: WebsiteProfileFull; onClick: () => void }) {
   const config = statusConfig[site.status];
-  const progressIdx = progressSteps.indexOf(site.devProgress);
   const { category, clientName } = getProjectCategory(site.projectId, allProjectsData);
 
   return (
@@ -130,18 +126,6 @@ function WebsiteCard({ site, onClick }: { site: WebsiteProfileFull; onClick: () 
         <span className="text-[11px] bg-muted px-1.5 py-0.5 rounded">{site.platform}</span>
         <span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{site.brand}</span>
         <span className="text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{site.company}</span>
-      </div>
-
-      {/* Progress Steps */}
-      <div className="mb-3">
-        <div className="flex items-center gap-1">
-          {progressSteps.map((step, idx) => (
-            <div key={step} className="flex items-center gap-1 flex-1">
-              <div className={cn('h-1.5 flex-1 rounded-full', idx <= progressIdx ? 'bg-teal-600' : 'bg-muted')} />
-            </div>
-          ))}
-        </div>
-        <span className="text-[10px] text-muted-foreground mt-1 block">{progressLabels[site.devProgress]}</span>
       </div>
 
       {/* Stats */}
@@ -689,7 +673,6 @@ function WebsiteDetail({ site, onBack }: { site: WebsiteProfileFull; onBack: () 
                   <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">品牌</span><span className="font-medium">{site.brand}</span></div>
                   <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">公司</span><span className="font-medium">{site.company}</span></div>
                   <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">主機</span><span className="font-medium">{site.hostingProvider || '—'}</span></div>
-                  <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">上線日期</span><span className="font-medium">{site.launchDate || '—'}</span></div>
                   <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">總工時</span><span className="font-medium">{site.totalHours}h</span></div>
                 </div>
               </div>
@@ -776,8 +759,6 @@ interface WebsiteFormData {
   hostingProvider: string;
   level: WebsiteLevel;
   status: 'development' | 'live' | 'maintenance' | 'archived';
-  devProgress: 'planning' | 'design' | 'development' | 'testing' | 'launched';
-  launchDate: string;
   notes: string;
   profileType: ProfileType;
   systemType?: SystemType;
@@ -795,8 +776,6 @@ const emptyFormData: WebsiteFormData = {
   hostingProvider: '',
   level: 3,
   status: 'development',
-  devProgress: 'planning',
-  launchDate: '',
   notes: '',
   profileType: 'website',
   systemType: undefined,
@@ -1027,33 +1006,6 @@ function WebsiteFormModal({
             </div>
           </div>
 
-          {/* Dev Progress & Launch Date */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">開發進度</label>
-              <select
-                value={form.devProgress}
-                onChange={(e) => handleChange('devProgress', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
-              >
-                <option value="planning">規劃</option>
-                <option value="design">設計</option>
-                <option value="development">開發</option>
-                <option value="testing">測試</option>
-                <option value="launched">上線</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">上線日期</label>
-              <input
-                type="date"
-                value={form.launchDate}
-                onChange={(e) => handleChange('launchDate', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
-              />
-            </div>
-          </div>
-
           {/* System-specific fields */}
           {form.profileType === 'system' && (
             <div className="space-y-4 p-4 rounded-lg bg-purple-50/50 border border-purple-100">
@@ -1189,8 +1141,6 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       brand: brand?.brandCode || '',
       level: data.level,
       status: data.status,
-      devProgress: data.devProgress,
-      launchDate: data.launchDate || undefined,
       notes: data.notes || undefined,
       pagesCount: 0,
       articlesCount: 0,
@@ -1230,8 +1180,6 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       brand: brand?.brandCode ?? editingSite.brand ?? '',
       level: data.level,
       status: data.status,
-      devProgress: data.devProgress,
-      launchDate: data.launchDate || undefined,
       notes: data.notes || undefined,
       systemType: data.systemType,
     };
@@ -1249,8 +1197,6 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
     hostingProvider: site.hostingProvider || '',
     level: site.level,
     status: site.status,
-    devProgress: site.devProgress,
-    launchDate: site.launchDate || '',
     notes: site.notes || '',
     profileType: site.profileType || 'website',
     systemType: site.systemType,
@@ -1474,7 +1420,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
 function FeaturedWebsiteCard({ site, onClick }: { site: WebsiteProfileFull; onClick: () => void }) {
   const config = statusConfig[site.status];
   const budgetPercent = site.budgetTotal ? Math.round((site.budgetUsed || 0) / site.budgetTotal * 100) : 0;
-  const lastUpdate = site.launchDate || '2024-12-01';
+  const lastUpdate = '2024-12-01';
 
   // Mock last article title
   const lastArticleTitles: Record<string, string> = {
