@@ -905,7 +905,7 @@ function WebsiteFormModal({
               >
                 <option value="">選擇公司</option>
                 {companies.filter(c => c.isActive).map(c => (
-                  <option key={c.id} value={c.id}>{c.companyCode} — {c.companyNameZh}</option>
+                  <option key={c.id} value={c.id}>{c.companyCode} — {c.companyNameEn}</option>
                 ))}
               </select>
             </div>
