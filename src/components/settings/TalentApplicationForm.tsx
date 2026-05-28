@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Check } from 'lucide-react';
+import { SignaturePad } from './SignaturePad';
 
 type OptionValue = string;
 
@@ -672,15 +673,15 @@ export function TalentApplicationForm() {
           </div>
 
           {/* Row 28: 簽名 (full width, right-aligned label) */}
-          <div className="col-span-4 flex items-center justify-end gap-2 px-3 py-2.5 bg-slate-50/50 border-b border-slate-300">
-            <span className="text-[12.5px] font-bold text-[#0d1a2d] whitespace-nowrap">
+          <div className="col-span-4 flex items-start justify-end gap-3 px-3 py-3 bg-slate-50/50 border-b border-slate-300">
+            <span className="text-[12.5px] font-bold text-[#0d1a2d] whitespace-nowrap mt-1">
               應聘人員簽名（面試當天簽名）：
             </span>
-            <input
+            <SignaturePad
               value={form.signature}
-              onChange={(e) => update('signature', e.target.value)}
-              placeholder="請於面試當天簽署"
-              className="px-1.5 py-1 text-[12px] border-b border-border bg-transparent outline-none focus:border-teal-500 w-44"
+              onChange={(v) => update('signature', v)}
+              width={360}
+              height={88}
             />
           </div>
         </div>
