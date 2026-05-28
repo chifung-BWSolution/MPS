@@ -78,10 +78,15 @@ const emptyForm: ProjectFormData = {
 
 export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
   const { navigateTo } = useApp();
-  const { addProject: addCompanyProject } = useCompanyProjects();
+  const { addProject: addCompanyProject, projects: companyProjects } = useCompanyProjects();
   const { addProject: addClientProject } = useClientProjects();
   const { companies } = useCompanies();
   const { brands } = useBrands();
+
+  const getBrandCount = (companyId: string) =>
+    brands.filter(b => b.companyId === companyId && b.isActive).length;
+  const getActiveProjectCount = (companyId: string) =>
+    companyProjects.filter(p => p.companyId === companyId && p.status === 'active').length;
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<ProjectFormData>(emptyForm);
   const [submitted, setSubmitted] = useState(false);
@@ -202,7 +207,7 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
 
       {/* Title */}
       <div>
-        <h2 className="text-[22px] font-bold tracking-tight text-[#0d1a2d]">新增項目</h2>
+        <h2 className="text-[22px] font-bold tracking-tight text-[#0d1a2d]">新增內部項目</h2>
         <p className="text-[13px] text-muted-foreground mt-0.5">
           按照三步驟完成項目新增：選擇公司 → 選擇品牌 → 填寫項目資料
         </p>
@@ -285,9 +290,9 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
                     <span>{company.bankName}</span>
                   </div>
                   <div className="mt-1.5 flex items-center gap-3 text-[11px]">
-                    <span className="text-teal-600 font-medium">{company.brandCount} 個品牌</span>
+                    <span className="text-teal-600 font-medium">{getBrandCount(company.id)} 個品牌</span>
                     <span className="text-muted-foreground">|</span>
-                    <span className="text-blue-600 font-medium">{company.activeProjectCount} 個活躍項目</span>
+                    <span className="text-blue-600 font-medium">{getActiveProjectCount(company.id)} 個活躍內部項目</span>
                   </div>
                 </button>
               ))}
@@ -554,7 +559,7 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
               disabled={!isFormValid}
             >
               <Check size={14} />
-              確認新增項目
+              確認新增內部項目
             </Button>
           )}
         </div>
