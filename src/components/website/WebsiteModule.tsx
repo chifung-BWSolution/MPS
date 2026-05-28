@@ -755,6 +755,7 @@ interface WebsiteFormData {
   domainUrl: string;
   companyId: string;
   brandId: string;
+  brand: string;
   platform: string;
   hostingProvider: string;
   level: WebsiteLevel;
@@ -772,6 +773,7 @@ const emptyFormData: WebsiteFormData = {
   domainUrl: '',
   companyId: '',
   brandId: '',
+  brand: '',
   platform: '',
   hostingProvider: '',
   level: 3,
@@ -797,7 +799,10 @@ function WebsiteFormModal({
 }) {
   const [form, setForm] = useState<WebsiteFormData>(initialData || emptyFormData);
   const { companies } = useCompanies();
-  const { brands } = useBrands();
+  const { profiles: existingProfiles } = useWebsiteProfiles();
+  const uniqueBrandCodes = Array.from(
+    new Set(existingProfiles.map(p => (p.brand || '').trim()).filter(Boolean))
+  ).sort();
   const { byCategory: optionsByCategory } = useSystemOptions();
   const platformOptions = optionsByCategory('platform');
   const knownPlatformValues = platformOptions
@@ -818,23 +823,12 @@ function WebsiteFormModal({
     setCustomPlatform(isCustom ? form.platform : '');
   }, [knownPlatformValues.length]);
 
-  const filteredBrandsForForm = form.companyId
-    ? brands.filter(b => b.companyId === form.companyId)
-    : brands;
-
   const handleChange = (field: keyof WebsiteFormData, value: any) => {
-    setForm(prev => {
-      const updated = { ...prev, [field]: value };
-      // Reset brand if company changes
-      if (field === 'companyId') {
-        updated.brandId = '';
-      }
-      return updated;
-    });
+    setForm(prev => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = () => {
-    if (!form.websiteName || !form.companyId) return;
+    if (!form.websiteName) return;
     onSave(form);
     onClose();
   };
@@ -896,7 +890,7 @@ function WebsiteFormModal({
           {/* Company & Brand (Cascading) */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">所屬公司 *</label>
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1">所屬公司</label>
               <select
                 value={form.companyId}
                 onChange={(e) => handleChange('companyId', e.target.value)}
@@ -911,14 +905,13 @@ function WebsiteFormModal({
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1">所屬品牌</label>
               <select
-                value={form.brandId}
-                onChange={(e) => handleChange('brandId', e.target.value)}
+                value={form.brand}
+                onChange={(e) => handleChange('brand', e.target.value)}
                 className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
-                disabled={!form.companyId}
               >
                 <option value="">選擇品牌</option>
-                {filteredBrandsForForm.filter(b => b.isActive).map(b => (
-                  <option key={b.id} value={b.id}>{b.brandCode} — {b.brandNameZh}</option>
+                {uniqueBrandCodes.map(code => (
+                  <option key={code} value={code}>{code}</option>
                 ))}
               </select>
             </div>
@@ -1076,7 +1069,7 @@ function WebsiteFormModal({
           <button onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted rounded-md">取消</button>
           <button
             onClick={handleSubmit}
-            disabled={!form.websiteName || !form.companyId}
+            disabled={!form.websiteName}
             className="px-4 py-2 text-[13px] font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {mode === 'add' ? '新增' : '保存修改'}
@@ -1128,17 +1121,16 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
 
   const handleAddWebsite = async (data: WebsiteFormData) => {
     const company = companies.find(c => c.id === data.companyId);
-    const brand = brands.find(b => b.id === data.brandId);
     const newSite: WebsiteProfileFull = {
       id: `${data.profileType === 'system' ? 'sys' : 'ws'}_${Date.now()}`,
       companyId: data.companyId,
-      brandId: data.brandId,
+      brandId: '',
       websiteName: data.websiteName,
       domainUrl: data.domainUrl,
       platform: data.platform as WebsiteProfileFull['platform'],
       hostingProvider: data.hostingProvider,
       company: company?.companyCode || '',
-      brand: brand?.brandCode || '',
+      brand: data.brand || '',
       level: data.level,
       status: data.status,
       notes: data.notes || undefined,
@@ -1168,16 +1160,15 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
   const handleEditWebsite = async (data: WebsiteFormData) => {
     if (!editingSite) return;
     const company = companies.find(c => c.id === data.companyId);
-    const brand = brands.find(b => b.id === data.brandId);
     const updates = {
       websiteName: data.websiteName,
       domainUrl: data.domainUrl,
       companyId: data.companyId,
-      brandId: data.brandId,
+      brandId: '',
       platform: data.platform as WebsiteProfileFull['platform'],
       hostingProvider: data.hostingProvider,
       company: company?.companyCode ?? editingSite.company ?? '',
-      brand: brand?.brandCode ?? editingSite.brand ?? '',
+      brand: data.brand || editingSite.brand || '',
       level: data.level,
       status: data.status,
       notes: data.notes || undefined,
@@ -1193,6 +1184,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
     domainUrl: site.domainUrl || '',
     companyId: site.companyId,
     brandId: site.brandId,
+    brand: site.brand || '',
     platform: site.platform,
     hostingProvider: site.hostingProvider || '',
     level: site.level,
