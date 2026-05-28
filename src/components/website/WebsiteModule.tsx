@@ -2514,7 +2514,9 @@ export function WebsiteModule({ subModule }: { subModule?: string }) {
       return <GlobalArticleList onSelectArticle={setSelectedArticle} />;
     case 'pending':
       return <PendingContent />;
-    default:
+    case 'list':
       return <WebsiteList onSelectSite={setSelectedSite} />;
+    default:
+      return <PendingContent />;
   }
 }
