@@ -1,7 +1,7 @@
 import { useApp, mainMenuItems } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
 import { canAccessSettings } from '@/lib/permissions';
-import { Search, Bell, Building2, LogOut } from 'lucide-react';
+import { Search, Bell, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import {
@@ -58,14 +58,6 @@ export function TopNav() {
         <span className="font-bold text-[14px] tracking-tight whitespace-nowrap hidden md:inline">
           行銷專案系統
         </span>
-      </div>
-
-      {/* Company/Brand Label (display only) */}
-      <div className="flex items-center h-full border-r border-white/10 shrink-0">
-        <div className="flex items-center gap-2 px-3 h-full text-[12px]">
-          <Building2 size={14} className="text-teal-400" />
-          <span className="text-white/80 max-w-[140px] truncate">全部公司</span>
-        </div>
       </div>
 
       {/* Main Navigation */}
