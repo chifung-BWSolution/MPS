@@ -37,14 +37,22 @@ function OptionCell({ label, selected, onClick, trailingInput }: OptionCellProps
         <input
           type="text"
           value={trailingInput.value}
+          disabled={!selected}
           onChange={(e) => {
+            if (!selected) return;
             trailingInput.onChange(e.target.value);
           }}
-          onClick={(e) => e.stopPropagation()}
-          placeholder={trailingInput.placeholder || '請填寫'}
+          onClick={(e) => {
+            if (selected) {
+              e.stopPropagation();
+            }
+            // when not selected, let click bubble so the parent button toggles the option on
+          }}
+          placeholder={selected ? trailingInput.placeholder || '請填寫' : '先勾選'}
           className={cn(
             'ml-0.5 px-1 py-0 text-[12px] border-b border-dashed border-border bg-transparent outline-none focus:border-teal-500',
-            trailingInput.width || 'w-16'
+            trailingInput.width || 'w-16',
+            !selected && 'opacity-50 cursor-not-allowed pointer-events-none'
           )}
         />
       )}
@@ -680,8 +688,8 @@ export function TalentApplicationForm() {
             <SignaturePad
               value={form.signature}
               onChange={(v) => update('signature', v)}
-              width={360}
-              height={88}
+              width={180}
+              height={280}
             />
           </div>
         </div>
