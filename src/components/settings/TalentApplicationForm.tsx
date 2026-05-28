@@ -17,15 +17,15 @@ function OptionCell({ label, selected, onClick, trailingInput }: OptionCellProps
       type="button"
       onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-2 px-3 py-2 rounded-md border text-[13px] transition-all duration-150 text-left',
+        'inline-flex items-center gap-2 px-2.5 py-1.5 rounded text-[13px] transition-all duration-150 text-left',
         selected
-          ? 'border-teal-500 bg-teal-50 text-teal-800 ring-1 ring-teal-500/40'
-          : 'border-border bg-white text-foreground hover:border-teal-300 hover:bg-muted/30'
+          ? 'bg-teal-50 text-teal-800 ring-1 ring-teal-500'
+          : 'text-foreground hover:bg-muted/40'
       )}
     >
       <span
         className={cn(
-          'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors',
+          'w-4 h-4 rounded-sm border flex items-center justify-center shrink-0 transition-colors',
           selected ? 'border-teal-600 bg-teal-600 text-white' : 'border-border bg-white text-transparent'
         )}
       >
@@ -42,8 +42,8 @@ function OptionCell({ label, selected, onClick, trailingInput }: OptionCellProps
           onClick={(e) => e.stopPropagation()}
           placeholder={trailingInput.placeholder || '請填寫'}
           className={cn(
-            'ml-1 px-1.5 py-0.5 text-[12px] border-b border-dashed border-border bg-transparent outline-none focus:border-teal-500',
-            trailingInput.width || 'w-24'
+            'ml-1 px-1 py-0.5 text-[12px] border-b border-dashed border-border bg-transparent outline-none focus:border-teal-500',
+            trailingInput.width || 'w-20'
           )}
         />
       )}
@@ -61,7 +61,7 @@ interface OptionRowProps {
 
 function OptionRow({ options, selected, onChange, mode, trailingInputs }: OptionRowProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-x-1 gap-y-1.5">
       {options.map((opt) => {
         const isSelected = selected.includes(opt.value);
         return (
@@ -86,30 +86,12 @@ function OptionRow({ options, selected, onChange, mode, trailingInputs }: Option
   );
 }
 
-function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
-  return (
-    <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">
-      {children}
-      {required && <span className="text-rose-500 ml-1">*</span>}
-    </label>
-  );
-}
-
-function SectionHeader({ title }: { title: string }) {
-  return (
-    <div className="flex items-center gap-3 pt-2 pb-1">
-      <span className="w-1 h-5 bg-teal-600 rounded-full" />
-      <h3 className="text-[15px] font-bold text-[#0d1a2d] tracking-tight">{title}</h3>
-    </div>
-  );
-}
-
-function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+function CellInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
       className={cn(
-        'w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 transition-colors',
+        'w-full px-2 py-1 text-[13px] bg-transparent border-0 outline-none focus:bg-teal-50/40 transition-colors',
         props.className
       )}
     />
@@ -210,6 +192,18 @@ const initialState: FormState = {
   signature: '',
 };
 
+// Excel grid styling helpers — every cell shares the same border so it looks like a real spreadsheet
+const labelCell =
+  'flex items-center gap-1 px-3 py-2.5 bg-slate-50 text-[12.5px] font-bold text-[#0d1a2d] border-r border-b border-slate-300';
+const valueCell =
+  'flex items-center px-2 py-1.5 bg-white border-r border-b border-slate-300 min-h-[44px]';
+const valueCellLast =
+  'flex items-center px-2 py-1.5 bg-white border-b border-slate-300 min-h-[44px]';
+const sectionBand =
+  'col-span-4 px-3 py-1.5 bg-[#0d1a2d] text-white text-[13px] font-bold border-b border-slate-300';
+const fullRowCell =
+  'col-span-4 flex items-center flex-wrap px-2 py-2 bg-white border-b border-slate-300';
+
 export function TalentApplicationForm() {
   const [form, setForm] = useState<FormState>(initialState);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -231,29 +225,37 @@ export function TalentApplicationForm() {
 
   return (
     <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card">
-      {/* Form header */}
-      <div className="px-6 py-5 border-b border-border/50 bg-gradient-to-r from-teal-50/50 to-transparent">
-        <h2 className="text-[20px] font-bold text-[#0d1a2d] tracking-tight">
-          志豐設計（深圳）有限公司 — Model 面試登記表
-        </h2>
-        <p className="text-[12px] text-muted-foreground mt-1">
-          請填寫以下資料，所有「空格」項目均以可點擊的選項形式呈現；單選類型只可選一格，重複點擊可取消。
-        </p>
-      </div>
+      {/* Spreadsheet wrapper */}
+      <div className="overflow-x-auto">
+        <div
+          className="grid border-l border-t border-slate-300 min-w-[920px]"
+          style={{
+            // Match Excel column widths roughly: B=24, C=39, D=24, E=43
+            gridTemplateColumns: '24% 26% 22% 28%',
+          }}
+        >
+          {/* Row 1: Title (B1:E1 merged) */}
+          <div className="col-span-4 px-4 py-4 bg-white border-r border-b border-slate-300 text-center">
+            <h2 className="text-[20px] font-bold text-[#0d1a2d] tracking-tight">
+              志豐設計（深圳）有限公司 — Model 面試登記表
+            </h2>
+          </div>
 
-      <div className="p-6 space-y-7">
-        {/* Top: Date + Types */}
-        <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-5">
-          <div>
-            <FieldLabel>填表日期</FieldLabel>
-            <TextInput
+          {/* Row 2: E2 only — 填表日期 (right-aligned, top-right) */}
+          <div className="col-span-3 px-3 py-2 bg-white border-r border-b border-slate-300" />
+          <div className={valueCellLast + ' justify-end gap-2'}>
+            <span className="text-[12.5px] font-bold text-[#0d1a2d] whitespace-nowrap">填表日期：</span>
+            <input
               type="date"
               value={form.fillDate}
               onChange={(e) => update('fillDate', e.target.value)}
+              className="px-2 py-1 text-[12px] border border-border rounded bg-white outline-none focus:ring-1 focus:ring-teal-500"
             />
           </div>
-          <div>
-            <FieldLabel>類型（可多選）</FieldLabel>
+
+          {/* Row 3: 類型 (full width) */}
+          <div className="col-span-4 flex items-center flex-wrap px-3 py-2 bg-white border-b border-slate-300 gap-1">
+            <span className="text-[12.5px] font-bold text-[#0d1a2d] mr-2 whitespace-nowrap">類型：</span>
             <OptionRow
               mode="multi"
               selected={form.types}
@@ -273,36 +275,28 @@ export function TalentApplicationForm() {
                   value: form.typeOther,
                   onChange: (v) => update('typeOther', v),
                   placeholder: '其他類型',
+                  width: 'w-28',
                 },
               }}
             />
           </div>
-        </div>
 
-        {/* Personal Info */}
-        <div className="space-y-4">
-          <SectionHeader title="個人資料" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <FieldLabel required>姓名（中文）</FieldLabel>
-              <TextInput
-                value={form.nameZh}
-                onChange={(e) => update('nameZh', e.target.value)}
-                placeholder="請輸入中文姓名"
-              />
-            </div>
-            <div>
-              <FieldLabel>姓名（英文）</FieldLabel>
-              <TextInput
-                value={form.nameEn}
-                onChange={(e) => update('nameEn', e.target.value)}
-                placeholder="Please enter English name"
-              />
-            </div>
+          {/* Section: 個人資訊 */}
+          <div className={sectionBand}>個人資訊</div>
+
+          {/* Row 5: 姓名(中文) | 姓名(英文) */}
+          <div className={labelCell}>姓名（中文）</div>
+          <div className={valueCell}>
+            <CellInput value={form.nameZh} onChange={(e) => update('nameZh', e.target.value)} placeholder="請輸入" />
+          </div>
+          <div className={labelCell}>姓名（英文）</div>
+          <div className={valueCellLast}>
+            <CellInput value={form.nameEn} onChange={(e) => update('nameEn', e.target.value)} placeholder="English Name" />
           </div>
 
-          <div>
-            <FieldLabel>性別</FieldLabel>
+          {/* Row 6: 性別 (男/女) | 年齡 */}
+          <div className={labelCell}>性別</div>
+          <div className={valueCell}>
             <OptionRow
               mode="single"
               selected={form.gender}
@@ -313,54 +307,34 @@ export function TalentApplicationForm() {
               ]}
             />
           </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <FieldLabel>年齡</FieldLabel>
-              <TextInput
-                type="number"
-                value={form.age}
-                onChange={(e) => update('age', e.target.value)}
-                placeholder="歲"
-              />
-            </div>
-            <div>
-              <FieldLabel>身高</FieldLabel>
-              <TextInput
-                value={form.height}
-                onChange={(e) => update('height', e.target.value)}
-                placeholder="cm"
-              />
-            </div>
-            <div>
-              <FieldLabel>體重</FieldLabel>
-              <TextInput
-                value={form.weight}
-                onChange={(e) => update('weight', e.target.value)}
-                placeholder="kg"
-              />
-            </div>
-            <div>
-              <FieldLabel>手機號碼</FieldLabel>
-              <TextInput
-                value={form.phone}
-                onChange={(e) => update('phone', e.target.value)}
-                placeholder="+852 / +86"
-              />
-            </div>
+          <div className={labelCell}>年齡</div>
+          <div className={valueCellLast}>
+            <CellInput type="number" value={form.age} onChange={(e) => update('age', e.target.value)} placeholder="歲" />
           </div>
 
-          <div>
-            <FieldLabel>WeChat 微信號</FieldLabel>
-            <TextInput
-              value={form.wechat}
-              onChange={(e) => update('wechat', e.target.value)}
-              placeholder="WeChat ID"
-            />
+          {/* Row 7: 手機號碼 | WeChat 微信號 */}
+          <div className={labelCell}>手機號碼</div>
+          <div className={valueCell}>
+            <CellInput value={form.phone} onChange={(e) => update('phone', e.target.value)} placeholder="+852 / +86" />
+          </div>
+          <div className={labelCell}>WeChat 微信號</div>
+          <div className={valueCellLast}>
+            <CellInput value={form.wechat} onChange={(e) => update('wechat', e.target.value)} placeholder="WeChat ID" />
           </div>
 
-          <div>
-            <FieldLabel>粵語/廣東話（可多選）</FieldLabel>
+          {/* Row 8: 身高 | 體重 */}
+          <div className={labelCell}>身高</div>
+          <div className={valueCell}>
+            <CellInput value={form.height} onChange={(e) => update('height', e.target.value)} placeholder="cm" />
+          </div>
+          <div className={labelCell}>體重</div>
+          <div className={valueCellLast}>
+            <CellInput value={form.weight} onChange={(e) => update('weight', e.target.value)} placeholder="kg" />
+          </div>
+
+          {/* Row 9: 粵語/廣東話 | 普通話 */}
+          <div className={labelCell}>粵語/廣東話</div>
+          <div className={valueCell}>
             <OptionRow
               mode="multi"
               selected={form.cantonese}
@@ -371,9 +345,8 @@ export function TalentApplicationForm() {
               ]}
             />
           </div>
-
-          <div>
-            <FieldLabel>普通話流利度（單選）</FieldLabel>
+          <div className={labelCell}>普通話</div>
+          <div className={valueCellLast}>
             <OptionRow
               mode="single"
               selected={form.mandarin}
@@ -386,8 +359,9 @@ export function TalentApplicationForm() {
             />
           </div>
 
-          <div>
-            <FieldLabel>現居住地（單選）</FieldLabel>
+          {/* Row 10: 現居住地 (full row but label on B, options span C-E) */}
+          <div className={labelCell}>現居住地</div>
+          <div className="col-span-3 flex items-center px-2 py-1.5 bg-white border-b border-slate-300">
             <OptionRow
               mode="single"
               selected={form.residence}
@@ -406,13 +380,12 @@ export function TalentApplicationForm() {
               }}
             />
           </div>
-        </div>
 
-        {/* Social Media */}
-        <div className="space-y-4">
-          <SectionHeader title="社交媒體資訊" />
-          <div>
-            <FieldLabel>使用平台（可多選）</FieldLabel>
+          {/* Section: 社交媒體資訊 */}
+          <div className={sectionBand}>社交媒體資訊</div>
+
+          {/* Row 12: 平台 (full width) */}
+          <div className={fullRowCell + ' gap-1'}>
             <OptionRow
               mode="multi"
               selected={form.socialPlatforms}
@@ -436,39 +409,43 @@ export function TalentApplicationForm() {
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <FieldLabel>主要帳號名稱</FieldLabel>
-              <TextInput
+          {/* Row 13: 主要社交媒體賬號 (label | merged row of 3 inputs) */}
+          <div className={labelCell}>主要社交媒體賬號</div>
+          <div className="col-span-3 flex items-center px-3 py-2 bg-white border-b border-slate-300 gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] text-muted-foreground">賬號名稱</span>
+              <input
                 value={form.socialAccountName}
                 onChange={(e) => update('socialAccountName', e.target.value)}
+                className="px-1 py-0.5 text-[12px] border-b border-dashed border-border bg-transparent outline-none focus:border-teal-500 w-32"
                 placeholder="@username"
               />
             </div>
-            <div>
-              <FieldLabel>粉絲數</FieldLabel>
-              <TextInput
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] text-muted-foreground">粉絲數</span>
+              <input
                 value={form.socialFollowers}
                 onChange={(e) => update('socialFollowers', e.target.value)}
+                className="px-1 py-0.5 text-[12px] border-b border-dashed border-border bg-transparent outline-none focus:border-teal-500 w-24"
                 placeholder="例：12.5K"
               />
             </div>
-            <div>
-              <FieldLabel>主要內容主題</FieldLabel>
-              <TextInput
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] text-muted-foreground">主要內容主題</span>
+              <input
                 value={form.socialTopic}
                 onChange={(e) => update('socialTopic', e.target.value)}
-                placeholder="例：美妝、生活、旅遊"
+                className="px-1 py-0.5 text-[12px] border-b border-dashed border-border bg-transparent outline-none focus:border-teal-500 w-40"
+                placeholder="美妝、生活..."
               />
             </div>
           </div>
-        </div>
 
-        {/* Shooting Experience */}
-        <div className="space-y-4">
-          <SectionHeader title="拍攝經驗" />
-          <div>
-            <FieldLabel>經驗類型（可多選）</FieldLabel>
+          {/* Section: 拍攝經驗 */}
+          <div className={sectionBand}>拍攝經驗</div>
+
+          {/* Row 15: 拍攝類型 (full width) */}
+          <div className={fullRowCell + ' gap-1'}>
             <OptionRow
               mode="multi"
               selected={form.shootingExperience}
@@ -491,8 +468,10 @@ export function TalentApplicationForm() {
               }}
             />
           </div>
-          <div>
-            <FieldLabel>經驗年期（單選）</FieldLabel>
+
+          {/* Row 16: 拍攝經驗年期 (label | options) */}
+          <div className={labelCell}>拍攝經驗</div>
+          <div className="col-span-3 flex items-center px-2 py-1.5 bg-white border-b border-slate-300">
             <OptionRow
               mode="single"
               selected={form.experienceYears}
@@ -508,13 +487,12 @@ export function TalentApplicationForm() {
               ]}
             />
           </div>
-        </div>
 
-        {/* Shooting Style */}
-        <div className="space-y-4">
-          <SectionHeader title="拍攝風格（可多選）" />
-          <div>
-            <FieldLabel>外型/穿搭風格</FieldLabel>
+          {/* Section: 拍攝風格 */}
+          <div className={sectionBand}>拍攝風格</div>
+
+          {/* Row 18: Style 1 (full width) */}
+          <div className={fullRowCell + ' gap-1'}>
             <OptionRow
               mode="multi"
               selected={form.shootingStyle1}
@@ -529,8 +507,9 @@ export function TalentApplicationForm() {
               ]}
             />
           </div>
-          <div>
-            <FieldLabel>內容/主題風格</FieldLabel>
+
+          {/* Row 19: Style 2 (full width) */}
+          <div className={fullRowCell + ' gap-1'}>
             <OptionRow
               mode="multi"
               selected={form.shootingStyle2}
@@ -552,78 +531,79 @@ export function TalentApplicationForm() {
               }}
             />
           </div>
-        </div>
 
-        {/* Talents */}
-        <div className="space-y-4">
-          <SectionHeader title="個人才藝（可多選）" />
-          <OptionRow
-            mode="multi"
-            selected={form.talents}
-            onChange={(v) => update('talents', v)}
-            options={[
-              { value: 'dance', label: '舞蹈' },
-              { value: 'sing', label: '唱歌' },
-              { value: 'instrument', label: '樂器' },
-              { value: 'photography', label: '拍攝攝影' },
-              { value: 'editing', label: '剪輯' },
-              { value: 'other', label: '其他才藝' },
-            ]}
-            trailingInputs={{
-              dance: {
-                value: form.talentDanceType,
-                onChange: (v) => update('talentDanceType', v),
-                placeholder: '舞種',
-              },
-              instrument: {
-                value: form.talentInstrument,
-                onChange: (v) => update('talentInstrument', v),
-                placeholder: '樂器',
-              },
-              other: {
-                value: form.talentOther,
-                onChange: (v) => update('talentOther', v),
-                placeholder: '其他才藝',
-              },
-            }}
-          />
-        </div>
+          {/* Section: 個人才藝 */}
+          <div className={sectionBand}>個人才藝</div>
 
-        {/* Pay */}
-        <div className="space-y-4">
-          <SectionHeader title="薪酬資訊" />
-          <div>
-            <FieldLabel>薪酬期望（可同時填寫兩種）</FieldLabel>
-            <div className="flex flex-wrap items-center gap-3">
-              <OptionCell
-                label="按小時計算（時薪）"
-                selected={form.payHourly}
-                onClick={() => update('payHourly', !form.payHourly)}
-                trailingInput={{
-                  value: form.payHourlyAmount,
-                  onChange: (v) => update('payHourlyAmount', v),
-                  placeholder: '時薪',
-                  width: 'w-20',
-                }}
-              />
-              <span className="text-[12px] text-muted-foreground">元/小時</span>
-              <OptionCell
-                label="按通告計算（每次）"
-                selected={form.payPerJob}
-                onClick={() => update('payPerJob', !form.payPerJob)}
-                trailingInput={{
-                  value: form.payPerJobAmount,
-                  onChange: (v) => update('payPerJobAmount', v),
-                  placeholder: '每次',
-                  width: 'w-20',
-                }}
-              />
-              <span className="text-[12px] text-muted-foreground">元/每次通告</span>
-            </div>
+          {/* Row 21: 才藝 (full width) */}
+          <div className={fullRowCell + ' gap-1'}>
+            <OptionRow
+              mode="multi"
+              selected={form.talents}
+              onChange={(v) => update('talents', v)}
+              options={[
+                { value: 'dance', label: '舞蹈' },
+                { value: 'sing', label: '唱歌' },
+                { value: 'instrument', label: '樂器' },
+                { value: 'photography', label: '拍攝攝影' },
+                { value: 'editing', label: '剪輯' },
+                { value: 'other', label: '其他才藝' },
+              ]}
+              trailingInputs={{
+                dance: {
+                  value: form.talentDanceType,
+                  onChange: (v) => update('talentDanceType', v),
+                  placeholder: '舞種',
+                },
+                instrument: {
+                  value: form.talentInstrument,
+                  onChange: (v) => update('talentInstrument', v),
+                  placeholder: '樂器',
+                },
+                other: {
+                  value: form.talentOther,
+                  onChange: (v) => update('talentOther', v),
+                  placeholder: '其他才藝',
+                },
+              }}
+            />
           </div>
 
-          <div>
-            <FieldLabel>結算方式（單選）</FieldLabel>
+          {/* Section: 薪酬資訊 */}
+          <div className={sectionBand}>薪酬資訊</div>
+
+          {/* Row 23: 薪酬期望 */}
+          <div className={labelCell}>薪酬期望</div>
+          <div className="col-span-3 flex items-center px-2 py-1.5 bg-white border-b border-slate-300 flex-wrap gap-2">
+            <OptionCell
+              label="按小時計算（時薪）"
+              selected={form.payHourly}
+              onClick={() => update('payHourly', !form.payHourly)}
+              trailingInput={{
+                value: form.payHourlyAmount,
+                onChange: (v) => update('payHourlyAmount', v),
+                placeholder: '時薪',
+                width: 'w-16',
+              }}
+            />
+            <span className="text-[12px] text-muted-foreground">元/小時</span>
+            <OptionCell
+              label="按通告計算（每次）"
+              selected={form.payPerJob}
+              onClick={() => update('payPerJob', !form.payPerJob)}
+              trailingInput={{
+                value: form.payPerJobAmount,
+                onChange: (v) => update('payPerJobAmount', v),
+                placeholder: '每次',
+                width: 'w-16',
+              }}
+            />
+            <span className="text-[12px] text-muted-foreground">元/每次通告</span>
+          </div>
+
+          {/* Row 24: 結算方式 */}
+          <div className={labelCell}>結算方式</div>
+          <div className="col-span-3 flex items-center px-2 py-1.5 bg-white border-b border-slate-300">
             <OptionRow
               mode="single"
               selected={form.settlement}
@@ -635,13 +615,13 @@ export function TalentApplicationForm() {
               ]}
             />
           </div>
-        </div>
 
-        {/* Availability */}
-        <div className="space-y-4">
-          <SectionHeader title="工作配合度" />
-          <div>
-            <FieldLabel>可接單日期（單選）</FieldLabel>
+          {/* Section: 工作配合度 */}
+          <div className={sectionBand}>工作配合度</div>
+
+          {/* Row 26: 可接單日期 | 去香港拍攝意願 */}
+          <div className={labelCell}>可接單日期</div>
+          <div className={valueCell}>
             <OptionRow
               mode="single"
               selected={form.availability}
@@ -655,13 +635,14 @@ export function TalentApplicationForm() {
                 other: {
                   value: form.availabilityOther,
                   onChange: (v) => update('availabilityOther', v),
-                  placeholder: '具體日期',
+                  placeholder: '日期',
+                  width: 'w-20',
                 },
               }}
             />
           </div>
-          <div>
-            <FieldLabel>去香港拍攝意願（單選）</FieldLabel>
+          <div className={labelCell}>去香港拍攝意願</div>
+          <div className={valueCellLast}>
             <OptionRow
               mode="single"
               selected={form.hkWillingness}
@@ -673,8 +654,10 @@ export function TalentApplicationForm() {
               ]}
             />
           </div>
-          <div>
-            <FieldLabel>每週可接通告（單選）</FieldLabel>
+
+          {/* Row 27: 每週可接通告 (label | full options) */}
+          <div className={labelCell}>每週可接通告</div>
+          <div className="col-span-3 flex items-center px-2 py-1.5 bg-white border-b border-slate-300">
             <OptionRow
               mode="single"
               selected={form.weeklyJobs}
@@ -687,16 +670,19 @@ export function TalentApplicationForm() {
               ]}
             />
           </div>
-        </div>
 
-        {/* Signature */}
-        <div className="space-y-4 pt-2 border-t border-border/50">
-          <FieldLabel>應聘人員簽名（面試當天簽名）</FieldLabel>
-          <TextInput
-            value={form.signature}
-            onChange={(e) => update('signature', e.target.value)}
-            placeholder="請於面試當天簽署"
-          />
+          {/* Row 28: 簽名 (full width, right-aligned label) */}
+          <div className="col-span-4 flex items-center justify-end gap-3 px-4 py-3 bg-slate-50/50 border-b border-slate-300">
+            <span className="text-[12.5px] font-bold text-[#0d1a2d] whitespace-nowrap">
+              應聘人員簽名（面試當天簽名）：
+            </span>
+            <input
+              value={form.signature}
+              onChange={(e) => update('signature', e.target.value)}
+              placeholder="請於面試當天簽署"
+              className="px-2 py-1 text-[12px] border-b border-border bg-transparent outline-none focus:border-teal-500 w-48"
+            />
+          </div>
         </div>
       </div>
 
