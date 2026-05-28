@@ -71,13 +71,13 @@ export function TopNav() {
               key={menuItem.id}
               onClick={() => navigateTo(menuItem.id)}
               className={cn(
-                'h-full px-3 text-[12px] font-medium whitespace-nowrap transition-all duration-200 relative flex items-center gap-1.5 shrink-0',
+                'h-full px-3 text-[14px] font-medium whitespace-nowrap transition-all duration-200 relative flex items-center gap-1.5 shrink-0',
                 isActive
                   ? 'text-white'
                   : 'text-white/55 hover:text-white/90'
               )}
             >
-              <Icon size={14} className="shrink-0" />
+              <Icon size={16} className="shrink-0" />
               <span>{menuItem.label}</span>
               {isActive && (
                 <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-teal-500 rounded-t-full" />
