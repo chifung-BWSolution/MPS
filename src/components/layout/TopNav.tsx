@@ -1,10 +1,9 @@
 import { useApp, mainMenuItems } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
 import { canAccessSettings } from '@/lib/permissions';
-import { Search, Bell, Building2, ChevronDown, LogOut } from 'lucide-react';
+import { Search, Bell, Building2, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
-import { companies, brands } from '@/data/mockData';
 import {
   LayoutDashboard,
   FileText,
@@ -40,23 +39,14 @@ const moduleIcons: Record<string, React.ElementType> = {
 };
 
 export function TopNav() {
-  const { currentModule, navigateTo, selectedCompanyId, setSelectedCompanyId, selectedBrandId, setSelectedBrandId } = useApp();
+  const { currentModule, navigateTo } = useApp();
   const { systemUser, userInfo, signOut } = useAuth();
   const [searchFocused, setSearchFocused] = useState(false);
-  const [filterOpen, setFilterOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-
-  const selectedCompany = companies.find(c => c.id === selectedCompanyId);
-  const selectedBrand = brands.find(b => b.id === selectedBrandId);
 
   const visibleMenuItems = mainMenuItems.filter(
     m => m.id !== 'settings' || canAccessSettings(systemUser?.role)
   );
-
-  const handleCompanyChange = (companyId: string | null) => {
-    setSelectedCompanyId(companyId);
-    setSelectedBrandId(null);
-  };
 
   return (
     <header className="fixed top-0 left-0 right-0 h-[48px] bg-[#0d1a2d] text-white z-50 flex items-center">
@@ -70,55 +60,12 @@ export function TopNav() {
         </span>
       </div>
 
-      {/* Company/Brand Filter */}
-      <div className="relative flex items-center h-full border-r border-white/10 shrink-0">
-        <button
-          onClick={() => setFilterOpen(!filterOpen)}
-          className="flex items-center gap-2 px-3 h-full text-[12px] hover:bg-white/5 transition-colors"
-        >
+      {/* Company/Brand Label (display only) */}
+      <div className="flex items-center h-full border-r border-white/10 shrink-0">
+        <div className="flex items-center gap-2 px-3 h-full text-[12px]">
           <Building2 size={14} className="text-teal-400" />
-          <span className="text-white/80 max-w-[140px] truncate">
-            {selectedCompany ? selectedCompany.companyCode : '全部公司'}
-            {selectedBrand ? ` / ${selectedBrand.brandCode}` : ''}
-          </span>
-          <ChevronDown size={12} className="text-white/50" />
-        </button>
-        {filterOpen && (
-          <div className="absolute top-[48px] left-0 bg-white rounded-md shadow-lg border border-border min-w-[220px] z-[100] py-1">
-            <button
-              onClick={() => { handleCompanyChange(null); setFilterOpen(false); }}
-              className={cn('w-full text-left px-3 py-2 text-[12px] hover:bg-muted transition-colors', !selectedCompanyId && 'bg-teal-50 text-teal-700 font-medium')}
-            >
-              全部公司
-            </button>
-            <div className="border-t border-border my-1" />
-            {companies.filter(c => c.isActive).map(company => (
-              <div key={company.id}>
-                <button
-                  onClick={() => { handleCompanyChange(company.id); setFilterOpen(false); }}
-                  className={cn('w-full text-left px-3 py-2 text-[12px] hover:bg-muted transition-colors flex items-center gap-2', selectedCompanyId === company.id && !selectedBrandId && 'bg-teal-50 text-teal-700 font-medium')}
-                >
-                  <span className="w-2 h-2 rounded-full bg-teal-500" />
-                  <span className="text-[#0d1a2d]">{company.companyCode} - {company.companyNameZh}</span>
-                </button>
-                {selectedCompanyId === company.id && (
-                  <div className="pl-6">
-                    {brands.filter(b => b.companyId === company.id && b.isActive).map(brand => (
-                      <button
-                        key={brand.id}
-                        onClick={() => { setSelectedBrandId(brand.id); setFilterOpen(false); }}
-                        className={cn('w-full text-left px-3 py-1.5 text-[11px] hover:bg-muted transition-colors', selectedBrandId === brand.id && 'bg-teal-50 text-teal-700 font-medium')}
-                      >
-                        <span className="inline-block w-2 h-2 rounded-sm mr-1.5" style={{ backgroundColor: brand.primaryColor }} />
-                        {brand.brandCode} - {brand.brandNameZh}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+          <span className="text-white/80 max-w-[140px] truncate">全部公司</span>
+        </div>
       </div>
 
       {/* Main Navigation */}
