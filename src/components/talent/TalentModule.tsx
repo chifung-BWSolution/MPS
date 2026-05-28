@@ -96,11 +96,38 @@ const categoryLabel = (id: TalentCategoryId): string => {
 const seedTalents: Talent[] = [];
 
 // =====================================================================
-// Persisted (in-memory) store via module-scoped state hook
+// Persisted store — hydrates from localStorage so invite links survive refresh.
+// Will be replaced by a Supabase-backed store once the talents schema lands.
 // =====================================================================
-let _talents: Talent[] = seedTalents;
+const TALENTS_STORAGE_KEY = 'mps:talents';
+
+const loadTalents = (): Talent[] => {
+  if (typeof window === 'undefined') return seedTalents;
+  try {
+    const raw = window.localStorage.getItem(TALENTS_STORAGE_KEY);
+    if (!raw) return seedTalents;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as Talent[]) : seedTalents;
+  } catch {
+    return seedTalents;
+  }
+};
+
+const persistTalents = (list: Talent[]) => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(TALENTS_STORAGE_KEY, JSON.stringify(list));
+  } catch {
+    // localStorage may be unavailable (private mode, quota); fall back silently.
+  }
+};
+
+let _talents: Talent[] = loadTalents();
 const _subscribers = new Set<() => void>();
-function notify() { _subscribers.forEach(fn => fn()); }
+function notify() {
+  persistTalents(_talents);
+  _subscribers.forEach(fn => fn());
+}
 
 function useTalents() {
   const [, force] = useState(0);
@@ -591,7 +618,7 @@ function Modal({ title, onClose, children, width = 'max-w-[640px]' }: {
 // 2.2 Invite (self-fill flow)
 // =====================================================================
 function TalentInvite() {
-  const { talents, add, update } = useTalents();
+  const { talents, add, remove } = useTalents();
   const [generated, setGenerated] = useState<{ token: string; talentId: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -700,10 +727,14 @@ function TalentInvite() {
                     複製連結
                   </button>
                   <button
-                    onClick={() => update(t.id, { inviteSubmittedAt: new Date().toISOString() })}
-                    className="text-[12px] px-3 py-1.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-md hover:bg-teal-100"
+                    onClick={() => {
+                      if (confirm('確定要刪除此筆未填寫紀錄嗎？')) {
+                        remove(t.id);
+                      }
+                    }}
+                    className="text-[12px] px-3 py-1.5 border border-rose-200 text-rose-600 rounded-md hover:bg-rose-50"
                   >
-                    標記為已填寫
+                    刪除
                   </button>
                 </div>
               </div>
