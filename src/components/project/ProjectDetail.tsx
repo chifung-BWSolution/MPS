@@ -143,14 +143,14 @@ const sampleTeamMembers: TeamMember[] = [
   { id: 'u4', name: '李美琪', roleInProject: '設計師', estimatedHours: 40 },
 ];
 
-const sampleClientInfo: ClientInfo = {
-  companyName: '志豐企業有限公司',
-  contactPerson: '張大偉',
-  email: 'david.zhang@zhifeng.com.hk',
-  phone: '+852 9123 4567',
-  companyPhone: '+852 2345 6789',
-  website: 'https://www.zhifeng.com.hk',
-  tags: ['知名品牌', '大客戶', '長期合作'],
+const emptyClientInfo: ClientInfo = {
+  companyName: '',
+  contactPerson: '',
+  email: '',
+  phone: '',
+  companyPhone: '',
+  website: '',
+  tags: [],
 };
 
 const roleOptions = ['負責人 / PM', '設計師', '前端開發', '後端開發', '文案 / SEO', '剪輯', 'PM 助理', '市場推廣'];
@@ -169,10 +169,10 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
   const { projects: companyProjects } = useCompanyProjects();
   const { projects: clientProjects } = useClientProjects();
   const [activeTab, setActiveTab] = useState('overview');
-  const [tasks, setTasks] = useState<ProjectTask[]>(sampleTasks);
+  const [tasks, setTasks] = useState<ProjectTask[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newTask, setNewTask] = useState({ title: '', assignees: [] as string[], priority: 'medium' as ProjectPriority, startDate: '', endDate: '', estimatedHours: '', description: '' });
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(sampleTeamMembers);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [newMember, setNewMember] = useState({ name: '', roleInProject: '', estimatedHours: '' });
   const [taskViewMode, setTaskViewMode] = useState<'kanban' | 'gantt'>('kanban');
@@ -186,7 +186,7 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
     targetArticles: number;
     targetVideos: number;
     targetSocialPosts: number;
-  } | null>(sampleYearPlan);
+  } | null>(null);
   const [isYearPlanModalOpen, setIsYearPlanModalOpen] = useState(false);
   const [yearPlanForm, setYearPlanForm] = useState({
     targetRevenue: '',
@@ -216,6 +216,7 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
   const config = statusConfig[project.status];
   const totalEstimatedHours = tasks.reduce((s, t) => s + (t.estimatedHours || 0), 0);
   const totalActualHours = tasks.reduce((s, t) => s + (t.actualHours || 0), 0);
+  const clientInfo: ClientInfo = emptyClientInfo;
 
   // Kanban columns
   const columns: Record<ColumnId, ProjectTask[]> = {
@@ -786,6 +787,9 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
             </div>
 
             {/* Team members grid */}
+            {teamMembers.length === 0 ? (
+              <div className="text-center py-8 text-[13px] text-muted-foreground">暫無團隊成員</div>
+            ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {teamMembers.map(member => (
                 <div key={member.id} className="relative group p-3 rounded-md border border-border/60 hover:border-teal-200 hover:shadow-sm transition-all">
@@ -812,6 +816,7 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
                 </div>
               ))}
             </div>
+            )}
           </div>
 
           {/* ═══════════════════════════════════════════════ */}
@@ -837,23 +842,27 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
                     <Building2 size={14} className="text-muted-foreground mt-0.5 flex-shrink-0" />
                     <div>
                       <span className="text-[11px] text-muted-foreground block">客戶公司</span>
-                      <span className="text-[13px] font-medium">{sampleClientInfo.companyName}</span>
+                      <span className="text-[13px] font-medium">{clientInfo.companyName || '—'}</span>
                     </div>
                   </div>
                   <div className="flex items-start gap-3 p-3 bg-slate-50 rounded">
                     <User size={14} className="text-muted-foreground mt-0.5 flex-shrink-0" />
                     <div>
                       <span className="text-[11px] text-muted-foreground block">聯絡人</span>
-                      <span className="text-[13px] font-medium">{sampleClientInfo.contactPerson}</span>
+                      <span className="text-[13px] font-medium">{clientInfo.contactPerson || '—'}</span>
                     </div>
                   </div>
                   <div className="flex items-start gap-3 p-3 bg-slate-50 rounded">
                     <Mail size={14} className="text-muted-foreground mt-0.5 flex-shrink-0" />
                     <div>
                       <span className="text-[11px] text-muted-foreground block">電郵</span>
-                      <a href={`mailto:${sampleClientInfo.email}`} className="text-[13px] font-medium text-teal-600 hover:underline">
-                        {sampleClientInfo.email}
-                      </a>
+                      {clientInfo.email ? (
+                        <a href={`mailto:${clientInfo.email}`} className="text-[13px] font-medium text-teal-600 hover:underline">
+                          {clientInfo.email}
+                        </a>
+                      ) : (
+                        <span className="text-[13px] font-medium">—</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -863,37 +872,41 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
                     <Phone size={14} className="text-muted-foreground mt-0.5 flex-shrink-0" />
                     <div>
                       <span className="text-[11px] text-muted-foreground block">主要聯絡電話</span>
-                      <span className="text-[13px] font-medium">{sampleClientInfo.phone}</span>
+                      <span className="text-[13px] font-medium">{clientInfo.phone || '—'}</span>
                     </div>
                   </div>
                   <div className="flex items-start gap-3 p-3 bg-slate-50 rounded">
                     <Phone size={14} className="text-muted-foreground mt-0.5 flex-shrink-0" />
                     <div>
                       <span className="text-[11px] text-muted-foreground block">公司電話</span>
-                      <span className="text-[13px] font-medium">{sampleClientInfo.companyPhone}</span>
+                      <span className="text-[13px] font-medium">{clientInfo.companyPhone || '—'}</span>
                     </div>
                   </div>
                   <div className="flex items-start gap-3 p-3 bg-slate-50 rounded">
                     <ExternalLink size={14} className="text-muted-foreground mt-0.5 flex-shrink-0" />
                     <div>
                       <span className="text-[11px] text-muted-foreground block">公司網頁</span>
-                      <a href={sampleClientInfo.website} target="_blank" rel="noopener noreferrer" className="text-[13px] font-medium text-teal-600 hover:underline">
-                        {sampleClientInfo.website}
-                      </a>
+                      {clientInfo.website ? (
+                        <a href={clientInfo.website} target="_blank" rel="noopener noreferrer" className="text-[13px] font-medium text-teal-600 hover:underline">
+                          {clientInfo.website}
+                        </a>
+                      ) : (
+                        <span className="text-[13px] font-medium">—</span>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Tags */}
-              {sampleClientInfo.tags.length > 0 && (
+              {clientInfo.tags.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-border/40">
                   <div className="flex items-center gap-2 mb-2">
                     <Tag size={12} className="text-muted-foreground" />
                     <span className="text-[11px] text-muted-foreground">標籤</span>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    {sampleClientInfo.tags.map(tag => (
+                    {clientInfo.tags.map(tag => (
                       <Badge key={tag} className={cn('text-[11px] font-medium', tagColors[tag] || 'bg-slate-100 text-slate-700')}>
                         {tag}
                       </Badge>
