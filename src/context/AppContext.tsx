@@ -161,6 +161,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'users', label: '用戶管理' },
       { id: 'companies', label: '公司管理' },
       { id: 'brands', label: '品牌管理' },
+      { id: 'talent-form', label: '藝人表格' },
       { id: 'roles', label: '角色權限' },
       { id: 'notifications', label: '通知設定' },
       { id: 'options', label: '選項設定' },
