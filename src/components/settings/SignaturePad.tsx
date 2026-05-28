@@ -10,8 +10,11 @@ interface SignaturePadProps {
   className?: string;
 }
 
+// Pen icon with the writing tip at (2, 2) — hotspot must match so the cursor's
+// click point aligns with the visible pen nib. The icon is rotated/laid-out so
+// the sharp tip is the top-left corner of the SVG.
 const PEN_CURSOR =
-  'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23000\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><path d=\'M12 19l7-7 3 3-7 7-3-3z\'/><path d=\'M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z\'/><path d=\'M2 2l7.586 7.586\'/><circle cx=\'11\' cy=\'11\' r=\'2\'/></svg>") 2 22, crosshair';
+  'url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'%23ffffff\' stroke=\'%23000\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'><path d=\'M2 2l4 1 14 14-3 3L3 6 2 2z\' fill=\'%23ffffff\'/><path d=\'M2 2l4 1 1 4-3-1-2-4z\' fill=\'%23000\'/><path d=\'M14 8l3 3\'/></svg>") 2 2, crosshair';
 
 export function SignaturePad({ value, onChange, width = 380, height = 90, className }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
