@@ -637,17 +637,25 @@ function TalentInvite() {
 
   const refreshSubmissions = async () => {
     setSubmissionsLoading(true);
-    const { data, error } = await supabase
-      .from('talent_form')
-      .select('id, invite_token, name_zh, name_en, phone, submitted_at')
-      .order('submitted_at', { ascending: false });
-    if (error) {
-      setSubmissionsError(error.message);
-    } else {
-      setSubmissions((data ?? []) as SubmittedFormRow[]);
-      setSubmissionsError(null);
+    try {
+      const { data, error } = await supabase
+        .from('talent_form')
+        .select('id, invite_token, name_zh, name_en, phone, submitted_at')
+        .order('submitted_at', { ascending: false });
+      if (error) {
+        setSubmissionsError(error.message);
+        setSubmissions([]);
+      } else {
+        setSubmissions((data ?? []) as SubmittedFormRow[]);
+        setSubmissionsError(null);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '無法載入已填寫名單';
+      setSubmissionsError(msg);
+      setSubmissions([]);
+    } finally {
+      setSubmissionsLoading(false);
     }
-    setSubmissionsLoading(false);
   };
 
   useEffect(() => {
