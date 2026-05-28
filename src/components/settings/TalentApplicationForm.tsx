@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Check } from 'lucide-react';
 import { SignaturePad } from './SignaturePad';
+import { supabase } from '@/lib/supabase';
 
 type OptionValue = string;
 
@@ -213,9 +214,17 @@ const sectionBand =
 const fullRowCell =
   'col-span-4 flex items-center flex-wrap px-2 py-1.5 bg-white border-b border-slate-300 gap-y-0.5';
 
-export function TalentApplicationForm() {
+interface TalentApplicationFormProps {
+  mode?: 'draft' | 'submit';
+  inviteToken?: string;
+}
+
+export function TalentApplicationForm({ mode = 'draft', inviteToken }: TalentApplicationFormProps = {}) {
   const [form, setForm] = useState<FormState>(initialState);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submittedAt, setSubmittedAt] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -225,12 +234,59 @@ export function TalentApplicationForm() {
     setSavedAt(new Date().toLocaleString('zh-HK'));
   };
 
+  const handleSubmit = async () => {
+    if (submitting) return;
+    setSubmitError(null);
+    setSubmitting(true);
+    try {
+      const { signature, ...rest } = form;
+      const { error } = await supabase.from('talent_form').insert({
+        invite_token: inviteToken ?? null,
+        fill_date: form.fillDate || null,
+        name_zh: form.nameZh || null,
+        name_en: form.nameEn || null,
+        gender: form.gender[0] ?? null,
+        age: form.age || null,
+        phone: form.phone || null,
+        wechat: form.wechat || null,
+        height: form.height || null,
+        weight: form.weight || null,
+        payload: rest,
+        signature_image: signature || null,
+      });
+      if (error) throw error;
+      setSubmittedAt(new Date().toLocaleString('zh-HK'));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '提交失敗，請稍後再試。';
+      setSubmitError(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleReset = () => {
     if (confirm('確定要重設整份表格嗎？所有已填寫內容將會清除。')) {
       setForm(initialState);
       setSavedAt(null);
+      setSubmittedAt(null);
+      setSubmitError(null);
     }
   };
+
+  if (submittedAt && mode === 'submit') {
+    return (
+      <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card mx-auto max-w-[880px] w-full px-8 py-12 text-center">
+        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-teal-100 text-teal-700 mb-3">
+          <Check size={28} strokeWidth={3} />
+        </div>
+        <h3 className="text-[16px] font-bold text-[#0d1a2d] mb-1">已成功遞交表格</h3>
+        <p className="text-[12.5px] text-muted-foreground">
+          感謝您的填寫！我們將盡快與您聯絡。<br />
+          遞交時間：{submittedAt}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card mx-auto max-w-[880px] w-full">
@@ -698,7 +754,13 @@ export function TalentApplicationForm() {
       {/* Footer actions */}
       <div className="px-4 py-2.5 border-t border-border/50 bg-muted/20 flex items-center justify-between">
         <div className="text-[11px] text-muted-foreground">
-          {savedAt ? <span className="text-teal-600">✓ 已於 {savedAt} 儲存草稿</span> : '尚未儲存'}
+          {mode === 'draft' && savedAt && (
+            <span className="text-teal-600">✓ 已於 {savedAt} 儲存草稿</span>
+          )}
+          {mode === 'draft' && !savedAt && '尚未儲存'}
+          {mode === 'submit' && submitError && (
+            <span className="text-rose-600">⚠ {submitError}</span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -707,12 +769,22 @@ export function TalentApplicationForm() {
           >
             重設
           </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-bold hover:bg-teal-700 transition-colors shadow-sm"
-          >
-            儲存草稿
-          </button>
+          {mode === 'submit' ? (
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="px-4 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-bold hover:bg-teal-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {submitting ? '正在遞交…' : '遞交表格'}
+            </button>
+          ) : (
+            <button
+              onClick={handleSave}
+              className="px-4 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-bold hover:bg-teal-700 transition-colors shadow-sm"
+            >
+              儲存草稿
+            </button>
+          )}
         </div>
       </div>
     </div>

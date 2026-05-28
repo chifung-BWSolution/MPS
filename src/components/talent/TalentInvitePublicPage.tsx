@@ -20,7 +20,7 @@ export function TalentInvitePublicPage() {
             </p>
           )}
         </div>
-        <TalentApplicationForm />
+        <TalentApplicationForm mode="submit" inviteToken={token} />
       </div>
     </div>
   );
