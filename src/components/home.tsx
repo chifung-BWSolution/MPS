@@ -10,6 +10,7 @@ import { WebsiteModule } from '@/components/website/WebsiteModule';
 import { ArticlesModule } from '@/components/articles/ArticlesModule';
 import { MarketingModule } from '@/components/marketing/MarketingModule';
 import { VideoModule } from '@/components/video/VideoModule';
+import { TalentModule } from '@/components/talent/TalentModule';
 import { SupplierModule } from '@/components/supplier/SupplierModule';
 import { ReportModule } from '@/components/report/ReportModule';
 import { ToolsCenterModule } from '@/components/tools-center/ToolsCenterModule';
@@ -38,6 +39,8 @@ function ModuleRouter() {
       return <MarketingModule subModule={currentSubModule} />;
     case 'video':
       return <VideoModule subModule={currentSubModule} />;
+    case 'talent':
+      return <TalentModule subModule={currentSubModule} />;
     case 'supplier':
       return <SupplierModule subModule={currentSubModule} />;
     case 'report':

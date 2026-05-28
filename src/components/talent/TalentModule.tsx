@@ -1,0 +1,1081 @@
+import { useMemo, useState } from 'react';
+import {
+  Search, Plus, Star, Link2, Copy, Check, X, Pencil, Calendar,
+  Image as ImageIcon, Tag, Users, Camera,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+// =====================================================================
+// Types
+// =====================================================================
+type Region = 'HK' | 'SZ' | 'OTHER';
+type CooperationStatus = 'cooperated' | 'pending' | 'not_yet';
+
+const TALENT_CATEGORIES = [
+  { id: 'photo_model', label: '平面拍攝模特兒' },
+  { id: 'event_model', label: '活動模特兒' },
+  { id: 'host', label: '主持人（上台型）' },
+  { id: 'vo', label: 'VO（聲音演出）' },
+  { id: 'self_media', label: '自媒體 / 直播藝人' },
+] as const;
+
+type TalentCategoryId = typeof TALENT_CATEGORIES[number]['id'] | string;
+
+interface TalentRating {
+  appearance: number;       // 外表 / 上鏡感 1-10
+  speaking: number;          // 講話流利度 / 聲音
+  posture: number;           // 儀態
+  personality: number;       // 性格
+  oncamera: number;          // 上鏡感
+}
+
+interface CollaborationRecord {
+  id: string;
+  date: string;
+  projectTitle: string;
+  videoLink?: string;
+  fee: number;
+  rating: number;            // 1-5
+  notes?: string;
+}
+
+interface Talent {
+  id: string;
+  photoUrl?: string;
+  galleryUrls: string[];
+  // Basic
+  name: string;
+  stageName?: string;
+  age?: number;
+  height?: number;
+  measurements?: string;     // e.g. 32-24-34
+  region: Region;
+  // Tags
+  categories: TalentCategoryId[];
+  hasLiveExperience: boolean;
+  aspirations?: string;      // 志向 / 夢想
+  // Status
+  cooperationStatus: CooperationStatus;
+  recentVideoCount: number;
+  // Ratings
+  rating?: TalentRating;
+  overallRating?: number;    // computed average 1-10
+  // Interview
+  hasInterviewed: boolean;
+  interviewScheduledAt?: string;
+  interviewNotes?: string;
+  auditionMediaUrls?: string[];
+  // Collaboration history
+  collaborations: CollaborationRecord[];
+  // Self-fill invite
+  inviteToken?: string;
+  inviteCreatedAt?: string;
+  inviteSubmittedAt?: string;
+}
+
+const REGION_LABELS: Record<Region, string> = {
+  HK: '香港',
+  SZ: '深圳',
+  OTHER: '其他',
+};
+
+const COOP_LABELS: Record<CooperationStatus, { text: string; color: string }> = {
+  cooperated: { text: '已合作', color: 'bg-teal-50 text-teal-700 border-teal-200' },
+  pending: { text: '待跟進', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  not_yet: { text: '未合作', color: 'bg-slate-100 text-slate-600 border-slate-200' },
+};
+
+const categoryLabel = (id: TalentCategoryId): string => {
+  const known = TALENT_CATEGORIES.find(c => c.id === id);
+  return known?.label || id;
+};
+
+// =====================================================================
+// Sample seed data (replaced once Supabase is wired up)
+// =====================================================================
+const seedTalents: Talent[] = [];
+
+// =====================================================================
+// Persisted (in-memory) store via module-scoped state hook
+// =====================================================================
+let _talents: Talent[] = seedTalents;
+const _subscribers = new Set<() => void>();
+function notify() { _subscribers.forEach(fn => fn()); }
+
+function useTalents() {
+  const [, force] = useState(0);
+  useMemo(() => {
+    const sub = () => force(n => n + 1);
+    _subscribers.add(sub);
+    return () => _subscribers.delete(sub);
+  }, []);
+  return {
+    talents: _talents,
+    add: (t: Talent) => { _talents = [..._talents, t]; notify(); },
+    update: (id: string, patch: Partial<Talent>) => {
+      _talents = _talents.map(t => t.id === id ? { ...t, ...patch } : t);
+      notify();
+    },
+    remove: (id: string) => { _talents = _talents.filter(t => t.id !== id); notify(); },
+  };
+}
+
+const computeOverall = (r?: TalentRating) => {
+  if (!r) return undefined;
+  const v = (r.appearance + r.speaking + r.posture + r.personality + r.oncamera) / 5;
+  return Math.round(v * 10) / 10;
+};
+
+const newId = () => `t_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+// =====================================================================
+// Shared UI helpers
+// =====================================================================
+function PageHeader({ title, subtitle, action }: { title: string; subtitle: string; action?: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between">
+      <div>
+        <h1 className="text-[32px] font-bold tracking-tight">{title}</h1>
+        <p className="text-[14px] text-muted-foreground mt-1">{subtitle}</p>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, title, hint }: { icon: React.ElementType; title: string; hint?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-3">
+        <Icon size={20} className="text-muted-foreground" />
+      </div>
+      <p className="text-[14px] font-medium text-foreground">{title}</p>
+      {hint && <p className="text-[12px] text-muted-foreground mt-1 max-w-[400px]">{hint}</p>}
+    </div>
+  );
+}
+
+function CategoryChip({ id }: { id: TalentCategoryId }) {
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 text-[11px]">
+      {categoryLabel(id)}
+    </span>
+  );
+}
+
+// =====================================================================
+// Talent Form (used for add / edit / self-fill)
+// =====================================================================
+function TalentForm({
+  initial,
+  onSave,
+  onCancel,
+  submitLabel = '保存',
+}: {
+  initial?: Partial<Talent>;
+  onSave: (data: Partial<Talent>) => void;
+  onCancel: () => void;
+  submitLabel?: string;
+}) {
+  const [form, setForm] = useState<Partial<Talent>>({
+    name: '',
+    region: 'HK',
+    categories: [],
+    cooperationStatus: 'not_yet',
+    hasLiveExperience: false,
+    hasInterviewed: false,
+    galleryUrls: [],
+    collaborations: [],
+    recentVideoCount: 0,
+    ...initial,
+  });
+
+  const set = <K extends keyof Talent>(key: K, value: Talent[K]) =>
+    setForm(prev => ({ ...prev, [key]: value }));
+
+  const toggleCategory = (id: TalentCategoryId) => {
+    const list = form.categories || [];
+    set('categories', list.includes(id) ? list.filter(c => c !== id) : [...list, id]);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Photo */}
+      <div>
+        <label className="text-[12px] font-medium text-muted-foreground block mb-1">藝人照片 URL *</label>
+        <input
+          value={form.photoUrl || ''}
+          onChange={(e) => set('photoUrl', e.target.value)}
+          placeholder="https://..."
+          className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+        />
+        {form.photoUrl && (
+          <img src={form.photoUrl} alt="" className="mt-2 w-24 h-24 rounded-md object-cover border border-border" />
+        )}
+      </div>
+
+      {/* Basic info */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="text-[12px] font-medium text-muted-foreground block mb-1">姓名 *</label>
+          <input
+            value={form.name || ''}
+            onChange={(e) => set('name', e.target.value)}
+            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+          />
+        </div>
+        <div>
+          <label className="text-[12px] font-medium text-muted-foreground block mb-1">藝名</label>
+          <input
+            value={form.stageName || ''}
+            onChange={(e) => set('stageName', e.target.value)}
+            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+          />
+        </div>
+        <div>
+          <label className="text-[12px] font-medium text-muted-foreground block mb-1">年齡</label>
+          <input
+            type="number"
+            value={form.age ?? ''}
+            onChange={(e) => set('age', e.target.value ? Number(e.target.value) : undefined)}
+            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+          />
+        </div>
+        <div>
+          <label className="text-[12px] font-medium text-muted-foreground block mb-1">身高 (cm)</label>
+          <input
+            type="number"
+            value={form.height ?? ''}
+            onChange={(e) => set('height', e.target.value ? Number(e.target.value) : undefined)}
+            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+          />
+        </div>
+        <div>
+          <label className="text-[12px] font-medium text-muted-foreground block mb-1">三圍</label>
+          <input
+            placeholder="32-24-34"
+            value={form.measurements || ''}
+            onChange={(e) => set('measurements', e.target.value)}
+            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+          />
+        </div>
+        <div>
+          <label className="text-[12px] font-medium text-muted-foreground block mb-1">所屬地區</label>
+          <select
+            value={form.region}
+            onChange={(e) => set('region', e.target.value as Region)}
+            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+          >
+            {Object.entries(REGION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Categories */}
+      <div>
+        <label className="text-[12px] font-medium text-muted-foreground block mb-2">藝人分類（可多選）</label>
+        <div className="flex flex-wrap gap-2">
+          {TALENT_CATEGORIES.map(cat => {
+            const active = (form.categories || []).includes(cat.id);
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => toggleCategory(cat.id)}
+                className={cn(
+                  'px-3 py-1.5 rounded-full border text-[12px] transition-colors',
+                  active
+                    ? 'bg-purple-100 border-purple-400 text-purple-800'
+                    : 'bg-white border-border text-muted-foreground hover:border-purple-300'
+                )}
+              >
+                {cat.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Aspirations + live experience */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="text-[12px] font-medium text-muted-foreground block mb-1">志向 / 發展方向</label>
+          <input
+            value={form.aspirations || ''}
+            onChange={(e) => set('aspirations', e.target.value)}
+            placeholder="例如：自媒體、直播、旅遊博主..."
+            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+          />
+        </div>
+        <div className="flex items-end">
+          <label className="flex items-center gap-2 text-[13px] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.hasLiveExperience || false}
+              onChange={(e) => set('hasLiveExperience', e.target.checked)}
+              className="w-4 h-4 accent-teal-600"
+            />
+            有直播經驗
+          </label>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex justify-end gap-2 pt-2">
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 text-[13px] text-muted-foreground hover:bg-muted rounded-md"
+        >
+          取消
+        </button>
+        <button
+          onClick={() => {
+            if (!form.name?.trim()) { alert('請輸入姓名'); return; }
+            if (!form.photoUrl?.trim()) { alert('請填寫照片 URL'); return; }
+            onSave(form);
+          }}
+          className="px-4 py-2 text-[13px] bg-teal-600 text-white rounded-md hover:bg-teal-700"
+        >
+          {submitLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// 2.1 Talent List
+// =====================================================================
+function TalentList() {
+  const { talents, add, update, remove } = useTalents();
+  const [search, setSearch] = useState('');
+  const [regionFilter, setRegionFilter] = useState<'all' | Region>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | string>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | CooperationStatus>('all');
+  const [liveOnly, setLiveOnly] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState<Talent | null>(null);
+
+  const filtered = talents.filter(t => {
+    if (search && !`${t.name} ${t.stageName || ''}`.toLowerCase().includes(search.toLowerCase())) return false;
+    if (regionFilter !== 'all' && t.region !== regionFilter) return false;
+    if (categoryFilter !== 'all' && !t.categories.includes(categoryFilter)) return false;
+    if (statusFilter !== 'all' && t.cooperationStatus !== statusFilter) return false;
+    if (liveOnly && !t.hasLiveExperience) return false;
+    return true;
+  });
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="藝人列表"
+        subtitle="管理所有藝人完整資料、評分及合作狀態。"
+        action={
+          <button
+            onClick={() => setShowAdd(true)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-sm font-medium hover:bg-teal-700 transition-colors active:scale-[0.97]"
+          >
+            <Plus size={14} />新增藝人
+          </button>
+        }
+      />
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm flex-1 max-w-[260px]">
+          <Search size={14} className="text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="搜尋姓名 / 藝名..."
+            className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground"
+          />
+        </div>
+        <select
+          value={regionFilter}
+          onChange={(e) => setRegionFilter(e.target.value as 'all' | Region)}
+          className="px-3 py-1.5 border border-border rounded-md text-[13px]"
+        >
+          <option value="all">所有地區</option>
+          {Object.entries(REGION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+        <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="px-3 py-1.5 border border-border rounded-md text-[13px]"
+        >
+          <option value="all">所有分類</option>
+          {TALENT_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as 'all' | CooperationStatus)}
+          className="px-3 py-1.5 border border-border rounded-md text-[13px]"
+        >
+          <option value="all">所有合作狀態</option>
+          <option value="cooperated">已合作</option>
+          <option value="pending">待跟進</option>
+          <option value="not_yet">未合作</option>
+        </select>
+        <label className="flex items-center gap-2 text-[12px] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={liveOnly}
+            onChange={(e) => setLiveOnly(e.target.checked)}
+            className="w-4 h-4 accent-teal-600"
+          />
+          僅顯示有直播經驗
+        </label>
+      </div>
+
+      <div className="text-[12px] text-muted-foreground">顯示 {filtered.length} 位藝人</div>
+
+      {filtered.length === 0 ? (
+        <EmptyState icon={Users} title="暫無藝人資料" hint="點擊右上「新增藝人」直接加入，或前往「新增藝人」頁面產生自助填表連結。" />
+      ) : (
+        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">藝人</th>
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">基本資料</th>
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">分類</th>
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">合作狀態</th>
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">最近影片</th>
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">綜合評分</th>
+                <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(t => (
+                <tr key={t.id} className="border-b border-border last:border-b-0 hover:bg-muted/30">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      {t.photoUrl ? (
+                        <img src={t.photoUrl} alt={t.name} className="w-10 h-10 rounded-full object-cover border border-border" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-[12px] font-bold text-muted-foreground">
+                          {t.name.slice(0, 1)}
+                        </div>
+                      )}
+                      <div>
+                        <div className="text-[13px] font-medium">{t.stageName || t.name}</div>
+                        {t.stageName && <div className="text-[11px] text-muted-foreground">{t.name}</div>}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-[12px] text-muted-foreground">
+                    {[
+                      t.age && `${t.age}歲`,
+                      t.height && `${t.height}cm`,
+                      t.measurements,
+                      REGION_LABELS[t.region],
+                    ].filter(Boolean).join(' · ')}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {t.categories.length === 0 ? (
+                        <span className="text-[11px] text-muted-foreground">—</span>
+                      ) : t.categories.map(c => <CategoryChip key={c} id={c} />)}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full border text-[11px]', COOP_LABELS[t.cooperationStatus].color)}>
+                      {COOP_LABELS[t.cooperationStatus].text}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-[13px]">{t.recentVideoCount}</td>
+                  <td className="px-4 py-3">
+                    {t.overallRating ? (
+                      <span className="inline-flex items-center gap-1 text-[13px] font-medium">
+                        <Star size={12} className="fill-amber-400 text-amber-400" />
+                        {t.overallRating.toFixed(1)}
+                      </span>
+                    ) : <span className="text-[12px] text-muted-foreground">未評</span>}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => setEditing(t)}
+                      className="text-muted-foreground hover:text-teal-600 mr-2"
+                      title="編輯"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      onClick={() => { if (confirm(`刪除 ${t.name}？`)) remove(t.id); }}
+                      className="text-muted-foreground hover:text-rose-600"
+                      title="刪除"
+                    >
+                      <X size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Add modal */}
+      {showAdd && (
+        <Modal title="新增藝人" onClose={() => setShowAdd(false)}>
+          <TalentForm
+            onCancel={() => setShowAdd(false)}
+            onSave={(data) => {
+              const newTalent: Talent = {
+                id: newId(),
+                name: data.name || '',
+                photoUrl: data.photoUrl,
+                galleryUrls: [],
+                stageName: data.stageName,
+                age: data.age,
+                height: data.height,
+                measurements: data.measurements,
+                region: data.region || 'HK',
+                categories: data.categories || [],
+                hasLiveExperience: data.hasLiveExperience || false,
+                aspirations: data.aspirations,
+                cooperationStatus: 'not_yet',
+                recentVideoCount: 0,
+                hasInterviewed: false,
+                collaborations: [],
+              };
+              add(newTalent);
+              setShowAdd(false);
+            }}
+          />
+        </Modal>
+      )}
+
+      {/* Edit modal */}
+      {editing && (
+        <Modal title={`編輯 ${editing.name}`} onClose={() => setEditing(null)}>
+          <TalentForm
+            initial={editing}
+            onCancel={() => setEditing(null)}
+            onSave={(data) => {
+              update(editing.id, data);
+              setEditing(null);
+            }}
+            submitLabel="保存修改"
+          />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// Modal helper
+// =====================================================================
+function Modal({ title, onClose, children, width = 'max-w-[640px]' }: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  width?: string;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className={cn('bg-white rounded-lg shadow-xl w-full max-h-[85vh] flex flex-col', width)}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h3 className="text-[16px] font-bold">{title}</h3>
+          <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// 2.2 Invite (self-fill flow)
+// =====================================================================
+function TalentInvite() {
+  const { talents, add, update } = useTalents();
+  const [generated, setGenerated] = useState<{ token: string; talentId: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const generate = () => {
+    const token = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    const id = newId();
+    add({
+      id,
+      name: '（待填寫）',
+      photoUrl: undefined,
+      galleryUrls: [],
+      region: 'HK',
+      categories: [],
+      hasLiveExperience: false,
+      cooperationStatus: 'pending',
+      recentVideoCount: 0,
+      hasInterviewed: false,
+      collaborations: [],
+      inviteToken: token,
+      inviteCreatedAt: new Date().toISOString(),
+    });
+    setGenerated({ token, talentId: id });
+    setCopied(false);
+  };
+
+  const inviteUrl = generated ? `${window.location.origin}/talent/invite/${generated.token}` : '';
+
+  const pending = talents.filter(t => t.inviteToken && !t.inviteSubmittedAt);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="新增藝人" subtitle="一鍵產生自助填表連結，發送給藝人填寫詳細資料。" />
+
+      <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] p-6 space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-md bg-teal-50 flex items-center justify-center">
+            <Link2 size={18} className="text-teal-600" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-[14px] font-bold mb-1">產生填表連結</h3>
+            <p className="text-[12px] text-muted-foreground mb-3">
+              點擊「加入新人」後，系統會產生一個專屬連結。將連結傳送給藝人，他們可自行填寫姓名、照片、三圍、分類等資料；
+              完成後會自動加入藝人列表並標記為「待跟進」。
+            </p>
+            <button
+              onClick={generate}
+              className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700"
+            >
+              <Plus size={14} />加入新人，產生連結
+            </button>
+          </div>
+        </div>
+
+        {generated && (
+          <div className="border-t border-border pt-4">
+            <label className="text-[12px] font-medium text-muted-foreground block mb-2">填表連結</label>
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={inviteUrl}
+                className="flex-1 px-3 py-2 border border-border rounded-md text-[13px] bg-muted/30 font-mono"
+              />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(inviteUrl).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1500);
+                  });
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-md text-[13px] hover:bg-muted"
+              >
+                {copied ? <Check size={14} className="text-teal-600" /> : <Copy size={14} />}
+                {copied ? '已複製' : '複製'}
+              </button>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-2">
+              （示意連結 — 實際整合時可改為發送 SMS / WhatsApp / Email 自動化推送）
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Pending list */}
+      <div>
+        <h3 className="text-[14px] font-bold mb-3">未填寫名單（{pending.length}）</h3>
+        {pending.length === 0 ? (
+          <EmptyState icon={Link2} title="目前沒有等待填表的藝人" hint="產生連結並發送給藝人後會顯示在這裡。" />
+        ) : (
+          <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] divide-y divide-border">
+            {pending.map(t => (
+              <div key={t.id} className="px-4 py-3 flex items-center justify-between">
+                <div>
+                  <div className="text-[13px] font-medium">{t.name}</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    產生時間：{t.inviteCreatedAt ? new Date(t.inviteCreatedAt).toLocaleString() : '—'}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const url = `${window.location.origin}/talent/invite/${t.inviteToken}`;
+                      navigator.clipboard.writeText(url);
+                    }}
+                    className="text-[12px] px-3 py-1.5 border border-border rounded-md hover:bg-muted"
+                  >
+                    複製連結
+                  </button>
+                  <button
+                    onClick={() => update(t.id, { inviteSubmittedAt: new Date().toISOString() })}
+                    className="text-[12px] px-3 py-1.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-md hover:bg-teal-100"
+                  >
+                    標記為已填寫
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// 2.3 Categories
+// =====================================================================
+function TalentCategoriesView() {
+  const { talents } = useTalents();
+
+  const counts = useMemo(() => {
+    const map: Record<string, number> = {};
+    talents.forEach(t => t.categories.forEach(c => { map[c] = (map[c] || 0) + 1; }));
+    return map;
+  }, [talents]);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="藝人分類" subtitle="目前分類概覽；新增藝人時可選擇對應分類。" />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {TALENT_CATEGORIES.map(cat => (
+          <div key={cat.id} className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] p-5">
+            <div className="flex items-center gap-2 mb-2">
+              <Tag size={14} className="text-purple-600" />
+              <h3 className="text-[14px] font-bold">{cat.label}</h3>
+            </div>
+            <div className="text-[24px] font-bold text-foreground">{counts[cat.id] || 0}</div>
+            <div className="text-[12px] text-muted-foreground">位藝人</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-md p-4">
+        <p className="text-[12px] text-amber-800">
+          <span className="font-medium">提示：</span>分類為多選欄位 — 一位藝人可同時屬於多個分類（例如同時是平面模特兒及主持人）。
+          未來可在系統設定中擴展自訂分類。
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// 2.4 Interviews
+// =====================================================================
+function InterviewRatingEditor({ talent, onSave, onCancel }: {
+  talent: Talent;
+  onSave: (rating: TalentRating, notes: string, scheduledAt: string, mediaUrl?: string) => void;
+  onCancel: () => void;
+}) {
+  const [r, setR] = useState<TalentRating>(talent.rating || {
+    appearance: 7, speaking: 7, posture: 7, personality: 7, oncamera: 7,
+  });
+  const [notes, setNotes] = useState(talent.interviewNotes || '');
+  const [scheduledAt, setScheduledAt] = useState(talent.interviewScheduledAt || '');
+  const [mediaUrl, setMediaUrl] = useState('');
+
+  const Slider = ({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) => (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-[12px] font-medium text-muted-foreground">{label}</label>
+        <span className="text-[13px] font-bold text-teal-700">{value}/10</span>
+      </div>
+      <input
+        type="range" min={1} max={10} step={1}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full accent-teal-600"
+      />
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="text-[12px] font-medium text-muted-foreground block mb-1">面試時間</label>
+        <input
+          type="datetime-local"
+          value={scheduledAt}
+          onChange={(e) => setScheduledAt(e.target.value)}
+          className="w-full px-3 py-2 border border-border rounded-md text-[13px]"
+        />
+      </div>
+
+      <div className="space-y-3 bg-muted/30 rounded-md p-4">
+        <h4 className="text-[13px] font-bold mb-2">評分項目</h4>
+        <Slider label="外表" value={r.appearance} onChange={(v) => setR({ ...r, appearance: v })} />
+        <Slider label="上鏡感" value={r.oncamera} onChange={(v) => setR({ ...r, oncamera: v })} />
+        <Slider label="講話流利度 / 聲音" value={r.speaking} onChange={(v) => setR({ ...r, speaking: v })} />
+        <Slider label="儀態" value={r.posture} onChange={(v) => setR({ ...r, posture: v })} />
+        <Slider label="性格" value={r.personality} onChange={(v) => setR({ ...r, personality: v })} />
+        <div className="text-right text-[12px] text-muted-foreground pt-2 border-t border-border">
+          綜合：<span className="font-bold text-teal-700 text-[14px]">{computeOverall(r)?.toFixed(1)}</span>
+        </div>
+      </div>
+
+      <div>
+        <label className="text-[12px] font-medium text-muted-foreground block mb-1">面試備註</label>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={3}
+          placeholder="例如：態度積極、有主持經驗..."
+          className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+        />
+      </div>
+
+      <div>
+        <label className="text-[12px] font-medium text-muted-foreground block mb-1">試鏡影片 / 照片 URL（可選）</label>
+        <input
+          value={mediaUrl}
+          onChange={(e) => setMediaUrl(e.target.value)}
+          placeholder="https://..."
+          className="w-full px-3 py-2 border border-border rounded-md text-[13px]"
+        />
+      </div>
+
+      <div className="flex justify-end gap-2 pt-2">
+        <button onClick={onCancel} className="px-4 py-2 text-[13px] hover:bg-muted rounded-md">取消</button>
+        <button
+          onClick={() => onSave(r, notes, scheduledAt, mediaUrl || undefined)}
+          className="px-4 py-2 text-[13px] bg-teal-600 text-white rounded-md hover:bg-teal-700"
+        >
+          標記為已面試並保存
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TalentInterviews() {
+  const { talents, update } = useTalents();
+  const [editing, setEditing] = useState<Talent | null>(null);
+
+  const notInterviewed = talents.filter(t => !t.hasInterviewed);
+  const interviewed = talents.filter(t => t.hasInterviewed);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="面試安排與評分" subtitle="管理未見面名單、面試排程及評分結果。" />
+
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-amber-50 border border-amber-200 rounded-md p-4 text-center">
+          <div className="text-[22px] font-bold text-amber-700">{notInterviewed.length}</div>
+          <div className="text-[12px] text-amber-600">未見面</div>
+        </div>
+        <div className="bg-blue-50 border border-blue-200 rounded-md p-4 text-center">
+          <div className="text-[22px] font-bold text-blue-700">
+            {talents.filter(t => t.interviewScheduledAt && !t.hasInterviewed).length}
+          </div>
+          <div className="text-[12px] text-blue-600">已排期</div>
+        </div>
+        <div className="bg-teal-50 border border-teal-200 rounded-md p-4 text-center">
+          <div className="text-[22px] font-bold text-teal-700">{interviewed.length}</div>
+          <div className="text-[12px] text-teal-600">已面試</div>
+        </div>
+      </div>
+
+      {/* Not interviewed */}
+      <div>
+        <h3 className="text-[14px] font-bold mb-3 flex items-center gap-2">
+          <Calendar size={14} className="text-amber-600" />未見面名單
+        </h3>
+        {notInterviewed.length === 0 ? (
+          <EmptyState icon={Calendar} title="所有藝人都已面試" />
+        ) : (
+          <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] divide-y divide-border">
+            {notInterviewed.map(t => (
+              <div key={t.id} className="px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {t.photoUrl ? (
+                    <img src={t.photoUrl} alt={t.name} className="w-9 h-9 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-[12px]">{t.name.slice(0, 1)}</div>
+                  )}
+                  <div>
+                    <div className="text-[13px] font-medium">{t.stageName || t.name}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {REGION_LABELS[t.region]}
+                      {t.interviewScheduledAt && ` · 已排：${new Date(t.interviewScheduledAt).toLocaleString()}`}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setEditing(t)}
+                  className="text-[12px] px-3 py-1.5 bg-teal-600 text-white rounded-md hover:bg-teal-700"
+                >
+                  安排面試 / 評分
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Interviewed */}
+      <div>
+        <h3 className="text-[14px] font-bold mb-3 flex items-center gap-2">
+          <Check size={14} className="text-teal-600" />已面試藝人
+        </h3>
+        {interviewed.length === 0 ? (
+          <EmptyState icon={Check} title="尚無已面試紀錄" />
+        ) : (
+          <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] divide-y divide-border">
+            {interviewed.map(t => (
+              <div key={t.id} className="px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {t.photoUrl ? (
+                    <img src={t.photoUrl} alt={t.name} className="w-9 h-9 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-[12px]">{t.name.slice(0, 1)}</div>
+                  )}
+                  <div>
+                    <div className="text-[13px] font-medium">{t.stageName || t.name}</div>
+                    <div className="text-[11px] text-muted-foreground">{t.interviewNotes || '—'}</div>
+                  </div>
+                </div>
+                {t.overallRating && (
+                  <span className="inline-flex items-center gap-1 text-[13px] font-medium">
+                    <Star size={12} className="fill-amber-400 text-amber-400" />
+                    {t.overallRating.toFixed(1)}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {editing && (
+        <Modal title={`面試評分 — ${editing.name}`} onClose={() => setEditing(null)}>
+          <InterviewRatingEditor
+            talent={editing}
+            onCancel={() => setEditing(null)}
+            onSave={(rating, notes, scheduledAt, mediaUrl) => {
+              update(editing.id, {
+                rating,
+                overallRating: computeOverall(rating),
+                interviewNotes: notes,
+                interviewScheduledAt: scheduledAt || undefined,
+                hasInterviewed: true,
+                auditionMediaUrls: mediaUrl ? [...(editing.auditionMediaUrls || []), mediaUrl] : editing.auditionMediaUrls,
+              });
+              setEditing(null);
+            }}
+          />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// 2.5 Collaborated talents
+// =====================================================================
+function TalentCollaborated() {
+  const { talents } = useTalents();
+  const cooperated = talents.filter(t => t.cooperationStatus === 'cooperated' || t.collaborations.length > 0);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="已合作藝人" subtitle="快速查看曾合作藝人、合作次數、費用及適合類型。" />
+
+      {cooperated.length === 0 ? (
+        <EmptyState icon={Users} title="尚無合作紀錄" hint="在「藝人列表」編輯藝人並將合作狀態設為「已合作」即可顯示。" />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {cooperated.map(t => {
+            const totalSpend = t.collaborations.reduce((s, c) => s + (c.fee || 0), 0);
+            const avgRating = t.collaborations.length > 0
+              ? t.collaborations.reduce((s, c) => s + c.rating, 0) / t.collaborations.length
+              : 0;
+            return (
+              <div key={t.id} className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] p-4">
+                <div className="flex items-start gap-3">
+                  {t.photoUrl ? (
+                    <img src={t.photoUrl} alt={t.name} className="w-12 h-12 rounded-md object-cover" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center text-[14px] font-bold">
+                      {t.name.slice(0, 1)}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[14px] font-bold truncate">{t.stageName || t.name}</div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {t.categories.slice(0, 2).map(c => <CategoryChip key={c} id={c} />)}
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 mt-4 text-center">
+                  <div className="bg-muted/30 rounded p-2">
+                    <div className="text-[16px] font-bold">{t.collaborations.length}</div>
+                    <div className="text-[10px] text-muted-foreground">合作次數</div>
+                  </div>
+                  <div className="bg-muted/30 rounded p-2">
+                    <div className="text-[16px] font-bold">${totalSpend.toLocaleString()}</div>
+                    <div className="text-[10px] text-muted-foreground">累計費用</div>
+                  </div>
+                  <div className="bg-muted/30 rounded p-2">
+                    <div className="text-[16px] font-bold flex items-center justify-center gap-0.5">
+                      <Star size={12} className="fill-amber-400 text-amber-400" />
+                      {avgRating ? avgRating.toFixed(1) : '—'}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">平均評價</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// 2.6 Photo Gallery
+// =====================================================================
+function TalentGallery() {
+  const { talents } = useTalents();
+  const allPhotos = useMemo(() => {
+    const list: { talentId: string; talentName: string; url: string }[] = [];
+    talents.forEach(t => {
+      if (t.photoUrl) list.push({ talentId: t.id, talentName: t.stageName || t.name, url: t.photoUrl });
+      (t.galleryUrls || []).forEach(url => list.push({ talentId: t.id, talentName: t.stageName || t.name, url }));
+    });
+    return list;
+  }, [talents]);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="照片庫" subtitle="集中瀏覽所有藝人照片。" />
+
+      {allPhotos.length === 0 ? (
+        <EmptyState icon={ImageIcon} title="尚無照片" hint="在藝人資料中加入主照片或畫廊 URL 後會在這裡集中顯示。" />
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          {allPhotos.map((p, i) => (
+            <div key={i} className="aspect-square rounded-md overflow-hidden border border-border bg-muted relative group">
+              <img src={p.url} alt={p.talentName} className="w-full h-full object-cover" />
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-2">
+                <div className="text-[11px] text-white font-medium truncate">{p.talentName}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// Module router
+// =====================================================================
+export function TalentModule({ subModule }: { subModule?: string }) {
+  switch (subModule) {
+    case 'invite': return <TalentInvite />;
+    case 'categories': return <TalentCategoriesView />;
+    case 'interviews': return <TalentInterviews />;
+    case 'collaborated': return <TalentCollaborated />;
+    case 'gallery': return <TalentGallery />;
+    case 'list':
+    default:
+      return <TalentList />;
+  }
+}
