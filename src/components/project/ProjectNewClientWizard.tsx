@@ -153,9 +153,14 @@ const existingClients = [
 
 export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
   const { navigateTo } = useApp();
-  const { addProject } = useClientProjects();
+  const { addProject, projects: clientProjects } = useClientProjects();
   const { companies } = useCompanies();
   const { brands } = useBrands();
+
+  const getBrandCount = (companyId: string) =>
+    brands.filter(b => b.companyId === companyId && b.isActive).length;
+  const getActiveProjectCount = (companyId: string) =>
+    clientProjects.filter(p => p.companyId === companyId && p.status === 'active').length;
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<ClientFormData>(emptyForm);
   const [submitted, setSubmitted] = useState(false);
@@ -505,6 +510,11 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
                       <span>BR: {company.brNo}</span>
                       <span>|</span>
                       <span>{company.bankName}</span>
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-3 text-[11px]">
+                      <span className="text-teal-600 font-medium">{getBrandCount(company.id)} 個品牌</span>
+                      <span className="text-muted-foreground">|</span>
+                      <span className="text-blue-600 font-medium">{getActiveProjectCount(company.id)} 個活躍項目</span>
                     </div>
                   </button>
                 ))}
