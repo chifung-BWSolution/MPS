@@ -5,6 +5,7 @@ import { Toaster } from "./components/ui/sonner";
 import { useAuth, AuthProvider } from "./context/AuthContext";
 import { LoginPage } from "./components/auth/LoginPage";
 import { Loader2 } from "lucide-react";
+import { TalentInvitePublicPage } from "./components/talent/TalentInvitePublicPage";
 
 function AuthGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated, isAuthorized, loading, authError } = useAuth();
@@ -41,11 +42,19 @@ function App() {
     <AuthProvider>
       <Suspense fallback={<p>Loading...</p>}>
         <>
-          <AuthGuard>
-            <Routes>
-              <Route path="/*" element={<Home />} />
-            </Routes>
-          </AuthGuard>
+          <Routes>
+            {/* Public talent self-fill form — no auth required */}
+            <Route path="/talent/invite/:token" element={<TalentInvitePublicPage />} />
+            {/* Everything else requires authentication */}
+            <Route
+              path="/*"
+              element={
+                <AuthGuard>
+                  <Home />
+                </AuthGuard>
+              }
+            />
+          </Routes>
           <Toaster />
         </>
       </Suspense>
