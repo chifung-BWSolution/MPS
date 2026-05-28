@@ -492,8 +492,8 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
                         {company.companyCode}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h4 className="text-[14px] font-bold text-[#0d1a2d] truncate">{company.companyNameZh}</h4>
-                        <span className="text-[11px] text-muted-foreground">{company.companyNameEn}</span>
+                        <h4 className="text-[14px] font-bold text-[#0d1a2d] truncate">{company.companyNameEn}</h4>
+                        <span className="text-[11px] text-muted-foreground font-normal">{company.companyNameZh}</span>
                       </div>
                       {formData.companyId === company.id && (
                         <div className="w-6 h-6 rounded-full bg-teal-600 text-white flex items-center justify-center flex-shrink-0">
