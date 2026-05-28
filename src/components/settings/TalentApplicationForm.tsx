@@ -742,9 +742,9 @@ export function TalentApplicationForm({ mode = 'draft', inviteToken, initialValu
           </div>
 
           {/* Row 28: 簽名 (full width, right-aligned label) */}
-          <div className="col-span-4 flex items-start justify-end gap-3 px-3 py-3 bg-slate-50/50 border-b border-slate-300">
-            <span className="text-[12.5px] font-bold text-[#0d1a2d] whitespace-nowrap mt-1">
-              應聘人員簽名（面試當天簽名）：
+          <div className="col-span-4 flex flex-wrap items-start justify-end gap-3 px-3 py-3 bg-slate-50/50 border-b border-slate-300">
+            <span className="text-[12.5px] font-bold text-[#0d1a2d] mt-1">
+              簽名：
             </span>
             <SignaturePad
               value={form.signature}
