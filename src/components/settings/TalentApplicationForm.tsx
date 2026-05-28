@@ -17,7 +17,7 @@ function OptionCell({ label, selected, onClick, trailingInput }: OptionCellProps
       type="button"
       onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-2 px-2.5 py-1.5 rounded text-[13px] transition-all duration-150 text-left',
+        'inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[11.5px] transition-all duration-150 text-left',
         selected
           ? 'bg-teal-50 text-teal-800 ring-1 ring-teal-500'
           : 'text-foreground hover:bg-muted/40'
@@ -25,11 +25,11 @@ function OptionCell({ label, selected, onClick, trailingInput }: OptionCellProps
     >
       <span
         className={cn(
-          'w-4 h-4 rounded-sm border flex items-center justify-center shrink-0 transition-colors',
+          'w-3.5 h-3.5 rounded-sm border flex items-center justify-center shrink-0 transition-colors',
           selected ? 'border-teal-600 bg-teal-600 text-white' : 'border-border bg-white text-transparent'
         )}
       >
-        <Check size={11} strokeWidth={3} />
+        <Check size={9} strokeWidth={3} />
       </span>
       <span className="whitespace-nowrap">{label}</span>
       {trailingInput && (
@@ -42,8 +42,8 @@ function OptionCell({ label, selected, onClick, trailingInput }: OptionCellProps
           onClick={(e) => e.stopPropagation()}
           placeholder={trailingInput.placeholder || '請填寫'}
           className={cn(
-            'ml-1 px-1 py-0.5 text-[12px] border-b border-dashed border-border bg-transparent outline-none focus:border-teal-500',
-            trailingInput.width || 'w-20'
+            'ml-0.5 px-1 py-0 text-[11px] border-b border-dashed border-border bg-transparent outline-none focus:border-teal-500',
+            trailingInput.width || 'w-16'
           )}
         />
       )}
@@ -61,7 +61,7 @@ interface OptionRowProps {
 
 function OptionRow({ options, selected, onChange, mode, trailingInputs }: OptionRowProps) {
   return (
-    <div className="flex flex-wrap items-center gap-x-1 gap-y-1.5">
+    <div className="flex flex-wrap items-center gap-x-0.5 gap-y-0.5">
       {options.map((opt) => {
         const isSelected = selected.includes(opt.value);
         return (
@@ -91,7 +91,7 @@ function CellInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
     <input
       {...props}
       className={cn(
-        'w-full px-2 py-1 text-[13px] bg-transparent border-0 outline-none focus:bg-teal-50/40 transition-colors',
+        'w-full px-1.5 py-0.5 text-[12px] bg-transparent border-0 outline-none focus:bg-teal-50/40 transition-colors',
         props.className
       )}
     />
@@ -192,17 +192,17 @@ const initialState: FormState = {
   signature: '',
 };
 
-// Excel grid styling helpers — every cell shares the same border so it looks like a real spreadsheet
+// Excel grid styling helpers — compact rows, every cell shares the same border so it looks like a real spreadsheet
 const labelCell =
-  'flex items-center gap-1 px-3 py-2.5 bg-slate-50 text-[12.5px] font-bold text-[#0d1a2d] border-r border-b border-slate-300';
+  'flex items-center gap-1 px-2 py-1.5 bg-slate-50 text-[11.5px] font-bold text-[#0d1a2d] border-r border-b border-slate-300';
 const valueCell =
-  'flex items-center px-2 py-1.5 bg-white border-r border-b border-slate-300 min-h-[44px]';
+  'flex items-center px-1.5 py-1 bg-white border-r border-b border-slate-300 min-h-[30px]';
 const valueCellLast =
-  'flex items-center px-2 py-1.5 bg-white border-b border-slate-300 min-h-[44px]';
+  'flex items-center px-1.5 py-1 bg-white border-b border-slate-300 min-h-[30px]';
 const sectionBand =
-  'col-span-4 px-3 py-1.5 bg-[#0d1a2d] text-white text-[13px] font-bold border-b border-slate-300';
+  'col-span-4 px-2.5 py-1 bg-[#0d1a2d] text-white text-[11.5px] font-bold border-b border-slate-300';
 const fullRowCell =
-  'col-span-4 flex items-center flex-wrap px-2 py-2 bg-white border-b border-slate-300';
+  'col-span-4 flex items-center flex-wrap px-1.5 py-1 bg-white border-b border-slate-300 gap-y-0.5';
 
 export function TalentApplicationForm() {
   const [form, setForm] = useState<FormState>(initialState);
@@ -224,38 +224,38 @@ export function TalentApplicationForm() {
   };
 
   return (
-    <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card">
+    <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card mx-auto max-w-[760px] w-full">
       {/* Spreadsheet wrapper */}
       <div className="overflow-x-auto">
         <div
-          className="grid border-l border-t border-slate-300 min-w-[920px]"
+          className="grid border-l border-t border-slate-300 text-[11.5px]"
           style={{
             // Match Excel column widths roughly: B=24, C=39, D=24, E=43
-            gridTemplateColumns: '24% 26% 22% 28%',
+            gridTemplateColumns: '22% 28% 22% 28%',
           }}
         >
           {/* Row 1: Title (B1:E1 merged) */}
-          <div className="col-span-4 px-4 py-4 bg-white border-r border-b border-slate-300 text-center">
-            <h2 className="text-[20px] font-bold text-[#0d1a2d] tracking-tight">
+          <div className="col-span-4 px-3 py-2.5 bg-white border-r border-b border-slate-300 text-center">
+            <h2 className="text-[15px] font-bold text-[#0d1a2d] tracking-tight">
               志豐設計（深圳）有限公司 — Model 面試登記表
             </h2>
           </div>
 
           {/* Row 2: E2 only — 填表日期 (right-aligned, top-right) */}
-          <div className="col-span-3 px-3 py-2 bg-white border-r border-b border-slate-300" />
-          <div className={valueCellLast + ' justify-end gap-2'}>
-            <span className="text-[12.5px] font-bold text-[#0d1a2d] whitespace-nowrap">填表日期：</span>
+          <div className="col-span-3 px-2 py-1 bg-white border-r border-b border-slate-300" />
+          <div className={valueCellLast + ' justify-end gap-1.5'}>
+            <span className="text-[11.5px] font-bold text-[#0d1a2d] whitespace-nowrap">填表日期：</span>
             <input
               type="date"
               value={form.fillDate}
               onChange={(e) => update('fillDate', e.target.value)}
-              className="px-2 py-1 text-[12px] border border-border rounded bg-white outline-none focus:ring-1 focus:ring-teal-500"
+              className="px-1.5 py-0.5 text-[11px] border border-border rounded bg-white outline-none focus:ring-1 focus:ring-teal-500"
             />
           </div>
 
           {/* Row 3: 類型 (full width) */}
-          <div className="col-span-4 flex items-center flex-wrap px-3 py-2 bg-white border-b border-slate-300 gap-1">
-            <span className="text-[12.5px] font-bold text-[#0d1a2d] mr-2 whitespace-nowrap">類型：</span>
+          <div className="col-span-4 flex items-center flex-wrap px-2 py-1 bg-white border-b border-slate-300 gap-0.5">
+            <span className="text-[11.5px] font-bold text-[#0d1a2d] mr-1 whitespace-nowrap">類型：</span>
             <OptionRow
               mode="multi"
               selected={form.types}
@@ -411,31 +411,31 @@ export function TalentApplicationForm() {
 
           {/* Row 13: 主要社交媒體賬號 (label | merged row of 3 inputs) */}
           <div className={labelCell}>主要社交媒體賬號</div>
-          <div className="col-span-3 flex items-center px-3 py-2 bg-white border-b border-slate-300 gap-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              <span className="text-[12px] text-muted-foreground">賬號名稱</span>
+          <div className="col-span-3 flex items-center px-2 py-1 bg-white border-b border-slate-300 gap-2 flex-wrap">
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-muted-foreground">賬號</span>
               <input
                 value={form.socialAccountName}
                 onChange={(e) => update('socialAccountName', e.target.value)}
-                className="px-1 py-0.5 text-[12px] border-b border-dashed border-border bg-transparent outline-none focus:border-teal-500 w-32"
+                className="px-1 py-0 text-[11px] border-b border-dashed border-border bg-transparent outline-none focus:border-teal-500 w-24"
                 placeholder="@username"
               />
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[12px] text-muted-foreground">粉絲數</span>
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-muted-foreground">粉絲</span>
               <input
                 value={form.socialFollowers}
                 onChange={(e) => update('socialFollowers', e.target.value)}
-                className="px-1 py-0.5 text-[12px] border-b border-dashed border-border bg-transparent outline-none focus:border-teal-500 w-24"
-                placeholder="例：12.5K"
+                className="px-1 py-0 text-[11px] border-b border-dashed border-border bg-transparent outline-none focus:border-teal-500 w-16"
+                placeholder="12.5K"
               />
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[12px] text-muted-foreground">主要內容主題</span>
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-muted-foreground">主題</span>
               <input
                 value={form.socialTopic}
                 onChange={(e) => update('socialTopic', e.target.value)}
-                className="px-1 py-0.5 text-[12px] border-b border-dashed border-border bg-transparent outline-none focus:border-teal-500 w-40"
+                className="px-1 py-0 text-[11px] border-b border-dashed border-border bg-transparent outline-none focus:border-teal-500 w-28"
                 placeholder="美妝、生活..."
               />
             </div>
@@ -574,31 +574,31 @@ export function TalentApplicationForm() {
 
           {/* Row 23: 薪酬期望 */}
           <div className={labelCell}>薪酬期望</div>
-          <div className="col-span-3 flex items-center px-2 py-1.5 bg-white border-b border-slate-300 flex-wrap gap-2">
+          <div className="col-span-3 flex items-center px-2 py-1 bg-white border-b border-slate-300 flex-wrap gap-1">
             <OptionCell
-              label="按小時計算（時薪）"
+              label="按小時計算"
               selected={form.payHourly}
               onClick={() => update('payHourly', !form.payHourly)}
               trailingInput={{
                 value: form.payHourlyAmount,
                 onChange: (v) => update('payHourlyAmount', v),
                 placeholder: '時薪',
-                width: 'w-16',
+                width: 'w-12',
               }}
             />
-            <span className="text-[12px] text-muted-foreground">元/小時</span>
+            <span className="text-[11px] text-muted-foreground">元/小時</span>
             <OptionCell
-              label="按通告計算（每次）"
+              label="按通告計算"
               selected={form.payPerJob}
               onClick={() => update('payPerJob', !form.payPerJob)}
               trailingInput={{
                 value: form.payPerJobAmount,
                 onChange: (v) => update('payPerJobAmount', v),
                 placeholder: '每次',
-                width: 'w-16',
+                width: 'w-12',
               }}
             />
-            <span className="text-[12px] text-muted-foreground">元/每次通告</span>
+            <span className="text-[11px] text-muted-foreground">元/通告</span>
           </div>
 
           {/* Row 24: 結算方式 */}
@@ -672,35 +672,35 @@ export function TalentApplicationForm() {
           </div>
 
           {/* Row 28: 簽名 (full width, right-aligned label) */}
-          <div className="col-span-4 flex items-center justify-end gap-3 px-4 py-3 bg-slate-50/50 border-b border-slate-300">
-            <span className="text-[12.5px] font-bold text-[#0d1a2d] whitespace-nowrap">
+          <div className="col-span-4 flex items-center justify-end gap-2 px-3 py-2 bg-slate-50/50 border-b border-slate-300">
+            <span className="text-[11.5px] font-bold text-[#0d1a2d] whitespace-nowrap">
               應聘人員簽名（面試當天簽名）：
             </span>
             <input
               value={form.signature}
               onChange={(e) => update('signature', e.target.value)}
               placeholder="請於面試當天簽署"
-              className="px-2 py-1 text-[12px] border-b border-border bg-transparent outline-none focus:border-teal-500 w-48"
+              className="px-1.5 py-0.5 text-[11px] border-b border-border bg-transparent outline-none focus:border-teal-500 w-40"
             />
           </div>
         </div>
       </div>
 
       {/* Footer actions */}
-      <div className="px-6 py-4 border-t border-border/50 bg-muted/20 flex items-center justify-between">
-        <div className="text-[12px] text-muted-foreground">
+      <div className="px-4 py-2.5 border-t border-border/50 bg-muted/20 flex items-center justify-between">
+        <div className="text-[11px] text-muted-foreground">
           {savedAt ? <span className="text-teal-600">✓ 已於 {savedAt} 儲存草稿</span> : '尚未儲存'}
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={handleReset}
-            className="px-4 py-2 border border-border rounded-md text-[13px] font-medium hover:bg-muted/50 transition-colors"
+            className="px-3 py-1.5 border border-border rounded-md text-[12px] font-medium hover:bg-muted/50 transition-colors"
           >
             重設
           </button>
           <button
             onClick={handleSave}
-            className="px-5 py-2 bg-teal-600 text-white rounded-md text-[13px] font-bold hover:bg-teal-700 transition-colors shadow-sm"
+            className="px-4 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-bold hover:bg-teal-700 transition-colors shadow-sm"
           >
             儲存草稿
           </button>
