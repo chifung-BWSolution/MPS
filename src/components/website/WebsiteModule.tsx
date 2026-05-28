@@ -801,7 +801,10 @@ function WebsiteFormModal({
   const { companies } = useCompanies();
   const { profiles: existingProfiles } = useWebsiteProfiles();
   const uniqueBrandCodes = Array.from(
-    new Set(existingProfiles.map(p => (p.brand || '').trim()).filter(Boolean))
+    new Set([
+      ...existingProfiles.map(p => (p.brand || '').trim()).filter(Boolean),
+      'OB',
+    ])
   ).sort();
   const { byCategory: optionsByCategory } = useSystemOptions();
   const platformOptions = optionsByCategory('platform');
