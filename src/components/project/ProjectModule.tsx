@@ -8,11 +8,33 @@ import { ProjectProgress } from './ProjectProgress';
 import { ProjectFocus } from './ProjectFocus';
 import { ProjectInternalList } from './ProjectInternalList';
 import { ProjectClientList } from './ProjectClientList';
-import { useProjects } from '@/hooks/useProjects';
+import { useCompanyProjects } from '@/hooks/useCompanyProjects';
+import { useClientProjects } from '@/hooks/useClientProjects';
 
 export function ProjectModule({ subModule }: { subModule?: string }) {
   const { navigateTo } = useApp();
-  const { projects: allProjects, loading: allLoading, updateProject: allUpdate, deleteProject: allDelete } = useProjects();
+  const {
+    projects: companyProjects,
+    loading: companyLoading,
+    updateProject: updateCompanyProject,
+    deleteProject: deleteCompanyProject,
+  } = useCompanyProjects();
+  const {
+    projects: clientProjects,
+    loading: clientLoading,
+    updateProject: updateClientProject,
+    deleteProject: deleteClientProject,
+  } = useClientProjects();
+  const allProjects = [...companyProjects, ...clientProjects];
+  const allLoading = companyLoading || clientLoading;
+  const allUpdate = (id: string, updates: Parameters<typeof updateCompanyProject>[1]) =>
+    companyProjects.some(p => p.id === id)
+      ? updateCompanyProject(id, updates)
+      : updateClientProject(id, updates);
+  const allDelete = (id: string) =>
+    companyProjects.some(p => p.id === id)
+      ? deleteCompanyProject(id)
+      : deleteClientProject(id);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [previousListSubModule, setPreviousListSubModule] = useState<string>('focus');
 

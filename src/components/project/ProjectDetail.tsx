@@ -30,7 +30,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useDataStore } from '@/context/DataStore';
-import { useProjects } from '@/hooks/useProjects';
 import { useCompanyProjects } from '@/hooks/useCompanyProjects';
 import { useClientProjects } from '@/hooks/useClientProjects';
 
@@ -167,7 +166,6 @@ const tagColors: Record<string, string> = {
 
 export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBack?: () => void }) {
   const { getProjectById } = useDataStore();
-  const { projects: supabaseProjects } = useProjects();
   const { projects: companyProjects } = useCompanyProjects();
   const { projects: clientProjects } = useClientProjects();
   const [activeTab, setActiveTab] = useState('overview');
@@ -211,7 +209,6 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
   const project = (projectId
     ? (companyProjects.find(p => p.id === projectId)
         || clientProjects.find(p => p.id === projectId)
-        || supabaseProjects.find(p => p.id === projectId)
         || getProjectById(projectId))
     : null) || sampleProject;
   const budgetPercent = project.budgetTotal > 0 ? Math.round((project.budgetUsed / project.budgetTotal) * 100) : 0;
