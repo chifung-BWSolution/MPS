@@ -215,12 +215,14 @@ const fullRowCell =
   'col-span-4 flex items-center flex-wrap px-2 py-1.5 bg-white border-b border-slate-300 gap-y-0.5';
 
 interface TalentApplicationFormProps {
-  mode?: 'draft' | 'submit';
+  mode?: 'draft' | 'submit' | 'view';
   inviteToken?: string;
+  initialValue?: Partial<FormState>;
 }
 
-export function TalentApplicationForm({ mode = 'draft', inviteToken }: TalentApplicationFormProps = {}) {
-  const [form, setForm] = useState<FormState>(initialState);
+export function TalentApplicationForm({ mode = 'draft', inviteToken, initialValue }: TalentApplicationFormProps = {}) {
+  const readOnly = mode === 'view';
+  const [form, setForm] = useState<FormState>(() => ({ ...initialState, ...(initialValue ?? {}) }));
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
@@ -293,7 +295,10 @@ export function TalentApplicationForm({ mode = 'draft', inviteToken }: TalentApp
       {/* Spreadsheet wrapper */}
       <div className="overflow-x-auto">
         <div
-          className="grid border-l border-t border-slate-300 text-[12.5px]"
+          className={cn(
+            'grid border-l border-t border-slate-300 text-[12.5px]',
+            readOnly && 'pointer-events-none select-text'
+          )}
           style={{
             // Match Excel column widths roughly: B=24, C=39, D=24, E=43
             gridTemplateColumns: '22% 28% 22% 28%',
@@ -752,41 +757,43 @@ export function TalentApplicationForm({ mode = 'draft', inviteToken }: TalentApp
       </div>
 
       {/* Footer actions */}
-      <div className="px-4 py-2.5 border-t border-border/50 bg-muted/20 flex items-center justify-between">
-        <div className="text-[11px] text-muted-foreground">
-          {mode === 'draft' && savedAt && (
-            <span className="text-teal-600">✓ 已於 {savedAt} 儲存草稿</span>
-          )}
-          {mode === 'draft' && !savedAt && '尚未儲存'}
-          {mode === 'submit' && submitError && (
-            <span className="text-rose-600">⚠ {submitError}</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleReset}
-            className="px-3 py-1.5 border border-border rounded-md text-[12px] font-medium hover:bg-muted/50 transition-colors"
-          >
-            重設
-          </button>
-          {mode === 'submit' ? (
+      {mode !== 'view' && (
+        <div className="px-4 py-2.5 border-t border-border/50 bg-muted/20 flex items-center justify-between">
+          <div className="text-[11px] text-muted-foreground">
+            {mode === 'draft' && savedAt && (
+              <span className="text-teal-600">✓ 已於 {savedAt} 儲存草稿</span>
+            )}
+            {mode === 'draft' && !savedAt && '尚未儲存'}
+            {mode === 'submit' && submitError && (
+              <span className="text-rose-600">⚠ {submitError}</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
             <button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="px-4 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-bold hover:bg-teal-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              onClick={handleReset}
+              className="px-3 py-1.5 border border-border rounded-md text-[12px] font-medium hover:bg-muted/50 transition-colors"
             >
-              {submitting ? '正在遞交…' : '遞交表格'}
+              重設
             </button>
-          ) : (
-            <button
-              onClick={handleSave}
-              className="px-4 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-bold hover:bg-teal-700 transition-colors shadow-sm"
-            >
-              儲存草稿
-            </button>
-          )}
+            {mode === 'submit' ? (
+              <button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="px-4 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-bold hover:bg-teal-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {submitting ? '正在遞交…' : '遞交表格'}
+              </button>
+            ) : (
+              <button
+                onClick={handleSave}
+                className="px-4 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-bold hover:bg-teal-700 transition-colors shadow-sm"
+              >
+                儲存草稿
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

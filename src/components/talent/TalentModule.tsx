@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Search, Plus, Star, Link2, Copy, Check, X, Pencil, Calendar,
-  Image as ImageIcon, Tag, Users, Camera,
+  Image as ImageIcon, Tag, Users, Camera, FileText, ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
 
 // =====================================================================
 // Types
@@ -617,10 +618,41 @@ function Modal({ title, onClose, children, width = 'max-w-[640px]' }: {
 // =====================================================================
 // 2.2 Invite (self-fill flow)
 // =====================================================================
+interface SubmittedFormRow {
+  id: string;
+  invite_token: string | null;
+  name_zh: string | null;
+  name_en: string | null;
+  phone: string | null;
+  submitted_at: string;
+}
+
 function TalentInvite() {
   const { talents, add, remove } = useTalents();
   const [generated, setGenerated] = useState<{ token: string; talentId: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [submissions, setSubmissions] = useState<SubmittedFormRow[]>([]);
+  const [submissionsLoading, setSubmissionsLoading] = useState(true);
+  const [submissionsError, setSubmissionsError] = useState<string | null>(null);
+
+  const refreshSubmissions = async () => {
+    setSubmissionsLoading(true);
+    const { data, error } = await supabase
+      .from('talent_form')
+      .select('id, invite_token, name_zh, name_en, phone, submitted_at')
+      .order('submitted_at', { ascending: false });
+    if (error) {
+      setSubmissionsError(error.message);
+    } else {
+      setSubmissions((data ?? []) as SubmittedFormRow[]);
+      setSubmissionsError(null);
+    }
+    setSubmissionsLoading(false);
+  };
+
+  useEffect(() => {
+    refreshSubmissions();
+  }, []);
 
   const generate = () => {
     const token = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -739,6 +771,64 @@ function TalentInvite() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Submitted list */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-[14px] font-bold">
+            已填寫名單（{submissionsLoading ? '…' : submissions.length}）
+          </h3>
+          <button
+            onClick={refreshSubmissions}
+            disabled={submissionsLoading}
+            className="text-[11px] px-2 py-1 border border-border rounded-md hover:bg-muted disabled:opacity-50"
+          >
+            {submissionsLoading ? '載入中…' : '重新整理'}
+          </button>
+        </div>
+        {submissionsError ? (
+          <div className="bg-rose-50 border border-rose-200 rounded-md px-4 py-3 text-[12px] text-rose-700">
+            載入失敗：{submissionsError}
+          </div>
+        ) : submissions.length === 0 && !submissionsLoading ? (
+          <EmptyState
+            icon={FileText}
+            title="尚未有人遞交表格"
+            hint="待藝人透過填表連結遞交後，這裡會顯示已填寫的表格紀錄。"
+          />
+        ) : (
+          <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] divide-y divide-border">
+            {submissions.map(s => {
+              const displayName = s.name_zh || s.name_en || '（未填姓名）';
+              const url = `/talent/submissions/${s.id}`;
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+                  className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-teal-50/40 transition-colors"
+                >
+                  <div>
+                    <div className="text-[13px] font-medium flex items-center gap-1.5">
+                      {displayName}
+                      {s.phone && (
+                        <span className="text-[11px] font-normal text-muted-foreground">
+                          · {s.phone}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      遞交時間：{new Date(s.submitted_at).toLocaleString('zh-HK')}
+                    </div>
+                  </div>
+                  <span className="text-[12px] text-teal-600 inline-flex items-center gap-1">
+                    開啟表格 <ExternalLink size={12} />
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

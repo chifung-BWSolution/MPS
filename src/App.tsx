@@ -6,6 +6,7 @@ import { useAuth, AuthProvider } from "./context/AuthContext";
 import { LoginPage } from "./components/auth/LoginPage";
 import { Loader2 } from "lucide-react";
 import { TalentInvitePublicPage } from "./components/talent/TalentInvitePublicPage";
+import { TalentSubmissionViewPage } from "./components/talent/TalentSubmissionViewPage";
 
 function AuthGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated, isAuthorized, loading, authError } = useAuth();
@@ -45,6 +46,15 @@ function App() {
           <Routes>
             {/* Public talent self-fill form — no auth required */}
             <Route path="/talent/invite/:token" element={<TalentInvitePublicPage />} />
+            {/* Auth-required read-only view of a submitted form */}
+            <Route
+              path="/talent/submissions/:id"
+              element={
+                <AuthGuard>
+                  <TalentSubmissionViewPage />
+                </AuthGuard>
+              }
+            />
             {/* Everything else requires authentication */}
             <Route
               path="/*"
