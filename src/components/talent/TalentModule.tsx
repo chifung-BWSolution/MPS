@@ -278,6 +278,21 @@ function TalentForm({
     recentVideoCount: 0,
     ...initial,
   });
+  const [rating, setRating] = useState<TalentRating>(
+    initial?.rating || { appearance: 7, speaking: 7, posture: 7, personality: 7, oncamera: 7 },
+  );
+  const [interviewNotes, setInterviewNotes] = useState(initial?.interviewNotes || '');
+  const initialMedia = initial?.auditionMediaUrls || [];
+  // Split the existing URLs into a plain URL slot (first http(s)) and an
+  // uploaded data-URL slot (first data:) so the form can edit each part
+  // independently while preserving any extras through `mediaExtras`.
+  const initialUrl = initialMedia.find(u => /^https?:\/\//i.test(u)) || '';
+  const initialFileDataUrl = initialMedia.find(u => u.startsWith('data:')) || '';
+  const mediaExtras = initialMedia.filter(u => u !== initialUrl && u !== initialFileDataUrl);
+  const [auditionUrl, setAuditionUrl] = useState(initialUrl);
+  const [auditionFile, setAuditionFile] = useState(initialFileDataUrl);
+  const [auditionFileName, setAuditionFileName] = useState('');
+  const [fileError, setFileError] = useState<string | null>(null);
 
   const set = <K extends keyof Talent>(key: K, value: Talent[K]) =>
     setForm(prev => ({ ...prev, [key]: value }));
@@ -287,22 +302,48 @@ function TalentForm({
     set('categories', list.includes(id) ? list.filter(c => c !== id) : [...list, id]);
   };
 
+  const handleFilePick = (file: File | null) => {
+    setFileError(null);
+    if (!file) {
+      setAuditionFile('');
+      setAuditionFileName('');
+      return;
+    }
+    const okType = ['image/jpeg', 'image/png', 'image/jpg'].includes(file.type);
+    if (!okType) {
+      setFileError('僅支援 .jpg / .jpeg / .png 格式');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setFileError('檔案大小上限為 10MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAuditionFile(typeof reader.result === 'string' ? reader.result : '');
+      setAuditionFileName(file.name);
+    };
+    reader.onerror = () => setFileError('讀取檔案失敗');
+    reader.readAsDataURL(file);
+  };
+
+  const Slider = ({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) => (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-[12px] font-medium text-muted-foreground">{label}</label>
+        <span className="text-[13px] font-bold text-teal-700">{value}/10</span>
+      </div>
+      <input
+        type="range" min={1} max={10} step={1}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full accent-teal-600"
+      />
+    </div>
+  );
+
   return (
     <div className="space-y-4">
-      {/* Photo */}
-      <div>
-        <label className="text-[12px] font-medium text-muted-foreground block mb-1">藝人照片 URL *</label>
-        <input
-          value={form.photoUrl || ''}
-          onChange={(e) => set('photoUrl', e.target.value)}
-          placeholder="https://..."
-          className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
-        />
-        {form.photoUrl && (
-          <img src={form.photoUrl} alt="" className="mt-2 w-24 h-24 rounded-md object-cover border border-border" />
-        )}
-      </div>
-
       {/* Basic info */}
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -409,6 +450,78 @@ function TalentForm({
         </div>
       </div>
 
+      {/* Interview rating */}
+      <div className="space-y-3 bg-muted/30 rounded-md p-4">
+        <h4 className="text-[13px] font-bold mb-2">評分項目</h4>
+        <Slider label="外表" value={rating.appearance} onChange={(v) => setRating({ ...rating, appearance: v })} />
+        <Slider label="上鏡感" value={rating.oncamera} onChange={(v) => setRating({ ...rating, oncamera: v })} />
+        <Slider label="講話流利度 / 聲音" value={rating.speaking} onChange={(v) => setRating({ ...rating, speaking: v })} />
+        <Slider label="儀態" value={rating.posture} onChange={(v) => setRating({ ...rating, posture: v })} />
+        <Slider label="性格" value={rating.personality} onChange={(v) => setRating({ ...rating, personality: v })} />
+        <div className="text-right text-[12px] text-muted-foreground pt-2 border-t border-border">
+          綜合：<span className="font-bold text-teal-700 text-[14px]">{computeOverall(rating)?.toFixed(1)}</span>
+        </div>
+      </div>
+
+      {/* Interview notes */}
+      <div>
+        <label className="text-[12px] font-medium text-muted-foreground block mb-1">面試備註</label>
+        <textarea
+          value={interviewNotes}
+          onChange={(e) => setInterviewNotes(e.target.value)}
+          rows={3}
+          placeholder="例如：態度積極、有主持經驗..."
+          className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+        />
+      </div>
+
+      {/* Audition media: URL + file picker */}
+      <div>
+        <label className="text-[12px] font-medium text-muted-foreground block mb-1">試鏡影片 / 照片 URL（可選）</label>
+        <input
+          value={auditionUrl}
+          onChange={(e) => setAuditionUrl(e.target.value)}
+          placeholder="https://..."
+          className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+        />
+        <label
+          className={cn(
+            'mt-2 block w-full border border-dashed rounded-md text-[12px] cursor-pointer transition-colors',
+            'border-border hover:border-teal-400 hover:bg-teal-50/40',
+          )}
+        >
+          <input
+            type="file"
+            accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+            onChange={(e) => handleFilePick(e.target.files?.[0] || null)}
+            className="hidden"
+          />
+          <div className="px-3 py-4 flex flex-col items-center justify-center text-muted-foreground gap-1">
+            {auditionFile ? (
+              <>
+                <img src={auditionFile} alt="" className="w-20 h-20 object-cover rounded border border-border" />
+                <span className="text-[11.5px]">{auditionFileName || '已選擇檔案'} — 點擊重新選擇</span>
+              </>
+            ) : (
+              <>
+                <span className="text-[12.5px] text-foreground">點擊此處上傳檔案</span>
+                <span>支援 .jpg / .jpeg / .png ・ 上限 10MB</span>
+              </>
+            )}
+          </div>
+        </label>
+        {auditionFile && (
+          <button
+            type="button"
+            onClick={() => { setAuditionFile(''); setAuditionFileName(''); }}
+            className="mt-1 text-[11.5px] text-rose-600 hover:underline"
+          >
+            移除檔案
+          </button>
+        )}
+        {fileError && <p className="mt-1 text-[11.5px] text-rose-600">{fileError}</p>}
+      </div>
+
       {/* Actions */}
       <div className="flex justify-end gap-2 pt-2">
         <button
@@ -420,8 +533,18 @@ function TalentForm({
         <button
           onClick={() => {
             if (!form.name?.trim()) { alert('請輸入姓名'); return; }
-            if (!form.photoUrl?.trim()) { alert('請填寫照片 URL'); return; }
-            onSave(form);
+            const media = [
+              ...(auditionUrl.trim() ? [auditionUrl.trim()] : []),
+              ...(auditionFile ? [auditionFile] : []),
+              ...mediaExtras,
+            ];
+            onSave({
+              ...form,
+              rating,
+              overallRating: computeOverall(rating),
+              interviewNotes: interviewNotes.trim() || undefined,
+              auditionMediaUrls: media.length > 0 ? media : undefined,
+            });
           }}
           className="px-4 py-2 text-[13px] bg-teal-600 text-white rounded-md hover:bg-teal-700"
         >
