@@ -1313,8 +1313,8 @@ function TalentInterviews() {
             </div>
           </div>
         </div>
-        {/* Trailing cluster — accept/reject buttons sit immediately left of
-            the rating button / score so the most-used controls stay together. */}
+        {/* Accept / reject cluster — fixed width so it lines up vertically
+            between 未見面名單 and 已面試藝人 rows regardless of trailing slot. */}
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={() => setClassifyTarget({ row: r, source })}
@@ -1328,6 +1328,10 @@ function TalentInterviews() {
           >
             不會取錄
           </button>
+        </div>
+        {/* Trailing slot — width matches the widest possible content
+            (安排面試 / 評分 button) so the score row aligns with the button row. */}
+        <div className="w-[120px] flex items-center justify-end shrink-0">
           {extraTrailing}
         </div>
       </div>
