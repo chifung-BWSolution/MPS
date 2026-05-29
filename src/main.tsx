@@ -3,6 +3,12 @@ import ReactDOM from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import { BrowserRouter } from "react-router-dom";
+import { redirectFromLegacyHost } from "./lib/siteUrl";
+
+// If the tab landed on the legacy mps-lilac.vercel.app preview domain,
+// bounce it to the canonical https://bwteam-marketing.com before React mounts
+// so the user never sees a flash of the old host.
+redirectFromLegacyHost();
 
 // Suppress unhandled promise rejections from third-party scripts (e.g. Supabase auth, analytics)
 window.addEventListener('unhandledrejection', (event) => {

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { getSiteOrigin } from '@/lib/siteUrl';
 
 // =====================================================================
 // Types
@@ -1096,7 +1097,7 @@ function TalentInvite() {
     setCopied(false);
   };
 
-  const inviteUrl = generated ? `${window.location.origin}/talent/invite/${generated.token}` : '';
+  const inviteUrl = generated ? `${getSiteOrigin()}/talent/invite/${generated.token}` : '';
 
   const pending = talents.filter(t => t.inviteToken && !t.inviteSubmittedAt);
 
@@ -1171,7 +1172,7 @@ function TalentInvite() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      const url = `${window.location.origin}/talent/invite/${t.inviteToken}`;
+                      const url = `${getSiteOrigin()}/talent/invite/${t.inviteToken}`;
                       navigator.clipboard.writeText(url);
                     }}
                     className="text-[12px] px-3 py-1.5 border border-border rounded-md hover:bg-muted"
