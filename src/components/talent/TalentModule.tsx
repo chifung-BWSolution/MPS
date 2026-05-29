@@ -1297,21 +1297,6 @@ function TalentInterviews() {
         key={r.id}
         className="px-4 py-3 flex flex-wrap items-center gap-3"
       >
-        {/* Action buttons (left) */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={() => setClassifyTarget({ row: r, source })}
-            className="text-[11.5px] px-2.5 py-1 bg-emerald-600 text-white rounded-md hover:bg-emerald-700"
-          >
-            直接取錄
-          </button>
-          <button
-            onClick={() => handleReject(r, source)}
-            className="text-[11.5px] px-2.5 py-1 border border-rose-200 text-rose-600 rounded-md hover:bg-rose-50"
-          >
-            不會取錄
-          </button>
-        </div>
         {/* Identity */}
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-[12px] shrink-0">
@@ -1328,8 +1313,23 @@ function TalentInterviews() {
             </div>
           </div>
         </div>
-        {/* Trailing — rating / schedule button */}
-        {extraTrailing}
+        {/* Trailing cluster — accept/reject buttons sit immediately left of
+            the rating button / score so the most-used controls stay together. */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => setClassifyTarget({ row: r, source })}
+            className="text-[11.5px] px-2.5 py-1 bg-emerald-600 text-white rounded-md hover:bg-emerald-700"
+          >
+            直接取錄
+          </button>
+          <button
+            onClick={() => handleReject(r, source)}
+            className="text-[11.5px] px-2.5 py-1 border border-rose-200 text-rose-600 rounded-md hover:bg-rose-50"
+          >
+            不會取錄
+          </button>
+          {extraTrailing}
+        </div>
       </div>
     );
   };
