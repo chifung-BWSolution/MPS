@@ -1305,7 +1305,7 @@ function SubmitReportPage() {
                   <div className="mb-2">
                     <span className="text-[13px] font-semibold text-purple-600 block mb-1.5">1. 文案工具：</span>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                      {['Perplexity', 'Grok', 'Gemini', 'Deepseek', '豆包', 'Claude', 'GPT'].map((tool) => (
+                      {['Perplexity', 'Grok', 'Gemini', 'Deepseek', '豆包', 'Claude', 'GPT', 'Skywork'].map((tool) => (
                         <label key={tool} className="flex items-center gap-1 cursor-pointer">
                           <input type="checkbox" checked={entry.aiToolsV2.copywriting.includes(tool)} onChange={(e) => { const tools = e.target.checked ? [...entry.aiToolsV2.copywriting, tool] : entry.aiToolsV2.copywriting.filter(t => t !== tool); updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, copywriting: tools }); }} className="rounded w-3 h-3 accent-purple-500" />
                           <span className="text-[13px] text-purple-700">{tool}</span>
