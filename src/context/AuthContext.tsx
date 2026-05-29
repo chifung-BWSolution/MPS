@@ -59,17 +59,18 @@ async function findSystemUserByEmail(email: string): Promise<{ data: SystemUserP
     return { data: null, error: new Error('Empty email after normalization') };
   }
 
-  // Master timeout — clears itself when the lookup completes so we don't print
-  // a misleading "5s timeout reached" log after auth has already succeeded.
-  const MASTER_TIMEOUT_MS = 5000;
+  // Master timeout — bumped to 8s because PostgREST cold-start on Vercel can take
+  // 4-6s for the first query of the session. Clears itself on success so we don't
+  // print a misleading "timeout reached" log after auth has already succeeded.
+  const MASTER_TIMEOUT_MS = 8000;
   let masterTimer: ReturnType<typeof setTimeout> | undefined;
   let timedOut = false;
 
   const masterTimeoutPromise = new Promise<{ data: null; error: Error }>((resolve) => {
     masterTimer = setTimeout(() => {
       timedOut = true;
-      console.warn('[Auth:findSystemUserByEmail] ⏰ MASTER 5s timeout reached. Aborting all queries.');
-      resolve({ data: null, error: new Error('findSystemUserByEmail: Master timeout (5s) reached') });
+      console.warn(`[Auth:findSystemUserByEmail] ⏰ Master ${MASTER_TIMEOUT_MS}ms timeout reached. Falling back.`);
+      resolve({ data: null, error: new Error(`findSystemUserByEmail: Master timeout (${MASTER_TIMEOUT_MS}ms) reached`) });
     }, MASTER_TIMEOUT_MS);
   });
 
@@ -428,8 +429,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             authSucceededRef.current = true;
             foundInDB = true;
 
-            // Update auth_user_id + last_login_at (fire and forget)
-            if (authUserId) {
+            // Update auth_user_id + last_login_at (fire and forget).
+            // Skip when sysUser.id is a synthesized bootstrap/fallback id — those are
+            // not valid UUIDs, and PATCHing system_users with them returns 400.
+            const isSyntheticId = sysUser.id.startsWith('ui-bootstrap-') || sysUser.id.startsWith('fallback-');
+            if (authUserId && !isSyntheticId) {
               supabase.from('system_users')
                 .update({ auth_user_id: authUserId, last_login_at: new Date().toISOString() })
                 .eq('id', sysUser.id)
@@ -582,24 +586,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         })();
 
-        // Update auth_user_id and last_login_at — fire and forget
-        if (!sysUser.auth_user_id && authUserId) {
-          supabase
-            .from('system_users')
-            .update({
-              auth_user_id: authUserId,
-              last_login_at: new Date().toISOString(),
-            })
-            .eq('id', sysUser.id)
-            .then(() => console.log('[Auth] Updated auth_user_id + last_login_at'))
-            .catch((e) => console.warn('[Auth] Non-blocking update failed:', e));
-        } else {
-          supabase
-            .from('system_users')
-            .update({ last_login_at: new Date().toISOString() })
-            .eq('id', sysUser.id)
-            .then(() => {})
-            .catch((e) => console.warn('[Auth] Non-blocking update failed:', e));
+        // Update auth_user_id and last_login_at — fire and forget.
+        // Skip when sysUser.id is a synthesized bootstrap/fallback id (not a valid UUID).
+        const isSyntheticId = sysUser.id.startsWith('ui-bootstrap-') || sysUser.id.startsWith('fallback-');
+        if (!isSyntheticId) {
+          if (!sysUser.auth_user_id && authUserId) {
+            supabase
+              .from('system_users')
+              .update({
+                auth_user_id: authUserId,
+                last_login_at: new Date().toISOString(),
+              })
+              .eq('id', sysUser.id)
+              .then(() => console.log('[Auth] Updated auth_user_id + last_login_at'))
+              .catch((e) => console.warn('[Auth] Non-blocking update failed:', e));
+          } else {
+            supabase
+              .from('system_users')
+              .update({ last_login_at: new Date().toISOString() })
+              .eq('id', sysUser.id)
+              .then(() => {})
+              .catch((e) => console.warn('[Auth] Non-blocking update failed:', e));
+          }
         }
 
         // Step 2: Fetch user_info for role_tag (joined via staff_id = bubble_staff_id, NO status filter)
