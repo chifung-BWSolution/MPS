@@ -157,6 +157,67 @@ const computeOverall = (r?: TalentRating) => {
 const newId = () => `t_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
 // =====================================================================
+// Supabase-backed pipeline rows
+// =====================================================================
+interface TalentFormRow {
+  id: string;
+  invite_token: string | null;
+  fill_date: string | null;
+  name_zh: string | null;
+  name_en: string | null;
+  gender: string | null;
+  age: string | null;
+  phone: string | null;
+  wechat: string | null;
+  height: string | null;
+  weight: string | null;
+  payload: Record<string, any> | null;
+  signature_image: string | null;
+  submitted_at: string;
+  status: 'pending' | 'confirmed' | 'rejected';
+  interviewed: boolean;
+  interview_rating: TalentRating | null;
+  interview_overall: number | null;
+  interview_notes: string | null;
+  interview_scheduled_at: string | null;
+  audition_media_urls: string[] | null;
+}
+
+interface ConfirmedArtistRow {
+  id: string;
+  source_form_id: string | null;
+  invite_token: string | null;
+  name_zh: string | null;
+  name_en: string | null;
+  gender: string | null;
+  age: string | null;
+  phone: string | null;
+  wechat: string | null;
+  height: string | null;
+  weight: string | null;
+  region: string | null;
+  photo_url: string | null;
+  categories: string[];
+  rating: TalentRating | null;
+  overall_rating: number | null;
+  interview_notes: string | null;
+  payload: Record<string, any> | null;
+  signature_image: string | null;
+  source: 'direct' | 'after_interview';
+  confirmed_at: string;
+}
+
+const formDisplayName = (row: { name_zh: string | null; name_en: string | null }) =>
+  row.name_zh || row.name_en || '（待填寫）';
+
+const residenceToRegion = (residence: unknown): Region => {
+  const first = Array.isArray(residence) ? residence[0] : null;
+  if (first === '香港' || first === 'HK') return 'HK';
+  if (first === '深圳' || first === 'SZ') return 'SZ';
+  return 'OTHER';
+};
+
+// =====================================================================
 // Shared UI helpers
 // =====================================================================
 function PageHeader({ title, subtitle, action }: { title: string; subtitle: string; action?: React.ReactNode }) {
@@ -374,8 +435,36 @@ function TalentForm({
 // =====================================================================
 // 2.1 Talent List
 // =====================================================================
+// Adapter: turn a ConfirmedArtistRow into a Talent-shaped object so the list
+// can render it through the same row template. Marked readOnly for the UI.
+const confirmedRowToTalent = (c: ConfirmedArtistRow): Talent & { _confirmed: true } => ({
+  id: `ca_${c.id}`,
+  name: c.name_zh || c.name_en || '（未填姓名）',
+  stageName: c.name_en || undefined,
+  age: c.age ? Number(c.age) || undefined : undefined,
+  height: c.height ? Number(c.height) || undefined : undefined,
+  measurements: undefined,
+  region: (c.region === 'HK' || c.region === 'SZ' ? c.region : 'OTHER') as Region,
+  categories: c.categories || [],
+  hasLiveExperience: false,
+  aspirations: undefined,
+  cooperationStatus: 'not_yet',
+  recentVideoCount: 0,
+  hasInterviewed: true,
+  rating: c.rating || undefined,
+  overallRating: c.overall_rating ?? undefined,
+  interviewNotes: c.interview_notes || undefined,
+  galleryUrls: [],
+  collaborations: [],
+  photoUrl: c.photo_url || undefined,
+  _confirmed: true,
+});
+
 function TalentList() {
   const { talents, add, update, remove } = useTalents();
+  const [confirmed, setConfirmed] = useState<ConfirmedArtistRow[]>([]);
+  const [confirmedLoading, setConfirmedLoading] = useState(true);
+  const [confirmedError, setConfirmedError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [regionFilter, setRegionFilter] = useState<'all' | Region>('all');
   const [categoryFilter, setCategoryFilter] = useState<'all' | string>('all');
@@ -384,7 +473,41 @@ function TalentList() {
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<Talent | null>(null);
 
-  const filtered = talents.filter(t => {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('confirmed_artist')
+          .select('*')
+          .order('confirmed_at', { ascending: false });
+        if (cancelled) return;
+        if (error) {
+          setConfirmedError(error.message);
+          setConfirmed([]);
+        } else {
+          setConfirmed((data ?? []) as ConfirmedArtistRow[]);
+          setConfirmedError(null);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setConfirmedError(err instanceof Error ? err.message : '無法載入');
+        setConfirmed([]);
+      } finally {
+        if (!cancelled) setConfirmedLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const merged: (Talent & { _confirmed?: true })[] = [
+    ...confirmed.map(confirmedRowToTalent),
+    ...talents,
+  ];
+
+  const filtered = merged.filter(t => {
     if (search && !`${t.name} ${t.stageName || ''}`.toLowerCase().includes(search.toLowerCase())) return false;
     if (regionFilter !== 'all' && t.region !== regionFilter) return false;
     if (categoryFilter !== 'all' && !t.categories.includes(categoryFilter)) return false;
@@ -456,7 +579,11 @@ function TalentList() {
         </label>
       </div>
 
-      <div className="text-[12px] text-muted-foreground">顯示 {filtered.length} 位藝人</div>
+      <div className="text-[12px] text-muted-foreground">
+        顯示 {filtered.length} 位藝人
+        {confirmedLoading && '（讀取中…）'}
+        {confirmedError && <span className="text-rose-600 ml-2">已取錄載入失敗：{confirmedError}</span>}
+      </div>
 
       {filtered.length === 0 ? (
         <EmptyState icon={Users} title="暫無藝人資料" hint="點擊右上「新增藝人」直接加入，或前往「新增藝人」頁面產生自助填表連結。" />
@@ -522,20 +649,28 @@ function TalentList() {
                     ) : <span className="text-[12px] text-muted-foreground">未評</span>}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => setEditing(t)}
-                      className="text-muted-foreground hover:text-teal-600 mr-2"
-                      title="編輯"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={() => { if (confirm(`刪除 ${t.name}？`)) remove(t.id); }}
-                      className="text-muted-foreground hover:text-rose-600"
-                      title="刪除"
-                    >
-                      <X size={14} />
-                    </button>
+                    {(t as any)._confirmed ? (
+                      <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        已取錄
+                      </span>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => setEditing(t)}
+                          className="text-muted-foreground hover:text-teal-600 mr-2"
+                          title="編輯"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => { if (confirm(`刪除 ${t.name}？`)) remove(t.id); }}
+                          className="text-muted-foreground hover:text-rose-600"
+                          title="刪除"
+                        >
+                          <X size={14} />
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -641,6 +776,8 @@ function TalentInvite() {
       const { data, error } = await supabase
         .from('talent_form')
         .select('id, invite_token, name_zh, name_en, phone, submitted_at')
+        .neq('status', 'confirmed')
+        .neq('status', 'rejected')
         .order('submitted_at', { ascending: false });
       if (error) {
         setSubmissionsError(error.message);
@@ -971,12 +1108,231 @@ function InterviewRatingEditor({ talent, onSave, onCancel }: {
   );
 }
 
-function TalentInterviews() {
-  const { talents, update } = useTalents();
-  const [editing, setEditing] = useState<Talent | null>(null);
+// Modal asking which categories to assign when 直接取錄.
+function ClassifyArtistModal({
+  displayName,
+  onCancel,
+  onConfirm,
+}: {
+  displayName: string;
+  onCancel: () => void;
+  onConfirm: (categoryIds: string[]) => void;
+}) {
+  const [picked, setPicked] = useState<string[]>([]);
+  const toggle = (id: string) =>
+    setPicked(prev => (prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]));
 
-  const notInterviewed = talents.filter(t => !t.hasInterviewed);
-  const interviewed = talents.filter(t => t.hasInterviewed);
+  return (
+    <Modal title={`加入分類 — ${displayName}`} onClose={onCancel}>
+      <div className="space-y-4">
+        <p className="text-[12.5px] text-muted-foreground">
+          請選擇要加入的分類（可多選）。確認後此藝人會加入「藝人列表」。
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {TALENT_CATEGORIES.map(cat => {
+            const active = picked.includes(cat.id);
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => toggle(cat.id)}
+                className={cn(
+                  'px-3 py-1.5 rounded-full border text-[12.5px] transition-colors',
+                  active
+                    ? 'bg-purple-100 border-purple-400 text-purple-800'
+                    : 'bg-white border-border text-muted-foreground hover:border-purple-300'
+                )}
+              >
+                {cat.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-[13px] text-muted-foreground hover:bg-muted rounded-md"
+          >
+            取消
+          </button>
+          <button
+            disabled={picked.length === 0}
+            onClick={() => onConfirm(picked)}
+            className={cn(
+              'px-4 py-2 text-[13px] rounded-md text-white',
+              picked.length === 0 ? 'bg-muted-foreground/40 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700'
+            )}
+          >
+            加入藝人列表
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function TalentInterviews() {
+  const [rows, setRows] = useState<TalentFormRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<TalentFormRow | null>(null);
+  const [classifyTarget, setClassifyTarget] = useState<{
+    row: TalentFormRow;
+    source: 'direct' | 'after_interview';
+  } | null>(null);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('talent_form')
+        .select(
+          'id, invite_token, fill_date, name_zh, name_en, gender, age, phone, wechat, height, weight, payload, signature_image, submitted_at, status, interviewed, interview_rating, interview_overall, interview_notes, interview_scheduled_at, audition_media_urls'
+        )
+        .neq('status', 'rejected')
+        .neq('status', 'confirmed')
+        .order('submitted_at', { ascending: false });
+      if (error) {
+        setError(error.message);
+        setRows([]);
+      } else {
+        setRows((data ?? []) as TalentFormRow[]);
+        setError(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '無法載入名單');
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const notInterviewed = rows.filter(r => !r.interviewed);
+  const interviewed = rows.filter(r => r.interviewed);
+  const scheduledCount = rows.filter(r => r.interview_scheduled_at && !r.interviewed).length;
+
+  // === 不會取錄 — copy snapshot to rejected_artist + flip status ===
+  const handleReject = async (row: TalentFormRow, source: 'direct' | 'after_interview') => {
+    if (!confirm(`確定不會取錄「${formDisplayName(row)}」？此筆會從面試安排移除。`)) return;
+    try {
+      const { error: insErr } = await supabase.from('rejected_artist').insert({
+        source_form_id: row.id,
+        invite_token: row.invite_token,
+        name_zh: row.name_zh,
+        name_en: row.name_en,
+        phone: row.phone,
+        payload: row.payload || {},
+        signature_image: row.signature_image,
+        source,
+      });
+      if (insErr) throw insErr;
+      const { error: updErr } = await supabase
+        .from('talent_form')
+        .update({ status: 'rejected' })
+        .eq('id', row.id);
+      if (updErr) throw updErr;
+      await refresh();
+    } catch (err) {
+      alert(`操作失敗：${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  // === 直接取錄 — open classify modal then write confirmed_artist ===
+  const handleAccept = async (categoryIds: string[]) => {
+    if (!classifyTarget) return;
+    const { row, source } = classifyTarget;
+    try {
+      const payload = row.payload || {};
+      const { error: insErr } = await supabase.from('confirmed_artist').insert({
+        source_form_id: row.id,
+        invite_token: row.invite_token,
+        name_zh: row.name_zh,
+        name_en: row.name_en,
+        gender: row.gender,
+        age: row.age,
+        phone: row.phone,
+        wechat: row.wechat,
+        height: row.height,
+        weight: row.weight,
+        region:
+          residenceToRegion((payload as any).residence) === 'HK'
+            ? 'HK'
+            : residenceToRegion((payload as any).residence) === 'SZ'
+            ? 'SZ'
+            : 'OTHER',
+        photo_url: null,
+        categories: categoryIds,
+        rating: row.interview_rating,
+        overall_rating: row.interview_overall,
+        interview_notes: row.interview_notes,
+        payload: payload,
+        signature_image: row.signature_image,
+        source,
+      });
+      if (insErr) throw insErr;
+      const { error: updErr } = await supabase
+        .from('talent_form')
+        .update({ status: 'confirmed' })
+        .eq('id', row.id);
+      if (updErr) throw updErr;
+      setClassifyTarget(null);
+      await refresh();
+    } catch (err) {
+      alert(`操作失敗：${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  const renderRow = (
+    r: TalentFormRow,
+    source: 'direct' | 'after_interview',
+    extraTrailing?: React.ReactNode
+  ) => {
+    const name = formDisplayName(r);
+    return (
+      <div
+        key={r.id}
+        className="px-4 py-3 flex flex-wrap items-center gap-3"
+      >
+        {/* Action buttons (left) */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => setClassifyTarget({ row: r, source })}
+            className="text-[11.5px] px-2.5 py-1 bg-emerald-600 text-white rounded-md hover:bg-emerald-700"
+          >
+            直接取錄
+          </button>
+          <button
+            onClick={() => handleReject(r, source)}
+            className="text-[11.5px] px-2.5 py-1 border border-rose-200 text-rose-600 rounded-md hover:bg-rose-50"
+          >
+            不會取錄
+          </button>
+        </div>
+        {/* Identity */}
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-[12px] shrink-0">
+            {(name || '?').slice(0, 1)}
+          </div>
+          <div className="min-w-0">
+            <div className="text-[13px] font-medium truncate">{name}</div>
+            <div className="text-[11px] text-muted-foreground truncate">
+              {[r.phone, r.fill_date && `填表：${r.fill_date}`]
+                .filter(Boolean)
+                .join(' · ') || '—'}
+              {r.interview_scheduled_at &&
+                ` · 已排：${new Date(r.interview_scheduled_at).toLocaleString('zh-HK')}`}
+            </div>
+          </div>
+        </div>
+        {/* Trailing — rating / schedule button */}
+        {extraTrailing}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -989,9 +1345,7 @@ function TalentInterviews() {
           <div className="text-[12px] text-amber-600">未見面</div>
         </div>
         <div className="bg-blue-50 border border-blue-200 rounded-md p-4 text-center">
-          <div className="text-[22px] font-bold text-blue-700">
-            {talents.filter(t => t.interviewScheduledAt && !t.hasInterviewed).length}
-          </div>
+          <div className="text-[22px] font-bold text-blue-700">{scheduledCount}</div>
           <div className="text-[12px] text-blue-600">已排期</div>
         </div>
         <div className="bg-teal-50 border border-teal-200 rounded-md p-4 text-center">
@@ -1000,39 +1354,43 @@ function TalentInterviews() {
         </div>
       </div>
 
+      {error && (
+        <div className="bg-rose-50 border border-rose-200 rounded-md px-4 py-3 text-[12px] text-rose-700">
+          載入失敗：{error}
+        </div>
+      )}
+
       {/* Not interviewed */}
       <div>
-        <h3 className="text-[14px] font-bold mb-3 flex items-center gap-2">
-          <Calendar size={14} className="text-amber-600" />未見面名單
-        </h3>
-        {notInterviewed.length === 0 ? (
-          <EmptyState icon={Calendar} title="所有藝人都已面試" />
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-[14px] font-bold flex items-center gap-2">
+            <Calendar size={14} className="text-amber-600" />
+            未見面名單{loading ? '' : `（${notInterviewed.length}）`}
+          </h3>
+          <button
+            onClick={refresh}
+            disabled={loading}
+            className="text-[11px] px-2 py-1 border border-border rounded-md hover:bg-muted disabled:opacity-50"
+          >
+            {loading ? '載入中…' : '重新整理'}
+          </button>
+        </div>
+        {notInterviewed.length === 0 && !loading ? (
+          <EmptyState icon={Calendar} title="目前沒有未見面藝人" hint="待藝人遞交填表連結後會在這裡顯示。" />
         ) : (
           <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] divide-y divide-border">
-            {notInterviewed.map(t => (
-              <div key={t.id} className="px-4 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {t.photoUrl ? (
-                    <img src={t.photoUrl} alt={t.name} className="w-9 h-9 rounded-full object-cover" />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-[12px]">{t.name.slice(0, 1)}</div>
-                  )}
-                  <div>
-                    <div className="text-[13px] font-medium">{t.stageName || t.name}</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {REGION_LABELS[t.region]}
-                      {t.interviewScheduledAt && ` · 已排：${new Date(t.interviewScheduledAt).toLocaleString()}`}
-                    </div>
-                  </div>
-                </div>
+            {notInterviewed.map(r =>
+              renderRow(
+                r,
+                'direct',
                 <button
-                  onClick={() => setEditing(t)}
+                  onClick={() => setEditing(r)}
                   className="text-[12px] px-3 py-1.5 bg-teal-600 text-white rounded-md hover:bg-teal-700"
                 >
                   安排面試 / 評分
                 </button>
-              </div>
-            ))}
+              )
+            )}
           </div>
         )}
       </div>
@@ -1040,55 +1398,85 @@ function TalentInterviews() {
       {/* Interviewed */}
       <div>
         <h3 className="text-[14px] font-bold mb-3 flex items-center gap-2">
-          <Check size={14} className="text-teal-600" />已面試藝人
+          <Check size={14} className="text-teal-600" />
+          已面試藝人{loading ? '' : `（${interviewed.length}）`}
         </h3>
-        {interviewed.length === 0 ? (
+        {interviewed.length === 0 && !loading ? (
           <EmptyState icon={Check} title="尚無已面試紀錄" />
         ) : (
           <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] divide-y divide-border">
-            {interviewed.map(t => (
-              <div key={t.id} className="px-4 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {t.photoUrl ? (
-                    <img src={t.photoUrl} alt={t.name} className="w-9 h-9 rounded-full object-cover" />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-[12px]">{t.name.slice(0, 1)}</div>
-                  )}
-                  <div>
-                    <div className="text-[13px] font-medium">{t.stageName || t.name}</div>
-                    <div className="text-[11px] text-muted-foreground">{t.interviewNotes || '—'}</div>
-                  </div>
-                </div>
-                {t.overallRating && (
+            {interviewed.map(r =>
+              renderRow(
+                r,
+                'after_interview',
+                r.interview_overall != null ? (
                   <span className="inline-flex items-center gap-1 text-[13px] font-medium">
                     <Star size={12} className="fill-amber-400 text-amber-400" />
-                    {t.overallRating.toFixed(1)}
+                    {Number(r.interview_overall).toFixed(1)}
                   </span>
-                )}
-              </div>
-            ))}
+                ) : null
+              )
+            )}
           </div>
         )}
       </div>
 
+      {/* Rating modal */}
       {editing && (
-        <Modal title={`面試評分 — ${editing.name}`} onClose={() => setEditing(null)}>
+        <Modal title={`面試評分 — ${formDisplayName(editing)}`} onClose={() => setEditing(null)}>
           <InterviewRatingEditor
-            talent={editing}
+            talent={{
+              id: editing.id,
+              name: formDisplayName(editing),
+              galleryUrls: [],
+              region: residenceToRegion(editing.payload?.residence),
+              categories: [],
+              hasLiveExperience: false,
+              cooperationStatus: 'pending',
+              recentVideoCount: 0,
+              hasInterviewed: editing.interviewed,
+              interviewNotes: editing.interview_notes || undefined,
+              interviewScheduledAt: editing.interview_scheduled_at || undefined,
+              auditionMediaUrls: editing.audition_media_urls || [],
+              collaborations: [],
+              rating: editing.interview_rating || undefined,
+              overallRating: editing.interview_overall ?? undefined,
+            }}
             onCancel={() => setEditing(null)}
-            onSave={(rating, notes, scheduledAt, mediaUrl) => {
-              update(editing.id, {
-                rating,
-                overallRating: computeOverall(rating),
-                interviewNotes: notes,
-                interviewScheduledAt: scheduledAt || undefined,
-                hasInterviewed: true,
-                auditionMediaUrls: mediaUrl ? [...(editing.auditionMediaUrls || []), mediaUrl] : editing.auditionMediaUrls,
-              });
-              setEditing(null);
+            onSave={async (rating, notes, scheduledAt, mediaUrl) => {
+              try {
+                const newMedia = mediaUrl
+                  ? [...(editing.audition_media_urls || []), mediaUrl]
+                  : editing.audition_media_urls || [];
+                const { error } = await supabase
+                  .from('talent_form')
+                  .update({
+                    interview_rating: rating,
+                    interview_overall: computeOverall(rating),
+                    interview_notes: notes,
+                    interview_scheduled_at: scheduledAt || null,
+                    interviewed: true,
+                    audition_media_urls: newMedia,
+                  })
+                  .eq('id', editing.id);
+                if (error) throw error;
+                setEditing(null);
+                await refresh();
+              } catch (err) {
+                alert(`保存失敗：${err instanceof Error ? err.message : String(err)}`);
+              }
             }}
           />
         </Modal>
+      )}
+
+      {/* Classify modal */}
+      {classifyTarget && (
+        <ClassifyArtistModal
+          displayName={formDisplayName(classifyTarget.row)}
+          onCancel={() => setClassifyTarget(null)}
+          onConfirm={handleAccept}
+        />
       )}
     </div>
   );
