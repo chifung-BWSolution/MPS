@@ -1098,7 +1098,13 @@ function SubmitReportPage() {
                   </div>
                   <div className="lg:col-span-3">
                     <label className="text-[13px] font-semibold text-muted-foreground block mb-1">工作內容 *</label>
-                    <input value={entry.title} onChange={(e) => updateEntry(idx, 'title', e.target.value)} className="w-full px-2.5 py-2 border border-border rounded-md text-[15px]" placeholder="簡述工作內容..." />
+                    <textarea
+                      value={entry.title}
+                      onChange={(e) => updateEntry(idx, 'title', e.target.value)}
+                      rows={3}
+                      className="w-full px-2.5 py-2 border border-border rounded-md text-[15px] resize-y leading-relaxed"
+                      placeholder="簡述工作內容...（可換行）"
+                    />
                   </div>
                 </div>
                 {/* AI Tools - Permanent Three-Category Layout */}
