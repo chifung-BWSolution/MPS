@@ -47,9 +47,9 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 /**
  * Flexible whitelist lookup: case-insensitive check across google_email and email columns
  * in BOTH system_users and user_info tables. Returns the first active match found.
- * 
- * SAFETY: Wrapped in a 5-second master timeout. Uses early-return pattern to minimize queries.
- * Each individual query has a 4s timeout. Overall function aborts at 5s regardless.
+ *
+ * Uses parallel .ilike() queries instead of PostgREST `.or()` because the latter mis-parses
+ * email values containing "." and "@" — that caused 4s hangs / 400 errors before.
  */
 async function findSystemUserByEmail(email: string): Promise<{ data: SystemUserProfile | null; error: any }> {
   const normalizedEmail = email.toLowerCase().trim();
@@ -59,99 +59,73 @@ async function findSystemUserByEmail(email: string): Promise<{ data: SystemUserP
     return { data: null, error: new Error('Empty email after normalization') };
   }
 
-  // ===== MASTER 5-SECOND TIMEOUT GUARD =====
+  // Master timeout — clears itself when the lookup completes so we don't print
+  // a misleading "5s timeout reached" log after auth has already succeeded.
   const MASTER_TIMEOUT_MS = 5000;
+  let masterTimer: ReturnType<typeof setTimeout> | undefined;
   let timedOut = false;
 
   const masterTimeoutPromise = new Promise<{ data: null; error: Error }>((resolve) => {
-    setTimeout(() => {
+    masterTimer = setTimeout(() => {
       timedOut = true;
       console.warn('[Auth:findSystemUserByEmail] ⏰ MASTER 5s timeout reached. Aborting all queries.');
       resolve({ data: null, error: new Error('findSystemUserByEmail: Master timeout (5s) reached') });
     }, MASTER_TIMEOUT_MS);
   });
 
-  const lookupLogic = async (): Promise<{ data: SystemUserProfile | null; error: any }> => {
-    const queryWithTimeout = async <T,>(queryPromise: Promise<T>, label: string, timeoutMs = 4000): Promise<T> => {
-      return Promise.race([
-        queryPromise,
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs))
-      ]);
+  const lookupInTable = async (table: 'system_users' | 'user_info') => {
+    // Run google_email + email lookups in parallel; return whichever hits first.
+    const [byGoogle, byEmail] = await Promise.all([
+      supabase.from(table).select('*').ilike('google_email', normalizedEmail).limit(1).maybeSingle(),
+      supabase.from(table).select('*').ilike('email', normalizedEmail).limit(1).maybeSingle(),
+    ]);
+    return {
+      data: byGoogle.data || byEmail.data || null,
+      error: byGoogle.error || byEmail.error || null,
     };
+  };
 
+  const lookupLogic = async (): Promise<{ data: SystemUserProfile | null; error: any }> => {
     try {
-      // Attempt 1: system_users with .or() combining both email columns in ONE query (most efficient)
-      const { data: byOr, error: err1 } = await queryWithTimeout(
-        supabase
-          .from('system_users')
-          .select('*')
-          .or(`google_email.ilike.${normalizedEmail},email.ilike.${normalizedEmail}`)
-          .limit(1)
-          .maybeSingle(),
-        'system_users.or(google_email,email)'
-      );
-
-      console.log('[Auth:findSystemUserByEmail] Attempt 1 (system_users .or):', { found: !!byOr, error: err1?.message || null });
-
-      if (byOr) {
-        return { data: byOr, error: null };
-      }
-
+      // Attempt 1: system_users
+      const { data: sysMatch, error: err1 } = await lookupInTable('system_users');
+      console.log('[Auth:findSystemUserByEmail] Attempt 1 (system_users):', { found: !!sysMatch, error: err1?.message || null });
+      if (sysMatch) return { data: sysMatch as SystemUserProfile, error: null };
       if (timedOut) return { data: null, error: new Error('Timed out') };
 
-      // Attempt 2: Check user_info with .or() — single query for both columns
-      const { data: uiMatch, error: err2 } = await queryWithTimeout(
-        supabase
-          .from('user_info')
-          .select('*')
-          .or(`google_email.ilike.${normalizedEmail},email.ilike.${normalizedEmail}`)
-          .limit(1)
-          .maybeSingle(),
-        'user_info.or(google_email,email)'
-      );
-
-      console.log('[Auth:findSystemUserByEmail] Attempt 2 (user_info .or):', { found: !!uiMatch, staff_id: uiMatch?.staff_id, error: err2?.message || null });
+      // Attempt 2: user_info
+      const { data: uiMatch, error: err2 } = await lookupInTable('user_info');
+      console.log('[Auth:findSystemUserByEmail] Attempt 2 (user_info):', { found: !!uiMatch, staff_id: (uiMatch as any)?.staff_id, error: err2?.message || null });
 
       if (uiMatch?.staff_id) {
         if (timedOut) return { data: null, error: new Error('Timed out') };
-
-        // Try to resolve back to system_users via staff_id
-        const { data: sysUserFromUI } = await queryWithTimeout(
-          supabase
-            .from('system_users')
-            .select('*')
-            .eq('bubble_staff_id', uiMatch.staff_id)
-            .limit(1)
-            .maybeSingle(),
-          'system_users by staff_id'
-        );
-
-        if (sysUserFromUI) {
-          return { data: sysUserFromUI, error: null };
-        }
-
-        // Bootstrap from user_info alone
-        console.log('[Auth:findSystemUserByEmail] Bootstrapping SystemUserProfile from user_info alone');
+        const { data: sysUserFromUI } = await supabase
+          .from('system_users')
+          .select('*')
+          .eq('bubble_staff_id', uiMatch.staff_id)
+          .limit(1)
+          .maybeSingle();
+        if (sysUserFromUI) return { data: sysUserFromUI as SystemUserProfile, error: null };
         return { data: bootstrapSystemUserFromUserInfo(uiMatch, normalizedEmail), error: null };
       }
 
       if (uiMatch) {
-        // user_info row exists but no staff_id — bootstrap anyway
-        console.log('[Auth:findSystemUserByEmail] Bootstrapping from user_info (no staff_id)');
         return { data: bootstrapSystemUserFromUserInfo(uiMatch, normalizedEmail), error: null };
       }
 
-      // Not found in any column or table
       console.warn('[Auth:findSystemUserByEmail] ❌ All attempts failed for:', normalizedEmail);
       return { data: null, error: err1 || err2 || new Error('Not found in any lookup path') };
     } catch (err) {
-      console.warn('[Auth:findSystemUserByEmail] Query error/timeout:', err);
+      console.warn('[Auth:findSystemUserByEmail] Query error:', err);
       return { data: null, error: err };
     }
   };
 
-  // Race the lookup logic against the master timeout
-  return Promise.race([lookupLogic(), masterTimeoutPromise]);
+  try {
+    return await Promise.race([lookupLogic(), masterTimeoutPromise]);
+  } finally {
+    if (masterTimer) clearTimeout(masterTimer);
+  }
 }
 
 /**
