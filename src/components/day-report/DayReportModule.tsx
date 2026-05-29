@@ -122,6 +122,10 @@ function SubmitReportPage() {
   }
   const emptyAiTools: AiToolsSelection = { copywriting: [], copywritingOther: '', image: [], imageOther: '', video: [], videoOther: '' };
 
+  // Authenticated user — needed early so the saved-templates storage key can
+  // be scoped per-user (see SavedTemplate state below).
+  const { systemUser } = useAuth();
+
   // Work entries
   const [entries, setEntries] = useState<Array<{
     category: WorkCategory | '';
@@ -138,35 +142,65 @@ function SubmitReportPage() {
     aiToolsV2: AiToolsSelection;
   }>>([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
 
-  // User-saved 常用匯報項目 templates (per-browser localStorage). Each template
-  // captures a full entry snapshot so clicking it restores category, related
-  // item, title (multi-line), hours, outcome, AI tools etc. on a new row.
+  // User-saved 常用匯報項目 templates. Stored in localStorage but the storage
+  // key is suffixed with the authenticated user's email so two users sharing
+  // the same browser don't see each other's saved items. Until the user is
+  // resolved we keep the list empty rather than reading a global key — this
+  // avoids leaking templates across accounts when one user logs out and
+  // another logs in on the same browser.
   type SavedTemplate = {
     id: string;
     label: string;       // shown in the chip; falls back to title or category
     entry: typeof entries[number];
     createdAt: string;
   };
-  const SAVED_TEMPLATES_KEY = 'mps:dayReport:savedTemplates';
-  const [savedTemplates, setSavedTemplates] = useState<SavedTemplate[]>(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const raw = window.localStorage.getItem(SAVED_TEMPLATES_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? (parsed as SavedTemplate[]) : [];
-    } catch {
-      return [];
-    }
-  });
+  const savedTemplatesKey = useMemo(() => {
+    const owner = (systemUser?.email || systemUser?.bubble_staff_id || '').toLowerCase().trim();
+    return owner ? `mps:dayReport:savedTemplates:${owner}` : null;
+  }, [systemUser?.email, systemUser?.bubble_staff_id]);
+  const [savedTemplates, setSavedTemplates] = useState<SavedTemplate[]>([]);
+
+  // Hydrate / re-hydrate from the per-user key whenever the auth identity
+  // changes (login, switch user, logout). On first run we also migrate any
+  // pre-existing global key (mps:dayReport:savedTemplates) to the current
+  // user's bucket so saves made before this scoping change aren't lost.
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (!savedTemplatesKey) {
+      setSavedTemplates([]);
+      return;
+    }
     try {
-      window.localStorage.setItem(SAVED_TEMPLATES_KEY, JSON.stringify(savedTemplates));
+      const raw = window.localStorage.getItem(savedTemplatesKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setSavedTemplates(Array.isArray(parsed) ? (parsed as SavedTemplate[]) : []);
+        return;
+      }
+      // No per-user data yet — try to migrate from the legacy global key.
+      const legacyRaw = window.localStorage.getItem('mps:dayReport:savedTemplates');
+      if (legacyRaw) {
+        const legacy = JSON.parse(legacyRaw);
+        if (Array.isArray(legacy) && legacy.length > 0) {
+          setSavedTemplates(legacy as SavedTemplate[]);
+          window.localStorage.removeItem('mps:dayReport:savedTemplates');
+          return;
+        }
+      }
+      setSavedTemplates([]);
+    } catch {
+      setSavedTemplates([]);
+    }
+  }, [savedTemplatesKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !savedTemplatesKey) return;
+    try {
+      window.localStorage.setItem(savedTemplatesKey, JSON.stringify(savedTemplates));
     } catch {
       // localStorage may be unavailable; persistence is best-effort.
     }
-  }, [savedTemplates]);
+  }, [savedTemplates, savedTemplatesKey]);
 
   const [targetHours, setTargetHours] = useState<number>(8);
   const [underHoursReason, setUnderHoursReason] = useState('');
@@ -201,8 +235,7 @@ function SubmitReportPage() {
     }
   }, [websites, projects]);
 
-  // Current staff — from authenticated user context
-  const { systemUser } = useAuth();
+  // Current staff — derived from the authenticated user resolved above
   const [currentStaffId, setCurrentStaffId] = useState<string | null>(null);
   const [currentStaffName, setCurrentStaffName] = useState<string>('');
 
