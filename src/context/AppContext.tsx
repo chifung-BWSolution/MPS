@@ -81,8 +81,8 @@ export const mainMenuItems: MainMenuItem[] = [
     id: 'website',
     label: '網站+系統',
     subMenus: [
-      { id: 'pending', label: '待跟進項目' },
       { id: 'list', label: '網站列表' },
+      { id: 'pending', label: '待跟進項目' },
       { id: 'articles-list', label: '文章列表' },
     ],
   },

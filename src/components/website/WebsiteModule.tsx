@@ -11,6 +11,7 @@ import {
   getWebsitesForArticle,
   addWebsiteToArticle,
   removeWebsiteFromArticle,
+  addNewArticle,
 } from '@/data/websiteData';
 import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
 import { useCompanies } from '@/hooks/useCompanies';
@@ -1950,14 +1951,224 @@ function BatchAddToWebsiteModal({
   );
 }
 
+// ===== Create Article Modal (with website-selection by name + URL search) =====
+function CreateArticleModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const { profiles: websiteProfiles } = useWebsiteProfiles();
+  const [title, setTitle] = useState('');
+  const [channel, setChannel] = useState<Article['channel']>('website_article');
+  const [authorName, setAuthorName] = useState('');
+  const [contentStatus, setContentStatus] = useState<Article['contentStatus']>('draft');
+  const [hoursSpent, setHoursSpent] = useState<string>('');
+  const [url, setUrl] = useState('');
+  const [websiteSearch, setWebsiteSearch] = useState('');
+  const [selectedWebsiteIds, setSelectedWebsiteIds] = useState<string[]>([]);
+
+  const filteredWebsites = websiteProfiles.filter(ws => {
+    if (!websiteSearch) return true;
+    const q = websiteSearch.toLowerCase();
+    return (
+      ws.websiteName.toLowerCase().includes(q) ||
+      (ws.domainUrl || '').toLowerCase().includes(q) ||
+      (ws.brand || '').toLowerCase().includes(q)
+    );
+  });
+
+  const toggleWebsite = (id: string) =>
+    setSelectedWebsiteIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+
+  const handleSubmit = () => {
+    if (!title.trim()) {
+      toast.error('請輸入文章標題');
+      return;
+    }
+    const firstWs = selectedWebsiteIds[0]
+      ? websiteProfiles.find(w => w.id === selectedWebsiteIds[0])
+      : undefined;
+    const newId = `art_${Date.now()}`;
+    const article: Article = {
+      id: newId,
+      title: title.trim(),
+      channel,
+      contentStatus,
+      authorName: authorName.trim() || undefined,
+      hoursSpent: hoursSpent ? Number(hoursSpent) : undefined,
+      url: url.trim() || undefined,
+      brand: firstWs?.brand,
+      company: firstWs?.company,
+      companyId: firstWs?.companyId,
+      brandId: firstWs?.brandId,
+      websiteProfileId: selectedWebsiteIds[0],
+    };
+    addNewArticle(article);
+    selectedWebsiteIds.forEach(wsId => addArticleToWebsite(wsId, newId));
+    toast.success(`已新增文章「${article.title}」`);
+    onCreated();
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h3 className="text-[16px] font-bold">新增文章</h3>
+          <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">文章標題 *</label>
+            <input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+              placeholder="輸入文章標題"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1">渠道</label>
+              <select
+                value={channel}
+                onChange={e => setChannel(e.target.value as Article['channel'])}
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+              >
+                <option value="website_article">網站文章</option>
+                <option value="youtube">YouTube</option>
+                <option value="facebook">Facebook</option>
+                <option value="instagram">Instagram</option>
+                <option value="xiaohongshu">小紅書</option>
+                <option value="other_video">其他影片</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1">狀態</label>
+              <select
+                value={contentStatus}
+                onChange={e => setContentStatus(e.target.value as Article['contentStatus'])}
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+              >
+                <option value="draft">草稿</option>
+                <option value="writing">撰寫中</option>
+                <option value="review">審核中</option>
+                <option value="published">已發佈</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1">撰稿人</label>
+              <input
+                value={authorName}
+                onChange={e => setAuthorName(e.target.value)}
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                placeholder="撰稿人名稱"
+              />
+            </div>
+            <div>
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1">工時（小時）</label>
+              <input
+                value={hoursSpent}
+                onChange={e => setHoursSpent(e.target.value.replace(/[^0-9.]/g, ''))}
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                placeholder="例：2.5"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">文章連結（可選）</label>
+            <input
+              value={url}
+              onChange={e => setUrl(e.target.value)}
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+              placeholder="https://..."
+            />
+          </div>
+
+          <div className="border-t border-border pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-[13px] font-medium">關聯網站</label>
+              <span className="text-[11px] text-muted-foreground">
+                {selectedWebsiteIds.length > 0 ? `已選 ${selectedWebsiteIds.length} 個` : '可多選'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm mb-2">
+              <Search size={14} className="text-muted-foreground" />
+              <input
+                value={websiteSearch}
+                onChange={e => setWebsiteSearch(e.target.value)}
+                className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground"
+                placeholder="搜尋網站名稱、網址或品牌..."
+              />
+            </div>
+            <div className="space-y-1 max-h-[260px] overflow-y-auto border border-border rounded-md">
+              {filteredWebsites.length === 0 ? (
+                <div className="text-center py-6 text-[13px] text-muted-foreground">沒有符合的網站</div>
+              ) : (
+                filteredWebsites.map(ws => {
+                  const isSel = selectedWebsiteIds.includes(ws.id);
+                  return (
+                    <div
+                      key={ws.id}
+                      onClick={() => toggleWebsite(ws.id)}
+                      className={cn(
+                        'flex items-center gap-3 px-3 py-2 cursor-pointer transition-all border-b border-border/50 last:border-0',
+                        isSel ? 'bg-teal-50' : 'hover:bg-muted/30'
+                      )}
+                    >
+                      <div className={cn('w-4 h-4 rounded border-2 flex items-center justify-center shrink-0', isSel ? 'border-teal-600 bg-teal-600' : 'border-muted-foreground/30')}>
+                        {isSel && <Check size={10} className="text-white" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[13px] font-medium block truncate">{ws.websiteName}</span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <Globe size={10} className="text-muted-foreground shrink-0" />
+                          <span className="text-[11px] text-teal-600 truncate">{ws.domainUrl}</span>
+                          {ws.brand && <span className="text-[11px] bg-teal-50 text-teal-700 px-1 py-0.5 rounded shrink-0">{ws.brand}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
+          <button onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted rounded-md">取消</button>
+          <button
+            onClick={handleSubmit}
+            disabled={!title.trim()}
+            className="px-4 py-2 text-[13px] font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            新增文章
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ===== Global Article List =====
 function GlobalArticleList({ onSelectArticle }: { onSelectArticle: (a: Article) => void }) {
+  const { companies } = useCompanies();
+  const { brands } = useBrands();
   const [searchQuery, setSearchQuery] = useState('');
   const [companyFilter, setCompanyFilter] = useState('all');
   const [brandFilter, setBrandFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showBatchModal, setShowBatchModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [, forceUpdate] = useState(0);
 
   const filteredBrands = companyFilter === 'all' ? brands : brands.filter(b => b.companyId === companyFilter);
@@ -1989,7 +2200,7 @@ function GlobalArticleList({ onSelectArticle }: { onSelectArticle: (a: Article) 
               <Globe size={13} />批量加入網站（{selectedIds.length}）
             </button>
           )}
-          <button className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-sm font-medium hover:bg-teal-700 transition-colors active:scale-[0.97]">
+          <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-sm font-medium hover:bg-teal-700 transition-colors active:scale-[0.97]">
             <Plus size={14} />新增文章
           </button>
         </div>
@@ -2132,6 +2343,13 @@ function GlobalArticleList({ onSelectArticle }: { onSelectArticle: (a: Article) 
           selectedArticleIds={selectedIds}
           onClose={() => setShowBatchModal(false)}
           onDone={() => { setSelectedIds([]); forceUpdate(n => n + 1); }}
+        />
+      )}
+
+      {showCreateModal && (
+        <CreateArticleModal
+          onClose={() => setShowCreateModal(false)}
+          onCreated={() => forceUpdate(n => n + 1)}
         />
       )}
     </div>
@@ -2517,6 +2735,6 @@ export function WebsiteModule({ subModule }: { subModule?: string }) {
     case 'list':
       return <WebsiteList onSelectSite={setSelectedSite} />;
     default:
-      return <PendingContent />;
+      return <WebsiteList onSelectSite={setSelectedSite} />;
   }
 }

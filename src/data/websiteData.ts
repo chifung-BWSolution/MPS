@@ -1970,7 +1970,7 @@ export function removeWebsiteFromArticle(articleId: string, websiteId: string): 
 }
 
 export function addNewArticle(article: Article): void {
-  allArticles = [...allArticles, article];
+  allArticles = [...allArticles, article as Article & { __sampleData: true }];
 }
 
 export function addWebsiteProfile(website: WebsiteProfileFull): void {
