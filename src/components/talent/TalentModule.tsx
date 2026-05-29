@@ -472,6 +472,12 @@ function TalentList() {
   const [liveOnly, setLiveOnly] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<Talent | null>(null);
+  // Multi-select for the 不錄用 (bulk-reject) action. Keys are display-row ids
+  // (e.g. "ca_<uuid>" for confirmed_artist rows, raw id for legacy talents).
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [showRejectConfirm, setShowRejectConfirm] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectError, setRejectError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -516,18 +522,115 @@ function TalentList() {
     return true;
   });
 
+  // Drop selections that are no longer visible (e.g. filter changes hid them).
+  useEffect(() => {
+    setSelected(prev => {
+      const visible = new Set(filtered.map(f => f.id));
+      let changed = false;
+      const next = new Set<string>();
+      prev.forEach(id => {
+        if (visible.has(id)) next.add(id);
+        else changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [filtered]);
+
+  const toggleSelected = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkReject = async () => {
+    if (selected.size === 0) return;
+    setRejecting(true);
+    setRejectError(null);
+    try {
+      const targets = filtered.filter(t => selected.has(t.id));
+      const confirmedTargets = targets.filter(t => (t as any)._confirmed);
+      const localTargets = targets.filter(t => !(t as any)._confirmed);
+
+      // 1) Insert a snapshot into rejected_artist for the confirmed_artist rows
+      //    so audit history survives even after we delete the original record.
+      if (confirmedTargets.length > 0) {
+        const rejectRows = confirmedTargets.map(t => {
+          const original = confirmed.find(c => `ca_${c.id}` === t.id);
+          return {
+            source_form_id: original?.source_form_id ?? null,
+            invite_token: original?.invite_token ?? null,
+            name_zh: original?.name_zh ?? null,
+            name_en: original?.name_en ?? null,
+            phone: original?.phone ?? null,
+            payload: {
+              from: 'confirmed_artist',
+              confirmed_artist_id: original?.id ?? null,
+              snapshot: original ?? null,
+            },
+            signature_image: original?.signature_image ?? null,
+            reason: '從藝人列表批次不錄用',
+            source: 'after_confirmation',
+          };
+        });
+        const { error: insertErr } = await supabase
+          .from('rejected_artist')
+          .insert(rejectRows);
+        if (insertErr) throw insertErr;
+
+        const ids = confirmedTargets.map(t => t.id.replace(/^ca_/, ''));
+        const { error: deleteErr } = await supabase
+          .from('confirmed_artist')
+          .delete()
+          .in('id', ids);
+        if (deleteErr) throw deleteErr;
+      }
+
+      // 2) For legacy in-memory talents we just drop them from local state —
+      //    they were never persisted, so there's no row to mirror in supabase.
+      localTargets.forEach(t => remove(t.id));
+
+      // 3) Refresh list from supabase so the UI reflects the deletion.
+      setConfirmed(prev =>
+        prev.filter(c => !confirmedTargets.some(t => t.id === `ca_${c.id}`))
+      );
+      setSelected(new Set());
+      setShowRejectConfirm(false);
+    } catch (err) {
+      setRejectError(err instanceof Error ? err.message : '不錄用失敗');
+    } finally {
+      setRejecting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="藝人列表"
         subtitle="管理所有藝人完整資料、評分及合作狀態。"
         action={
-          <button
-            onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-sm font-medium hover:bg-teal-700 transition-colors active:scale-[0.97]"
-          >
-            <Plus size={14} />新增藝人
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => selected.size > 0 && setShowRejectConfirm(true)}
+              disabled={selected.size === 0}
+              className={cn(
+                'flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors active:scale-[0.97]',
+                selected.size === 0
+                  ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                  : 'bg-rose-600 text-white hover:bg-rose-700'
+              )}
+            >
+              <X size={14} />不錄用{selected.size > 0 ? ` (${selected.size})` : ''}
+            </button>
+            <button
+              onClick={() => setShowAdd(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-sm font-medium hover:bg-teal-700 transition-colors active:scale-[0.97]"
+            >
+              <Plus size={14} />新增藝人
+            </button>
+          </div>
         }
       />
 
@@ -592,6 +695,7 @@ function TalentList() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-muted/30">
+                <th className="w-10 px-3 py-3" aria-label="選取" />
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">藝人</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">基本資料</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">分類</th>
@@ -604,6 +708,15 @@ function TalentList() {
             <tbody>
               {filtered.map(t => (
                 <tr key={t.id} className="border-b border-border last:border-b-0 hover:bg-muted/30">
+                  <td className="px-3 py-3 align-middle">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(t.id)}
+                      onChange={() => toggleSelected(t.id)}
+                      className="w-4 h-4 accent-rose-600 cursor-pointer"
+                      aria-label={`選取 ${t.name}`}
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       {t.photoUrl ? (
@@ -722,6 +835,45 @@ function TalentList() {
             }}
             submitLabel="保存修改"
           />
+        </Modal>
+      )}
+
+      {/* Bulk reject confirmation */}
+      {showRejectConfirm && (
+        <Modal
+          title="確認不錄用"
+          onClose={() => { if (!rejecting) { setShowRejectConfirm(false); setRejectError(null); } }}
+          width="max-w-[420px]"
+        >
+          <div className="px-5 py-4 space-y-3">
+            <p className="text-[14px]">
+              是否確認不錄用 <span className="font-semibold text-rose-600">{selected.size}</span> 位藝人？
+            </p>
+            <p className="text-[12px] text-muted-foreground">
+              這些藝人會從藝人列表移除，並儲存至「rejected_artist」作為紀錄。
+            </p>
+            {rejectError && (
+              <p className="text-[12px] text-rose-600">錯誤：{rejectError}</p>
+            )}
+          </div>
+          <div className="px-5 py-3 border-t border-border flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => { setShowRejectConfirm(false); setRejectError(null); }}
+              disabled={rejecting}
+              className="px-3 py-1.5 text-[13px] border border-border rounded-md hover:bg-muted disabled:opacity-50"
+            >
+              否
+            </button>
+            <button
+              type="button"
+              onClick={handleBulkReject}
+              disabled={rejecting}
+              className="px-3 py-1.5 text-[13px] bg-rose-600 text-white rounded-md hover:bg-rose-700 disabled:opacity-50"
+            >
+              {rejecting ? '處理中…' : '是'}
+            </button>
+          </div>
         </Modal>
       )}
     </div>
