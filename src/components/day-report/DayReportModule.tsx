@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Plus, Check, X, AlertTriangle, ChevronLeft, ChevronRight, Link, Sparkles, Clock, Users, BarChart3, Calendar, FileText, Zap, Bot, Trash2, RefreshCw, Eye, MapPin, CalendarDays, Loader2, Shield } from 'lucide-react';
+import { Plus, Check, X, AlertTriangle, ChevronLeft, ChevronRight, Link, Sparkles, Clock, Users, BarChart3, Calendar, FileText, Zap, Bot, Trash2, RefreshCw, Eye, MapPin, CalendarDays, Loader2, Shield, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -137,7 +137,37 @@ function SubmitReportPage() {
     aiTools: AITool[];
     aiToolsV2: AiToolsSelection;
   }>>([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
-  
+
+  // User-saved 常用匯報項目 templates (per-browser localStorage). Each template
+  // captures a full entry snapshot so clicking it restores category, related
+  // item, title (multi-line), hours, outcome, AI tools etc. on a new row.
+  type SavedTemplate = {
+    id: string;
+    label: string;       // shown in the chip; falls back to title or category
+    entry: typeof entries[number];
+    createdAt: string;
+  };
+  const SAVED_TEMPLATES_KEY = 'mps:dayReport:savedTemplates';
+  const [savedTemplates, setSavedTemplates] = useState<SavedTemplate[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = window.localStorage.getItem(SAVED_TEMPLATES_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as SavedTemplate[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(SAVED_TEMPLATES_KEY, JSON.stringify(savedTemplates));
+    } catch {
+      // localStorage may be unavailable; persistence is best-effort.
+    }
+  }, [savedTemplates]);
+
   const [targetHours, setTargetHours] = useState<number>(8);
   const [underHoursReason, setUnderHoursReason] = useState('');
   const [isPulling, setIsPulling] = useState(false);
@@ -484,6 +514,48 @@ function SubmitReportPage() {
     const newEntries = [...entries];
     (newEntries[idx] as any)[field] = value;
     setEntries(newEntries);
+  };
+
+  // Snapshot the current row into 常用匯報項目. Skip if the row is essentially
+  // empty so users can't accidentally save a blank template.
+  const saveEntryAsTemplate = (idx: number) => {
+    const e = entries[idx];
+    if (!e.category && !e.title && !e.relatedName && (!e.hours || e.hours === 0)) {
+      alert('請先填寫工作項目內容再儲存。');
+      return;
+    }
+    const label = (e.title.trim().split('\n')[0] || e.relatedName || categoryConfig[e.category as WorkCategory]?.label || '自訂項目').slice(0, 40);
+    const tpl: SavedTemplate = {
+      id: `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      label,
+      entry: { ...e, aiToolsV2: { ...e.aiToolsV2 } },
+      createdAt: new Date().toISOString(),
+    };
+    setSavedTemplates(prev => [tpl, ...prev]);
+  };
+
+  const removeSavedTemplate = (id: string) => {
+    setSavedTemplates(prev => prev.filter(t => t.id !== id));
+  };
+
+  // Click a saved chip → drop a fresh row pre-filled with its snapshot. If
+  // the first row is still empty we replace it instead of appending so the
+  // form stays tidy.
+  const applySavedTemplate = (tpl: SavedTemplate) => {
+    const newEntry = {
+      ...tpl.entry,
+      aiToolsV2: { ...tpl.entry.aiToolsV2 },
+      outcomeImages: [...(tpl.entry.outcomeImages || [])],
+      aiTools: [...(tpl.entry.aiTools || [])],
+    };
+    const firstEmpty = entries.findIndex(e => !e.category && !e.title && e.hours === 0);
+    if (firstEmpty >= 0) {
+      const next = [...entries];
+      next[firstEmpty] = newEntry;
+      setEntries(next);
+    } else {
+      setEntries([...entries, newEntry]);
+    }
   };
 
   const handleAutoPull = () => {
@@ -873,13 +945,71 @@ function SubmitReportPage() {
           </div>
 
           {/* Recent Frequent Items — Quick Add from past reports */}
-          {recentFrequentItems.length > 0 && (
+          {(recentFrequentItems.length > 0 || savedTemplates.length > 0) && (
             <div className="bg-white rounded-lg border border-border/60 px-4 py-3">
               <div className="flex items-center gap-2 mb-2.5">
                 <Sparkles size={14} className="text-amber-500" />
                 <span className="text-[14px] font-bold text-foreground">常用匯報項目</span>
-                <span className="text-[13px] text-muted-foreground">（根據你的歷史匯報自動推薦，點擊快速填入）</span>
+                <span className="text-[13px] text-muted-foreground">（自訂 + 根據你的歷史匯報自動推薦，點擊快速填入）</span>
               </div>
+
+              {/* User-saved templates first — these capture full entry payloads
+                  so a single click restores category, hours, title, AI tools etc. */}
+              {savedTemplates.length > 0 && (
+                <div className="mb-3">
+                  <div className="text-[12px] text-muted-foreground mb-1.5">我的常用項目</div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {savedTemplates.map(tpl => {
+                      const cat = tpl.entry.category as WorkCategory | '';
+                      const config = cat ? categoryConfig[cat] : null;
+                      return (
+                        <div
+                          key={tpl.id}
+                          className="group relative flex items-start gap-2 px-3 py-2.5 rounded-lg border bg-amber-50/40 border-amber-200/70 hover:border-amber-400 hover:shadow-sm transition-all"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => applySavedTemplate(tpl)}
+                            className="flex-1 flex items-start gap-2 text-left"
+                          >
+                            {config ? (
+                              <span className={cn('text-[12px] px-1.5 py-0.5 rounded shrink-0 mt-0.5', config.bg, config.color)}>
+                                {config.icon}
+                              </span>
+                            ) : (
+                              <span className="text-[12px] px-1.5 py-0.5 rounded shrink-0 mt-0.5 bg-amber-100 text-amber-700">★</span>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[14px] font-medium text-foreground truncate">{tpl.label}</div>
+                              <div className="text-[12px] text-muted-foreground truncate">
+                                {[
+                                  config?.label,
+                                  tpl.entry.relatedName,
+                                  tpl.entry.hours ? `${tpl.entry.hours}h` : null,
+                                ].filter(Boolean).join(' · ') || '自訂項目'}
+                              </div>
+                            </div>
+                            <Plus size={12} className="text-amber-600 shrink-0 mt-1" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeSavedTemplate(tpl.id)}
+                            title="移除這個常用項目"
+                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-rose-600 p-0.5 rounded transition-opacity"
+                          >
+                            <X size={11} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {recentFrequentItems.length > 0 && savedTemplates.length > 0 && (
+                <div className="text-[12px] text-muted-foreground mb-1.5">歷史推薦</div>
+              )}
+              {recentFrequentItems.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {recentFrequentItems.map((item, idx) => {
                   const config = categoryConfig[item.category];
@@ -928,6 +1058,7 @@ function SubmitReportPage() {
                   );
                 })}
               </div>
+              )}
             </div>
           )}
         </div>
@@ -1041,6 +1172,15 @@ function SubmitReportPage() {
                     工作項目
                   </span>
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => saveEntryAsTemplate(idx)}
+                      title="加入到常用匯報項目"
+                      className="flex items-center gap-1 text-[12px] text-amber-600 hover:text-amber-700 px-2 py-1 rounded border border-amber-200 hover:bg-amber-50"
+                    >
+                      <Star size={12} />
+                      <span>加入到常用匯報項目</span>
+                    </button>
                     {entries.length > 1 && (
                       <button onClick={() => removeEntry(idx)} className="text-rose-500 hover:text-rose-700 p-1.5 rounded hover:bg-rose-50"><Trash2 size={13} /></button>
                     )}
