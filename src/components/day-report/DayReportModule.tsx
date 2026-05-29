@@ -142,65 +142,53 @@ function SubmitReportPage() {
     aiToolsV2: AiToolsSelection;
   }>>([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
 
-  // User-saved 常用匯報項目 templates. Stored in localStorage but the storage
-  // key is suffixed with the authenticated user's email so two users sharing
-  // the same browser don't see each other's saved items. Until the user is
-  // resolved we keep the list empty rather than reading a global key — this
-  // avoids leaking templates across accounts when one user logs out and
-  // another logs in on the same browser.
+  // User-saved 常用匯報項目 templates — backed by Supabase
+  // public.user_report_templates so they follow the user across devices.
+  // Each row stores a full work-entry snapshot and is keyed by the user's
+  // lowercased email; we filter reads/writes by that on the client (RLS is
+  // permissive for authenticated users, mirroring confirmed_artist).
   type SavedTemplate = {
     id: string;
     label: string;       // shown in the chip; falls back to title or category
     entry: typeof entries[number];
     createdAt: string;
   };
-  const savedTemplatesKey = useMemo(() => {
-    const owner = (systemUser?.email || systemUser?.bubble_staff_id || '').toLowerCase().trim();
-    return owner ? `mps:dayReport:savedTemplates:${owner}` : null;
-  }, [systemUser?.email, systemUser?.bubble_staff_id]);
+  const ownerEmail = useMemo(
+    () => (systemUser?.email || '').toLowerCase().trim(),
+    [systemUser?.email],
+  );
   const [savedTemplates, setSavedTemplates] = useState<SavedTemplate[]>([]);
 
-  // Hydrate / re-hydrate from the per-user key whenever the auth identity
-  // changes (login, switch user, logout). On first run we also migrate any
-  // pre-existing global key (mps:dayReport:savedTemplates) to the current
-  // user's bucket so saves made before this scoping change aren't lost.
+  // Load templates whenever the authenticated identity changes.
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (!savedTemplatesKey) {
+    let cancelled = false;
+    if (!ownerEmail) {
       setSavedTemplates([]);
       return;
     }
-    try {
-      const raw = window.localStorage.getItem(savedTemplatesKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setSavedTemplates(Array.isArray(parsed) ? (parsed as SavedTemplate[]) : []);
+    (async () => {
+      const { data, error } = await supabase
+        .from('user_report_templates')
+        .select('id, label, entry, created_at')
+        .eq('owner_email', ownerEmail)
+        .order('created_at', { ascending: false });
+      if (cancelled) return;
+      if (error) {
+        console.warn('[SubmitReport] load saved templates failed:', error.message);
+        setSavedTemplates([]);
         return;
       }
-      // No per-user data yet — try to migrate from the legacy global key.
-      const legacyRaw = window.localStorage.getItem('mps:dayReport:savedTemplates');
-      if (legacyRaw) {
-        const legacy = JSON.parse(legacyRaw);
-        if (Array.isArray(legacy) && legacy.length > 0) {
-          setSavedTemplates(legacy as SavedTemplate[]);
-          window.localStorage.removeItem('mps:dayReport:savedTemplates');
-          return;
-        }
-      }
-      setSavedTemplates([]);
-    } catch {
-      setSavedTemplates([]);
-    }
-  }, [savedTemplatesKey]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !savedTemplatesKey) return;
-    try {
-      window.localStorage.setItem(savedTemplatesKey, JSON.stringify(savedTemplates));
-    } catch {
-      // localStorage may be unavailable; persistence is best-effort.
-    }
-  }, [savedTemplates, savedTemplatesKey]);
+      setSavedTemplates(
+        (data || []).map(r => ({
+          id: r.id as string,
+          label: r.label as string,
+          entry: r.entry as SavedTemplate['entry'],
+          createdAt: r.created_at as string,
+        })),
+      );
+    })();
+    return () => { cancelled = true; };
+  }, [ownerEmail]);
 
   const [targetHours, setTargetHours] = useState<number>(8);
   const [underHoursReason, setUnderHoursReason] = useState('');
@@ -550,25 +538,52 @@ function SubmitReportPage() {
   };
 
   // Snapshot the current row into 常用匯報項目. Skip if the row is essentially
-  // empty so users can't accidentally save a blank template.
-  const saveEntryAsTemplate = (idx: number) => {
+  // empty so users can't accidentally save a blank template. The row is
+  // persisted to Supabase, then prepended to local state on success so the
+  // UI updates immediately.
+  const saveEntryAsTemplate = async (idx: number) => {
     const e = entries[idx];
     if (!e.category && !e.title && !e.relatedName && (!e.hours || e.hours === 0)) {
       alert('請先填寫工作項目內容再儲存。');
       return;
     }
+    if (!ownerEmail) {
+      alert('未能識別登入帳戶，請重新登入後再試。');
+      return;
+    }
     const label = (e.title.trim().split('\n')[0] || e.relatedName || categoryConfig[e.category as WorkCategory]?.label || '自訂項目').slice(0, 40);
-    const tpl: SavedTemplate = {
-      id: `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      label,
-      entry: { ...e, aiToolsV2: { ...e.aiToolsV2 } },
-      createdAt: new Date().toISOString(),
-    };
-    setSavedTemplates(prev => [tpl, ...prev]);
+    const entrySnapshot = { ...e, aiToolsV2: { ...e.aiToolsV2 } };
+    const { data, error } = await supabase
+      .from('user_report_templates')
+      .insert({ owner_email: ownerEmail, label, entry: entrySnapshot })
+      .select('id, label, entry, created_at')
+      .single();
+    if (error || !data) {
+      console.error('[SubmitReport] save template failed:', error?.message);
+      alert('儲存常用項目失敗，請稍後再試。');
+      return;
+    }
+    setSavedTemplates(prev => [{
+      id: data.id as string,
+      label: data.label as string,
+      entry: data.entry as SavedTemplate['entry'],
+      createdAt: data.created_at as string,
+    }, ...prev]);
   };
 
-  const removeSavedTemplate = (id: string) => {
-    setSavedTemplates(prev => prev.filter(t => t.id !== id));
+  const removeSavedTemplate = async (id: string) => {
+    // Optimistic remove — restore on failure so the user sees the actual state.
+    const prev = savedTemplates;
+    setSavedTemplates(s => s.filter(t => t.id !== id));
+    const { error } = await supabase
+      .from('user_report_templates')
+      .delete()
+      .eq('id', id);
+    if (error) {
+      console.error('[SubmitReport] delete template failed:', error.message);
+      alert('移除失敗，請稍後再試。');
+      setSavedTemplates(prev);
+    }
   };
 
   // Click a saved chip → drop a fresh row pre-filled with its snapshot. If
