@@ -844,9 +844,13 @@ function TalentList() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       {t.photoUrl ? (
-                        <img src={t.photoUrl} alt={t.name} className="w-10 h-10 rounded-full object-cover border border-border" />
+                        <img
+                          src={t.photoUrl}
+                          alt={t.name}
+                          className="w-[300px] h-[300px] rounded-md object-cover border border-border shrink-0"
+                        />
                       ) : (
-                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-[12px] font-bold text-muted-foreground">
+                        <div className="w-[300px] h-[300px] rounded-md bg-muted flex items-center justify-center text-[64px] font-bold text-muted-foreground shrink-0">
                           {t.name.slice(0, 1)}
                         </div>
                       )}
