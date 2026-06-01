@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Search, Plus, Star, Link2, Copy, Check, X, Pencil, Calendar,
-  Image as ImageIcon, Tag, Users, Camera, FileText, ExternalLink,
+  Tag, Users, Camera, FileText, ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -1948,42 +1948,6 @@ function TalentCollaborated() {
 }
 
 // =====================================================================
-// 2.6 Photo Gallery
-// =====================================================================
-function TalentGallery() {
-  const { talents } = useTalents();
-  const allPhotos = useMemo(() => {
-    const list: { talentId: string; talentName: string; url: string }[] = [];
-    talents.forEach(t => {
-      if (t.photoUrl) list.push({ talentId: t.id, talentName: t.stageName || t.name, url: t.photoUrl });
-      (t.galleryUrls || []).forEach(url => list.push({ talentId: t.id, talentName: t.stageName || t.name, url }));
-    });
-    return list;
-  }, [talents]);
-
-  return (
-    <div className="space-y-6">
-      <PageHeader title="照片庫" subtitle="集中瀏覽所有藝人照片。" />
-
-      {allPhotos.length === 0 ? (
-        <EmptyState icon={ImageIcon} title="尚無照片" hint="在藝人資料中加入主照片或畫廊 URL 後會在這裡集中顯示。" />
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          {allPhotos.map((p, i) => (
-            <div key={i} className="aspect-square rounded-md overflow-hidden border border-border bg-muted relative group">
-              <img src={p.url} alt={p.talentName} className="w-full h-full object-cover" />
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-2">
-                <div className="text-[11px] text-white font-medium truncate">{p.talentName}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// =====================================================================
 // Module router
 // =====================================================================
 export function TalentModule({ subModule }: { subModule?: string }) {
@@ -1992,7 +1956,6 @@ export function TalentModule({ subModule }: { subModule?: string }) {
     case 'categories': return <TalentCategoriesView />;
     case 'interviews': return <TalentInterviews />;
     case 'collaborated': return <TalentCollaborated />;
-    case 'gallery': return <TalentGallery />;
     case 'list':
     default:
       return <TalentList />;

@@ -117,7 +117,6 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'categories', label: '藝人分類' },
       { id: 'interviews', label: '面試安排' },
       { id: 'collaborated', label: '已合作藝人' },
-      { id: 'gallery', label: '照片庫' },
     ],
   },
   {
