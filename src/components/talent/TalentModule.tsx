@@ -911,10 +911,10 @@ function TalentList() {
                         <img
                           src={t.photoUrl}
                           alt={t.name}
-                          className="w-[300px] h-[300px] rounded-md object-cover border border-border shrink-0"
+                          className="w-[100px] h-[100px] rounded-lg object-cover border border-border shrink-0"
                         />
                       ) : (
-                        <div className="w-[300px] h-[300px] rounded-md bg-muted flex items-center justify-center text-[64px] font-bold text-muted-foreground shrink-0">
+                        <div className="w-[100px] h-[100px] rounded-lg bg-muted flex items-center justify-center text-[28px] font-bold text-muted-foreground shrink-0">
                           {t.name.slice(0, 1)}
                         </div>
                       )}
