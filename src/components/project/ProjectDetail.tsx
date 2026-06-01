@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Dispatch, SetStateAction, useState } from 'react';
 import {
   ArrowLeft, Calendar, DollarSign, User, Clock, Globe, FileText,
   Film, Megaphone, Plus, Edit, GanttChart, KanbanSquare, Target, Settings,
@@ -119,10 +119,11 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
   const { projects: companyProjects } = useCompanyProjects();
   const { projects: clientProjects } = useClientProjects();
   const [activeTab, setActiveTab] = useState('overview');
-  const [tasks, setTasks] = useState<ProjectTask[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newTask, setNewTask] = useState({ title: '', assignees: [] as string[], priority: 'medium' as ProjectPriority, startDate: '', endDate: '', estimatedHours: '', description: '' });
-  const { teamMembers, setTeamMembers } = useProjectDetails(projectId);
+  const { teamMembers, setTeamMembers, tasks: persistedTasks, setTasks: setPersistedTasks } = useProjectDetails(projectId);
+  const tasks = persistedTasks as unknown as ProjectTask[];
+  const setTasks = setPersistedTasks as unknown as Dispatch<SetStateAction<ProjectTask[]>>;
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [newMember, setNewMember] = useState({ name: '', roleInProject: '', estimatedHours: '' });
   const [taskViewMode, setTaskViewMode] = useState<'kanban' | 'gantt'>('kanban');
