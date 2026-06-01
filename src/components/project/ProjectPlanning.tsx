@@ -192,7 +192,11 @@ export function ProjectPlanning({ onSelectProject, forcedCategory, projects, loa
               <LayoutGrid size={16} />
             </button>
           </div>
-          <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white gap-1.5" onClick={() => navigateTo('project', 'new')}>
+          <Button
+            size="sm"
+            className="bg-teal-600 hover:bg-teal-700 text-white gap-1.5"
+            onClick={() => navigateTo('project', forcedCategory === 'client' ? 'new-client' : 'new')}
+          >
             <Plus size={14} />
             新增項目
           </Button>
