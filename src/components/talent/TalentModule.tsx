@@ -625,7 +625,7 @@ function TalentForm({
 // =====================================================================
 // Adapter: turn a ConfirmedArtistRow into a Talent-shaped object so the list
 // can render it through the same row template. Marked readOnly for the UI.
-const confirmedRowToTalent = (c: ConfirmedArtistRow): Talent & { _confirmed: true } => ({
+const confirmedRowToTalent = (c: ConfirmedArtistRow): Talent & { _confirmed: true; _formId?: string; _inviteToken?: string } => ({
   id: `ca_${c.id}`,
   name: c.name_zh || c.name_en || '（未填姓名）',
   stageName: c.name_en || undefined,
@@ -646,6 +646,9 @@ const confirmedRowToTalent = (c: ConfirmedArtistRow): Talent & { _confirmed: tru
   collaborations: [],
   photoUrl: c.photo_url || undefined,
   _confirmed: true,
+  _formId: c.source_form_id || undefined,
+  _inviteToken: c.invite_token || undefined,
+  inviteToken: c.invite_token || undefined,
 });
 
 function TalentList() {
@@ -668,6 +671,7 @@ function TalentList() {
   const [rejectError, setRejectError] = useState<string | null>(null);
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<{ rowId: string; name: string; url?: string } | null>(null);
+  const [formIdByToken, setFormIdByToken] = useState<Record<string, string>>({});
 
   const handleAvatarReplace = (rowId: string, file: File | null) => {
     setPhotoUploadError(null);
@@ -732,6 +736,22 @@ function TalentList() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('talent_form')
+        .select('id, invite_token');
+      if (cancelled || error || !data) return;
+      const map: Record<string, string> = {};
+      for (const row of data as { id: string; invite_token: string | null }[]) {
+        if (row.invite_token) map[row.invite_token] = row.id;
+      }
+      setFormIdByToken(map);
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const merged: (Talent & { _confirmed?: true })[] = [
@@ -929,6 +949,7 @@ function TalentList() {
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">合作狀態</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">最近影片</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">綜合評分</th>
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">申請表格</th>
                 <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">操作</th>
               </tr>
             </thead>
@@ -1004,6 +1025,25 @@ function TalentList() {
                         {t.overallRating.toFixed(1)}
                       </span>
                     ) : <span className="text-[12px] text-muted-foreground">未評</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const formId = (t as any)._formId
+                        || (t.inviteToken ? formIdByToken[t.inviteToken] : undefined);
+                      if (!formId) return <span className="text-[12px] text-muted-foreground">—</span>;
+                      const url = `/talent/submissions/${formId}`;
+                      return (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-[12px] text-teal-600 inline-flex items-center gap-1 hover:underline"
+                        >
+                          開啟表格 <ExternalLink size={12} />
+                        </a>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {(t as any)._confirmed ? (
