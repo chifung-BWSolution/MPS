@@ -1174,8 +1174,6 @@ function TalentInvite() {
       const { data, error } = await supabase
         .from('talent_form')
         .select('id, invite_token, name_zh, name_en, phone, submitted_at')
-        .neq('status', 'confirmed')
-        .neq('status', 'rejected')
         .order('submitted_at', { ascending: false });
       if (error) {
         setSubmissionsError(error.message);
