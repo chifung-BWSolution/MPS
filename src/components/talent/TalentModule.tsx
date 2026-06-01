@@ -294,6 +294,31 @@ function TalentForm({
   const [auditionFile, setAuditionFile] = useState(initialFileDataUrl);
   const [auditionFileName, setAuditionFileName] = useState('');
   const [fileError, setFileError] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
+  const handlePhotoPick = (file: File | null) => {
+    setPhotoError(null);
+    if (!file) {
+      set('photoUrl', undefined);
+      return;
+    }
+    const okType = ['image/jpeg', 'image/jpg', 'image/png', 'image/svg+xml', 'image/tiff', 'image/webp'].includes(file.type);
+    if (!okType) {
+      setPhotoError('僅支援 PNG / JPG / JPEG / SVG / TIFF / WebP 格式');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setPhotoError('檔案大小上限為 10MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      set('photoUrl', result);
+    };
+    reader.onerror = () => setPhotoError('讀取檔案失敗');
+    reader.readAsDataURL(file);
+  };
 
   const set = <K extends keyof Talent>(key: K, value: Talent[K]) =>
     setForm(prev => ({ ...prev, [key]: value }));
@@ -345,6 +370,45 @@ function TalentForm({
 
   return (
     <div className="space-y-4">
+      {/* Photo upload */}
+      <div>
+        <label className="text-[12px] font-medium text-muted-foreground block mb-1">藝人頭像</label>
+        <div className="flex items-start gap-3">
+          <label
+            className="relative flex items-center justify-center w-24 h-24 rounded-md border border-dashed border-border bg-muted/30 cursor-pointer overflow-hidden hover:border-teal-500 hover:bg-muted/50 transition-colors"
+            title="點擊上傳圖片"
+          >
+            {form.photoUrl ? (
+              <img src={form.photoUrl} alt="頭像預覽" className="w-full h-full object-cover" />
+            ) : (
+              <div className="flex flex-col items-center text-muted-foreground">
+                <Plus size={20} />
+                <span className="text-[10.5px] mt-0.5">上傳頭像</span>
+              </div>
+            )}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/tiff,image/webp,.png,.jpg,.jpeg,.svg,.tif,.tiff,.webp"
+              className="absolute inset-0 opacity-0 cursor-pointer"
+              onChange={(e) => handlePhotoPick(e.target.files?.[0] || null)}
+            />
+          </label>
+          <div className="text-[11px] text-muted-foreground space-y-1 pt-1">
+            <p>支援 PNG / JPG / JPEG / SVG / TIFF / WebP，上限 10MB，僅可上傳一張。</p>
+            {form.photoUrl && (
+              <button
+                type="button"
+                onClick={() => { set('photoUrl', undefined); setPhotoError(null); }}
+                className="text-rose-600 hover:underline"
+              >
+                移除圖片
+              </button>
+            )}
+            {photoError && <p className="text-rose-600">{photoError}</p>}
+          </div>
+        </div>
+      </div>
+
       {/* Basic info */}
       <div className="grid grid-cols-2 gap-4">
         <div>
