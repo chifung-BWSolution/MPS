@@ -667,6 +667,7 @@ function TalentList() {
   const [rejecting, setRejecting] = useState(false);
   const [rejectError, setRejectError] = useState<string | null>(null);
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<{ rowId: string; name: string; url?: string } | null>(null);
 
   const handleAvatarReplace = (rowId: string, file: File | null) => {
     setPhotoUploadError(null);
@@ -698,6 +699,7 @@ function TalentList() {
       } else {
         update(rowId, { photoUrl: dataUrl });
       }
+      setPhotoPreview(prev => (prev && prev.rowId === rowId ? { ...prev, url: dataUrl } : prev));
     };
     reader.onerror = () => setPhotoUploadError('讀取檔案失敗');
     reader.readAsDataURL(file);
@@ -944,9 +946,14 @@ function TalentList() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <label
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPhotoUploadError(null);
+                          setPhotoPreview({ rowId: t.id, name: t.name, url: t.photoUrl });
+                        }}
                         className="relative w-[100px] h-[100px] rounded-lg overflow-hidden shrink-0 cursor-pointer group border border-border"
-                        title="點擊更換頭像"
+                        title="點擊查看大圖 / 更換圖片"
                       >
                         {t.photoUrl ? (
                           <img
@@ -960,18 +967,9 @@ function TalentList() {
                           </div>
                         )}
                         <div className="absolute inset-0 bg-black/40 text-white text-[11px] font-medium flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                          更換頭像
+                          查看大圖
                         </div>
-                        <input
-                          type="file"
-                          accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/tiff,image/webp,.png,.jpg,.jpeg,.svg,.tif,.tiff,.webp"
-                          className="absolute inset-0 opacity-0 cursor-pointer"
-                          onChange={(e) => {
-                            handleAvatarReplace(t.id, e.target.files?.[0] || null);
-                            e.target.value = '';
-                          }}
-                        />
-                      </label>
+                      </button>
                       <div>
                         <div className="text-[13px] font-medium">{t.stageName || t.name}</div>
                         {t.stageName && <div className="text-[11px] text-muted-foreground">{t.name}</div>}
@@ -1119,6 +1117,35 @@ function TalentList() {
             >
               {rejecting ? '處理中…' : '是'}
             </button>
+          </div>
+        </Modal>
+      )}
+
+      {photoPreview && (
+        <Modal title={`${photoPreview.name} 的頭像`} onClose={() => { setPhotoPreview(null); setPhotoUploadError(null); }} width="max-w-[860px]">
+          <div className="p-5 flex flex-col items-center gap-4">
+            <div className="w-[800px] max-w-full aspect-square rounded-lg overflow-hidden border border-border bg-muted/30 flex items-center justify-center">
+              {photoPreview.url ? (
+                <img src={photoPreview.url} alt={photoPreview.name} className="w-full h-full object-contain" />
+              ) : (
+                <div className="text-[64px] font-bold text-muted-foreground">{photoPreview.name.slice(0, 1)}</div>
+              )}
+            </div>
+            <label className="px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 cursor-pointer">
+              更換圖片
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/tiff,image/webp,.png,.jpg,.jpeg,.svg,.tif,.tiff,.webp"
+                className="hidden"
+                onChange={(e) => {
+                  handleAvatarReplace(photoPreview.rowId, e.target.files?.[0] || null);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+            {photoUploadError && (
+              <div className="text-[12px] text-rose-600">{photoUploadError}</div>
+            )}
           </div>
         </Modal>
       )}
