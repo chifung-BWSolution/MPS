@@ -133,6 +133,7 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
   const [isManageRolesOpen, setIsManageRolesOpen] = useState(false);
   const [newRoleName, setNewRoleName] = useState('');
   const [roleToDelete, setRoleToDelete] = useState<string | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<{ id: string; title: string } | null>(null);
 
   // Year Plan state
   const [yearPlan, setYearPlan] = useState<{
@@ -1143,7 +1144,21 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
                                     snapshot.isDragging ? 'shadow-lg ring-2 ring-teal-200' : 'hover:shadow-md cursor-grab'
                                   )}
                                 >
-                                  <span className="text-[13px] font-medium block mb-2">{task.title}</span>
+                                  <div className="flex items-start justify-between gap-2 mb-2">
+                                    <span className="text-[13px] font-medium flex-1">{task.title}</span>
+                                    <button
+                                      type="button"
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setTaskToDelete({ id: task.id, title: task.title });
+                                      }}
+                                      className="text-muted-foreground hover:text-rose-600 -mt-0.5 -mr-0.5 p-0.5"
+                                      aria-label="刪除任務"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  </div>
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-1">
                                       <Users size={10} className="text-muted-foreground" />
@@ -1188,6 +1203,35 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
               </div>
             </DragDropContext>
           )}
+
+          {/* Confirm Delete Task Dialog */}
+          <Dialog open={!!taskToDelete} onOpenChange={(open) => !open && setTaskToDelete(null)}>
+            <DialogContent className="sm:max-w-[360px]">
+              <DialogHeader>
+                <DialogTitle>確認刪除任務</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-2">
+                <div className="text-[13px] text-muted-foreground">
+                  是否刪除「{taskToDelete?.title}」這個任務？
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setTaskToDelete(null)}>否</Button>
+                  <Button
+                    size="sm"
+                    className="bg-rose-600 hover:bg-rose-700 text-white"
+                    onClick={() => {
+                      if (taskToDelete) {
+                        setTasks(prev => prev.filter(t => t.id !== taskToDelete.id));
+                      }
+                      setTaskToDelete(null);
+                    }}
+                  >
+                    是
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {/* Gantt Chart View */}
           {taskViewMode === 'gantt' && (
