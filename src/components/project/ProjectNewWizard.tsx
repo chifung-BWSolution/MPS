@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Check, Building2, Tags, FileText, ChevronRight, ArrowLeft, Home, Sparkles, AlertCircle } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Check, Tags, FileText, ChevronRight, ArrowLeft, Home, Sparkles, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ProjectType, ProjectCategory, ProjectPriority } from '@/types/app';
 import { projectTypeLabels } from '@/data/mockData';
@@ -83,33 +83,40 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
   const { companies } = useCompanies();
   const { brands } = useBrands();
 
-  const getBrandCount = (companyId: string) =>
-    brands.filter(b => b.companyId === companyId && b.isActive).length;
-  const getActiveProjectCount = (companyId: string) =>
-    companyProjects.filter(p => p.companyId === companyId && p.status === 'active').length;
+  const getActiveProjectCount = (brandCode: string) =>
+    companyProjects.filter(p => {
+      const b = brands.find(br => br.id === p.brandId);
+      return b?.brandCode === brandCode && p.status === 'active';
+    }).length;
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<ProjectFormData>(emptyForm);
   const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const steps = [
-    { number: 1, label: '選擇公司', icon: Building2 },
-    { number: 2, label: '選擇品牌', icon: Tags },
-    { number: 3, label: '項目資料', icon: FileText },
+    { number: 1, label: '所屬品牌', icon: Tags },
+    { number: 2, label: '項目資料', icon: FileText },
   ];
 
+  // Dedupe brands by brand_code so each brand_code only appears once.
+  const dedupedBrands = useMemo(() => {
+    const map = new Map<string, typeof brands[number]>();
+    brands.filter(b => b.isActive).forEach(b => {
+      if (!map.has(b.brandCode)) map.set(b.brandCode, b);
+    });
+    return Array.from(map.values());
+  }, [brands]);
+
   const selectedCompany = companies.find(c => c.id === formData.companyId);
-  const availableBrands = brands.filter(b => b.companyId === formData.companyId && b.isActive);
   const selectedBrand = brands.find(b => b.id === formData.brandId);
 
   const canNext = () => {
-    if (currentStep === 1) return !!formData.companyId;
-    if (currentStep === 2) return !!formData.brandId;
+    if (currentStep === 1) return !!formData.brandId && !!formData.companyId;
     return true;
   };
 
   const handleNext = () => {
-    if (currentStep < 3) setCurrentStep(currentStep + 1);
+    if (currentStep < 2) setCurrentStep(currentStep + 1);
   };
 
   const handlePrev = () => {
@@ -179,7 +186,7 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
         </div>
         <h2 className="text-[20px] font-bold text-[#0d1a2d]">項目已成功新增！</h2>
         <p className="text-[13px] text-muted-foreground">
-          {selectedCompany?.companyCode} → {selectedBrand?.brandCode} → {formData.name}
+          {selectedBrand?.brandCode} → {formData.name}
         </p>
         <p className="text-[12px] text-muted-foreground">正在跳轉至項目列表...</p>
       </div>
@@ -209,7 +216,7 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
       <div>
         <h2 className="text-[22px] font-bold tracking-tight text-[#0d1a2d]">新增內部項目</h2>
         <p className="text-[13px] text-muted-foreground mt-0.5">
-          按照三步驟完成項目新增：選擇公司 → 選擇品牌 → 填寫項目資料
+          按照兩步驟完成項目新增：選擇所屬品牌 → 填寫項目資料
         </p>
       </div>
 
@@ -249,128 +256,81 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
 
       {/* Step Content */}
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] p-6">
-        {/* Step 1: Select Company */}
+        {/* Step 1: Select Brand */}
         {currentStep === 1 && (
           <div className="space-y-4">
             <div>
-              <h3 className="text-[16px] font-bold text-[#0d1a2d]">選擇所屬公司</h3>
-              <p className="text-[12px] text-muted-foreground mt-1">所有項目必須歸屬一間公司，請選擇此項目的所屬公司。</p>
+              <h3 className="text-[16px] font-bold text-[#0d1a2d]">所屬品牌</h3>
+              <p className="text-[12px] text-muted-foreground mt-1">所有項目必須歸屬一個品牌，請選擇此項目的所屬品牌。</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-              {companies.filter(c => c.isActive).map(company => (
-                <button
-                  key={company.id}
-                  onClick={() => {
-                    setFormData({ ...formData, companyId: company.id, brandId: '' });
-                  }}
-                  className={cn(
-                    'text-left p-4 rounded-md border-2 transition-all duration-200 group',
-                    formData.companyId === company.id
-                      ? 'border-teal-600 bg-teal-50/50 shadow-[0_0_0_1px_rgba(13,148,136,0.1)]'
-                      : 'border-border hover:border-teal-300 hover:bg-muted/30'
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-md bg-teal-600 text-white flex items-center justify-center font-bold text-[12px]">
-                      {company.companyCode}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-[14px] font-bold text-[#0d1a2d] truncate">{company.companyNameEn}</h4>
-                      <span className="text-[11px] text-muted-foreground">{company.companyNameZh}</span>
-                    </div>
-                    {formData.companyId === company.id && (
-                      <div className="w-6 h-6 rounded-full bg-teal-600 text-white flex items-center justify-center flex-shrink-0">
-                        <Check size={14} />
-                      </div>
-                    )}
-                  </div>
-                  <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground">
-                    <span>BR: {company.brNo}</span>
-                    <span>|</span>
-                    <span>{company.bankName}</span>
-                  </div>
-                  <div className="mt-1.5 flex items-center gap-3 text-[11px]">
-                    <span className="text-teal-600 font-medium">{getBrandCount(company.id)} 個品牌</span>
-                    <span className="text-muted-foreground">|</span>
-                    <span className="text-blue-600 font-medium">{getActiveProjectCount(company.id)} 個活躍內部項目</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Select Brand */}
-        {currentStep === 2 && (
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-[16px] font-bold text-[#0d1a2d]">選擇品牌</h3>
-              <p className="text-[12px] text-muted-foreground mt-1">
-                已選公司：<span className="font-medium text-teal-700">{selectedCompany?.companyCode} - {selectedCompany?.companyNameZh}</span>
-                &nbsp;|&nbsp;請選擇該公司下的品牌
-              </p>
-            </div>
-            {availableBrands.length === 0 ? (
+            {dedupedBrands.length === 0 ? (
               <div className="text-center py-12">
                 <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-3">
                   <AlertCircle size={20} />
                 </div>
-                <p className="text-muted-foreground text-[13px] font-medium">此公司尚未建立任何品牌</p>
+                <p className="text-muted-foreground text-[13px] font-medium">尚未建立任何品牌</p>
                 <p className="text-muted-foreground text-[12px] mt-1">請先前往品牌管理新增品牌。</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
-                {availableBrands.map(brand => (
-                  <button
-                    key={brand.id}
-                    onClick={() => setFormData({ ...formData, brandId: brand.id })}
-                    className={cn(
-                      'text-left p-4 rounded-md border-2 transition-all duration-200',
-                      formData.brandId === brand.id
-                        ? 'border-teal-600 bg-teal-50/50 shadow-[0_0_0_1px_rgba(13,148,136,0.1)]'
-                        : 'border-border hover:border-teal-300 hover:bg-muted/30'
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-md flex items-center justify-center text-white font-bold text-[11px]" style={{ backgroundColor: brand.primaryColor }}>
-                        {brand.brandCode}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-[13px] font-bold text-[#0d1a2d]">{brand.brandNameZh}</h4>
-                        <span className="text-[11px] text-muted-foreground">{brand.brandNameEn}</span>
-                      </div>
-                      {formData.brandId === brand.id && (
-                        <div className="w-5 h-5 rounded-full bg-teal-600 text-white flex items-center justify-center flex-shrink-0">
-                          <Check size={12} />
+                {dedupedBrands.map(brand => {
+                  const company = companies.find(c => c.id === brand.companyId);
+                  const companyName = company?.companyNameZh || company?.companyNameEn || '—';
+                  const isSelected = formData.brandId === brand.id;
+                  return (
+                    <button
+                      key={brand.id}
+                      onClick={() => setFormData({ ...formData, brandId: brand.id, companyId: brand.companyId })}
+                      className={cn(
+                        'text-left p-4 rounded-md border-2 transition-all duration-200',
+                        isSelected
+                          ? 'border-teal-600 bg-teal-50/50 shadow-[0_0_0_1px_rgba(13,148,136,0.1)]'
+                          : 'border-border hover:border-teal-300 hover:bg-muted/30'
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-10 h-10 rounded-md flex items-center justify-center text-white font-bold text-[12px] flex-shrink-0"
+                          style={{ backgroundColor: brand.primaryColor }}
+                        >
+                          {brand.brandCode}
                         </div>
-                      )}
-                    </div>
-                    <div className="mt-2 flex items-center gap-2">
-                      {brand.industry && (
-                        <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{brand.industry}</span>
-                      )}
-                      <span className="text-[10px] text-muted-foreground">{brand.projectCount || 0} 項目</span>
-                    </div>
-                    {brand.description && (
-                      <p className="text-[11px] text-muted-foreground mt-2 line-clamp-1">{brand.description}</p>
-                    )}
-                  </button>
-                ))}
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-[14px] font-bold text-[#0d1a2d] truncate">{brand.brandCode}</h4>
+                          <p className="text-[11px] text-muted-foreground/80 font-light truncate">所屬公司 : {companyName}</p>
+                        </div>
+                        {isSelected && (
+                          <div className="w-6 h-6 rounded-full bg-teal-600 text-white flex items-center justify-center flex-shrink-0">
+                            <Check size={14} />
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-2 flex items-center gap-3 text-[11px]">
+                        {brand.industry && (
+                          <span className="text-muted-foreground">{brand.industry}</span>
+                        )}
+                        <span className="text-blue-600 font-medium ml-auto">
+                          {getActiveProjectCount(brand.brandCode)} 個活躍項目
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
         )}
 
-        {/* Step 3: Project Details */}
-        {currentStep === 3 && (
+        {/* Step 2: Project Details */}
+        {currentStep === 2 && (
           <div className="space-y-5">
             <div>
               <h3 className="text-[16px] font-bold text-[#0d1a2d]">填寫項目資料</h3>
               <div className="mt-2 flex items-center gap-2 bg-teal-50/80 border border-teal-200 rounded-md px-3 py-2">
                 <Sparkles size={14} className="text-teal-600 flex-shrink-0" />
                 <p className="text-[12px] text-teal-700">
-                  所屬公司：<span className="font-bold">{selectedCompany?.companyCode} - {selectedCompany?.companyNameZh}</span>
-                  &nbsp;→&nbsp;品牌：<span className="font-bold" style={{ color: selectedBrand?.primaryColor }}>{selectedBrand?.brandCode} - {selectedBrand?.brandNameZh}</span>
+                  所屬品牌：<span className="font-bold" style={{ color: selectedBrand?.primaryColor }}>{selectedBrand?.brandCode}</span>
+                  &nbsp;|&nbsp;所屬公司：<span className="font-bold">{selectedCompany?.companyNameZh || selectedCompany?.companyNameEn}</span>
                 </p>
               </div>
             </div>
@@ -541,7 +501,7 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
           <Button variant="ghost" size="sm" onClick={onBack} className="text-[13px] text-muted-foreground">
             取消
           </Button>
-          {currentStep < 3 ? (
+          {currentStep < 2 ? (
             <Button
               size="sm"
               className="bg-teal-600 hover:bg-teal-700 text-white gap-1.5 text-[13px] transition-all duration-200 active:scale-[0.97]"

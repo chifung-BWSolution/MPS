@@ -157,10 +157,19 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
   const { companies } = useCompanies();
   const { brands } = useBrands();
 
-  const getBrandCount = (companyId: string) =>
-    brands.filter(b => b.companyId === companyId && b.isActive).length;
-  const getActiveProjectCount = (companyId: string) =>
-    clientProjects.filter(p => p.companyId === companyId && p.status === 'active').length;
+  const getActiveProjectCount = (brandCode: string) =>
+    clientProjects.filter(p => {
+      const b = brands.find(br => br.id === p.brandId);
+      return b?.brandCode === brandCode && p.status === 'active';
+    }).length;
+
+  const dedupedBrands = useMemo(() => {
+    const map = new Map<string, typeof brands[number]>();
+    brands.filter(b => b.isActive).forEach(b => {
+      if (!map.has(b.brandCode)) map.set(b.brandCode, b);
+    });
+    return Array.from(map.values());
+  }, [brands]);
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<ClientFormData>(emptyForm);
   const [submitted, setSubmitted] = useState(false);
@@ -171,13 +180,12 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
   const [showQuotationPrompt, setShowQuotationPrompt] = useState(false);
 
   const steps = [
-    { number: 1, label: '選擇公司與品牌', icon: Building2 },
+    { number: 1, label: '所屬品牌', icon: Building2 },
     { number: 2, label: '客戶資料', icon: UserCircle },
     { number: 3, label: '項目詳情', icon: FileText },
   ];
 
   const selectedCompany = companies.find(c => c.id === formData.companyId);
-  const availableBrands = brands.filter(b => b.companyId === formData.companyId && b.isActive);
   const selectedBrand = brands.find(b => b.id === formData.brandId);
 
   const filteredClients = useMemo(() => {
@@ -190,7 +198,7 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
   }, [clientSearchQuery]);
 
   const canNext = () => {
-    if (currentStep === 1) return !!formData.companyId && !!formData.brandId;
+    if (currentStep === 1) return !!formData.brandId && !!formData.companyId;
     if (currentStep === 2) return !!formData.clientCompanyName && !!formData.clientContactPerson && !!formData.clientPrimaryPhone;
     return true;
   };
@@ -330,7 +338,7 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
         <div className="text-center space-y-2">
           <h2 className="text-[20px] font-bold text-[#0d1a2d]">客戶項目已成功新增！</h2>
           <p className="text-[13px] text-muted-foreground">
-            {selectedCompany?.companyCode} → {selectedBrand?.brandCode} → {formData.name}
+            {selectedBrand?.brandCode} → {formData.name}
           </p>
           <div className="flex items-center justify-center gap-2 mt-2">
             <Badge className="bg-teal-50 text-teal-700 border border-teal-200">
@@ -427,7 +435,7 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
           </Badge>
         </div>
         <p className="text-[13px] text-muted-foreground mt-0.5">
-          三步驟完成客戶項目建立：選擇公司與品牌 → 填寫客戶資料 → 設定項目詳情與收費模式
+          三步驟完成客戶項目建立：選擇所屬品牌 → 填寫客戶資料 → 設定項目詳情與收費模式
         </p>
       </div>
 
@@ -467,105 +475,67 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
 
       {/* Step Content */}
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] p-6">
-        {/* Step 1: Select Company & Brand */}
+        {/* Step 1: Select Brand */}
         {currentStep === 1 && (
-          <div className="space-y-6">
+          <div className="space-y-4">
             <div>
-              <h3 className="text-[16px] font-bold text-[#0d1a2d]">選擇公司與品牌</h3>
-              <p className="text-[12px] text-muted-foreground mt-1">選擇承接此客戶項目的公司與品牌。報價單將以所選公司的名義發出。</p>
+              <h3 className="text-[16px] font-bold text-[#0d1a2d]">所屬品牌</h3>
+              <p className="text-[12px] text-muted-foreground mt-1">選擇承接此客戶項目的所屬品牌。報價單將以該品牌所屬公司的名義發出。</p>
             </div>
 
-            {/* Company Selection */}
-            <div className="space-y-3">
-              <Label className="text-[13px] font-medium">
-                所屬公司 <span className="text-rose-500">*</span>
-              </Label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {companies.filter(c => c.isActive).map(company => (
-                  <button
-                    key={company.id}
-                    onClick={() => setFormData({ ...formData, companyId: company.id, brandId: '' })}
-                    className={cn(
-                      'text-left p-4 rounded-md border-2 transition-all duration-200 group',
-                      formData.companyId === company.id
-                        ? 'border-teal-600 bg-teal-50/50 shadow-[0_0_0_1px_rgba(13,148,136,0.1)]'
-                        : 'border-border hover:border-teal-300 hover:bg-muted/30'
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-md bg-teal-600 text-white flex items-center justify-center font-bold text-[12px]">
-                        {company.companyCode}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-[14px] font-bold text-[#0d1a2d] truncate">{company.companyNameEn}</h4>
-                        <span className="text-[11px] text-muted-foreground font-normal">{company.companyNameZh}</span>
-                      </div>
-                      {formData.companyId === company.id && (
-                        <div className="w-6 h-6 rounded-full bg-teal-600 text-white flex items-center justify-center flex-shrink-0">
-                          <Check size={14} />
-                        </div>
-                      )}
-                    </div>
-                    <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground">
-                      <span>BR: {company.brNo}</span>
-                      <span>|</span>
-                      <span>{company.bankName}</span>
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-3 text-[11px]">
-                      <span className="text-teal-600 font-medium">{getBrandCount(company.id)} 個品牌</span>
-                      <span className="text-muted-foreground">|</span>
-                      <span className="text-blue-600 font-medium">{getActiveProjectCount(company.id)} 個活躍項目</span>
-                    </div>
-                  </button>
-                ))}
+            {dedupedBrands.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-3">
+                  <AlertCircle size={20} />
+                </div>
+                <p className="text-muted-foreground text-[13px] font-medium">尚未建立任何品牌</p>
+                <p className="text-muted-foreground text-[12px] mt-1">請先前往品牌管理新增品牌。</p>
               </div>
-            </div>
-
-            {/* Brand Selection (only show if company selected) */}
-            {formData.companyId && (
-              <div className="space-y-3 pt-2 border-t border-dashed border-muted">
-                <Label className="text-[13px] font-medium">
-                  選擇品牌 <span className="text-rose-500">*</span>
-                  <span className="text-[11px] text-muted-foreground font-normal ml-2">
-                    公司: {selectedCompany?.companyCode} - {selectedCompany?.companyNameZh}
-                  </span>
-                </Label>
-                {availableBrands.length === 0 ? (
-                  <div className="text-center py-8">
-                    <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-2">
-                      <AlertCircle size={18} />
-                    </div>
-                    <p className="text-muted-foreground text-[12px]">此公司尚未建立任何品牌</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {availableBrands.map(brand => (
-                      <button
-                        key={brand.id}
-                        onClick={() => setFormData({ ...formData, brandId: brand.id })}
-                        className={cn(
-                          'text-left p-3 rounded-md border-2 transition-all duration-200',
-                          formData.brandId === brand.id
-                            ? 'border-teal-600 bg-teal-50/50'
-                            : 'border-border hover:border-teal-300'
-                        )}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-md flex items-center justify-center text-white font-bold text-[10px]" style={{ backgroundColor: brand.primaryColor }}>
-                            {brand.brandCode}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="text-[12px] font-bold text-[#0d1a2d]">{brand.brandNameZh}</h4>
-                            <span className="text-[10px] text-muted-foreground">{brand.brandNameEn}</span>
-                          </div>
-                          {formData.brandId === brand.id && (
-                            <Check size={14} className="text-teal-600 flex-shrink-0" />
-                          )}
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
+                {dedupedBrands.map(brand => {
+                  const company = companies.find(c => c.id === brand.companyId);
+                  const companyName = company?.companyNameZh || company?.companyNameEn || '—';
+                  const isSelected = formData.brandId === brand.id;
+                  return (
+                    <button
+                      key={brand.id}
+                      onClick={() => setFormData({ ...formData, brandId: brand.id, companyId: brand.companyId })}
+                      className={cn(
+                        'text-left p-4 rounded-md border-2 transition-all duration-200',
+                        isSelected
+                          ? 'border-teal-600 bg-teal-50/50 shadow-[0_0_0_1px_rgba(13,148,136,0.1)]'
+                          : 'border-border hover:border-teal-300 hover:bg-muted/30'
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-10 h-10 rounded-md flex items-center justify-center text-white font-bold text-[12px] flex-shrink-0"
+                          style={{ backgroundColor: brand.primaryColor }}
+                        >
+                          {brand.brandCode}
                         </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-[14px] font-bold text-[#0d1a2d] truncate">{brand.brandCode}</h4>
+                          <p className="text-[11px] text-muted-foreground/80 font-light truncate">所屬公司 : {companyName}</p>
+                        </div>
+                        {isSelected && (
+                          <div className="w-6 h-6 rounded-full bg-teal-600 text-white flex items-center justify-center flex-shrink-0">
+                            <Check size={14} />
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-2 flex items-center gap-3 text-[11px]">
+                        {brand.industry && (
+                          <span className="text-muted-foreground">{brand.industry}</span>
+                        )}
+                        <span className="text-blue-600 font-medium ml-auto">
+                          {getActiveProjectCount(brand.brandCode)} 個活躍客戶項目
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -801,8 +771,8 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
                 <Sparkles size={14} className="text-teal-600 flex-shrink-0" />
                 <p className="text-[12px] text-teal-700">
                   客戶：<span className="font-bold">{formData.clientCompanyName}</span>
-                  &nbsp;|&nbsp;公司：<span className="font-bold">{selectedCompany?.companyCode}</span>
-                  &nbsp;→&nbsp;品牌：<span className="font-bold" style={{ color: selectedBrand?.primaryColor }}>{selectedBrand?.brandCode}</span>
+                  &nbsp;|&nbsp;品牌：<span className="font-bold" style={{ color: selectedBrand?.primaryColor }}>{selectedBrand?.brandCode}</span>
+                  &nbsp;|&nbsp;所屬公司：<span className="font-bold">{selectedCompany?.companyNameZh || selectedCompany?.companyNameEn}</span>
                 </p>
               </div>
             </div>
