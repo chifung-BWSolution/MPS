@@ -666,6 +666,42 @@ function TalentList() {
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [rejectError, setRejectError] = useState<string | null>(null);
+  const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
+
+  const handleAvatarReplace = (rowId: string, file: File | null) => {
+    setPhotoUploadError(null);
+    if (!file) return;
+    const okType = ['image/jpeg', 'image/jpg', 'image/png', 'image/svg+xml', 'image/tiff', 'image/webp'].includes(file.type);
+    if (!okType) {
+      setPhotoUploadError('僅支援 PNG / JPG / JPEG / SVG / TIFF / WebP 格式');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setPhotoUploadError('檔案大小上限為 10MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+      if (!dataUrl) return;
+      if (rowId.startsWith('ca_')) {
+        const supabaseId = rowId.slice(3);
+        const { error } = await supabase
+          .from('confirmed_artist')
+          .update({ photo_url: dataUrl })
+          .eq('id', supabaseId);
+        if (error) {
+          setPhotoUploadError(`更新失敗：${error.message}`);
+          return;
+        }
+        setConfirmed(prev => prev.map(c => c.id === supabaseId ? { ...c, photo_url: dataUrl } : c));
+      } else {
+        update(rowId, { photoUrl: dataUrl });
+      }
+    };
+    reader.onerror = () => setPhotoUploadError('讀取檔案失敗');
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -874,6 +910,7 @@ function TalentList() {
         顯示 {filtered.length} 位藝人
         {confirmedLoading && '（讀取中…）'}
         {confirmedError && <span className="text-rose-600 ml-2">已取錄載入失敗：{confirmedError}</span>}
+        {photoUploadError && <span className="text-rose-600 ml-2">{photoUploadError}</span>}
       </div>
 
       {filtered.length === 0 ? (
@@ -907,17 +944,34 @@ function TalentList() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      {t.photoUrl ? (
-                        <img
-                          src={t.photoUrl}
-                          alt={t.name}
-                          className="w-[100px] h-[100px] rounded-lg object-cover border border-border shrink-0"
-                        />
-                      ) : (
-                        <div className="w-[100px] h-[100px] rounded-lg bg-muted flex items-center justify-center text-[28px] font-bold text-muted-foreground shrink-0">
-                          {t.name.slice(0, 1)}
+                      <label
+                        className="relative w-[100px] h-[100px] rounded-lg overflow-hidden shrink-0 cursor-pointer group border border-border"
+                        title="點擊更換頭像"
+                      >
+                        {t.photoUrl ? (
+                          <img
+                            src={t.photoUrl}
+                            alt={t.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-muted flex items-center justify-center text-[28px] font-bold text-muted-foreground">
+                            {t.name.slice(0, 1)}
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-black/40 text-white text-[11px] font-medium flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          更換頭像
                         </div>
-                      )}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/tiff,image/webp,.png,.jpg,.jpeg,.svg,.tif,.tiff,.webp"
+                          className="absolute inset-0 opacity-0 cursor-pointer"
+                          onChange={(e) => {
+                            handleAvatarReplace(t.id, e.target.files?.[0] || null);
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
                       <div>
                         <div className="text-[13px] font-medium">{t.stageName || t.name}</div>
                         {t.stageName && <div className="text-[11px] text-muted-foreground">{t.name}</div>}
