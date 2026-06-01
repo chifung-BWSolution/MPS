@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import {
   ArrowLeft, Calendar, DollarSign, User, Clock, Globe, FileText,
-  Film, Megaphone, Plus, Edit, GanttChart, KanbanSquare, Target,
-  Building2, Palette, TrendingUp, BarChart3, Home, Users, X, Mail,
-  Phone, ExternalLink, Tag, UserPlus, Pencil, Link as LinkIcon
+  Film, Megaphone, Plus, Edit, GanttChart, KanbanSquare, Target, Settings,
+  Building2, Palette, TrendingUp, BarChart3, Users, X, Mail,
+  Phone, ExternalLink, Tag, UserPlus, Pencil, Trash2, Link as LinkIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Project, ProjectTask, ProjectPriority } from '@/types/app';
@@ -32,6 +32,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useDataStore } from '@/context/DataStore';
 import { useCompanyProjects } from '@/hooks/useCompanyProjects';
 import { useClientProjects } from '@/hooks/useClientProjects';
+import { useStaffNames } from '@/hooks/useStaffNames';
+import { useProjectRoles } from '@/hooks/useProjectRoles';
 
 const statusConfig = {
   planning: { label: '規劃中', color: 'bg-blue-500', textColor: 'text-blue-700', bgColor: 'bg-blue-50' },
@@ -153,9 +155,6 @@ const emptyClientInfo: ClientInfo = {
   tags: [],
 };
 
-const roleOptions = ['負責人 / PM', '設計師', '前端開發', '後端開發', '文案 / SEO', '剪輯', 'PM 助理', '市場推廣'];
-const staffOptions = ['陳小華', '戴維斯', '朴賢俊', '李美琪', '張美玲', '王志明', '劉建華'];
-
 const tagColors: Record<string, string> = {
   '知名品牌': 'bg-purple-100 text-purple-700',
   '大客戶': 'bg-teal-100 text-teal-700',
@@ -177,6 +176,11 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
   const [newMember, setNewMember] = useState({ name: '', roleInProject: '', estimatedHours: '' });
   const [taskViewMode, setTaskViewMode] = useState<'kanban' | 'gantt'>('kanban');
   const [isAddingTask, setIsAddingTask] = useState(false);
+  const { names: staffOptions } = useStaffNames();
+  const { roles: roleOptions, addRole, removeRole } = useProjectRoles();
+  const [isManageRolesOpen, setIsManageRolesOpen] = useState(false);
+  const [newRoleName, setNewRoleName] = useState('');
+  const [roleToDelete, setRoleToDelete] = useState<string | null>(null);
 
   // Year Plan state
   const [yearPlan, setYearPlan] = useState<{
@@ -398,10 +402,6 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
             </Button>
           )}
         </div>
-        <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground hover:text-foreground">
-          <Home size={14} />
-          返回 Dashboard
-        </Button>
       </div>
 
       {/* Project Header Card */}
@@ -490,22 +490,6 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
         {/* Tab 1: 概覽 (Overview) */}
         {/* ═══════════════════════════════════════════════ */}
         <TabsContent value="overview" className="mt-6 space-y-6">
-          {/* Quick Action Buttons */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <Button size="sm" variant="outline" className="gap-1.5 text-[12px]">
-              <Edit size={13} />
-              編輯項目
-            </Button>
-            <Button size="sm" variant="outline" className="gap-1.5 text-[12px]">
-              <GanttChart size={13} />
-              查看甘特圖
-            </Button>
-            <Button size="sm" variant="outline" className="gap-1.5 text-[12px]">
-              <KanbanSquare size={13} />
-              分配任務
-            </Button>
-          </div>
-
           {/* Info Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] p-4">
@@ -754,7 +738,17 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-[13px]">項目中的角色 *</Label>
+                        <div className="flex items-center justify-between">
+                          <Label className="text-[13px]">項目中的角色 *</Label>
+                          <button
+                            type="button"
+                            onClick={() => setIsManageRolesOpen(true)}
+                            className="inline-flex items-center gap-1 text-[11px] text-teal-600 hover:text-teal-700"
+                          >
+                            <Settings size={12} />
+                            管理角色
+                          </button>
+                        </div>
                         <Select value={newMember.roleInProject} onValueChange={(val) => setNewMember({ ...newMember, roleInProject: val })}>
                           <SelectTrigger className="text-[13px]">
                             <SelectValue placeholder="選擇角色" />
@@ -779,6 +773,94 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
                       <div className="flex justify-end gap-2 pt-2">
                         <Button variant="outline" size="sm" onClick={() => setIsAddMemberOpen(false)}>取消</Button>
                         <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={handleAddMember} disabled={!newMember.name || !newMember.roleInProject}>新增</Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Manage Roles Dialog */}
+                <Dialog open={isManageRolesOpen} onOpenChange={setIsManageRolesOpen}>
+                  <DialogContent className="sm:max-w-[420px]">
+                    <DialogHeader>
+                      <DialogTitle>管理角色</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 mt-4">
+                      <div className="space-y-2">
+                        <Label className="text-[13px]">新增角色</Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={newRoleName}
+                            onChange={(e) => setNewRoleName(e.target.value)}
+                            placeholder="輸入角色名稱"
+                            className="text-[13px]"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && newRoleName.trim()) {
+                                addRole(newRoleName);
+                                setNewRoleName('');
+                              }
+                            }}
+                          />
+                          <Button
+                            size="sm"
+                            className="bg-teal-600 hover:bg-teal-700"
+                            disabled={!newRoleName.trim() || roleOptions.includes(newRoleName.trim())}
+                            onClick={() => { addRole(newRoleName); setNewRoleName(''); }}
+                          >
+                            <Plus size={13} />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[13px]">目前角色</Label>
+                        {roleOptions.length === 0 ? (
+                          <div className="text-[12px] text-muted-foreground py-2">尚未有任何角色</div>
+                        ) : (
+                          <div className="border rounded-md divide-y">
+                            {roleOptions.map(role => (
+                              <div key={role} className="flex items-center justify-between px-3 py-2">
+                                <span className="text-[13px]">{role}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setRoleToDelete(role)}
+                                  className="inline-flex items-center gap-1 text-[12px] text-rose-600 hover:text-rose-700"
+                                >
+                                  <Trash2 size={12} />
+                                  刪除
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex justify-end pt-2">
+                        <Button variant="outline" size="sm" onClick={() => setIsManageRolesOpen(false)}>關閉</Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Confirm Delete Role Dialog */}
+                <Dialog open={!!roleToDelete} onOpenChange={(open) => !open && setRoleToDelete(null)}>
+                  <DialogContent className="sm:max-w-[360px]">
+                    <DialogHeader>
+                      <DialogTitle>確認刪除角色</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 mt-2">
+                      <div className="text-[13px] text-muted-foreground">
+                        是否刪除「{roleToDelete}」的角色？
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setRoleToDelete(null)}>取消</Button>
+                        <Button
+                          size="sm"
+                          className="bg-rose-600 hover:bg-rose-700 text-white"
+                          onClick={() => {
+                            if (roleToDelete) removeRole(roleToDelete);
+                            setRoleToDelete(null);
+                          }}
+                        >
+                          確認刪除
+                        </Button>
                       </div>
                     </div>
                   </DialogContent>
@@ -981,19 +1063,21 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
                   <div className="space-y-2">
                     <Label className="text-[13px]">負責同事（可多選）</Label>
                     <div className="flex flex-wrap gap-2 p-2 border rounded-md min-h-[40px]">
-                      {staffOptions.map(name => (
+                      {teamMembers.length === 0 ? (
+                        <span className="text-[11px] text-muted-foreground py-1">請先在「概覽 → 團隊成員」新增成員</span>
+                      ) : teamMembers.map(m => (
                         <button
-                          key={name}
+                          key={m.id}
                           type="button"
-                          onClick={() => toggleAssignee(name)}
+                          onClick={() => toggleAssignee(m.name)}
                           className={cn(
                             'text-[11px] px-2 py-1 rounded-md border transition-all',
-                            newTask.assignees.includes(name)
+                            newTask.assignees.includes(m.name)
                               ? 'bg-teal-600 text-white border-teal-600'
                               : 'bg-white text-muted-foreground border-border hover:border-teal-300'
                           )}
                         >
-                          {name}
+                          {m.name}
                         </button>
                       ))}
                     </div>
