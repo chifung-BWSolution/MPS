@@ -167,6 +167,9 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
         || getProjectById(projectId))
     : null;
   const project = resolvedProject;
+  const completionPercent = tasks.length === 0
+    ? 0
+    : Math.round((tasks.filter(t => t.status === 'done').length / tasks.length) * 100);
   const budgetPercent = project && project.budgetTotal > 0 ? Math.round((project.budgetUsed / project.budgetTotal) * 100) : 0;
   const budgetAtRisk = budgetPercent >= 80;
   const config = project ? statusConfig[project.status] : statusConfig.planning;
@@ -407,7 +410,7 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
           <div className="flex items-center gap-4">
             <div className="text-right">
               <span className="text-[11px] text-muted-foreground block">完成進度</span>
-              <span className="text-[24px] font-bold text-teal-600">{project.progress}%</span>
+              <span className="text-[24px] font-bold text-teal-600">{completionPercent}%</span>
             </div>
             <div className="w-16 h-16">
               <svg viewBox="0 0 36 36" className="w-full h-full">
@@ -422,7 +425,7 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
                   fill="none"
                   stroke="#0D9488"
                   strokeWidth="3"
-                  strokeDasharray={`${project.progress}, 100`}
+                  strokeDasharray={`${completionPercent}, 100`}
                 />
               </svg>
             </div>
