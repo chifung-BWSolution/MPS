@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutGrid, List, Plus, Search, Calendar, DollarSign, Edit, Trash2 } from 'lucide-react';
+import { Plus, Search, Edit, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Project } from '@/types/app';
 import { useApp } from '@/context/AppContext';
@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 
 type ProjectPlanningProps = {
@@ -28,7 +27,6 @@ type ProjectPlanningProps = {
 
 export function ProjectPlanning({ onSelectProject, forcedCategory, projects, loading: projectsLoading, updateProject, deleteProject }: ProjectPlanningProps) {
   const { navigateTo, selectedCompanyId, selectedBrandId } = useApp();
-  const [viewMode, setViewMode] = useState<'card' | 'table'>('table');
   const [filterBrand, setFilterBrand] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -87,11 +85,6 @@ export function ProjectPlanning({ onSelectProject, forcedCategory, projects, loa
   const availableBrands = filterCompany !== 'all'
     ? brands.filter(b => b.companyId === filterCompany)
     : brands;
-
-  const groupedByBrand = availableBrands.map(brand => ({
-    brand,
-    projects: filteredProjects.filter(p => p.brandId === brand.id),
-  })).filter(g => g.projects.length > 0);
 
   const activeCount = filteredProjects.filter(p => p.status === 'active').length;
   const completedCount = filteredProjects.filter(p => p.status === 'completed').length;
@@ -184,14 +177,6 @@ export function ProjectPlanning({ onSelectProject, forcedCategory, projects, loa
           </Select>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center border border-border rounded-md overflow-hidden">
-            <button onClick={() => setViewMode('table')} className={cn('p-1.5 transition-colors', viewMode === 'table' ? 'bg-teal-600 text-white' : 'text-muted-foreground hover:bg-muted')}>
-              <List size={16} />
-            </button>
-            <button onClick={() => setViewMode('card')} className={cn('p-1.5 transition-colors', viewMode === 'card' ? 'bg-teal-600 text-white' : 'text-muted-foreground hover:bg-muted')}>
-              <LayoutGrid size={16} />
-            </button>
-          </div>
           <Button
             size="sm"
             className="bg-teal-600 hover:bg-teal-700 text-white gap-1.5"
@@ -203,125 +188,8 @@ export function ProjectPlanning({ onSelectProject, forcedCategory, projects, loa
         </div>
       </div>
 
-      {/* Card View (grouped by brand) */}
-      {viewMode === 'card' && (
-        <div className="space-y-8">
-          {groupedByBrand.map(({ brand, projects: brandProjects }) => {
-            const company = companies.find(c => c.id === brand.companyId);
-            return (
-            <div key={brand.id}>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: brand.primaryColor }} />
-                <h3 className="text-[15px] font-bold">{brand.brandCode}</h3>
-                <span className="text-[12px] text-muted-foreground">- {brand.brandNameZh}</span>
-                {company && <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">({company.companyCode})</span>}
-                <Badge variant="secondary" className="text-[10px] h-5">{brandProjects.length}</Badge>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {brandProjects.map((project) => {
-                  const config = statusConfig[project.status];
-                  const budgetPercent = project.budgetTotal > 0 ? Math.round((project.budgetUsed / project.budgetTotal) * 100) : 0;
-                  const budgetAtRisk = budgetPercent >= 80;
-                  return (
-                    <div
-                      key={project.id}
-                      className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] p-5 hover:shadow-[0_4px_12px_rgba(0,20,40,0.1)] transition-all duration-200 cursor-pointer group relative"
-                      onClick={() => onSelectProject?.(project.id)}
-                    >
-                      {/* Hover action buttons */}
-                      <div className="absolute top-2 right-2 hidden group-hover:flex items-center gap-1">
-                        <button onClick={(e) => handleEdit(e, project)} className="p-1.5 bg-white border border-border rounded shadow-sm hover:bg-muted transition-colors" title="編輯">
-                          <Edit size={12} className="text-teal-600" />
-                        </button>
-                        <button onClick={(e) => handleDeleteClick(e, project)} className="p-1.5 bg-white border border-border rounded shadow-sm hover:bg-muted transition-colors" title="刪除">
-                          <Trash2 size={12} className="text-rose-500" />
-                        </button>
-                      </div>
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-[14px] font-bold truncate">{project.name}</h4>
-                          <span className="text-[12px] text-muted-foreground">
-                            {projectTypeLabels[project.projectType]} • {project.assignedPm}
-                          </span>
-                        </div>
-                        <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-sm whitespace-nowrap ml-2', config.bgColor, config.textColor)}>{config.label}</span>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-                        <ProjectCategoryBadge category={project.projectCategory} clientName={project.clientName} size="sm" />
-                        <span className={cn('text-[10px] px-1.5 py-0.5 rounded', priorityConfig[project.priority].color)}>
-                          {priorityConfig[project.priority].label}
-                        </span>
-                        {project.billingModel && (
-                          <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium', project.billingModel === 'one_time' ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700')}>
-                            {project.billingModel === 'one_time' ? '一次性' : project.billingFrequency === 'monthly' ? '每月' : project.billingFrequency === 'quarterly' ? '每季' : project.billingFrequency === 'semi_annual' ? '每半年' : '每年'}
-                          </span>
-                        )}
-                        {project.clientName && (
-                          <span className="text-[10px] text-muted-foreground truncate">| {project.clientName}</span>
-                        )}
-                      </div>
-
-                      {/* Progress */}
-                      <div className="mb-3">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-[11px] text-muted-foreground">進度</span>
-                          <span className="text-[11px] font-medium">{project.progress}%</span>
-                        </div>
-                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div className={cn('h-full rounded-full', config.color)} style={{ width: `${project.progress}%` }} />
-                        </div>
-                      </div>
-
-                      {/* Budget */}
-                      <div className="mb-3">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-[11px] text-muted-foreground">預算</span>
-                          <span className={cn('text-[11px] font-medium', budgetAtRisk ? 'text-amber-600' : '')}>
-                            {budgetAtRisk && '⚠ '}${(project.budgetUsed / 1000).toFixed(0)}K / ${(project.budgetTotal / 1000).toFixed(0)}K
-                          </span>
-                        </div>
-                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div className={cn('h-full rounded-full', budgetAtRisk ? 'bg-amber-500' : 'bg-teal-600')} style={{ width: `${Math.min(budgetPercent, 100)}%` }} />
-                        </div>
-                      </div>
-
-                      {/* Footer */}
-                      <div className="flex items-center justify-between pt-3 border-t border-border/50">
-                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                          <Calendar size={11} />
-                          <span>{project.startDate}</span>
-                        </div>
-                        {/* Contract remaining days for recurring billing */}
-                        {project.billingModel === 'recurring' && project.contractStartDate && project.contractDuration && (
-                          <div className="text-[10px] text-orange-600 font-medium">
-                            {(() => {
-                              const start = new Date(project.contractStartDate);
-                              const end = new Date(start);
-                              end.setMonth(end.getMonth() + project.contractDuration);
-                              const remaining = Math.ceil((end.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                              return remaining > 0 ? `合約剩餘 ${remaining} 天` : '合約已到期';
-                            })()}
-                          </div>
-                        )}
-                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                          <DollarSign size={11} />
-                          <span>{budgetPercent}%</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            );
-          })}
-        </div>
-      )}
-
       {/* Table View */}
-      {viewMode === 'table' && (
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] overflow-hidden overflow-x-auto">
+      <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] overflow-hidden overflow-x-auto">
           <table className="w-full min-w-[1100px]">
             <thead>
               <tr className="border-b border-border bg-muted/30">
@@ -462,7 +330,6 @@ export function ProjectPlanning({ onSelectProject, forcedCategory, projects, loa
             </tbody>
           </table>
         </div>
-      )}
 
       {/* Edit Modal */}
       <CrudModal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="編輯項目" size="lg">
