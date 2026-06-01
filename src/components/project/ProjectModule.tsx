@@ -1,4 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+
+const SELECTED_PROJECT_KEY = 'mps_selected_project_id';
+const PREVIOUS_LIST_KEY = 'mps_previous_list_submodule';
+const readSession = (key: string) => {
+  try { return sessionStorage.getItem(key); } catch { return null; }
+};
+const writeSession = (key: string, value: string | null) => {
+  try {
+    if (value === null) sessionStorage.removeItem(key);
+    else sessionStorage.setItem(key, value);
+  } catch {}
+};
 import { useApp } from '@/context/AppContext';
 import { ProjectPlanning } from './ProjectPlanning';
 import { ProjectNewWizard } from './ProjectNewWizard';
@@ -35,8 +47,11 @@ export function ProjectModule({ subModule }: { subModule?: string }) {
     companyProjects.some(p => p.id === id)
       ? deleteCompanyProject(id)
       : deleteClientProject(id);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [previousListSubModule, setPreviousListSubModule] = useState<string>('focus');
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(() => readSession(SELECTED_PROJECT_KEY));
+  const [previousListSubModule, setPreviousListSubModule] = useState<string>(() => readSession(PREVIOUS_LIST_KEY) || 'focus');
+
+  useEffect(() => { writeSession(SELECTED_PROJECT_KEY, selectedProjectId); }, [selectedProjectId]);
+  useEffect(() => { writeSession(PREVIOUS_LIST_KEY, previousListSubModule); }, [previousListSubModule]);
 
   const handleSelectProject = (projectId: string) => {
     // Remember which list we came from

@@ -6,7 +6,7 @@ import {
   Phone, ExternalLink, Tag, UserPlus, Pencil, Trash2, Link as LinkIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Project, ProjectTask, ProjectPriority } from '@/types/app';
+import { ProjectTask, ProjectPriority } from '@/types/app';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -34,6 +34,7 @@ import { useCompanyProjects } from '@/hooks/useCompanyProjects';
 import { useClientProjects } from '@/hooks/useClientProjects';
 import { useStaffNames } from '@/hooks/useStaffNames';
 import { useProjectRoles } from '@/hooks/useProjectRoles';
+import { useProjectDetails } from '@/hooks/useProjectDetails';
 
 const statusConfig = {
   planning: { label: '規劃中', color: 'bg-blue-500', textColor: 'text-blue-700', bgColor: 'bg-blue-50' },
@@ -75,49 +76,6 @@ const columnConfig = {
 
 type ColumnId = keyof typeof columnConfig;
 
-// Sample project data
-const sampleProject: Project = {
-  id: '1',
-  name: 'BW 官網重建',
-  clientName: '志豐企業',
-  companyId: 'c1',
-  brandId: '1',
-  projectType: 'web_design',
-  projectCategory: 'client',
-  status: 'active',
-  progress: 72,
-  assignedPm: '陳小華',
-  brand: 'BW Design',
-  company: 'BWD Centre',
-  budgetTotal: 45000,
-  budgetUsed: 32400,
-  startDate: '2024-10-01',
-  endDate: '2025-01-15',
-  description: '全面重新設計志豐企業官方網站，包含新品牌形象、響應式設計、SEO 優化及後台管理系統升級。',
-  priority: 'high',
-};
-
-const sampleTasks: ProjectTask[] = [
-  { id: 't1', projectId: '1', title: '首頁 Banner 設計', assignee: '陳小華', status: 'done', priority: 'high', startDate: '2024-10-01', endDate: '2024-10-15', estimatedHours: 12, actualHours: 10 },
-  { id: 't2', projectId: '1', title: '產品頁面開發', assignee: '戴維斯', status: 'in_progress', priority: 'high', startDate: '2024-11-01', endDate: '2024-12-15', estimatedHours: 40, actualHours: 28 },
-  { id: 't3', projectId: '1', title: '購物車流程優化', assignee: '陳小華', status: 'in_progress', priority: 'medium', startDate: '2024-11-15', endDate: '2025-01-05', estimatedHours: 30, actualHours: 12 },
-  { id: 't4', projectId: '1', title: 'SEO Meta 優化', assignee: '朴賢俊', status: 'todo', priority: 'medium', startDate: '2024-12-15', endDate: '2025-01-10', estimatedHours: 8 },
-  { id: 't5', projectId: '1', title: '後台管理系統升級', assignee: '戴維斯', status: 'todo', priority: 'high', startDate: '2025-01-01', endDate: '2025-01-15', estimatedHours: 24 },
-  { id: 't6', projectId: '1', title: 'Logo 設計定稿', assignee: '陳小華', status: 'done', priority: 'high', startDate: '2024-10-01', endDate: '2024-10-20', estimatedHours: 16, actualHours: 14 },
-  { id: 't7', projectId: '1', title: '內容撰寫', assignee: '朴賢俊', status: 'review', priority: 'medium', startDate: '2024-11-01', endDate: '2024-12-20', estimatedHours: 20, actualHours: 18 },
-  { id: 't8', projectId: '1', title: '圖片拍攝', assignee: '戴維斯', status: 'done', priority: 'low', startDate: '2024-10-15', endDate: '2024-11-01', estimatedHours: 8, actualHours: 6 },
-];
-
-// Year Plan sample
-const sampleYearPlan = {
-  year: 2025,
-  targetRevenue: 500000,
-  targetProjects: 20,
-  targetArticles: 60,
-  targetVideos: 30,
-  targetSocialPosts: 120,
-};
-
 // Team member types
 interface TeamMember {
   id: string;
@@ -137,13 +95,6 @@ interface ClientInfo {
   website: string;
   tags: string[];
 }
-
-const sampleTeamMembers: TeamMember[] = [
-  { id: 'u1', name: '陳小華', roleInProject: '負責人 / PM', estimatedHours: 60 },
-  { id: 'u2', name: '戴維斯', roleInProject: '前端開發', estimatedHours: 80 },
-  { id: 'u3', name: '朴賢俊', roleInProject: '文案 / SEO', estimatedHours: 30 },
-  { id: 'u4', name: '李美琪', roleInProject: '設計師', estimatedHours: 40 },
-];
 
 const emptyClientInfo: ClientInfo = {
   companyName: '',
@@ -171,7 +122,7 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
   const [tasks, setTasks] = useState<ProjectTask[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newTask, setNewTask] = useState({ title: '', assignees: [] as string[], priority: 'medium' as ProjectPriority, startDate: '', endDate: '', estimatedHours: '', description: '' });
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const { teamMembers, setTeamMembers } = useProjectDetails(projectId);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [newMember, setNewMember] = useState({ name: '', roleInProject: '', estimatedHours: '' });
   const [taskViewMode, setTaskViewMode] = useState<'kanban' | 'gantt'>('kanban');
@@ -210,14 +161,15 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
     actualSocialPosts: 48,
   };
 
-  const project = (projectId
+  const resolvedProject = projectId
     ? (companyProjects.find(p => p.id === projectId)
         || clientProjects.find(p => p.id === projectId)
         || getProjectById(projectId))
-    : null) || sampleProject;
-  const budgetPercent = project.budgetTotal > 0 ? Math.round((project.budgetUsed / project.budgetTotal) * 100) : 0;
+    : null;
+  const project = resolvedProject;
+  const budgetPercent = project && project.budgetTotal > 0 ? Math.round((project.budgetUsed / project.budgetTotal) * 100) : 0;
   const budgetAtRisk = budgetPercent >= 80;
-  const config = statusConfig[project.status];
+  const config = project ? statusConfig[project.status] : statusConfig.planning;
   const totalEstimatedHours = tasks.reduce((s, t) => s + (t.estimatedHours || 0), 0);
   const totalActualHours = tasks.reduce((s, t) => s + (t.actualHours || 0), 0);
   const clientInfo: ClientInfo = emptyClientInfo;
@@ -389,6 +341,19 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
     setNewAd({ campaignName: '', platform: 'google_ads', budget: '', currency: 'HKD', startDate: '', endDate: '', manHours: '', outputUrl: '', notes: '' });
     setIsAdModalOpen(false);
   };
+
+  if (!project) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <p className="text-muted-foreground mb-4">找不到該項目</p>
+        {onBack && (
+          <Button variant="outline" onClick={onBack}>
+            <ArrowLeft className="w-4 h-4 mr-2" />返回列表
+          </Button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
