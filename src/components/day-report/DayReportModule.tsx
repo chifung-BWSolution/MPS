@@ -197,7 +197,11 @@ function SubmitReportPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [existingReportId, setExistingReportId] = useState<string | null>(null);
-  const [isLoadingExisting, setIsLoadingExisting] = useState(false);
+  // Start as `true` so the draft-hydrated gate stays closed until
+  // loadExistingReport has actually finished (its setIsLoadingExisting(true)
+  // happens inside an async function and would otherwise miss the first
+  // commit, letting the persist effect wipe localStorage before restore).
+  const [isLoadingExisting, setIsLoadingExisting] = useState(true);
   const isUpdateMode = !!existingReportId;
 
   // Reactive helper: get related items for a work category from DataStore (live data)
@@ -365,6 +369,8 @@ function SubmitReportPage() {
     async function loadExistingReport() {
       if (!currentStaffId) {
         setExistingReportId(null);
+        // Don't flip isLoadingExisting to false here — we have no key to
+        // restore from yet. Wait for currentStaffId to resolve and re-run.
         return;
       }
       setIsLoadingExisting(true);
