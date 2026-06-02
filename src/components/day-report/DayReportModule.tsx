@@ -461,35 +461,47 @@ function SubmitReportPage() {
     [currentStaffId, selectedDate],
   );
 
-  // After loadExistingReport finishes, hydrate from draft only if there's no
-  // already-submitted server-side report (existingReportId stays null).
+  // `hydrated` gates the persist effect so it can't run with stale blank
+  // state on mount and overwrite/delete a draft before we've had a chance
+  // to read it. Reset whenever the (staff, date) key changes.
+  const [draftHydrated, setDraftHydrated] = useState(false);
+  useEffect(() => { setDraftHydrated(false); }, [draftStorageKey]);
+
+  // Restore draft once loadExistingReport finishes. Only restores when
+  // there's no already-submitted server-side report.
   useEffect(() => {
-    if (!draftStorageKey || isLoadingExisting || existingReportId) return;
+    if (!draftStorageKey || isLoadingExisting || draftHydrated) return;
+    if (existingReportId) {
+      // Submitted report exists — no draft restoration. Mark hydrated so
+      // the persist effect can later clear any stale draft.
+      setDraftHydrated(true);
+      return;
+    }
     try {
       const raw = localStorage.getItem(draftStorageKey);
-      if (!raw) return;
-      const draft = JSON.parse(raw) as {
-        entries?: typeof entries;
-        targetHours?: number;
-        underHoursReason?: string;
-        office?: OfficeLocation;
-      };
-      if (draft.entries && draft.entries.length > 0) setEntries(draft.entries);
-      if (typeof draft.targetHours === 'number') setTargetHours(draft.targetHours);
-      if (typeof draft.underHoursReason === 'string') setUnderHoursReason(draft.underHoursReason);
-      if (draft.office) setOffice(draft.office);
+      if (raw) {
+        const draft = JSON.parse(raw) as {
+          entries?: typeof entries;
+          targetHours?: number;
+          underHoursReason?: string;
+          office?: OfficeLocation;
+        };
+        if (draft.entries && draft.entries.length > 0) setEntries(draft.entries);
+        if (typeof draft.targetHours === 'number') setTargetHours(draft.targetHours);
+        if (typeof draft.underHoursReason === 'string') setUnderHoursReason(draft.underHoursReason);
+        if (draft.office) setOffice(draft.office);
+      }
     } catch (err) {
       console.warn('[SubmitReport] failed to restore draft:', err);
     }
-    // We only want to restore once per (date, staff) load — depend on key + load completion.
+    setDraftHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftStorageKey, isLoadingExisting, existingReportId]);
+  }, [draftStorageKey, isLoadingExisting, existingReportId, draftHydrated]);
 
-  // Persist draft as the user edits. Skip while still loading the existing
-  // report (would otherwise overwrite with the blank initial state) and skip
-  // if a submitted report exists (server is the source of truth).
+  // Persist draft as the user edits. Gated by `draftHydrated` so it never
+  // runs before restore. Skip if a submitted report exists.
   useEffect(() => {
-    if (!draftStorageKey || isLoadingExisting || existingReportId) return;
+    if (!draftStorageKey || !draftHydrated || existingReportId) return;
     const hasContent = entries.some(e => e.category || e.title || e.hours > 0 || e.relatedName)
       || underHoursReason.length > 0;
     try {
@@ -504,7 +516,7 @@ function SubmitReportPage() {
     } catch (err) {
       console.warn('[SubmitReport] failed to persist draft:', err);
     }
-  }, [draftStorageKey, isLoadingExisting, existingReportId, entries, targetHours, underHoursReason, office]);
+  }, [draftStorageKey, draftHydrated, existingReportId, entries, targetHours, underHoursReason, office]);
 
   // Generate list of available dates (past 14 days) — always relative to real current date
   const availableDates = useMemo(() => {
