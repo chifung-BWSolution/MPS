@@ -3,7 +3,9 @@ import { Plus, Search, Edit, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Project } from '@/types/app';
 import { useApp } from '@/context/AppContext';
-import { companies, brands, projectTypeLabels, statusConfig, priorityConfig } from '@/data/mockData';
+import { projectTypeLabels, statusConfig, priorityConfig } from '@/data/mockData';
+import { useCompanies } from '@/hooks/useCompanies';
+import { useBrands } from '@/hooks/useBrands';
 import { ProjectCategoryBadge } from '@/components/ui/project-category-badge';
 import {
   Select,
@@ -27,6 +29,8 @@ type ProjectPlanningProps = {
 
 export function ProjectPlanning({ onSelectProject, forcedCategory, projects, loading: projectsLoading, updateProject, deleteProject }: ProjectPlanningProps) {
   const { navigateTo, selectedCompanyId, selectedBrandId } = useApp();
+  const { companies } = useCompanies();
+  const { brands } = useBrands();
   const [filterBrand, setFilterBrand] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');

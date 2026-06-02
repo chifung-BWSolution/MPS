@@ -903,9 +903,7 @@ function SubmitReportPage() {
                       selectedDate === d.date 
                         ? 'bg-teal-50 border-teal-400 text-teal-800 shadow-sm ring-2 ring-teal-200' 
                         : d.reported
-                          ? d.reportedHours >= 8
-                            ? 'bg-teal-50/50 border-teal-200 text-teal-700'
-                            : 'bg-amber-50/50 border-amber-200 text-amber-700'
+                          ? 'bg-teal-50/50 border-teal-200 text-teal-700'
                           : d.isHoliday
                             ? 'bg-red-50/40 border-red-200 text-red-600 hover:bg-red-50'
                             : d.isSun
@@ -930,7 +928,7 @@ function SubmitReportPage() {
                     {/* Hours / Status indicator */}
                     {d.reported ? (
                       <div className="flex flex-col items-center gap-0.5">
-                        <span className={cn('text-[15px] font-bold', d.reportedHours >= 8 ? 'text-teal-600' : 'text-amber-600')}>
+                        <span className="text-[15px] font-bold text-teal-600">
                           {d.reportedHours}h
                         </span>
                         <span className="text-[12px] px-1.5 py-0 rounded-full font-medium bg-teal-100 text-teal-700">

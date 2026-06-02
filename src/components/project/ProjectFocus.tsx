@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
-import { TrendingUp, Clock, DollarSign, Eye, UserPlus, FileText, Flame, User } from 'lucide-react';
+import { TrendingUp, Clock, DollarSign, Flame, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { companies, brands, statusConfig } from '@/data/mockData';
 import { useApp } from '@/context/AppContext';
 import { useClientProjects } from '@/hooks/useClientProjects';
 import { useCompanyProjects } from '@/hooks/useCompanyProjects';
+import { useProjectHours } from '@/hooks/useProjectHours';
 import { ProjectCategoryBadge } from '@/components/ui/project-category-badge';
 import {
   Select,
@@ -21,6 +22,7 @@ export function ProjectFocus({ onSelectProject }: { onSelectProject?: (projectId
   const allProjects = useMemo(() => [...companyProjects, ...clientProjects], [companyProjects, clientProjects]);
   const [timeRange, setTimeRange] = useState<string>('14');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'internal' | 'client'>('all');
+  const { data: hoursMap } = useProjectHours(parseInt(timeRange));
 
   // Only show incomplete (active / planning / on_hold) projects
   const incompleteProjects = useMemo(() => {
@@ -33,27 +35,26 @@ export function ProjectFocus({ onSelectProject }: { onSelectProject?: (projectId
     });
   }, [allProjects, selectedCompanyId, selectedBrandId, categoryFilter]);
 
-  // Simulate man-hour growth based on selected time range
+  // Real hours from day_report_entries; fall back to 0 when no entries logged
   const projectsWithGrowth = useMemo(() => {
-    const daysFactor = parseInt(timeRange) / 14;
     return incompleteProjects.map(p => {
-      const seed = p.id.charCodeAt(0) + p.id.charCodeAt(1);
-      const growth = Math.round(((seed % 38) + 2) * daysFactor);
-      const totalHours = Math.round((p.budgetUsed || 0) / 150 * 8 + growth * 2);
+      const stat = hoursMap[p.id];
+      const growth = Math.round(stat?.growthHours ?? 0);
+      const totalHours = Math.round(stat?.totalHours ?? 0);
       const budgetUsagePercent = p.budgetTotal ? Math.round(((p.budgetUsed || 0) / p.budgetTotal) * 100) : 0;
-      const lastUpdateDays = (seed % 5);
-      const lastUpdateDate = new Date();
-      lastUpdateDate.setDate(lastUpdateDate.getDate() - lastUpdateDays);
+      const lastUpdate = stat?.lastUpdate
+        ? new Date(stat.lastUpdate).toLocaleDateString('zh-HK')
+        : '—';
       return {
         ...p,
         growth,
         totalHours,
         budgetUsagePercent,
-        isHighActivity: totalHours > 50,
-        lastUpdate: lastUpdateDate.toLocaleDateString('zh-HK'),
+        isHighActivity: growth >= 20,
+        lastUpdate,
       };
-    }).sort((a, b) => b.growth - a.growth);
-  }, [incompleteProjects, timeRange]);
+    }).sort((a, b) => b.growth - a.growth || b.totalHours - a.totalHours);
+  }, [incompleteProjects, hoursMap]);
 
   const getCompanyName = (companyId: string) => companies.find(c => c.id === companyId)?.companyNameZh || '—';
   const getBrandName = (brandId: string) => brands.find(b => b.id === brandId)?.brandNameZh || '—';
@@ -173,33 +174,8 @@ export function ProjectFocus({ onSelectProject }: { onSelectProject?: (projectId
                   </div>
                 </div>
 
-                {/* Quick actions + Growth indicators */}
+                {/* Growth indicators */}
                 <div className="flex items-center gap-3">
-                  {/* Quick action buttons - visible on hover */}
-                  <div className="hidden group-hover:flex items-center gap-1 mr-2">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onSelectProject?.(project.id); }}
-                      className="p-1.5 bg-white border border-border rounded shadow-sm hover:bg-muted transition-colors"
-                      title="查看詳情"
-                    >
-                      <Eye size={12} className="text-teal-600" />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); }}
-                      className="p-1.5 bg-white border border-border rounded shadow-sm hover:bg-muted transition-colors"
-                      title="分配任務"
-                    >
-                      <UserPlus size={12} className="text-blue-600" />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); }}
-                      className="p-1.5 bg-white border border-border rounded shadow-sm hover:bg-muted transition-colors"
-                      title="提交工時"
-                    >
-                      <FileText size={12} className="text-purple-600" />
-                    </button>
-                  </div>
-
                   <div className="text-right">
                     <div className="flex items-center gap-1 text-teal-600">
                       <TrendingUp size={12} />
