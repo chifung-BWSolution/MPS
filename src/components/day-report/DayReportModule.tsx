@@ -453,6 +453,59 @@ function SubmitReportPage() {
     return () => { cancelled = true; };
   }, [selectedDate, currentStaffId]);
 
+  // ---- Draft persistence (localStorage) -----------------------------------
+  // Keep unsubmitted edits across reloads / page navigation. Draft is keyed
+  // per (staff, date) and cleared automatically once the form submits.
+  const draftStorageKey = useMemo(
+    () => (currentStaffId ? `mps:day-report-draft:${currentStaffId}:${selectedDate}` : null),
+    [currentStaffId, selectedDate],
+  );
+
+  // After loadExistingReport finishes, hydrate from draft only if there's no
+  // already-submitted server-side report (existingReportId stays null).
+  useEffect(() => {
+    if (!draftStorageKey || isLoadingExisting || existingReportId) return;
+    try {
+      const raw = localStorage.getItem(draftStorageKey);
+      if (!raw) return;
+      const draft = JSON.parse(raw) as {
+        entries?: typeof entries;
+        targetHours?: number;
+        underHoursReason?: string;
+        office?: OfficeLocation;
+      };
+      if (draft.entries && draft.entries.length > 0) setEntries(draft.entries);
+      if (typeof draft.targetHours === 'number') setTargetHours(draft.targetHours);
+      if (typeof draft.underHoursReason === 'string') setUnderHoursReason(draft.underHoursReason);
+      if (draft.office) setOffice(draft.office);
+    } catch (err) {
+      console.warn('[SubmitReport] failed to restore draft:', err);
+    }
+    // We only want to restore once per (date, staff) load — depend on key + load completion.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftStorageKey, isLoadingExisting, existingReportId]);
+
+  // Persist draft as the user edits. Skip while still loading the existing
+  // report (would otherwise overwrite with the blank initial state) and skip
+  // if a submitted report exists (server is the source of truth).
+  useEffect(() => {
+    if (!draftStorageKey || isLoadingExisting || existingReportId) return;
+    const hasContent = entries.some(e => e.category || e.title || e.hours > 0 || e.relatedName)
+      || underHoursReason.length > 0;
+    try {
+      if (hasContent) {
+        localStorage.setItem(
+          draftStorageKey,
+          JSON.stringify({ entries, targetHours, underHoursReason, office }),
+        );
+      } else {
+        localStorage.removeItem(draftStorageKey);
+      }
+    } catch (err) {
+      console.warn('[SubmitReport] failed to persist draft:', err);
+    }
+  }, [draftStorageKey, isLoadingExisting, existingReportId, entries, targetHours, underHoursReason, office]);
+
   // Generate list of available dates (past 14 days) — always relative to real current date
   const availableDates = useMemo(() => {
     const dates: { date: string; label: string; isToday: boolean; isHoliday: boolean; isSat: boolean; isSun: boolean; reported: boolean; reportedHours: number; reportStatus: string }[] = [];
@@ -732,7 +785,10 @@ function SubmitReportPage() {
         }
       }
 
-      // Success
+      // Success — clear the local draft for this date
+      if (draftStorageKey) {
+        try { localStorage.removeItem(draftStorageKey); } catch {}
+      }
       setSubmitted(true);
       setExistingReportId(reportId);
       // Refresh the 14-day view
