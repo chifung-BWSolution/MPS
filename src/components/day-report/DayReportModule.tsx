@@ -430,12 +430,40 @@ function SubmitReportPage() {
             setEntries([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
           }
         } else {
-          // No existing report — reset to blank
+          // No existing report — restore from localStorage draft if present,
+          // otherwise reset to blank. We do this here (not just in the
+          // separate restore effect) because loadExistingReport runs async
+          // and would otherwise overwrite a freshly-restored draft.
           console.log('[SubmitReport] No existing report for date:', selectedDate);
           setExistingReportId(null);
-          setEntries([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
-          setUnderHoursReason('');
-          setTargetHours(8);
+          const draftKey = `mps:day-report-draft:${currentStaffId}:${selectedDate}`;
+          let draftRestored = false;
+          try {
+            const raw = localStorage.getItem(draftKey);
+            if (raw) {
+              const draft = JSON.parse(raw) as {
+                entries?: typeof entries;
+                targetHours?: number;
+                underHoursReason?: string;
+                office?: OfficeLocation;
+              };
+              if (draft.entries && draft.entries.length > 0) {
+                setEntries(draft.entries);
+                draftRestored = true;
+              }
+              if (typeof draft.targetHours === 'number') setTargetHours(draft.targetHours);
+              else setTargetHours(8);
+              setUnderHoursReason(typeof draft.underHoursReason === 'string' ? draft.underHoursReason : '');
+              if (draft.office) setOffice(draft.office);
+            }
+          } catch (err) {
+            console.warn('[SubmitReport] failed to restore draft inside loadExistingReport:', err);
+          }
+          if (!draftRestored) {
+            setEntries([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
+            setUnderHoursReason('');
+            setTargetHours(8);
+          }
         }
       } catch (err) {
         console.error('[SubmitReport] Error loading existing report:', err);
@@ -467,36 +495,13 @@ function SubmitReportPage() {
   const [draftHydrated, setDraftHydrated] = useState(false);
   useEffect(() => { setDraftHydrated(false); }, [draftStorageKey]);
 
-  // Restore draft once loadExistingReport finishes. Only restores when
-  // there's no already-submitted server-side report.
+  // Mark draft as hydrated once loadExistingReport finishes. Restoration
+  // itself happens inside loadExistingReport's "no existing report" branch
+  // to avoid a race where the async load would overwrite a restored draft.
   useEffect(() => {
     if (!draftStorageKey || isLoadingExisting || draftHydrated) return;
-    if (existingReportId) {
-      // Submitted report exists — no draft restoration. Mark hydrated so
-      // the persist effect can later clear any stale draft.
-      setDraftHydrated(true);
-      return;
-    }
-    try {
-      const raw = localStorage.getItem(draftStorageKey);
-      if (raw) {
-        const draft = JSON.parse(raw) as {
-          entries?: typeof entries;
-          targetHours?: number;
-          underHoursReason?: string;
-          office?: OfficeLocation;
-        };
-        if (draft.entries && draft.entries.length > 0) setEntries(draft.entries);
-        if (typeof draft.targetHours === 'number') setTargetHours(draft.targetHours);
-        if (typeof draft.underHoursReason === 'string') setUnderHoursReason(draft.underHoursReason);
-        if (draft.office) setOffice(draft.office);
-      }
-    } catch (err) {
-      console.warn('[SubmitReport] failed to restore draft:', err);
-    }
     setDraftHydrated(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftStorageKey, isLoadingExisting, existingReportId, draftHydrated]);
+  }, [draftStorageKey, isLoadingExisting, draftHydrated]);
 
   // Persist draft as the user edits. Gated by `draftHydrated` so it never
   // runs before restore. Skip if a submitted report exists.
