@@ -56,7 +56,7 @@ export const mainMenuItems: MainMenuItem[] = [
     label: '專案策劃',
     subMenus: [
       { id: 'focus', label: '近期焦點' },
-      { id: 'internal', label: '內部項目列表' },
+      { id: 'internal', label: '內部焦點項目' },
       { id: 'client', label: '客戶項目列表' },
       { id: 'progress', label: '項目進度' },
     ],

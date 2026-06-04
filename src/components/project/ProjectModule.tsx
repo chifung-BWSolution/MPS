@@ -100,7 +100,7 @@ export function ProjectModule({ subModule }: { subModule?: string }) {
       case 'focus': return { title: '近期焦點', subtitle: '按14天工時增長排序，快速掌握活躍項目。' };
       case 'new': return { title: '新增內部項目', subtitle: '三步驟新增內部項目（公司 → 品牌 → 項目資料）。' };
       case 'new-client': return { title: '新增客戶項目', subtitle: '客戶專屬流程（公司與品牌 → 客戶資料 → 項目詳情與收費模式）。' };
-      case 'internal': return { title: '內部項目列表', subtitle: '管理所有內部發展項目。' };
+      case 'internal': return { title: '內部項目列表', subtitle: '項目需時必須大於 100 小時。' };
       case 'client': return { title: '客戶項目列表', subtitle: '管理所有客戶項目。' };
       case 'progress': return { title: '項目進度', subtitle: '看板與甘特圖視圖管理任務進度。' };
       case 'planning': return { title: '年度計劃', subtitle: '設定年度目標及追蹤達成率。' };
