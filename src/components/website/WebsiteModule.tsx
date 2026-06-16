@@ -541,7 +541,7 @@ function WebsiteDetail({ site, onBack }: { site: WebsiteProfileFull; onBack: () 
 
       const staffIds = Object.keys(hoursMap);
       const { data: staffData } = await supabase
-        .from('user_info')
+        .from('staff_directory')
         .select('bubble_staff_id, display_name, full_name')
         .in('bubble_staff_id', staffIds);
 
