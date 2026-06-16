@@ -645,7 +645,7 @@ function SubmitReportPage() {
       alert('未能識別登入帳戶，請重新登入後再試。');
       return;
     }
-    const label = (e.title.trim().split('\n')[0] || e.relatedName || categoryConfig[e.category as WorkCategory]?.label || '自訂項目').slice(0, 40);
+    const label = (e.title.trim().split('\n')[0] || e.relatedName || categoryLookup[e.category]?.label || '自訂項目').slice(0, 40);
     const entrySnapshot = { ...e, aiToolsV2: { ...e.aiToolsV2 } };
     const { data, error } = await supabase
       .from('user_report_templates')
