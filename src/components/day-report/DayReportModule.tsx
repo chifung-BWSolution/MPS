@@ -716,6 +716,9 @@ function SubmitReportPage() {
     try {
       let reportId: string;
 
+      // Collect related_ids that may need hours recalculation
+      const affectedWebsiteIds = new Set<string>();
+
       if (existingReportId) {
         // UPDATE existing report
         const { error: updateError } = await supabase
@@ -739,6 +742,14 @@ function SubmitReportPage() {
           throw new Error(updateError.message);
         }
         reportId = existingReportId;
+
+        // Capture old related_ids before deleting so we can recalculate them too
+        const { data: oldEntries } = await supabase
+          .from('day_report_entries')
+          .select('related_id')
+          .eq('day_report_id', existingReportId)
+          .not('related_id', 'is', null);
+        oldEntries?.forEach(e => e.related_id && affectedWebsiteIds.add(e.related_id));
 
         // Delete old entries before re-inserting updated ones
         const { error: deleteError } = await supabase
@@ -806,6 +817,26 @@ function SubmitReportPage() {
         if (entriesError) {
           throw new Error(entriesError.message);
         }
+      }
+
+      // Collect new related_ids from the just-inserted entries
+      entryRecords.forEach(e => e.related_id && affectedWebsiteIds.add(e.related_id));
+
+      // Recalculate total_hours for each affected website/system
+      if (affectedWebsiteIds.size > 0) {
+        await Promise.all(
+          Array.from(affectedWebsiteIds).map(async (websiteId) => {
+            const { data: hoursData } = await supabase
+              .from('day_report_entries')
+              .select('hours')
+              .eq('related_id', websiteId);
+            const total = (hoursData ?? []).reduce((sum, row) => sum + (Number(row.hours) || 0), 0);
+            await supabase
+              .from('webandsystem_list')
+              .update({ total_hours: total })
+              .eq('id', websiteId);
+          })
+        );
       }
 
       // Success — clear the local draft for this date
