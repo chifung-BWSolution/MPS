@@ -520,6 +520,43 @@ function WebsiteDetail({ site, onBack }: { site: WebsiteProfileFull; onBack: () 
   const [activeTab, setActiveTab] = useState('overview');
   const [currentLevel, setCurrentLevel] = useState<WebsiteLevel>(site.level);
   const [showLevelDropdown, setShowLevelDropdown] = useState(false);
+  const [staffHours, setStaffHours] = useState<{ name: string; hours: number }[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: entries } = await supabase
+        .from('day_report_entries')
+        .select('staff_id, hours')
+        .eq('related_id', site.id);
+      if (cancelled || !entries || entries.length === 0) return;
+
+      // Aggregate hours per staff_id
+      const hoursMap: Record<string, number> = {};
+      entries.forEach(e => {
+        if (!e.staff_id) return;
+        hoursMap[e.staff_id] = (hoursMap[e.staff_id] || 0) + Number(e.hours || 0);
+      });
+
+      const staffIds = Object.keys(hoursMap);
+      const { data: staffData } = await supabase
+        .from('user_info')
+        .select('bubble_staff_id, display_name, full_name')
+        .in('bubble_staff_id', staffIds);
+
+      const nameById: Record<string, string> = {};
+      (staffData || []).forEach((s: any) => {
+        nameById[s.bubble_staff_id] = (s.display_name || s.full_name || s.bubble_staff_id).trim();
+      });
+
+      const list = staffIds
+        .map(id => ({ name: nameById[id] || id, hours: hoursMap[id] }))
+        .sort((a, b) => b.hours - a.hours);
+
+      if (!cancelled) setStaffHours(list);
+    })();
+    return () => { cancelled = true; };
+  }, [site.id]);
 
   const tabs = [
     { id: 'overview', label: '概覽', icon: Globe },
@@ -675,6 +712,16 @@ function WebsiteDetail({ site, onBack }: { site: WebsiteProfileFull; onBack: () 
                   <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">公司</span><span className="font-medium">{site.company}</span></div>
                   <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">主機</span><span className="font-medium">{site.hostingProvider || '—'}</span></div>
                   <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">總工時</span><span className="font-medium">{site.totalHours}h</span></div>
+                  {staffHours.length > 0 && (
+                    <div className="mt-2 space-y-1 border-t border-border/40 pt-2">
+                      {staffHours.map((s, i) => (
+                        <div key={i} className="flex items-center justify-between text-[12px]">
+                          <span className="text-muted-foreground">{s.name}</span>
+                          <span className="font-medium tabular-nums">{s.hours}h</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="space-y-3">
