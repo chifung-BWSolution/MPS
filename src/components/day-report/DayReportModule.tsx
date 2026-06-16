@@ -99,6 +99,24 @@ function SubmitReportPage() {
   const { projects } = useDataStore();
   const { profiles: websites } = useWebsiteProfiles();
   const { types: dynamicTypes } = useDayReportTypes();
+  // Merge built-in categoryConfig with custom 工作類型 from Supabase so
+  // entries created with a custom category render its label/icon/colour
+  // instead of the raw id (e.g. custom_1779878653873).
+  const categoryLookup = useMemo(() => {
+    const map: Record<string, { label: string; icon: string; color: string; bg: string }> = {};
+    for (const [k, v] of Object.entries(categoryConfig)) {
+      map[k] = { label: v.label, icon: v.icon, color: v.color, bg: v.bg };
+    }
+    for (const t of dynamicTypes) {
+      map[t.id] = {
+        label: t.label,
+        icon: t.icon || '📋',
+        color: t.color || 'text-gray-600',
+        bg: t.bg || 'bg-gray-100',
+      };
+    }
+    return map;
+  }, [dynamicTypes]);
   const [office, setOffice] = useState<OfficeLocation>('hk');
   
   // Date selection (single date, up to 14 days back) — always based on NOW (local date)
@@ -1785,7 +1803,7 @@ function TodayTeamReports() {
                   {/* Entry summary */}
                   <div className="ml-12 space-y-1">
                     {entries.slice(0, expandedId === report.id ? undefined : 3).map(entry => {
-                      const config = categoryConfig[entry.category as WorkCategory] || { bg: 'bg-gray-50', color: 'text-gray-600', icon: '📋', label: entry.category };
+                      const config = categoryLookup[entry.category] || { bg: 'bg-gray-50', color: 'text-gray-600', icon: '📋', label: entry.category };
                       return (
                         <div key={entry.id} className="flex items-center gap-2">
                           <span className={cn('text-[11px] px-1.5 py-0.5 rounded shrink-0', config.bg, config.color)}>{config.icon} {config.label}</span>
@@ -2173,7 +2191,7 @@ function WorkCalendar() {
                 </div>
                 <div className="space-y-2 pl-1">
                   {reportEntries.map(entry => {
-                    const config = categoryConfig[entry.category as WorkCategory];
+                    const config = categoryLookup[entry.category];
                     return (
                       <div key={entry.id} className="p-2.5 rounded-md bg-muted/30 border border-border/40">
                         <div className="flex items-center gap-1.5 mb-1">
