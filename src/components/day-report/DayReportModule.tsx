@@ -92,18 +92,14 @@ function getDateRange(startDate: string, endDate: string): string[] {
   return dates;
 }
 
-// ============================
-// Submit Report Page (Redesigned)
-// ============================
-function SubmitReportPage() {
-  const { projects } = useDataStore();
-  const { profiles: websites } = useWebsiteProfiles();
+// Merge built-in categoryConfig with custom 工作類型 from Supabase so
+// entries created with a custom category render its label/icon/colour
+// instead of the raw id (e.g. custom_1779878653873).
+type CategoryLookup = Record<string, { label: string; icon: string; color: string; bg: string }>;
+function useCategoryLookup(): CategoryLookup {
   const { types: dynamicTypes } = useDayReportTypes();
-  // Merge built-in categoryConfig with custom 工作類型 from Supabase so
-  // entries created with a custom category render its label/icon/colour
-  // instead of the raw id (e.g. custom_1779878653873).
-  const categoryLookup = useMemo(() => {
-    const map: Record<string, { label: string; icon: string; color: string; bg: string }> = {};
+  return useMemo(() => {
+    const map: CategoryLookup = {};
     for (const [k, v] of Object.entries(categoryConfig)) {
       map[k] = { label: v.label, icon: v.icon, color: v.color, bg: v.bg };
     }
@@ -117,6 +113,16 @@ function SubmitReportPage() {
     }
     return map;
   }, [dynamicTypes]);
+}
+
+// ============================
+// Submit Report Page (Redesigned)
+// ============================
+function SubmitReportPage() {
+  const { projects } = useDataStore();
+  const { profiles: websites } = useWebsiteProfiles();
+  const { types: dynamicTypes } = useDayReportTypes();
+  const categoryLookup = useCategoryLookup();
   const [office, setOffice] = useState<OfficeLocation>('hk');
   
   // Date selection (single date, up to 14 days back) — always based on NOW (local date)
@@ -1135,7 +1141,7 @@ function SubmitReportPage() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     {savedTemplates.map(tpl => {
                       const cat = tpl.entry.category as WorkCategory | '';
-                      const config = cat ? categoryConfig[cat] : null;
+                      const config = cat ? categoryLookup[cat] : null;
                       return (
                         <div
                           key={tpl.id}
@@ -1186,7 +1192,7 @@ function SubmitReportPage() {
               {recentFrequentItems.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {recentFrequentItems.map((item, idx) => {
-                  const config = categoryConfig[item.category];
+                  const config = categoryLookup[item.category];
                   return (
                     <button
                       key={idx}
@@ -1324,7 +1330,7 @@ function SubmitReportPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="flex items-center gap-1 text-[14px] font-medium text-muted-foreground shrink-0"><Zap size={11} className="text-amber-500" />快速填入：</span>
               {quickTemplates.map((tpl, idx) => {
-                const config = categoryConfig[tpl.category];
+                const config = categoryLookup[tpl.category];
                 return (
                   <button key={idx} onClick={() => applyQuickTemplate(tpl)} className={cn('flex items-center gap-1 px-2.5 py-1.5 rounded-md border text-[14px] hover:shadow-sm transition-all', config.bg, config.color, 'border-current/20 hover:scale-[1.02]')}>
                     <span>{config.icon}</span>
@@ -1560,6 +1566,7 @@ function SubmitReportPage() {
 // ============================
 function TodayTeamReports() {
   const { systemUser } = useAuth();
+  const categoryLookup = useCategoryLookup();
   const todayStr = new Date().toISOString().split('T')[0]; // Live today's date
   
   // Determine user's department and role
@@ -1882,6 +1889,7 @@ const WC_DEPARTMENT_OPTIONS = [
 
 function WorkCalendar() {
   const { systemUser } = useAuth();
+  const categoryLookup = useCategoryLookup();
   const [currentMonth, setCurrentMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [staffList, setStaffList] = useState<WCStaff[]>([]);
@@ -2133,8 +2141,8 @@ function WorkCalendar() {
                     {dayReports.length > 0 && (
                       <div className="mt-0.5 space-y-0.5">
                         {dayReports.slice(0, 2).map(r => {
-                          const mainCat = (entriesByReport[r.id] || [])[0]?.category as WorkCategory | undefined;
-                          const config = mainCat ? categoryConfig[mainCat] : null;
+                          const mainCat = (entriesByReport[r.id] || [])[0]?.category as string | undefined;
+                          const config = mainCat ? categoryLookup[mainCat] : null;
                           const name = staffNameById[r.staff_id] || '';
                           return (<div key={r.id} className="flex items-center gap-0.5">{config && <span className={cn('text-[10px] px-1 py-0 rounded', config.bg, config.color)}>{name.slice(0, 2)}</span>}{!config && r.is_leave && <span className="text-[10px] px-1 py-0 rounded bg-amber-100 text-amber-700">假</span>}</div>);
                         })}
@@ -2421,14 +2429,15 @@ function MonthlyReport() {
 // Work Analysis
 // ============================
 function WorkAnalysis() {
+  const categoryLookup = useCategoryLookup();
   const [selectedMonth, setSelectedMonth] = useState(1);
   const monthStr = `2025-${String(selectedMonth).padStart(2, '0')}`;
   const monthReports = dailyReportsV2.filter(r => r.reportDate.startsWith(monthStr) && !r.isLeave);
   const allEntries = monthReports.flatMap(r => r.entries);
 
   const catHours: Record<string, number> = {};
-  Object.keys(categoryConfig).forEach(k => { catHours[k] = 0; });
-  allEntries.forEach(e => { catHours[e.category] += e.hours; });
+  Object.keys(categoryLookup).forEach(k => { catHours[k] = 0; });
+  allEntries.forEach(e => { catHours[e.category] = (catHours[e.category] || 0) + e.hours; });
   const totalModuleHours = Object.values(catHours).reduce((s, h) => s + h, 0);
 
   const staffComparison = staffMembersV2.map(staff => {
@@ -2455,7 +2464,7 @@ function WorkAnalysis() {
         <h4 className="text-[16px] font-bold mb-4">工作類型分佈（13 類）</h4>
         <div className="space-y-3">
           {(Object.entries(catHours) as [string, number][]).filter(([_, h]) => h > 0).sort((a, b) => b[1] - a[1]).map(([cat, hours]) => {
-            const config = categoryConfig[cat as WorkCategory];
+            const config = categoryLookup[cat];
             if (!config) return null;
             const pct = totalModuleHours > 0 ? (hours / totalModuleHours) * 100 : 0;
             return (
