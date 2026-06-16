@@ -7,7 +7,8 @@ import {
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { categoryConfig, WorkCategory } from '@/data/dayReportDataV2';
+import { categoryConfig } from '@/data/dayReportDataV2';
+import { useDayReportTypes } from '@/hooks/useDayReportTypes';
 
 // ============================
 // Types
@@ -93,6 +94,25 @@ function isWeekend(dateStr: string): boolean {
 // ============================
 export function TeamDashboard() {
   const { systemUser } = useAuth();
+  const { types: dynamicTypes } = useDayReportTypes();
+  // Build a lookup that includes both built-in categories and any
+  // custom 工作類型 the user has added in 工作類型管理. Custom rows fall
+  // back to a neutral icon/colour so they no longer render as the raw id.
+  const categoryLookup = useMemo(() => {
+    const map: Record<string, { label: string; icon: string; color: string; bg: string }> = {};
+    for (const [k, v] of Object.entries(categoryConfig)) {
+      map[k] = { label: v.label, icon: v.icon, color: v.color, bg: v.bg };
+    }
+    for (const t of dynamicTypes) {
+      map[t.id] = {
+        label: t.label,
+        icon: t.icon || '📋',
+        color: t.color || 'text-gray-600',
+        bg: t.bg || 'bg-gray-100',
+      };
+    }
+    return map;
+  }, [dynamicTypes]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [reports, setReports] = useState<DayReport[]>([]);
   const [entries, setEntries] = useState<DayReportEntry[]>([]);
@@ -548,6 +568,7 @@ export function TeamDashboard() {
           toggleExpandedReport={toggleExpandedReport}
           statusColors={statusColors}
           statusLabels={statusLabels}
+          categoryLookup={categoryLookup}
         />
       )}
 
@@ -633,6 +654,7 @@ interface ReportsPanelProps {
   toggleExpandedReport: (id: string) => void;
   statusColors: Record<string, string>;
   statusLabels: Record<string, string>;
+  categoryLookup: Record<string, { label: string; icon: string; color: string; bg: string }>;
 }
 
 function AllReportsPanel(props: ReportsPanelProps) {
@@ -756,7 +778,7 @@ function AllReportsPanel(props: ReportsPanelProps) {
   );
 }
 
-function ReportsList({ reports, entries, getStaffName, getStaffAvatar, expandedReports, toggleExpandedReport, statusColors, statusLabels, title }: ReportsPanelProps & { title: string }) {
+function ReportsList({ reports, entries, getStaffName, getStaffAvatar, expandedReports, toggleExpandedReport, statusColors, statusLabels, categoryLookup, title }: ReportsPanelProps & { title: string }) {
   return (
     <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between">
@@ -812,7 +834,7 @@ function ReportsList({ reports, entries, getStaffName, getStaffAvatar, expandedR
                   {reportEntries.length > 0 ? (
                     <div className="space-y-2">
                       {reportEntries.map(entry => {
-                        const config = categoryConfig[entry.category as WorkCategory];
+                        const config = categoryLookup[entry.category];
                         return (
                           <div key={entry.id} className="flex items-start gap-2 p-2.5 rounded-lg bg-muted/20 border border-border/20">
                             <span className={cn('text-[11px] px-1.5 py-0.5 rounded shrink-0 mt-0.5', config?.bg || 'bg-gray-100', config?.color || 'text-gray-600')}>
