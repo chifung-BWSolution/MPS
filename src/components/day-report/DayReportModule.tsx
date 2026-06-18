@@ -1581,7 +1581,7 @@ function TodayTeamReports() {
   // === LIVE DATABASE STATE ===
   const [dbStaff, setDbStaff] = useState<Array<{ id: string; bubble_staff_id: string; display_name: string; department: string; position: string; status: string }>>([]);
   const [dbReports, setDbReports] = useState<Array<{ id: string; staff_id: string; report_date: string; total_hours: number; ot_hours: number; is_leave: boolean; leave_type: string | null; status: string }>>([]);
-  const [dbEntries, setDbEntries] = useState<Array<{ id: string; day_report_id: string; staff_id: string; category: string; title: string; hours: number; outcome_url: string | null; growth_experience: string | null; is_ai_assisted: boolean; ai_tools: any }>>([]);
+  const [dbEntries, setDbEntries] = useState<Array<{ id: string; day_report_id: string; staff_id: string; category: string; title: string; hours: number; outcome_url: string | null; growth_experience: string | null; is_ai_assisted: boolean; ai_tools: any; related_name: string | null }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [departmentOptions, setDepartmentOptions] = useState<Array<{ value: string; label: string }>>([]);
 
@@ -1641,7 +1641,7 @@ function TodayTeamReports() {
           const reportIds = reports.map(r => r.id);
           const { data: entryData, error: entryErr } = await supabase
             .from('day_report_entries')
-            .select('id, day_report_id, staff_id, category, title, hours, outcome_url, growth_experience, is_ai_assisted, ai_tools')
+            .select('id, day_report_id, staff_id, category, title, hours, outcome_url, growth_experience, is_ai_assisted, ai_tools, related_name')
             .in('day_report_id', reportIds);
 
           if (entryErr) {
@@ -1814,6 +1814,7 @@ function TodayTeamReports() {
                       return (
                         <div key={entry.id} className="flex items-center gap-2">
                           <span className={cn('text-[11px] px-1.5 py-0.5 rounded shrink-0', config.bg, config.color)}>{config.icon} {config.label}</span>
+                          {entry.related_name && <span className="text-[11px] px-1.5 py-0.5 rounded bg-sky-50 text-sky-600 border border-sky-100 shrink-0">{entry.related_name}</span>}
                           <span className="text-[12px] text-muted-foreground truncate flex-1">{entry.title}</span>
                           <span className="text-[12px] font-medium shrink-0">{entry.hours}h</span>
                           {entry.is_ai_assisted && <Bot size={10} className="text-purple-500 shrink-0" />}
@@ -1876,7 +1877,7 @@ function TodayTeamReports() {
 // ============================
 interface WCStaff { bubble_staff_id: string; display_name: string; department: string | null; }
 interface WCReport { id: string; staff_id: string; report_date: string; total_hours: number; ot_hours: number; is_leave: boolean; status: string; }
-interface WCEntry { id: string; day_report_id: string; category: string; title: string | null; hours: number; outcome_url: string | null; growth_experience: string | null; is_ai_assisted: boolean | null; }
+interface WCEntry { id: string; day_report_id: string; category: string; title: string | null; hours: number; outcome_url: string | null; growth_experience: string | null; is_ai_assisted: boolean | null; related_name: string | null; }
 
 const WC_DEPARTMENT_OPTIONS = [
   { value: '__ALL__', label: '全部部門' },
@@ -2037,7 +2038,7 @@ function WorkCalendar() {
           const ids = normalizedReports.map(r => r.id);
           const { data: eData, error: eErr } = await supabase
             .from('day_report_entries')
-            .select('id, day_report_id, category, title, hours, outcome_url, growth_experience, is_ai_assisted')
+            .select('id, day_report_id, category, title, hours, outcome_url, growth_experience, is_ai_assisted, related_name')
             .in('day_report_id', ids)
             .limit(20000);
           if (eErr) console.error('[WorkCalendar] day_report_entries error:', eErr);
@@ -2202,8 +2203,9 @@ function WorkCalendar() {
                     const config = categoryLookup[entry.category];
                     return (
                       <div key={entry.id} className="p-2.5 rounded-md bg-muted/30 border border-border/40">
-                        <div className="flex items-center gap-1.5 mb-1">
+                        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                           {config && <span className={cn('text-[11px] px-1.5 py-0.5 rounded font-medium', config.bg, config.color)}>{config.label}</span>}
+                          {entry.related_name && <span className="text-[11px] px-1.5 py-0.5 rounded bg-sky-50 text-sky-600 border border-sky-100">{entry.related_name}</span>}
                           <span className="text-[12px] font-semibold text-muted-foreground">{entry.hours}h</span>
                           {entry.is_ai_assisted && <Bot size={11} className="text-purple-500" />}
                         </div>

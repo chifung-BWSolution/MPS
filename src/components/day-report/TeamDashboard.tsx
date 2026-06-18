@@ -837,12 +837,14 @@ function ReportsList({ reports, entries, getStaffName, getStaffAvatar, expandedR
                         const config = categoryLookup[entry.category];
                         return (
                           <div key={entry.id} className="flex items-start gap-2 p-2.5 rounded-lg bg-muted/20 border border-border/20">
-                            <span className={cn('text-[11px] px-1.5 py-0.5 rounded shrink-0 mt-0.5', config?.bg || 'bg-gray-100', config?.color || 'text-gray-600')}>
-                              {config?.icon || '📋'} {config?.label || entry.category}
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0 mt-0.5 flex-wrap">
+                              <span className={cn('text-[11px] px-1.5 py-0.5 rounded', config?.bg || 'bg-gray-100', config?.color || 'text-gray-600')}>
+                                {config?.icon || '📋'} {config?.label || entry.category}
+                              </span>
+                              {entry.related_name && <span className="text-[11px] px-1.5 py-0.5 rounded bg-sky-50 text-sky-600 border border-sky-100">{entry.related_name}</span>}
+                            </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-[13px] font-medium">{entry.title || '(無標題)'}</p>
-                              {entry.related_name && <p className="text-[11px] text-muted-foreground mt-0.5">關聯: {entry.related_name}</p>}
                               {entry.outcome_url && (
                                 <a href={entry.outcome_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-blue-600 hover:underline mt-0.5 block truncate">
                                   {entry.outcome_url}
