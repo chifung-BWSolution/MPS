@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Plus, Check, X, AlertTriangle, ChevronLeft, ChevronRight, Link, Sparkles, Clock, Users, BarChart3, Calendar, FileText, Zap, Bot, Trash2, RefreshCw, Eye, MapPin, CalendarDays, Loader2, Shield, Star } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { Plus, Check, X, AlertTriangle, ChevronLeft, ChevronRight, Link, Sparkles, Clock, Users, BarChart3, Calendar, FileText, Zap, Bot, Trash2, RefreshCw, Eye, MapPin, CalendarDays, Loader2, Shield, Star, Upload, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -160,11 +160,13 @@ function SubmitReportPage() {
     outcomeType: OutcomeType | '';
     outcomeUrl: string;
     outcomeImages: string[];
+    outcomeImageFiles: File[];
     growthExperience: string;
     isAiAssisted: boolean;
     aiTools: AITool[];
     aiToolsV2: AiToolsSelection;
-  }>>([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
+  }>>([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], outcomeImageFiles: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
+  const imageInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   // User-saved 常用匯報項目 templates — backed by Supabase
   // public.user_report_templates so they follow the user across devices.
@@ -450,6 +452,7 @@ function SubmitReportPage() {
               outcomeType: (e.outcome_type || '') as OutcomeType | '',
               outcomeUrl: e.outcome_url || '',
               outcomeImages: e.outcome_images || [],
+              outcomeImageFiles: [] as File[],
               growthExperience: e.growth_experience || '',
               isAiAssisted: e.is_ai_assisted || false,
               aiTools: (e.ai_tools || []) as AITool[],
@@ -457,7 +460,7 @@ function SubmitReportPage() {
             }));
             setEntries(loadedEntries);
           } else {
-            setEntries([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
+            setEntries([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], outcomeImageFiles: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
           }
         } else {
           // No existing report — restore from localStorage draft if present,
@@ -490,7 +493,7 @@ function SubmitReportPage() {
             console.warn('[SubmitReport] failed to restore draft inside loadExistingReport:', err);
           }
           if (!draftRestored) {
-            setEntries([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
+            setEntries([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], outcomeImageFiles: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
             setUnderHoursReason('');
             setTargetHours(8);
           }
@@ -626,7 +629,7 @@ function SubmitReportPage() {
   const aiUsedInEntries = entries.some(e => e.isAiAssisted || e.aiToolsV2.copywriting.length > 0 || e.aiToolsV2.image.length > 0 || e.aiToolsV2.video.length > 0 || !!e.aiToolsV2.copywritingOther || !!e.aiToolsV2.imageOther || !!e.aiToolsV2.videoOther);
 
   const addEntry = () => {
-    setEntries([...entries, { category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
+    setEntries([...entries, { category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], outcomeImageFiles: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
   };
   const removeEntry = (idx: number) => {
     if (entries.length > 1) setEntries(entries.filter((_, i) => i !== idx));
@@ -694,6 +697,7 @@ function SubmitReportPage() {
       ...tpl.entry,
       aiToolsV2: { ...tpl.entry.aiToolsV2 },
       outcomeImages: [...(tpl.entry.outcomeImages || [])],
+      outcomeImageFiles: [] as File[],
       aiTools: [...(tpl.entry.aiTools || [])],
     };
     const firstEmpty = entries.findIndex(e => !e.category && !e.title && e.hours === 0);
@@ -719,6 +723,7 @@ function SubmitReportPage() {
         outcomeType: d.outcomeType || '' as OutcomeType | '',
         outcomeUrl: d.outcomeUrl || '',
         outcomeImages: [] as string[],
+        outcomeImageFiles: [] as File[],
         growthExperience: '',
         isAiAssisted: false,
         aiTools: [] as AITool[],
@@ -727,6 +732,53 @@ function SubmitReportPage() {
       setEntries([...entries.filter(e => e.category || e.title), ...newEntries]);
       setIsPulling(false);
     }, 800);
+  };
+
+  const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/avif'];
+  const MAX_IMAGE_SIZE_MB = 5;
+  const MAX_IMAGES_PER_ENTRY = 5;
+
+  const handleImageFileSelect = (idx: number, files: FileList | null) => {
+    if (!files) return;
+    const existing = entries[idx].outcomeImageFiles || [];
+    const candidates = Array.from(files);
+    const errors: string[] = [];
+    const valid: File[] = [];
+    for (const f of candidates) {
+      if (!ACCEPTED_IMAGE_TYPES.includes(f.type)) { errors.push(`${f.name} 格式不支援`); continue; }
+      if (f.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) { errors.push(`${f.name} 超過 ${MAX_IMAGE_SIZE_MB}MB`); continue; }
+      valid.push(f);
+    }
+    const merged = [...existing, ...valid].slice(0, MAX_IMAGES_PER_ENTRY);
+    if (errors.length) alert(errors.join('\n'));
+    updateEntry(idx, 'outcomeImageFiles', merged);
+  };
+
+  const removeImageFile = (entryIdx: number, fileIdx: number) => {
+    const files = [...(entries[entryIdx].outcomeImageFiles || [])];
+    files.splice(fileIdx, 1);
+    updateEntry(entryIdx, 'outcomeImageFiles', files);
+  };
+
+  const removeExistingImage = (entryIdx: number, imgIdx: number) => {
+    const imgs = [...entries[entryIdx].outcomeImages];
+    imgs.splice(imgIdx, 1);
+    updateEntry(entryIdx, 'outcomeImages', imgs);
+  };
+
+  const uploadEntryImages = async (entryIdx: number, reportId: string): Promise<string[]> => {
+    const files = entries[entryIdx].outcomeImageFiles || [];
+    if (files.length === 0) return [];
+    const urls: string[] = [];
+    for (const file of files) {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `${reportId}/${entryIdx}_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage.from('day-report-images').upload(path, file, { upsert: false });
+      if (error) { console.error('[ImageUpload] failed:', error.message); continue; }
+      const { data: urlData } = supabase.storage.from('day-report-images').getPublicUrl(path);
+      if (urlData?.publicUrl) urls.push(urlData.publicUrl);
+    }
+    return urls;
   };
 
   const handleSubmit = async () => {
@@ -812,10 +864,20 @@ function SubmitReportPage() {
         reportId = reportData.id;
       }
 
+      // Upload any pending image files and collect public URLs per entry
+      const filteredEntries = entries.filter(e => e.category && e.hours > 0);
+      const uploadedUrlsPerEntry = await Promise.all(
+        filteredEntries.map((_, i) => {
+          const origIdx = entries.indexOf(filteredEntries[i]);
+          return uploadEntryImages(origIdx, reportId);
+        })
+      );
+
       // Insert all entry records (fresh for both create and update)
-      const entryRecords = entries
-        .filter(e => e.category && e.hours > 0)
-        .map((e, idx) => ({
+      const entryRecords = filteredEntries
+        .map((e, idx) => {
+          const allImages = [...e.outcomeImages, ...uploadedUrlsPerEntry[idx]];
+          return ({
           day_report_id: reportId,
           staff_id: currentStaffId,
           category: e.category,
@@ -825,13 +887,14 @@ function SubmitReportPage() {
           hours: e.hours,
           outcome_type: e.outcomeType || null,
           outcome_url: e.outcomeUrl || null,
-          outcome_images: e.outcomeImages.length > 0 ? e.outcomeImages : null,
+          outcome_images: allImages.length > 0 ? allImages : null,
           growth_experience: e.growthExperience || null,
           is_ai_assisted: e.aiToolsV2.copywriting.length > 0 || e.aiToolsV2.image.length > 0 || e.aiToolsV2.video.length > 0 || !!e.aiToolsV2.copywritingOther || !!e.aiToolsV2.imageOther || !!e.aiToolsV2.videoOther,
           ai_tools: e.aiTools.length > 0 ? e.aiTools : null,
           ai_tools_v2: (e.aiToolsV2.copywriting.length > 0 || e.aiToolsV2.image.length > 0 || e.aiToolsV2.video.length > 0 || !!e.aiToolsV2.copywritingOther || !!e.aiToolsV2.imageOther || !!e.aiToolsV2.videoOther) ? e.aiToolsV2 : null,
           sort_order: idx,
-        }));
+        });
+        });
 
       if (entryRecords.length > 0) {
         const { error: entriesError } = await supabase
@@ -903,6 +966,7 @@ function SubmitReportPage() {
         outcomeType: '',
         outcomeUrl: '',
         outcomeImages: [],
+        outcomeImageFiles: [],
         growthExperience: '',
         isAiAssisted: false,
         aiTools: [],
@@ -919,6 +983,7 @@ function SubmitReportPage() {
         outcomeType: '',
         outcomeUrl: '',
         outcomeImages: [],
+        outcomeImageFiles: [],
         growthExperience: '',
         isAiAssisted: false,
         aiTools: [],
@@ -946,7 +1011,7 @@ function SubmitReportPage() {
         )}
         <button onClick={() => {
           setSubmitted(false);
-          setEntries([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
+          setEntries([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], outcomeImageFiles: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
           setUnderHoursReason('');
           setSubmitError(null);
         }} className="px-4 py-2 rounded-md border border-teal-200 text-teal-700 text-[15px] font-medium hover:bg-teal-50 transition-colors">
@@ -1208,6 +1273,7 @@ function SubmitReportPage() {
                           outcomeType: '' as OutcomeType | '',
                           outcomeUrl: '',
                           outcomeImages: [] as string[],
+                          outcomeImageFiles: [] as File[],
                           growthExperience: '',
                           isAiAssisted: false,
                           aiTools: [] as AITool[],
@@ -1498,7 +1564,61 @@ function SubmitReportPage() {
                     {Object.entries(outcomeTypeConfigV2).map(([k, v]) => (<option key={k} value={k}>{v.icon} {v.label}</option>))}
                   </select>
                   {entry.outcomeType === 'url' && (<input value={entry.outcomeUrl} onChange={(e) => updateEntry(idx, 'outcomeUrl', e.target.value)} className="flex-1 px-2.5 py-1.5 border border-border rounded-md text-[15px]" placeholder="輸入成果URL連結..." />)}
-                  {entry.outcomeType === 'image' && (<input value={entry.outcomeImages.join(', ')} onChange={(e) => updateEntry(idx, 'outcomeImages', e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean))} className="flex-1 px-2.5 py-1.5 border border-border rounded-md text-[15px]" placeholder="輸入圖片URL（多張以逗號分隔）..." />)}
+                  {entry.outcomeType === 'image' && (
+                    <div className="flex-1">
+                      {/* Hidden file input */}
+                      <input
+                        ref={el => { imageInputRefs.current[idx] = el; }}
+                        type="file"
+                        accept=".png,.jpg,.jpeg,.webp,.avif,image/png,image/jpeg,image/webp,image/avif"
+                        multiple
+                        className="hidden"
+                        onChange={e => handleImageFileSelect(idx, e.target.files)}
+                        onClick={e => { (e.target as HTMLInputElement).value = ''; }}
+                      />
+                      {/* Upload trigger row */}
+                      <div
+                        className="flex items-center gap-2 px-2.5 py-1.5 border border-dashed border-border rounded-md cursor-pointer hover:bg-muted/30 transition-colors select-none"
+                        onClick={() => imageInputRefs.current[idx]?.click()}
+                      >
+                        <Upload size={13} className="text-muted-foreground shrink-0" />
+                        <span className="text-[13px] text-muted-foreground">
+                          點擊上傳圖片（PNG / JPG / WEBP / AVIF，每張≤5MB，最多5張）
+                        </span>
+                        {((entry.outcomeImageFiles?.length || 0) + entry.outcomeImages.length) > 0 && (
+                          <span className="ml-auto text-[12px] font-medium text-teal-600 shrink-0">
+                            {(entry.outcomeImageFiles?.length || 0) + entry.outcomeImages.length} / {MAX_IMAGES_PER_ENTRY}
+                          </span>
+                        )}
+                      </div>
+                      {/* Thumbnail previews */}
+                      {(entry.outcomeImages.length > 0 || (entry.outcomeImageFiles?.length || 0) > 0) && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {entry.outcomeImages.map((url, imgIdx) => (
+                            <div key={`existing-${imgIdx}`} className="relative group w-16 h-16">
+                              <img src={url} alt="" className="w-16 h-16 object-cover rounded border border-border" />
+                              <button
+                                type="button"
+                                onClick={() => removeExistingImage(idx, imgIdx)}
+                                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                              ><X size={9} /></button>
+                            </div>
+                          ))}
+                          {(entry.outcomeImageFiles || []).map((file, fileIdx) => (
+                            <div key={`new-${fileIdx}`} className="relative group w-16 h-16">
+                              <img src={URL.createObjectURL(file)} alt="" className="w-16 h-16 object-cover rounded border border-teal-300" />
+                              <div className="absolute bottom-0 left-0 right-0 text-[8px] text-center bg-black/40 text-white rounded-b truncate px-0.5">新</div>
+                              <button
+                                type="button"
+                                onClick={() => removeImageFile(idx, fileIdx)}
+                                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                              ><X size={9} /></button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {entry.outcomeType === 'growth_experience' && (<input value={entry.growthExperience} onChange={(e) => updateEntry(idx, 'growthExperience', e.target.value)} className="flex-1 px-2.5 py-1.5 border border-border rounded-md text-[15px]" placeholder="描述成長經驗與技能提升..." />)}
                 </div>
               </div>
