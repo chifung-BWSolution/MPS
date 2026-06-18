@@ -786,6 +786,11 @@ function SubmitReportPage() {
       setSubmitError('無法識別當前用戶，請確認員工資料已同步。');
       return;
     }
+    const asanaEntry = entries.find(e => e.outcomeType === 'url' && /app\.asana\.com/i.test(e.outcomeUrl));
+    if (asanaEntry) {
+      setSubmitError('成果連結不允許使用 Asana 連結，請移除後再提交。');
+      return;
+    }
     setIsSubmitting(true);
     setSubmitError(null);
 
@@ -1563,7 +1568,22 @@ function SubmitReportPage() {
                     <option value="">類型...</option>
                     {Object.entries(outcomeTypeConfigV2).map(([k, v]) => (<option key={k} value={k}>{v.icon} {v.label}</option>))}
                   </select>
-                  {entry.outcomeType === 'url' && (<input value={entry.outcomeUrl} onChange={(e) => updateEntry(idx, 'outcomeUrl', e.target.value)} className="flex-1 px-2.5 py-1.5 border border-border rounded-md text-[15px]" placeholder="輸入成果URL連結..." />)}
+                  {entry.outcomeType === 'url' && (
+                    <div className="flex-1 flex flex-col gap-1">
+                      <input
+                        value={entry.outcomeUrl}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          updateEntry(idx, 'outcomeUrl', val);
+                        }}
+                        className={cn('flex-1 w-full px-2.5 py-1.5 border rounded-md text-[15px]', entry.outcomeUrl && /app\.asana\.com/i.test(entry.outcomeUrl) ? 'border-rose-400 bg-rose-50' : 'border-border')}
+                        placeholder="輸入成果URL連結，不要貼上ASANA 連結"
+                      />
+                      {entry.outcomeUrl && /app\.asana\.com/i.test(entry.outcomeUrl) && (
+                        <span className="text-[12px] text-rose-600">不允許貼上 Asana 連結，請改用其他成果連結。</span>
+                      )}
+                    </div>
+                  )}
                   {entry.outcomeType === 'image' && (
                     <div className="flex-1">
                       {/* Hidden file input */}
