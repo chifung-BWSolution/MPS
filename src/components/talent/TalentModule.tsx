@@ -1290,7 +1290,7 @@ function TalentInvite() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="新增藝人" subtitle="一鍵產生自助填表連結，發送給藝人填寫詳細資料。" />
+      <PageHeader title="新增藝人1" subtitle="一鍵產生自助填表連結，發送給藝人填寫詳細資料。" />
 
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] p-6 space-y-4">
         <div className="flex items-start gap-3">

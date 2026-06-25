@@ -113,7 +113,7 @@ export const mainMenuItems: MainMenuItem[] = [
     label: '藝人管理',
     subMenus: [
       { id: 'list', label: '藝人列表' },
-      { id: 'invite', label: '新增藝人' },
+      { id: 'invite', label: '新增藝人1' },
       { id: 'categories', label: '藝人分類' },
       { id: 'interviews', label: '面試安排' },
       { id: 'collaborated', label: '已合作藝人' },
