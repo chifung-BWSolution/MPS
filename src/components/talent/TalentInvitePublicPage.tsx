@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom';
-import { TalentApplicationForm } from '@/components/settings/TalentApplicationForm';
+import { TalentApplicationFormV2 } from '@/components/settings/TalentApplicationFormV2';
 
 export function TalentInvitePublicPage() {
   const { token } = useParams<{ token: string }>();
@@ -20,7 +20,7 @@ export function TalentInvitePublicPage() {
             </p>
           )}
         </div>
-        <TalentApplicationForm mode="submit" inviteToken={token} />
+        <TalentApplicationFormV2 mode="submit" inviteToken={token} />
       </div>
     </div>
   );
