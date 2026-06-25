@@ -257,6 +257,25 @@ const fileOptions: Choice[] = [
   { value: 'other', label: '其他補充文件' },
 ];
 
+const formSteps = [
+  {
+    title: '基本資料與申請方向',
+    description: '填寫身份、聯絡方式，以及希望發展的藝人方向。',
+  },
+  {
+    title: '外形資質與內容能力',
+    description: '補充外形條件、語言能力、拍攝限制與社交媒體能力。',
+  },
+  {
+    title: '經驗紀錄與發展規劃',
+    description: '整理過往合作經驗、收費方式和未來發展定位。',
+  },
+  {
+    title: '文件上傳與聲明簽署',
+    description: '提交附件清單並完成申請人聲明及簽署。',
+  },
+];
+
 function FieldLabel({ children, required }: { children: string; required?: boolean }) {
   return (
     <label className="mb-1.5 block text-[13px] font-semibold text-[#0d1a2d]">
@@ -489,6 +508,13 @@ export function TalentApplicationFormV2({
   const [submitting, setSubmitting] = useState(false);
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [currentStep, setCurrentStep] = useState(0);
+
+  const totalSteps = formSteps.length;
+  const currentStepMeta = formSteps[currentStep];
+  const isFirstStep = currentStep === 0;
+  const isLastStep = currentStep === totalSteps - 1;
+  const progressPercent = Math.round(((currentStep + 1) / totalSteps) * 100);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -503,7 +529,18 @@ export function TalentApplicationFormV2({
       setForm({ ...initialState, ...(initialValue ?? {}) });
       setSavedAt(null);
       setSubmitError(null);
+      setCurrentStep(0);
     }
+  };
+
+  const goPrevious = () => {
+    setCurrentStep((step) => Math.max(0, step - 1));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const goNext = () => {
+    setCurrentStep((step) => Math.min(totalSteps - 1, step + 1));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSubmit = async () => {
@@ -565,7 +602,25 @@ export function TalentApplicationFormV2({
         </p>
       </div>
 
-      <SectionCard title="A1. 基本資料">
+      <div className="rounded-lg border border-teal-100 bg-teal-50/70 px-5 py-4">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-[12px] font-semibold text-teal-700">第 {currentStep + 1} / {totalSteps} 頁</p>
+            <h3 className="mt-1 text-[16px] font-bold text-[#0d1a2d]">{currentStepMeta.title}</h3>
+            <p className="mt-1 text-[12px] text-muted-foreground">{currentStepMeta.description}</p>
+          </div>
+          <div className="rounded-full bg-white px-3 py-1 text-[12px] font-bold text-teal-700 shadow-sm">
+            進度 {progressPercent}%
+          </div>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-white">
+          <div className="h-full rounded-full bg-teal-600 transition-all duration-300" style={{ width: `${progressPercent}%` }} />
+        </div>
+      </div>
+
+      {currentStep === 0 && (
+        <>
+          <SectionCard title="A1. 基本資料">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <TextInput label="申請編號" value={form.applicationNo} onChange={(value) => update('applicationNo', value)} placeholder="例如：APP-0001" disabled={readOnly} />
           <TextInput label="申請日期" type="date" value={form.applicationDate} onChange={(value) => update('applicationDate', value)} disabled={readOnly} />
@@ -592,8 +647,12 @@ export function TalentApplicationFormV2({
         <CheckboxGroup label="申請類別" options={categoryOptions} value={form.categories} onChange={(value) => update('categories', value)} disabled={readOnly} />
         <TextInput label="其他類別" value={form.categoryOther} onChange={(value) => update('categoryOther', value)} placeholder="如選其他，請補充" disabled={readOnly} />
       </SectionCard>
+        </>
+      )}
 
-      <SectionCard title="A3. 外形及資質資料">
+      {currentStep === 1 && (
+        <>
+          <SectionCard title="A3. 外形及資質資料">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <TextInput label="身高（cm）" value={form.height} onChange={(value) => update('height', value)} placeholder="例如：168" disabled={readOnly} />
           <TextInput label="體重（kg）" value={form.weight} onChange={(value) => update('weight', value)} placeholder="例如：50" disabled={readOnly} />
@@ -642,8 +701,12 @@ export function TalentApplicationFormV2({
         </div>
         <TextArea label="過往作品連結" value={form.portfolioLinks} onChange={(value) => update('portfolioLinks', value)} placeholder="影片 / Reel / 主持片段 / VO sample，可每行一個連結" rows={4} disabled={readOnly} />
       </SectionCard>
+        </>
+      )}
 
-      <SectionCard title="A5. 工作經驗及代表紀錄">
+      {currentStep === 2 && (
+        <>
+          <SectionCard title="A5. 工作經驗及代表紀錄">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <RadioGroup label="是否曾簽約於其他公司 / 經紀" options={[{ value: 'yes', label: '是' }, { value: 'no', label: '否' }]} value={form.signedCompanyBefore} onChange={(value) => update('signedCompanyBefore', value)} disabled={readOnly} />
           <SelectInput label="現時合約狀態" value={form.contractStatus} onChange={(value) => update('contractStatus', value)} options={[{ value: 'exclusive', label: '獨家' }, { value: 'non_exclusive', label: '非獨家' }, { value: 'ended', label: '已完結' }]} disabled={readOnly} />
@@ -674,8 +737,12 @@ export function TalentApplicationFormV2({
           </div>
         </div>
       </SectionCard>
+        </>
+      )}
 
-      <SectionCard title="A7. 文件上傳清單" hint="請按實際情況勾選並上傳或提供資料。">
+      {currentStep === 3 && (
+        <>
+          <SectionCard title="A7. 文件上傳清單" hint="請按實際情況勾選並上傳或提供資料。">
         <CheckboxGroup label="已提交資料" options={fileOptions} value={form.submittedFiles} onChange={(value) => update('submittedFiles', value)} disabled={readOnly} />
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <TextInput label="其他補充文件說明" value={form.otherFileNote} onChange={(value) => update('otherFileNote', value)} disabled={readOnly} />
@@ -733,44 +800,72 @@ export function TalentApplicationFormV2({
           <TextInput label="家長 / 監護人簽署日期" type="date" value={form.guardianSignDate} onChange={(value) => update('guardianSignDate', value)} disabled={readOnly} />
         </div>
       </SectionCard>
+        </>
+      )}
 
       {mode !== 'view' && (
-        <div className="sticky bottom-0 z-10 flex items-center justify-between rounded-lg border border-[rgba(13,26,45,0.08)] bg-white/95 px-5 py-3 shadow-[0_-2px_12px_rgba(0,20,40,0.06)] backdrop-blur">
-          <div className="text-[12px] text-muted-foreground">
-            {mode === 'draft' && savedAt && <span className="text-teal-700">已於 {savedAt} 儲存草稿</span>}
-            {mode === 'draft' && !savedAt && '尚未儲存'}
-            {mode === 'submit' && submitError && <span className="text-rose-600">{submitError}</span>}
-            {mode === 'submit' && !submitError && '填寫完成後可提交表格。'}
+        <div className="sticky bottom-0 z-10 rounded-lg border border-[rgba(13,26,45,0.08)] bg-white/95 px-5 py-3 shadow-[0_-2px_12px_rgba(0,20,40,0.06)] backdrop-blur">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[12px]">
+            <div className="font-semibold text-teal-700">進度：{progressPercent}%</div>
+            <div className="text-muted-foreground">第 {currentStep + 1} / {totalSteps} 頁</div>
+            <div className="text-muted-foreground">
+              {mode === 'draft' && savedAt && <span className="text-teal-700">已於 {savedAt} 儲存草稿</span>}
+              {mode === 'draft' && !savedAt && '尚未儲存'}
+              {mode === 'submit' && submitError && <span className="text-rose-600">{submitError}</span>}
+              {mode === 'submit' && !submitError && (isLastStep ? '請確認資料後遞交表格。' : '請完成本頁後進入下一頁。')}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleReset}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-white px-3 py-2 text-[13px] font-medium text-[#0d1a2d] transition-colors hover:bg-muted/60"
-            >
-              <RotateCcw size={14} />
-              重設
-            </button>
-            {mode === 'submit' ? (
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              {!isFirstStep && (
+                <button
+                  type="button"
+                  onClick={goPrevious}
+                  className="inline-flex items-center rounded-md border border-border bg-white px-3 py-2 text-[13px] font-medium text-[#0d1a2d] transition-colors hover:bg-muted/60"
+                >
+                  上一頁
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="inline-flex items-center gap-1.5 rounded-md bg-teal-600 px-4 py-2 text-[13px] font-bold text-white shadow-sm transition-colors hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={handleReset}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-white px-3 py-2 text-[13px] font-medium text-[#0d1a2d] transition-colors hover:bg-muted/60"
               >
-                <Send size={14} />
-                {submitting ? '正在遞交…' : '遞交表格'}
+                <RotateCcw size={14} />
+                重設
               </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSave}
-                className="inline-flex items-center gap-1.5 rounded-md bg-teal-600 px-4 py-2 text-[13px] font-bold text-white shadow-sm transition-colors hover:bg-teal-700"
-              >
-                <Send size={14} />
-                儲存草稿
-              </button>
-            )}
+              {!isLastStep && (
+                <button
+                  type="button"
+                  onClick={goNext}
+                  className="inline-flex items-center rounded-md bg-teal-600 px-4 py-2 text-[13px] font-bold text-white shadow-sm transition-colors hover:bg-teal-700"
+                >
+                  下一頁
+                </button>
+              )}
+              {isLastStep && (mode === 'submit' ? (
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={submitting}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-teal-600 px-4 py-2 text-[13px] font-bold text-white shadow-sm transition-colors hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Send size={14} />
+                  {submitting ? '正在遞交…' : '遞交表格'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-teal-600 px-4 py-2 text-[13px] font-bold text-white shadow-sm transition-colors hover:bg-teal-700"
+                >
+                  <Send size={14} />
+                  儲存草稿
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
