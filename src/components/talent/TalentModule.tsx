@@ -638,7 +638,7 @@ function TalentForm({
 // =====================================================================
 // Adapter: turn a ConfirmedArtistRow into a Talent-shaped object so the list
 // can render it through the same row template. Marked readOnly for the UI.
-const confirmedRowToTalent = (c: ConfirmedArtistRow): Talent & { _confirmed: true; _formId?: string; _inviteToken?: string } => ({
+const confirmedRowToTalent = (c: ConfirmedArtistRow): Talent & { _confirmed: true; _formId?: string; _legacyFormId?: string; _inviteToken?: string } => ({
   id: `ca_${c.id}`,
   name: c.name_zh || c.name_en || '（未填姓名）',
   stageName: c.name_en || undefined,
@@ -660,6 +660,7 @@ const confirmedRowToTalent = (c: ConfirmedArtistRow): Talent & { _confirmed: tru
   photoUrl: c.photo_url || undefined,
   _confirmed: true,
   _formId: c.artist_apply_id || undefined,
+  _legacyFormId: c.source_form_id || undefined,
   _inviteToken: c.invite_token || undefined,
   inviteToken: c.invite_token || undefined,
 });
@@ -685,6 +686,7 @@ function TalentList() {
   const [photoUploadError, setPhotoUploadError] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<{ rowId: string; name: string; url?: string } | null>(null);
   const [formIdByToken, setFormIdByToken] = useState<Record<string, string>>({});
+  const [formIdByLegacyId, setFormIdByLegacyId] = useState<Record<string, string>>({});
 
   const handleAvatarReplace = (rowId: string, file: File | null) => {
     setPhotoUploadError(null);
@@ -756,13 +758,18 @@ function TalentList() {
     (async () => {
       const { data, error } = await supabase
         .from('artist_apply')
-        .select('id, invite_token');
+        .select('id, invite_token, raw_payload, submitted_at')
+        .order('submitted_at', { ascending: false });
       if (cancelled || error || !data) return;
-      const map: Record<string, string> = {};
-      for (const row of data as { id: string; invite_token: string | null }[]) {
-        if (row.invite_token) map[row.invite_token] = row.id;
+      const tokenMap: Record<string, string> = {};
+      const legacyMap: Record<string, string> = {};
+      for (const row of data as { id: string; invite_token: string | null; raw_payload?: Record<string, any> | null }[]) {
+        if (row.invite_token && !tokenMap[row.invite_token]) tokenMap[row.invite_token] = row.id;
+        const legacyId = row.raw_payload?.legacyTalentFormId;
+        if (typeof legacyId === 'string' && legacyId) legacyMap[legacyId] = row.id;
       }
-      setFormIdByToken(map);
+      setFormIdByToken(tokenMap);
+      setFormIdByLegacyId(legacyMap);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -1042,6 +1049,7 @@ function TalentList() {
                   <td className="px-4 py-3">
                     {(() => {
                       const formId = (t as any)._formId
+                        || ((t as any)._legacyFormId ? formIdByLegacyId[(t as any)._legacyFormId] : undefined)
                         || (t.inviteToken ? formIdByToken[t.inviteToken] : undefined);
                       if (!formId) return <span className="text-[12px] text-muted-foreground">—</span>;
                       const url = `/talent/submissions/${formId}`;

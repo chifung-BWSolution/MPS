@@ -37,27 +37,58 @@ export function TalentSubmissionViewPage() {
     (async () => {
       if (!id) return;
       setLoading(true);
-      const [{ data, error }, { data: photoData, error: photoError }] = await Promise.all([
-        supabase
+      const { data: directData, error: directError } = await supabase
+        .from('artist_apply')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      let applyRow = directData as ArtistApplyRow | null;
+      let applyError = directError;
+
+      // Backwards compatibility: old links used talent_form.id. Migrated rows
+      // keep that id under raw_payload.legacyTalentFormId.
+      if (!applyRow && !directError) {
+        const { data: legacyData, error: legacyError } = await supabase
           .from('artist_apply')
           .select('*')
-          .eq('id', id)
-          .single(),
-        supabase
-          .from('artist_apply_photo')
-          .select('data_url')
-          .eq('artist_apply_id', id)
-          .eq('file_role', 'applicant_signature')
-          .order('created_at', { ascending: false })
-          .limit(1),
-      ]);
+          .filter('raw_payload->>legacyTalentFormId', 'eq', id)
+          .order('submitted_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (cancelled) return;
+        applyRow = legacyData as ArtistApplyRow | null;
+        applyError = legacyError;
+      }
+
+      if (applyError) {
+        setError(applyError.message);
+        setLoading(false);
+        return;
+      }
+
+      if (!applyRow) {
+        setRow(null);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+
+      const { data: photoData, error: photoError } = await supabase
+        .from('artist_apply_photo')
+        .select('data_url')
+        .eq('artist_apply_id', applyRow.id)
+        .eq('file_role', 'applicant_signature')
+        .order('created_at', { ascending: false })
+        .limit(1);
       if (cancelled) return;
-      if (error) {
-        setError(error.message);
-      } else if (photoError) {
+
+      if (photoError) {
         setError(photoError.message);
       } else {
-        setRow(data as ArtistApplyRow);
+        setRow(applyRow);
         const signatureRow = (photoData?.[0] ?? null) as ArtistApplyPhotoRow | null;
         setApplicantSignature(signatureRow?.data_url || '');
       }

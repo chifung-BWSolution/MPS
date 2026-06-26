@@ -589,20 +589,26 @@ export function TalentApplicationFormV2({
       <div className="rounded-lg border border-teal-100 bg-teal-50/70 px-5 py-4">
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-[12px] font-semibold text-teal-700">第 {currentStep + 1} / {totalSteps} 頁</p>
-            <h3 className="mt-1 text-[16px] font-bold text-[#0d1a2d]">{currentStepMeta.title}</h3>
-            <p className="mt-1 text-[12px] text-muted-foreground">{currentStepMeta.description}</p>
+            <p className="text-[12px] font-semibold text-teal-700">
+              {readOnly ? '完整表格' : `第 ${currentStep + 1} / ${totalSteps} 頁`}
+            </p>
+            <h3 className="mt-1 text-[16px] font-bold text-[#0d1a2d]">
+              {readOnly ? '已遞交完整資料' : currentStepMeta.title}
+            </h3>
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              {readOnly ? '以下為藝人已遞交的全部 4 頁申請內容。' : currentStepMeta.description}
+            </p>
           </div>
           <div className="rounded-full bg-white px-3 py-1 text-[12px] font-bold text-teal-700 shadow-sm">
-            進度 {progressPercent}%
+            進度 {readOnly ? 100 : progressPercent}%
           </div>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-white">
-          <div className="h-full rounded-full bg-teal-600 transition-all duration-300" style={{ width: `${progressPercent}%` }} />
+          <div className="h-full rounded-full bg-teal-600 transition-all duration-300" style={{ width: `${readOnly ? 100 : progressPercent}%` }} />
         </div>
       </div>
 
-      {currentStep === 0 && (
+      {(readOnly || currentStep === 0) && (
         <>
           <SectionCard title="A1. 基本資料">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -634,7 +640,7 @@ export function TalentApplicationFormV2({
         </>
       )}
 
-      {currentStep === 1 && (
+      {(readOnly || currentStep === 1) && (
         <>
           <SectionCard title="A3. 外形及資質資料">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -688,7 +694,7 @@ export function TalentApplicationFormV2({
         </>
       )}
 
-      {currentStep === 2 && (
+      {(readOnly || currentStep === 2) && (
         <>
           <SectionCard title="A5. 工作經驗及代表紀錄">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -724,7 +730,7 @@ export function TalentApplicationFormV2({
         </>
       )}
 
-      {currentStep === 3 && (
+      {(readOnly || currentStep === 3) && (
         <>
           <SectionCard title="A7. 文件上傳清單" hint="請按實際情況勾選並上傳或提供資料。">
         <CheckboxGroup label="已提交資料" options={fileOptions} value={form.submittedFiles} onChange={(value) => update('submittedFiles', value)} disabled={readOnly} />
