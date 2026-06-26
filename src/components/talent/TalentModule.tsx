@@ -1592,6 +1592,93 @@ function InterviewRatingEditor({ talent, onSave, onCancel }: {
   );
 }
 
+function InterviewRecordModal({ row, onClose }: {
+  row: TalentFormRow;
+  onClose: () => void;
+}) {
+  const ratingItems = row.interview_rating
+    ? [
+        { label: '外表', value: row.interview_rating.appearance },
+        { label: '上鏡感', value: row.interview_rating.oncamera },
+        { label: '講話流利度 / 聲音', value: row.interview_rating.speaking },
+        { label: '儀態', value: row.interview_rating.posture },
+        { label: '性格', value: row.interview_rating.personality },
+      ]
+    : [];
+  const notes = row.interview_notes?.trim();
+  const mediaUrls = row.audition_media_urls || [];
+
+  return (
+    <Modal title={`面試記錄 — ${formDisplayName(row)}`} onClose={onClose}>
+      <div className="space-y-5">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-md border border-border bg-muted/20 p-3">
+            <div className="text-[11px] text-muted-foreground mb-1">面試時間</div>
+            <div className="text-[13px] font-medium">
+              {row.interview_scheduled_at
+                ? new Date(row.interview_scheduled_at).toLocaleString('zh-HK')
+                : '未記錄'}
+            </div>
+          </div>
+          <div className="rounded-md border border-border bg-amber-50 p-3">
+            <div className="text-[11px] text-amber-700 mb-1">綜合評分</div>
+            <div className="inline-flex items-center gap-1 text-[18px] font-bold text-amber-700">
+              <Star size={14} className="fill-amber-400 text-amber-400" />
+              {row.interview_overall != null ? Number(row.interview_overall).toFixed(1) : '—'}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h4 className="text-[13px] font-bold mb-2">評分項目</h4>
+          {ratingItems.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {ratingItems.map(item => (
+                <div key={item.label} className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2">
+                  <span className="text-[12px] text-muted-foreground">{item.label}</span>
+                  <span className="text-[13px] font-bold text-teal-700">{item.value}/10</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[12px] text-muted-foreground">暫無評分明細。</p>
+          )}
+        </div>
+
+        <div>
+          <h4 className="text-[13px] font-bold mb-2 flex items-center gap-1.5">
+            <FileText size={14} className="text-muted-foreground" />
+            面試備註
+          </h4>
+          <div className="min-h-[88px] whitespace-pre-wrap rounded-md border border-border bg-muted/20 px-3 py-2 text-[13px] leading-6">
+            {notes || <span className="text-muted-foreground">暫無面試記錄。</span>}
+          </div>
+        </div>
+
+        {mediaUrls.length > 0 && (
+          <div>
+            <h4 className="text-[13px] font-bold mb-2">試鏡影片 / 照片</h4>
+            <div className="space-y-2">
+              {mediaUrls.map((url, index) => (
+                <a
+                  key={`${url}-${index}`}
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-[12px] text-teal-700 hover:bg-teal-50"
+                >
+                  <span className="truncate">{url.startsWith('data:') ? `已上傳媒體 ${index + 1}` : url}</span>
+                  <ExternalLink size={13} className="shrink-0" />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 // Modal asking which categories to assign when 直接取錄.
 function ClassifyArtistModal({
   displayName,
@@ -1660,6 +1747,7 @@ function TalentInterviews() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<TalentFormRow | null>(null);
+  const [recordTarget, setRecordTarget] = useState<TalentFormRow | null>(null);
   const [classifyTarget, setClassifyTarget] = useState<{
     row: TalentFormRow;
     source: 'direct' | 'after_interview';
@@ -1938,10 +2026,16 @@ function TalentInterviews() {
                 r,
                 'after_interview',
                 r.interview_overall != null ? (
-                  <span className="inline-flex items-center gap-1 text-[13px] font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setRecordTarget(r)}
+                    title="查看面試記錄"
+                    aria-label={`查看 ${formDisplayName(r)} 的面試記錄`}
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-amber-700 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  >
                     <Star size={12} className="fill-amber-400 text-amber-400" />
                     {Number(r.interview_overall).toFixed(1)}
-                  </span>
+                  </button>
                 ) : null
               )
             )}
@@ -2004,6 +2098,13 @@ function TalentInterviews() {
           displayName={formDisplayName(classifyTarget.row)}
           onCancel={() => setClassifyTarget(null)}
           onConfirm={handleAccept}
+        />
+      )}
+
+      {recordTarget && (
+        <InterviewRecordModal
+          row={recordTarget}
+          onClose={() => setRecordTarget(null)}
         />
       )}
     </div>
