@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Check, FileText, RotateCcw, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/lib/supabase';
+import { submitArtistApplyV2 } from '@/lib/artist-apply-api';
 import { SignaturePad } from './SignaturePad';
 
 type Choice = { value: string; label: string };
@@ -548,23 +548,7 @@ export function TalentApplicationFormV2({
     setSubmitError(null);
     setSubmitting(true);
     try {
-      const { applicantSignature, ...payload } = form;
-      const { error } = await supabase.from('talent_form').insert({
-        invite_token: inviteToken ?? null,
-        fill_date: form.applicationDate || null,
-        name_zh: form.nameZh || null,
-        name_en: form.nameEn || null,
-        gender: form.gender || null,
-        age: form.age || null,
-        phone: form.phone || null,
-        wechat: form.whatsapp || null,
-        height: form.height || null,
-        weight: form.weight || null,
-        payload,
-        signature_image: applicantSignature || null,
-      });
-
-      if (error) throw error;
+      await submitArtistApplyV2(form, inviteToken);
       setSubmittedAt(new Date().toLocaleString('zh-HK'));
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : '遞交失敗，請稍後再試。');
