@@ -101,8 +101,8 @@ export const mainMenuItems: MainMenuItem[] = [
     id: 'video',
     label: '影片製作',
     subMenus: [
-      { id: 'list', label: '影片列表' },
       { id: 'channels', label: '頻道管理' },
+      { id: 'list', label: '影片列表' },
       { id: 'schedule', label: '拍攝排期' },
       { id: 'library', label: '片庫' },
       { id: 'distribution', label: '發佈追蹤' },
