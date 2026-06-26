@@ -1,23 +1,34 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { TalentApplicationForm } from '@/components/settings/TalentApplicationForm';
+import { TalentApplicationFormV2 } from '@/components/settings/TalentApplicationFormV2';
 import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
 
-interface TalentFormRow {
+interface ArtistApplyRow {
   id: string;
   invite_token: string | null;
-  fill_date: string | null;
+  application_date: string | null;
   name_zh: string | null;
   name_en: string | null;
-  payload: Record<string, unknown> | null;
-  signature_image: string | null;
+  display_name: string | null;
+  gender: string | null;
+  birth_date: string | null;
+  age: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  email: string | null;
+  raw_payload: Record<string, unknown> | null;
   submitted_at: string;
+}
+
+interface ArtistApplyPhotoRow {
+  data_url: string | null;
 }
 
 export function TalentSubmissionViewPage() {
   const { id } = useParams<{ id: string }>();
-  const [row, setRow] = useState<TalentFormRow | null>(null);
+  const [row, setRow] = useState<ArtistApplyRow | null>(null);
+  const [applicantSignature, setApplicantSignature] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,16 +37,29 @@ export function TalentSubmissionViewPage() {
     (async () => {
       if (!id) return;
       setLoading(true);
-      const { data, error } = await supabase
-        .from('talent_form')
-        .select('*')
-        .eq('id', id)
-        .single();
+      const [{ data, error }, { data: photoData, error: photoError }] = await Promise.all([
+        supabase
+          .from('artist_apply')
+          .select('*')
+          .eq('id', id)
+          .single(),
+        supabase
+          .from('artist_apply_photo')
+          .select('data_url')
+          .eq('artist_apply_id', id)
+          .eq('file_role', 'applicant_signature')
+          .order('created_at', { ascending: false })
+          .limit(1),
+      ]);
       if (cancelled) return;
       if (error) {
         setError(error.message);
+      } else if (photoError) {
+        setError(photoError.message);
       } else {
-        setRow(data as TalentFormRow);
+        setRow(data as ArtistApplyRow);
+        const signatureRow = (photoData?.[0] ?? null) as ArtistApplyPhotoRow | null;
+        setApplicantSignature(signatureRow?.data_url || '');
       }
       setLoading(false);
     })();
@@ -69,11 +93,18 @@ export function TalentSubmissionViewPage() {
   }
 
   const initialValue = {
-    ...((row.payload as Record<string, unknown>) || {}),
-    fillDate: row.fill_date || '',
+    ...((row.raw_payload as Record<string, unknown>) || {}),
+    applicationDate: row.application_date || '',
     nameZh: row.name_zh || '',
     nameEn: row.name_en || '',
-    signature: row.signature_image || '',
+    displayName: row.display_name || '',
+    gender: row.gender || '',
+    birthDate: row.birth_date || '',
+    age: row.age || '',
+    phone: row.phone || '',
+    whatsapp: row.whatsapp || '',
+    email: row.email || '',
+    applicantSignature,
   };
 
   return (
@@ -81,7 +112,7 @@ export function TalentSubmissionViewPage() {
       <div className="max-w-[940px] mx-auto">
         <div className="mb-4 text-center">
           <h1 className="text-[18px] font-bold text-[#0d1a2d] tracking-tight">
-            藝人面試登記表（已遞交）
+            藝人面試登記表 V2（已遞交）
           </h1>
           <p className="text-[12px] text-muted-foreground mt-1">
             遞交時間：{new Date(row.submitted_at).toLocaleString('zh-HK')}
@@ -92,7 +123,7 @@ export function TalentSubmissionViewPage() {
             </p>
           )}
         </div>
-        <TalentApplicationForm mode="view" initialValue={initialValue} />
+        <TalentApplicationFormV2 mode="view" initialValue={initialValue} />
       </div>
     </div>
   );

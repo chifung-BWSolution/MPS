@@ -175,7 +175,7 @@ interface TalentFormRow {
   payload: Record<string, any> | null;
   signature_image: string | null;
   submitted_at: string;
-  status: 'pending' | 'confirmed' | 'rejected';
+  status: 'submitted' | 'pending' | 'confirmed' | 'rejected';
   interviewed: boolean;
   interview_rating: TalentRating | null;
   interview_overall: number | null;
@@ -184,9 +184,16 @@ interface TalentFormRow {
   audition_media_urls: string[] | null;
 }
 
+interface ArtistApplyPhotoRow {
+  artist_apply_id: string;
+  file_role: string;
+  data_url: string | null;
+}
+
 interface ConfirmedArtistRow {
   id: string;
   source_form_id: string | null;
+  artist_apply_id?: string | null;
   invite_token: string | null;
   name_zh: string | null;
   name_en: string | null;
@@ -213,9 +220,15 @@ const formDisplayName = (row: { name_zh: string | null; name_en: string | null }
 
 const residenceToRegion = (residence: unknown): Region => {
   const first = Array.isArray(residence) ? residence[0] : null;
-  if (first === '香港' || first === 'HK') return 'HK';
-  if (first === '深圳' || first === 'SZ') return 'SZ';
+  const value = typeof residence === 'string' ? residence : first;
+  if (value === '香港' || value === 'HK' || value === 'hk') return 'HK';
+  if (value === '深圳' || value === 'SZ' || value === 'sz') return 'SZ';
   return 'OTHER';
+};
+
+const legacyTalentFormId = (row: TalentFormRow): string | null => {
+  const value = row.payload?.legacyTalentFormId;
+  return typeof value === 'string' && value ? value : null;
 };
 
 // =====================================================================
@@ -646,7 +659,7 @@ const confirmedRowToTalent = (c: ConfirmedArtistRow): Talent & { _confirmed: tru
   collaborations: [],
   photoUrl: c.photo_url || undefined,
   _confirmed: true,
-  _formId: c.source_form_id || undefined,
+  _formId: c.artist_apply_id || undefined,
   _inviteToken: c.invite_token || undefined,
   inviteToken: c.invite_token || undefined,
 });
@@ -742,7 +755,7 @@ function TalentList() {
     let cancelled = false;
     (async () => {
       const { data, error } = await supabase
-        .from('talent_form')
+        .from('artist_apply')
         .select('id, invite_token');
       if (cancelled || error || !data) return;
       const map: Record<string, string> = {};
@@ -1239,7 +1252,7 @@ function TalentInvite() {
     setSubmissionsLoading(true);
     try {
       const { data, error } = await supabase
-        .from('talent_form')
+        .from('artist_apply')
         .select('id, invite_token, name_zh, name_en, phone, submitted_at')
         .order('submitted_at', { ascending: false });
       if (error) {
@@ -1648,9 +1661,9 @@ function TalentInterviews() {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('talent_form')
+        .from('artist_apply')
         .select(
-          'id, invite_token, fill_date, name_zh, name_en, gender, age, phone, wechat, height, weight, payload, signature_image, submitted_at, status, interviewed, interview_rating, interview_overall, interview_notes, interview_scheduled_at, audition_media_urls'
+          'id, invite_token, application_date, name_zh, name_en, gender, age, phone, whatsapp, height, weight, raw_payload, submitted_at, status, interviewed, interview_rating, interview_overall, interview_notes, interview_scheduled_at, audition_media_urls'
         )
         .neq('status', 'rejected')
         .neq('status', 'confirmed')
@@ -1659,7 +1672,46 @@ function TalentInterviews() {
         setError(error.message);
         setRows([]);
       } else {
-        setRows((data ?? []) as TalentFormRow[]);
+        const applyRows = (data ?? []) as any[];
+        const applyIds = applyRows.map(row => row.id);
+        let signaturesByApplyId: Record<string, string> = {};
+
+        if (applyIds.length > 0) {
+          const { data: photoRows, error: photoError } = await supabase
+            .from('artist_apply_photo')
+            .select('artist_apply_id, file_role, data_url')
+            .in('artist_apply_id', applyIds)
+            .eq('file_role', 'applicant_signature');
+          if (photoError) throw photoError;
+          signaturesByApplyId = ((photoRows ?? []) as ArtistApplyPhotoRow[]).reduce<Record<string, string>>((acc, photo) => {
+            if (photo.data_url) acc[photo.artist_apply_id] = photo.data_url;
+            return acc;
+          }, {});
+        }
+
+        setRows(applyRows.map(row => ({
+          id: row.id,
+          invite_token: row.invite_token,
+          fill_date: row.application_date,
+          name_zh: row.name_zh,
+          name_en: row.name_en,
+          gender: row.gender,
+          age: row.age,
+          phone: row.phone,
+          wechat: row.whatsapp,
+          height: row.height,
+          weight: row.weight,
+          payload: row.raw_payload || {},
+          signature_image: signaturesByApplyId[row.id] || null,
+          submitted_at: row.submitted_at,
+          status: row.status,
+          interviewed: row.interviewed,
+          interview_rating: row.interview_rating,
+          interview_overall: row.interview_overall,
+          interview_notes: row.interview_notes,
+          interview_scheduled_at: row.interview_scheduled_at,
+          audition_media_urls: row.audition_media_urls || [],
+        })) as TalentFormRow[]);
         setError(null);
       }
     } catch (err) {
@@ -1683,18 +1735,18 @@ function TalentInterviews() {
     if (!confirm(`確定不會取錄「${formDisplayName(row)}」？此筆會從面試安排移除。`)) return;
     try {
       const { error: insErr } = await supabase.from('rejected_artist').insert({
-        source_form_id: row.id,
+        source_form_id: legacyTalentFormId(row),
         invite_token: row.invite_token,
         name_zh: row.name_zh,
         name_en: row.name_en,
         phone: row.phone,
-        payload: row.payload || {},
+        payload: { ...(row.payload || {}), artistApplyId: row.id },
         signature_image: row.signature_image,
         source,
       });
       if (insErr) throw insErr;
       const { error: updErr } = await supabase
-        .from('talent_form')
+        .from('artist_apply')
         .update({ status: 'rejected' })
         .eq('id', row.id);
       if (updErr) throw updErr;
@@ -1711,7 +1763,8 @@ function TalentInterviews() {
     try {
       const payload = row.payload || {};
       const { error: insErr } = await supabase.from('confirmed_artist').insert({
-        source_form_id: row.id,
+        source_form_id: legacyTalentFormId(row),
+        artist_apply_id: row.id,
         invite_token: row.invite_token,
         name_zh: row.name_zh,
         name_en: row.name_en,
@@ -1732,13 +1785,13 @@ function TalentInterviews() {
         rating: row.interview_rating,
         overall_rating: row.interview_overall,
         interview_notes: row.interview_notes,
-        payload: payload,
+        payload: { ...payload, artistApplyId: row.id },
         signature_image: row.signature_image,
         source,
       });
       if (insErr) throw insErr;
       const { error: updErr } = await supabase
-        .from('talent_form')
+        .from('artist_apply')
         .update({ status: 'confirmed' })
         .eq('id', row.id);
       if (updErr) throw updErr;
@@ -1916,7 +1969,7 @@ function TalentInterviews() {
                   ? [...(editing.audition_media_urls || []), mediaUrl]
                   : editing.audition_media_urls || [];
                 const { error } = await supabase
-                  .from('talent_form')
+                  .from('artist_apply')
                   .update({
                     interview_rating: rating,
                     interview_overall: computeOverall(rating),
