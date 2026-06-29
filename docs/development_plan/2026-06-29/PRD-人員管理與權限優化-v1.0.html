@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>人員管理與權限優化 — PRD v1.0</title>
+  <style>
+    :root {
+      --teal-50: #f0fdfa;
+      --teal-100: #ccfbf1;
+      --teal-600: #0d9488;
+      --teal-700: #0f766e;
+      --teal-800: #115e59;
+      --slate-50: #f8fafc;
+      --slate-100: #f1f5f9;
+      --slate-200: #e2e8f0;
+      --slate-400: #94a3b8;
+      --slate-600: #475569;
+      --slate-700: #334155;
+      --slate-800: #1e293b;
+      --slate-900: #0f172a;
+      --amber-50: #fffbeb;
+      --amber-600: #d97706;
+      --rose-50: #fff1f2;
+      --rose-600: #e11d48;
+      --font: "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font); font-size: 15px; line-height: 1.7; color: var(--slate-800); background: var(--slate-100); }
+    .hero { background: linear-gradient(135deg, var(--teal-800) 0%, var(--slate-900) 100%); color: #fff; padding: 48px 32px 56px; }
+    .hero-inner { max-width: 960px; margin: 0 auto; }
+    .hero h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 12px; }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: 16px; font-size: 0.875rem; opacity: 0.85; margin-bottom: 24px; }
+    .hero-summary { font-size: 1.05rem; max-width: 760px; opacity: 0.95; line-height: 1.65; }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+    .badge { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); }
+    .container { max-width: 960px; margin: 0 auto; padding: 32px 24px 64px; }
+    section { background: #fff; border-radius: 12px; border: 1px solid var(--slate-200); padding: 28px 32px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(15,23,42,0.04); }
+    h2 { font-size: 1.25rem; font-weight: 700; color: var(--teal-800); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--teal-100); }
+    h3 { font-size: 1rem; font-weight: 600; color: var(--slate-700); margin: 20px 0 10px; }
+    h4 { font-size: 0.95rem; font-weight: 600; color: var(--slate-700); margin: 14px 0 8px; }
+    p { margin-bottom: 12px; }
+    ul, ol { margin: 0 0 12px 1.25rem; }
+    li { margin-bottom: 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; margin: 12px 0 16px; }
+    th, td { border: 1px solid var(--slate-200); padding: 10px 12px; text-align: left; vertical-align: top; }
+    th { background: var(--teal-50); font-weight: 600; color: var(--teal-800); }
+    tr:nth-child(even) td { background: var(--slate-50); }
+    code { font-family: Consolas, monospace; font-size: 0.82em; background: var(--slate-100); padding: 2px 6px; border-radius: 4px; color: var(--teal-700); }
+    .callout { border-left: 4px solid var(--teal-600); background: var(--teal-50); padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 0.9rem; }
+    .callout-warn { border-left-color: var(--amber-600); background: var(--amber-50); }
+    .callout-danger { border-left-color: var(--rose-600); background: var(--rose-50); }
+    .priority-p0 { color: #b91c1c; font-weight: 700; }
+    .priority-p1 { color: var(--amber-600); font-weight: 700; }
+    .priority-p2 { color: var(--slate-600); font-weight: 700; }
+    .flow { background: var(--slate-900); color: #e2e8f0; padding: 20px; border-radius: 10px; font-family: Consolas, monospace; font-size: 0.78rem; line-height: 1.7; overflow-x: auto; margin: 16px 0; white-space: pre; }
+    .toc { background: var(--slate-50); border: 1px solid var(--slate-200); border-radius: 10px; padding: 20px 24px; margin-bottom: 24px; }
+    .toc h2 { border: none; margin-bottom: 12px; font-size: 1rem; }
+    .toc ol { margin: 0; }
+    .toc a { color: var(--teal-700); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin: 16px 0; }
+    .module-card { border: 1px solid var(--slate-200); border-radius: 10px; padding: 18px; background: var(--slate-50); }
+    .module-card h4 { font-size: 0.95rem; color: var(--teal-700); margin-bottom: 8px; }
+    .diagram-section { margin: 20px 0; padding: 20px; background: var(--slate-50); border: 1px solid var(--slate-200); border-radius: 10px; }
+    footer { text-align: center; padding: 24px; font-size: 0.8rem; color: var(--slate-400); }
+    @media print { body { background: #fff; } section { box-shadow: none; break-inside: avoid; } }
+  </style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <h1>人員管理與權限優化 — 產品需求文檔</h1>
+    <div class="hero-meta">
+      <span>編寫人：Dylan</span>
+      <span>版本 v1.0</span>
+      <span>系統：MPS（Marketing Project System）</span>
+      <span>日期：2026-06-29</span>
+      <span>狀態：方案設計</span>
+    </div>
+    <p class="hero-summary">
+      本 PRD 針對 MPS「系統設定」模塊中的人員管理（員工列表、用戶管理、個人設定）與權限管理（角色權限、登入校驗）進行全面梳理與優化設計。
+      核心目標是<strong>統一三表（staff_directory / user_info / system_users）資料流</strong>、<strong>消除雙路徑開通矛盾</strong>、<strong>補齊登入與權限安全缺口</strong>，並為後續 RBAC / RLS 落地奠定基礎。
+    </p>
+    <div class="badge-row">
+      <span class="badge">三表同步</span>
+      <span class="badge">Google OAuth 白名單</span>
+      <span class="badge">Bubble.io HR 來源</span>
+      <span class="badge">RBAC 對齊 04 文檔</span>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <nav class="toc">
+    <h2>目錄</h2>
+    <ol>
+      <li><a href="#doc-info">文檔信息</a></li>
+      <li><a href="#background">背景與目標</a></li>
+      <li><a href="#scope">範圍（In / Out of Scope）</a></li>
+      <li><a href="#glossary">術語與數據字典</a></li>
+      <li><a href="#as-is">現有業務流程（As-Is）</a></li>
+      <li><a href="#issues">現有問題清單</a></li>
+      <li><a href="#to-be">目標業務流程與優化方案</a></li>
+      <li><a href="#functional">功能需求（按模塊）</a></li>
+      <li><a href="#nfr">非功能需求</a></li>
+      <li><a href="#dev-plan">與開發計劃文檔的關聯</a></li>
+      <li><a href="#acceptance">驗收標準</a></li>
+      <li><a href="#appendix">附錄</a></li>
+    </ol>
+  </nav>
+
+  <!-- 文檔信息 -->
+  <section id="doc-info">
+    <h2>文檔信息</h2>
+    <table>
+      <tr><th>項目</th><th>內容</th></tr>
+      <tr><td>文檔標題</td><td>人員管理與權限優化 — PRD</td></tr>
+      <tr><td>版本</td><td>v1.0</td></tr>
+      <tr><td>編寫人</td><td>Dylan</td></tr>
+      <tr><td>建立日期</td><td>2026-06-29</td></tr>
+      <tr><td>狀態</td><td>方案設計（待評審 → 開發 → 驗收）</td></tr>
+      <tr><td>關聯系統</td><td>MPS — 系統設定（/settings）</td></tr>
+      <tr><td>關聯文檔</td><td><code>docs/04-Role-Permission-RLS.md</code>、<code>docs/05-Page-Specifications/Settings.md</code>、<code>docs/03-Data-Dictionary.md</code>、<code>docs/06-development_plan.md</code></td></tr>
+      <tr><td>存放路徑</td><td><code>docs/development_plan/2026-06-29/PRD-人員管理與權限優化-v1.0.html</code></td></tr>
+      <tr><td>修訂記錄</td><td>v1.0 — 初稿（2026-06-29，Dylan）</td></tr>
+    </table>
+  </section>
+
+  <!-- 背景與目標 -->
+  <section id="background">
+    <h2>一、背景與目標</h2>
+    <h3>1.1 背景</h3>
+    <p>MPS 採用 <strong>React 18 + TypeScript + Vite</strong> 前端、<strong>Supabase</strong> 後端，員工主數據來自 <strong>Bubble.io HR（Staff）</strong>。人員與權限相關資料分散在三張關聯表中：</p>
+    <ul>
+      <li><code>staff_directory</code> — Bubble 同步的 HR 快取（全量員工）</li>
+      <li><code>user_info</code> — 分類（classification）與身份標籤（role_tag）</li>
+      <li><code>system_users</code> — 登入白名單（Google OAuth 可登入者）</li>
+    </ul>
+    <p>認證流程為 <strong>Google OAuth + 電郵白名單查詢</strong>；權限控制目前僅在「系統設定」模塊做前端角色門禁（<code>canAccessSettings</code>），<code>docs/04-Role-Permission-RLS.md</code> 中定義的完整 RBAC 矩陣與 RLS 政策<strong>尚未在資料庫層實施</strong>。人員相關三表 RLS 目前均為<strong>關閉狀態</strong>。</p>
+
+    <h3>1.2 產品目標</h3>
+    <table>
+      <tr><th>編號</th><th>目標</th><th>說明</th></tr>
+      <tr><td>G1</td><td>三表資料一致</td><td>角色、狀態、電郵變更時，三表透過統一服務同步，消除「用戶管理改角色但登入仍用舊角色」等問題</td></tr>
+      <tr><td>G2</td><td>單一開通路徑</td><td>管理員只需一個入口完成「授予系統存取 + 分配角色 + 設定 Google 電郵」</td></tr>
+      <tr><td>G3</td><td>登入安全補強</td><td>登入時校驗 <code>is_active</code>、記錄真實登入日誌、移除不必要的 hardcoded bypass（或限於 dev 環境）</td></tr>
+      <tr><td>G4</td><td>個人設定真實化</td><td>個人資料、登入紀錄接入 Supabase，移除 mock 數據</td></tr>
+      <tr><td>G5</td><td>權限體系對齊</td><td>前端角色枚舉、Sidebar 過濾、角色權限頁與 <code>04-Role-Permission-RLS.md</code> 對齊；為 RLS 二期預留 <code>accessible_companies</code> 等欄位</td></tr>
+      <tr><td>G6</td><td>代碼可維護</td><td>拆分 <code>SettingsModule.tsx</code>（目前 &gt;1600 行），消除重複邏輯</td></tr>
+    </table>
+
+    <h3>1.3 成功指標</h3>
+    <ul>
+      <li>管理員在「用戶管理」修改角色後，該用戶下次登入/刷新即反映新角色（三表一致）</li>
+      <li>停用帳號（<code>is_active = false</code>）無法完成登入授權</li>
+      <li>登入紀錄頁展示來自 <code>login_logs</code> 表的真實數據</li>
+      <li>非管理層用戶無法存取系統設定子頁（除個人設定）</li>
+    </ul>
+  </section>
+
+  <!-- 範圍 -->
+  <section id="scope">
+    <h2>二、範圍（In / Out of Scope）</h2>
+    <div class="module-grid">
+      <div class="module-card">
+        <h4>✅ In Scope（本期）</h4>
+        <ul>
+          <li>個人設定（ProfileSection）</li>
+          <li>用戶管理（UserManagement）</li>
+          <li>員工列表（StaffDirectory）</li>
+          <li>角色權限（RolesSection 升級）</li>
+          <li>登入校驗（AuthContext）</li>
+          <li>登入紀錄（LoginLogsSection）</li>
+          <li>三表同步服務層</li>
+          <li>人員表 RLS 基礎政策（P1）</li>
+          <li>SettingsModule 組件拆分</li>
+        </ul>
+      </div>
+      <div class="module-card">
+        <h4>❌ Out of Scope（本期不做）</h4>
+        <ul>
+          <li>全業務表 RLS 全面落地（見 04 文檔，二期）</li>
+          <li>Supabase Auth invite 郵件邀請流程</li>
+          <li>accessible_companies 可視化編輯 UI（預留欄位即可）</li>
+          <li>多角色 / 多公司精細授權（ProfileSection 中 mock 的 roleAssignments）</li>
+          <li>Bubble 雙向同步（仍為 Bubble → Supabase 單向）</li>
+          <li>通知設定、選項設定、信用卡等其他 Settings 子頁</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 術語與數據字典 -->
+  <section id="glossary">
+    <h2>三、術語與數據字典</h2>
+
+    <h3>3.1 核心術語</h3>
+    <table>
+      <tr><th>術語</th><th>英文 / 欄位</th><th>說明</th></tr>
+      <tr><td>員工</td><td>Staff / Bubble Staff</td><td>Bubble.io HR 中的在職/離職人員，同步至 <code>staff_directory</code></td></tr>
+      <tr><td>系統使用者</td><td>System User</td><td>被授權可登入 MPS 的員工，存在於 <code>system_users</code> 白名單</td></tr>
+      <tr><td>身份標籤</td><td>role_tag</td><td>決定模塊存取的角色標識，存於 <code>user_info.role_tag</code> 及 <code>system_users.role</code></td></tr>
+      <tr><td>分類</td><td>classification</td><td>員工在 MPS 中的分類：<code>system_user</code> / <code>other_staff</code> / <code>disabled</code></td></tr>
+      <tr><td>系統狀態</td><td>system_status</td><td><code>user_info</code> 中的 active / inactive，與 classification 聯動</td></tr>
+      <tr><td>白名單登入</td><td>Whitelist Auth</td><td>Google OAuth 成功後，以 google_email / email 查詢白名單表授權</td></tr>
+      <tr><td>管理層角色</td><td>management+</td><td>可存取系統設定（除個人設定外）的角色集合，見 <code>permissions.ts</code></td></tr>
+    </table>
+
+    <h3>3.2 三表字段字典</h3>
+
+    <h4>staff_directory（HR 快取，Bubble 同步）</h4>
+    <table>
+      <tr><th>欄位</th><th>類型</th><th>說明</th></tr>
+      <tr><td><code>bubble_staff_id</code></td><td>TEXT UNIQUE</td><td>Bubble Staff._id，三表關聯主鍵</td></tr>
+      <tr><td><code>display_name</code> / <code>full_name</code></td><td>TEXT</td><td>顯示名稱</td></tr>
+      <tr><td><code>position</code> / <code>user_role</code></td><td>TEXT</td><td>職位 / Bubble 原始角色</td></tr>
+      <tr><td><code>status</code></td><td>TEXT</td><td>active / inactive（對應 Bubble O_Status）</td></tr>
+      <tr><td><code>work_email</code> / <code>private_email</code></td><td>TEXT</td><td>工作 / 私人電郵</td></tr>
+      <tr><td><code>work_phone</code> / <code>private_phone</code></td><td>TEXT</td><td>電話（個人設定可回寫 work_phone）</td></tr>
+      <tr><td><code>department</code> / <code>office</code></td><td>TEXT</td><td>部門 / 辦公地點（後續 migration 新增）</td></tr>
+      <tr><td><code>business_unit</code> / <code>team_id</code></td><td>TEXT</td><td>業務單元 / 團隊</td></tr>
+      <tr><td><code>synced_at</code></td><td>TIMESTAMPTZ</td><td>最後 Bubble 同步時間</td></tr>
+    </table>
+
+    <h4>user_info（分類與身份標籤）</h4>
+    <table>
+      <tr><th>欄位</th><th>類型</th><th>說明</th></tr>
+      <tr><td><code>staff_id</code></td><td>TEXT UNIQUE</td><td>= bubble_staff_id</td></tr>
+      <tr><td><code>role_tag</code></td><td>TEXT</td><td>身份標籤（如 management、project_manager）</td></tr>
+      <tr><td><code>classification</code></td><td>TEXT</td><td>system_user | other_staff | disabled</td></tr>
+      <tr><td><code>system_status</code></td><td>TEXT</td><td>active | inactive</td></tr>
+      <tr><td><code>display_name</code> / <code>email</code> / <code>google_email</code></td><td>TEXT</td><td>冗餘快照，供登入查詢</td></tr>
+      <tr><td><code>department</code> / <code>office</code></td><td>TEXT</td><td>部門 / 辦公地點</td></tr>
+    </table>
+
+    <h4>system_users（登入白名單）</h4>
+    <table>
+      <tr><th>欄位</th><th>類型</th><th>說明</th></tr>
+      <tr><td><code>id</code></td><td>UUID PK</td><td>系統使用者主鍵</td></tr>
+      <tr><td><code>auth_user_id</code></td><td>UUID UNIQUE</td><td>Supabase Auth UID（首次登入回寫）</td></tr>
+      <tr><td><code>bubble_staff_id</code></td><td>TEXT</td><td>= staff_id</td></tr>
+      <tr><td><code>display_name</code> / <code>email</code></td><td>TEXT</td><td>姓名 / 工作電郵</td></tr>
+      <tr><td><code>google_email</code></td><td>TEXT</td><td>Google OAuth 登入電郵（白名單匹配主鍵）</td></tr>
+      <tr><td><code>role</code></td><td>TEXT</td><td>系統角色（應與 user_info.role_tag 一致）</td></tr>
+      <tr><td><code>department</code> / <code>position</code> / <code>phone</code></td><td>TEXT</td><td>部門 / 職位 / 電話</td></tr>
+      <tr><td><code>is_active</code></td><td>BOOLEAN</td><td>是否允許登入（停用 = false）</td></tr>
+      <tr><td><code>last_login_at</code></td><td>TIMESTAMPTZ</td><td>最後登入時間</td></tr>
+      <tr><td><code>profile_pic_url</code></td><td>TEXT</td><td>頭像 URL</td></tr>
+    </table>
+
+    <h3>3.3 角色枚舉</h3>
+    <p>系統存在<strong>兩套角色定義</strong>，本期需統一：</p>
+    <table>
+      <tr><th>來源</th><th>角色 ID</th><th>中文名稱</th><th>備註</th></tr>
+      <tr><td rowspan="7"><code>04-Role-Permission-RLS.md</code><br>（規範角色）</td><td><code>management</code></td><td>管理層</td><td>全模組 + 系統設定</td></tr>
+      <tr><td><code>project_manager</code></td><td>項目經理</td><td>—</td></tr>
+      <tr><td><code>designer</code></td><td>設計師</td><td>—</td></tr>
+      <tr><td><code>accountant</code></td><td>會計</td><td>—</td></tr>
+      <tr><td><code>copywriter</code></td><td>文案同事</td><td>—</td></tr>
+      <tr><td><code>video_editor</code></td><td>影片剪輯</td><td>—</td></tr>
+      <tr><td><code>marketing</code></td><td>市場推廣</td><td>—</td></tr>
+      <tr><td rowspan="3">前端擴展角色<br>（UserManagement / StaffDirectory）</td><td><code>super_admin</code></td><td>Super Admin</td><td>最高權限，需映射至 management+</td></tr>
+      <tr><td><code>system_dev</code></td><td>系統開發</td><td>技術維護，可存取系統設定</td></tr>
+      <tr><td><code>company_admin</code></td><td>公司行政</td><td>行政角色，可存取部分設定</td></tr>
+      <tr><td>AuthContext 默認</td><td><code>staff</code></td><td>一般員工</td><td>無法匹配 role_tag 時的 fallback</td></tr>
+    </table>
+
+    <h3>3.4 classification 枚舉</h3>
+    <table>
+      <tr><th>值</th><th>含義</th><th>對應操作</th></tr>
+      <tr><td><code>system_user</code></td><td>系統使用者</td><td>應存在 system_users 白名單；可登入</td></tr>
+      <tr><td><code>other_staff</code></td><td>普通員工</td><td>僅 HR 資料，無 MPS 登入權；user_info 可刪除</td></tr>
+      <tr><td><code>disabled</code></td><td>手動停用</td><td>user_info 保留但 system_status=inactive；system_users.is_active=false</td></tr>
+    </table>
+  </section>
+
+  <!-- 現有業務流程 -->
+  <section id="as-is">
+    <h2>四、現有業務流程（As-Is）</h2>
+
+    <h3>4.1 員工列表（StaffDirectory）</h3>
+    <ol>
+      <li>資料來源：優先從 <code>staff_directory</code>（Supabase）載入；若無則 fallback 至 Bubble API 即時查詢</li>
+      <li>管理員可從 Bubble 觸發 Edge Function <code>sync-bubble-staff</code> 全量/增量同步至 <code>staff_directory</code></li>
+      <li>管理員可為每位員工設定 classification（system_user / other_staff / disabled）及 role_tag</li>
+      <li>點擊「儲存」→ 僅 upsert / delete <code>user_info</code>，<strong>不寫入 system_users</strong></li>
+      <li>office / department 變更會即時寫入 staff_directory + user_info</li>
+    </ol>
+
+    <h3>4.2 用戶管理（UserManagement）</h3>
+    <ol>
+      <li>讀取 <code>system_users</code> 全表展示白名單使用者</li>
+      <li>「從員工列表加入」→ insert <code>system_users</code> + upsert <code>user_info</code>（classification=system_user）</li>
+      <li>編輯使用者 → update <code>system_users</code>；<strong>僅在 google_email 變更時</strong>同步 user_info，<strong>role 變更不 sync</strong></li>
+      <li>停用 / 啟用 → 僅 update <code>system_users.is_active</code>，不同步 user_info.system_status</li>
+      <li>移除 → delete <code>system_users</code> 記錄，不清理 user_info</li>
+    </ol>
+
+    <h3>4.3 登入認證（AuthContext）</h3>
+    <div class="flow">Google OAuth 成功
+  → findSystemUserByEmail(email)
+      ① 查 system_users（google_email / email，ilike）
+      ② 查 user_info（google_email / email）
+         → 若有 staff_id，再查 system_users.bubble_staff_id
+         → 若仍無，bootstrap 合成 SystemUserProfile（id 非 UUID）
+  → 若找到 sysUser：
+      setSystemUser
+      查 user_info by staff_id → 用 role_tag/classification **覆蓋** systemUser.role
+      更新 last_login_at / auth_user_id
+      logLoginEvent → login_logs
+  → isAuthorized = systemUser 存在 AND (is_active === true OR is_active === null)
+  → 系統設定門禁：canAccessSettings(systemUser.role)</div>
+
+    <h3>4.4 個人設定（ProfileSection）</h3>
+    <ol>
+      <li>從 systemUser + staff_directory 動態載入姓名、部門、職位、電話</li>
+      <li>儲存電話 → 寫入 system_users.phone + staff_directory.work_phone</li>
+      <li>角色顯示為唯讀（來自 AuthContext  enriched role）</li>
+      <li><strong>角色分配（roleAssignments）仍為硬編碼 mock</strong>，使用 mockData 中的 companies/brands</li>
+    </ol>
+
+    <h3>4.5 角色權限（RolesSection）</h3>
+    <p>靜態卡片列表，展示 7 個規範角色的模塊說明，<strong>不可編輯、未接入權限引擎</strong>，與 04 文檔矩陣不完全一致（缺少 super_admin 等擴展角色）。</p>
+
+    <div class="diagram-section">
+      <h4>圖 4-1 現有三表關係（As-Is）</h4>
+      <div class="flow">Bubble.io Staff
+       │ sync (Edge Function)
+       ▼
+ staff_directory ──bubble_staff_id──► user_info
+       │                                  │
+       │                                  │ (部分同步，不完整)
+       └──── bubble_staff_id ────────────► system_users
+                                          │
+Google OAuth email ─────────────────────► 白名單查詢</div>
+    </div>
+  </section>
+
+  <!-- 問題清單 -->
+  <section id="issues">
+    <h2>五、現有問題清單</h2>
+    <table>
+      <tr><th>優先級</th><th>編號</th><th>問題</th><th>影響</th><th>涉及文件</th></tr>
+      <tr>
+        <td class="priority-p0">P0</td><td>I-01</td>
+        <td>三表同步不完整：UserManagement 修改 role 不同步 user_info；停用不同步 system_status</td>
+        <td>AuthContext 以 user_info.role_tag 覆蓋 system_users.role，造成<strong>用戶管理改角色無效</strong></td>
+        <td><code>UserManagement.tsx</code>、<code>AuthContext.tsx</code></td>
+      </tr>
+      <tr>
+        <td class="priority-p0">P0</td><td>I-02</td>
+        <td>雙路徑開通未統一：員工列表設 classification=system_user 不寫 system_users；用戶管理 insert 才寫白名單</td>
+        <td>管理員困惑；可能出現 user_info 有記錄但無法登入，或反之</td>
+        <td><code>StaffDirectory.tsx</code>、<code>UserManagement.tsx</code></td>
+      </tr>
+      <tr>
+        <td class="priority-p0">P0</td><td>I-03</td>
+        <td>登入未校驗 is_active=false：<code>isAuthorized</code> 將 null 視為 active，bootstrap 路徑硬設 is_active=true</td>
+        <td>已停用帳號仍可能登入</td>
+        <td><code>AuthContext.tsx</code></td>
+      </tr>
+      <tr>
+        <td class="priority-p0">P0</td><td>I-04</td>
+        <td>人員三表 RLS 關閉 + GRANT ALL TO anon</td>
+        <td>任何持有 anon key 的請求可讀寫白名單與員工資料</td>
+        <td><code>20240611_fix_system_users_rls.sql</code> 等</td>
+      </tr>
+      <tr>
+        <td class="priority-p1">P1</td><td>I-05</td>
+        <td>登入紀錄頁使用硬編碼 mock 數據，未讀 login_logs</td>
+        <td>管理員無法稽核真實登入</td>
+        <td><code>SettingsModule.tsx</code> LoginLogsSection</td>
+      </tr>
+      <tr>
+        <td class="priority-p1">P1</td><td>I-06</td>
+        <td>個人設定 roleAssignments 使用 mock companies/brands</td>
+        <td>誤導用戶以為多角色已生效</td>
+        <td><code>SettingsModule.tsx</code> ProfileSection</td>
+      </tr>
+      <tr>
+        <td class="priority-p1">P1</td><td>I-07</td>
+        <td>RBAC 僅前端 canAccessSettings；04 文檔 RLS / Sidebar 過濾未實施</td>
+        <td>可透過 API 直接存取受保護資料</td>
+        <td><code>permissions.ts</code>、全模塊</td>
+      </tr>
+      <tr>
+        <td class="priority-p1">P1</td><td>I-08</td>
+        <td>角色枚舉不一致：前端 10 角色 vs 04 文檔 7 角色</td>
+        <td>權限矩陣難以維護；mapRoleToInternal 映射不完整</td>
+        <td>多文件</td>
+      </tr>
+      <tr>
+        <td class="priority-p1">P1</td><td>I-09</td>
+        <td>AuthContext 含 production hardcoded super admin bypass</td>
+        <td>安全風險；掩蓋白名單問題</td>
+        <td><code>AuthContext.tsx</code></td>
+      </tr>
+      <tr>
+        <td class="priority-p2">P2</td><td>I-10</td>
+        <td>SettingsModule.tsx 超 1600 行，ProfileSection / RolesSection / LoginLogs 內嵌</td>
+        <td>維護成本高、邏輯重複（ROLE_OPTIONS 多處定義）</td>
+        <td><code>SettingsModule.tsx</code></td>
+      </tr>
+      <tr>
+        <td class="priority-p2">P2</td><td>I-11</td>
+        <td>system_users 未納入 supabase.ts 類型生成</td>
+        <td>TypeScript 類型不完整</td>
+        <td><code>src/types/supabase.ts</code></td>
+      </tr>
+      <tr>
+        <td class="priority-p2">P2</td><td>I-12</td>
+        <td>RolesSection 靜態展示，與 04 矩陣脫節</td>
+        <td>管理員無法查閱完整 CRUD 權限</td>
+        <td><code>SettingsModule.tsx</code></td>
+      </tr>
+    </table>
+  </section>
+
+  <!-- 目標流程 -->
+  <section id="to-be">
+    <h2>六、目標業務流程與優化方案概要</h2>
+
+    <h3>6.1 設計原則</h3>
+    <ul>
+      <li><strong>Single Source of Truth</strong>：以 <code>bubble_staff_id</code> 為關聯鍵；角色以 <code>system_users.role</code> 為權威來源，<code>user_info</code> 為冗餘快照（由同步服務維護）</li>
+      <li><strong>Write Once, Sync Everywhere</strong>：所有寫操作經 <code>personnelSyncService</code> 統一處理三表</li>
+      <li><strong>Fail Closed</strong>：登入時 is_active 必須明確為 true；查無白名單或已停用均拒絕</li>
+      <li><strong>Backend Last Defense</strong>：前端門禁 + RLS 雙層（本期先做人員表 RLS）</li>
+    </ul>
+
+    <h3>6.2 目標架構</h3>
+    <div class="diagram-section">
+      <h4>圖 6-1 目標三表同步架構（To-Be）</h4>
+      <div class="flow">                    ┌─────────────────────────┐
+                    │  personnelSyncService   │
+                    │  (src/lib/personnel/)   │
+                    └───────────┬─────────────┘
+                                │
+         ┌──────────────────────┼──────────────────────┐
+         ▼                      ▼                      ▼
+ staff_directory          user_info            system_users
+ (HR 快取，Bubble 同步)   (分類+標籤快照)      (白名單+角色權威)
+
+統一入口：
+  • UserManagement — 主操作面（加入/編輯/停用/移除）
+  • StaffDirectory — 批量分類（呼叫 syncService.grant/revoke）
+  • ProfileSection — 僅寫個人欄位（phone 等）
+
+AuthContext：
+  • 白名單查詢 system_users（is_active=true）
+  • role 直接取自 system_users.role（不再被 stale user_info 覆蓋）
+  • user_info 僅用於 classification 展示 / 員工列表</div>
+    </div>
+
+    <h3>6.3 統一開通流程（To-Be）</h3>
+    <ol>
+      <li>管理員在<strong>用戶管理</strong>（或員工列表「設為系統使用者」）選擇員工</li>
+      <li>填寫：Google 電郵、角色、部門（可選）</li>
+      <li><code>personnelSyncService.grantAccess()</code> 原子操作：
+        <ul>
+          <li>upsert system_users（is_active=true, role, google_email…）</li>
+          <li>upsert user_info（classification=system_user, system_status=active, role_tag=role…）</li>
+          <li>可選：更新 staff_directory.department / office</li>
+        </ul>
+      </li>
+      <li>員工使用 Google 電郵 OAuth 登入 → 白名單命中 → 授權成功</li>
+    </ol>
+
+    <h3>6.4 停用 / 移除流程（To-Be）</h3>
+    <table>
+      <tr><th>操作</th><th>system_users</th><th>user_info</th><th>staff_directory</th></tr>
+      <tr><td>停用</td><td>is_active=false</td><td>system_status=inactive, classification=disabled</td><td>不變</td></tr>
+      <tr><td>重新啟用</td><td>is_active=true</td><td>system_status=active, classification=system_user</td><td>不變</td></tr>
+      <tr><td>移除存取</td><td>DELETE</td><td>DELETE 或 classification=other_staff</td><td>不變</td></tr>
+    </table>
+
+    <h3>6.5 實施分期</h3>
+    <table>
+      <tr><th>階段</th><th>內容</th><th>優先級</th></tr>
+      <tr><td>Phase 1</td><td>personnelSyncService + UserManagement/StaffDirectory 改造 + AuthContext is_active 修復</td><td>P0</td></tr>
+      <tr><td>Phase 2</td><td>LoginLogs 真實化 + ProfileSection 移除 mock + SettingsModule 拆分</td><td>P1</td></tr>
+      <tr><td>Phase 3</td><td>RolesSection 對齊 04 矩陣 + 人員表 RLS + 角色枚舉統一</td><td>P1</td></tr>
+      <tr><td>Phase 4</td><td>全業務 RLS（引用 04 文檔，獨立 PRD）</td><td>Out of Scope</td></tr>
+    </table>
+  </section>
+
+  <!-- 功能需求 -->
+  <section id="functional">
+    <h2>七、功能需求（按模塊）</h2>
+
+    <h3>7.1 個人設定（ProfileSection）</h3>
+    <table>
+      <tr><th>ID</th><th>需求</th><th>優先級</th></tr>
+      <tr><td>FR-P-01</td><td>展示當前登入者的姓名、Email（唯讀）、角色（唯讀）、部門、職位、電話</td><td>P0</td></tr>
+      <tr><td>FR-P-02</td><td>資料來源優先序：systemUser → staff_directory → session metadata</td><td>P0</td></tr>
+      <tr><td>FR-P-03</td><td>用戶可編輯並儲存電話；同步至 system_users.phone + staff_directory.work_phone</td><td>P0</td></tr>
+      <tr><td>FR-P-04</td><td>移除 mock roleAssignments UI，或改為「即將推出」佔位（多角色二期）</td><td>P1</td></tr>
+      <tr><td>FR-P-05</td><td>頭像展示使用 profile_pic_url（system_users / staff_directory）</td><td>P2</td></tr>
+      <tr><td>FR-P-06</td><td>拆分為獨立文件 <code>ProfileSettings.tsx</code></td><td>P1</td></tr>
+    </table>
+
+    <h3>7.2 用戶管理（UserManagement）</h3>
+    <table>
+      <tr><th>ID</th><th>需求</th><th>優先級</th></tr>
+      <tr><td>FR-U-01</td><td>列表展示 system_users：頭像、姓名、工作電郵、Google 電郵、角色、部門、狀態、最後登入</td><td>P0</td></tr>
+      <tr><td>FR-U-02</td><td>支援搜尋、角色篩選、狀態篩選</td><td>P0</td></tr>
+      <tr><td>FR-U-03</td><td>「從員工列表加入」：選 Bubble/Supabase 在職員工 → 設定角色 + Google 電郵 → 呼叫 grantAccess</td><td>P0</td></tr>
+      <tr><td>FR-U-04</td><td>編輯使用者（角色、部門、Google 電郵、狀態）→ 三表同步</td><td>P0</td></tr>
+      <tr><td>FR-U-05</td><td>停用/啟用 → syncService.setActiveStatus()</td><td>P0</td></tr>
+      <tr><td>FR-U-06</td><td>移除 → syncService.revokeAccess()，確認對話框</td><td>P0</td></tr>
+      <tr><td>FR-U-07</td><td>Inline 編輯 Google 電郵即時同步三表</td><td>P0</td></tr>
+      <tr><td>FR-U-08</td><td>統計卡片：總數 / 啟用 / 停用 / 已設 Google 電郵</td><td>P1</td></tr>
+      <tr><td>FR-U-09</td><td>ROLE_OPTIONS 抽取至 <code>src/lib/roles.ts</code> 統一引用</td><td>P1</td></tr>
+    </table>
+
+    <h3>7.3 員工列表（StaffDirectory）</h3>
+    <table>
+      <tr><th>ID</th><th>需求</th><th>優先級</th></tr>
+      <tr><td>FR-S-01</td><td>展示 Bubble/Supabase 全量員工；支援 Supabase 快取優先策略</td><td>P0</td></tr>
+      <tr><td>FR-S-02</td><td>Bubble 同步按鈕（Edge Function）及同步結果統計</td><td>P0</td></tr>
+      <tr><td>FR-S-03</td><td>設定 classification + role_tag + google_email + office + department</td><td>P0</td></tr>
+      <tr><td>FR-S-04</td><td>儲存時：若 classification=system_user → 呼叫 grantAccess（含 system_users）；若 other_staff → 清理 user_info；若 disabled → setActiveStatus(false)</td><td>P0</td></tr>
+      <tr><td>FR-S-05</td><td>列表標示是否已在 system_users 白名單（已開通徽章）</td><td>P1</td></tr>
+      <tr><td>FR-S-06</td><td>批量選取 + 批量設為系統使用者 / 批量停用</td><td>P2</td></tr>
+    </table>
+
+    <h3>7.4 角色權限（RolesSection）</h3>
+    <table>
+      <tr><th>ID</th><th>需求</th><th>優先級</th></tr>
+      <tr><td>FR-R-01</td><td>只讀展示完整模塊存取矩陣（對齊 04 文檔 §2）</td><td>P1</td></tr>
+      <tr><td>FR-R-02</td><td>展示 CRUD 細節（Companies / Projects / Day Reports 等，04 文檔 §3）</td><td>P2</td></tr>
+      <tr><td>FR-R-03</td><td>標註擴展角色（super_admin 等）與規範角色的映射關係</td><td>P1</td></tr>
+      <tr><td>FR-R-04</td><td>高亮當前登入者角色對應列</td><td>P2</td></tr>
+      <tr><td>FR-R-05</td><td>拆分為 <code>RolePermissions.tsx</code>（Settings.md 已規劃）</td><td>P1</td></tr>
+    </table>
+
+    <h3>7.5 登入校驗（AuthContext + Login）</h3>
+    <table>
+      <tr><th>ID</th><th>需求</th><th>優先級</th></tr>
+      <tr><td>FR-A-01</td><td>白名單查詢以 system_users 為主；必須 is_active=true</td><td>P0</td></tr>
+      <tr><td>FR-A-02</td><td>role 取自 system_users.role；禁止 stale user_info 覆蓋（除非 system_users.role 為空時 fallback）</td><td>P0</td></tr>
+      <tr><td>FR-A-03</td><td>isAuthorized 改為：<code>!!systemUser &amp;&amp; systemUser.is_active === true</code></td><td>P0</td></tr>
+      <tr><td>FR-A-04</td><td>bootstrap 路徑僅在 dev 環境允許，或改為引導管理員完成 grantAccess</td><td>P1</td></tr>
+      <tr><td>FR-A-05</td><td>hardcoded super admin bypass 限 <code>import.meta.env.DEV</code></td><td>P1</td></tr>
+      <tr><td>FR-A-06</td><td>登入成功/失敗寫入 login_logs（已有，需確保 user_id 關聯）</td><td>P1</td></tr>
+      <tr><td>FR-A-07</td><td>停用帳號登入時顯示明確錯誤：「您的帳號已被停用，請聯絡管理員」</td><td>P0</td></tr>
+    </table>
+
+    <h3>7.6 登入紀錄（LoginLogsSection）</h3>
+    <table>
+      <tr><th>ID</th><th>需求</th><th>優先級</th></tr>
+      <tr><td>FR-L-01</td><td>從 login_logs 表讀取最近 50 筆，join system_users 顯示姓名</td><td>P1</td></tr>
+      <tr><td>FR-L-02</td><td>欄位：時間、用戶、Email、IP（若有）、方式、成功/失敗</td><td>P1</td></tr>
+      <tr><td>FR-L-03</td><td>支援匯出 CSV</td><td>P2</td></tr>
+      <tr><td>FR-L-04</td><td>拆分為 <code>LoginLogs.tsx</code></td><td>P1</td></tr>
+    </table>
+
+    <h3>7.7 同步服務（personnelSyncService — 新增）</h3>
+    <table>
+      <tr><th>ID</th><th>方法</th><th>行為</th></tr>
+      <tr><td>FR-SYNC-01</td><td><code>grantAccess(params)</code></td><td>upsert system_users + user_info；staff 資料從 staff_directory 帶入</td></tr>
+      <tr><td>FR-SYNC-02</td><td><code>updateUser(params)</code></td><td>同步更新 role / emails / department 至三表</td></tr>
+      <tr><td>FR-SYNC-03</td><td><code>setActiveStatus(staffId, active)</code></td><td>system_users.is_active + user_info.system_status/classification</td></tr>
+      <tr><td>FR-SYNC-04</td><td><code>revokeAccess(staffId)</code></td><td>delete system_users；user_info → other_staff 或 delete</td></tr>
+      <tr><td>FR-SYNC-05</td><td><code>syncRoleFromStaffDirectory(staffId)</code></td><td>Bubble 同步後可選刷新快照欄位</td></tr>
+    </table>
+  </section>
+
+  <!-- 非功能需求 -->
+  <section id="nfr">
+    <h2>八、非功能需求</h2>
+
+    <h3>8.1 安全</h3>
+    <ul>
+      <li>生產環境禁止 anon 對 personnel 表的 unrestricted GRANT；改為 authenticated + RLS</li>
+      <li>system_users / user_info SELECT：authenticated 用戶可讀自己的記錄；management+ 可讀全部</li>
+      <li>system_users / user_info INSERT/UPDATE/DELETE：僅 management+ （或 service_role / Edge Function）</li>
+      <li>staff_directory：authenticated 可读；寫入僅 sync Edge Function（service_role）及 management+</li>
+      <li>Service Role Key 不得暴露於前端</li>
+      <li>移除或限制 devBypassLogin 在 production build</li>
+    </ul>
+
+    <h3>8.2 RLS 政策（人員表 — 本期）</h3>
+    <div class="callout callout-warn">
+      <strong>注意：</strong>現狀 migration 明確 DISABLE RLS 是為解決 OAuth 登入時 anon 查白名單問題。本期應改為：<strong>登入白名單查詢走 SECURITY DEFINER 函數</strong>（如 <code>verify_system_user_by_email(email)</code>），而非開放整表。
+    </div>
+    <table>
+      <tr><th>表</th><th>政策概要</th></tr>
+      <tr><td>system_users</td><td>SELECT：self（by auth_user_id or email match）+ management；WRITE：management+</td></tr>
+      <tr><td>user_info</td><td>SELECT：self（by staff_id match）+ management；WRITE：management+</td></tr>
+      <tr><td>staff_directory</td><td>SELECT：authenticated；WRITE：service_role + management</td></tr>
+      <tr><td>login_logs</td><td>SELECT：management+；INSERT：authenticated（self）+ service</td></tr>
+    </table>
+
+    <h3>8.3 性能</h3>
+    <ul>
+      <li>findSystemUserByEmail 使用 SECURITY DEFINER 單查詢替代多次 ilike 並行（減少 cold start 延遲）</li>
+      <li>staff_directory 列表：Supabase 快取優先，Bubble 僅作同步源</li>
+      <li>login_logs 列表：索引 <code>created_at DESC</code>（已有）</li>
+    </ul>
+
+    <h3>8.4 可靠性</h3>
+    <ul>
+      <li>grantAccess / updateUser 失敗時事務回滾或補償日誌</li>
+      <li>同步操作返回明確錯誤供 toast 展示</li>
+    </ul>
+
+    <h3>8.5 可維護性</h3>
+    <ul>
+      <li>ROLE_OPTIONS 單一定義於 <code>src/lib/roles.ts</code></li>
+      <li>SettingsModule 拆分为独立组件（对齐 Settings.md 组件结构）</li>
+      <li>补充 system_users / login_logs 至 supabase gen types</li>
+    </ul>
+  </section>
+
+  <!-- 開發計劃關聯 -->
+  <section id="dev-plan">
+    <h2>九、與 06-development_plan.md 的關聯</h2>
+    <p>本 PRD 遵循 <code>docs/06-development_plan.md</code> 規範：</p>
+    <table>
+      <tr><th>規範項</th><th>本 PRD 對齊方式</th></tr>
+      <tr><td>存放路徑</td><td><code>docs/development_plan/2026-06-29/PRD-人員管理與權限優化-v1.0.html</code></td></tr>
+      <tr><td>文件名即標題</td><td>列表標題：<strong>PRD-人員管理與權限優化-v1.0</strong></td></tr>
+      <tr><td>負責人</td><td>Dylan</td></tr>
+      <tr><td>前端入口</td><td>規劃中心 → 開發計劃 → 查看（iframe 載入）</td></tr>
+      <tr><td>資料庫註冊</td><td>需向 development_plan 表 INSERT 一筆記錄（見下方 SQL）</td></tr>
+    </table>
+
+    <h3>9.1 建議的 development_plan 註冊 SQL</h3>
+    <div class="flow">INSERT INTO public.development_plan (
+  planning_date, title, owner, document_path, file_name
+) VALUES (
+  '2026-06-29',
+  'PRD-人員管理與權限優化-v1.0',
+  'Dylan',
+  'docs/development_plan/2026-06-29/PRD-人員管理與權限優化-v1.0.html',
+  'PRD-人員管理與權限優化-v1.0.html'
+);</div>
+
+    <h3>9.2 與其他 PRD 的邊界</h3>
+    <ul>
+      <li><code>PRD-工作匯報自動關聯-v2.0</code>：涉及 staff_id 解析，依賴本 PRD 三表一致後的 bubble_staff_id 可靠性</li>
+      <li>全業務 RLS 落地：引用 <code>04-Role-Permission-RLS.md</code>，建議另立 PRD，在本 PRD Phase 3 完成後啟動</li>
+    </ul>
+  </section>
+
+  <!-- 驗收標準 -->
+  <section id="acceptance">
+    <h2>十、驗收標準</h2>
+
+    <h3>10.1 P0 驗收（必須全部通過）</h3>
+    <table>
+      <tr><th>#</th><th>場景</th><th>預期結果</th></tr>
+      <tr><td>AC-01</td><td>管理員在 UserManagement 將用戶角色從 designer 改為 project_manager</td><td>system_users.role、user_info.role_tag 均更新；用戶刷新後 Sidebar/設定門禁反映 PM 權限</td></tr>
+      <tr><td>AC-02</td><td>管理員在 StaffDirectory 將員工設為 system_user 並儲存</td><td>system_users 出現對應記錄；該 Google 電郵可登入</td></tr>
+      <tr><td>AC-03</td><td>管理員停用某 system_user（is_active=false）</td><td>該用戶下次登入被拒絕，提示帳號停用；user_info.system_status=inactive</td></tr>
+      <tr><td>AC-04</td><td>非白名單 Google 電郵嘗試登入</td><td>OAuth 後被拒絕，authError 提示聯絡管理員；login_logs.success=false</td></tr>
+      <tr><td>AC-05</td><td>非 management 角色訪問 /settings/users</td><td>顯示無權限提示（canAccessSettings=false）</td></tr>
+      <tr><td>AC-06</td><td>personnelSyncService.grantAccess 中途失敗</td><td>不留下不一致的部分寫入；UI 顯示錯誤</td></tr>
+    </table>
+
+    <h3>10.2 P1 驗收</h3>
+    <table>
+      <tr><th>#</th><th>場景</th><th>預期結果</th></tr>
+      <tr><td>AC-07</td><td>打開登入紀錄頁</td><td>展示 login_logs 真實數據，非 mock</td></tr>
+      <tr><td>AC-08</td><td>打開個人設定</td><td>無 mock 公司/品牌角色分配卡片</td></tr>
+      <tr><td>AC-09</td><td>打開角色權限頁</td><td>模塊矩陣與 04 文檔 §2 一致</td></tr>
+      <tr><td>AC-10</td><td>Production 環境登入</td><td>無 hardcoded super admin bypass</td></tr>
+      <tr><td>AC-11</td><td>人員表 RLS 啟用後，anon 直接 REST 查 system_users</td><td>返回空或 401（除 SECURITY DEFINER 函數外）</td></tr>
+    </table>
+
+    <h3>10.3 P2 驗收</h3>
+    <table>
+      <tr><th>#</th><th>場景</th><th>預期結果</th></tr>
+      <tr><td>AC-12</td><td>SettingsModule.tsx 行數</td><td>主文件 &lt; 300 行；子組件獨立文件</td></tr>
+      <tr><td>AC-13</td><td>StaffDirectory 批量操作</td><td>可批量設為系統使用者（若 FR-S-06 納入本期）</td></tr>
+    </table>
+  </section>
+
+  <!-- 附錄 -->
+  <section id="appendix">
+    <h2>十一、附錄</h2>
+
+    <h3>11.1 關鍵文件路徑</h3>
+    <table>
+      <tr><th>類別</th><th>路徑</th><th>說明</th></tr>
+      <tr><td>認證</td><td><code>src/context/AuthContext.tsx</code></td><td>Google OAuth、白名單查詢、角色 enrichment</td></tr>
+      <tr><td>權限</td><td><code>src/lib/permissions.ts</code></td><td>canAccessSettings 等前端門禁</td></tr>
+      <tr><td>設定主模塊</td><td><code>src/components/settings/SettingsModule.tsx</code></td><td>路由子頁、ProfileSection 等（待拆分）</td></tr>
+      <tr><td>用戶管理</td><td><code>src/components/settings/UserManagement.tsx</code></td><td>system_users CRUD</td></tr>
+      <tr><td>員工列表</td><td><code>src/components/settings/StaffDirectory.tsx</code></td><td>Bubble 同步、user_info 分類</td></tr>
+      <tr><td>類型</td><td><code>src/types/supabase.ts</code></td><td>staff_directory、user_info 類型（缺 system_users）</td></tr>
+      <tr><td>Migration</td><td><code>supabase/migrations/20240601_create_system_users.sql</code></td><td>system_users + login_logs 建表</td></tr>
+      <tr><td>Migration</td><td><code>supabase/migrations/20240602_create_staff_directory.sql</code></td><td>staff_directory 建表</td></tr>
+      <tr><td>Migration</td><td><code>supabase/migrations/20240605_create_user_info.sql</code></td><td>user_info 建表</td></tr>
+      <tr><td>Migration</td><td><code>supabase/migrations/20240611_fix_system_users_rls.sql</code></td><td>RLS 關閉 + anon GRANT（待替換）</td></tr>
+      <tr><td>Edge Function</td><td><code>supabase/functions/sync-bubble-staff/</code></td><td>Bubble → staff_directory 同步</td></tr>
+      <tr><td>開發計劃 UI</td><td><code>src/components/planning-center/DevelopmentPlans.tsx</code></td><td>PRD 列表/詳情</td></tr>
+      <tr><td>文檔</td><td><code>docs/04-Role-Permission-RLS.md</code></td><td>RBAC 矩陣 + RLS 政策（目標態）</td></tr>
+      <tr><td>文檔</td><td><code>docs/05-Page-Specifications/Settings.md</code></td><td>Settings 頁面規格</td></tr>
+      <tr><td>新增（規劃）</td><td><code>src/lib/personnel/personnelSyncService.ts</code></td><td>三表同步服務</td></tr>
+      <tr><td>新增（規劃）</td><td><code>src/lib/roles.ts</code></td><td>統一角色常量</td></tr>
+    </table>
+
+    <h3>11.2 ER 關係圖</h3>
+    <div class="diagram-section">
+      <div class="flow">┌─────────────────────┐
+│   Bubble.io Staff   │
+│   (_id = staff key) │
+└──────────┬──────────┘
+           │ sync
+           ▼
+┌─────────────────────┐         ┌─────────────────────┐
+│   staff_directory   │         │     user_info       │
+│─────────────────────│         │─────────────────────│
+│ PK  id (UUID)       │         │ PK  id (UUID)       │
+│ UK  bubble_staff_id │◄───────►│ UK  staff_id        │
+│     display_name    │  1 : 0..1│     role_tag        │
+│     work_email      │         │     classification  │
+│     status          │         │     system_status   │
+│     department      │         │     google_email    │
+│     office          │         │     department      │
+└──────────┬──────────┘         └──────────┬──────────┘
+           │                               │
+           │         bubble_staff_id       │
+           └───────────────┬───────────────┘
+                           │ 1 : 0..1
+                           ▼
+                ┌─────────────────────┐
+                │    system_users     │
+                │─────────────────────│
+                │ PK  id (UUID)       │
+                │ UK  auth_user_id    │──────► auth.users (Supabase Auth)
+                │     bubble_staff_id │
+                │     email           │
+                │     google_email    │◄────── Google OAuth 匹配
+                │     role            │  ★ 角色權威來源（To-Be）
+                │     is_active       │
+                │     last_login_at   │
+                └──────────┬──────────┘
+                           │ 1 : N
+                           ▼
+                ┌─────────────────────┐
+                │     login_logs      │
+                │─────────────────────│
+                │ FK  user_id         │
+                │     email           │
+                │     success         │
+                │     login_method    │
+                │     created_at      │
+                └─────────────────────┘</div>
+    </div>
+
+    <h3>11.3 角色 → 系統設定存取對照</h3>
+    <table>
+      <tr><th>角色</th><th>個人設定</th><th>系統設定其他子頁</th><th>備註</th></tr>
+      <tr><td>management / super_admin / system_dev / company_admin</td><td>✅</td><td>✅</td><td>SETTINGS_ROLES in permissions.ts</td></tr>
+      <tr><td>project_manager / designer / accountant / copywriter / video_editor / marketing / staff</td><td>✅</td><td>❌</td><td>—</td></tr>
+    </table>
+
+    <h3>11.4 參考：AuthContext 角色映射邏輯</h3>
+    <p><code>mapRoleToInternal(roleTag, classification)</code> 以中文/英文關鍵字模糊匹配。本期應改為<strong>枚舉直匹配</strong>，僅保留 fallback 至 <code>staff</code>。</p>
+  </section>
+
+</main>
+
+<footer>
+  MPS — 人員管理與權限優化 PRD v1.0 · 編寫人 Dylan · 2026-06-29<br>
+  文檔路徑：docs/development_plan/2026-06-29/PRD-人員管理與權限優化-v1.0.html
+</footer>
+
+</body>
+</html>
