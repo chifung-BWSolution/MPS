@@ -54,10 +54,10 @@ INSERT INTO public.development_plan (
   document_path,
   file_name
 ) VALUES (
-  '2025-06-29',
+  '2026-06-29',
   'PRD-工作匯報自動關聯-v2.0',
   'Dylan',
-  'docs/development_plan/2025-06-29/PRD-工作匯報自動關聯-v2.0.html',
+  'docs/development_plan/2026-06-29/PRD-工作匯報自動關聯-v2.0.html',
   'PRD-工作匯報自動關聯-v2.0.html'
 )
 ON CONFLICT (document_path) DO NOTHING;

@@ -10,8 +10,8 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "types:supabase": "npx supabase gen types typescript --project-id kwcevjcmdjadhrygjyfp > src/types/supabase.ts",
-    "db:push": "npx supabase db push --project-id kwcevjcmdjadhrygjyfp",
-    "db:link": "npx supabase link --project-ref kwcevjcmdjadhrygjyfp"
+    "db:push": "supabase db push --linked --yes",
+    "db:link": "supabase link --project-ref kwcevjcmdjadhrygjyfp --yes"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
