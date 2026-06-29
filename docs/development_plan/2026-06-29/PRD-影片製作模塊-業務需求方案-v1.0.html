@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>影片製作模塊 — 業務部門需求方案 v1.0</title>
+  <style>
+    :root {
+      --teal-50: #f0fdfa;
+      --teal-100: #ccfbf1;
+      --teal-600: #0d9488;
+      --teal-700: #0f766e;
+      --teal-800: #115e59;
+      --slate-50: #f8fafc;
+      --slate-100: #f1f5f9;
+      --slate-200: #e2e8f0;
+      --slate-600: #475569;
+      --slate-700: #334155;
+      --slate-800: #1e293b;
+      --slate-900: #0f172a;
+      --amber-50: #fffbeb;
+      --amber-600: #d97706;
+      --rose-50: #fff1f2;
+      --rose-600: #e11d48;
+      --font: "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font); font-size: 15px; line-height: 1.7; color: var(--slate-800); background: var(--slate-100); }
+    .hero { background: linear-gradient(135deg, #6d28d9 0%, var(--slate-900) 100%); color: #fff; padding: 48px 32px 56px; }
+    .hero-inner { max-width: 960px; margin: 0 auto; }
+    .hero h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 12px; }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: 16px; font-size: 0.875rem; opacity: 0.85; margin-bottom: 24px; }
+    .hero-summary { font-size: 1.05rem; max-width: 760px; opacity: 0.95; line-height: 1.65; }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+    .badge { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); }
+    .container { max-width: 960px; margin: 0 auto; padding: 32px 24px 64px; }
+    section { background: #fff; border-radius: 12px; border: 1px solid var(--slate-200); padding: 28px 32px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(15,23,42,0.04); }
+    h2 { font-size: 1.25rem; font-weight: 700; color: var(--teal-800); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--teal-100); }
+    h3 { font-size: 1rem; font-weight: 600; color: var(--slate-700); margin: 20px 0 10px; }
+    h4 { font-size: 0.9rem; font-weight: 600; color: var(--slate-700); margin: 14px 0 8px; }
+    p { margin-bottom: 12px; }
+    ul, ol { margin: 0 0 12px 1.25rem; }
+    li { margin-bottom: 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; margin: 12px 0 16px; }
+    th, td { border: 1px solid var(--slate-200); padding: 10px 12px; text-align: left; vertical-align: top; }
+    th { background: var(--teal-50); font-weight: 600; color: var(--teal-800); }
+    tr:nth-child(even) td { background: var(--slate-50); }
+    code { font-family: Consolas, monospace; font-size: 0.82em; background: var(--slate-100); padding: 2px 6px; border-radius: 4px; color: var(--teal-700); }
+    .flow { background: var(--slate-900); color: #e2e8f0; padding: 16px; border-radius: 8px; font-family: Consolas, monospace; font-size: 0.8rem; overflow-x: auto; white-space: pre-wrap; margin: 12px 0; }
+    .callout { background: var(--amber-50); border-left: 4px solid var(--amber-600); padding: 14px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 0.9rem; }
+    .callout-danger { background: var(--rose-50); border-left-color: var(--rose-600); }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; margin-right: 4px; }
+    .tag-p0 { background: #fecaca; color: #991b1b; }
+    .tag-p1 { background: #fde68a; color: #92400e; }
+    .tag-p2 { background: var(--slate-200); color: var(--slate-700); }
+    .tag-gap { background: #fecaca; color: #991b1b; }
+    .tag-ok { background: #bbf7d0; color: #166534; }
+    .module-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 12px 0; }
+    @media (max-width: 720px) { .module-grid { grid-template-columns: 1fr; } }
+    .module-card { border: 1px solid var(--slate-200); border-radius: 8px; padding: 16px; background: var(--slate-50); }
+    .module-card h4 { margin-top: 0; color: var(--teal-800); }
+    .stat-row { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
+    .stat { background: var(--teal-50); border: 1px solid var(--teal-100); border-radius: 8px; padding: 12px 16px; min-width: 120px; }
+    .stat strong { display: block; font-size: 1.4rem; color: var(--teal-800); }
+    .stat span { font-size: 0.75rem; color: var(--slate-600); }
+  </style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-inner">
+    <h1>影片製作模塊 — 業務部門需求方案</h1>
+    <div class="hero-meta">
+      <span>版本 v1.0</span>
+      <span>規劃日期 2026-06-29</span>
+      <span>負責人 Dylan</span>
+      <span>類型 BRD / 業務需求</span>
+    </div>
+    <p class="hero-summary">
+      本方案依據業務部門實際使用的 WPS 工作簿
+      <strong>「Video Vchannel Account + Timeline + Report」</strong>
+      梳理而成。核心結論：業務以 <strong>Vchannel（影片頻道）</strong> 為一級組織單元，而非 MPS 現有的「公司 → 品牌 → 網站」模型；
+      MPS 需以 Vchannel 重構數據模型，並合併「列表 / 排期 / 發佈追蹤」為統一的影片產出時間軸。
+    </p>
+    <div class="badge-row">
+      <span class="badge">21 個 Vchannel</span>
+      <span class="badge">~135 部影片</span>
+      <span class="badge">43 篇成功個案</span>
+      <span class="badge">11+ 發佈平台</span>
+      <span class="badge">來源：WPS Excel</span>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+  <section id="meta">
+    <h2>文檔資訊</h2>
+    <table>
+      <tr><th>項目</th><th>內容</th></tr>
+      <tr><td>業務來源</td><td><code>[影片頻道+成功個案] Video Vchannel Account + Timeline + Report.xlsx</code>（WPS 維護）</td></tr>
+      <tr><td>分析方式</td><td>WPS <code>Ket.Application</code> COM 匯出 CSV → 欄位與樣本數據分析</td></tr>
+      <tr><td>對照規格</td><td><code>docs/05-Page-Specifications/Video.md</code>、MPS 現有 <code>src/components/video/*</code></td></tr>
+      <tr><td>關聯 PRD</td><td><code>PRD-工作匯報自動關聯-v2.0</code>（影片 completed/published 觸發待匯報）</td></tr>
+      <tr><td>存放路徑</td><td><code>docs/development_plan/2026-06-29/PRD-影片製作模塊-業務需求方案-v1.0.html</code></td></tr>
+    </table>
+  </section>
+
+  <section id="background">
+    <h2>一、背景與目標</h2>
+    <h3>1.1 現狀痛點</h3>
+    <ul>
+      <li>業務以單一 Excel 管理頻道、帳密、影片時間軸、成功個案，四表人工同步。</li>
+      <li>Login 表含明文密碼，無權限分級，安全風險高。</li>
+      <li>MPS「影片製作」模塊為前端原型（mock 數據），覆蓋業務需求約 <strong>25–30%</strong>，且數據模型與業務不一致。</li>
+    </ul>
+    <h3>1.2 建議目標</h3>
+    <ol>
+      <li>以 <strong>Vchannel</strong> 為中心，數位化 Excel 四 Sheet 能力。</li>
+      <li>影片產出採 <strong>Checkbox 節點 + 多平台發佈矩陣</strong>，而非簡化 5 階段狀態機。</li>
+      <li>成功個案（Article）與影片共用 Vchannel，獨立編碼體系。</li>
+      <li>帳密加密存儲，FeedHive / Asana / 本地 V:\ 路徑可關聯。</li>
+    </ol>
+    <div class="stat-row">
+      <div class="stat"><strong>21</strong><span>有效 Vchannel</span></div>
+      <div class="stat"><strong>135</strong><span>有效影片記錄</span></div>
+      <div class="stat"><strong>43</strong><span>成功個案文章</span></div>
+      <div class="stat"><strong>4</strong><span>Excel 工作表</span></div>
+    </div>
+  </section>
+
+  <section id="as-is">
+    <h2>二、業務工作簿結構（As-Is）</h2>
+    <table>
+      <tr><th>Sheet</th><th>業務名稱</th><th>有效規模</th><th>核心用途</th></tr>
+      <tr><td><code>summary</code></td><td>影片頻道主檔</td><td>21 頻道</td><td>重要性 A1–A4、D/M、品牌分類、各平台開通狀態</td></tr>
+      <tr><td><code>Login</code></td><td>Vchannel Account</td><td>~36 行（多平台展開）</td><td>帳號 ID、密碼、登入方式、運營者（M02/M03…）</td></tr>
+      <tr><td><code>影片 Video輸出(改）</code></td><td>影片產出時間軸</td><td>~135 部（2022–2026）</td><td>Video Code、拍攝/剪輯/Demo/多平台發佈、V:\ 路徑</td></tr>
+      <tr><td><code>Article 成功個案輸出</code></td><td>成功個案</td><td>43 篇（2025–2026）</td><td>Article Code、刊登月份、輸出網站 URL</td></tr>
+    </table>
+    <div class="callout">
+      Sheet 物理行數達千行，大量為空白預留列；系統設計應以<strong>有效記錄</strong>為準，並支援持續擴展。
+    </div>
+  </section>
+
+  <section id="concepts">
+    <h2>三、核心業務概念</h2>
+
+    <h3>3.1 Vchannel（影片頻道）</h3>
+    <p>業務一級組織單元，命名示例：<code>V01 - Franco IP 老闆個人</code>、<code>V11 - BW Office + Furniture</code>、<code>V22 - FCC Catering 到會</code>。</p>
+    <table>
+      <tr><th>屬性</th><th>說明</th><th>示例</th></tr>
+      <tr><td>頻道編號</td><td>內部唯一 ID</td><td>V01、V11、V22</td></tr>
+      <tr><td>重要性</td><td>更新優先級</td><td>A1（7）、A2（7）、A3（4）、A4（3）</td></tr>
+      <tr><td>D/M（比例）</td><td>Desktop / Mobile 內容側重</td><td>D、M、DM、D/M</td></tr>
+      <tr><td>頻道名稱</td><td>對外公開名稱</td><td>Franco 梵高管理新思維</td></tr>
+      <tr><td>品牌分類</td><td>內部品牌代碼</td><td>BWF、BWA、BWL、CFA+CFB、Wine、FC Shop</td></tr>
+    </table>
+
+    <h3>3.2 平台矩陣（11+ 平台）</h3>
+    <table>
+      <tr><th>平台</th><th>summary</th><th>Video 發佈</th><th>Login</th></tr>
+      <tr><td>YouTube</td><td>✓</td><td>✓</td><td>✓</td></tr>
+      <tr><td>Instagram</td><td>✓</td><td>✓</td><td>✓</td></tr>
+      <tr><td>Facebook</td><td>✓</td><td>✓</td><td>✓</td></tr>
+      <tr><td>小紅書</td><td>✓</td><td>✓</td><td>✓</td></tr>
+      <tr><td>微信視頻號 / 影音號</td><td>✓</td><td>✓</td><td>✓</td></tr>
+      <tr><td>抖音</td><td>✓</td><td>✓</td><td>✓</td></tr>
+      <tr><td>Threads</td><td>✓</td><td>✓</td><td>✓</td></tr>
+      <tr><td>LinkedIn</td><td>✓</td><td>—</td><td>✓</td></tr>
+      <tr><td>微信公眾號</td><td>—</td><td>✓</td><td>✓</td></tr>
+      <tr><td>簡體中文 / 繁體中文</td><td>—</td><td>✓（語言維度）</td><td>—</td></tr>
+    </table>
+    <p>summary 平台欄位記錄<strong>帳號狀態</strong>（非僅 URL），如「已開賬號（M02工作手機號）」「已有個人帳號」「-」「??」。</p>
+
+    <h3>3.3 編碼體系</h3>
+    <table>
+      <tr><th>類型</th><th>格式</th><th>示例</th></tr>
+      <tr><td>Video Code</td><td><code>{Vchannel}-{年}-{序號}{D|M}</code></td><td><code>V11-2024-001M</code>、<code>V12-2024-028D</code></td></tr>
+      <tr><td>Article Code</td><td><code>{Vchannel}-{年}-A{序號}</code></td><td><code>V11-2025-A001</code>、<code>V22-2025-A001</code></td></tr>
+    </table>
+    <p>影片按頻道 Top：V12（69）、V01（21）、V21（14）、V11（14）。成功個案 Top：V22（20）、V13（12）、V12（7）、V11（4）。</p>
+
+    <h3>3.4 影片製作流程（Checkbox 節點）</h3>
+    <div class="flow">企劃/主題 → 深圳拍攝 ☑ → 香港拍攝 ☑ → 原片拍攝 ☑ → 拍攝時間
+→ 是否剪輯 ☑ → Demo完成 ☑ → 預計發佈日期 → 最終發佈日期
+→ 各平台發佈 TRUE/FALSE（11 欄）→ Video storage location (V:\...) → Asana link</div>
+  </section>
+
+  <section id="workflow">
+    <h2>四、業務流程</h2>
+    <h3>4.1 典型場景</h3>
+    <table>
+      <tr><th>場景</th><th>步驟</th></tr>
+      <tr><td>A 新頻道開通</td><td>summary 新增 Vchannel → 填平台狀態 → Login 補帳密與運營者</td></tr>
+      <tr><td>B 新影片立項</td><td>選 Vchannel → 生成 Video Code → 填主題/Asana → 勾選製作節點 → 填 V:\ 路徑</td></tr>
+      <tr><td>C 成功個案產出</td><td>選 Vchannel → 生成 Article Code → 填主題/月份 → 填輸出網站 1–5 URL</td></tr>
+      <tr><td>D 運營發佈</td><td>Video 表找待發 → Login 查帳密/FeedHive → 發佈後勾選平台 TRUE</td></tr>
+    </table>
+  </section>
+
+  <section id="gap">
+    <h2>五、與 MPS 現狀差距</h2>
+    <table>
+      <tr><th>業務能力</th><th>Excel</th><th>MPS 現狀</th><th>差距</th></tr>
+      <tr><td>Vchannel 為中心</td><td><span class="tag tag-ok">✓</span></td><td>公司/品牌/網站</td><td><span class="tag tag-gap">架構性</span></td></tr>
+      <tr><td>11+ 平台矩陣</td><td><span class="tag tag-ok">✓</span></td><td>7 平台，缺中國系</td><td><span class="tag tag-gap">P0</span></td></tr>
+      <tr><td>帳號狀態（非僅 URL）</td><td><span class="tag tag-ok">✓</span></td><td>pending/uploaded</td><td><span class="tag tag-gap">P0</span></td></tr>
+      <tr><td>Login 帳密管理</td><td><span class="tag tag-ok">✓</span></td><td>mock 硬編碼</td><td><span class="tag tag-gap">P0</span></td></tr>
+      <tr><td>Video / Article Code</td><td><span class="tag tag-ok">✓</span></td><td>無編碼規則</td><td><span class="tag tag-gap">P0</span></td></tr>
+      <tr><td>深圳/香港雙城拍攝</td><td><span class="tag tag-ok">✓</span></td><td>單一 shoot_date</td><td><span class="tag tag-p1">P1</span></td></tr>
+      <tr><td>Demo 審片節點</td><td><span class="tag tag-ok">✓</span></td><td>無</td><td><span class="tag tag-p1">P1</span></td></tr>
+      <tr><td>V:\ 成品路徑</td><td><span class="tag tag-ok">✓</span></td><td>無</td><td><span class="tag tag-p1">P1</span></td></tr>
+      <tr><td>成功個案 Article</td><td><span class="tag tag-ok">✓</span></td><td>模塊不存在</td><td><span class="tag tag-gap">P0</span></td></tr>
+      <tr><td>數據持久化</td><td>Excel 文件</td><td>mock + 內存</td><td><span class="tag tag-gap">P0</span></td></tr>
+    </table>
+  </section>
+
+  <section id="requirements">
+    <h2>六、功能需求清單</h2>
+
+    <h3>6.1 模塊一：Vchannel 頻道主檔（summary） <span class="tag tag-p0">P0</span></h3>
+    <ul>
+      <li>Vchannel CRUD（編號、內部全名、對外頻道名稱、重要性、D/M、品牌分類）</li>
+      <li>11 平台帳號<strong>狀態</strong>欄（URL / 文字狀態 / 未開通 / 待定）</li>
+      <li>篩選：重要性、品牌、D/M、平台開通狀態</li>
+      <li>頻道詳情：關聯影片數、成功個案數、平台摘要</li>
+    </ul>
+
+    <h3>6.2 模塊二：平台帳號登入（Login） <span class="tag tag-p0">P0</span></h3>
+    <ul>
+      <li>按 Vchannel + 平台管理（可多行/多子品牌，如 V12 下多個名稱）</li>
+      <li>欄位：平台、賬號 ID、登入方式、運營負責人、備註</li>
+      <li><strong>密碼加密存儲</strong>，僅授權角色可查看</li>
+      <li>與 summary 平台狀態聯動告警</li>
+      <li>FeedHive 統管標記（P1）</li>
+    </ul>
+    <div class="callout callout-danger">
+      安全要求：密碼不得再明文匯出；<code>video_editor</code> 可看帳號 ID 但不可看密碼；管理層/指定運營可看密碼。
+    </div>
+
+    <h3>6.3 模塊三：影片產出時間軸（Video 輸出） <span class="tag tag-p0">P0</span></h3>
+    <ul>
+      <li>自動生成 Video Code（<code>{Vchannel}-{年}-{序號}{D|M}</code>）</li>
+      <li>製作節點 checkbox：深圳、香港、原片拍攝、是否剪輯、Demo 完成</li>
+      <li>拍攝時間、預計/最終發佈日期</li>
+      <li>11 平台發佈 checkbox + 可擴展 URL</li>
+      <li>Video storage location、Asana link</li>
+      <li>列表篩選：Vchannel、年份、製作進度、發佈狀態</li>
+      <li>日曆視圖（P1）；工作匯報自動關聯（P1，對接 PRD v2.0）</li>
+    </ul>
+
+    <h3>6.4 模塊四：成功個案（Article 輸出） <span class="tag tag-p0">P0</span></h3>
+    <ul>
+      <li>自動生成 Article Code（<code>{Vchannel}-{年}-A{序號}</code>）</li>
+      <li>主題、刊登月份（YYYYMM）、年份</li>
+      <li>輸出網站 1–5（URL 列表）</li>
+      <li>與 MPS 網站文章關聯（P1）</li>
+    </ul>
+
+    <h3>6.5 報表與匯出 <span class="tag tag-p1">P1</span></h3>
+    <ul>
+      <li>按 Vchannel / 品牌統計年度產出</li>
+      <li>WPS/Excel 格式匯出（過渡期）；Login 密碼脫敏匯出</li>
+    </ul>
+  </section>
+
+  <section id="to-be">
+    <h2>七、建議 MPS 模塊結構（To-Be）</h2>
+    <table>
+      <tr><th>子路由</th><th>標籤</th><th>對應 Excel</th><th>說明</th></tr>
+      <tr><td><code>/video/channels</code></td><td>頻道主檔</td><td>summary</td><td>升級現有「頻道管理」</td></tr>
+      <tr><td><code>/video/accounts</code></td><td>平台帳號</td><td>Login</td><td><strong>新增</strong>，需權限</td></tr>
+      <tr><td><code>/video/timeline</code></td><td>影片產出</td><td>Video 輸出</td><td>合併列表+排期+發佈</td></tr>
+      <tr><td><code>/video/cases</code></td><td>成功個案</td><td>Article 輸出</td><td><strong>新增</strong></td></tr>
+      <tr><td><code>/video/library</code></td><td>片庫</td><td>—</td><td>從 timeline 已完成+有路徑聚合</td></tr>
+    </table>
+  </section>
+
+  <section id="data-model">
+    <h2>八、數據模型建議</h2>
+    <div class="flow">Vchannel（頻道）
+  ├── PlatformAccount[]（平台帳號，含加密憑證）
+  ├── VideoOutput[]（影片產出）
+  │     └── PlatformPublish[]（各平台發佈狀態）
+  └── SuccessCase[]（成功個案）
+        └── OutputUrl[]（輸出網站 1-5）</div>
+    <p>與 MPS 主數據<strong>鬆耦合</strong>：品牌分類 → Brand；輸出網站 → WebsiteProfile；Asana / V:\ → 外部引用。</p>
+  </section>
+
+  <section id="fields">
+    <h2>九、字段級對照（Excel → MPS）</h2>
+    <h3>9.1 summary → vchannel</h3>
+    <table>
+      <tr><th>Excel 欄</th><th>建議字段</th><th>類型</th></tr>
+      <tr><td>影片頻道</td><td><code>channel_code</code> + <code>internal_name</code></td><td>TEXT</td></tr>
+      <tr><td>重要性</td><td><code>importance</code></td><td>ENUM A1–A4</td></tr>
+      <tr><td>D/M（比例）</td><td><code>device_type</code></td><td>ENUM D/M/DM</td></tr>
+      <tr><td>頻道名稱</td><td><code>public_name</code></td><td>TEXT</td></tr>
+      <tr><td>品牌分類 *</td><td><code>brand_code</code></td><td>TEXT</td></tr>
+      <tr><td>youtube … Linkedin</td><td><code>platform_status</code></td><td>JSONB</td></tr>
+    </table>
+    <h3>9.2 Video 輸出 → video_output</h3>
+    <table>
+      <tr><th>Excel 欄</th><th>建議字段</th></tr>
+      <tr><td>Years</td><td><code>production_year</code></td></tr>
+      <tr><td>Vchannel</td><td><code>vchannel_id</code> FK</td></tr>
+      <tr><td>Video Code</td><td><code>video_code</code> UNIQUE</td></tr>
+      <tr><td>Match asana / Asana link</td><td><code>asana_task_id</code> / <code>asana_url</code></td></tr>
+      <tr><td>Video Theme</td><td><code>title</code></td></tr>
+      <tr><td>深圳 / 香港 / 原片拍攝 / 是否剪輯 / Demo完成</td><td><code>shoot_sz</code> … <code>demo_done</code> BOOLEAN</td></tr>
+      <tr><td>拍攝時間 / 預計/最終發佈日期</td><td><code>shoot_at</code> / <code>planned_publish_date</code> / <code>published_date</code></td></tr>
+      <tr><td>youtube … 繁體中文</td><td><code>platform_publish</code> JSONB</td></tr>
+      <tr><td>Video storage location</td><td><code>storage_path</code></td></tr>
+    </table>
+    <h3>9.3 Article 輸出 → success_case</h3>
+    <table>
+      <tr><th>Excel 欄</th><th>建議字段</th></tr>
+      <tr><td>Article Code</td><td><code>article_code</code> UNIQUE</td></tr>
+      <tr><td>刊登月份</td><td><code>publish_month</code> (YYYYMM)</td></tr>
+      <tr><td>Article Theme</td><td><code>title</code></td></tr>
+      <tr><td>輸出網站 1–5</td><td><code>output_urls</code> JSONB array</td></tr>
+    </table>
+  </section>
+
+  <section id="phases">
+    <h2>十、實施分期</h2>
+    <table>
+      <tr><th>階段</th><th>範圍</th><th>業務價值</th></tr>
+      <tr><td>一期 P0</td><td>Vchannel 主檔 + 影片 Timeline + Excel 匯入</td><td>替代 Excel 主表</td></tr>
+      <tr><td>二期 P0</td><td>Login 帳密（加密）+ 成功個案</td><td>完整替代工作簿</td></tr>
+      <tr><td>三期 P1</td><td>Asana、工作匯報、FeedHive、報表</td><td>流程自動化</td></tr>
+      <tr><td>四期 P2</td><td>V:\ 整合、批量發佈</td><td>效率提升</td></tr>
+    </table>
+    <h3>10.1 數據遷移</h3>
+    <ul>
+      <li>使用 WPS <code>Ket.Application</code> COM 匯出 CSV（4 sheet 約 9 秒，已驗證）。</li>
+      <li>一次性匯入：21 頻道 + 135 影片 + 43 成功個案。</li>
+      <li>Login 密碼遷移時強制加密。</li>
+    </ul>
+  </section>
+
+  <section id="confirm">
+    <h2>十一、待業務確認事項</h2>
+    <ol>
+      <li>成功個案是否放在「影片製作」模塊內（建議：同模塊兩 Tab）？</li>
+      <li>Video Code 的 D/M 後綴是否必須與頻道 D/M 一致？一部片能否同時有 D 和 M 兩個 Code？</li>
+      <li>Login 密碼哪些角色可查看？是否接受系統內加密、禁止明文匯出？</li>
+      <li>summary 平台自由文字是否標準化為枚舉（已開通/待開通/FeedHive/URL）？</li>
+      <li>V:\ 路徑是否長期保留？是否改為 SharePoint/雲端？</li>
+      <li>FeedHive 是否為官方發佈工具，系統是否只需記錄無需 API？</li>
+    </ol>
+  </section>
+
+  <section id="dev-plan">
+    <h2>十二、與 06-development_plan.md 的關聯</h2>
+    <table>
+      <tr><th>項目</th><th>值</th></tr>
+      <tr><td>規劃日期</td><td>2026-06-29</td></tr>
+      <tr><td>內容標題</td><td>PRD-影片製作模塊-業務需求方案-v1.0</td></tr>
+      <tr><td>負責人</td><td>Dylan</td></tr>
+      <tr><td>文檔路徑</td><td><code>docs/development_plan/2026-06-29/PRD-影片製作模塊-業務需求方案-v1.0.html</code></td></tr>
+      <tr><td>iframe URL</td><td><code>/development_plan/2026-06-29/PRD-影片製作模塊-業務需求方案-v1.0.html</code></td></tr>
+    </table>
+    <h3>12.1 development_plan 註冊 SQL</h3>
+    <div class="flow">INSERT INTO public.development_plan (
+  planning_date, title, owner, document_path, file_name
+) VALUES (
+  '2026-06-29',
+  'PRD-影片製作模塊-業務需求方案-v1.0',
+  'Dylan',
+  'docs/development_plan/2026-06-29/PRD-影片製作模塊-業務需求方案-v1.0.html',
+  'PRD-影片製作模塊-業務需求方案-v1.0.html'
+) ON CONFLICT (document_path) DO NOTHING;</div>
+  </section>
+
+</div>
+</body>
+</html>
