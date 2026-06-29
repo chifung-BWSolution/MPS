@@ -2,6 +2,7 @@ import path from "path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import tsconfigPaths from "vite-tsconfig-paths";
+import { developmentPlanStatic } from "./vite-plugin-development-plan-static";
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => {
@@ -16,6 +17,7 @@ export default defineConfig(async () => {
     tempoAnnotate(),
     react(),
     tsconfigPaths({ projectDiscovery: "lazy" }),
+    developmentPlanStatic(__dirname),
   ],
   resolve: {
     preserveSymlinks: true,

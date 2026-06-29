@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>工作匯報自動關聯 — 方案規劃 v2.0</title>
+  <style>
+    :root {
+      --teal-50: #f0fdfa;
+      --teal-100: #ccfbf1;
+      --teal-600: #0d9488;
+      --teal-700: #0f766e;
+      --teal-800: #115e59;
+      --slate-50: #f8fafc;
+      --slate-100: #f1f5f9;
+      --slate-200: #e2e8f0;
+      --slate-400: #94a3b8;
+      --slate-600: #475569;
+      --slate-700: #334155;
+      --slate-800: #1e293b;
+      --slate-900: #0f172a;
+      --amber-50: #fffbeb;
+      --amber-600: #d97706;
+      --blue-50: #eff6ff;
+      --purple-50: #faf5ff;
+      --pink-50: #fdf2f8;
+      --rose-50: #fff1f2;
+      --font: "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--slate-800);
+      background: var(--slate-100);
+    }
+
+    .hero {
+      background: linear-gradient(135deg, var(--teal-800) 0%, var(--slate-900) 100%);
+      color: #fff;
+      padding: 48px 32px 56px;
+    }
+
+    .hero-inner { max-width: 960px; margin: 0 auto; }
+
+    .hero h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 0.875rem;
+      opacity: 0.85;
+      margin-bottom: 24px;
+    }
+
+    .hero-summary {
+      font-size: 1.05rem;
+      max-width: 720px;
+      opacity: 0.95;
+      line-height: 1.65;
+    }
+
+    .badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.25);
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 32px 24px 64px;
+    }
+
+    section {
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid var(--slate-200);
+      padding: 28px 32px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.04);
+    }
+
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--teal-800);
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--teal-100);
+    }
+
+    h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--slate-700);
+      margin: 20px 0 10px;
+    }
+
+    p { margin-bottom: 12px; }
+
+    ul, ol { margin: 0 0 12px 1.25rem; }
+    li { margin-bottom: 6px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      margin: 12px 0 16px;
+    }
+
+    th, td {
+      border: 1px solid var(--slate-200);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--teal-50);
+      font-weight: 600;
+      color: var(--teal-800);
+    }
+
+    tr:nth-child(even) td { background: var(--slate-50); }
+
+    code {
+      font-family: Consolas, monospace;
+      font-size: 0.82em;
+      background: var(--slate-100);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--teal-700);
+    }
+
+    .callout {
+      border-left: 4px solid var(--teal-600);
+      background: var(--teal-50);
+      padding: 14px 18px;
+      border-radius: 0 8px 8px 0;
+      margin: 16px 0;
+      font-size: 0.9rem;
+    }
+
+    .callout-warn {
+      border-left-color: var(--amber-600);
+      background: var(--amber-50);
+    }
+
+    .module-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      margin: 16px 0;
+    }
+
+    .module-card {
+      border: 1px solid var(--slate-200);
+      border-radius: 10px;
+      padding: 18px;
+      background: var(--slate-50);
+    }
+
+    .module-card h4 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--teal-700);
+      margin-bottom: 8px;
+    }
+
+    .module-card .tag {
+      display: inline-block;
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--teal-100);
+      color: var(--teal-800);
+      margin-bottom: 10px;
+    }
+
+    .module-card ul {
+      margin: 0;
+      list-style: none;
+      font-size: 0.85rem;
+    }
+
+    .module-card li::before {
+      content: "→ ";
+      color: var(--teal-600);
+    }
+
+    .flow {
+      background: var(--slate-900);
+      color: #e2e8f0;
+      padding: 24px;
+      border-radius: 10px;
+      font-family: Consolas, monospace;
+      font-size: 0.8rem;
+      line-height: 1.8;
+      overflow-x: auto;
+      margin: 16px 0;
+      white-space: pre;
+    }
+
+    .flow-diagram {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      margin: 24px 0;
+      font-size: 0.85rem;
+    }
+
+    .flow-box {
+      background: #fff;
+      border: 2px solid var(--teal-600);
+      border-radius: 8px;
+      padding: 12px 20px;
+      text-align: center;
+      min-width: 260px;
+      font-weight: 500;
+    }
+
+    .flow-box.highlight {
+      background: var(--teal-50);
+      border-color: var(--teal-700);
+    }
+
+    .flow-box.muted {
+      border-color: var(--slate-400);
+      background: var(--slate-50);
+      color: var(--slate-600);
+    }
+
+    .flow-arrow {
+      color: var(--teal-600);
+      font-size: 1.2rem;
+      line-height: 1;
+      padding: 4px 0;
+    }
+
+    .state-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+      margin: 12px 0;
+    }
+
+    .state-item {
+      text-align: center;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--slate-200);
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .state-pending { background: var(--amber-50); border-color: #fcd34d; }
+    .state-pulled { background: var(--blue-50); border-color: #93c5fd; }
+    .state-consumed { background: var(--teal-50); border-color: #5eead4; }
+    .state-dismissed { background: var(--slate-100); }
+
+    .ui-mock {
+      border: 1px solid var(--slate-200);
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 16px 0;
+      font-size: 0.85rem;
+    }
+
+    .ui-mock-header {
+      background: var(--teal-700);
+      color: #fff;
+      padding: 12px 16px;
+      font-weight: 600;
+    }
+
+    .ui-mock-body { padding: 16px; background: #fff; }
+
+    .ui-entry {
+      border: 1px solid var(--slate-200);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      position: relative;
+    }
+
+    .ui-entry.auto { border-color: #5eead4; background: var(--teal-50); }
+
+    .auto-label {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      font-size: 0.65rem;
+      background: var(--teal-600);
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+
+    .roadmap {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .roadmap-item {
+      display: grid;
+      grid-template-columns: 100px 1fr;
+      gap: 16px;
+      align-items: start;
+      padding: 14px;
+      background: var(--slate-50);
+      border-radius: 8px;
+      border: 1px solid var(--slate-200);
+    }
+
+    .roadmap-phase {
+      font-weight: 700;
+      color: var(--teal-700);
+      font-size: 0.85rem;
+    }
+
+    .toc {
+      background: var(--slate-50);
+      border: 1px solid var(--slate-200);
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin-bottom: 24px;
+    }
+
+    .toc h2 { border: none; margin-bottom: 12px; font-size: 1rem; }
+    .toc ol { margin: 0; }
+    .toc a { color: var(--teal-700); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+
+    .diagram-section {
+      margin: 20px 0 28px;
+      padding: 20px;
+      background: var(--slate-50);
+      border: 1px solid var(--slate-200);
+      border-radius: 10px;
+    }
+
+    .diagram-section h4 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--teal-800);
+      margin-bottom: 14px;
+    }
+
+    .diagram-section p.desc {
+      font-size: 0.85rem;
+      color: var(--slate-600);
+      margin-bottom: 12px;
+    }
+
+    .mermaid {
+      background: #fff;
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      text-align: center;
+    }
+
+    .mermaid svg { max-width: 100%; height: auto; }
+
+    footer {
+      text-align: center;
+      padding: 24px;
+      font-size: 0.8rem;
+      color: var(--slate-400);
+    }
+
+    @media print {
+      body { background: #fff; }
+      section { box-shadow: none; break-inside: avoid; }
+      .hero { background: var(--teal-800); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <h1>工作匯報自動關聯 — 方案規劃</h1>
+    <div class="hero-meta">
+      <span>版本 v2.0</span>
+      <span>系統 MPS（Marketing Project System）</span>
+      <span>2025-06-29</span>
+      <span>狀態：方案設計</span>
+    </div>
+    <p class="hero-summary">
+      當用戶在業務模塊完成任務後，系統自動將工作項寫入「待匯報佇列」；
+      用戶在「提交匯報」一鍵拉取、填寫工時後提交——無需逐條手動錄入。
+      一期覆蓋五大模塊：<strong>網站+系統、行銷管理、專案策劃、影片製作、藝人管理</strong>。
+    </p>
+    <div class="badge-row">
+      <span class="badge">當日完成 · 當日關聯</span>
+      <span class="badge">不自動提交</span>
+      <span class="badge">工時用戶確認</span>
+      <span class="badge">支持補充匯報</span>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <nav class="toc">
+    <h2>目錄</h2>
+    <ol>
+      <li><a href="#s1">背景與目標</a></li>
+      <li><a href="#s2">一期範圍總覽</a></li>
+      <li><a href="#s3">整體架構</a></li>
+      <li><a href="#s4">端到端業務流程</a></li>
+      <li><a href="#s-flow">業務流程圖總覽</a></li>
+      <li><a href="#s5">模塊接入規格</a></li>
+      <li><a href="#s6">類別映射表</a></li>
+      <li><a href="#s7">數據模型</a></li>
+      <li><a href="#s8">核心業務規則</a></li>
+      <li><a href="#s9">提交匯報 UI</a></li>
+      <li><a href="#s10">技術實施方案</a></li>
+      <li><a href="#s11">實施路線圖</a></li>
+      <li><a href="#s12">二期：跨日任務拆分</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1 -->
+  <section id="s1">
+    <h2>一、背景與目標</h2>
+    <h3>1.1 現狀問題</h3>
+    <p>MPS「提交匯報」目前完全依賴手動新增工作項目。各業務模塊完成任務後，與工作匯報之間沒有數據通道。系統雖有「自動拉取」按鈕，但 <code>getAutoPullData()</code> 僅返回硬編碼 Mock，未接入真實完成事件。</p>
+    <h3>1.2 產品目標</h3>
+    <ul>
+      <li><strong>G1</strong>：五大業務模塊任務完成時，自動寫入待匯報佇列（當日）。</li>
+      <li><strong>G2</strong>：提交匯報頁一鍵拉取，預填類別、關聯對象、內容、成果；工時由用戶填寫。</li>
+      <li><strong>G3</strong>：不自動提交；用戶可修改、刪除、忽略自動項。</li>
+      <li><strong>G4</strong>：同一任務只關聯一次（去重）。</li>
+      <li><strong>G5</strong>：已提交當日匯報後，新任務完成可補充匯報。</li>
+    </ul>
+    <h3>1.3 非目標</h3>
+    <ul>
+      <li>不自動填滿 8 小時或自動提交匯報</li>
+      <li>一期不支持跨日任務拆分（見第十二節）</li>
+      <li>暫不考慮多人協作歸屬</li>
+      <li>不納入財務管理、供應商、系統設定</li>
+    </ul>
+  </section>
+
+  <!-- 2 -->
+  <section id="s2">
+    <h2>二、一期範圍總覽</h2>
+    <div class="module-grid">
+      <div class="module-card">
+        <span class="tag">P0</span>
+        <h4>🌐 網站+系統</h4>
+        <ul>
+          <li>待跟進項目「提交完成」</li>
+          <li>文章發佈（contentStatus → published）</li>
+        </ul>
+      </div>
+      <div class="module-card">
+        <span class="tag">P0</span>
+        <h4>📣 行銷管理</h4>
+        <ul>
+          <li>社媒帖文發佈（published）</li>
+          <li>EDM 發送（sent）</li>
+          <li>SEO 關鍵字達成（achieved）</li>
+          <li>付費廣告結束（completed）</li>
+        </ul>
+      </div>
+      <div class="module-card">
+        <span class="tag">P1</span>
+        <h4>📋 專案策劃</h4>
+        <ul>
+          <li>看板任務拖至「已完成」（done）</li>
+        </ul>
+      </div>
+      <div class="module-card">
+        <span class="tag">P0</span>
+        <h4>🎬 影片製作</h4>
+        <ul>
+          <li>影片狀態 → 已完成（completed）</li>
+          <li>影片狀態 → 已發佈（published）</li>
+        </ul>
+      </div>
+      <div class="module-card">
+        <span class="tag">P1</span>
+        <h4>🎤 藝人管理</h4>
+        <ul>
+          <li>面試評分完成（interviewed = true）</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout callout-warn">
+      <strong>數據層說明：</strong>行銷、影片、專案看板目前主要走 <code>DataStore</code> 內存層；藝人管理、部分網站數據已持久化至 Supabase。一期在 <code>DataStore</code> 的 update 方法及 Supabase 寫入成功後統一調用 <code>reportLinkService</code>，待各模塊遷移 DB 後可無縫切換為 Trigger / Edge Function。
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section id="s3">
+    <h2>三、整體架構</h2>
+
+    <div class="diagram-section">
+      <h4>圖 3-1 系統架構數據流</h4>
+      <p class="desc">五大業務模塊完成事件經統一服務寫入待匯報佇列，再由提交匯報頁拉取並持久化。</p>
+      <pre class="mermaid">
+flowchart TB
+  subgraph Modules["業務模塊（一期）"]
+    W["🌐 網站+系統"]
+    M["📣 行銷管理"]
+    P["📋 專案策劃"]
+    V["🎬 影片製作"]
+    T["🎤 藝人管理"]
+  end
+
+  subgraph Service["統一服務層"]
+    RLS["reportLinkService<br/>映射 · 去重 · staff_id"]
+  end
+
+  subgraph Queue["Supabase"]
+    PRI[("pending_report_items")]
+    DR[("day_reports")]
+    ENT[("day_report_entries")]
+  end
+
+  subgraph ReportUI["工作匯報"]
+    SUB["提交匯報 · 自動拉取"]
+  end
+
+  W & M & P & V & T -->|"任務首次完成"| RLS
+  RLS -->|"INSERT pending"| PRI
+  SUB -->|"SELECT pending"| PRI
+  SUB -->|"合併 entries · 填工時"| SUB
+  SUB -->|"INSERT/UPDATE"| DR
+  SUB -->|"INSERT entries"| ENT
+  SUB -->|"status → consumed"| PRI
+      </pre>
+    </div>
+
+    <h3>3.1 設計原則</h3>
+    <table>
+      <tr><th>原則</th><th>說明</th></tr>
+      <tr><td>中間層解耦</td><td>業務表結構各異，統一寫入 <code>pending_report_items</code>，不直接改 day_report 寫入邏輯</td></tr>
+      <tr><td>非侵入接入</td><td>各模塊完成 Handler 末尾增加一行 service 調用</td></tr>
+      <tr><td>人機協作</td><td>系統預填內容，人工確認工時——工時為 0 不可提交</td></tr>
+      <tr><td>可追溯</td><td>source_module / source_type / source_id 記錄來源，支持去重與審計</td></tr>
+    </table>
+  </section>
+
+  <!-- 4 -->
+  <section id="s4">
+    <h2>四、端到端業務流程</h2>
+
+    <div class="diagram-section">
+      <h4>圖 4-1 端到端主流程（當日完成 · 當日關聯）</h4>
+      <pre class="mermaid">
+flowchart TD
+  A([用戶在業務模塊完成任務]) --> B{狀態首次進入完成態?}
+  B -->|否| Z([不觸發])
+  B -->|是| C[reportLinkService.createPendingReportItem]
+  C --> D[(pending_report_items<br/>status=pending<br/>report_date=今日)]
+  D --> E([用戶進入提交匯報])
+  E --> F[選擇日期 · 看到 N 項待匯報]
+  F --> G[點擊自動拉取]
+  G --> H[預填工作項目 · 標記自動角標<br/>pending → pulled]
+  H --> I[用戶填寫工時 hours > 0]
+  I --> J{校驗通過?}
+  J -->|否| I
+  J -->|是| K[提交匯報]
+  K --> L[(day_report_entries)]
+  K --> M[pending → consumed]
+  L --> N([完成])
+  M --> N
+      </pre>
+    </div>
+
+    <h3>4.1 主流程（一期：當日完成 · 當日關聯）</h3>
+    <ol>
+      <li>用戶在業務模塊完成任務（如社媒發佈、看板拖至已完成、面試評分保存）。</li>
+      <li>模塊 Handler 調用 <code>reportLinkService.createPendingReportItem()</code>，寫入佇列（<code>report_date = 今日</code>，<code>status = pending</code>）。</li>
+      <li>用戶進入「提交匯報」，選擇今日日期，看到「今日有 N 項待匯報」。</li>
+      <li>點擊「自動拉取」，pending 項合併至表單 <code>entries[]</code>，標記「自動」角標，status → pulled。</li>
+      <li>用戶為每條自動項填寫工時（&gt; 0），可修改內容，手動補充其他工作項。</li>
+      <li>校驗通過後提交；寫入 <code>day_report_entries</code>，pending → consumed。</li>
+      <li><strong>補充匯報</strong>：步驟 6 後若再有任務完成，重複 3–6，對已存在 <code>day_reports</code> 執行 update + 追加 entries。</li>
+    </ol>
+
+    <h3>4.2 待匯報項狀態機</h3>
+    <div class="diagram-section">
+      <h4>圖 4-2 待匯報項狀態流轉</h4>
+      <pre class="mermaid">
+stateDiagram-v2
+  [*] --> pending: 業務任務完成
+  pending --> pulled: 用戶點自動拉取
+  pending --> dismissed: 用戶忽略
+  pulled --> consumed: 匯報提交成功
+  pulled --> pending: 清空表單未提交
+  consumed --> [*]
+  dismissed --> [*]
+      </pre>
+    </div>
+    <div class="state-grid">
+      <div class="state-item state-pending">pending<br><small>待拉取</small></div>
+      <div class="state-item state-pulled">pulled<br><small>已拉取至表單</small></div>
+      <div class="state-item state-consumed">consumed<br><small>匯報已提交</small></div>
+      <div class="state-item state-dismissed">dismissed<br><small>用戶忽略</small></div>
+    </div>
+    <div class="flow">pending ──[自動拉取]──→ pulled ──[提交匯報]──→ consumed
+pending ──[忽略]──→ dismissed
+pulled ──[清空表單未提交]──→ pending（可選）</div>
+
+    <div class="diagram-section">
+      <h4>圖 4-3 補充匯報流程</h4>
+      <p class="desc">當日匯報已提交後，新任務完成仍可追加工作項目。</p>
+      <pre class="mermaid">
+flowchart TD
+  A([當日 day_reports 已 submitted]) --> B[業務模塊又有新任務完成]
+  B --> C[新增 pending 項]
+  C --> D([用戶再次進入提交匯報])
+  D --> E[載入已有 entries + 拉取新 pending]
+  E --> F[追加工作項目 · 填工時]
+  F --> G[UPDATE day_reports]
+  G --> H[INSERT 新 day_report_entries]
+  H --> I[新 pending → consumed]
+  I --> J([補充匯報完成])
+      </pre>
+    </div>
+
+    <h3>4.3 時序（以社媒發佈為例）</h3>
+    <div class="diagram-section">
+      <h4>圖 4-4 社媒發佈時序圖</h4>
+      <pre class="mermaid">
+sequenceDiagram
+  actor U as 用戶
+  participant MK as 行銷管理
+  participant SVC as reportLinkService
+  participant DB as pending_report_items
+  participant DR as 提交匯報
+
+  U->>MK: 將帖文標記「已發佈」
+  MK->>SVC: createPendingReportItem
+  SVC->>SVC: 映射 social_media · 去重
+  SVC->>DB: INSERT pending
+  Note over U,DR: 當日稍後
+  U->>DR: 打開提交匯報 · 選今日
+  DR->>DB: SELECT pending
+  DB-->>DR: 返回 1 項
+  U->>DR: 自動拉取 · 填工時 1.5h
+  U->>DR: 提交匯報
+  DR->>DB: UPDATE consumed
+      </pre>
+    </div>
+    <div class="flow">09:30  行銷管理 · 將 IG 帖文標記「已發佈」
+         └→ reportLinkService.create({ source: marketing/social_post, category: social_media })
+09:31  pending_report_items 新增 1 條（staff_id=操作者, report_date=今日）
+
+17:00  工作匯報 · 提交匯報 · 選今日
+         └→ 提示「1 項待匯報」→ 自動拉取
+17:05  預填：社交媒體 / ACI Global / 「發佈 IG Reel — xxx」/ 工時 0
+17:10  用戶填工時 1.5h → 提交
+         └→ day_report_entries 寫入 + pending → consumed</div>
+  </section>
+
+  <!-- 流程圖總覽 -->
+  <section id="s-flow">
+    <h2>業務流程圖總覽</h2>
+    <p>以下為一期五大模塊及跨模塊協作的完整業務流程圖。</p>
+
+    <div class="diagram-section">
+      <h4>圖 F-1 五大模塊匯入待匯報佇列總覽</h4>
+      <pre class="mermaid">
+flowchart LR
+  subgraph W["網站+系統"]
+    W1[待跟進提交完成] --> WP[pending]
+    W2[文章發佈] --> WP
+  end
+  subgraph MK["行銷管理"]
+    M1[社媒 published] --> MP[pending]
+    M2[EDM sent] --> MP
+    M3[SEO achieved] --> MP
+    M4[廣告 completed] --> MP
+  end
+  subgraph PJ["專案策劃"]
+    P1[看板 → done] --> PP[pending]
+  end
+  subgraph VD["影片製作"]
+    V1[completed] --> VP[pending]
+    V2[published] --> VP
+  end
+  subgraph TL["藝人管理"]
+    T1[面試評分保存] --> TP[pending]
+  end
+  WP & MP & PP & VP & TP --> Q[(pending_report_items)]
+  Q --> R[提交匯報 · 自動拉取]
+      </pre>
+    </div>
+
+    <div class="diagram-section">
+      <h4>圖 F-2 網站+系統 · 文章/待跟進完成</h4>
+      <pre class="mermaid">
+flowchart TD
+  Start([進入待跟進列表]) --> A{項目狀態}
+  A -->|planned| B[開始撰寫 → in_progress]
+  A -->|in_progress| C[點擊提交完成]
+  C --> D[SubmitCompleteModal<br/>選擇關聯網站]
+  D --> E[建立文章記錄 · status=completed]
+  E --> F[reportLinkService<br/>source: website/pending_article]
+  F --> G[category: article_writing]
+  G --> H[(pending_report_items)]
+
+  Start2([文章列表]) --> I[contentStatus → published]
+  I --> J[reportLinkService<br/>source: website/article_published]
+  J --> H
+      </pre>
+    </div>
+
+    <div class="diagram-section">
+      <h4>圖 F-3 行銷管理 · 社媒 / EDM / SEO / 廣告</h4>
+      <pre class="mermaid">
+flowchart TD
+  subgraph Social["社交媒體"]
+    S1[編輯帖文] --> S2{status 變更}
+    S2 -->|→ published| S3[updateSocialPost hook]
+    S3 --> S4[category: social_media]
+  end
+  subgraph EDM["EDM"]
+    E1[編輯 Campaign] --> E2{status 變更}
+    E2 -->|→ sent| E3[updateEdmCampaign hook]
+    E3 --> E4[category: edm]
+  end
+  subgraph SEO["SEO 關鍵字"]
+    O1[更新關鍵字] --> O2{status 變更}
+    O2 -->|→ achieved| O3[updateSeoKeyword hook]
+    O3 --> O4[category: seo]
+  end
+  subgraph Ads["付費廣告"]
+    A1[更新廣告] --> A2{status 變更}
+    A2 -->|→ completed| A3[updatePaidAd hook]
+    A3 --> A4[category: paid_ads]
+  end
+  S4 & E4 & O4 & A4 --> Q[reportLinkService · 去重]
+  Q --> P[(pending_report_items)]
+      </pre>
+    </div>
+
+    <div class="diagram-section">
+      <h4>圖 F-4 專案策劃 · 看板任務完成</h4>
+      <pre class="mermaid">
+flowchart TD
+  A([專案詳情 · 看板視圖]) --> B[拖動任務卡片]
+  B --> C{destination 列}
+  C -->|todo / in_progress / review| D[僅更新狀態 · 不觸發]
+  C -->|done| E[handleDragEnd]
+  E --> F{首次進入 done?}
+  F -->|否| D
+  F -->|是| G[reportLinkService<br/>source: project/kanban_task]
+  G --> H[related_id = 專案 ID<br/>title = 任務名稱]
+  H --> I[(pending_report_items)]
+      </pre>
+    </div>
+
+    <div class="diagram-section">
+      <h4>圖 F-5 影片製作 · 完成/發佈</h4>
+      <pre class="mermaid">
+flowchart TD
+  A([影片列表 · 編輯影片]) --> B{status 變更}
+  B -->|→ completed| C[updateVideo hook]
+  B -->|→ published| D[updateVideo hook]
+  B -->|其他| E([不觸發])
+  C --> F[source: video/video_completed<br/>category: video_editing]
+  D --> G[source: video/video_published<br/>category: video_editing<br/>outcome_url = 發佈連結]
+  F --> H[reportLinkService]
+  G --> H
+  H --> I[(pending_report_items)]
+      </pre>
+    </div>
+
+    <div class="diagram-section">
+      <h4>圖 F-6 藝人管理 · 面試完成</h4>
+      <pre class="mermaid">
+flowchart TD
+  A([面試安排與評分]) --> B[選擇待面試藝人]
+  B --> C[InterviewRatingEditor<br/>填寫評分 · 備註 · 試鏡 URL]
+  C --> D[點擊「標記為已面試並保存」]
+  D --> E[UPDATE artist_apply<br/>interviewed = true]
+  E --> F[reportLinkService<br/>source: talent/interview]
+  F --> G[category: talent_interview<br/>title: 完成藝人面試 — 姓名]
+  G --> H[(pending_report_items)]
+  H --> I([當日提交匯報可拉取])
+      </pre>
+    </div>
+
+    <div class="diagram-section">
+      <h4>圖 F-7 工作類別映射決策</h4>
+      <pre class="mermaid">
+flowchart TD
+  IN([createPendingReportItem 入參]) --> M{source_module}
+  M -->|website| W{source_type}
+  W -->|pending_article / article_published| C1[article_writing]
+  M -->|marketing| MK{source_type}
+  MK -->|social_post| C2[social_media]
+  MK -->|edm_campaign| C3[edm]
+  MK -->|seo_keyword| C4[seo]
+  MK -->|paid_ad| C5[paid_ads]
+  M -->|project| C6[kanban_task 映射]
+  M -->|video| C7[video_editing]
+  M -->|talent| C8[talent_interview]
+  C1 & C2 & C3 & C4 & C5 & C6 & C7 & C8 --> OUT[寫入 pending.category]
+      </pre>
+    </div>
+
+    <div class="diagram-section">
+      <h4>圖 F-8 提交匯報泳道圖</h4>
+      <pre class="mermaid">
+flowchart TB
+  subgraph User["👤 用戶"]
+    U1[完成業務任務]
+    U2[進入提交匯報]
+    U3[自動拉取]
+    U4[填寫工時]
+    U5[提交/補充]
+  end
+  subgraph Module["📦 業務模塊"]
+    M1[狀態 → 完成態]
+    M2[調用 reportLinkService]
+  end
+  subgraph System["⚙️ 系統"]
+    S1[寫入 pending]
+    S2[查詢 pending 數量]
+    S3[合併 entries]
+    S4[校驗工時]
+    S5[持久化 day_report]
+    S6[标记 consumed]
+  end
+  U1 --> M1 --> M2 --> S1
+  U2 --> S2 --> U3 --> S3 --> U4 --> S4
+  U5 --> S5 --> S6
+      </pre>
+    </div>
+
+    <div class="diagram-section">
+      <h4>圖 F-9 去重與歸屬判斷流程</h4>
+      <pre class="mermaid">
+flowchart TD
+  A([收到 create 請求]) --> B[解析 staff_id<br/>當前操作者]
+  B --> C[計算 report_date<br/>completed_at 本地日期]
+  C --> D{UNIQUE 鍵已存在?}
+  D -->|是 · 且非 dismissed| E([跳過 · 返回 created=false])
+  D -->|否| F[映射 category · related_id]
+  F --> G[INSERT pending<br/>status=pending]
+  G --> H([返回 created=true])
+      </pre>
+    </div>
+
+    <div class="diagram-section">
+      <h4>圖 F-10 二期預覽 · 跨日任務拆分（不在一期實施）</h4>
+      <pre class="mermaid">
+flowchart TD
+  A([跨日任務]) --> B[業務模塊登記今日進度]
+  B --> C[work_task_sessions<br/>按日記錄]
+  C --> D[每日生成 pending<br/>report_date = 當日]
+  D --> E[待匯報池 · 可按日期篩選]
+  E --> F[提交匯報 · 歸檔至對應日期]
+  G([任務完全完成]) --> H[按 sessions 批量生成 pending]
+  H --> E
+      </pre>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section id="s5">
+    <h2>五、模塊接入規格</h2>
+
+    <h3>5.1 網站+系統</h3>
+    <table>
+      <tr><th>觸發事件</th><th>完成條件</th><th>接入位置</th><th>預填內容</th></tr>
+      <tr>
+        <td>待跟進 · 提交完成</td>
+        <td>status: in_progress → completed</td>
+        <td><code>WebsiteModule</code> · SubmitCompleteModal onDone</td>
+        <td>category=article_writing；title=文章標題；related_id=關聯網站</td>
+      </tr>
+      <tr>
+        <td>文章發佈</td>
+        <td>contentStatus → published</td>
+        <td>文章建立/更新 Handler</td>
+        <td>category=article_writing；outcome_url=文章 URL</td>
+      </tr>
+    </table>
+
+    <h3>5.2 行銷管理</h3>
+    <table>
+      <tr><th>子模塊</th><th>觸發事件</th><th>完成條件</th><th>接入位置</th></tr>
+      <tr>
+        <td>社交媒體</td>
+        <td>帖文發佈</td>
+        <td>status → published</td>
+        <td><code>updateSocialPost()</code> · status 變更時</td>
+      </tr>
+      <tr>
+        <td>EDM</td>
+        <td>Campaign 發送</td>
+        <td>status → sent</td>
+        <td><code>updateEdmCampaign()</code></td>
+      </tr>
+      <tr>
+        <td>SEO 關鍵字</td>
+        <td>排名達成</td>
+        <td>status → achieved</td>
+        <td><code>updateSeoKeyword()</code></td>
+      </tr>
+      <tr>
+        <td>付費廣告</td>
+        <td>廣告結束</td>
+        <td>status → completed</td>
+        <td><code>updatePaidAd()</code></td>
+      </tr>
+    </table>
+
+    <h3>5.3 專案策劃</h3>
+    <table>
+      <tr><th>觸發事件</th><th>完成條件</th><th>接入位置</th><th>備註</th></tr>
+      <tr>
+        <td>看板任務完成</td>
+        <td>task.status → done（拖拉或狀態變更）</td>
+        <td><code>ProjectDetail.handleDragEnd</code> · destination=done</td>
+        <td>related_id=專案 ID；title=任務名稱；suggested_hours=estimatedHours</td>
+      </tr>
+    </table>
+
+    <h3>5.4 影片製作</h3>
+    <table>
+      <tr><th>觸發事件</th><th>完成條件</th><th>接入位置</th><th>類別推導</th></tr>
+      <tr>
+        <td>影片完成</td>
+        <td>status → completed</td>
+        <td><code>updateVideo()</code> · 狀態首次進入 completed</td>
+        <td>video_editing（後製完成）</td>
+      </tr>
+      <tr>
+        <td>影片發佈</td>
+        <td>status → published</td>
+        <td><code>updateVideo()</code> · 狀態首次進入 published</td>
+        <td>video_editing；outcome_url=發佈連結</td>
+      </tr>
+      <tr>
+        <td>（可選）拍攝完成</td>
+        <td>status → shooting 結束進入 post_production</td>
+        <td>二期評估</td>
+        <td>video_shooting</td>
+      </tr>
+    </table>
+
+    <h3>5.5 藝人管理</h3>
+    <table>
+      <tr><th>觸發事件</th><th>完成條件</th><th>接入位置</th><th>備註</th></tr>
+      <tr>
+        <td>面試評分完成</td>
+        <td>artist_apply.interviewed = true</td>
+        <td><code>TalentModule</code> · InterviewRatingEditor onSave</td>
+        <td>新增類別 talent_interview；title=「完成藝人面試 — {姓名}」</td>
+      </tr>
+    </table>
+    <div class="callout">
+      一期藝人管理<strong>僅接入面試完成</strong>，「取錄確認」不在本期範圍。面試項 relation_type=none，無需關聯網站。
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section id="s6">
+    <h2>六、類別映射表</h2>
+    <table>
+      <tr><th>來源模塊</th><th>source_type</th><th>day_report_type</th><th>關聯對象</th></tr>
+      <tr><td>website</td><td>pending_article</td><td>article_writing</td><td>webandsystem_list.id</td></tr>
+      <tr><td>website</td><td>article_published</td><td>article_writing</td><td>webandsystem_list.id</td></tr>
+      <tr><td>marketing</td><td>social_post</td><td>social_media</td><td>websiteProfileId</td></tr>
+      <tr><td>marketing</td><td>edm_campaign</td><td>edm</td><td>websiteProfileId</td></tr>
+      <tr><td>marketing</td><td>seo_keyword</td><td>seo</td><td>websiteProfileId</td></tr>
+      <tr><td>marketing</td><td>paid_ad</td><td>paid_ads</td><td>websiteProfileId</td></tr>
+      <tr><td>project</td><td>kanban_task</td><td>依 task.type 映射*</td><td>project.id</td></tr>
+      <tr><td>video</td><td>video_completed</td><td>video_editing</td><td>websiteProfileId</td></tr>
+      <tr><td>video</td><td>video_published</td><td>video_editing</td><td>websiteProfileId</td></tr>
+      <tr><td>talent</td><td>interview</td><td>talent_interview（新增）</td><td>無</td></tr>
+    </table>
+    <p><small>* 專案看板任務預設映射至 website_design / client_meeting 等，可在 task 上增加 category 欄位精確指定；初期預設 internal_meeting 或 graphic_design。</small></p>
+  </section>
+
+  <!-- 7 -->
+  <section id="s7">
+    <h2>七、數據模型</h2>
+
+    <h3>7.1 新增表 pending_report_items</h3>
+    <table>
+      <tr><th>欄位</th><th>類型</th><th>說明</th></tr>
+      <tr><td>id</td><td>UUID</td><td>主鍵</td></tr>
+      <tr><td>staff_id</td><td>TEXT</td><td>操作者 bubble_staff_id</td></tr>
+      <tr><td>report_date</td><td>DATE</td><td>建議匯報日期（一期 = 完成日）</td></tr>
+      <tr><td>source_module</td><td>TEXT</td><td>website / marketing / project / video / talent</td></tr>
+      <tr><td>source_type</td><td>TEXT</td><td>見第六節映射表</td></tr>
+      <tr><td>source_id</td><td>TEXT</td><td>來源實體 ID</td></tr>
+      <tr><td>category</td><td>TEXT</td><td>→ day_report_type.id</td></tr>
+      <tr><td>related_id</td><td>TEXT</td><td>網站 / 專案 ID（可空）</td></tr>
+      <tr><td>related_name</td><td>TEXT</td><td>顯示名稱</td></tr>
+      <tr><td>title</td><td>TEXT</td><td>工作內容描述</td></tr>
+      <tr><td>suggested_hours</td><td>NUMERIC</td><td>建議工時，預設 0；有 hoursSpent 時帶入</td></tr>
+      <tr><td>outcome_type</td><td>TEXT</td><td>url / image / growth_experience</td></tr>
+      <tr><td>outcome_url</td><td>TEXT</td><td>成果連結</td></tr>
+      <tr><td>metadata</td><td>JSONB</td><td>平台、藝人姓名、評分等</td></tr>
+      <tr><td>status</td><td>TEXT</td><td>pending / pulled / consumed / dismissed</td></tr>
+      <tr><td>completed_at</td><td>TIMESTAMPTZ</td><td>來源完成時間</td></tr>
+    </table>
+
+    <h3>7.2 唯一約束（去重）</h3>
+    <p><code>UNIQUE (staff_id, source_module, source_type, source_id)</code></p>
+
+    <h3>7.3 day_report_type 新增種子</h3>
+    <table>
+      <tr><th>id</th><th>label</th><th>relation_type</th></tr>
+      <tr><td>talent_interview</td><td>藝人面試</td><td>none</td></tr>
+    </table>
+  </section>
+
+  <!-- 8 -->
+  <section id="s8">
+    <h2>八、核心業務規則</h2>
+    <table>
+      <tr><th>編號</th><th>規則</th><th>說明</th></tr>
+      <tr><td>BR-01</td><td>當日關聯</td><td>report_date = completed_at 本地日期；一期不做跨日累積</td></tr>
+      <tr><td>BR-02</td><td>首次觸發</td><td>狀態<strong>首次</strong>進入完成態才寫入，重複編輯不觸發</td></tr>
+      <tr><td>BR-03</td><td>歸屬人員</td><td>操作者 staff_id；暫不考慮多人協作</td></tr>
+      <tr><td>BR-04</td><td>工時校驗</td><td>自動項預設 0；提交時每條 entry 必須 hours &gt; 0；總工時達標或填不足原因</td></tr>
+      <tr><td>BR-05</td><td>去重</td><td>同一 source 只產生一條 pending；consumed 後不再生成</td></tr>
+      <tr><td>BR-06</td><td>補充匯報</td><td>當日 day_reports 已 submitted 時，可 update + 追加 entries</td></tr>
+      <tr><td>BR-07</td><td>雙向解耦</td><td>刪除/修改匯報 entry 不影響原業務記錄</td></tr>
+      <tr><td>BR-08</td><td>排除</td><td>工作匯報、財務、供應商、設定不產生 pending</td></tr>
+    </table>
+  </section>
+
+  <!-- 9 -->
+  <section id="s9">
+    <h2>九、提交匯報 UI 設計</h2>
+    <div class="ui-mock">
+      <div class="ui-mock-header">提交匯報 — 2025-06-29 · 香港 8h</div>
+      <div class="ui-mock-body">
+        <p style="background:var(--teal-50);padding:10px 14px;border-radius:8px;margin-bottom:14px;">
+          🔔 今日有 <strong>4</strong> 項待匯報工作
+          <span style="float:right;color:var(--teal-700);font-weight:600;cursor:pointer;">一鍵拉取 →</span>
+        </p>
+        <div class="ui-entry auto">
+          <span class="auto-label">自動</span>
+          <div><strong>社交媒體</strong> · ACI Global</div>
+          <div style="color:var(--slate-600);margin-top:4px;">發佈 IG Reel — 辦公室日常</div>
+          <div style="margin-top:8px;">工時：<input type="text" value="0" style="width:48px;padding:2px 6px;border:1px solid var(--slate-200);border-radius:4px;" /> h <span style="color:var(--amber-600);font-size:0.8rem;">← 必填</span></div>
+        </div>
+        <div class="ui-entry auto">
+          <span class="auto-label">自動</span>
+          <div><strong>文章撰寫</strong> · Wine Club HK</div>
+          <div style="color:var(--slate-600);margin-top:4px;">「紅酒保存指南」文章已發佈</div>
+          <div style="margin-top:8px;">工時：<input type="text" value="0" style="width:48px;padding:2px 6px;border:1px solid var(--slate-200);border-radius:4px;" /> h</div>
+        </div>
+        <div class="ui-entry auto">
+          <span class="auto-label">自動</span>
+          <div><strong>藝人面試</strong></div>
+          <div style="color:var(--slate-600);margin-top:4px;">完成藝人面試 — 張小明</div>
+          <div style="margin-top:8px;">工時：<input type="text" value="0" style="width:48px;padding:2px 6px;border:1px solid var(--slate-200);border-radius:4px;" /> h</div>
+        </div>
+        <p style="font-size:0.8rem;color:var(--slate-400);margin-top:12px;">總工時 0 / 8h · 工時不足，請填寫各項工時或不足原因</p>
+      </div>
+    </div>
+    <ul>
+      <li>自動項顯示「自動」角標，可編輯、刪除</li>
+      <li>拉取後 status=pulled；提交成功後 status=consumed</li>
+      <li>localStorage 草稿同步保存自動項</li>
+    </ul>
+  </section>
+
+  <!-- 10 -->
+  <section id="s10">
+    <h2>十、技術實施方案</h2>
+
+    <h3>10.1 新增文件</h3>
+    <table>
+      <tr><th>文件</th><th>職責</th></tr>
+      <tr><td><code>src/services/reportLinkService.ts</code></td><td>create / pull / consume / dismiss；映射與去重</td></tr>
+      <tr><td><code>src/hooks/usePendingReportItems.ts</code></td><td>查詢待匯報數量、拉取列表</td></tr>
+      <tr><td><code>supabase/migrations/xxx_pending_report_items.sql</code></td><td>表結構 + RLS + 唯一索引</td></tr>
+    </table>
+
+    <h3>10.2 改造現有文件</h3>
+    <table>
+      <tr><th>文件</th><th>改動</th></tr>
+      <tr><td><code>DayReportModule.tsx</code></td><td>handleAutoPull 改查 pending；待匯報提示 UI；提交後 consume</td></tr>
+      <tr><td><code>dayReportDataV2.ts</code></td><td>移除 getAutoPullData Mock</td></tr>
+      <tr><td><code>DataStore.tsx</code></td><td>updateSocialPost / updateVideo / updateEdm 等末尾 hook</td></tr>
+      <tr><td><code>WebsiteModule.tsx</code></td><td>待跟進提交完成 hook</td></tr>
+      <tr><td><code>ProjectDetail.tsx</code></td><td>handleDragEnd → done 時 hook</td></tr>
+      <tr><td><code>TalentModule.tsx</code></td><td>面試 onSave hook</td></tr>
+    </table>
+
+    <h3>10.3 reportLinkService 接口</h3>
+    <div class="flow">createPendingReportItem(payload: {
+  staffId, reportDate, sourceModule, sourceType, sourceId,
+  category, relatedId?, relatedName?, title,
+  suggestedHours?, outcomeType?, outcomeUrl?, metadata?
+}): Promise&lt;{ created: boolean; id?: string }&gt;
+
+pullPendingItems(staffId, reportDate): Promise&lt;PendingReportItem[]&gt;
+
+consumePendingItems(ids: string[]): Promise&lt;void&gt;</div>
+
+    <h3>10.4 DataStore 統一 Hook 模式</h3>
+    <div class="flow">// 在 updateXxx 方法内，检测到「首次进入完成态」时：
+if (prev.status !== 'published' &amp;&amp; data.status === 'published') {
+  reportLinkService.createPendingReportItem({ ... });
+}</div>
+  </section>
+
+  <!-- 11 -->
+  <section id="s11">
+    <h2>十一、實施路線圖</h2>
+    <div class="roadmap">
+      <div class="roadmap-item">
+        <div class="roadmap-phase">Phase 1a</div>
+        <div>
+          <strong>基礎設施</strong><br>
+          pending_report_items 表 · reportLinkService · usePendingReportItems · 替換 getAutoPullData · talent_interview 工作類別
+        </div>
+      </div>
+      <div class="roadmap-item">
+        <div class="roadmap-phase">Phase 1b</div>
+        <div>
+          <strong>行銷 + 影片（高頻）</strong><br>
+          社媒 published · EDM sent · SEO achieved · 廣告 completed · 影片 completed/published
+        </div>
+      </div>
+      <div class="roadmap-item">
+        <div class="roadmap-phase">Phase 1c</div>
+        <div>
+          <strong>網站 + 藝人</strong><br>
+          待跟進提交完成 · 文章發佈 · 面試評分完成
+        </div>
+      </div>
+      <div class="roadmap-item">
+        <div class="roadmap-phase">Phase 1d</div>
+        <div>
+          <strong>專案看板 + 補充匯報</strong><br>
+          handleDragEnd → done · 已提交後追加 entries · UI 待匯報提示
+        </div>
+      </div>
+      <div class="roadmap-item">
+        <div class="roadmap-phase">Phase 2</div>
+        <div>
+          <strong>跨日任務拆分</strong><br>
+          見第十二節
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 12 -->
+  <section id="s12">
+    <h2>十二、二期規劃：跨日任務拆分</h2>
+    <p>實際工期常跨多日，同一任務需分多天匯報工時。一期約束為「當天完成、當天關聯」；二期擴展如下：</p>
+    <table>
+      <tr><th>能力</th><th>方案</th></tr>
+      <tr><td>按日登記進度</td><td>業務模塊增加「登記今日進度」按鈕，或任務層 <code>work_task_sessions</code> 表</td></tr>
+      <tr><td>跨日 pending</td><td>去重鍵擴展為 (staff_id, source_module, source_type, source_id, report_date)</td></tr>
+      <tr><td>待匯報池</td><td>提交匯報支持查看跨日累積 pending，按日期歸檔</td></tr>
+      <tr><td>完成時批量</td><td>任務完全完成時，按已登記 session 批量生成多條 pending</td></tr>
+    </table>
+    <div class="callout">
+      一期不實施跨日能力。前日完成但未匯報的 pending 在一期不會自動累積至今日（用戶需手動在對應日期匯報頁拉取，或二期統一處理）。
+    </div>
+    <div class="diagram-section">
+      <h4>圖 12-1 跨日任務拆分方案（二期）</h4>
+      <pre class="mermaid">
+flowchart LR
+  subgraph Phase1["一期"]
+    P1[當日完成] --> P2[當日 pending] --> P3[當日匯報]
+  end
+  subgraph Phase2["二期"]
+    Q1[按日登記進度] --> Q2[多條 pending<br/>不同 report_date]
+    Q2 --> Q3[待匯報池跨日累積]
+    Q3 --> Q4[按日期提交匯報]
+  end
+  Phase1 -.->|演進| Phase2
+      </pre>
+    </div>
+  </section>
+
+  <!-- 驗收 -->
+  <section>
+    <h2>附錄：驗收標準</h2>
+    <table>
+      <tr><th>ID</th><th>場景</th><th>預期結果</th></tr>
+      <tr><td>AC-01</td><td>社媒帖文標記已發佈</td><td>當日匯報可拉取 social_media 項</td></tr>
+      <tr><td>AC-02</td><td>EDM 標記已發送</td><td>拉取 edm 項，含 Campaign 主題</td></tr>
+      <tr><td>AC-03</td><td>SEO 關鍵字達成</td><td>拉取 seo 項，含關鍵字與網站</td></tr>
+      <tr><td>AC-04</td><td>廣告結束</td><td>拉取 paid_ads 項</td></tr>
+      <tr><td>AC-05</td><td>看板任務拖至已完成</td><td>拉取對應類別項，含任務名</td></tr>
+      <tr><td>AC-06</td><td>影片標記已完成/已發佈</td><td>拉取 video_editing 項</td></tr>
+      <tr><td>AC-07</td><td>待跟進文章提交完成</td><td>拉取 article_writing 項</td></tr>
+      <tr><td>AC-08</td><td>藝人面試評分保存</td><td>拉取 talent_interview 項</td></tr>
+      <tr><td>AC-09</td><td>工時為 0 提交</td><td>系統阻斷</td></tr>
+      <tr><td>AC-10</td><td>已提交後再完成任務</td><td>可補充匯報</td></tr>
+      <tr><td>AC-11</td><td>同一任務重複操作</td><td>不重複生成 pending</td></tr>
+    </table>
+  </section>
+
+</main>
+
+<footer>
+  MPS · 工作匯報自動關聯方案 v2.0 · 方案設計文檔
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'neutral',
+    securityLevel: 'loose',
+    flowchart: {
+      useMaxWidth: true,
+      htmlLabels: true,
+      curve: 'basis'
+    },
+    sequence: { useMaxWidth: true, wrap: true },
+    themeVariables: {
+      primaryColor: '#ccfbf1',
+      primaryTextColor: '#115e59',
+      primaryBorderColor: '#0d9488',
+      lineColor: '#475569',
+      secondaryColor: '#f0fdfa',
+      tertiaryColor: '#f8fafc'
+    }
+  });
+</script>
+
+</body>
+</html>

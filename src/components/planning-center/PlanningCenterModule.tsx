@@ -6,6 +6,7 @@ import { ManhourTemplates } from './ManhourTemplates';
 import { AiEfficiency } from './AiEfficiency';
 import { SalesGpTargets } from './SalesGpTargets';
 import { TeamReports } from './TeamReports';
+import { DevelopmentPlans } from './DevelopmentPlans';
 
 interface PlanningCenterModuleProps {
   subModule?: string;
@@ -29,6 +30,8 @@ export function PlanningCenterModule({ subModule }: PlanningCenterModuleProps) {
       return <SalesGpTargets />;
     case 'team-reports':
       return <TeamReports />;
+    case 'dev-plans':
+      return <DevelopmentPlans />;
     default:
       return <InternalPlans />;
   }
