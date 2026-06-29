@@ -158,6 +158,78 @@ const computeOverall = (r?: TalentRating) => {
 const newId = () => `t_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
 // =====================================================================
+// Cooperation overlay — frontend-only localStorage until backend lands
+// =====================================================================
+const COOPERATION_STORAGE_KEY = 'mps:talent-cooperation';
+
+type CooperationOverlay = {
+  collaborations: CollaborationRecord[];
+  cooperationStopped?: boolean;
+};
+
+const loadAllCooperationOverlays = (): Record<string, CooperationOverlay> => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(COOPERATION_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, CooperationOverlay>) : {};
+  } catch {
+    return {};
+  }
+};
+
+const loadCooperationOverlay = (talentId: string): CooperationOverlay | null =>
+  loadAllCooperationOverlays()[talentId] ?? null;
+
+const saveCooperationOverlay = (talentId: string, overlay: CooperationOverlay) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const all = loadAllCooperationOverlays();
+    all[talentId] = overlay;
+    window.localStorage.setItem(COOPERATION_STORAGE_KEY, JSON.stringify(all));
+  } catch {
+    // ignore quota / private mode
+  }
+};
+
+const createMockCollaborations = (): CollaborationRecord[] => [
+  {
+    id: `mock_${Date.now()}_1`,
+    date: '2024-03-15',
+    projectTitle: '品牌宣傳片拍攝',
+    videoLink: 'https://example.com/video/brand-campaign',
+    fee: 8000,
+    rating: 4,
+    notes: '準時到場，鏡頭感佳，與團隊配合順暢。',
+  },
+  {
+    id: `mock_${Date.now()}_2`,
+    date: '2024-06-01',
+    projectTitle: '直播帶貨活動',
+    fee: 12000,
+    rating: 5,
+    notes: '口才流利，帶貨節奏佳，現場應變能力強。',
+  },
+];
+
+const getCooperationStatusDisplay = (
+  talent: Talent,
+  overlay: CooperationOverlay | null,
+): { text: string; color: string } => {
+  if (overlay?.cooperationStopped) {
+    return { text: '停止合作', color: 'bg-rose-50 text-rose-700 border-rose-200' };
+  }
+  return COOP_LABELS[talent.cooperationStatus];
+};
+
+const formatCooperationDate = (date: string) => {
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return date;
+  return parsed.toLocaleDateString('zh-HK');
+};
+
+// =====================================================================
 // Supabase-backed pipeline rows
 // =====================================================================
 interface TalentFormRow {
@@ -688,6 +760,8 @@ function TalentList() {
   const [formIdByToken, setFormIdByToken] = useState<Record<string, string>>({});
   const [formIdByLegacyId, setFormIdByLegacyId] = useState<Record<string, string>>({});
   const [ratingRecordTarget, setRatingRecordTarget] = useState<Talent | null>(null);
+  const [cooperationTarget, setCooperationTarget] = useState<Talent | null>(null);
+  const [cooperationOverlayVersion, setCooperationOverlayVersion] = useState(0);
 
   const handleAvatarReplace = (rowId: string, file: File | null) => {
     setPhotoUploadError(null);
@@ -968,6 +1042,7 @@ function TalentList() {
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">基本資料</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">分類</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">合作狀態</th>
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">合作&評價</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">最近影片</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">綜合評分</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">申請表格</th>
@@ -1034,9 +1109,27 @@ function TalentList() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full border text-[11px]', COOP_LABELS[t.cooperationStatus].color)}>
-                      {COOP_LABELS[t.cooperationStatus].text}
-                    </span>
+                    {(() => {
+                      void cooperationOverlayVersion;
+                      const coopDisplay = getCooperationStatusDisplay(
+                        t,
+                        loadCooperationOverlay(t.id),
+                      );
+                      return (
+                        <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full border text-[11px]', coopDisplay.color)}>
+                          {coopDisplay.text}
+                        </span>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => setCooperationTarget(t)}
+                      className="text-[12px] px-2.5 py-1 border border-teal-200 text-teal-700 rounded-md hover:bg-teal-50"
+                    >
+                      查看
+                    </button>
                   </td>
                   <td className="px-4 py-3 text-[13px]">{t.recentVideoCount}</td>
                   <td className="px-4 py-3">
@@ -1224,6 +1317,15 @@ function TalentList() {
           onClose={() => setRatingRecordTarget(null)}
         />
       )}
+
+      {cooperationTarget && (
+        <CollaborationReviewModal
+          key={`${cooperationTarget.id}-${cooperationOverlayVersion}`}
+          talent={cooperationTarget}
+          onClose={() => setCooperationTarget(null)}
+          onUpdate={() => setCooperationOverlayVersion(v => v + 1)}
+        />
+      )}
     </div>
   );
 }
@@ -1247,6 +1349,117 @@ function Modal({ title, onClose, children, width = 'max-w-[640px]' }: {
         <div className="flex-1 overflow-y-auto px-6 py-4">{children}</div>
       </div>
     </div>
+  );
+}
+
+function CollaborationReviewModal({
+  talent,
+  onClose,
+  onUpdate,
+}: {
+  talent: Talent;
+  onClose: () => void;
+  onUpdate: () => void;
+}) {
+  const [overlay, setOverlay] = useState<CooperationOverlay>(() => {
+    const existing = loadCooperationOverlay(talent.id);
+    if (existing && existing.collaborations.length > 0) return existing;
+    if (existing) return existing;
+    if (talent.collaborations.length > 0) {
+      const initial = { collaborations: talent.collaborations, cooperationStopped: false };
+      saveCooperationOverlay(talent.id, initial);
+      return initial;
+    }
+    const initial = { collaborations: createMockCollaborations(), cooperationStopped: false };
+    saveCooperationOverlay(talent.id, initial);
+    return initial;
+  });
+  const [selectedId, setSelectedId] = useState<string>(() => overlay.collaborations[0]?.id ?? '');
+
+  useEffect(() => {
+    if (overlay.collaborations.length === 0) {
+      setSelectedId('');
+      return;
+    }
+    if (!overlay.collaborations.some(c => c.id === selectedId)) {
+      setSelectedId(overlay.collaborations[0].id);
+    }
+  }, [overlay.collaborations, selectedId]);
+
+  const persist = (next: CooperationOverlay) => {
+    setOverlay(next);
+    saveCooperationOverlay(talent.id, next);
+    onUpdate();
+  };
+
+  const selected = overlay.collaborations.find(c => c.id === selectedId);
+
+  const handleStopCooperation = () => {
+    if (overlay.cooperationStopped) return;
+    if (!confirm(`確認停止與 ${talent.name} 的合作？`)) return;
+    persist({ ...overlay, cooperationStopped: true });
+  };
+
+  return (
+    <Modal title={`合作 & 評價 — ${talent.stageName || talent.name}`} onClose={onClose} width="max-w-[900px]">
+      <div className="flex flex-col min-h-[360px]">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
+          <div className="rounded-md border border-border bg-muted/10 p-3 min-h-[280px] flex flex-col">
+            <h4 className="text-[13px] font-bold mb-3">合作紀錄</h4>
+            <div className="flex-1 overflow-y-auto space-y-2">
+              {overlay.collaborations.length === 0 ? (
+                <p className="text-[12px] text-muted-foreground">暫無合作紀錄。</p>
+              ) : (
+                overlay.collaborations.map(item => {
+                  const active = item.id === selectedId;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setSelectedId(item.id)}
+                      className={cn(
+                        'w-full text-left rounded-md border px-3 py-2.5 transition-colors',
+                        active
+                          ? 'border-teal-300 bg-teal-50'
+                          : 'border-border bg-white hover:bg-muted/30',
+                      )}
+                    >
+                      <div className="text-[11px] text-muted-foreground mb-1">
+                        {formatCooperationDate(item.date)}
+                      </div>
+                      <div className="text-[13px] font-medium text-[#0d1a2d]">{item.projectTitle}</div>
+                      {item.videoLink && (
+                        <div className="text-[11px] text-teal-600 mt-1 truncate">{item.videoLink}</div>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-md border border-border bg-muted/10 p-3 min-h-[280px] flex flex-col">
+            <h4 className="text-[13px] font-bold mb-3">評價（備註）</h4>
+            <div className="flex-1 rounded-md border border-border bg-white px-3 py-2.5 text-[13px] leading-6 whitespace-pre-wrap overflow-y-auto">
+              {selected?.notes?.trim()
+                ? selected.notes
+                : <span className="text-muted-foreground">暫無評價備註。</span>}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 pt-4 border-t border-border flex justify-end">
+          <button
+            type="button"
+            onClick={handleStopCooperation}
+            disabled={overlay.cooperationStopped}
+            className="px-4 py-2 text-[13px] border border-rose-200 text-rose-600 rounded-md hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            停止合作
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
