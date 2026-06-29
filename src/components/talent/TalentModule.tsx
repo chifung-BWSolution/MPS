@@ -687,6 +687,7 @@ function TalentList() {
   const [photoPreview, setPhotoPreview] = useState<{ rowId: string; name: string; url?: string } | null>(null);
   const [formIdByToken, setFormIdByToken] = useState<Record<string, string>>({});
   const [formIdByLegacyId, setFormIdByLegacyId] = useState<Record<string, string>>({});
+  const [ratingRecordTarget, setRatingRecordTarget] = useState<Talent | null>(null);
 
   const handleAvatarReplace = (rowId: string, file: File | null) => {
     setPhotoUploadError(null);
@@ -1040,10 +1041,16 @@ function TalentList() {
                   <td className="px-4 py-3 text-[13px]">{t.recentVideoCount}</td>
                   <td className="px-4 py-3">
                     {t.overallRating ? (
-                      <span className="inline-flex items-center gap-1 text-[13px] font-medium">
+                      <button
+                        type="button"
+                        onClick={() => setRatingRecordTarget(t)}
+                        title="查看面試記錄"
+                        aria-label={`查看 ${t.name} 的面試記錄`}
+                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[13px] font-medium text-amber-700 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-300"
+                      >
                         <Star size={12} className="fill-amber-400 text-amber-400" />
                         {t.overallRating.toFixed(1)}
-                      </span>
+                      </button>
                     ) : <span className="text-[12px] text-muted-foreground">未評</span>}
                   </td>
                   <td className="px-4 py-3">
@@ -1209,6 +1216,13 @@ function TalentList() {
             )}
           </div>
         </Modal>
+      )}
+
+      {ratingRecordTarget && (
+        <InterviewRecordModal
+          record={talentToInterviewRecord(ratingRecordTarget)}
+          onClose={() => setRatingRecordTarget(null)}
+        />
       )}
     </div>
   );
@@ -1592,31 +1606,62 @@ function InterviewRatingEditor({ talent, onSave, onCancel }: {
   );
 }
 
-function InterviewRecordModal({ row, onClose }: {
-  row: TalentFormRow;
+type InterviewRecordViewModel = {
+  displayName: string;
+  interview_scheduled_at?: string | null;
+  interview_overall?: number | null;
+  interview_rating?: TalentRating | null;
+  interview_notes?: string | null;
+  audition_media_urls?: string[];
+};
+
+function formRowToInterviewRecord(row: TalentFormRow): InterviewRecordViewModel {
+  return {
+    displayName: formDisplayName(row),
+    interview_scheduled_at: row.interview_scheduled_at,
+    interview_overall: row.interview_overall,
+    interview_rating: row.interview_rating,
+    interview_notes: row.interview_notes,
+    audition_media_urls: row.audition_media_urls || [],
+  };
+}
+
+function talentToInterviewRecord(t: Talent): InterviewRecordViewModel {
+  return {
+    displayName: t.name,
+    interview_scheduled_at: t.interviewScheduledAt || null,
+    interview_overall: t.overallRating ?? null,
+    interview_rating: t.rating || null,
+    interview_notes: t.interviewNotes || null,
+    audition_media_urls: t.auditionMediaUrls || [],
+  };
+}
+
+function InterviewRecordModal({ record, onClose }: {
+  record: InterviewRecordViewModel;
   onClose: () => void;
 }) {
-  const ratingItems = row.interview_rating
+  const ratingItems = record.interview_rating
     ? [
-        { label: '外表', value: row.interview_rating.appearance },
-        { label: '上鏡感', value: row.interview_rating.oncamera },
-        { label: '講話流利度 / 聲音', value: row.interview_rating.speaking },
-        { label: '儀態', value: row.interview_rating.posture },
-        { label: '性格', value: row.interview_rating.personality },
+        { label: '外表', value: record.interview_rating.appearance },
+        { label: '上鏡感', value: record.interview_rating.oncamera },
+        { label: '講話流利度 / 聲音', value: record.interview_rating.speaking },
+        { label: '儀態', value: record.interview_rating.posture },
+        { label: '性格', value: record.interview_rating.personality },
       ]
     : [];
-  const notes = row.interview_notes?.trim();
-  const mediaUrls = row.audition_media_urls || [];
+  const notes = record.interview_notes?.trim();
+  const mediaUrls = record.audition_media_urls || [];
 
   return (
-    <Modal title={`面試記錄 — ${formDisplayName(row)}`} onClose={onClose}>
+    <Modal title={`面試記錄 — ${record.displayName}`} onClose={onClose}>
       <div className="space-y-5">
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-md border border-border bg-muted/20 p-3">
             <div className="text-[11px] text-muted-foreground mb-1">面試時間</div>
             <div className="text-[13px] font-medium">
-              {row.interview_scheduled_at
-                ? new Date(row.interview_scheduled_at).toLocaleString('zh-HK')
+              {record.interview_scheduled_at
+                ? new Date(record.interview_scheduled_at).toLocaleString('zh-HK')
                 : '未記錄'}
             </div>
           </div>
@@ -1624,7 +1669,7 @@ function InterviewRecordModal({ row, onClose }: {
             <div className="text-[11px] text-amber-700 mb-1">綜合評分</div>
             <div className="inline-flex items-center gap-1 text-[18px] font-bold text-amber-700">
               <Star size={14} className="fill-amber-400 text-amber-400" />
-              {row.interview_overall != null ? Number(row.interview_overall).toFixed(1) : '—'}
+              {record.interview_overall != null ? Number(record.interview_overall).toFixed(1) : '—'}
             </div>
           </div>
         </div>
@@ -2103,7 +2148,7 @@ function TalentInterviews() {
 
       {recordTarget && (
         <InterviewRecordModal
-          row={recordTarget}
+          record={formRowToInterviewRecord(recordTarget)}
           onClose={() => setRecordTarget(null)}
         />
       )}
