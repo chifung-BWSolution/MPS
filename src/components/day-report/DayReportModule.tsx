@@ -27,6 +27,13 @@ import {
   mergePendingIntoReportEntries,
   type ReportFormEntry,
 } from '@/services/reportLinkService';
+import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
+import {
+  fetchDistinctDepartments,
+  fetchDepartmentMap,
+  fetchDepartmentByStaffId,
+  fetchStaffIdsByDepartment,
+} from '@/components/day-report/departmentLookup';
 
 // ============================
 // Office Location & Holiday Config
@@ -1816,42 +1823,46 @@ function TodayTeamReports() {
   const [dbEntries, setDbEntries] = useState<Array<{ id: string; day_report_id: string; staff_id: string; category: string; title: string; hours: number; outcome_url: string | null; growth_experience: string | null; is_ai_assisted: boolean; ai_tools: any; related_name: string | null }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [departmentOptions, setDepartmentOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [staffNameById, setStaffNameById] = useState<Record<string, string>>({});
 
   // Fetch live staff directory and reports from Supabase
   useEffect(() => {
     async function fetchData() {
       setIsLoading(true);
       try {
-        // 1. Fetch all staff with a valid, non-empty department
-        // Exclude legacy orphan rows: "Director" position and "Management" department
+        // 1. Fetch active staff from staff_directory; department comes from user_info
         const { data: staffData, error: staffErr } = await supabase
           .from('staff_directory')
-          .select('id, bubble_staff_id, display_name, department, position, status')
+          .select('id, bubble_staff_id, display_name, position, status')
           .eq('status', 'active')
-          .not('department', 'is', null)
-          .neq('department', '')
-          .neq('department', 'Management')
           .neq('position', 'Director');
 
         if (staffErr) {
           console.error('[TodayTeamReports] Staff query error:', staffErr);
         }
 
-        // Post-fetch safety: exclude any legacy "Director / Management" rows that slip through
+        const staffIds = (staffData || []).map(s => s.bubble_staff_id).filter(Boolean);
+        const deptMap = await fetchDepartmentMap(staffIds);
+
+        // Post-fetch: attach user_info department and exclude legacy Director / Management rows
         const EXCLUDED_POSITIONS = ['director', 'director / management'];
         const EXCLUDED_DEPARTMENTS = ['management'];
-        const staff = (staffData || []).filter(s => {
-          const pos = (s.position || '').toLowerCase().trim();
-          const dept = (s.department || '').toLowerCase().trim();
-          return !EXCLUDED_POSITIONS.includes(pos) && !EXCLUDED_DEPARTMENTS.includes(dept);
-        });
+        const staff = (staffData || [])
+          .map(s => ({ ...s, department: deptMap[s.bubble_staff_id] || '' }))
+          .filter(s => {
+            const pos = (s.position || '').toLowerCase().trim();
+            const dept = (s.department || '').toLowerCase().trim();
+            return !EXCLUDED_POSITIONS.includes(pos)
+              && !!dept
+              && !EXCLUDED_DEPARTMENTS.includes(dept);
+          });
         setDbStaff(staff);
 
-        // 2. Build dynamic department options from actual data
-        const deptSet = new Set(staff.map(s => s.department).filter(Boolean));
+        // 2. Build dynamic department options from user_info
+        const distinctDepts = await fetchDistinctDepartments();
         const dynamicDepts: Array<{ value: string; label: string }> = [
           { value: '__ALL__', label: '全部門' },
-          ...Array.from(deptSet).sort().map(d => ({ value: d, label: d })),
+          ...distinctDepts.map(d => ({ value: d, label: d })),
         ];
         setDepartmentOptions(dynamicDepts);
 
@@ -1883,6 +1894,13 @@ function TodayTeamReports() {
         } else {
           setDbEntries([]);
         }
+
+        // 5. Resolve display names for all staff in today's reports (not only dept-filtered staff)
+        const reportStaffIds = reports.map(r => r.staff_id).filter(Boolean);
+        const scopeStaffIds = staff.map(s => s.bubble_staff_id).filter(Boolean);
+        const nameLookupIds = [...new Set([...reportStaffIds, ...scopeStaffIds])];
+        const nameMap = await fetchStaffNameMap(nameLookupIds);
+        setStaffNameById(nameMap);
       } catch (err) {
         console.error('[TodayTeamReports] Unexpected error:', err);
       } finally {
@@ -1921,11 +1939,9 @@ function TodayTeamReports() {
   }, [dbEntries]);
 
   // Build staff name lookup (bubble_staff_id -> display_name)
-  const staffNameMap = useMemo(() => {
-    const map = new Map<string, string>();
-    dbStaff.forEach(s => map.set(s.bubble_staff_id, s.display_name));
-    return map;
-  }, [dbStaff]);
+  const resolveStaffName = useCallback((staffId: string) => {
+    return staffNameById[staffId] || staffId;
+  }, [staffNameById]);
 
   const submittedCount = todayReports.length;
   const totalStaff = filteredStaff.length;
@@ -2021,7 +2037,7 @@ function TodayTeamReports() {
           <div className="divide-y divide-border/30">
             {todayReports.map(report => {
               const entries = entriesByReport.get(report.id) || [];
-              const staffName = staffNameMap.get(report.staff_id) || report.staff_id;
+              const staffName = resolveStaffName(report.staff_id);
               const hasAi = entries.some(e => e.is_ai_assisted);
               return (
                 <div key={report.id} className="px-5 py-3.5 hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => setExpandedId(expandedId === report.id ? null : report.id)}>
@@ -2132,6 +2148,7 @@ function WorkCalendar() {
   const [ownDepartment, setOwnDepartment] = useState<string | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
   const [availableDepartments, setAvailableDepartments] = useState<string[]>([]);
+  const [staffNameById, setStaffNameById] = useState<Record<string, string>>({});
 
   const isSuperAdmin = useMemo(() => {
     const role = (systemUser?.role || '').toLowerCase().replace(/[\s-]/g, '_');
@@ -2152,16 +2169,7 @@ function WorkCalendar() {
       if (!systemUser?.bubble_staff_id) return;
       let dept: string | null = systemUser.department || null;
       if (!dept) {
-        const { data: ui } = await supabase
-          .from('user_info').select('department')
-          .eq('staff_id', systemUser.bubble_staff_id).maybeSingle();
-        dept = ui?.department || null;
-      }
-      if (!dept) {
-        const { data: sd } = await supabase
-          .from('staff_directory').select('department')
-          .eq('bubble_staff_id', systemUser.bubble_staff_id).maybeSingle();
-        dept = sd?.department || null;
+        dept = await fetchDepartmentByStaffId(systemUser.bubble_staff_id);
       }
       if (aborted) return;
       setOwnDepartment(dept);
@@ -2182,16 +2190,8 @@ function WorkCalendar() {
     if (!isSuperAdmin) return;
     let aborted = false;
     (async () => {
-      const { data } = await supabase
-        .from('staff_directory')
-        .select('department')
-        .eq('status', 'active')
-        .not('department', 'is', null)
-        .neq('department', '')
-        .neq('department', 'Management');
-      const set = new Set<string>();
-      (data || []).forEach((r: any) => { if (r.department) set.add(r.department); });
-      if (!aborted) setAvailableDepartments(Array.from(set).sort());
+      const departments = await fetchDistinctDepartments();
+      if (!aborted) setAvailableDepartments(departments);
     })();
     return () => { aborted = true; };
   }, [isSuperAdmin]);
@@ -2211,29 +2211,48 @@ function WorkCalendar() {
           ? (selectedDepartment === '__ALL__' ? null : selectedDepartment)
           : ownDepartment; // non-super-admin locked to own department
 
-        // 1) Fetch active staff (filtered by department if applicable)
+        // 1) Resolve staff scope via user_info department, then fetch staff_directory profiles
+        let allowedStaffIds: string[] | null = null;
+        if (activeDept) {
+          allowedStaffIds = await fetchStaffIdsByDepartment(activeDept);
+          if (allowedStaffIds.length === 0) {
+            setStaffList([]);
+            setReports([]);
+            setEntries([]);
+            setStaffNameById({});
+            return;
+          }
+        }
+
         let staffQuery = supabase
           .from('staff_directory')
-          .select('bubble_staff_id, display_name, department')
+          .select('bubble_staff_id, display_name')
           .eq('status', 'active')
-          .not('department', 'is', null)
-          .neq('department', '')
-          .neq('department', 'Management');
-        if (activeDept) staffQuery = staffQuery.eq('department', activeDept);
+          .neq('position', 'Director');
+        if (allowedStaffIds) staffQuery = staffQuery.in('bubble_staff_id', allowedStaffIds);
+
         const { data: staffData } = await staffQuery;
+        const scopeIds = (staffData || []).map((s: any) => s.bubble_staff_id).filter(Boolean);
+        const deptMap = await fetchDepartmentMap(scopeIds);
+
         const seen = new Set<string>();
         const dedupStaff = (staffData || []).filter((s: any) => {
           if (!s.bubble_staff_id || seen.has(s.bubble_staff_id)) return false;
           seen.add(s.bubble_staff_id);
           return true;
-        }) as WCStaff[];
+        }).map((s: any) => ({
+          bubble_staff_id: s.bubble_staff_id,
+          display_name: s.display_name,
+          department: deptMap[s.bubble_staff_id] || null,
+        })) as WCStaff[];
         if (aborted) return;
         setStaffList(dedupStaff);
 
-        const allowed = dedupStaff.map(s => s.bubble_staff_id);
+        const allowed = activeDept ? dedupStaff.map(s => s.bubble_staff_id) : [];
         if (activeDept && allowed.length === 0) {
           setReports([]);
           setEntries([]);
+          setStaffNameById({});
           return;
         }
 
@@ -2265,6 +2284,13 @@ function WorkCalendar() {
         if (aborted) return;
         setReports(normalizedReports);
 
+        // Resolve display names for everyone in loaded reports (not only dept-filtered staff)
+        const reportStaffIds = normalizedReports.map(r => r.staff_id).filter(Boolean);
+        const scopeStaffIds = dedupStaff.map(s => s.bubble_staff_id).filter(Boolean);
+        const nameMap = await fetchStaffNameMap([...new Set([...reportStaffIds, ...scopeStaffIds])]);
+        if (aborted) return;
+        setStaffNameById(nameMap);
+
         // 3) Entries
         if (normalizedReports.length > 0) {
           const ids = normalizedReports.map(r => r.id);
@@ -2289,12 +2315,6 @@ function WorkCalendar() {
     load();
     return () => { aborted = true; };
   }, [systemUser?.bubble_staff_id, ownDepartment, selectedDepartment, isSuperAdmin, monthStr, year, month, daysInMonth]);
-
-  const staffNameById = useMemo(() => {
-    const m: Record<string, string> = {};
-    staffList.forEach(s => { m[s.bubble_staff_id] = s.display_name; });
-    return m;
-  }, [staffList]);
 
   const reportsByDate = useMemo(() => {
     const m: Record<string, WCReport[]> = {};
@@ -2376,7 +2396,7 @@ function WorkCalendar() {
                         {dayReports.slice(0, 2).map(r => {
                           const mainCat = (entriesByReport[r.id] || [])[0]?.category as string | undefined;
                           const config = mainCat ? categoryLookup[mainCat] : null;
-                          const name = staffNameById[r.staff_id] || '';
+                          const name = staffNameById[r.staff_id] || r.staff_id;
                           return (<div key={r.id} className="flex items-center gap-0.5">{config && <span className={cn('text-[10px] px-1 py-0 rounded', config.bg, config.color)}>{name.slice(0, 2)}</span>}{!config && r.is_leave && <span className="text-[10px] px-1 py-0 rounded bg-amber-100 text-amber-700">假</span>}</div>);
                         })}
                         {dayReports.length > 2 && <span className="text-[10px] text-muted-foreground">+{dayReports.length - 2}</span>}

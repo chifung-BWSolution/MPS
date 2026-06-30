@@ -9,6 +9,13 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { categoryConfig } from '@/data/dayReportDataV2';
 import { useDayReportTypes } from '@/hooks/useDayReportTypes';
+import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
+import {
+  fetchDepartmentByStaffId,
+  fetchDepartmentMap,
+  fetchStaffIdsByDepartment,
+  isValidDepartment,
+} from '@/components/day-report/departmentLookup';
 
 // ============================
 // Types
@@ -89,36 +96,6 @@ function isWeekend(dateStr: string): boolean {
   return d.getDay() === 0 || d.getDay() === 6;
 }
 
-/** Resolve display names: staff_directory first, then user_info fallback. */
-async function fetchStaffNameMap(staffIds: string[]): Promise<Record<string, string>> {
-  const nameMap: Record<string, string> = {};
-  if (staffIds.length === 0) return nameMap;
-
-  const [{ data: sdRows }, { data: uiRows }] = await Promise.all([
-    supabase
-      .from('staff_directory')
-      .select('bubble_staff_id, display_name')
-      .in('bubble_staff_id', staffIds),
-    supabase
-      .from('user_info')
-      .select('staff_id, display_name')
-      .in('staff_id', staffIds),
-  ]);
-
-  (sdRows || []).forEach((r) => {
-    const name = (r.display_name || '').trim();
-    if (r.bubble_staff_id && name) nameMap[r.bubble_staff_id] = name;
-  });
-
-  (uiRows || []).forEach((r) => {
-    const name = (r.display_name || '').trim();
-    if (r.staff_id && name && !nameMap[r.staff_id]) {
-      nameMap[r.staff_id] = name;
-    }
-  });
-
-  return nameMap;
-}
 
 // ============================
 // Team Dashboard Component
@@ -196,30 +173,10 @@ export function TeamDashboard() {
       // Fallback: query user_info by staff_id for department
       if (!dept) {
         try {
-          const { data: userInfoRow } = await supabase
-            .from('user_info')
-            .select('department')
-            .eq('staff_id', systemUser.bubble_staff_id)
-            .maybeSingle();
-          dept = userInfoRow?.department || null;
-          console.log('[TeamDashboard] 🏢 Got department from user_info fallback:', dept);
+          dept = await fetchDepartmentByStaffId(systemUser.bubble_staff_id);
+          console.log('[TeamDashboard] 🏢 Got department from user_info:', dept);
         } catch (err) {
           console.warn('[TeamDashboard] ⚠️ user_info query failed:', err);
-        }
-      }
-
-      // Second fallback: query staff_directory for department
-      if (!dept) {
-        try {
-          const { data: staffRow } = await supabase
-            .from('staff_directory')
-            .select('department')
-            .eq('bubble_staff_id', systemUser.bubble_staff_id)
-            .maybeSingle();
-          dept = staffRow?.department || null;
-          console.log('[TeamDashboard] 🏢 Got department from staff_directory fallback:', dept);
-        } catch (err) {
-          console.warn('[TeamDashboard] ⚠️ staff_directory query failed:', err);
         }
       }
 
@@ -253,30 +210,7 @@ export function TeamDashboard() {
       let allowedStaffIds: string[] | null = null; // null = no filter (show all)
 
       if (activeDept) {
-        // Query user_info to get all staff_ids in the selected department
-        const { data: deptMembers, error: deptError } = await supabase
-          .from('user_info')
-          .select('staff_id')
-          .eq('department', activeDept);
-
-        if (deptError) {
-          console.error(`[TeamDashboard] ❌ user_info department query error:`, deptError);
-        }
-
-        const fromUserInfo = (deptMembers || []).map(m => m.staff_id).filter(Boolean);
-
-        // Also query staff_directory for the same department (belt-and-suspenders)
-        const { data: staffDeptMembers } = await supabase
-          .from('staff_directory')
-          .select('bubble_staff_id')
-          .eq('department', activeDept);
-
-        const fromStaffDir = (staffDeptMembers || []).map(m => m.bubble_staff_id).filter(Boolean);
-
-        // Merge both sources (union, no duplicates)
-        const merged = [...new Set([...fromUserInfo, ...fromStaffDir])];
-        allowedStaffIds = merged;
-        
+        allowedStaffIds = await fetchStaffIdsByDepartment(activeDept);
         console.log(`[TeamDashboard] 🏢 Department filter: "${activeDept}" — ${allowedStaffIds.length} staff IDs`, allowedStaffIds);
 
         // If no staff found for this department, set empty and return early
@@ -295,31 +229,30 @@ export function TeamDashboard() {
         console.log('[TeamDashboard] 🌐 Showing ALL departments (no filter)');
       }
 
-      // Step 2: Fetch active staff in scope (department filter via allowedStaffIds, not staff_directory.department)
-      // Many system users have user_info.department set while staff_directory.department is still null from Bubble.
+      // Step 2: Fetch active staff in scope (department filter via user_info → allowedStaffIds)
       let staffQuery = supabase
         .from('staff_directory')
-        .select('id, bubble_staff_id, display_name, position, user_role, status, base_location, team_id, business_unit, profile_pic_url, department')
+        .select('id, bubble_staff_id, display_name, position, user_role, status, base_location, team_id, business_unit, profile_pic_url')
         .eq('status', 'active')
         .neq('position', 'Director');
 
       if (allowedStaffIds !== null) {
         staffQuery = staffQuery.in('bubble_staff_id', allowedStaffIds);
-      } else {
-        // All-departments view: still exclude legacy Management-only rows
-        staffQuery = staffQuery
-          .not('department', 'is', null)
-          .neq('department', '')
-          .neq('department', 'Management');
       }
 
       const { data: rawStaffData } = await staffQuery;
 
-      // Post-fetch exclusion: Remove any legacy/orphan rows that slip through query filters
-      // Specifically targets "Director / Management" pattern and any "Management" department entries
+      const deptMap = await fetchDepartmentMap(
+        (rawStaffData || []).map(s => s.bubble_staff_id).filter(Boolean),
+      );
+
+      // Post-fetch exclusion: Remove legacy Director rows and Management department (from user_info)
       const EXCLUDED_POSITIONS = ['director', 'director / management'];
       const EXCLUDED_DEPARTMENTS = ['management'];
-      const cleanedStaffData = (rawStaffData || []).filter(s => {
+      const cleanedStaffData = (rawStaffData || []).map(s => ({
+        ...s,
+        department: deptMap[s.bubble_staff_id] || null,
+      })).filter(s => {
         const pos = (s.position || '').toLowerCase().trim();
         const dept = (s.department || '').toLowerCase().trim();
         if (EXCLUDED_POSITIONS.includes(pos) || EXCLUDED_DEPARTMENTS.includes(dept)) {
@@ -379,11 +312,11 @@ export function TeamDashboard() {
 
       setStaff(staffData || []);
       setStaffNameById(nameMap);
-      // KPI: active staff in department scope (not gated on staff_directory.department being set)
+      // KPI: active staff in department scope (department from user_info)
       setActiveStaffCount(
         allowedStaffIds !== null
           ? staffData.length
-          : (staffData || []).filter(s => s.department && s.department !== 'Management').length,
+          : staffData.filter(s => isValidDepartment(s.department)).length,
       );
       setReports(reportData || []);
     } catch (err) {

@@ -438,6 +438,7 @@
       <li><a href="#s10">技術實施方案</a></li>
       <li><a href="#s11">實施路線圖</a></li>
       <li><a href="#s12">二期：跨日任務拆分</a></li>
+      <li><a href="#s-impl">實施記錄（2026-06-30）</a></li>
     </ol>
   </nav>
 
@@ -1222,6 +1223,47 @@ flowchart LR
       <tr><td>AC-09</td><td>工時為 0 提交</td><td>系統阻斷</td></tr>
       <tr><td>AC-10</td><td>已提交後再完成任務</td><td>可補充匯報</td></tr>
       <tr><td>AC-11</td><td>同一任務重複操作</td><td>不重複生成 pending</td></tr>
+    </table>
+  </section>
+
+  <!-- 實施記錄 -->
+  <section id="s-impl">
+    <h2>實施記錄（2026-06-30）</h2>
+    <p>以下為 Phase 1 首批上線內容；Git：<code>65b059c</code>（功能）、<code>f75e247</code>（loading 修復）。Supabase migration 已套用至 <code>kwcevjcmdjadhrygjyfp</code>。</p>
+
+    <h3>階段</h3>
+    <table>
+      <tr><th>階段</th><th>狀態</th><th>說明</th></tr>
+      <tr><td>Phase 1 · 藝人管理</td><td>✅ 已上線</td><td>面試評分完成 → 寫入待匯報佇列 → 提交匯報頁自動合併</td></tr>
+      <tr><td>Phase 1 · 行銷 / 影片 / 網站 / 專案</td><td>⏳ 未實施</td><td>見第十一節路線圖</td></tr>
+      <tr><td>Phase 2 · 跨日拆分</td><td>⏳ 未實施</td><td>—</td></tr>
+    </table>
+
+    <h3>本期內容</h3>
+    <ul>
+      <li>觸發：面試安排 → 填評分 + <strong>匯報工時（必填）</strong> → 標記已面試</li>
+      <li>寫入 <code>pending_report_items</code>（<code>source: talent/interview</code>，類別 <code>talent_interview</code>）</li>
+      <li>提交匯報：載入日期後<strong>自動合併</strong> pending 至表單，工時預填；保留「刷新待匯報」按鈕</li>
+      <li>刪除自動項 → <code>dismissed</code>；提交成功 → <code>consumed</code>；匯報頁工時可修改</li>
+    </ul>
+
+    <h3>方案調整（相對 v2.0 原稿）</h3>
+    <table>
+      <tr><th>原方案</th><th>實際實施</th></tr>
+      <tr><td>一鍵拉取</td><td>進頁自動合併 + 手動「刷新待匯報」</td></tr>
+      <tr><td>匯報頁填工時</td><td>任務端填工時，關聯時自動帶入（匯報頁仍可改）</td></tr>
+      <tr><td>五大模塊同期</td><td>首期僅藝人管理 · 面試完成</td></tr>
+    </table>
+
+    <h3>改動文件</h3>
+    <table>
+      <tr><th>文件</th><th>改動</th></tr>
+      <tr><td><code>supabase/migrations/20260630_work_report_pending_items.sql</code></td><td><code>pending_report_items</code> 表、RLS；<code>artist_apply.report_hours</code>；<code>talent_interview</code> 種子</td></tr>
+      <tr><td><code>src/services/reportLinkService.ts</code></td><td>create / pull / merge / consume / dismiss</td></tr>
+      <tr><td><code>src/hooks/usePendingReportItems.ts</code></td><td>待匯報數量查詢</td></tr>
+      <tr><td><code>src/components/talent/TalentModule.tsx</code></td><td>面試工時欄位；保存時寫 pending</td></tr>
+      <tr><td><code>src/components/day-report/DayReportModule.tsx</code></td><td>自動合併、刷新、dismiss、consume；修復 loading 無限循環</td></tr>
+      <tr><td><code>src/data/dayReportDataV2.ts</code></td><td>移除 <code>getAutoPullData()</code> Mock</td></tr>
     </table>
   </section>
 

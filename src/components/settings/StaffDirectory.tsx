@@ -89,15 +89,12 @@ export function StaffDirectory() {
         setSupabaseStaff(converted);
         setDataSource('supabase');
 
-        // Populate office and department maps from staff_directory
+        // Populate office map from staff_directory (department comes from user_info)
         const officeData: Record<string, string> = {};
-        const deptData: Record<string, string> = {};
         data.forEach((row: any) => {
           if (row.office) officeData[row.bubble_staff_id] = row.office;
-          if (row.department) deptData[row.bubble_staff_id] = row.department;
         });
         setOfficeMap(prev => ({ ...prev, ...officeData }));
-        setDepartmentMap(prev => ({ ...prev, ...deptData }));
       }
     } catch (err: any) {
       console.warn('[StaffDirectory] Supabase fetch error:', err.message);
@@ -327,20 +324,10 @@ export function StaffDirectory() {
     }
   };
 
-  // Handle department change for a staff member
+  // Handle department change for a staff member (persist to user_info only)
   const handleDepartmentChange = async (staffId: string, department: string) => {
     setDepartmentMap(prev => ({ ...prev, [staffId]: department }));
     setHasUnsavedChanges(true);
-    // Persist immediately to staff_directory
-    try {
-      await supabase
-        .from('staff_directory')
-        .update({ department, updated_at: new Date().toISOString() })
-        .eq('bubble_staff_id', staffId);
-    } catch (err) {
-      console.warn('[StaffDirectory] Department save to staff_directory error:', err);
-    }
-    // Also persist to user_info table
     try {
       const { error } = await supabase
         .from('user_info')
