@@ -9,7 +9,6 @@ import {
   categoryConfig,
   outcomeTypeConfigV2,
   getTopProjectsByHoursV2,
-  getAutoPullData,
   WorkCategory,
   OutcomeType,
   AITool,
@@ -21,6 +20,13 @@ import { SearchableProjectSelect } from '@/components/day-report/SearchableProje
 import { useDataStore } from '@/context/DataStore';
 import { useDayReportTypes } from '@/hooks/useDayReportTypes';
 import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
+import { usePendingReportItems } from '@/hooks/usePendingReportItems';
+import {
+  consumePendingItems,
+  dismissPendingItem,
+  mergePendingIntoReportEntries,
+  type ReportFormEntry,
+} from '@/services/reportLinkService';
 
 // ============================
 // Office Location & Holiday Config
@@ -146,26 +152,28 @@ function SubmitReportPage() {
   }
   const emptyAiTools: AiToolsSelection = { copywriting: [], copywritingOther: '', image: [], imageOther: '', video: [], videoOther: '' };
 
+  const createBlankEntry = useCallback((): ReportFormEntry => ({
+    category: '',
+    relatedId: '',
+    relatedName: '',
+    title: '',
+    hours: 0,
+    outcomeType: '',
+    outcomeUrl: '',
+    outcomeImages: [],
+    outcomeImageFiles: [],
+    growthExperience: '',
+    isAiAssisted: false,
+    aiTools: [],
+    aiToolsV2: { ...emptyAiTools },
+  }), [emptyAiTools]);
+
   // Authenticated user — needed early so the saved-templates storage key can
   // be scoped per-user (see SavedTemplate state below).
   const { systemUser } = useAuth();
 
   // Work entries
-  const [entries, setEntries] = useState<Array<{
-    category: WorkCategory | '';
-    relatedId: string;
-    relatedName: string;
-    title: string;
-    hours: number;
-    outcomeType: OutcomeType | '';
-    outcomeUrl: string;
-    outcomeImages: string[];
-    outcomeImageFiles: File[];
-    growthExperience: string;
-    isAiAssisted: boolean;
-    aiTools: AITool[];
-    aiToolsV2: AiToolsSelection;
-  }>>([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], outcomeImageFiles: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
+  const [entries, setEntries] = useState<ReportFormEntry[]>([createBlankEntry()]);
   const imageInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   // User-saved 常用匯報項目 templates — backed by Supabase
@@ -256,6 +264,19 @@ function SubmitReportPage() {
   // Current staff — derived from the authenticated user resolved above
   const [currentStaffId, setCurrentStaffId] = useState<string | null>(null);
   const [currentStaffName, setCurrentStaffName] = useState<string>('');
+  const { count: pendingCount, refresh: refreshPendingCount } = usePendingReportItems(currentStaffId, selectedDate);
+
+  const applyPendingMerge = useCallback(async (baseEntries: ReportFormEntry[]) => {
+    if (!currentStaffId) return baseEntries;
+    const { entries: merged } = await mergePendingIntoReportEntries(
+      currentStaffId,
+      selectedDate,
+      baseEntries,
+      emptyAiTools,
+      createBlankEntry,
+    );
+    return merged;
+  }, [currentStaffId, selectedDate, emptyAiTools, createBlankEntry]);
 
   // Database reports for the 14-day window (to show reported status)
   const [dbReports, setDbReports] = useState<Array<{ report_date: string; total_hours: number; status: string }>>([]);
@@ -458,9 +479,11 @@ function SubmitReportPage() {
               aiTools: (e.ai_tools || []) as AITool[],
               aiToolsV2: (e.ai_tools_v2 || { ...emptyAiTools }) as AiToolsSelection,
             }));
-            setEntries(loadedEntries);
+            const mergedEntries = await applyPendingMerge(loadedEntries);
+            if (!cancelled) setEntries(mergedEntries);
           } else {
-            setEntries([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], outcomeImageFiles: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
+            const mergedEntries = await applyPendingMerge([createBlankEntry()]);
+            if (!cancelled) setEntries(mergedEntries);
           }
         } else {
           // No existing report — restore from localStorage draft if present,
@@ -471,17 +494,18 @@ function SubmitReportPage() {
           setExistingReportId(null);
           const draftKey = `mps:day-report-draft:${currentStaffId}:${selectedDate}`;
           let draftRestored = false;
+          let restoredEntries: ReportFormEntry[] | null = null;
           try {
             const raw = localStorage.getItem(draftKey);
             if (raw) {
               const draft = JSON.parse(raw) as {
-                entries?: typeof entries;
+                entries?: ReportFormEntry[];
                 targetHours?: number;
                 underHoursReason?: string;
                 office?: OfficeLocation;
               };
               if (draft.entries && draft.entries.length > 0) {
-                setEntries(draft.entries);
+                restoredEntries = draft.entries;
                 draftRestored = true;
               }
               if (typeof draft.targetHours === 'number') setTargetHours(draft.targetHours);
@@ -493,10 +517,14 @@ function SubmitReportPage() {
             console.warn('[SubmitReport] failed to restore draft inside loadExistingReport:', err);
           }
           if (!draftRestored) {
-            setEntries([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], outcomeImageFiles: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
             setUnderHoursReason('');
             setTargetHours(8);
           }
+          const baseEntries = restoredEntries && restoredEntries.length > 0
+            ? restoredEntries
+            : [createBlankEntry()];
+          const mergedEntries = await applyPendingMerge(baseEntries);
+          if (!cancelled) setEntries(mergedEntries);
         }
       } catch (err) {
         console.error('[SubmitReport] Error loading existing report:', err);
@@ -506,13 +534,14 @@ function SubmitReportPage() {
       } finally {
         if (!cancelled) {
           setIsLoadingExisting(false);
+          refreshPendingCount();
         }
       }
     }
     loadExistingReport();
 
     return () => { cancelled = true; };
-  }, [selectedDate, currentStaffId]);
+  }, [selectedDate, currentStaffId, applyPendingMerge, createBlankEntry, emptyAiTools, refreshPendingCount]);
 
   // ---- Draft persistence (localStorage) -----------------------------------
   // Keep unsubmitted edits across reloads / page navigation. Draft is keyed
@@ -629,10 +658,23 @@ function SubmitReportPage() {
   const aiUsedInEntries = entries.some(e => e.isAiAssisted || e.aiToolsV2.copywriting.length > 0 || e.aiToolsV2.image.length > 0 || e.aiToolsV2.video.length > 0 || !!e.aiToolsV2.copywritingOther || !!e.aiToolsV2.imageOther || !!e.aiToolsV2.videoOther);
 
   const addEntry = () => {
-    setEntries([...entries, { category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], outcomeImageFiles: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
+    setEntries([...entries, createBlankEntry()]);
   };
-  const removeEntry = (idx: number) => {
-    if (entries.length > 1) setEntries(entries.filter((_, i) => i !== idx));
+  const removeEntry = async (idx: number) => {
+    const entry = entries[idx];
+    if (entry?.pendingReportItemId && entry.isAutoPulled) {
+      try {
+        await dismissPendingItem(entry.pendingReportItemId);
+        await refreshPendingCount();
+      } catch (err) {
+        console.warn('[SubmitReport] dismiss pending failed:', err);
+      }
+    }
+    if (entries.length > 1) {
+      setEntries(entries.filter((_, i) => i !== idx));
+    } else {
+      setEntries([createBlankEntry()]);
+    }
   };
   const updateEntry = (idx: number, field: string, value: any) => {
     const newEntries = [...entries];
@@ -710,28 +752,31 @@ function SubmitReportPage() {
     }
   };
 
-  const handleAutoPull = () => {
+  const handleRefreshPending = async () => {
+    if (!currentStaffId) {
+      alert('無法識別當前用戶，請確認員工資料已同步。');
+      return;
+    }
     setIsPulling(true);
-    setTimeout(() => {
-      const pullData = getAutoPullData();
-      const newEntries = pullData.map(d => ({
-        category: d.category || '' as WorkCategory | '',
-        relatedId: d.relatedId || '',
-        relatedName: d.relatedName || '',
-        title: d.title || '',
-        hours: d.hours || 0,
-        outcomeType: d.outcomeType || '' as OutcomeType | '',
-        outcomeUrl: d.outcomeUrl || '',
-        outcomeImages: [] as string[],
-        outcomeImageFiles: [] as File[],
-        growthExperience: '',
-        isAiAssisted: false,
-        aiTools: [] as AITool[],
-        aiToolsV2: { ...emptyAiTools },
-      }));
-      setEntries([...entries.filter(e => e.category || e.title), ...newEntries]);
+    try {
+      const { entries: merged, mergedCount } = await mergePendingIntoReportEntries(
+        currentStaffId,
+        selectedDate,
+        entries,
+        emptyAiTools,
+        createBlankEntry,
+      );
+      setEntries(merged);
+      await refreshPendingCount();
+      if (mergedCount === 0) {
+        alert('目前沒有新的待匯報工作。');
+      }
+    } catch (err) {
+      console.error('[SubmitReport] refresh pending failed:', err);
+      alert(`刷新失敗：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
       setIsPulling(false);
-    }, 800);
+    }
   };
 
   const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/avif'];
@@ -911,6 +956,14 @@ function SubmitReportPage() {
         }
       }
 
+      const consumedIds = entries
+        .filter(e => e.pendingReportItemId && e.category && e.hours > 0)
+        .map(e => e.pendingReportItemId!);
+      if (consumedIds.length > 0) {
+        await consumePendingItems(consumedIds);
+      }
+      await refreshPendingCount();
+
       // Collect new related_ids from the just-inserted entries
       entryRecords.forEach(e => e.related_id && affectedWebsiteIds.add(e.related_id));
 
@@ -1059,11 +1112,17 @@ function SubmitReportPage() {
             </div>
           </div>
           
-          <button onClick={handleAutoPull} disabled={isPulling} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-teal-200 bg-white text-teal-700 text-[14px] font-medium hover:bg-teal-50 transition-all disabled:opacity-50">
+          <button onClick={handleRefreshPending} disabled={isPulling || isLoadingExisting} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-teal-200 bg-white text-teal-700 text-[14px] font-medium hover:bg-teal-50 transition-all disabled:opacity-50">
             <RefreshCw size={12} className={isPulling ? 'animate-spin' : ''} />
-            {isPulling ? '拉取中...' : '一鍵拉取工作記錄'}
+            {isPulling ? '刷新中...' : '刷新待匯報'}
           </button>
         </div>
+
+        {pendingCount > 0 && (
+          <p className="text-[13px] text-teal-700 bg-teal-50 border border-teal-100 rounded-md px-3 py-2 mt-2">
+            此日期有 <strong>{pendingCount}</strong> 項待匯報工作，開啟頁面時已自動加入表單；可點「刷新待匯報」手動同步。
+          </p>
+        )}
         
         <p className="text-[13px] text-teal-600/70 mt-2">
           {office === 'hk' ? '🇭🇰 香港辦公室 · 依據香港公眾假期' : '🇨🇳 深圳辦公室 · 依據中國法定假日'} · 
@@ -1416,11 +1475,16 @@ function SubmitReportPage() {
           {/* Work Entries */}
           <div className="space-y-3">
             {entries.map((entry, idx) => (
-              <div key={idx} className="p-4 rounded-lg border border-border/60 bg-white hover:border-teal-200 transition-colors shadow-sm">
+              <div key={idx} className={cn('p-4 rounded-lg border hover:border-teal-200 transition-colors shadow-sm', entry.isAutoPulled ? 'border-teal-300 bg-teal-50/40' : 'border-border/60 bg-white')}>
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-[14px] font-bold text-teal-600 uppercase tracking-wide flex items-center gap-1.5">
                     <span className="w-6 h-6 rounded-full bg-teal-100 flex items-center justify-center text-[14px]">{idx + 1}</span>
                     工作項目
+                    {entry.isAutoPulled && (
+                      <span className="text-[11px] font-semibold normal-case tracking-normal bg-teal-600 text-white px-2 py-0.5 rounded-full">
+                        自動
+                      </span>
+                    )}
                   </span>
                   <div className="flex items-center gap-2">
                     <button

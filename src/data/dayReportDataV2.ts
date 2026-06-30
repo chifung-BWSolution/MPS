@@ -541,11 +541,4 @@ function getWorkingDaysInMonth(year: number, month: number): number {
   return workingDays;
 }
 
-// Simulated "auto-pull" data for today
-export function getAutoPullData(): Partial<WorkEntryV2>[] {
-  return [
-    { category: 'website_design', relatedType: 'website', relatedId: 'ws1', relatedName: 'BW Design Centre', title: '更新網站聯絡頁面', hours: 1.5, outcomeType: 'url', outcomeUrl: 'https://staging.bwdesign.com.hk/contact' },
-    { category: 'social_media', relatedType: 'website', relatedId: 'ws2', relatedName: 'ACI Global', title: '發佈 IG 限時動態 x3', hours: 1.0, outcomeType: 'image' },
-    { category: 'article_writing', relatedType: 'website', relatedId: 'ws5', relatedName: 'Wine Club HK', title: '「紅酒保存指南」文章草稿完成', hours: 2.0, outcomeType: 'url', outcomeUrl: 'https://docs.google.com/wineclub-storage-guide' },
-  ];
-}
+// Simulated "auto-pull" data for today — removed; use pending_report_items via reportLinkService.

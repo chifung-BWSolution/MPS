@@ -6,6 +6,13 @@ import {
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { getSiteOrigin } from '@/lib/siteUrl';
+import { useAuth } from '@/context/AuthContext';
+import {
+  createPendingReportItem,
+  localDateString,
+  resolveBubbleStaffId,
+  updatePendingReportHours,
+} from '@/services/reportLinkService';
 
 // =====================================================================
 // Types
@@ -66,6 +73,7 @@ interface Talent {
   hasInterviewed: boolean;
   interviewScheduledAt?: string;
   interviewNotes?: string;
+  reportHours?: number;
   auditionMediaUrls?: string[];
   // Collaboration history
   collaborations: CollaborationRecord[];
@@ -254,6 +262,7 @@ interface TalentFormRow {
   interview_notes: string | null;
   interview_scheduled_at: string | null;
   audition_media_urls: string[] | null;
+  report_hours: number | null;
 }
 
 interface ArtistApplyPhotoRow {
@@ -1736,7 +1745,7 @@ function TalentCategoriesView() {
 // =====================================================================
 function InterviewRatingEditor({ talent, onSave, onCancel }: {
   talent: Talent;
-  onSave: (rating: TalentRating, notes: string, scheduledAt: string, mediaUrl?: string) => void;
+  onSave: (rating: TalentRating, notes: string, scheduledAt: string, reportHours: number, mediaUrl?: string) => void;
   onCancel: () => void;
 }) {
   const [r, setR] = useState<TalentRating>(talent.rating || {
@@ -1744,6 +1753,7 @@ function InterviewRatingEditor({ talent, onSave, onCancel }: {
   });
   const [notes, setNotes] = useState(talent.interviewNotes || '');
   const [scheduledAt, setScheduledAt] = useState(talent.interviewScheduledAt || '');
+  const [reportHours, setReportHours] = useState<number>(talent.reportHours ?? 0);
   const [mediaUrl, setMediaUrl] = useState('');
 
   const Slider = ({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) => (
@@ -1797,6 +1807,21 @@ function InterviewRatingEditor({ talent, onSave, onCancel }: {
       </div>
 
       <div>
+        <label className="text-[12px] font-medium text-muted-foreground block mb-1">匯報工時 (h) *</label>
+        <input
+          type="number"
+          step={0.5}
+          min={0.5}
+          max={12}
+          value={reportHours || ''}
+          onChange={(e) => setReportHours(parseFloat(e.target.value) || 0)}
+          placeholder="例如：1.5"
+          className="w-full px-3 py-2 border border-border rounded-md text-[13px]"
+        />
+        <p className="text-[11px] text-muted-foreground mt-1">完成面試時填寫，將自動帶入工作匯報</p>
+      </div>
+
+      <div>
         <label className="text-[12px] font-medium text-muted-foreground block mb-1">試鏡影片 / 照片 URL（可選）</label>
         <input
           value={mediaUrl}
@@ -1809,7 +1834,13 @@ function InterviewRatingEditor({ talent, onSave, onCancel }: {
       <div className="flex justify-end gap-2 pt-2">
         <button onClick={onCancel} className="px-4 py-2 text-[13px] hover:bg-muted rounded-md">取消</button>
         <button
-          onClick={() => onSave(r, notes, scheduledAt, mediaUrl || undefined)}
+          onClick={() => {
+            if (!reportHours || reportHours <= 0) {
+              alert('請填寫匯報工時（必須大於 0）');
+              return;
+            }
+            onSave(r, notes, scheduledAt, reportHours, mediaUrl || undefined);
+          }}
           className="px-4 py-2 text-[13px] bg-teal-600 text-white rounded-md hover:bg-teal-700"
         >
           標記為已面試並保存
@@ -2001,6 +2032,7 @@ function ClassifyArtistModal({
 }
 
 function TalentInterviews() {
+  const { systemUser } = useAuth();
   const [rows, setRows] = useState<TalentFormRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -2017,7 +2049,7 @@ function TalentInterviews() {
       const { data, error } = await supabase
         .from('artist_apply')
         .select(
-          'id, invite_token, application_date, name_zh, name_en, gender, age, phone, whatsapp, height, weight, raw_payload, submitted_at, status, interviewed, interview_rating, interview_overall, interview_notes, interview_scheduled_at, audition_media_urls'
+          'id, invite_token, application_date, name_zh, name_en, gender, age, phone, whatsapp, height, weight, raw_payload, submitted_at, status, interviewed, interview_rating, interview_overall, interview_notes, interview_scheduled_at, audition_media_urls, report_hours'
         )
         .neq('status', 'rejected')
         .neq('status', 'confirmed')
@@ -2065,6 +2097,7 @@ function TalentInterviews() {
           interview_notes: row.interview_notes,
           interview_scheduled_at: row.interview_scheduled_at,
           audition_media_urls: row.audition_media_urls || [],
+          report_hours: row.report_hours != null ? Number(row.report_hours) : null,
         })) as TalentFormRow[]);
         setError(null);
       }
@@ -2321,13 +2354,21 @@ function TalentInterviews() {
               collaborations: [],
               rating: editing.interview_rating || undefined,
               overallRating: editing.interview_overall ?? undefined,
+              reportHours: editing.report_hours ?? undefined,
             }}
             onCancel={() => setEditing(null)}
-            onSave={async (rating, notes, scheduledAt, mediaUrl) => {
+            onSave={async (rating, notes, scheduledAt, reportHours, mediaUrl) => {
               try {
+                const staffId = await resolveBubbleStaffId(systemUser);
+                if (!staffId) {
+                  alert('無法識別當前用戶，請確認員工資料已同步。');
+                  return;
+                }
+
                 const newMedia = mediaUrl
                   ? [...(editing.audition_media_urls || []), mediaUrl]
                   : editing.audition_media_urls || [];
+                const wasInterviewed = editing.interviewed;
                 const { error } = await supabase
                   .from('artist_apply')
                   .update({
@@ -2336,10 +2377,38 @@ function TalentInterviews() {
                     interview_notes: notes,
                     interview_scheduled_at: scheduledAt || null,
                     interviewed: true,
+                    report_hours: reportHours,
                     audition_media_urls: newMedia,
                   })
                   .eq('id', editing.id);
                 if (error) throw error;
+
+                const artistName = formDisplayName(editing);
+                if (!wasInterviewed) {
+                  await createPendingReportItem({
+                    staffId,
+                    reportDate: localDateString(),
+                    sourceModule: 'talent',
+                    sourceType: 'interview',
+                    sourceId: editing.id,
+                    category: 'talent_interview',
+                    title: `完成藝人面試 — ${artistName}`,
+                    suggestedHours: reportHours,
+                    metadata: {
+                      artistName,
+                      overall: computeOverall(rating),
+                    },
+                  });
+                } else {
+                  await updatePendingReportHours(
+                    staffId,
+                    'talent',
+                    'interview',
+                    editing.id,
+                    reportHours,
+                  );
+                }
+
                 setEditing(null);
                 await refresh();
               } catch (err) {
