@@ -124,6 +124,42 @@ function useCategoryLookup(): CategoryLookup {
 // ============================
 // Submit Report Page (Redesigned)
 // ============================
+type AiToolsSelection = {
+  copywriting: string[];
+  copywritingOther: string;
+  image: string[];
+  imageOther: string;
+  video: string[];
+  videoOther: string;
+};
+
+const EMPTY_AI_TOOLS: AiToolsSelection = {
+  copywriting: [],
+  copywritingOther: '',
+  image: [],
+  imageOther: '',
+  video: [],
+  videoOther: '',
+};
+
+function createBlankReportEntry(): ReportFormEntry {
+  return {
+    category: '',
+    relatedId: '',
+    relatedName: '',
+    title: '',
+    hours: 0,
+    outcomeType: '',
+    outcomeUrl: '',
+    outcomeImages: [],
+    outcomeImageFiles: [],
+    growthExperience: '',
+    isAiAssisted: false,
+    aiTools: [],
+    aiToolsV2: { ...EMPTY_AI_TOOLS },
+  };
+}
+
 function SubmitReportPage() {
   const { projects } = useDataStore();
   const { profiles: websites } = useWebsiteProfiles();
@@ -141,39 +177,15 @@ function SubmitReportPage() {
     return `${year}-${month}-${day}`;
   });
   
-  // AI Tools category structure
-  interface AiToolsSelection {
-    copywriting: string[]; // selected tools from category 1
-    copywritingOther: string; // custom text for 其他
-    image: string[]; // selected tools from category 2
-    imageOther: string; // custom text for 其他
-    video: string[]; // selected tools from category 3
-    videoOther: string; // custom text for 其他
-  }
-  const emptyAiTools: AiToolsSelection = { copywriting: [], copywritingOther: '', image: [], imageOther: '', video: [], videoOther: '' };
-
-  const createBlankEntry = useCallback((): ReportFormEntry => ({
-    category: '',
-    relatedId: '',
-    relatedName: '',
-    title: '',
-    hours: 0,
-    outcomeType: '',
-    outcomeUrl: '',
-    outcomeImages: [],
-    outcomeImageFiles: [],
-    growthExperience: '',
-    isAiAssisted: false,
-    aiTools: [],
-    aiToolsV2: { ...emptyAiTools },
-  }), [emptyAiTools]);
+  // AI Tools category structure — use module-level EMPTY_AI_TOOLS for stable refs
+  const emptyAiTools = EMPTY_AI_TOOLS;
 
   // Authenticated user — needed early so the saved-templates storage key can
   // be scoped per-user (see SavedTemplate state below).
   const { systemUser } = useAuth();
 
   // Work entries
-  const [entries, setEntries] = useState<ReportFormEntry[]>([createBlankEntry()]);
+  const [entries, setEntries] = useState<ReportFormEntry[]>([createBlankReportEntry()]);
   const imageInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   // User-saved 常用匯報項目 templates — backed by Supabase
@@ -264,19 +276,25 @@ function SubmitReportPage() {
   // Current staff — derived from the authenticated user resolved above
   const [currentStaffId, setCurrentStaffId] = useState<string | null>(null);
   const [currentStaffName, setCurrentStaffName] = useState<string>('');
+  const [staffIdResolved, setStaffIdResolved] = useState(false);
   const { count: pendingCount, refresh: refreshPendingCount } = usePendingReportItems(currentStaffId, selectedDate);
 
   const applyPendingMerge = useCallback(async (baseEntries: ReportFormEntry[]) => {
     if (!currentStaffId) return baseEntries;
-    const { entries: merged } = await mergePendingIntoReportEntries(
-      currentStaffId,
-      selectedDate,
-      baseEntries,
-      emptyAiTools,
-      createBlankEntry,
-    );
-    return merged;
-  }, [currentStaffId, selectedDate, emptyAiTools, createBlankEntry]);
+    try {
+      const { entries: merged } = await mergePendingIntoReportEntries(
+        currentStaffId,
+        selectedDate,
+        baseEntries,
+        EMPTY_AI_TOOLS,
+        createBlankReportEntry,
+      );
+      return merged;
+    } catch (err) {
+      console.warn('[SubmitReport] pending merge failed:', err);
+      return baseEntries;
+    }
+  }, [currentStaffId, selectedDate]);
 
   // Database reports for the 14-day window (to show reported status)
   const [dbReports, setDbReports] = useState<Array<{ report_date: string; total_hours: number; status: string }>>([]);
@@ -287,18 +305,27 @@ function SubmitReportPage() {
   useEffect(() => {
     let aborted = false;
     async function resolveStaffId() {
-      if (!systemUser) return;
+      if (!systemUser) {
+        if (!aborted) setStaffIdResolved(false);
+        return;
+      }
       setCurrentStaffName(systemUser.display_name);
       const id = systemUser.bubble_staff_id || '';
       const looksPlaceholder = !id || id.startsWith('manual_') || id.startsWith('ui_');
       if (!looksPlaceholder) {
-        setCurrentStaffId(id);
+        if (!aborted) {
+          setCurrentStaffId(id);
+          setStaffIdResolved(true);
+        }
         return;
       }
       // Try email-based lookup in staff_directory
       const email = (systemUser.email || '').toLowerCase().trim();
       if (!email) {
-        setCurrentStaffId(id || null);
+        if (!aborted) {
+          setCurrentStaffId(id || null);
+          setStaffIdResolved(true);
+        }
         return;
       }
       const { data } = await supabase
@@ -311,6 +338,7 @@ function SubmitReportPage() {
       const realId = data?.bubble_staff_id || id || null;
       console.log('[SubmitReport] resolved staff_id:', realId, '(was placeholder:', id, ')');
       setCurrentStaffId(realId);
+      setStaffIdResolved(true);
     }
     resolveStaffId();
     return () => { aborted = true; };
@@ -416,8 +444,8 @@ function SubmitReportPage() {
     async function loadExistingReport() {
       if (!currentStaffId) {
         setExistingReportId(null);
-        // Don't flip isLoadingExisting to false here — we have no key to
-        // restore from yet. Wait for currentStaffId to resolve and re-run.
+        if (!staffIdResolved) return;
+        setIsLoadingExisting(false);
         return;
       }
       setIsLoadingExisting(true);
@@ -482,7 +510,7 @@ function SubmitReportPage() {
             const mergedEntries = await applyPendingMerge(loadedEntries);
             if (!cancelled) setEntries(mergedEntries);
           } else {
-            const mergedEntries = await applyPendingMerge([createBlankEntry()]);
+            const mergedEntries = await applyPendingMerge([createBlankReportEntry()]);
             if (!cancelled) setEntries(mergedEntries);
           }
         } else {
@@ -522,7 +550,7 @@ function SubmitReportPage() {
           }
           const baseEntries = restoredEntries && restoredEntries.length > 0
             ? restoredEntries
-            : [createBlankEntry()];
+            : [createBlankReportEntry()];
           const mergedEntries = await applyPendingMerge(baseEntries);
           if (!cancelled) setEntries(mergedEntries);
         }
@@ -541,7 +569,7 @@ function SubmitReportPage() {
     loadExistingReport();
 
     return () => { cancelled = true; };
-  }, [selectedDate, currentStaffId, applyPendingMerge, createBlankEntry, emptyAiTools, refreshPendingCount]);
+  }, [selectedDate, currentStaffId, staffIdResolved, applyPendingMerge]);
 
   // ---- Draft persistence (localStorage) -----------------------------------
   // Keep unsubmitted edits across reloads / page navigation. Draft is keyed
@@ -658,7 +686,7 @@ function SubmitReportPage() {
   const aiUsedInEntries = entries.some(e => e.isAiAssisted || e.aiToolsV2.copywriting.length > 0 || e.aiToolsV2.image.length > 0 || e.aiToolsV2.video.length > 0 || !!e.aiToolsV2.copywritingOther || !!e.aiToolsV2.imageOther || !!e.aiToolsV2.videoOther);
 
   const addEntry = () => {
-    setEntries([...entries, createBlankEntry()]);
+    setEntries([...entries, createBlankReportEntry()]);
   };
   const removeEntry = async (idx: number) => {
     const entry = entries[idx];
@@ -673,7 +701,7 @@ function SubmitReportPage() {
     if (entries.length > 1) {
       setEntries(entries.filter((_, i) => i !== idx));
     } else {
-      setEntries([createBlankEntry()]);
+      setEntries([createBlankReportEntry()]);
     }
   };
   const updateEntry = (idx: number, field: string, value: any) => {
@@ -763,8 +791,8 @@ function SubmitReportPage() {
         currentStaffId,
         selectedDate,
         entries,
-        emptyAiTools,
-        createBlankEntry,
+        EMPTY_AI_TOOLS,
+        createBlankReportEntry,
       );
       setEntries(merged);
       await refreshPendingCount();
