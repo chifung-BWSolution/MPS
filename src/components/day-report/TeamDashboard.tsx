@@ -97,7 +97,7 @@ async function fetchStaffNameMap(staffIds: string[]): Promise<Record<string, str
   const [{ data: sdRows }, { data: uiRows }] = await Promise.all([
     supabase
       .from('staff_directory')
-      .select('bubble_staff_id, display_name, full_name')
+      .select('bubble_staff_id, display_name')
       .in('bubble_staff_id', staffIds),
     supabase
       .from('user_info')
@@ -106,7 +106,7 @@ async function fetchStaffNameMap(staffIds: string[]): Promise<Record<string, str
   ]);
 
   (sdRows || []).forEach((r) => {
-    const name = (r.full_name || r.display_name || '').trim();
+    const name = (r.display_name || '').trim();
     if (r.bubble_staff_id && name) nameMap[r.bubble_staff_id] = name;
   });
 
