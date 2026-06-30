@@ -89,6 +89,37 @@ function isWeekend(dateStr: string): boolean {
   return d.getDay() === 0 || d.getDay() === 6;
 }
 
+/** Resolve display names: staff_directory first, then user_info fallback. */
+async function fetchStaffNameMap(staffIds: string[]): Promise<Record<string, string>> {
+  const nameMap: Record<string, string> = {};
+  if (staffIds.length === 0) return nameMap;
+
+  const [{ data: sdRows }, { data: uiRows }] = await Promise.all([
+    supabase
+      .from('staff_directory')
+      .select('bubble_staff_id, display_name, full_name')
+      .in('bubble_staff_id', staffIds),
+    supabase
+      .from('user_info')
+      .select('staff_id, display_name')
+      .in('staff_id', staffIds),
+  ]);
+
+  (sdRows || []).forEach((r) => {
+    const name = (r.full_name || r.display_name || '').trim();
+    if (r.bubble_staff_id && name) nameMap[r.bubble_staff_id] = name;
+  });
+
+  (uiRows || []).forEach((r) => {
+    const name = (r.display_name || '').trim();
+    if (r.staff_id && name && !nameMap[r.staff_id]) {
+      nameMap[r.staff_id] = name;
+    }
+  });
+
+  return nameMap;
+}
+
 // ============================
 // Team Dashboard Component
 // ============================
@@ -114,6 +145,8 @@ export function TeamDashboard() {
     return map;
   }, [dynamicTypes]);
   const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [staffNameById, setStaffNameById] = useState<Record<string, string>>({});
+  const [activeStaffCount, setActiveStaffCount] = useState(0);
   const [reports, setReports] = useState<DayReport[]>([]);
   const [entries, setEntries] = useState<DayReportEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -250,6 +283,8 @@ export function TeamDashboard() {
         if (allowedStaffIds.length === 0) {
           console.warn(`[TeamDashboard] ⚠️ No staff found for department "${activeDept}". Showing empty state.`);
           setStaff([]);
+          setStaffNameById({});
+          setActiveStaffCount(0);
           setReports([]);
           setEntries([]);
           setLoading(false);
@@ -260,20 +295,22 @@ export function TeamDashboard() {
         console.log('[TeamDashboard] 🌐 Showing ALL departments (no filter)');
       }
 
-      // Step 2: Fetch active staff (filtered if needed)
-      // IMPORTANT: Only include staff with a valid, non-empty department to avoid legacy/duplicate rows
-      // Also exclude legacy orphan rows: "Director" position and "Management" department are not valid active worker entries
+      // Step 2: Fetch active staff in scope (department filter via allowedStaffIds, not staff_directory.department)
+      // Many system users have user_info.department set while staff_directory.department is still null from Bubble.
       let staffQuery = supabase
         .from('staff_directory')
         .select('id, bubble_staff_id, display_name, position, user_role, status, base_location, team_id, business_unit, profile_pic_url, department')
         .eq('status', 'active')
-        .not('department', 'is', null)
-        .neq('department', '')
-        .neq('department', 'Management')
         .neq('position', 'Director');
 
       if (allowedStaffIds !== null) {
         staffQuery = staffQuery.in('bubble_staff_id', allowedStaffIds);
+      } else {
+        // All-departments view: still exclude legacy Management-only rows
+        staffQuery = staffQuery
+          .not('department', 'is', null)
+          .neq('department', '')
+          .neq('department', 'Management');
       }
 
       const { data: rawStaffData } = await staffQuery;
@@ -332,7 +369,22 @@ export function TeamDashboard() {
         setEntries([]);
       }
 
+      // Build display-name map for everyone in scope (A: staff_directory + user_info fallback)
+      const scopeStaffIds = allowedStaffIds !== null
+        ? allowedStaffIds
+        : [...new Set((staffData || []).map(s => s.bubble_staff_id).filter(Boolean))];
+      const reportStaffIds = [...new Set((reportData || []).map(r => r.staff_id).filter(Boolean))];
+      const nameLookupIds = [...new Set([...scopeStaffIds, ...reportStaffIds])];
+      const nameMap = await fetchStaffNameMap(nameLookupIds);
+
       setStaff(staffData || []);
+      setStaffNameById(nameMap);
+      // KPI: active staff in department scope (not gated on staff_directory.department being set)
+      setActiveStaffCount(
+        allowedStaffIds !== null
+          ? staffData.length
+          : (staffData || []).filter(s => s.department && s.department !== 'Management').length,
+      );
       setReports(reportData || []);
     } catch (err) {
       console.error('Failed to fetch team dashboard data:', err);
@@ -414,13 +466,15 @@ export function TeamDashboard() {
   // Get staff info by bubble_staff_id
   // ============================
   const getStaffName = (staffId: string): string => {
+    const fromMap = staffNameById[staffId];
+    if (fromMap) return fromMap;
     const s = staff.find(st => st.bubble_staff_id === staffId);
     return s?.display_name || staffId;
   };
 
   const getStaffAvatar = (staffId: string): string => {
-    const s = staff.find(st => st.bubble_staff_id === staffId);
-    return s?.display_name?.slice(0, 1) || '?';
+    const name = getStaffName(staffId);
+    return name !== staffId ? name.slice(0, 1) : '?';
   };
 
   // ============================
@@ -486,7 +540,7 @@ export function TeamDashboard() {
       {/* KPI Stats */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: '活躍員工', value: staff.length, icon: <Users size={14} />, color: 'text-teal-600', bgColor: 'bg-teal-50' },
+          { label: '活躍員工', value: activeStaffCount, icon: <Users size={14} />, color: 'text-teal-600', bgColor: 'bg-teal-50' },
           { label: '14天總工時', value: `${totalHoursAll.toFixed(0)}h`, icon: <BarChart3 size={14} />, color: 'text-blue-600', bgColor: 'bg-blue-50' },
           { label: '平均工時/份', value: `${avgHoursPerReport}h`, icon: <Clock size={14} />, color: 'text-indigo-600', bgColor: 'bg-indigo-50' },
         ].map(stat => (
@@ -658,7 +712,7 @@ interface ReportsPanelProps {
 }
 
 function AllReportsPanel(props: ReportsPanelProps) {
-  const { reports, staff = [] } = props;
+  const { reports, staff = [], getStaffName } = props;
   const [selectedStaffId, setSelectedStaffId] = useState<string>('__ALL__');
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 50;
@@ -684,10 +738,17 @@ function AllReportsPanel(props: ReportsPanelProps) {
   // Get unique staff who have reports (sorted alphabetically by name)
   const staffWithReports = useMemo(() => {
     const staffIds = [...new Set(reports.map(r => r.staff_id))];
-    return staff
-      .filter(s => staffIds.includes(s.bubble_staff_id))
-      .sort((a, b) => a.display_name.localeCompare(b.display_name));
-  }, [reports, staff]);
+    const fromStaff = staff.filter(s => staffIds.includes(s.bubble_staff_id));
+    const knownIds = new Set(fromStaff.map(s => s.bubble_staff_id));
+    const extras = staffIds
+      .filter(id => !knownIds.has(id))
+      .map(id => ({
+        bubble_staff_id: id,
+        display_name: getStaffName(id),
+        position: null as string | null,
+      }));
+    return [...fromStaff, ...extras].sort((a, b) => a.display_name.localeCompare(b.display_name));
+  }, [reports, staff, getStaffName]);
 
   if (reports.length === 0) {
     return (
