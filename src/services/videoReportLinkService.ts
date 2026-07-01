@@ -6,6 +6,7 @@ import {
 } from '@/services/reportLinkService';
 import type { VideoOutput } from '@/types/videoOutput';
 import type { VideoWorkLogDraft } from '@/types/videoOutputWorkLog';
+import { VIDEO_WORK_LOG_TYPE_LABELS } from '@/types/videoOutputWorkLog';
 import { latestWorkDateForStaff, sumHoursForStaff } from '@/services/videoOutputWorkLogService';
 
 export type VideoPendingSyncResult =
@@ -16,9 +17,33 @@ function resolveVideoSourceType(video: Pick<VideoOutput, 'publishedDate'>): stri
   return video.publishedDate ? 'video_published' : 'video_demo_done';
 }
 
-function buildVideoReportTitle(video: Pick<VideoOutput, 'title' | 'publishedDate'>): string {
+/** Only real video/output URLs — never fall back to Asana task links. */
+export function resolveVideoOutcomeUrl(video: Pick<VideoOutput, 'storagePath'>): string | undefined {
+  const path = video.storagePath?.trim();
+  if (path && /^https?:\/\//i.test(path)) return path;
+  return undefined;
+}
+
+export function buildVideoReportTitle(
+  video: Pick<VideoOutput, 'title' | 'publishedDate'>,
+  operatorLogs: VideoWorkLogDraft[],
+): string {
   const prefix = video.publishedDate ? '影片發佈' : '影片製作';
-  return `${prefix} — ${video.title}`;
+  const base = `${prefix} — ${video.title}`;
+
+  if (operatorLogs.length === 0) return base;
+
+  const typeLabels = [
+    ...new Set(operatorLogs.map(l => VIDEO_WORK_LOG_TYPE_LABELS[l.workType] ?? l.workType)),
+  ];
+  const noteTexts = operatorLogs.map(l => l.notes?.trim()).filter(Boolean) as string[];
+
+  const detailParts: string[] = [];
+  if (typeLabels.length > 0) detailParts.push(typeLabels.join('、'));
+  if (noteTexts.length > 0) detailParts.push(noteTexts.join('；'));
+
+  if (detailParts.length === 0) return base;
+  return `${base}（${detailParts.join('｜')}）`;
 }
 
 export async function syncVideoPendingReport(
@@ -26,6 +51,7 @@ export async function syncVideoPendingReport(
   workLogs: VideoWorkLogDraft[],
   staffId: string,
 ): Promise<VideoPendingSyncResult> {
+  const operatorLogs = workLogs.filter(l => l.staffId === staffId && l.hours > 0);
   const suggestedHours = sumHoursForStaff(workLogs, staffId);
   if (suggestedHours <= 0) {
     return { action: 'skipped', reason: 'no_hours' };
@@ -37,9 +63,7 @@ export async function syncVideoPendingReport(
 
   const sourceType = resolveVideoSourceType(video);
   const reportDate = latestWorkDateForStaff(workLogs, staffId) ?? localDateString();
-  const outcomeUrl = video.storagePath && /^https?:\/\//i.test(video.storagePath)
-    ? video.storagePath
-    : video.asanaUrl;
+  const outcomeUrl = resolveVideoOutcomeUrl(video);
 
   const { data: existing, error: existingError } = await supabase
     .from('pending_report_items')
@@ -56,6 +80,7 @@ export async function syncVideoPendingReport(
     return { action: 'skipped', reason: 'consumed' };
   }
 
+  const title = buildVideoReportTitle(video, operatorLogs);
   const payload = {
     staffId,
     reportDate,
@@ -63,7 +88,7 @@ export async function syncVideoPendingReport(
     sourceType,
     sourceId: video.id,
     category: 'video_editing',
-    title: buildVideoReportTitle(video),
+    title,
     suggestedHours,
     relatedId: video.vchannelId,
     relatedName: video.channelPublicName ?? video.channelCode,
@@ -72,8 +97,10 @@ export async function syncVideoPendingReport(
     metadata: {
       videoCode: video.videoCode,
       vchannelCode: video.channelCode,
-      workLogCount: workLogs.length,
+      workLogCount: operatorLogs.length,
       operatorHours: suggestedHours,
+      workTypes: operatorLogs.map(l => l.workType),
+      workNotes: operatorLogs.map(l => l.notes?.trim()).filter(Boolean),
     },
   };
 
