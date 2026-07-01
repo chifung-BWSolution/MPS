@@ -48,29 +48,24 @@ function CheckCell({ value }: { value?: boolean | null }) {
   return <span className="text-muted-foreground">—</span>;
 }
 
-function CopywritingCell({ sc, tc, en }: { sc?: boolean; tc?: boolean; en?: boolean }) {
-  const items = [
-    { key: 'sc', label: '簡', done: sc },
-    { key: 'tc', label: '繁', done: tc },
-    { key: 'en', label: '英', done: en },
-  ].filter(item => item.done);
+const COPYWRITING_LABELS = [
+  { key: 'sc', label: '簡體', done: (v: { copySc?: boolean }) => v.copySc },
+  { key: 'tc', label: '繁體', done: (v: { copyTc?: boolean }) => v.copyTc },
+  { key: 'en', label: '英文', done: (v: { copyEn?: boolean }) => v.copyEn },
+] as const;
 
-  if (items.length === 0) {
+function CopywritingCell({ sc, tc, en }: { sc?: boolean; tc?: boolean; en?: boolean }) {
+  const video = { copySc: sc, copyTc: tc, copyEn: en };
+  const labels = COPYWRITING_LABELS.filter(item => item.done(video)).map(item => item.label);
+
+  if (labels.length === 0) {
     return <span className="text-muted-foreground">—</span>;
   }
 
   return (
-    <div className="inline-flex items-center text-[11px] whitespace-nowrap">
-      {items.map((item, idx) => (
-        <Fragment key={item.key}>
-          {idx > 0 && <span className="text-muted-foreground/40 px-0.5">|</span>}
-          <span className="inline-flex items-center gap-0.5 text-teal-700 font-medium">
-            <Check size={9} strokeWidth={3} className="text-teal-600 shrink-0" />
-            {item.label}
-          </span>
-        </Fragment>
-      ))}
-    </div>
+    <span className="text-[11px] text-teal-700 font-medium whitespace-nowrap">
+      {labels.join('|')}
+    </span>
   );
 }
 
