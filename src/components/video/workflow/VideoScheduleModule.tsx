@@ -188,7 +188,7 @@ export function VideoScheduleModule() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-4">
         <div className="space-y-2 min-h-[320px]">
           <p className="text-[12px] text-muted-foreground">
             未審核前 {filteredVideos.length} 部（準備中 + 製作中）
