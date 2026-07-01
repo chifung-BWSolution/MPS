@@ -22,6 +22,25 @@ export type VideoWorkflowLocation = {
 
 export type VideoWorkflowDeviceSuffix = 'D' | 'M' | null;
 
+export type ProductionTask = {
+  done: boolean;
+  hours?: number;
+};
+
+export type FootageMode = 'shoot' | 'ai' | null;
+
+export type ProductionProgress = {
+  copywriting: ProductionTask;
+  script: ProductionTask;
+  rawFootage: ProductionTask;
+  editing: ProductionTask;
+  demo: ProductionTask;
+  footageMode: FootageMode;
+  editingMode: boolean | null;
+};
+
+export type ProductionTaskKey = 'copywriting' | 'script' | 'rawFootage' | 'editing' | 'demo';
+
 export type VideoWorkflowMock = {
   id: string;
   vchannelId?: string;
@@ -39,6 +58,7 @@ export type VideoWorkflowMock = {
   model?: ModelAssignment;
   photographer?: StaffAssignment;
   onSiteCrew?: StaffAssignment[];
+  productionProgress?: ProductionProgress;
   rawFootageDone?: boolean;
   needsEditing?: boolean | null;
   demoDone?: boolean;

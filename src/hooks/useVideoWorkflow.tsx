@@ -8,7 +8,12 @@ import {
   type ReactNode,
 } from 'react';
 import { VIDEO_WORKFLOW_MOCK_SEED } from '@/data/videoWorkflowMock';
-import { getPrepMissingItems, isPrepComplete } from '@/lib/videoWorkflowUtils';
+import {
+  getPrepMissingItems,
+  isPrepComplete,
+  normalizeProductionProgress,
+  normalizeVideoWorkflow,
+} from '@/lib/videoWorkflowUtils';
 import type { VideoWorkflowMock, VideoWorkflowStage, VideoWorkflowUpdate } from '@/types/videoWorkflow';
 
 const STORAGE_KEY = 'mps_video_workflow_mock_v1';
@@ -35,12 +40,19 @@ function loadInitialVideos(): VideoWorkflowMock[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as VideoWorkflowMock[];
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map(v => normalizeVideoWorkflow(v));
+      }
     }
   } catch {
     // ignore corrupt storage
   }
-  return VIDEO_WORKFLOW_MOCK_SEED.map(v => ({ ...v, onSiteCrew: v.onSiteCrew ? [...v.onSiteCrew] : undefined }));
+  return VIDEO_WORKFLOW_MOCK_SEED.map(v =>
+    normalizeVideoWorkflow({
+      ...v,
+      onSiteCrew: v.onSiteCrew ? [...v.onSiteCrew] : undefined,
+    }),
+  );
 }
 
 export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
@@ -79,10 +91,23 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
     setVideos(prev =>
       prev.map(v => {
         if (v.id !== id) return v;
-        const next = { ...v, ...patch };
+        let next: VideoWorkflowMock = { ...v, ...patch };
         if (patch.location) next.location = { ...v.location, ...patch.location };
         if (patch.onSiteCrew) next.onSiteCrew = patch.onSiteCrew;
         if (patch.platformPublish) next.platformPublish = { ...v.platformPublish, ...patch.platformPublish };
+        if (patch.productionProgress) {
+          const base = normalizeProductionProgress(v);
+          next.productionProgress = {
+            ...base,
+            ...patch.productionProgress,
+            copywriting: { ...base.copywriting, ...patch.productionProgress.copywriting },
+            script: { ...base.script, ...patch.productionProgress.script },
+            rawFootage: { ...base.rawFootage, ...patch.productionProgress.rawFootage },
+            editing: { ...base.editing, ...patch.productionProgress.editing },
+            demo: { ...base.demo, ...patch.productionProgress.demo },
+          };
+        }
+        next = normalizeVideoWorkflow(next);
         return next;
       }),
     );
@@ -126,7 +151,14 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
   }, [updateVideo]);
 
   const resetToSeed = useCallback(() => {
-    setVideos(VIDEO_WORKFLOW_MOCK_SEED.map(v => ({ ...v, onSiteCrew: v.onSiteCrew ? [...v.onSiteCrew] : undefined })));
+    setVideos(
+      VIDEO_WORKFLOW_MOCK_SEED.map(v =>
+        normalizeVideoWorkflow({
+          ...v,
+          onSiteCrew: v.onSiteCrew ? [...v.onSiteCrew] : undefined,
+        }),
+      ),
+    );
   }, []);
 
   const value = useMemo(

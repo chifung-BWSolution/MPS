@@ -5,10 +5,124 @@ import {
 } from '@/lib/videoOutputUtils';
 import type {
   ModelAssignment,
+  ProductionProgress,
+  ProductionTask,
+  ProductionTaskKey,
   StaffAssignment,
   VideoWorkflowMock,
   VideoWorkflowStage,
 } from '@/types/videoWorkflow';
+
+export type ProductionTaskDisplayStatus = 'done' | 'pending' | 'na';
+
+export const PRODUCTION_TASK_LABELS: Record<ProductionTaskKey, string> = {
+  copywriting: '文案',
+  script: '腳本',
+  rawFootage: '原片',
+  editing: '剪輯',
+  demo: 'Demo',
+};
+
+export function emptyProductionTask(): ProductionTask {
+  return { done: false };
+}
+
+export function emptyProductionProgress(): ProductionProgress {
+  return {
+    copywriting: emptyProductionTask(),
+    script: emptyProductionTask(),
+    rawFootage: emptyProductionTask(),
+    editing: emptyProductionTask(),
+    demo: emptyProductionTask(),
+    footageMode: null,
+    editingMode: null,
+  };
+}
+
+export function normalizeProductionProgress(video: VideoWorkflowMock): ProductionProgress {
+  if (video.productionProgress) {
+    const p = video.productionProgress;
+    return {
+      copywriting: { ...emptyProductionTask(), ...p.copywriting },
+      script: { ...emptyProductionTask(), ...p.script },
+      rawFootage: { ...emptyProductionTask(), ...p.rawFootage },
+      editing: { ...emptyProductionTask(), ...p.editing },
+      demo: { ...emptyProductionTask(), ...p.demo },
+      footageMode: p.footageMode ?? null,
+      editingMode: p.editingMode ?? null,
+    };
+  }
+
+  const hasLegacyFootage = video.rawFootageDone !== undefined;
+  return {
+    copywriting: emptyProductionTask(),
+    script: emptyProductionTask(),
+    rawFootage: { done: !!video.rawFootageDone },
+    editing: { done: false },
+    demo: { done: !!video.demoDone },
+    footageMode: hasLegacyFootage ? 'shoot' : null,
+    editingMode: video.needsEditing ?? null,
+  };
+}
+
+export function syncLegacyProductionFields(progress: ProductionProgress): Pick<
+  VideoWorkflowMock,
+  'rawFootageDone' | 'needsEditing' | 'demoDone'
+> {
+  return {
+    rawFootageDone: progress.footageMode === 'shoot' && progress.rawFootage.done,
+    needsEditing: progress.editingMode,
+    demoDone: progress.demo.done,
+  };
+}
+
+export function normalizeVideoWorkflow(video: VideoWorkflowMock): VideoWorkflowMock {
+  const productionProgress = normalizeProductionProgress(video);
+  return {
+    ...video,
+    productionProgress,
+    ...syncLegacyProductionFields(productionProgress),
+  };
+}
+
+export function getProductionTaskDisplayStatus(
+  progress: ProductionProgress,
+  key: ProductionTaskKey,
+): ProductionTaskDisplayStatus {
+  if (key === 'rawFootage') {
+    if (progress.footageMode !== 'shoot') return 'na';
+    return progress.rawFootage.done ? 'done' : 'pending';
+  }
+  if (key === 'editing') {
+    if (progress.editingMode !== true) return 'na';
+    return progress.editing.done ? 'done' : 'pending';
+  }
+  const task = progress[key];
+  return task.done ? 'done' : 'pending';
+}
+
+export function canSubmitProductionForReview(video: VideoWorkflowMock): boolean {
+  const progress = normalizeProductionProgress(video);
+  return progress.demo.done;
+}
+
+export function validateProductionProgress(progress: ProductionProgress): string | null {
+  const checks: { label: string; task: ProductionTask; applicable: boolean }[] = [
+    { label: PRODUCTION_TASK_LABELS.copywriting, task: progress.copywriting, applicable: true },
+    { label: PRODUCTION_TASK_LABELS.script, task: progress.script, applicable: true },
+    { label: PRODUCTION_TASK_LABELS.rawFootage, task: progress.rawFootage, applicable: progress.footageMode === 'shoot' },
+    { label: PRODUCTION_TASK_LABELS.editing, task: progress.editing, applicable: progress.editingMode === true },
+    { label: PRODUCTION_TASK_LABELS.demo, task: progress.demo, applicable: true },
+  ];
+
+  for (const { label, task, applicable } of checks) {
+    if (!applicable) continue;
+    if (task.done && !(task.hours && task.hours > 0)) {
+      return `${label} 完成時請填寫工時（> 0）`;
+    }
+  }
+  return null;
+}
 
 export const VIDEO_WORKFLOW_STAGE_LABELS: Record<VideoWorkflowStage, string> = {
   prep: '準備中',
