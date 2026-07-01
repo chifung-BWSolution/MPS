@@ -170,3 +170,4 @@ Cursor 應自動完成：
 |----------|----------|--------|----------|
 | 2026-06-29 | PRD-工作匯報自動關聯-v2.0 | Dylan | `docs/development_plan/2026-06-29/PRD-工作匯報自動關聯-v2.0.html` |
 | 2026-06-29 | PRD-影片製作模塊-業務需求方案-v1.0 | Dylan | `docs/development_plan/2026-06-29/PRD-影片製作模塊-業務需求方案-v1.0.html` |
+| 2026-07-01 | PRD-影片製作模塊-子模塊重構方案-v1.0 | Dylan | `docs/development_plan/2026-07-01/PRD-影片製作模塊-子模塊重構方案-v1.0.html` |

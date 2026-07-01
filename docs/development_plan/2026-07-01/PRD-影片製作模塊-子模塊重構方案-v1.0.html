@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>影片製作模塊 — 子模塊重構方案 v1.0</title>
+  <style>
+    :root {
+      --teal-50: #f0fdfa;
+      --teal-100: #ccfbf1;
+      --teal-600: #0d9488;
+      --teal-700: #0f766e;
+      --teal-800: #115e59;
+      --slate-50: #f8fafc;
+      --slate-100: #f1f5f9;
+      --slate-200: #e2e8f0;
+      --slate-600: #475569;
+      --slate-700: #334155;
+      --slate-800: #1e293b;
+      --slate-900: #0f172a;
+      --amber-50: #fffbeb;
+      --amber-600: #d97706;
+      --rose-50: #fff1f2;
+      --rose-600: #e11d48;
+      --font: "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font); font-size: 15px; line-height: 1.7; color: var(--slate-800); background: var(--slate-100); }
+    .hero { background: linear-gradient(135deg, var(--teal-700) 0%, var(--slate-900) 100%); color: #fff; padding: 48px 32px 56px; }
+    .hero-inner { max-width: 960px; margin: 0 auto; }
+    .hero h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 12px; }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: 16px; font-size: 0.875rem; opacity: 0.85; margin-bottom: 24px; }
+    .hero-summary { font-size: 1.05rem; max-width: 760px; opacity: 0.95; line-height: 1.65; }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+    .badge { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); }
+    .container { max-width: 960px; margin: 0 auto; padding: 32px 24px 64px; }
+    section { background: #fff; border-radius: 12px; border: 1px solid var(--slate-200); padding: 28px 32px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(15,23,42,0.04); }
+    h2 { font-size: 1.25rem; font-weight: 700; color: var(--teal-800); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--teal-100); }
+    h3 { font-size: 1rem; font-weight: 600; color: var(--slate-700); margin: 20px 0 10px; }
+    h4 { font-size: 0.9rem; font-weight: 600; color: var(--slate-700); margin: 14px 0 8px; }
+    p { margin-bottom: 12px; }
+    ul, ol { margin: 0 0 12px 1.25rem; }
+    li { margin-bottom: 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; margin: 12px 0 16px; }
+    th, td { border: 1px solid var(--slate-200); padding: 10px 12px; text-align: left; vertical-align: top; }
+    th { background: var(--teal-50); font-weight: 600; color: var(--teal-800); }
+    tr:nth-child(even) td { background: var(--slate-50); }
+    code { font-family: Consolas, monospace; font-size: 0.82em; background: var(--slate-100); padding: 2px 6px; border-radius: 4px; color: var(--teal-700); }
+    pre { background: var(--slate-900); color: #e2e8f0; padding: 16px; border-radius: 8px; font-family: Consolas, monospace; font-size: 0.78rem; overflow-x: auto; margin: 12px 0; line-height: 1.5; }
+    .flow { background: var(--slate-900); color: #e2e8f0; padding: 16px; border-radius: 8px; font-family: Consolas, monospace; font-size: 0.8rem; overflow-x: auto; white-space: pre-wrap; margin: 12px 0; }
+    .callout { background: var(--amber-50); border-left: 4px solid var(--amber-600); padding: 14px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 0.9rem; }
+    .callout-ok { background: var(--teal-50); border-left-color: var(--teal-600); }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; margin-right: 4px; }
+    .tag-p0 { background: #fecaca; color: #991b1b; }
+    .tag-p1 { background: #fde68a; color: #92400e; }
+    .tag-p2 { background: var(--slate-200); color: var(--slate-700); }
+    .tag-ok { background: #bbf7d0; color: #166534; }
+    .nav-tree { background: var(--slate-50); border: 1px solid var(--slate-200); border-radius: 8px; padding: 16px 20px; font-family: Consolas, monospace; font-size: 0.85rem; line-height: 1.8; margin: 12px 0; }
+  </style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-inner">
+    <h1>影片製作模塊 — 子模塊重構方案</h1>
+    <div class="hero-meta">
+      <span>版本 v1.0</span>
+      <span>規劃日期 2026-07-01</span>
+      <span>編寫人 Dylan</span>
+      <span>類型 PRD / 產品需求</span>
+    </div>
+    <p class="hero-summary">
+      本方案將「影片製作」模塊由單一 Excel 式大表（影片管理），重構為<strong>按製作流水線分工的 6 個子模塊</strong>。
+      前 4 個流程頁（拍攝排期 → 影片製作 → 影片審核 → 影片發佈）Phase 1 使用 Mock 數據；
+      影片統籌與頻道設定沿用真實後端。核心原則：<strong>同一影片主數據、強制流程順序、職能分頁操作</strong>。
+    </p>
+    <div class="badge-row">
+      <span class="badge">6 個子模塊</span>
+      <span class="badge">強制流程</span>
+      <span class="badge">Phase 1 Mock</span>
+      <span class="badge">雙軌數據</span>
+      <span class="badge">關聯 PRD v1.0 業務方案</span>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+  <section id="meta">
+    <h2>文檔資訊</h2>
+    <table>
+      <tr><th>項目</th><th>內容</th></tr>
+      <tr><td>編寫人</td><td>Dylan</td></tr>
+      <tr><td>規劃日期</td><td>2026-07-01</td></tr>
+      <tr><td>版本</td><td>v1.0</td></tr>
+      <tr><td>對照規格</td><td><code>docs/05-Page-Specifications/Video.md</code>、<code>src/components/video/*</code></td></tr>
+      <tr><td>關聯 PRD</td><td><code>PRD-影片製作模塊-業務需求方案-v1.0</code>（2026-06-29，Excel 數位化 BRD）</td></tr>
+      <tr><td>存放路徑</td><td><code>docs/development_plan/2026-07-01/PRD-影片製作模塊-子模塊重構方案-v1.0.html</code></td></tr>
+      <tr><td>iframe URL</td><td><code>/development_plan/2026-07-01/PRD-影片製作模塊-子模塊重構方案-v1.0.html</code></td></tr>
+    </table>
+  </section>
+
+  <section id="background">
+    <h2>一、背景與目標</h2>
+    <h3>1.1 現狀</h3>
+    <ul>
+      <li>側邊欄現有：頻道管理、影片管理、拍攝排期（3 項）。</li>
+      <li><code>VideoManagementModule</code> 承載過多功能：製作節點、審核、平台發佈、工時等，橫向 15+ 欄大表。</li>
+      <li>拍攝排期頁（<code>ShootingScheduleModule</code>）使用 mock 數據，未與 <code>video_output</code> 對接。</li>
+      <li>審核（<code>reviewed</code>）與平台發佈（<code>PlatformPublishModal</code>）均嵌在影片管理表內。</li>
+    </ul>
+    <h3>1.2 重構目標</h3>
+    <ol>
+      <li>按製作流水線拆分 UI，不同角色在專屬子頁操作。</li>
+      <li>建立強制流程：拍攝排期 → 影片製作 → 影片審核 → 影片發佈。</li>
+      <li>「影片統籌」保留全局視角（原「影片管理」改名），可查看所有狀態影片。</li>
+      <li>Phase 1 前 4 流程頁用 Mock 快速驗證 UX；統籌與頻道設定保持真實 DB。</li>
+    </ol>
+    <div class="callout callout-ok">
+      <strong>本階段不做：</strong>字幕、審核角色權限、舊頁面（影片列表 / 片庫 / 發佈追蹤）清理、Mock 接 DB、統籌大表全面瘦身。
+    </div>
+  </section>
+
+  <section id="ia">
+    <h2>二、信息架構（側邊欄）</h2>
+    <h3>2.1 子模塊順序（定稿）</h3>
+    <div class="nav-tree">影片製作
+├── 1. 拍攝排期      /video/schedule
+├── 2. 影片製作      /video/production
+├── 3. 影片審核      /video/review
+├── 4. 影片發佈      /video/publish
+├── 5. 影片統籌      /video/coordination   ← 原「影片管理」
+└── 6. 頻道設定      /video/channels       ← 原「頻道管理」</div>
+    <p>過渡期：<code>/video/management</code> 重定向至 <code>/video/coordination</code>。</p>
+
+    <h3>2.2 路由與數據來源</h3>
+    <table>
+      <tr><th>序</th><th>路由</th><th>標籤</th><th>數據來源</th><th>說明</th></tr>
+      <tr><td>1</td><td><code>/video/schedule</code></td><td>拍攝排期</td><td><strong>Mock</strong></td><td>日曆 + 準備清單</td></tr>
+      <tr><td>2</td><td><code>/video/production</code></td><td>影片製作</td><td><strong>Mock</strong></td><td>素材 + 剪輯</td></tr>
+      <tr><td>3</td><td><code>/video/review</code></td><td>影片審核</td><td><strong>Mock</strong></td><td>通過 / 拒絕</td></tr>
+      <tr><td>4</td><td><code>/video/publish</code></td><td>影片發佈</td><td><strong>Mock</strong></td><td>多平台發佈</td></tr>
+      <tr><td>5</td><td><code>/video/coordination</code></td><td>影片統籌</td><td><strong>真實 DB</strong></td><td>原 VideoManagementModule</td></tr>
+      <tr><td>6</td><td><code>/video/channels</code></td><td>頻道設定</td><td><strong>真實 DB</strong></td><td>原 VideoChannelsList</td></tr>
+    </table>
+  </section>
+
+  <section id="data-strategy">
+    <h2>三、數據策略（Phase 1）</h2>
+    <table>
+      <tr><th>頁面</th><th>數據來源</th><th>說明</th></tr>
+      <tr><td>拍攝排期 / 製作 / 審核 / 發佈</td><td>Mock store（前端）</td><td>獨立 <code>VideoWorkflowMock</code>，不接 DB</td></tr>
+      <tr><td>影片統籌</td><td>真實 DB（<code>video_output</code>）</td><td>現有邏輯不變，看全部狀態</td></tr>
+      <tr><td>頻道設定</td><td>真實 DB（Vchannel）</td><td>現有邏輯不變</td></tr>
+    </table>
+    <div class="callout">
+      <strong>雙軌並存（已定稿）：</strong>統籌看真實 DB、流程頁看 Mock。統籌新建影片<strong>不</strong>同步寫入 Mock store。兩套數據 Phase 1 獨立運行，Phase 5 再合併。
+    </div>
+    <h3>3.1 Mock 存儲建議</h3>
+    <ul>
+      <li><code>src/data/videoWorkflowMock.ts</code> — seed 數據</li>
+      <li><code>src/hooks/useVideoWorkflow.ts</code> — 狀態管理（可選 localStorage 持久化）</li>
+      <li>Model 選人：可從 <code>confirmed_artist</code> <strong>只讀</strong>拉列表（已有 Supabase）</li>
+      <li>系統用戶選人：復用 <code>fetchStaffDirectoryOptions</code>（與 <code>VideoEditModal</code> 一致）</li>
+    </ul>
+  </section>
+
+  <section id="workflow">
+    <h2>四、強制流程狀態機</h2>
+    <div class="flow">prep（準備中）
+  │  拍攝排期頁可操作
+  │  手動點「進入製作」（準備項齊全後 enabled）
+  ▼
+production（製作中）
+  │  影片製作頁可操作
+  │  demoDone = true → 自動進入 review
+  ▼
+review（待審核）
+  │  影片審核頁可操作
+  │  通過 → publish；拒絕 + 理由 → 退回 production（保留 demoDone）
+  ▼
+publish（待發佈）
+  │  影片發佈頁可操作
+  │  發佈完成 → published
+  ▼
+published（已發佈）</div>
+
+    <h3>4.1 流程規則（定稿）</h3>
+    <table>
+      <tr><th>規則</th><th>說明</th></tr>
+      <tr><td>順序</td><td>排期 → 製作 → 審核 → 發佈，不可跳步</td></tr>
+      <tr><td>各流程頁</td><td>只顯示、只編輯<strong>當前階段</strong>影片；跨階段操作 UI 禁用 + 提示</td></tr>
+      <tr><td>影片統籌</td><td>顯示<strong>所有階段</strong>影片，不受流程限制</td></tr>
+      <tr><td>進入製作</td><td><strong>手動按鈕</strong>；準備項全部指派後 enabled，不自動推進</td></tr>
+      <tr><td>審核拒絕</td><td><code>stage</code> 退回 <code>production</code>；<strong>保留 demoDone</strong>；寫入 <code>reviewRejectReason</code></td></tr>
+      <tr><td>審核權限</td><td>暫無角色權限限制</td></tr>
+      <tr><td>字幕</td><td>本階段不做</td></tr>
+    </table>
+
+    <h3>4.2 階段代碼</h3>
+    <table>
+      <tr><th>階段</th><th>代碼</th><th>可操作頁面</th></tr>
+      <tr><td>準備中</td><td><code>prep</code></td><td>拍攝排期</td></tr>
+      <tr><td>製作中</td><td><code>production</code></td><td>影片製作</td></tr>
+      <tr><td>待審核</td><td><code>review</code></td><td>影片審核</td></tr>
+      <tr><td>待發佈</td><td><code>publish</code></td><td>影片發佈</td></tr>
+      <tr><td>已發佈</td><td><code>published</code></td><td>只讀</td></tr>
+    </table>
+  </section>
+
+  <section id="modules">
+    <h2>五、各子模塊規格</h2>
+
+    <h3>5.1 拍攝排期（Mock） <span class="tag tag-p0">P0</span></h3>
+    <p><strong>定位：</strong>單頁雙視圖 — 日曆 + 準備清單。</p>
+    <h4>視圖 A：日曆</h4>
+    <ul>
+      <li>按 <code>shootAt</code> 展示 upcoming 拍攝</li>
+      <li>點擊進入該影片準備詳情</li>
+    </ul>
+    <h4>視圖 B：準備清單</h4>
+    <ul>
+      <li>篩選 <code>stage === 'prep'</code></li>
+      <li>每支影片需完成以下指派（每項 = 人員 + 時間，除非另有說明）</li>
+    </ul>
+    <table>
+      <tr><th>準備項</th><th>人員來源</th><th>備註</th></tr>
+      <tr><td>文案</td><td>系統用戶</td><td>獨立一條（人 + 時間）</td></tr>
+      <tr><td>腳本</td><td>系統用戶</td><td>獨立一條（人 + 時間）</td></tr>
+      <tr><td>Model</td><td>藝人管理（<code>confirmed_artist</code>）</td><td>藝人 + 到場時間</td></tr>
+      <tr><td>場地</td><td>—</td><td>SZ / HK 勾選 + 備註（無完整地址欄）</td></tr>
+      <tr><td>攝影師</td><td>系統用戶</td><td>人 + 時間</td></tr>
+      <tr><td>到場人員</td><td>系統用戶</td><td>可多行，每行 人 + 時間</td></tr>
+    </table>
+    <p><strong>「進入製作」按鈕：</strong>全部準備項已指派 → enabled；點擊 → <code>stage = 'production'</code>；未齊 → disabled + tooltip。</p>
+
+    <h3>5.2 影片製作（Mock） <span class="tag tag-p0">P0</span></h3>
+    <ul>
+      <li>列表：<code>stage === 'production'</code>（含審核拒絕退回）</li>
+      <li>可編輯：<code>rawFootageDone</code>、<code>needsEditing</code>、<code>demoDone</code>、<code>storagePath</code></li>
+      <li>工時（可選）：復用 <code>VideoWorkLogEditor</code></li>
+      <li><code>demoDone = true</code> → 自動 <code>stage = 'review'</code></li>
+      <li>審核拒絕退回：頂部展示 <code>reviewRejectReason</code>（只讀）；<code>demoDone</code> 仍為 true</li>
+    </ul>
+
+    <h3>5.3 影片審核（Mock） <span class="tag tag-p0">P0</span></h3>
+    <ul>
+      <li>列表：<code>stage === 'review'</code></li>
+      <li><strong>通過</strong> → <code>stage = 'publish'</code>，記錄 <code>reviewedAt</code>、<code>reviewedBy</code></li>
+      <li><strong>拒絕</strong> → 彈窗必填理由 → <code>stage = 'production'</code>，保留 <code>demoDone</code></li>
+      <li>參考信息（只讀）：主題、Demo 連結、準備/製作摘要</li>
+    </ul>
+
+    <h3>5.4 影片發佈（Mock） <span class="tag tag-p0">P0</span></h3>
+    <ul>
+      <li>列表：<code>stage === 'publish'</code></li>
+      <li>復用 <code>PlatformPublishModal</code> + 11 平台矩陣 + URL</li>
+      <li><code>plannedPublishDate</code> / <code>publishedDate</code>、複製發佈文案</li>
+      <li>發佈完成 → <code>stage = 'published'</code></li>
+    </ul>
+
+    <h3>5.5 影片統籌（真實 DB） <span class="tag tag-p1">P1 優化</span></h3>
+    <ul>
+      <li>現 <code>VideoManagementModule</code> 改名，路由 <code>coordination</code></li>
+      <li>看全部 <code>video_output</code> 記錄；新建、Asana、項目分類等主檔維護</li>
+      <li>Phase 1：保留現有大表；審核/發佈 UI 可暫留，Phase 4 再遷出</li>
+      <li>與 Mock 流程頁無數據聯動</li>
+    </ul>
+
+    <h3>5.6 頻道設定（真實 DB）</h3>
+    <ul>
+      <li>現 <code>VideoChannelsList</code>，標籤改為「頻道設定」</li>
+      <li>Vchannel 代碼、公開名稱、平台帳號、重要性等 — 功能不變</li>
+    </ul>
+  </section>
+
+  <section id="mock-model">
+    <h2>六、Mock 數據模型（定稿）</h2>
+    <pre>type VideoWorkflowStage = 'prep' | 'production' | 'review' | 'publish' | 'published';
+
+type StaffAssignment = {
+  userId: string;
+  displayName: string;
+  scheduledAt?: string;  // 計劃時間 ISO
+};
+
+type ModelAssignment = {
+  talentId: string;       // confirmed_artist.id
+  displayName: string;
+  scheduledAt?: string;
+};
+
+type VideoWorkflowMock = {
+  id: string;
+  vchannelCode: string;
+  videoCode: string;
+  title: string;
+  stage: VideoWorkflowStage;
+
+  // 拍攝排期 / 準備
+  shootAt?: string;
+  location: { sz?: boolean; hk?: boolean; notes?: string };
+  copywriting?: StaffAssignment;   // 文案
+  script?: StaffAssignment;        // 腳本
+  model?: ModelAssignment;
+  photographer?: StaffAssignment;
+  onSiteCrew?: StaffAssignment[];
+
+  // 影片製作
+  rawFootageDone?: boolean;
+  needsEditing?: boolean | null;
+  demoDone?: boolean;
+  storagePath?: string;
+
+  // 審核
+  reviewRejectReason?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+
+  // 發佈
+  plannedPublishDate?: string;
+  publishedDate?: string;
+  platformPublish?: PlatformPublishMap;
+};</pre>
+
+    <h3>6.1 Mock Seed 建議</h3>
+    <table>
+      <tr><th>#</th><th>title</th><th>stage</th><th>用途</th></tr>
+      <tr><td>1</td><td>待準備示範片</td><td><code>prep</code></td><td>拍攝排期頁演示</td></tr>
+      <tr><td>2</td><td>製作中示範片</td><td><code>production</code></td><td>影片製作頁演示</td></tr>
+      <tr><td>3</td><td>待審核示範片</td><td><code>review</code></td><td>影片審核頁演示</td></tr>
+      <tr><td>4</td><td>待發佈示範片</td><td><code>publish</code></td><td>影片發佈頁演示</td></tr>
+      <tr><td>5</td><td>已發佈示範片</td><td><code>published</code></td><td>全流程完成對照</td></tr>
+    </table>
+  </section>
+
+  <section id="reuse">
+    <h2>七、現有代碼復用</h2>
+    <table>
+      <tr><th>現有組件 / 服務</th><th>復用到</th></tr>
+      <tr><td><code>VideoChannelsList</code></td><td>頻道設定</td></tr>
+      <tr><td><code>VideoManagementModule</code></td><td>影片統籌（漸進瘦身）</td></tr>
+      <tr><td><code>PlatformPublishModal</code></td><td>影片發佈</td></tr>
+      <tr><td><code>VideoWorkLogEditor</code> + <code>fetchStaffDirectoryOptions</code></td><td>製作工時、人員選擇</td></tr>
+      <tr><td><code>confirmed_artist</code> 查詢</td><td>Model picker</td></tr>
+      <tr><td><code>ShootingScheduleModule</code> 日曆 UI</td><td>拍攝排期日曆視圖</td></tr>
+    </table>
+  </section>
+
+  <section id="out-of-scope">
+    <h2>八、範圍外（本階段明確不做）</h2>
+    <table>
+      <tr><th>項目</th><th>決策</th></tr>
+      <tr><td>字幕</td><td>不做</td></tr>
+      <tr><td>審核角色權限</td><td>不做</td></tr>
+      <tr><td>VideoListModule（卡片 5 階段）</td><td>暫不處理</td></tr>
+      <tr><td>DistributionTrackingModule（發佈追蹤）</td><td>暫不處理</td></tr>
+      <tr><td>VideoLibrary（片庫）</td><td>暫不處理</td></tr>
+      <tr><td>Mock 接 DB</td><td>Phase 5 再做</td></tr>
+      <tr><td>統籌 ↔ Mock 數據同步</td><td>Phase 1 不做</td></tr>
+    </table>
+  </section>
+
+  <section id="phases">
+    <h2>九、實施分期</h2>
+    <table>
+      <tr><th>階段</th><th>範圍</th><th>交付物</th></tr>
+      <tr><td>Phase 1</td><td>信息架構 + Mock 層 + 4 流程空殼頁</td><td>側邊欄 6 項、路由、Mock hook + seed</td></tr>
+      <tr><td>Phase 2</td><td>拍攝排期（Mock）</td><td>日曆 + 準備清單 + 進入製作 + Model/人員選擇</td></tr>
+      <tr><td>Phase 3</td><td>影片製作 + 審核（Mock）</td><td>製作 checkbox、通過/拒絕 + 理由、退回製作</td></tr>
+      <tr><td>Phase 4</td><td>影片發佈（Mock）+ 統籌瘦身</td><td>遷移 PlatformPublish；統籌移除審核/發佈操作</td></tr>
+      <tr><td>Phase 5</td><td>後端對接</td><td>Mock 字段 migration；流程頁切換真實 API；雙軌合併</td></tr>
+    </table>
+
+    <h3>9.1 Phase 1 任務拆分</h3>
+    <table>
+      <tr><th>序</th><th>任務</th><th>範圍</th></tr>
+      <tr><td>1</td><td>更新 AppContext 子選單</td><td>6 項順序 + 路由 + 重定向</td></tr>
+      <tr><td>2</td><td>Mock 數據層</td><td>types + seed + hook</td></tr>
+      <tr><td>3</td><td>拍攝排期頁</td><td>日曆 + 準備清單 + 進入製作</td></tr>
+      <tr><td>4</td><td>影片製作頁</td><td>製作 checkbox + 拒絕理由展示</td></tr>
+      <tr><td>5</td><td>影片審核頁</td><td>通過/拒絕 + 理由彈窗</td></tr>
+      <tr><td>6</td><td>影片發佈頁</td><td>遷移 PlatformPublish 組件</td></tr>
+      <tr><td>7</td><td>影片統籌</td><td>改名 + 路由；功能不變</td></tr>
+      <tr><td>8</td><td>頻道設定</td><td>標籤改名</td></tr>
+    </table>
+  </section>
+
+  <section id="decisions">
+    <h2>十、定稿決策清單</h2>
+    <table>
+      <tr><th>項目</th><th>定稿</th></tr>
+      <tr><td>側邊欄順序</td><td>排期 → 製作 → 審核 → 發佈 → 統籌 → 頻道</td></tr>
+      <tr><td>拍攝排期結構</td><td>單頁：日曆 + 準備清單</td></tr>
+      <tr><td>影片統籌</td><td>原「影片管理」改名，非 dashboard 重定位</td></tr>
+      <tr><td>文案 / 腳本</td><td>各一條（人 + 時間）</td></tr>
+      <tr><td>Model</td><td>對接藝人管理 <code>confirmed_artist</code></td></tr>
+      <tr><td>場地</td><td>SZ/HK 勾選 + 備註</td></tr>
+      <tr><td>數據雙軌</td><td>接受；統籌 DB + 流程 Mock，不同步</td></tr>
+      <tr><td>進入製作</td><td>手動按鈕</td></tr>
+      <tr><td>審核拒絕</td><td>保留 demoDone，只退階段 + 理由</td></tr>
+      <tr><td>審核權限</td><td>暫無</td></tr>
+      <tr><td>字幕</td><td>不做</td></tr>
+      <tr><td>舊頁面</td><td>暫不處理</td></tr>
+    </table>
+  </section>
+
+  <section id="dev-plan">
+    <h2>十一、與 06-development_plan.md 的關聯</h2>
+    <table>
+      <tr><th>項目</th><th>值</th></tr>
+      <tr><td>規劃日期</td><td>2026-07-01</td></tr>
+      <tr><td>內容標題</td><td>PRD-影片製作模塊-子模塊重構方案-v1.0</td></tr>
+      <tr><td>編寫人</td><td>Dylan</td></tr>
+      <tr><td>文檔路徑</td><td><code>docs/development_plan/2026-07-01/PRD-影片製作模塊-子模塊重構方案-v1.0.html</code></td></tr>
+      <tr><td>iframe URL</td><td><code>/development_plan/2026-07-01/PRD-影片製作模塊-子模塊重構方案-v1.0.html</code></td></tr>
+    </table>
+    <h3>11.1 development_plan 註冊 SQL</h3>
+    <div class="flow">INSERT INTO public.development_plan (
+  planning_date, title, owner, document_path, file_name
+) VALUES (
+  '2026-07-01',
+  'PRD-影片製作模塊-子模塊重構方案-v1.0',
+  'Dylan',
+  'docs/development_plan/2026-07-01/PRD-影片製作模塊-子模塊重構方案-v1.0.html',
+  'PRD-影片製作模塊-子模塊重構方案-v1.0.html'
+) ON CONFLICT (document_path) DO NOTHING;</div>
+  </section>
+
+</div>
+</body>
+</html>
