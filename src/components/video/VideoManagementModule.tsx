@@ -5,20 +5,21 @@ import { useVideoOutput } from '@/hooks/useVideoOutput';
 import { useVchannels } from '@/hooks/useVchannels';
 import type { VideoOutput, VideoOutputInput, VideoOutputStatus, VideoProjectCategory } from '@/types/videoOutput';
 import {
-  MEDIA_PLATFORM_PUBLISH_KEYS,
   PLATFORM_PUBLISH_LABELS,
   VIDEO_OUTPUT_STATUS_COLORS,
   VIDEO_OUTPUT_STATUS_LABELS,
   countPublishedPlatforms,
   deriveVideoOutputStatus,
   filterVideoOutputs,
+  formatPlatformPublishCopyText,
   formatPublishDate,
   formatShootLocation,
   formatStorageOrLink,
   getPlatformUrl,
+  getPublishedPlatformKeys,
+  getPublishedPlatformKeysWithUrl,
   inferProjectCategory,
   isHttpUrl,
-  isPlatformPublished,
   resolveChannelPrefixFromCode,
 } from '@/lib/videoOutputUtils';
 import { CrudModal } from '@/components/ui/crud-modal';
@@ -108,49 +109,81 @@ function PlatformPublishRow({
   platformPublish: VideoOutput['platformPublish'];
   onPublish: () => void;
 }) {
+  const [copyDone, setCopyDone] = useState(false);
+  const publishedKeys = getPublishedPlatformKeys(platformPublish);
+  const copyableKeys = getPublishedPlatformKeysWithUrl(platformPublish);
+  const canCopy = copyableKeys.length > 0;
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const text = formatPlatformPublishCopyText(platformPublish);
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyDone(true);
+      setTimeout(() => setCopyDone(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
   return (
     <div className="px-4 py-3 bg-slate-50/80 border-t border-border/60">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[11px] font-bold text-muted-foreground">平台發佈</p>
-        <button
-          type="button"
-          onClick={e => {
-            e.stopPropagation();
-            onPublish();
-          }}
-          className="flex items-center gap-1 px-2.5 py-1 bg-teal-600 text-white rounded text-[11px] font-medium hover:bg-teal-700 transition-colors"
-        >
-          <Plus size={11} /> 發佈
-        </button>
+        <div className="flex items-center gap-1.5">
+          {canCopy && (
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="flex items-center gap-1 px-2.5 py-1 border border-border/60 bg-white text-muted-foreground rounded text-[11px] font-medium hover:bg-muted/50 transition-colors"
+            >
+              <Copy size={11} /> {copyDone ? '已複製' : '複製'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation();
+              onPublish();
+            }}
+            className="flex items-center gap-1 px-2.5 py-1 bg-teal-600 text-white rounded text-[11px] font-medium hover:bg-teal-700 transition-colors"
+          >
+            <Plus size={11} /> 發佈
+          </button>
+        </div>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-        {MEDIA_PLATFORM_PUBLISH_KEYS.map(key => {
-          const published = isPlatformPublished(platformPublish, key);
-          const url = getPlatformUrl(platformPublish, key);
-          return (
-            <div key={key} className="flex items-center gap-2 text-[11px] bg-white border border-border/60 rounded px-2 py-1.5 min-w-0">
-              <CheckCell value={published} />
-              <span className="text-muted-foreground shrink-0">{PLATFORM_PUBLISH_LABELS[key]}</span>
-              {url && (
-                isHttpUrl(url) ? (
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={e => e.stopPropagation()}
-                    className="truncate text-teal-700 hover:underline ml-auto min-w-0"
-                    title={url}
-                  >
-                    鏈接
-                  </a>
-                ) : (
-                  <span className="truncate text-teal-700 ml-auto min-w-0" title={url}>{url}</span>
-                )
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {publishedKeys.length === 0 ? (
+        <p className="text-[12px] text-muted-foreground py-1">尚未發佈任何平台</p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+          {publishedKeys.map(key => {
+            const url = getPlatformUrl(platformPublish, key);
+            return (
+              <div key={key} className="flex items-center gap-2 text-[11px] bg-white border border-border/60 rounded px-2 py-1.5 min-w-0">
+                <CheckCell value />
+                <span className="text-muted-foreground shrink-0">{PLATFORM_PUBLISH_LABELS[key]}</span>
+                {url && (
+                  isHttpUrl(url) ? (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      className="truncate text-teal-700 hover:underline ml-auto min-w-0"
+                      title={url}
+                    >
+                      鏈接
+                    </a>
+                  ) : (
+                    <span className="truncate text-teal-700 ml-auto min-w-0" title={url}>{url}</span>
+                  )
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

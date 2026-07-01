@@ -91,6 +91,20 @@ export function firstPublishedPlatformUrl(platformPublish: PlatformPublishMap): 
   return undefined;
 }
 
+export function getPublishedPlatformKeys(platformPublish: PlatformPublishMap): PlatformPublishKey[] {
+  return MEDIA_PLATFORM_PUBLISH_KEYS.filter(k => isPlatformPublished(platformPublish, k));
+}
+
+export function getPublishedPlatformKeysWithUrl(platformPublish: PlatformPublishMap): PlatformPublishKey[] {
+  return MEDIA_PLATFORM_PUBLISH_KEYS.filter(k => !!getPlatformUrl(platformPublish, k));
+}
+
+export function formatPlatformPublishCopyText(platformPublish: PlatformPublishMap): string {
+  return getPublishedPlatformKeysWithUrl(platformPublish)
+    .map(key => `${PLATFORM_PUBLISH_LABELS[key]}：${getPlatformUrl(platformPublish, key)}`)
+    .join('\n');
+}
+
 export const VIDEO_OUTPUT_STATUS_LABELS: Record<VideoOutputStatus, string> = {
   pending: '待製作',
   in_production: '製作中',
