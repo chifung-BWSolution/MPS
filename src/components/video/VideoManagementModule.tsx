@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, Copy, Loader2, Plus, Search } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Copy, Edit, Loader2, Plus, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVideoOutput } from '@/hooks/useVideoOutput';
 import { useVchannels } from '@/hooks/useVchannels';
@@ -23,6 +23,11 @@ import { CrudModal } from '@/components/ui/crud-modal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { VideoEditModal } from '@/components/video/VideoEditModal';
+import { saveWorkLogsForVideo } from '@/services/videoOutputWorkLogService';
+import { resolveBubbleStaffId } from '@/services/reportLinkService';
+import { useAuth } from '@/context/AuthContext';
+import type { VideoWorkLogDraft } from '@/types/videoOutputWorkLog';
 
 const STATUS_FILTERS: { id: 'all' | VideoOutputStatus; label: string }[] = [
   { id: 'all', label: '全部' },
@@ -106,7 +111,8 @@ const emptyForm = (): VideoOutputInput & { shootLocationHk: boolean; shootLocati
 });
 
 export function VideoManagementModule() {
-  const { videos, loading, error, addVideo } = useVideoOutput();
+  const { systemUser } = useAuth();
+  const { videos, loading, error, addVideo, updateVideo } = useVideoOutput();
   const { channels } = useVchannels();
 
   const [vchannelFilter, setVchannelFilter] = useState('all');
@@ -115,6 +121,7 @@ export function VideoManagementModule() {
   const [statusFilter, setStatusFilter] = useState<'all' | VideoOutputStatus>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingVideo, setEditingVideo] = useState<VideoOutput | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -193,6 +200,24 @@ export function VideoManagementModule() {
     }
     setShowAddModal(false);
   };
+
+  const handleSaveEdit = async (input: Partial<VideoOutputInput>, workLogs: VideoWorkLogDraft[]) => {
+    if (!editingVideo) return new Error('未選擇影片');
+    const err = await updateVideo(editingVideo.id, input);
+    if (err) return err instanceof Error ? err : new Error('更新影片失敗');
+    try {
+      const staffId = await resolveBubbleStaffId(systemUser);
+      await saveWorkLogsForVideo(editingVideo.id, workLogs, staffId ?? undefined);
+    } catch (e) {
+      return e instanceof Error ? e : new Error('保存工時失敗');
+    }
+    return null;
+  };
+
+  const channelOptions = useMemo(
+    () => channels.map(ch => ({ id: ch.id, channelCode: ch.channelCode, publicName: ch.publicName })),
+    [channels],
+  );
 
   if (loading) {
     return (
@@ -314,6 +339,7 @@ export function VideoManagementModule() {
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">狀態</th>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">發佈日期</th>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground min-w-[160px]">視頻鏈接/保存地址</th>
+              <th className="w-16 px-2 py-2.5 font-medium text-muted-foreground text-center">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -369,10 +395,20 @@ export function VideoManagementModule() {
                       </span>
                     </td>
                     <td className="px-3 py-2.5 align-middle"><StorageLinkCell value={storage} /></td>
+                    <td className="px-2 py-2.5 align-middle text-center">
+                      <button
+                        type="button"
+                        onClick={() => setEditingVideo(video)}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-teal-50 text-teal-700"
+                        title="編輯"
+                      >
+                        <Edit size={13} />
+                      </button>
+                    </td>
                   </tr>
                   {isExpanded && (
                     <tr className="border-t border-border/30">
-                      <td colSpan={12} className="p-0">
+                      <td colSpan={13} className="p-0">
                         <PlatformPublishRow platformPublish={video.platformPublish} />
                       </td>
                     </tr>
@@ -513,6 +549,15 @@ export function VideoManagementModule() {
           </div>
         </div>
       </CrudModal>
+
+      {editingVideo && (
+        <VideoEditModal
+          video={editingVideo}
+          channels={channelOptions}
+          onClose={() => setEditingVideo(null)}
+          onSave={handleSaveEdit}
+        />
+      )}
     </div>
   );
 }
