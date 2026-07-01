@@ -11,6 +11,8 @@ export function resolveSubModule(module: string, sub?: string): string {
   const menuItem = mainMenuItems.find(m => m.id === module);
   const defaultSub = menuItem?.subMenus[0]?.id || 'overview';
   if (!sub) return defaultSub;
+  // Legacy alias: 影片管理 → 影片統籌
+  if (module === 'video' && sub === 'management') return 'coordination';
   return menuItem?.subMenus.some(s => s.id === sub) ? sub : defaultSub;
 }
 
@@ -109,9 +111,12 @@ export const mainMenuItems: MainMenuItem[] = [
     id: 'video',
     label: '影片製作',
     subMenus: [
-      { id: 'channels', label: '頻道管理' },
-      { id: 'management', label: '影片管理' },
       { id: 'schedule', label: '拍攝排期' },
+      { id: 'production', label: '影片製作' },
+      { id: 'review', label: '影片審核' },
+      { id: 'publish', label: '影片發佈' },
+      { id: 'coordination', label: '影片統籌' },
+      { id: 'channels', label: '頻道設定' },
     ],
   },
   {
