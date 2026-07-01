@@ -20,11 +20,17 @@ export type VideoWorkflowLocation = {
   notes?: string;
 };
 
+export type VideoWorkflowDeviceSuffix = 'D' | 'M' | null;
+
 export type VideoWorkflowMock = {
   id: string;
+  vchannelId?: string;
   vchannelCode: string;
   videoCode: string;
   title: string;
+  deviceType?: VideoWorkflowDeviceSuffix;
+  productionYear?: number;
+  createdAt?: string;
   stage: VideoWorkflowStage;
   shootAt?: string;
   location: VideoWorkflowLocation;

@@ -17,6 +17,8 @@ type VideoWorkflowContextValue = {
   videos: VideoWorkflowMock[];
   getById: (id: string) => VideoWorkflowMock | undefined;
   getByStage: (stage: VideoWorkflowStage) => VideoWorkflowMock[];
+  getPreReviewVideos: () => VideoWorkflowMock[];
+  addVideo: (payload: Omit<VideoWorkflowMock, 'id' | 'stage' | 'createdAt'>) => string;
   updateVideo: (id: string, patch: VideoWorkflowUpdate) => void;
   advanceToProduction: (id: string) => string | null;
   submitForReview: (id: string) => void;
@@ -54,6 +56,24 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
     (stage: VideoWorkflowStage) => videos.filter(v => v.stage === stage),
     [videos],
   );
+
+  const getPreReviewVideos = useCallback(
+    () => videos.filter(v => v.stage === 'prep' || v.stage === 'production'),
+    [videos],
+  );
+
+  const addVideo = useCallback((payload: Omit<VideoWorkflowMock, 'id' | 'stage' | 'createdAt'>) => {
+    const id = `wf-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const video: VideoWorkflowMock = {
+      ...payload,
+      id,
+      stage: 'prep',
+      location: payload.location ?? { sz: false, hk: false },
+      createdAt: new Date().toISOString(),
+    };
+    setVideos(prev => [video, ...prev]);
+    return id;
+  }, []);
 
   const updateVideo = useCallback((id: string, patch: VideoWorkflowUpdate) => {
     setVideos(prev =>
@@ -114,6 +134,8 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
       videos,
       getById,
       getByStage,
+      getPreReviewVideos,
+      addVideo,
       updateVideo,
       advanceToProduction,
       submitForReview,
@@ -126,6 +148,8 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
       videos,
       getById,
       getByStage,
+      getPreReviewVideos,
+      addVideo,
       updateVideo,
       advanceToProduction,
       submitForReview,

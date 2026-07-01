@@ -3,267 +3,68 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
-  List,
+  Edit2,
   Loader2,
   MapPin,
   Plus,
-  Trash2,
+  Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVideoWorkflow } from '@/hooks/useVideoWorkflow';
+import { useVchannels } from '@/hooks/useVchannels';
 import { fetchStaffDirectoryOptions } from '@/services/videoOutputWorkLogService';
 import { supabase } from '@/lib/supabase';
-import type { ModelAssignment, StaffAssignment, VideoWorkflowMock } from '@/types/videoWorkflow';
+import type { VideoWorkflowMock } from '@/types/videoWorkflow';
 import {
-  formatAssignmentWhen,
   formatLocation,
   getPrepMissingItems,
   isPrepComplete,
   VIDEO_WORKFLOW_STAGE_COLORS,
+  VIDEO_WORKFLOW_STAGE_LABELS,
 } from '@/lib/videoWorkflowUtils';
-import { StaffAssignmentField } from '@/components/video/workflow/StaffAssignmentField';
+import { ScheduleEditModal } from '@/components/video/workflow/ScheduleEditModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-type ViewMode = 'calendar' | 'list';
 type TalentOption = { id: string; displayName: string };
 
-function ModelAssignmentField({
-  value,
-  talentOptions,
-  onChange,
-}: {
-  value?: ModelAssignment;
-  talentOptions: TalentOption[];
-  onChange: (next?: ModelAssignment) => void;
-}) {
-  return (
-    <div className="border border-border/60 rounded-md p-3 bg-slate-50/50 space-y-2">
-      <p className="text-[12px] font-semibold text-slate-700">Model</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <div>
-          <label className="text-[11px] text-muted-foreground block mb-1">藝人</label>
-          <Select
-            value={value?.talentId ?? ''}
-            onValueChange={id => {
-              const t = talentOptions.find(x => x.id === id);
-              onChange({ talentId: id, displayName: t?.displayName ?? id, scheduledAt: value?.scheduledAt ?? '' });
-            }}
-          >
-            <SelectTrigger className="h-8 text-[12px]">
-              <SelectValue placeholder="從藝人列表選擇" />
-            </SelectTrigger>
-            <SelectContent>
-              {talentOptions.map(t => (
-                <SelectItem key={t.id} value={t.id}>{t.displayName}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <label className="text-[11px] text-muted-foreground block mb-1">到場時間</label>
-          <Input
-            type="datetime-local"
-            value={value?.scheduledAt ?? ''}
-            onChange={e => {
-              if (!value?.talentId) return;
-              onChange({ ...value, scheduledAt: e.target.value });
-            }}
-            className="h-8 text-[12px]"
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PrepDetailPanel({
-  video,
-  staffOptions,
-  talentOptions,
-  onUpdate,
-  onEnterProduction,
-}: {
-  video: VideoWorkflowMock;
-  staffOptions: { staffId: string; displayName: string }[];
-  talentOptions: TalentOption[];
-  onUpdate: (patch: Partial<VideoWorkflowMock>) => void;
-  onEnterProduction: () => void;
-}) {
-  const [enterError, setEnterError] = useState<string | null>(null);
-  const prepReady = isPrepComplete(video);
-  const missing = getPrepMissingItems(video);
-
-  const handleEnter = () => {
-    setEnterError(null);
-    if (!prepReady) {
-      setEnterError(`尚有未完成的準備項：${missing.join('、')}`);
-      return;
-    }
-    onEnterProduction();
-  };
-
-  const updateCrew = (index: number, next?: StaffAssignment) => {
-    const crew = [...(video.onSiteCrew ?? [])];
-    if (next) crew[index] = next;
-    else crew.splice(index, 1);
-    onUpdate({ onSiteCrew: crew });
-  };
-
-  return (
-    <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-4 space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[11px] text-muted-foreground">{video.videoCode} · {video.vchannelCode}</p>
-          <h3 className="text-[16px] font-bold mt-0.5">{video.title}</h3>
-        </div>
-        <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded shrink-0', VIDEO_WORKFLOW_STAGE_COLORS.prep)}>
-          準備中
-        </span>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="text-[11px] text-muted-foreground block mb-1">拍攝日期</label>
-          <Input
-            type="date"
-            value={video.shootAt ?? ''}
-            onChange={e => onUpdate({ shootAt: e.target.value })}
-            className="h-8 text-[12px]"
-          />
-        </div>
-        <div className="border border-border/60 rounded-md p-3 bg-slate-50/50">
-          <p className="text-[12px] font-semibold text-slate-700 mb-2">場地</p>
-          <div className="flex items-center gap-4 mb-2">
-            <label className="flex items-center gap-1.5 text-[12px]">
-              <input
-                type="checkbox"
-                checked={!!video.location?.sz}
-                onChange={e => onUpdate({ location: { ...video.location, sz: e.target.checked } })}
-              />
-              深圳
-            </label>
-            <label className="flex items-center gap-1.5 text-[12px]">
-              <input
-                type="checkbox"
-                checked={!!video.location?.hk}
-                onChange={e => onUpdate({ location: { ...video.location, hk: e.target.checked } })}
-              />
-              香港
-            </label>
-          </div>
-          <Input
-            value={video.location?.notes ?? ''}
-            onChange={e => onUpdate({ location: { ...video.location, notes: e.target.value } })}
-            placeholder="備註"
-            className="h-8 text-[12px]"
-          />
-        </div>
-      </div>
-
-      <StaffAssignmentField
-        label="文案"
-        value={video.copywriting}
-        staffOptions={staffOptions}
-        onChange={copywriting => onUpdate({ copywriting })}
-      />
-      <StaffAssignmentField
-        label="腳本"
-        value={video.script}
-        staffOptions={staffOptions}
-        onChange={script => onUpdate({ script })}
-      />
-      <ModelAssignmentField
-        value={video.model}
-        talentOptions={talentOptions}
-        onChange={model => onUpdate({ model })}
-      />
-      <StaffAssignmentField
-        label="攝影師"
-        value={video.photographer}
-        staffOptions={staffOptions}
-        onChange={photographer => onUpdate({ photographer })}
-      />
-
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="text-[12px] font-semibold text-slate-700">到場人員</p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 text-[11px] gap-1"
-            onClick={() =>
-              onUpdate({
-                onSiteCrew: [...(video.onSiteCrew ?? []), { userId: '', displayName: '', scheduledAt: '' }],
-              })
-            }
-          >
-            <Plus size={11} /> 新增
-          </Button>
-        </div>
-        {(video.onSiteCrew ?? []).length === 0 ? (
-          <p className="text-[12px] text-muted-foreground bg-muted/30 rounded px-3 py-2">尚未添加到場人員</p>
-        ) : (
-          (video.onSiteCrew ?? []).map((member, index) => (
-            <div key={index} className="relative">
-              <StaffAssignmentField
-                label={`到場人員 #${index + 1}`}
-                value={member.userId ? member : undefined}
-                staffOptions={staffOptions}
-                onChange={next => updateCrew(index, next)}
-              />
-              <button
-                type="button"
-                onClick={() => updateCrew(index)}
-                className="absolute top-2 right-2 text-rose-500 hover:text-rose-700 p-1"
-                title="移除"
-              >
-                <Trash2 size={13} />
-              </button>
-            </div>
-          ))
-        )}
-      </div>
-
-      {enterError && (
-        <p className="text-[12px] text-rose-600 bg-rose-50 border border-rose-200 rounded px-3 py-2">{enterError}</p>
-      )}
-      {!prepReady && !enterError && (
-        <p className="text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-          待完成：{missing.join('、')}
-        </p>
-      )}
-
-      <Button
-        type="button"
-        className="w-full bg-teal-600 hover:bg-teal-700 text-white"
-        disabled={!prepReady}
-        onClick={handleEnter}
-      >
-        進入製作
-      </Button>
-    </div>
-  );
-}
-
 export function VideoScheduleModule() {
-  const { getByStage, getById, updateVideo, advanceToProduction } = useVideoWorkflow();
-  const prepVideos = getByStage('prep');
-  const [viewMode, setViewMode] = useState<ViewMode>('calendar');
+  const { getPreReviewVideos, getById, addVideo, updateVideo, advanceToProduction } = useVideoWorkflow();
+  const { channels } = useVchannels();
+
+  const [vchannelFilter, setVchannelFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [currentMonth, setCurrentMonth] = useState(() => new Date());
-  const [selectedId, setSelectedId] = useState<string | null>(() => prepVideos[0]?.id ?? null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [staffOptions, setStaffOptions] = useState<{ staffId: string; displayName: string }[]>([]);
   const [talentOptions, setTalentOptions] = useState<TalentOption[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!selectedId && prepVideos[0]) setSelectedId(prepVideos[0].id);
-    if (selectedId && !prepVideos.find(v => v.id === selectedId)) {
-      setSelectedId(prepVideos[0]?.id ?? null);
-    }
-  }, [prepVideos, selectedId]);
+  const preReviewVideos = getPreReviewVideos();
+
+  const filteredVideos = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const filterChannel = vchannelFilter !== 'all' ? channels.find(c => c.id === vchannelFilter) : null;
+    return preReviewVideos
+      .filter(v => {
+        if (filterChannel) {
+          const matchId = v.vchannelId === filterChannel.id;
+          const matchCode = v.vchannelCode === filterChannel.channelCode;
+          if (!matchId && !matchCode) return false;
+        }
+        if (!q) return true;
+        return v.title.toLowerCase().includes(q) || v.videoCode.toLowerCase().includes(q);
+      })
+      .sort((a, b) => (b.createdAt ?? b.videoCode).localeCompare(a.createdAt ?? a.videoCode));
+  }, [preReviewVideos, vchannelFilter, searchQuery, channels]);
+
+  const calendarVideos = useMemo(
+    () => preReviewVideos.filter(v => v.shootAt),
+    [preReviewVideos],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -271,10 +72,7 @@ export function VideoScheduleModule() {
       try {
         const [staffList, talentRes] = await Promise.all([
           fetchStaffDirectoryOptions(),
-          supabase
-            .from('confirmed_artist')
-            .select('id, name_zh, name_en')
-            .order('name_zh'),
+          supabase.from('confirmed_artist').select('id, name_zh, name_en').order('name_zh'),
         ]);
         if (cancelled) return;
         setStaffOptions(staffList);
@@ -291,8 +89,6 @@ export function VideoScheduleModule() {
     return () => { cancelled = true; };
   }, []);
 
-  const selectedVideo = selectedId ? getById(selectedId) : undefined;
-
   const calendarDays = useMemo(() => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
@@ -303,15 +99,58 @@ export function VideoScheduleModule() {
     for (let i = 0; i < startPad; i++) cells.push({ date: null, items: [] });
     for (let d = 1; d <= daysInMonth; d++) {
       const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      cells.push({
-        date,
-        items: prepVideos.filter(v => v.shootAt === date),
-      });
+      cells.push({ date, items: calendarVideos.filter(v => v.shootAt === date) });
     }
     return cells;
-  }, [currentMonth, prepVideos]);
+  }, [currentMonth, calendarVideos]);
 
   const monthLabel = `${currentMonth.getFullYear()}年${currentMonth.getMonth() + 1}月`;
+  const editingVideo = editingId ? getById(editingId) ?? null : null;
+
+  const openNew = () => {
+    setEditingId(null);
+    setModalOpen(true);
+  };
+
+  const openEdit = (id: string) => {
+    setEditingId(id);
+    setModalOpen(true);
+  };
+
+  const handleSave = async (
+    payload: Partial<VideoWorkflowMock>,
+    isNew: boolean,
+  ): Promise<{ error: string | null; id?: string }> => {
+    if (isNew) {
+      if (!payload.vchannelCode || !payload.videoCode || !payload.title?.trim()) {
+        return { error: '請填寫完整基本資訊' };
+      }
+      const id = addVideo({
+        vchannelId: payload.vchannelId,
+        vchannelCode: payload.vchannelCode,
+        videoCode: payload.videoCode,
+        title: payload.title.trim(),
+        deviceType: payload.deviceType ?? null,
+        productionYear: payload.productionYear,
+        shootAt: payload.shootAt,
+        location: payload.location ?? { sz: false, hk: false },
+        copywriting: payload.copywriting,
+        script: payload.script,
+        model: payload.model,
+        photographer: payload.photographer,
+        onSiteCrew: payload.onSiteCrew,
+      });
+      setEditingId(id);
+      return { error: null, id };
+    }
+    if (!editingId) return { error: '找不到影片' };
+    updateVideo(editingId, payload);
+    return { error: null, id: editingId };
+  };
+
+  const handleEnterProduction = async (videoId: string): Promise<string | null> => {
+    return advanceToProduction(videoId);
+  };
 
   if (loading) {
     return (
@@ -323,137 +162,142 @@ export function VideoScheduleModule() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1 bg-muted rounded-md p-0.5">
-          <button
-            type="button"
-            onClick={() => setViewMode('calendar')}
-            className={cn(
-              'flex items-center gap-1 px-3 py-1.5 rounded text-[12px] font-medium transition-colors',
-              viewMode === 'calendar' ? 'bg-white shadow-sm text-teal-800' : 'text-muted-foreground',
-            )}
-          >
-            <Calendar size={12} /> 日曆
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('list')}
-            className={cn(
-              'flex items-center gap-1 px-3 py-1.5 rounded text-[12px] font-medium transition-colors',
-              viewMode === 'list' ? 'bg-white shadow-sm text-teal-800' : 'text-muted-foreground',
-            )}
-          >
-            <List size={12} /> 準備清單
-          </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={vchannelFilter} onValueChange={setVchannelFilter}>
+          <SelectTrigger className="h-9 w-[180px] text-[12px]">
+            <SelectValue placeholder="Vchannel" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部 Vchannel</SelectItem>
+            {channels.map(ch => (
+              <SelectItem key={ch.id} value={ch.id}>{ch.channelCode} — {ch.publicName}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="relative flex-1 min-w-[180px] max-w-[280px]">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="搜尋主題或 Video Code…"
+            className="h-9 pl-9 text-[12px]"
+          />
         </div>
-        <p className="text-[12px] text-muted-foreground">{prepVideos.length} 部待準備</p>
+        <Button type="button" className="ml-auto h-9 bg-teal-600 hover:bg-teal-700 text-white text-[12px] gap-1.5" onClick={openNew}>
+          <Plus size={14} /> 新建影片
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <div className="space-y-3">
-          {viewMode === 'calendar' ? (
-            <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-4">
-              <div className="flex items-center justify-between mb-4">
-                <button type="button" onClick={() => setCurrentMonth(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="p-1 rounded hover:bg-muted">
-                  <ChevronLeft size={16} />
-                </button>
-                <span className="text-[14px] font-bold">{monthLabel}</span>
-                <button type="button" onClick={() => setCurrentMonth(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))} className="p-1 rounded hover:bg-muted">
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-              <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-muted-foreground mb-1">
-                {['日', '一', '二', '三', '四', '五', '六'].map(d => <div key={d}>{d}</div>)}
-              </div>
-              <div className="grid grid-cols-7 gap-1">
-                {calendarDays.map((cell, idx) => (
-                  <div
-                    key={idx}
-                    className={cn(
-                      'min-h-[72px] border border-border/40 rounded p-1 text-left',
-                      cell.date ? 'bg-white' : 'bg-muted/20',
-                    )}
-                  >
-                    {cell.date && (
-                      <>
-                        <span className="text-[10px] text-muted-foreground">{Number(cell.date.slice(8))}</span>
-                        <div className="space-y-0.5 mt-0.5">
-                          {cell.items.map(item => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => setSelectedId(item.id)}
-                              className={cn(
-                                'w-full text-left text-[9px] px-1 py-0.5 rounded truncate',
-                                selectedId === item.id ? 'bg-teal-600 text-white' : 'bg-teal-50 text-teal-800 hover:bg-teal-100',
-                              )}
-                            >
-                              {item.title}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-4">
+        <div className="space-y-2 min-h-[320px]">
+          <p className="text-[12px] text-muted-foreground">
+            未審核前 {filteredVideos.length} 部（準備中 + 製作中）
+          </p>
+          {filteredVideos.length === 0 ? (
+            <div className="text-center py-12 text-[13px] text-muted-foreground bg-white rounded-md border">
+              沒有符合條件的影片
             </div>
           ) : (
-            <div className="space-y-2">
-              {prepVideos.length === 0 ? (
-                <div className="text-center py-12 text-[13px] text-muted-foreground bg-white rounded-md border">目前沒有待準備的影片</div>
-              ) : (
-                prepVideos.map(video => (
-                  <button
-                    key={video.id}
-                    type="button"
-                    onClick={() => setSelectedId(video.id)}
-                    className={cn(
-                      'w-full text-left bg-white rounded-md border p-3 transition-all',
-                      selectedId === video.id ? 'border-teal-500 shadow-card' : 'border-[rgba(13,26,45,0.08)] hover:shadow-card',
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-[11px] text-muted-foreground">{video.videoCode}</p>
-                        <p className="text-[14px] font-bold">{video.title}</p>
-                        <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[11px] text-muted-foreground">
-                          {video.shootAt && (
-                            <span className="flex items-center gap-1"><Calendar size={10} />{video.shootAt}</span>
-                          )}
-                          <span className="flex items-center gap-1"><MapPin size={10} />{formatLocation(video.location)}</span>
-                        </div>
-                      </div>
-                      <span className={cn('text-[10px] px-2 py-0.5 rounded shrink-0', isPrepComplete(video) ? 'bg-teal-100 text-teal-700' : 'bg-amber-100 text-amber-700')}>
-                        {isPrepComplete(video) ? '可進製作' : `${getPrepMissingItems(video).length} 項待完成`}
+            filteredVideos.map(video => (
+              <div
+                key={video.id}
+                className={cn(
+                  'bg-white rounded-md border p-3 transition-all',
+                  highlightId === video.id ? 'border-teal-500 shadow-card' : 'border-[rgba(13,26,45,0.08)] hover:shadow-card',
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                      <p className="text-[11px] font-mono text-muted-foreground">{video.videoCode}</p>
+                      <span className={cn('text-[10px] px-1.5 py-0.5 rounded', VIDEO_WORKFLOW_STAGE_COLORS[video.stage])}>
+                        {VIDEO_WORKFLOW_STAGE_LABELS[video.stage]}
                       </span>
                     </div>
-                  </button>
-                ))
-              )}
-            </div>
+                    <p className="text-[14px] font-bold truncate">{video.title}</p>
+                    <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[11px] text-muted-foreground">
+                      <span>{video.vchannelCode}</span>
+                      {video.shootAt ? (
+                        <span className="flex items-center gap-1"><Calendar size={10} />{video.shootAt}</span>
+                      ) : (
+                        <span className="text-amber-600">待排期</span>
+                      )}
+                      <span className="flex items-center gap-1"><MapPin size={10} />{formatLocation(video.location)}</span>
+                    </div>
+                    {video.stage === 'prep' && (
+                      <p className="text-[11px] mt-1 text-muted-foreground">
+                        {isPrepComplete(video) ? '準備已完成，可進製作' : `待完成 ${getPrepMissingItems(video).length} 項`}
+                      </p>
+                    )}
+                  </div>
+                  <Button type="button" variant="outline" size="sm" className="h-8 text-[11px] gap-1 shrink-0"
+                    onClick={() => openEdit(video.id)}>
+                    <Edit2 size={12} /> 編輯
+                  </Button>
+                </div>
+              </div>
+            ))
           )}
         </div>
 
-        <div>
-          {selectedVideo ? (
-            <PrepDetailPanel
-              video={selectedVideo}
-              staffOptions={staffOptions}
-              talentOptions={talentOptions}
-              onUpdate={patch => updateVideo(selectedVideo.id, patch)}
-              onEnterProduction={() => {
-                const err = advanceToProduction(selectedVideo.id);
-                if (err) alert(err);
-              }}
-            />
-          ) : (
-            <div className="text-center py-16 text-[13px] text-muted-foreground bg-white rounded-md border">
-              選擇左側影片以編輯準備工作
-            </div>
-          )}
+        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-4 h-fit xl:sticky xl:top-20">
+          <div className="flex items-center justify-between mb-4">
+            <button type="button" onClick={() => setCurrentMonth(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="p-1 rounded hover:bg-muted">
+              <ChevronLeft size={16} />
+            </button>
+            <span className="text-[14px] font-bold">{monthLabel}</span>
+            <button type="button" onClick={() => setCurrentMonth(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))} className="p-1 rounded hover:bg-muted">
+              <ChevronRight size={16} />
+            </button>
+          </div>
+          <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-muted-foreground mb-1">
+            {['日', '一', '二', '三', '四', '五', '六'].map(d => <div key={d}>{d}</div>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {calendarDays.map((cell, idx) => (
+              <div
+                key={idx}
+                className={cn(
+                  'min-h-[64px] border border-border/40 rounded p-1 text-left',
+                  cell.date ? 'bg-white' : 'bg-muted/20',
+                )}
+              >
+                {cell.date && (
+                  <>
+                    <span className="text-[10px] text-muted-foreground">{Number(cell.date.slice(8))}</span>
+                    <div className="space-y-0.5 mt-0.5">
+                      {cell.items.map(item => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setHighlightId(item.id)}
+                          className={cn(
+                            'w-full text-left text-[9px] px-1 py-0.5 rounded truncate',
+                            highlightId === item.id ? 'bg-teal-600 text-white' : 'bg-teal-50 text-teal-800 hover:bg-teal-100',
+                          )}
+                        >
+                          {item.title}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
+
+      <ScheduleEditModal
+        open={modalOpen}
+        video={editingVideo}
+        channels={channels}
+        staffOptions={staffOptions}
+        talentOptions={talentOptions}
+        onClose={() => { setModalOpen(false); setEditingId(null); }}
+        onSave={handleSave}
+        onEnterProduction={editingVideo?.stage === 'prep' || !editingVideo ? handleEnterProduction : undefined}
+      />
     </div>
   );
 }

@@ -18,11 +18,8 @@ import {
   getPlatformUrl,
   getPublishedPlatformKeys,
   getPublishedPlatformKeysWithUrl,
-  inferProjectCategory,
   isHttpUrl,
-  resolveChannelPrefixFromCode,
 } from '@/lib/videoOutputUtils';
-import { CrudModal } from '@/components/ui/crud-modal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -188,26 +185,9 @@ function PlatformPublishRow({
   );
 }
 
-const emptyForm = (): VideoOutputInput & { shootLocationHk: boolean; shootLocationSz: boolean } => ({
-  vchannelId: '',
-  videoCode: '',
-  title: '',
-  productionYear: new Date().getFullYear(),
-  projectCategory: 'client',
-  shootSz: false,
-  shootHk: false,
-  shootLocationHk: false,
-  shootLocationSz: false,
-  rawFootageDone: false,
-  needsEditing: null,
-  demoDone: false,
-  platformPublish: {},
-  storagePath: '',
-});
-
 export function VideoManagementModule() {
   const { systemUser } = useAuth();
-  const { videos, loading, error, addVideo, updateVideo } = useVideoOutput();
+  const { videos, loading, error, updateVideo } = useVideoOutput();
   const { channels } = useVchannels();
 
   const [vchannelFilter, setVchannelFilter] = useState('all');
@@ -215,12 +195,8 @@ export function VideoManagementModule() {
   const [categoryFilter, setCategoryFilter] = useState<'all' | VideoProjectCategory>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | VideoOutputStatus>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [showAddModal, setShowAddModal] = useState(false);
   const [editingVideo, setEditingVideo] = useState<VideoOutput | null>(null);
   const [publishingVideo, setPublishingVideo] = useState<VideoOutput | null>(null);
-  const [form, setForm] = useState(emptyForm);
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
 
   const filteredVideos = useMemo(
@@ -239,64 +215,6 @@ export function VideoManagementModule() {
     const published = videos.filter(v => deriveVideoOutputStatus(v) === 'published').length;
     return { total: videos.length, demoDone, published };
   }, [videos]);
-
-  const channelMap = useMemo(() => new Map(channels.map(c => [c.channelCode, c])), [channels]);
-
-  const resolveVchannelId = (videoCode: string, selectedId?: string) => {
-    if (selectedId) return selectedId;
-    const prefix = resolveChannelPrefixFromCode(videoCode);
-    return channelMap.get(prefix)?.id ?? '';
-  };
-
-  const handleOpenAdd = () => {
-    setForm(emptyForm());
-    setFormError(null);
-    setShowAddModal(true);
-  };
-
-  const handleSubmit = async () => {
-    setFormError(null);
-    if (!form.videoCode.trim()) {
-      setFormError('請輸入 Video Code');
-      return;
-    }
-    if (!form.title.trim()) {
-      setFormError('請輸入主題');
-      return;
-    }
-    const vchannelId = resolveVchannelId(form.videoCode, form.vchannelId);
-    if (!vchannelId) {
-      setFormError('無法匹配 Vchannel，請選擇頻道或修正 Video Code 前綴');
-      return;
-    }
-
-    setSaving(true);
-    const err = await addVideo({
-      vchannelId,
-      videoCode: form.videoCode.trim(),
-      title: form.title.trim(),
-      productionYear: form.productionYear,
-      projectCategory: form.projectCategory ?? inferProjectCategory(resolveChannelPrefixFromCode(form.videoCode)),
-      shootSz: form.shootLocationSz,
-      shootHk: form.shootLocationHk,
-      rawFootageDone: form.rawFootageDone,
-      needsEditing: form.needsEditing,
-      demoDone: form.demoDone,
-      storagePath: form.storagePath?.trim() || undefined,
-      platformPublish: form.platformPublish,
-      asanaTaskId: form.asanaTaskId,
-      asanaUrl: form.asanaUrl,
-      plannedPublishDate: form.plannedPublishDate,
-      publishedDate: form.publishedDate,
-    });
-    setSaving(false);
-
-    if (err) {
-      setFormError(typeof err === 'object' && err && 'message' in err ? String((err as { message: string }).message) : '儲存失敗');
-      return;
-    }
-    setShowAddModal(false);
-  };
 
   const handleSavePublish = async (input: Partial<VideoOutputInput>) => {
     if (!publishingVideo) return new Error('未選擇影片');
@@ -420,14 +338,6 @@ export function VideoManagementModule() {
             </button>
           ))}
         </div>
-
-        <button
-          type="button"
-          onClick={handleOpenAdd}
-          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700 transition-colors duration-200"
-        >
-          <Plus size={12} /> 新增影片
-        </button>
       </div>
 
       <p className="text-[12px] text-muted-foreground">
@@ -566,132 +476,6 @@ export function VideoManagementModule() {
       {filteredVideos.length === 0 && (
         <div className="text-center py-12 text-muted-foreground text-[13px]">沒有符合條件的影片</div>
       )}
-
-      <CrudModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="新增影片" size="lg">
-        <div className="space-y-4">
-          {formError && (
-            <p className="text-[12px] text-rose-600 bg-rose-50 border border-rose-200 rounded px-3 py-2">{formError}</p>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-[12px] font-medium mb-1 block">Vchannel</label>
-              <Select
-                value={form.vchannelId || 'auto'}
-                onValueChange={v => setForm(f => ({ ...f, vchannelId: v === 'auto' ? '' : v }))}
-              >
-                <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="依 Video Code 自動匹配" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="auto">依 Video Code 自動匹配</SelectItem>
-                  {channels.map(ch => (
-                    <SelectItem key={ch.id} value={ch.id}>{ch.channelCode} — {ch.publicName}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-[12px] font-medium mb-1 block">年份</label>
-              <Input
-                type="number"
-                value={form.productionYear ?? ''}
-                onChange={e => setForm(f => ({ ...f, productionYear: parseInt(e.target.value, 10) || undefined }))}
-                className="h-9 text-[13px]"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-[12px] font-medium mb-1 block">Video Code *</label>
-            <Input
-              value={form.videoCode}
-              onChange={e => setForm(f => ({ ...f, videoCode: e.target.value }))}
-              placeholder="V11-2026-003M 或 V12/V14-2025-003"
-              className="h-9 text-[13px] font-mono"
-            />
-          </div>
-
-          <div>
-            <label className="text-[12px] font-medium mb-1 block">主題 *</label>
-            <Input
-              value={form.title}
-              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-              className="h-9 text-[13px]"
-            />
-          </div>
-
-          <div>
-            <label className="text-[12px] font-medium mb-1 block">視頻保存地址 / 鏈接</label>
-            <Input
-              value={form.storagePath ?? ''}
-              onChange={e => setForm(f => ({ ...f, storagePath: e.target.value }))}
-              placeholder="V:\... 或 https://..."
-              className="h-9 text-[13px]"
-            />
-          </div>
-
-          <div>
-            <label className="text-[12px] font-medium mb-2 block">拍攝地址</label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 text-[13px]">
-                <input
-                  type="checkbox"
-                  checked={form.shootLocationHk}
-                  onChange={e => setForm(f => ({ ...f, shootLocationHk: e.target.checked }))}
-                />
-                香港
-              </label>
-              <label className="flex items-center gap-2 text-[13px]">
-                <input
-                  type="checkbox"
-                  checked={form.shootLocationSz}
-                  onChange={e => setForm(f => ({ ...f, shootLocationSz: e.target.checked }))}
-                />
-                深圳
-              </label>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-[13px]">
-              <input type="checkbox" checked={form.rawFootageDone} onChange={e => setForm(f => ({ ...f, rawFootageDone: e.target.checked }))} />
-              原片拍攝
-            </label>
-            <label className="flex items-center gap-2 text-[13px]">
-              <input
-                type="checkbox"
-                checked={form.needsEditing === true}
-                onChange={e => setForm(f => ({ ...f, needsEditing: e.target.checked }))}
-              />
-              是否剪輯
-            </label>
-            <label className="flex items-center gap-2 text-[13px]">
-              <input type="checkbox" checked={form.demoDone} onChange={e => setForm(f => ({ ...f, demoDone: e.target.checked }))} />
-              Demo 完成
-            </label>
-          </div>
-
-          <div>
-            <label className="text-[12px] font-medium mb-1 block">項目類型</label>
-            <Select
-              value={form.projectCategory ?? 'client'}
-              onValueChange={v => setForm(f => ({ ...f, projectCategory: v as VideoProjectCategory }))}
-            >
-              <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="internal">內部項目</SelectItem>
-                <SelectItem value="client">客戶項目</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" size="sm" onClick={() => setShowAddModal(false)}>取消</Button>
-            <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSubmit} disabled={saving}>
-              {saving ? '儲存中...' : '建立影片'}
-            </Button>
-          </div>
-        </div>
-      </CrudModal>
 
       {editingVideo && (
         <VideoEditModal
