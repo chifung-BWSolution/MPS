@@ -3,6 +3,7 @@ import { Plus, Calendar, Search, Tag, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getAllVideos } from '@/data/marketingData';
 import { VideoListModule } from './VideoListModule';
+import { VideoManagementModule } from './VideoManagementModule';
 import { VideoChannelsList } from './VideoChannelsList';
 import { DistributionTrackingModule } from './DistributionTrackingModule';
 
@@ -163,6 +164,7 @@ export function VideoModule({ subModule }: { subModule?: string }) {
 
   const getTitle = () => {
     switch (activeTab) {
+      case 'management': return { title: '影片管理', subtitle: '管理 Excel 影片產出時間軸，含 Vchannel、製作節點與平台發佈。' };
       case 'list': return { title: '影片列表', subtitle: '管理所有影片及其製作進度。' };
       case 'channels': return { title: '頻道管理', subtitle: '管理頻道基本信息及相應平臺信息' };
       case 'schedule': return { title: '拍攝排期', subtitle: '查看拍攝日程及里程碑安排。' };
@@ -185,6 +187,7 @@ export function VideoModule({ subModule }: { subModule?: string }) {
       </div>
 
       {/* Content */}
+      {activeTab === 'management' && <VideoManagementModule />}
       {activeTab === 'list' && <VideoListModule />}
       {activeTab === 'channels' && <VideoChannelsList />}
       {activeTab === 'schedule' && <ShootingSchedule />}
