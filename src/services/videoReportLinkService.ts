@@ -8,6 +8,7 @@ import type { VideoOutput } from '@/types/videoOutput';
 import type { VideoWorkLogDraft } from '@/types/videoOutputWorkLog';
 import { VIDEO_WORK_LOG_TYPE_LABELS } from '@/types/videoOutputWorkLog';
 import { latestWorkDateForStaff, sumHoursForStaff } from '@/services/videoOutputWorkLogService';
+import { firstPublishedPlatformUrl } from '@/lib/videoOutputUtils';
 
 export type VideoPendingSyncResult =
   | { action: 'skipped'; reason: 'no_hours' | 'no_staff' | 'consumed' }
@@ -18,10 +19,12 @@ function resolveVideoSourceType(video: Pick<VideoOutput, 'publishedDate'>): stri
 }
 
 /** Only real video/output URLs — never fall back to Asana task links. */
-export function resolveVideoOutcomeUrl(video: Pick<VideoOutput, 'storagePath'>): string | undefined {
+export function resolveVideoOutcomeUrl(
+  video: Pick<VideoOutput, 'storagePath' | 'platformPublish'>,
+): string | undefined {
   const path = video.storagePath?.trim();
   if (path && /^https?:\/\//i.test(path)) return path;
-  return undefined;
+  return firstPublishedPlatformUrl(video.platformPublish);
 }
 
 export function buildVideoReportTitle(

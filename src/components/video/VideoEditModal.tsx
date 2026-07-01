@@ -2,10 +2,6 @@ import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { VideoOutput, VideoOutputInput, VideoProjectCategory } from '@/types/videoOutput';
 import type { VideoWorkLogDraft } from '@/types/videoOutputWorkLog';
-import {
-  PLATFORM_PUBLISH_KEYS,
-  PLATFORM_PUBLISH_LABELS,
-} from '@/lib/videoOutputUtils';
 import { CrudModal } from '@/components/ui/crud-modal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -73,7 +69,6 @@ export function VideoEditModal({ video, channels, onClose, onSave }: Props) {
     asanaUrl: video.asanaUrl ?? '',
     notes: video.notes ?? '',
     projectCategory: video.projectCategory as VideoProjectCategory,
-    platformPublish: { ...video.platformPublish },
   });
 
   useEffect(() => {
@@ -141,7 +136,6 @@ export function VideoEditModal({ video, channels, onClose, onSave }: Props) {
         asanaUrl: form.asanaUrl.trim() || undefined,
         notes: form.notes.trim() || undefined,
         projectCategory: form.projectCategory,
-        platformPublish: form.platformPublish,
       };
 
       const err = await onSave(input, workLogs);
@@ -173,7 +167,6 @@ export function VideoEditModal({ video, channels, onClose, onSave }: Props) {
           asanaUrl: input.asanaUrl,
           notes: input.notes,
           projectCategory: input.projectCategory ?? video.projectCategory,
-          platformPublish: input.platformPublish ?? video.platformPublish,
         };
         const syncResult = await syncVideoPendingReport(updatedVideo, workLogs, staffId);
         if (syncResult.action === 'created' || syncResult.action === 'updated') {
@@ -323,25 +316,6 @@ export function VideoEditModal({ video, channels, onClose, onSave }: Props) {
                 <input type="checkbox" checked={form.copyEn} onChange={e => setForm(f => ({ ...f, copyEn: e.target.checked }))} />
                 英文
               </label>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-[12px] font-medium mb-2 block">平台發佈</label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {PLATFORM_PUBLISH_KEYS.map(key => (
-                <label key={key} className="flex items-center gap-2 text-[12px] border border-border/60 rounded px-2 py-1.5">
-                  <input
-                    type="checkbox"
-                    checked={!!form.platformPublish[key]}
-                    onChange={e => setForm(f => ({
-                      ...f,
-                      platformPublish: { ...f.platformPublish, [key]: e.target.checked || undefined },
-                    }))}
-                  />
-                  {PLATFORM_PUBLISH_LABELS[key]}
-                </label>
-              ))}
             </div>
           </div>
 

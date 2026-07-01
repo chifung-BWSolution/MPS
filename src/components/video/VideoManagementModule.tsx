@@ -5,7 +5,7 @@ import { useVideoOutput } from '@/hooks/useVideoOutput';
 import { useVchannels } from '@/hooks/useVchannels';
 import type { VideoOutput, VideoOutputInput, VideoOutputStatus, VideoProjectCategory } from '@/types/videoOutput';
 import {
-  PLATFORM_PUBLISH_KEYS,
+  MEDIA_PLATFORM_PUBLISH_KEYS,
   PLATFORM_PUBLISH_LABELS,
   VIDEO_OUTPUT_STATUS_COLORS,
   VIDEO_OUTPUT_STATUS_LABELS,
@@ -15,8 +15,10 @@ import {
   formatPublishDate,
   formatShootLocation,
   formatStorageOrLink,
+  getPlatformUrl,
   inferProjectCategory,
   isHttpUrl,
+  isPlatformPublished,
   resolveChannelPrefixFromCode,
 } from '@/lib/videoOutputUtils';
 import { CrudModal } from '@/components/ui/crud-modal';
@@ -24,6 +26,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { VideoEditModal } from '@/components/video/VideoEditModal';
+import { PlatformPublishModal } from '@/components/video/PlatformPublishModal';
 import { saveWorkLogsForVideo } from '@/services/videoOutputWorkLogService';
 import { resolveBubbleStaffId } from '@/services/reportLinkService';
 import { useAuth } from '@/context/AuthContext';
@@ -98,17 +101,55 @@ function StorageLinkCell({ value }: { value: string }) {
   );
 }
 
-function PlatformPublishRow({ platformPublish }: { platformPublish: VideoOutput['platformPublish'] }) {
+function PlatformPublishRow({
+  platformPublish,
+  onPublish,
+}: {
+  platformPublish: VideoOutput['platformPublish'];
+  onPublish: () => void;
+}) {
   return (
     <div className="px-4 py-3 bg-slate-50/80 border-t border-border/60">
-      <p className="text-[11px] font-bold text-muted-foreground mb-2">平台發佈</p>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[11px] font-bold text-muted-foreground">平台發佈</p>
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation();
+            onPublish();
+          }}
+          className="flex items-center gap-1 px-2.5 py-1 bg-teal-600 text-white rounded text-[11px] font-medium hover:bg-teal-700 transition-colors"
+        >
+          <Plus size={11} /> 發佈
+        </button>
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-        {PLATFORM_PUBLISH_KEYS.map(key => (
-          <div key={key} className="flex items-center gap-2 text-[11px] bg-white border border-border/60 rounded px-2 py-1.5">
-            <CheckCell value={platformPublish[key]} />
-            <span className="text-muted-foreground">{PLATFORM_PUBLISH_LABELS[key]}</span>
-          </div>
-        ))}
+        {MEDIA_PLATFORM_PUBLISH_KEYS.map(key => {
+          const published = isPlatformPublished(platformPublish, key);
+          const url = getPlatformUrl(platformPublish, key);
+          return (
+            <div key={key} className="flex items-center gap-2 text-[11px] bg-white border border-border/60 rounded px-2 py-1.5 min-w-0">
+              <CheckCell value={published} />
+              <span className="text-muted-foreground shrink-0">{PLATFORM_PUBLISH_LABELS[key]}</span>
+              {url && (
+                isHttpUrl(url) ? (
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    className="truncate text-teal-700 hover:underline ml-auto min-w-0"
+                    title={url}
+                  >
+                    鏈接
+                  </a>
+                ) : (
+                  <span className="truncate text-teal-700 ml-auto min-w-0" title={url}>{url}</span>
+                )
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -143,6 +184,7 @@ export function VideoManagementModule() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingVideo, setEditingVideo] = useState<VideoOutput | null>(null);
+  const [publishingVideo, setPublishingVideo] = useState<VideoOutput | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -221,6 +263,13 @@ export function VideoManagementModule() {
       return;
     }
     setShowAddModal(false);
+  };
+
+  const handleSavePublish = async (input: Partial<VideoOutputInput>) => {
+    if (!publishingVideo) return new Error('未選擇影片');
+    const err = await updateVideo(publishingVideo.id, input);
+    if (err) return err instanceof Error ? err : new Error('更新發佈失敗');
+    return null;
   };
 
   const handleSaveEdit = async (input: Partial<VideoOutputInput>, workLogs: VideoWorkLogDraft[]) => {
@@ -467,7 +516,10 @@ export function VideoManagementModule() {
                   {isExpanded && (
                     <tr className="border-t border-border/30">
                       <td colSpan={16} className="p-0">
-                        <PlatformPublishRow platformPublish={video.platformPublish} />
+                        <PlatformPublishRow
+                          platformPublish={video.platformPublish}
+                          onPublish={() => setPublishingVideo(video)}
+                        />
                       </td>
                     </tr>
                   )}
@@ -614,6 +666,14 @@ export function VideoManagementModule() {
           channels={channelOptions}
           onClose={() => setEditingVideo(null)}
           onSave={handleSaveEdit}
+        />
+      )}
+
+      {publishingVideo && (
+        <PlatformPublishModal
+          video={publishingVideo}
+          onClose={() => setPublishingVideo(null)}
+          onSave={handleSavePublish}
         />
       )}
     </div>

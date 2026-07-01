@@ -7,6 +7,7 @@ export type PlatformPublishKey =
   | 'instagram'
   | 'facebook'
   | 'threads'
+  | 'linkedin'
   | 'xiaohongshu'
   | 'douyin'
   | 'wechat_channels'
@@ -14,7 +15,10 @@ export type PlatformPublishKey =
   | 'zh_cn'
   | 'zh_tw';
 
-export type PlatformPublishMap = Partial<Record<PlatformPublishKey, boolean>>;
+/** URL entry; legacy rows may still store `true` (published without URL). */
+export type PlatformPublishEntry = boolean | { url?: string };
+
+export type PlatformPublishMap = Partial<Record<PlatformPublishKey, PlatformPublishEntry>>;
 
 export interface VideoOutput {
   id: string;

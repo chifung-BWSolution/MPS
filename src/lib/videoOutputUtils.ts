@@ -7,31 +7,89 @@ import type {
   VideoProjectCategory,
 } from '@/types/videoOutput';
 
-export const PLATFORM_PUBLISH_KEYS: PlatformPublishKey[] = [
+/** Nine media platforms managed via the 發佈 modal. */
+export const MEDIA_PLATFORM_PUBLISH_KEYS: PlatformPublishKey[] = [
   'youtube',
   'instagram',
   'facebook',
   'threads',
+  'linkedin',
   'xiaohongshu',
   'douyin',
   'wechat_channels',
   'wechat_official',
-  'zh_cn',
-  'zh_tw',
 ];
+
+/** @deprecated Use MEDIA_PLATFORM_PUBLISH_KEYS for publish UI. */
+export const PLATFORM_PUBLISH_KEYS = MEDIA_PLATFORM_PUBLISH_KEYS;
 
 export const PLATFORM_PUBLISH_LABELS: Record<PlatformPublishKey, string> = {
   youtube: 'YouTube',
   instagram: 'IG',
   facebook: 'Facebook',
   threads: 'Threads',
+  linkedin: 'LinkedIn',
   xiaohongshu: '小紅書',
   douyin: '抖音',
-  wechat_channels: '微信視頻號',
+  wechat_channels: '影音號',
   wechat_official: '公眾號',
   zh_cn: '簡體中文',
   zh_tw: '繁體中文',
 };
+
+export function isPlatformPublished(
+  platformPublish: PlatformPublishMap,
+  key: PlatformPublishKey,
+): boolean {
+  const entry = platformPublish[key];
+  if (entry === true) return true;
+  if (entry && typeof entry === 'object') return !!entry.url?.trim();
+  return false;
+}
+
+export function getPlatformUrl(platformPublish: PlatformPublishMap, key: PlatformPublishKey): string {
+  const entry = platformPublish[key];
+  if (!entry || typeof entry !== 'object') return '';
+  return entry.url?.trim() ?? '';
+}
+
+export function mergePlatformUrls(
+  existing: PlatformPublishMap,
+  urls: Partial<Record<PlatformPublishKey, string>>,
+): PlatformPublishMap {
+  const merged: PlatformPublishMap = { ...existing };
+  for (const key of MEDIA_PLATFORM_PUBLISH_KEYS) {
+    if (!(key in urls)) continue;
+    const url = urls[key]?.trim();
+    if (url) {
+      merged[key] = { url };
+    } else {
+      const prev = existing[key];
+      // Only clear object entries; legacy boolean flags stay unless replaced with a URL
+      if (prev && typeof prev === 'object') {
+        delete merged[key];
+      }
+    }
+  }
+  return merged;
+}
+
+export function urlsFromPlatformPublish(platformPublish: PlatformPublishMap): Partial<Record<PlatformPublishKey, string>> {
+  const result: Partial<Record<PlatformPublishKey, string>> = {};
+  for (const key of MEDIA_PLATFORM_PUBLISH_KEYS) {
+    const url = getPlatformUrl(platformPublish, key);
+    if (url) result[key] = url;
+  }
+  return result;
+}
+
+export function firstPublishedPlatformUrl(platformPublish: PlatformPublishMap): string | undefined {
+  for (const key of MEDIA_PLATFORM_PUBLISH_KEYS) {
+    const url = getPlatformUrl(platformPublish, key);
+    if (url && isHttpUrl(url)) return url;
+  }
+  return undefined;
+}
 
 export const VIDEO_OUTPUT_STATUS_LABELS: Record<VideoOutputStatus, string> = {
   pending: '待製作',
@@ -67,8 +125,8 @@ export function deriveVideoOutputStatus(row: Pick<
 }
 
 export function countPublishedPlatforms(platformPublish: PlatformPublishMap): { done: number; total: number } {
-  const total = PLATFORM_PUBLISH_KEYS.length;
-  const done = PLATFORM_PUBLISH_KEYS.filter(k => platformPublish[k]).length;
+  const total = MEDIA_PLATFORM_PUBLISH_KEYS.length;
+  const done = MEDIA_PLATFORM_PUBLISH_KEYS.filter(k => isPlatformPublished(platformPublish, k)).length;
   return { done, total };
 }
 
@@ -80,11 +138,7 @@ export function formatPublishDate(row: Pick<VideoOutput, 'publishedDate' | 'plan
 
 export function formatStorageOrLink(row: Pick<VideoOutput, 'storagePath' | 'platformPublish'>) {
   if (row.storagePath?.trim()) return row.storagePath.trim();
-  for (const key of PLATFORM_PUBLISH_KEYS) {
-    // platform_publish only stores booleans in DB; URLs would be future extension
-    void key;
-  }
-  return '';
+  return firstPublishedPlatformUrl(row.platformPublish) ?? '';
 }
 
 export function isHttpUrl(value: string) {
