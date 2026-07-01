@@ -160,7 +160,7 @@ function VideoLibrary() {
 }
 
 export function VideoModule({ subModule }: { subModule?: string }) {
-  const activeTab = subModule || 'list';
+  const activeTab = subModule || 'channels';
 
   const getTitle = () => {
     switch (activeTab) {
@@ -170,7 +170,7 @@ export function VideoModule({ subModule }: { subModule?: string }) {
       case 'schedule': return { title: '拍攝排期', subtitle: '查看拍攝日程及里程碑安排。' };
       case 'library': return { title: '片庫', subtitle: '瀏覽已完成的影片素材庫。' };
       case 'distribution': return { title: '發佈追蹤', subtitle: '追蹤影片在各平台的發佈狀態。' };
-      default: return { title: '影片列表', subtitle: '管理所有影片及其製作進度。' };
+      default: return { title: '頻道管理', subtitle: '管理頻道基本信息及相應平臺信息' };
     }
   };
 

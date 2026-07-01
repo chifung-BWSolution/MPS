@@ -48,6 +48,33 @@ function CheckCell({ value }: { value?: boolean | null }) {
   return <span className="text-muted-foreground">—</span>;
 }
 
+function CopywritingCell({ sc, tc, en }: { sc?: boolean; tc?: boolean; en?: boolean }) {
+  const items = [
+    { key: 'sc', label: '簡', done: sc },
+    { key: 'tc', label: '繁', done: tc },
+    { key: 'en', label: '英', done: en },
+  ];
+
+  return (
+    <div className="inline-flex items-center text-[11px] whitespace-nowrap">
+      {items.map((item, idx) => (
+        <Fragment key={item.key}>
+          {idx > 0 && <span className="text-muted-foreground/40 px-0.5">|</span>}
+          <span
+            className={cn(
+              'inline-flex items-center gap-0.5',
+              item.done ? 'text-teal-700 font-medium' : 'text-muted-foreground',
+            )}
+          >
+            {item.done && <Check size={9} strokeWidth={3} className="text-teal-600 shrink-0" />}
+            {item.label}
+          </span>
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
 function StorageLinkCell({ value }: { value: string }) {
   if (!value) return <span className="text-muted-foreground">—</span>;
 
@@ -125,6 +152,7 @@ export function VideoManagementModule() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
 
   const filteredVideos = useMemo(
     () =>
@@ -212,6 +240,13 @@ export function VideoManagementModule() {
       return e instanceof Error ? e : new Error('保存工時失敗');
     }
     return null;
+  };
+
+  const handleReview = async (video: VideoOutput) => {
+    if (video.reviewed || reviewingId === video.id) return;
+    setReviewingId(video.id);
+    await updateVideo(video.id, { reviewed: true });
+    setReviewingId(null);
   };
 
   const channelOptions = useMemo(
@@ -324,7 +359,7 @@ export function VideoManagementModule() {
       </p>
 
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-x-auto">
-        <table className="w-full text-[13px] min-w-[1200px]">
+        <table className="w-full text-[13px] min-w-[1320px]">
           <thead className="bg-muted/30">
             <tr>
               <th className="w-8 px-2 py-2.5" />
@@ -335,10 +370,13 @@ export function VideoManagementModule() {
               <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">原片拍攝</th>
               <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">是否剪輯</th>
               <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">Demo完成</th>
+              <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">文案</th>
+              <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">字幕</th>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">拍攝時間</th>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">狀態</th>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">發佈日期</th>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground min-w-[160px]">視頻鏈接/保存地址</th>
+              <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">審核</th>
               <th className="w-16 px-2 py-2.5 font-medium text-muted-foreground text-center">操作</th>
             </tr>
           </thead>
@@ -383,11 +421,21 @@ export function VideoManagementModule() {
                     <td className="px-2 py-2.5 align-middle text-center"><CheckCell value={video.rawFootageDone} /></td>
                     <td className="px-2 py-2.5 align-middle text-center"><CheckCell value={video.needsEditing} /></td>
                     <td className="px-2 py-2.5 align-middle text-center"><CheckCell value={video.demoDone} /></td>
+                    <td className="px-2 py-2.5 align-middle text-center">
+                      <CopywritingCell sc={video.copySc} tc={video.copyTc} en={video.copyEn} />
+                    </td>
+                    <td className="px-2 py-2.5 align-middle text-center"><CheckCell value={video.subtitleDone} /></td>
                     <td className="px-3 py-2.5 align-middle text-[12px] whitespace-nowrap">{video.shootAt ?? '—'}</td>
                     <td className="px-3 py-2.5 align-middle">
-                      <span className={cn('text-[10px] font-medium px-2 py-0.5 rounded whitespace-nowrap', VIDEO_OUTPUT_STATUS_COLORS[status])}>
-                        {VIDEO_OUTPUT_STATUS_LABELS[status]}
-                      </span>
+                      {video.reviewed ? (
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded whitespace-nowrap bg-slate-100 text-slate-600">
+                          已審核
+                        </span>
+                      ) : (
+                        <span className={cn('text-[10px] font-medium px-2 py-0.5 rounded whitespace-nowrap', VIDEO_OUTPUT_STATUS_COLORS[status])}>
+                          {VIDEO_OUTPUT_STATUS_LABELS[status]}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 align-middle text-[12px] whitespace-nowrap">
                       <span className={cn(publish.planned && 'text-muted-foreground')} title={publish.planned ? '預計發佈' : undefined}>
@@ -395,6 +443,22 @@ export function VideoManagementModule() {
                       </span>
                     </td>
                     <td className="px-3 py-2.5 align-middle"><StorageLinkCell value={storage} /></td>
+                    <td className="px-2 py-2.5 align-middle text-center">
+                      <button
+                        type="button"
+                        disabled={video.reviewed || reviewingId === video.id}
+                        onClick={() => handleReview(video)}
+                        className={cn(
+                          'px-2.5 py-1 rounded text-[11px] font-medium transition-colors duration-200 whitespace-nowrap',
+                          video.reviewed
+                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                            : 'bg-teal-600 text-white hover:bg-teal-700',
+                          reviewingId === video.id && !video.reviewed && 'opacity-70 cursor-wait',
+                        )}
+                      >
+                        {reviewingId === video.id ? '處理中…' : video.reviewed ? '已審核' : '審核'}
+                      </button>
+                    </td>
                     <td className="px-2 py-2.5 align-middle text-center">
                       <button
                         type="button"
@@ -408,7 +472,7 @@ export function VideoManagementModule() {
                   </tr>
                   {isExpanded && (
                     <tr className="border-t border-border/30">
-                      <td colSpan={13} className="p-0">
+                      <td colSpan={16} className="p-0">
                         <PlatformPublishRow platformPublish={video.platformPublish} />
                       </td>
                     </tr>

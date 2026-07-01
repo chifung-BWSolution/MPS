@@ -7,6 +7,13 @@ export interface SubMenuItem {
   label: string;
 }
 
+export function resolveSubModule(module: string, sub?: string): string {
+  const menuItem = mainMenuItems.find(m => m.id === module);
+  const defaultSub = menuItem?.subMenus[0]?.id || 'overview';
+  if (!sub) return defaultSub;
+  return menuItem?.subMenus.some(s => s.id === sub) ? sub : defaultSub;
+}
+
 export interface MainMenuItem {
   id: string;
   label: string;
@@ -104,10 +111,7 @@ export const mainMenuItems: MainMenuItem[] = [
     subMenus: [
       { id: 'channels', label: '頻道管理' },
       { id: 'management', label: '影片管理' },
-      { id: 'list', label: '影片列表' },
       { id: 'schedule', label: '拍攝排期' },
-      { id: 'library', label: '片庫' },
-      { id: 'distribution', label: '發佈追蹤' },
     ],
   },
   {
@@ -215,18 +219,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [currentModule, setCurrentModule] = useState(() => parseHash().mod);
   const [currentSubModule, setCurrentSubModule] = useState(() => {
     const { mod, sub } = parseHash();
-    if (sub) return sub;
-    const menuItem = mainMenuItems.find(m => m.id === mod);
-    return menuItem?.subMenus[0]?.id || 'overview';
+    return resolveSubModule(mod, sub || undefined);
   });
+
+  // Normalize hash if it points to a hidden/invalid sub-module
+  useEffect(() => {
+    const { mod, sub } = parseHash();
+    const resolved = resolveSubModule(mod, sub || undefined);
+    const current = window.location.hash.replace('#', '');
+    const expected = `${mod}/${resolved}`;
+    if (current !== expected) {
+      window.location.replace(`#${expected}`);
+    }
+  }, []);
 
   // Keep hash in sync when state changes externally (e.g. browser back/forward)
   useEffect(() => {
     const onHashChange = () => {
       const { mod, sub } = parseHash();
       setCurrentModule(mod);
-      const resolvedSub = sub || mainMenuItems.find(m => m.id === mod)?.subMenus[0]?.id || 'overview';
-      setCurrentSubModule(resolvedSub);
+      setCurrentSubModule(resolveSubModule(mod, sub || undefined));
     };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
@@ -256,7 +268,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [systemUser, session]);
 
   const navigateTo = useCallback((module: string, subModule?: string) => {
-    const resolvedSub = subModule || mainMenuItems.find(m => m.id === module)?.subMenus[0]?.id || 'overview';
+    const resolvedSub = resolveSubModule(module, subModule);
     setCurrentModule(module);
     setCurrentSubModule(resolvedSub);
     // Update the URL hash so refresh restores the same page
@@ -266,7 +278,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Hash-aware wrappers so any direct setCurrentModule/setCurrentSubModule call also updates the URL
   const setModuleWithHash = useCallback((module: string) => {
     setCurrentModule(module);
-    const sub = mainMenuItems.find(m => m.id === module)?.subMenus[0]?.id || 'overview';
+    const sub = resolveSubModule(module);
     setCurrentSubModule(sub);
     window.location.hash = `${module}/${sub}`;
   }, []);

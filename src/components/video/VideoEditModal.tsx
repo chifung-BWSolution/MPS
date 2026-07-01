@@ -62,6 +62,10 @@ export function VideoEditModal({ video, channels, onClose, onSave }: Props) {
     rawFootageDone: video.rawFootageDone,
     needsEditing: video.needsEditing === true,
     demoDone: video.demoDone,
+    copySc: video.copySc,
+    copyTc: video.copyTc,
+    copyEn: video.copyEn,
+    subtitleDone: video.subtitleDone,
     shootAt: video.shootAt ?? '',
     plannedPublishDate: video.plannedPublishDate ?? '',
     publishedDate: video.publishedDate ?? '',
@@ -126,6 +130,10 @@ export function VideoEditModal({ video, channels, onClose, onSave }: Props) {
         rawFootageDone: form.rawFootageDone,
         needsEditing: form.needsEditing,
         demoDone: form.demoDone,
+        copySc: form.copySc,
+        copyTc: form.copyTc,
+        copyEn: form.copyEn,
+        subtitleDone: form.subtitleDone,
         shootAt: form.shootAt || undefined,
         plannedPublishDate: form.plannedPublishDate || undefined,
         publishedDate: form.publishedDate || undefined,
@@ -294,6 +302,28 @@ export function VideoEditModal({ video, channels, onClose, onSave }: Props) {
               <input type="checkbox" checked={form.demoDone} onChange={e => setForm(f => ({ ...f, demoDone: e.target.checked }))} />
               Demo 完成
             </label>
+            <label className="flex items-center gap-2 text-[13px]">
+              <input type="checkbox" checked={form.subtitleDone} onChange={e => setForm(f => ({ ...f, subtitleDone: e.target.checked }))} />
+              字幕
+            </label>
+          </div>
+
+          <div>
+            <label className="text-[12px] font-medium mb-2 block">文案</label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 text-[13px]">
+                <input type="checkbox" checked={form.copySc} onChange={e => setForm(f => ({ ...f, copySc: e.target.checked }))} />
+                簡體
+              </label>
+              <label className="flex items-center gap-2 text-[13px]">
+                <input type="checkbox" checked={form.copyTc} onChange={e => setForm(f => ({ ...f, copyTc: e.target.checked }))} />
+                繁體
+              </label>
+              <label className="flex items-center gap-2 text-[13px]">
+                <input type="checkbox" checked={form.copyEn} onChange={e => setForm(f => ({ ...f, copyEn: e.target.checked }))} />
+                英文
+              </label>
+            </div>
           </div>
 
           <div>

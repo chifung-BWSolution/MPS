@@ -5,7 +5,7 @@ const shortcuts = [
   { id: 'report', label: '提交日報', icon: FileText, module: 'day-report', subModule: 'submit', color: 'bg-teal-50 text-teal-600' },
   { id: 'quote', label: '新增報價', icon: DollarSign, module: 'quotation', subModule: 'new', color: 'bg-amber-50 text-amber-600' },
   { id: 'task', label: '新增任務', icon: ListTodo, module: 'project', subModule: 'new', color: 'bg-blue-50 text-blue-600' },
-  { id: 'video', label: '上傳影片', icon: Video, module: 'video', subModule: 'list', color: 'bg-rose-50 text-rose-600' },
+  { id: 'video', label: '上傳影片', icon: Video, module: 'video', subModule: 'management', color: 'bg-rose-50 text-rose-600' },
 ];
 
 export function QuickActions() {

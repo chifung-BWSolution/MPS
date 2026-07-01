@@ -140,6 +140,11 @@ type DbVideoOutputRow = {
   raw_footage_done: boolean;
   needs_editing: boolean | null;
   demo_done: boolean;
+  copy_sc?: boolean;
+  copy_tc?: boolean;
+  copy_en?: boolean;
+  subtitle_done?: boolean;
+  reviewed?: boolean;
   shoot_at: string | null;
   planned_publish_date: string | null;
   published_date: string | null;
@@ -168,6 +173,11 @@ export function mapVideoOutputRow(row: DbVideoOutputRow): VideoOutput {
     rawFootageDone: row.raw_footage_done,
     needsEditing: row.needs_editing,
     demoDone: row.demo_done,
+    copySc: row.copy_sc ?? false,
+    copyTc: row.copy_tc ?? false,
+    copyEn: row.copy_en ?? false,
+    subtitleDone: row.subtitle_done ?? false,
+    reviewed: row.reviewed ?? false,
     shootAt: row.shoot_at ?? undefined,
     plannedPublishDate: row.planned_publish_date ?? undefined,
     publishedDate: row.published_date ?? undefined,
@@ -193,6 +203,11 @@ export function videoOutputToDbRow(input: VideoOutputInput) {
     raw_footage_done: input.rawFootageDone ?? false,
     needs_editing: input.needsEditing ?? null,
     demo_done: input.demoDone ?? false,
+    copy_sc: input.copySc ?? false,
+    copy_tc: input.copyTc ?? false,
+    copy_en: input.copyEn ?? false,
+    subtitle_done: input.subtitleDone ?? false,
+    reviewed: input.reviewed ?? false,
     shoot_at: input.shootAt ?? null,
     planned_publish_date: input.plannedPublishDate ?? null,
     published_date: input.publishedDate ?? null,

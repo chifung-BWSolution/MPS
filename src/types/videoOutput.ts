@@ -31,6 +31,11 @@ export interface VideoOutput {
   rawFootageDone: boolean;
   needsEditing?: boolean | null;
   demoDone: boolean;
+  copySc: boolean;
+  copyTc: boolean;
+  copyEn: boolean;
+  subtitleDone: boolean;
+  reviewed: boolean;
   shootAt?: string;
   plannedPublishDate?: string;
   publishedDate?: string;
@@ -54,6 +59,11 @@ export interface VideoOutputInput {
   rawFootageDone?: boolean;
   needsEditing?: boolean | null;
   demoDone?: boolean;
+  copySc?: boolean;
+  copyTc?: boolean;
+  copyEn?: boolean;
+  subtitleDone?: boolean;
+  reviewed?: boolean;
   shootAt?: string;
   plannedPublishDate?: string;
   publishedDate?: string;
