@@ -1188,7 +1188,6 @@ function TalentList() {
               <tr className="border-b border-border bg-muted/30">
                 <th className="w-10 px-3 py-3" aria-label="選取" />
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">藝人</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">藝人詳情</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">基本資料</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">技能</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">合作狀態</th>
@@ -1240,22 +1239,6 @@ function TalentList() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    {(() => {
-                      const formId = resolveTalentFormId(t as Talent & { _formId?: string; _legacyFormId?: string }, formIdByToken, formIdByLegacyId);
-                      if (!formId) return <span className="text-[12px] text-muted-foreground">—</span>;
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => setSubmissionModalFormId(formId)}
-                          className="inline-flex items-center gap-1 text-[12px] px-2.5 py-1 rounded-md font-medium bg-teal-600 text-white hover:bg-teal-700 shadow-sm transition-colors"
-                        >
-                          <FileText size={12} />
-                          藝人詳情
-                        </button>
-                      );
-                    })()}
-                  </td>
                   <td className="px-4 py-3 text-[12px] text-muted-foreground">
                     <div className="space-y-1">
                       <div>
@@ -1265,15 +1248,35 @@ function TalentList() {
                           t.height && `${t.height}cm`,
                         ].filter(Boolean).join(' · ') || '—'}
                       </div>
-                      {t.instagramAccount ? (
-                        <button
-                          type="button"
-                          onClick={() => window.open(instagramProfileUrl(t.instagramAccount!), '_blank', 'noopener,noreferrer')}
-                          className="text-teal-600 hover:underline"
-                        >
-                          {formatInstagramHandle(t.instagramAccount)}
-                        </button>
-                      ) : null}
+                      <div>
+                        {t.instagramAccount ? (
+                          <button
+                            type="button"
+                            onClick={() => window.open(instagramProfileUrl(t.instagramAccount!), '_blank', 'noopener,noreferrer')}
+                            className="text-teal-600 hover:underline"
+                          >
+                            {formatInstagramHandle(t.instagramAccount)}
+                          </button>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </div>
+                      <div>
+                        {(() => {
+                          const formId = resolveTalentFormId(t as Talent & { _formId?: string; _legacyFormId?: string }, formIdByToken, formIdByLegacyId);
+                          if (!formId) return <span className="text-muted-foreground">—</span>;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setSubmissionModalFormId(formId)}
+                              className="inline-flex items-center gap-1 text-[12px] px-2.5 py-1 rounded-md font-medium bg-teal-600 text-white hover:bg-teal-700 shadow-sm transition-colors"
+                            >
+                              <FileText size={12} />
+                              藝人詳情
+                            </button>
+                          );
+                        })()}
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3">
