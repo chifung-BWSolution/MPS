@@ -92,6 +92,9 @@ export function VideoProductionModule() {
     setVchannelFilter,
     searchQuery,
     setSearchQuery,
+    yearFilter,
+    setYearFilter,
+    yearOptions,
     filteredVideos,
   } = useVideoWorkflowListFilter(productionVideos, 'createdAt');
 
@@ -133,6 +136,9 @@ export function VideoProductionModule() {
         onVchannelFilterChange={setVchannelFilter}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
+        yearFilter={yearFilter}
+        onYearFilterChange={setYearFilter}
+        yearOptions={yearOptions}
       />
 
       <p className="text-[12px] text-muted-foreground">{filteredVideos.length} 部製作中</p>

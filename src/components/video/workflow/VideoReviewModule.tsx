@@ -82,6 +82,9 @@ export function VideoReviewModule() {
     setVchannelFilter,
     searchQuery,
     setSearchQuery,
+    yearFilter,
+    setYearFilter,
+    yearOptions,
     filteredVideos: contextVideos,
   } = useVideoWorkflowListFilter(scopeVideos, 'submittedForReviewAt');
 
@@ -134,6 +137,9 @@ export function VideoReviewModule() {
         onVchannelFilterChange={setVchannelFilter}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
+        yearFilter={yearFilter}
+        onYearFilterChange={setYearFilter}
+        yearOptions={yearOptions}
       />
 
       {filteredVideos.length === 0 ? (

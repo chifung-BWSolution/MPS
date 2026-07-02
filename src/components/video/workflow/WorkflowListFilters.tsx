@@ -10,6 +10,9 @@ type Props = {
   onVchannelFilterChange: (value: string) => void;
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
+  yearFilter: number;
+  onYearFilterChange: (value: number) => void;
+  yearOptions: number[];
 };
 
 export function WorkflowListFilters({
@@ -18,9 +21,24 @@ export function WorkflowListFilters({
   onVchannelFilterChange,
   searchQuery,
   onSearchQueryChange,
+  yearFilter,
+  onYearFilterChange,
+  yearOptions,
 }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2">
+      <Select value={String(yearFilter)} onValueChange={value => onYearFilterChange(Number(value))}>
+        <SelectTrigger className="h-9 w-[100px] text-[12px]">
+          <SelectValue placeholder="年份" />
+        </SelectTrigger>
+        <SelectContent>
+          {yearOptions.map(year => (
+            <SelectItem key={year} value={String(year)}>
+              {year}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <Select value={vchannelFilter} onValueChange={onVchannelFilterChange}>
         <SelectTrigger className="h-9 w-[180px] text-[12px]">
           <SelectValue placeholder="Vchannel" />

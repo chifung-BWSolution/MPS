@@ -222,6 +222,21 @@ export function matchesVideoSearch(row: VideoOutput, query: string) {
   return row.title.toLowerCase().includes(q) || row.videoCode.toLowerCase().includes(q);
 }
 
+export function getCurrentProductionYear(): number {
+  return new Date().getFullYear();
+}
+
+export function buildProductionYearOptions(
+  yearsFromData: Iterable<number | undefined | null>,
+): number[] {
+  const years = new Set<number>();
+  years.add(getCurrentProductionYear());
+  for (const year of yearsFromData) {
+    if (year != null && year > 0) years.add(year);
+  }
+  return [...years].sort((a, b) => b - a);
+}
+
 export function filterVideoOutputs(
   rows: VideoOutput[],
   filters: {
@@ -229,6 +244,7 @@ export function filterVideoOutputs(
     searchQuery: string;
     category: 'all' | VideoProjectCategory;
     status: 'all' | VideoOutputStatus;
+    productionYear?: number;
   },
 ) {
   return rows.filter(row => {
@@ -236,6 +252,7 @@ export function filterVideoOutputs(
     if (!matchesVideoSearch(row, filters.searchQuery)) return false;
     if (filters.category !== 'all' && row.projectCategory !== filters.category) return false;
     if (filters.status !== 'all' && deriveVideoOutputStatus(row) !== filters.status) return false;
+    if (filters.productionYear != null && row.productionYear !== filters.productionYear) return false;
     return true;
   });
 }

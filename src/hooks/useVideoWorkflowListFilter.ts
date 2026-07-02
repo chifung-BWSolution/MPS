@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useVchannels } from '@/hooks/useVchannels';
 import {
+  buildProductionYearOptions,
+  getCurrentProductionYear,
+} from '@/lib/videoOutputUtils';
+import {
   filterWorkflowVideos,
   sortWorkflowVideosNewestFirst,
   type WorkflowListSortMode,
@@ -14,11 +18,23 @@ export function useVideoWorkflowListFilter(
   const { channels } = useVchannels();
   const [vchannelFilter, setVchannelFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [yearFilter, setYearFilter] = useState(getCurrentProductionYear);
+
+  const yearOptions = useMemo(
+    () => buildProductionYearOptions(videos.map(v => v.productionYear)),
+    [videos],
+  );
 
   const filteredVideos = useMemo(() => {
-    const filtered = filterWorkflowVideos(videos, searchQuery, vchannelFilter, channels);
+    const filtered = filterWorkflowVideos(
+      videos,
+      searchQuery,
+      vchannelFilter,
+      channels,
+      yearFilter,
+    );
     return sortWorkflowVideosNewestFirst(filtered, sortMode);
-  }, [videos, searchQuery, vchannelFilter, channels, sortMode]);
+  }, [videos, searchQuery, vchannelFilter, channels, yearFilter, sortMode]);
 
   return {
     channels,
@@ -26,6 +42,9 @@ export function useVideoWorkflowListFilter(
     setVchannelFilter,
     searchQuery,
     setSearchQuery,
+    yearFilter,
+    setYearFilter,
+    yearOptions,
     filteredVideos,
   };
 }

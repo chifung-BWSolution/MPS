@@ -236,6 +236,7 @@ export function filterWorkflowVideos(
   searchQuery: string,
   vchannelFilter: string,
   channels: { id: string; channelCode: string }[],
+  productionYear?: number,
 ): VideoWorkflowMock[] {
   const q = searchQuery.trim().toLowerCase();
   const filterChannel = vchannelFilter !== 'all' ? channels.find(c => c.id === vchannelFilter) : null;
@@ -245,6 +246,7 @@ export function filterWorkflowVideos(
       const matchCode = v.vchannelCode === filterChannel.channelCode;
       if (!matchId && !matchCode) return false;
     }
+    if (productionYear != null && v.productionYear !== productionYear) return false;
     if (!q) return true;
     return v.title.toLowerCase().includes(q) || v.videoCode.toLowerCase().includes(q);
   });

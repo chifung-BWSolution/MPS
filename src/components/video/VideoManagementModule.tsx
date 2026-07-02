@@ -9,11 +9,13 @@ import {
   VIDEO_OUTPUT_STATUS_COLORS,
   VIDEO_OUTPUT_STATUS_LABELS,
   countPublishedPlatforms,
+  buildProductionYearOptions,
   deriveVideoOutputStatus,
   filterVideoOutputs,
   formatPlatformPublishCopyText,
   formatPublishDate,
   formatShootLocation,
+  getCurrentProductionYear,
   getPlatformUrl,
   getPublishedPlatformKeys,
   getPublishedPlatformKeysWithUrl,
@@ -199,6 +201,7 @@ export function VideoManagementModule() {
 
   const [vchannelFilter, setVchannelFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [yearFilter, setYearFilter] = useState(getCurrentProductionYear);
   const [categoryFilter, setCategoryFilter] = useState<'all' | VideoProjectCategory>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | VideoOutputStatus>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -226,6 +229,11 @@ export function VideoManagementModule() {
     void refreshWorkLogTotals(videos.map(v => v.id));
   }, [videos, refreshWorkLogTotals]);
 
+  const yearOptions = useMemo(
+    () => buildProductionYearOptions(videos.map(v => v.productionYear)),
+    [videos],
+  );
+
   const contextVideos = useMemo(
     () =>
       filterVideoOutputs(videos, {
@@ -233,8 +241,9 @@ export function VideoManagementModule() {
         searchQuery,
         category: categoryFilter,
         status: 'all',
+        productionYear: yearFilter,
       }),
-    [videos, vchannelFilter, searchQuery, categoryFilter],
+    [videos, vchannelFilter, searchQuery, categoryFilter, yearFilter],
   );
 
   const filteredVideos = useMemo(() => {
@@ -294,6 +303,19 @@ export function VideoManagementModule() {
       />
 
       <div className="flex items-center gap-3 flex-wrap">
+        <Select value={String(yearFilter)} onValueChange={value => setYearFilter(Number(value))}>
+          <SelectTrigger className="w-[100px] h-9 text-[12px]">
+            <SelectValue placeholder="年份" />
+          </SelectTrigger>
+          <SelectContent>
+            {yearOptions.map(year => (
+              <SelectItem key={year} value={String(year)}>
+                {year}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         <Select value={vchannelFilter} onValueChange={setVchannelFilter}>
           <SelectTrigger className="w-[220px] h-9 text-[12px]">
             <SelectValue placeholder="Vchannel" />
