@@ -23,71 +23,17 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PlatformPublishModal } from '@/components/video/PlatformPublishModal';
 import { fetchWorkLogTotalsByVideoIds } from '@/services/videoOutputWorkLogService';
+import { WorkflowStatusSummaryBar } from '@/components/video/workflow/WorkflowStatusSummaryBar';
 
 const TABLE_COL_COUNT = 13;
 
 const STATUS_SUMMARY_KEYS: VideoOutputStatus[] = ['pending', 'in_production', 'demo_done', 'published'];
 
-const STATUS_PILL_BASE =
-  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium border transition-all duration-200 cursor-pointer select-none';
-
-const STATUS_PILL_INACTIVE =
-  'border-border/70 bg-white text-muted-foreground shadow-sm hover:bg-muted/50 hover:border-border hover:text-foreground hover:shadow';
-
-function StatusSummaryBar({
-  filteredCount,
-  contextCount,
-  statusFilter,
-  statusCounts,
-  onSelectAll,
-  onSelectStatus,
-}: {
-  filteredCount: number;
-  contextCount: number;
-  statusFilter: 'all' | VideoOutputStatus;
-  statusCounts: Record<VideoOutputStatus, number>;
-  onSelectAll: () => void;
-  onSelectStatus: (status: VideoOutputStatus) => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="狀態篩選">
-      <button
-        type="button"
-        onClick={onSelectAll}
-        className={cn(
-          STATUS_PILL_BASE,
-          statusFilter === 'all'
-            ? 'border-teal-600 bg-teal-600 text-white shadow-sm hover:bg-teal-700 hover:border-teal-700'
-            : STATUS_PILL_INACTIVE,
-        )}
-      >
-        <span>顯示</span>
-        <span className="tabular-nums font-semibold">{filteredCount}</span>
-        <span>/</span>
-        <span className="tabular-nums">{contextCount}</span>
-        <span>部</span>
-      </button>
-      {STATUS_SUMMARY_KEYS.map(status => (
-        <button
-          key={status}
-          type="button"
-          onClick={() => onSelectStatus(status)}
-          className={cn(
-            STATUS_PILL_BASE,
-            statusFilter === status
-              ? cn(VIDEO_OUTPUT_STATUS_COLORS[status], 'border-transparent ring-2 ring-teal-600/25 shadow-sm')
-              : STATUS_PILL_INACTIVE,
-          )}
-        >
-          <span>{VIDEO_OUTPUT_STATUS_LABELS[status]}</span>
-          <span className={cn('tabular-nums font-semibold', statusFilter !== status && 'text-foreground/80')}>
-            {statusCounts[status]}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
+const COORDINATION_STATUS_ITEMS = STATUS_SUMMARY_KEYS.map(status => ({
+  id: status,
+  label: VIDEO_OUTPUT_STATUS_LABELS[status],
+  activeClassName: VIDEO_OUTPUT_STATUS_COLORS[status],
+}));
 
 function countVideosByStatus(videos: VideoOutput[]): Record<VideoOutputStatus, number> {
   const counts: Record<VideoOutputStatus, number> = {
@@ -332,13 +278,15 @@ export function VideoManagementModule() {
 
   return (
     <div className="space-y-4">
-      <StatusSummaryBar
+      <WorkflowStatusSummaryBar
         filteredCount={filteredVideos.length}
         contextCount={contextVideos.length}
-        statusFilter={statusFilter}
-        statusCounts={statusCounts}
+        activeFilter={statusFilter}
+        items={COORDINATION_STATUS_ITEMS}
+        counts={statusCounts}
         onSelectAll={() => setStatusFilter('all')}
-        onSelectStatus={handleStatusSummaryClick}
+        onSelectItem={id => handleStatusSummaryClick(id as VideoOutputStatus)}
+        ariaLabel="狀態篩選"
       />
 
       <div className="flex items-center gap-3 flex-wrap">

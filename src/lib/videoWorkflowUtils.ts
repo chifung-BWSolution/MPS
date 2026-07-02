@@ -249,3 +249,54 @@ export function filterWorkflowVideos(
     return v.title.toLowerCase().includes(q) || v.videoCode.toLowerCase().includes(q);
   });
 }
+
+export type WorkflowBinaryStatusFilter = 'all' | 'pending' | 'done';
+
+export function isWorkflowPendingReview(video: VideoWorkflowMock): boolean {
+  return video.stage === 'review';
+}
+
+export function isWorkflowReviewed(video: VideoWorkflowMock): boolean {
+  return video.stage === 'publish' || video.stage === 'published';
+}
+
+export function isWorkflowPendingPublish(video: VideoWorkflowMock): boolean {
+  return video.stage === 'publish';
+}
+
+export function isWorkflowPublished(video: VideoWorkflowMock): boolean {
+  return video.stage === 'published';
+}
+
+export function getReviewScopeVideos(videos: VideoWorkflowMock[]): VideoWorkflowMock[] {
+  return videos.filter(v => isWorkflowPendingReview(v) || isWorkflowReviewed(v));
+}
+
+export function getPublishScopeVideos(videos: VideoWorkflowMock[]): VideoWorkflowMock[] {
+  return videos.filter(v => isWorkflowPendingPublish(v) || isWorkflowPublished(v));
+}
+
+export function countWorkflowBinaryStatus(
+  videos: VideoWorkflowMock[],
+  isPending: (video: VideoWorkflowMock) => boolean,
+  isDone: (video: VideoWorkflowMock) => boolean,
+): { pending: number; done: number } {
+  let pending = 0;
+  let done = 0;
+  for (const video of videos) {
+    if (isPending(video)) pending++;
+    else if (isDone(video)) done++;
+  }
+  return { pending, done };
+}
+
+export function filterWorkflowBinaryStatus(
+  videos: VideoWorkflowMock[],
+  statusFilter: WorkflowBinaryStatusFilter,
+  isPending: (video: VideoWorkflowMock) => boolean,
+  isDone: (video: VideoWorkflowMock) => boolean,
+): VideoWorkflowMock[] {
+  if (statusFilter === 'pending') return videos.filter(isPending);
+  if (statusFilter === 'done') return videos.filter(isDone);
+  return videos;
+}
