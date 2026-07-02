@@ -396,6 +396,38 @@ function CategoryChip({ id }: { id: TalentCategoryId }) {
   );
 }
 
+function SkillCheckboxRow({
+  checkedIds,
+  readOnly = false,
+  onToggle,
+}: {
+  checkedIds: Set<TalentCategoryId> | TalentCategoryId[];
+  readOnly?: boolean;
+  onToggle?: (id: TalentCategoryId) => void;
+}) {
+  const checked = checkedIds instanceof Set ? checkedIds : new Set(checkedIds);
+  return (
+    <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+      {TALENT_CATEGORIES.map(c => (
+        <label
+          key={c.id}
+          className={cn('inline-flex items-center gap-1.5', !readOnly && 'cursor-pointer')}
+        >
+          <input
+            type="checkbox"
+            checked={checked.has(c.id)}
+            readOnly={readOnly}
+            disabled={readOnly}
+            onChange={readOnly ? undefined : () => onToggle?.(c.id)}
+            className="w-3.5 h-3.5 accent-teal-600 shrink-0"
+          />
+          <span className="text-[10.5px] text-muted-foreground whitespace-nowrap">{c.label}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 // =====================================================================
 // Talent Form (used for add / edit / self-fill)
 // =====================================================================
@@ -1072,79 +1104,55 @@ function TalentList() {
         }
       />
 
-      {/* Filters + skill checkbox column */}
-      <div className="flex items-start gap-0">
-        <div className="flex shrink-0">
-          <div className="w-10" aria-hidden="true" />
-          <div className="w-[116px] px-4 pt-1">
-            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">技能</p>
-            <div className="space-y-1.5">
-              {TALENT_CATEGORIES.map(c => (
-                <label
-                  key={c.id}
-                  className="flex items-start gap-1.5 cursor-pointer group"
-                >
-                  <input
-                    type="checkbox"
-                    checked={skillFilters.has(c.id)}
-                    onChange={() => toggleSkillFilter(c.id)}
-                    className="mt-0.5 w-3.5 h-3.5 accent-teal-600 shrink-0 cursor-pointer"
-                  />
-                  <span className="text-[10px] leading-snug text-muted-foreground group-hover:text-[#0d1a2d]">
-                    {c.label}
-                  </span>
-                </label>
-              ))}
-            </div>
+      {/* Filters */}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm flex-1 max-w-[260px]">
+            <Search size={14} className="text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="搜尋姓名 / 藝名..."
+              className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground"
+            />
           </div>
+          <select
+            value={regionFilter}
+            onChange={(e) => setRegionFilter(e.target.value as 'all' | Region)}
+            className="px-3 py-1.5 border border-border rounded-md text-[13px]"
+          >
+            <option value="all">所有地區</option>
+            {Object.entries(REGION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as 'all' | CooperationStage)}
+            className="px-3 py-1.5 border border-border rounded-md text-[13px]"
+          >
+            <option value="all">所有合作狀態</option>
+            {COOPERATION_STAGES.map(stage => (
+              <option key={stage} value={stage}>{STAGE_LABELS[stage].text}</option>
+            ))}
+          </select>
+          <label className="flex items-center gap-2 text-[12px] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={liveOnly}
+              onChange={(e) => setLiveOnly(e.target.checked)}
+              className="w-4 h-4 accent-teal-600"
+            />
+            僅顯示有直播經驗
+          </label>
         </div>
-
-        <div className="flex-1 min-w-0 space-y-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm flex-1 max-w-[260px]">
-              <Search size={14} className="text-muted-foreground" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="搜尋姓名 / 藝名..."
-                className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground"
-              />
-            </div>
-            <select
-              value={regionFilter}
-              onChange={(e) => setRegionFilter(e.target.value as 'all' | Region)}
-              className="px-3 py-1.5 border border-border rounded-md text-[13px]"
-            >
-              <option value="all">所有地區</option>
-              {Object.entries(REGION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as 'all' | CooperationStage)}
-              className="px-3 py-1.5 border border-border rounded-md text-[13px]"
-            >
-              <option value="all">所有合作狀態</option>
-              {COOPERATION_STAGES.map(stage => (
-                <option key={stage} value={stage}>{STAGE_LABELS[stage].text}</option>
-              ))}
-            </select>
-            <label className="flex items-center gap-2 text-[12px] cursor-pointer">
-              <input
-                type="checkbox"
-                checked={liveOnly}
-                onChange={(e) => setLiveOnly(e.target.checked)}
-                className="w-4 h-4 accent-teal-600"
-              />
-              僅顯示有直播經驗
-            </label>
-          </div>
-
-          <div className="text-[12px] text-muted-foreground">
-            顯示 {filtered.length} 位藝人
-            {confirmedLoading && '（讀取中…）'}
-            {confirmedError && <span className="text-rose-600 ml-2">已取錄載入失敗：{confirmedError}</span>}
-            {photoUploadError && <span className="text-rose-600 ml-2">{photoUploadError}</span>}
-          </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className="text-[12px] font-medium text-muted-foreground shrink-0">技能</span>
+          <SkillCheckboxRow checkedIds={skillFilters} onToggle={toggleSkillFilter} />
+        </div>
+        <div className="text-[12px] text-muted-foreground">
+          顯示 {filtered.length} 位藝人
+          {confirmedLoading && '（讀取中…）'}
+          {confirmedError && <span className="text-rose-600 ml-2">已取錄載入失敗：{confirmedError}</span>}
+          {photoUploadError && <span className="text-rose-600 ml-2">{photoUploadError}</span>}
         </div>
       </div>
 
@@ -1158,6 +1166,7 @@ function TalentList() {
                 <th className="w-10 px-3 py-3" aria-label="選取" />
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">藝人</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">基本資料</th>
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">技能</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">合作狀態</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">合作&評價</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">綜合評分</th>
@@ -1176,50 +1185,34 @@ function TalentList() {
                     />
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-start gap-3">
-                      <div className="w-[116px] shrink-0 space-y-1">
-                        {TALENT_CATEGORIES.map(c => (
-                          <div key={c.id} className="flex items-start gap-1.5">
-                            <input
-                              type="checkbox"
-                              readOnly
-                              checked={t.categories.includes(c.id)}
-                              className="mt-0.5 w-3.5 h-3.5 accent-teal-600 shrink-0"
-                              tabIndex={-1}
-                              aria-label={c.label}
-                            />
-                            <span className="text-[10px] leading-snug text-muted-foreground">
-                              {c.label}
-                            </span>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPhotoUploadError(null);
+                          setPhotoPreview({ rowId: t.id, name: t.name, url: t.photoUrl });
+                        }}
+                        className="relative w-[100px] h-[100px] rounded-lg overflow-hidden shrink-0 cursor-pointer group border border-border"
+                        title="點擊查看大圖 / 更換圖片"
+                      >
+                        {t.photoUrl ? (
+                          <img
+                            src={t.photoUrl}
+                            alt={t.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-muted flex items-center justify-center text-[28px] font-bold text-muted-foreground">
+                            {t.name.slice(0, 1)}
                           </div>
-                        ))}
-                      </div>
-                      <div className="min-w-0 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPhotoUploadError(null);
-                            setPhotoPreview({ rowId: t.id, name: t.name, url: t.photoUrl });
-                          }}
-                          className="flex items-center gap-2 text-left group"
-                          title="點擊查看大圖 / 更換圖片"
-                        >
-                          {t.photoUrl ? (
-                            <img
-                              src={t.photoUrl}
-                              alt={t.name}
-                              className="w-10 h-10 rounded-md object-cover border border-border shrink-0"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center text-[14px] font-bold text-muted-foreground border border-border shrink-0">
-                              {t.name.slice(0, 1)}
-                            </div>
-                          )}
-                          <div>
-                            <div className="text-[13px] font-medium group-hover:text-teal-700">{t.stageName || t.name}</div>
-                            {t.stageName && <div className="text-[11px] text-muted-foreground">{t.name}</div>}
-                          </div>
-                        </button>
+                        )}
+                        <div className="absolute inset-0 bg-black/40 text-white text-[11px] font-medium flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          查看大圖
+                        </div>
+                      </button>
+                      <div>
+                        <div className="text-[13px] font-medium">{t.stageName || t.name}</div>
+                        {t.stageName && <div className="text-[11px] text-muted-foreground">{t.name}</div>}
                       </div>
                     </div>
                   </td>
@@ -1257,6 +1250,9 @@ function TalentList() {
                         })()}
                       </div>
                     </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <SkillCheckboxRow checkedIds={t.categories} readOnly />
                   </td>
                   <td className="px-4 py-3">
                     {(() => {
