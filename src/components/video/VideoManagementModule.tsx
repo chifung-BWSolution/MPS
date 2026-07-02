@@ -25,13 +25,20 @@ import { fetchWorkLogTotalsByVideoIds } from '@/services/videoOutputWorkLogServi
 
 const TABLE_COL_COUNT = 13;
 
-const STATUS_FILTERS: { id: 'all' | VideoOutputStatus; label: string }[] = [
-  { id: 'all', label: '全部' },
-  { id: 'pending', label: '待製作' },
-  { id: 'in_production', label: '製作中' },
-  { id: 'demo_done', label: 'Demo 完成' },
-  { id: 'published', label: '已發佈' },
-];
+const STATUS_SUMMARY_KEYS: VideoOutputStatus[] = ['pending', 'in_production', 'demo_done', 'published'];
+
+function countVideosByStatus(videos: VideoOutput[]): Record<VideoOutputStatus, number> {
+  const counts: Record<VideoOutputStatus, number> = {
+    pending: 0,
+    in_production: 0,
+    demo_done: 0,
+    published: 0,
+  };
+  for (const video of videos) {
+    counts[deriveVideoOutputStatus(video)]++;
+  }
+  return counts;
+}
 
 function CheckCell({ value }: { value?: boolean | null }) {
   if (value === true) {
@@ -207,22 +214,30 @@ export function VideoManagementModule() {
     void refreshWorkLogTotals(videos.map(v => v.id));
   }, [videos, refreshWorkLogTotals]);
 
-  const filteredVideos = useMemo(
+  const contextVideos = useMemo(
     () =>
       filterVideoOutputs(videos, {
         vchannelId: vchannelFilter,
         searchQuery,
         category: categoryFilter,
-        status: statusFilter,
+        status: 'all',
       }),
-    [videos, vchannelFilter, searchQuery, categoryFilter, statusFilter],
+    [videos, vchannelFilter, searchQuery, categoryFilter],
   );
 
-  const stats = useMemo(() => {
-    const demoDone = videos.filter(v => deriveVideoOutputStatus(v) === 'demo_done').length;
-    const published = videos.filter(v => deriveVideoOutputStatus(v) === 'published').length;
-    return { total: videos.length, demoDone, published };
-  }, [videos]);
+  const filteredVideos = useMemo(
+    () =>
+      statusFilter === 'all'
+        ? contextVideos
+        : contextVideos.filter(v => deriveVideoOutputStatus(v) === statusFilter),
+    [contextVideos, statusFilter],
+  );
+
+  const statusCounts = useMemo(() => countVideosByStatus(contextVideos), [contextVideos]);
+
+  const handleStatusSummaryClick = (status: VideoOutputStatus) => {
+    setStatusFilter(prev => (prev === status ? 'all' : status));
+  };
 
   const handleSavePublish = async (input: Partial<VideoOutputInput>) => {
     if (!publishingVideo) return new Error('未選擇影片');
@@ -254,21 +269,34 @@ export function VideoManagementModule() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-4 flex-wrap">
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
-          <span className="text-[11px] text-muted-foreground">影片總數</span>
-          <p className="text-[18px] font-bold">{stats.total}</p>
-        </div>
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
-          <span className="text-[11px] text-muted-foreground">Demo 完成</span>
-          <p className="text-[18px] font-bold text-blue-600">{stats.demoDone}</p>
-        </div>
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
-          <span className="text-[11px] text-muted-foreground">已發佈</span>
-          <p className="text-[18px] font-bold text-teal-600">{stats.published}</p>
-        </div>
-      </div>
+    <div className="space-y-4">
+      <p className="text-[12px] text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1">
+        <button
+          type="button"
+          onClick={() => setStatusFilter('all')}
+          className={cn(
+            'hover:text-foreground transition-colors',
+            statusFilter === 'all' && 'font-semibold text-foreground',
+          )}
+        >
+          顯示 {filteredVideos.length} / {contextVideos.length} 部
+        </button>
+        {STATUS_SUMMARY_KEYS.map(status => (
+          <span key={status} className="inline-flex items-center gap-x-1.5">
+            <span aria-hidden>·</span>
+            <button
+              type="button"
+              onClick={() => handleStatusSummaryClick(status)}
+              className={cn(
+                'hover:text-foreground transition-colors',
+                statusFilter === status && 'font-semibold text-teal-700',
+              )}
+            >
+              {VIDEO_OUTPUT_STATUS_LABELS[status]} {statusCounts[status]}
+            </button>
+          </span>
+        ))}
+      </p>
 
       <div className="flex items-center gap-3 flex-wrap">
         <Select value={vchannelFilter} onValueChange={setVchannelFilter}>
@@ -310,27 +338,7 @@ export function VideoManagementModule() {
             </button>
           ))}
         </div>
-
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {STATUS_FILTERS.map(s => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => setStatusFilter(s.id)}
-              className={cn(
-                'px-2.5 py-1.5 rounded text-[12px] font-medium transition-colors duration-200',
-                statusFilter === s.id ? 'bg-teal-600 text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80',
-              )}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
       </div>
-
-      <p className="text-[12px] text-muted-foreground">
-        顯示 {filteredVideos.length} / {videos.length} 部
-      </p>
 
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-x-auto">
         <table className="w-full text-[13px] min-w-[1080px]">
