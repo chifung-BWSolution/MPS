@@ -19,6 +19,8 @@ import {
   formatWorkflowStoragePath,
   WORKFLOW_LIST_DATE_CELL,
   WORKFLOW_LIST_GRID_PRODUCTION,
+  WorkflowListChannelCell,
+  WorkflowListVideoCodeCell,
   WorkflowVideoListHeader,
 } from '@/components/video/workflow/workflowListLayout';
 import { CrudModal } from '@/components/ui/crud-modal';
@@ -39,15 +41,15 @@ function ProductionListRow({
 
   return (
     <div className={cn(WORKFLOW_LIST_GRID_PRODUCTION, 'px-3 py-2.5 border-b border-border/50 hover:bg-muted/20 text-[12px]')}>
-      <span className="text-muted-foreground font-medium">{video.vchannelCode}</span>
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="font-mono text-[11px] text-muted-foreground truncate">{video.videoCode}</span>
-          <span className={cn('text-[10px] px-1.5 py-0.5 rounded shrink-0', VIDEO_WORKFLOW_STAGE_COLORS.production)}>
+      <WorkflowListChannelCell code={video.vchannelCode} publicName={video.vchannelPublicName} />
+      <WorkflowListVideoCodeCell
+        videoCode={video.videoCode}
+        statusBadge={
+          <span className={cn('text-[10px] px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap', VIDEO_WORKFLOW_STAGE_COLORS.production)}>
             {VIDEO_WORKFLOW_STAGE_LABELS.production}
           </span>
-        </div>
-      </div>
+        }
+      />
       <div className="min-w-0">
         <p className="font-semibold truncate" title={video.title}>{video.title}</p>
         {video.reviewRejectReason && (

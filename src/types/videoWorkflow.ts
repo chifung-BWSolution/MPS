@@ -46,6 +46,7 @@ export type VideoWorkflowMock = {
   id: string;
   vchannelId?: string;
   vchannelCode: string;
+  vchannelPublicName?: string;
   videoCode: string;
   title: string;
   deviceType?: VideoWorkflowDeviceSuffix;

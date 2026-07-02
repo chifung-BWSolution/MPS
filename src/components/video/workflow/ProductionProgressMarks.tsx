@@ -37,7 +37,9 @@ export function ProductionProgressMarks({ video }: { video: VideoWorkflowMock })
   return (
     <>
       {PRODUCTION_TASK_KEYS.map(key => (
-        <ProductionProgressMark key={key} status={getProductionTaskDisplayStatus(progress, key)} />
+        <div key={key} className="flex justify-center">
+          <ProductionProgressMark status={getProductionTaskDisplayStatus(progress, key)} />
+        </div>
       ))}
     </>
   );

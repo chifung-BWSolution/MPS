@@ -53,6 +53,7 @@ export function mapVideoOutputToWorkflow(video: VideoOutput): VideoWorkflowMock 
     id: video.id,
     vchannelId: video.vchannelId,
     vchannelCode: video.channelCode,
+    vchannelPublicName: video.channelPublicName,
     videoCode: video.videoCode,
     title: video.title,
     productionYear: video.productionYear,

@@ -25,6 +25,8 @@ import {
   formatWorkflowStoragePath,
   WORKFLOW_LIST_DATE_CELL,
   WORKFLOW_LIST_GRID_PUBLISH,
+  WorkflowListChannelCell,
+  WorkflowListVideoCodeCell,
   WorkflowVideoListHeader,
 } from '@/components/video/workflow/workflowListLayout';
 import { Button } from '@/components/ui/button';
@@ -48,20 +50,20 @@ function PublishListRow({
 
   return (
     <div className={cn(WORKFLOW_LIST_GRID_PUBLISH, 'px-3 py-2.5 border-b border-border/50 hover:bg-muted/20 text-[12px]')}>
-      <span className="text-muted-foreground font-medium">{video.vchannelCode}</span>
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="font-mono text-[11px] text-muted-foreground truncate">{video.videoCode}</span>
+      <WorkflowListChannelCell code={video.vchannelCode} publicName={video.vchannelPublicName} />
+      <WorkflowListVideoCodeCell
+        videoCode={video.videoCode}
+        statusBadge={
           <span
             className={cn(
-              'text-[10px] px-1.5 py-0.5 rounded shrink-0',
+              'text-[10px] px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap',
               pending ? VIDEO_WORKFLOW_STAGE_COLORS.publish : VIDEO_WORKFLOW_STAGE_COLORS.published,
             )}
           >
             {pending ? VIDEO_WORKFLOW_STAGE_LABELS.publish : VIDEO_WORKFLOW_STAGE_LABELS.published}
           </span>
-        </div>
-      </div>
+        }
+      />
       <p className="font-semibold truncate min-w-0" title={video.title}>{video.title}</p>
       <span className={WORKFLOW_LIST_DATE_CELL}>{video.shootAt ?? '—'}</span>
       <ProductionProgressMarks video={video} />
