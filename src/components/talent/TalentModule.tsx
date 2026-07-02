@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Search, Plus, Star, Link2, Copy, Check, X, Calendar,
-  Tag, Users, Camera, FileText, Loader2, ExternalLink,
+  Tag, Users, Camera, FileText, Loader2, ExternalLink, Pencil,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { getSiteOrigin } from '@/lib/siteUrl';
 import { useAuth } from '@/context/AuthContext';
 import { TalentApplicationFormV2 } from '@/components/settings/TalentApplicationFormV2';
+import { updateArtistApplyV2, type ArtistApplyV2Form } from '@/lib/artist-apply-api';
 import {
   createPendingReportItem,
   localDateString,
@@ -894,9 +895,31 @@ function TalentList() {
     reader.readAsDataURL(file);
   };
 
+  const reloadConfirmed = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('confirmed_artist')
+        .select('*')
+        .order('confirmed_at', { ascending: false });
+      if (error) {
+        setConfirmedError(error.message);
+        setConfirmed([]);
+      } else {
+        setConfirmed((data ?? []) as ConfirmedArtistRow[]);
+        setConfirmedError(null);
+      }
+    } catch (err) {
+      setConfirmedError(err instanceof Error ? err.message : '無法載入');
+      setConfirmed([]);
+    } finally {
+      setConfirmedLoading(false);
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      setConfirmedLoading(true);
       try {
         const { data, error } = await supabase
           .from('confirmed_artist')
@@ -1452,6 +1475,7 @@ function TalentList() {
         <TalentSubmissionModal
           formId={submissionModalFormId}
           onClose={() => setSubmissionModalFormId(null)}
+          onUpdated={reloadConfirmed}
         />
       )}
     </div>
@@ -1461,18 +1485,22 @@ function TalentList() {
 // =====================================================================
 // Modal helper
 // =====================================================================
-function Modal({ title, onClose, children, width = 'max-w-[640px]' }: {
+function Modal({ title, onClose, children, width = 'max-w-[640px]', headerAction }: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
   width?: string;
+  headerAction?: React.ReactNode;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className={cn('bg-white rounded-lg shadow-xl w-full max-h-[85vh] flex flex-col', width)}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="text-[16px] font-bold">{title}</h3>
-          <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
+          <div className="flex items-center gap-2">
+            {headerAction}
+            <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-4">{children}</div>
       </div>
@@ -1538,112 +1566,175 @@ interface SubmissionArtistApplyRow {
   submitted_at: string;
 }
 
-function TalentSubmissionModal({ formId, onClose }: { formId: string; onClose: () => void }) {
+function TalentSubmissionModal({
+  formId,
+  onClose,
+  onUpdated,
+}: {
+  formId: string;
+  onClose: () => void;
+  onUpdated?: () => void | Promise<void>;
+}) {
   const [row, setRow] = useState<SubmissionArtistApplyRow | null>(null);
+  const [resolvedApplyId, setResolvedApplyId] = useState<string | null>(null);
   const [applicantSignature, setApplicantSignature] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+
+  const loadSubmission = async (targetFormId: string) => {
+    setLoading(true);
+    setError(null);
+    const { data: directData, error: directError } = await supabase
+      .from('artist_apply')
+      .select('*')
+      .eq('id', targetFormId)
+      .maybeSingle();
+
+    let applyRow = directData as SubmissionArtistApplyRow | null;
+    let applyError = directError;
+
+    if (!applyRow && !directError) {
+      const { data: legacyData, error: legacyError } = await supabase
+        .from('artist_apply')
+        .select('*')
+        .filter('raw_payload->>legacyTalentFormId', 'eq', targetFormId)
+        .order('submitted_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      applyRow = legacyData as SubmissionArtistApplyRow | null;
+      applyError = legacyError;
+    }
+
+    if (applyError) {
+      setError(applyError.message);
+      setRow(null);
+      setResolvedApplyId(null);
+      setLoading(false);
+      return;
+    }
+
+    if (!applyRow) {
+      setRow(null);
+      setResolvedApplyId(null);
+      setError('找不到此筆資料');
+      setLoading(false);
+      return;
+    }
+
+    const { data: photoData, error: photoError } = await supabase
+      .from('artist_apply_photo')
+      .select('data_url')
+      .eq('artist_apply_id', applyRow.id)
+      .eq('file_role', 'applicant_signature')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (photoError) {
+      setError(photoError.message);
+      setRow(null);
+      setResolvedApplyId(null);
+    } else {
+      setRow(applyRow);
+      setResolvedApplyId(applyRow.id);
+      const signatureRow = photoData?.[0] as { data_url: string | null } | undefined;
+      setApplicantSignature(signatureRow?.data_url || '');
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setLoading(true);
-      setError(null);
-      const { data: directData, error: directError } = await supabase
-        .from('artist_apply')
-        .select('*')
-        .eq('id', formId)
-        .maybeSingle();
-
+      await loadSubmission(formId);
       if (cancelled) return;
-
-      let applyRow = directData as SubmissionArtistApplyRow | null;
-      let applyError = directError;
-
-      if (!applyRow && !directError) {
-        const { data: legacyData, error: legacyError } = await supabase
-          .from('artist_apply')
-          .select('*')
-          .filter('raw_payload->>legacyTalentFormId', 'eq', formId)
-          .order('submitted_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (cancelled) return;
-        applyRow = legacyData as SubmissionArtistApplyRow | null;
-        applyError = legacyError;
-      }
-
-      if (applyError) {
-        setError(applyError.message);
-        setLoading(false);
-        return;
-      }
-
-      if (!applyRow) {
-        setRow(null);
-        setError('找不到此筆資料');
-        setLoading(false);
-        return;
-      }
-
-      const { data: photoData, error: photoError } = await supabase
-        .from('artist_apply_photo')
-        .select('data_url')
-        .eq('artist_apply_id', applyRow.id)
-        .eq('file_role', 'applicant_signature')
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-      if (cancelled) return;
-
-      if (photoError) {
-        setError(photoError.message);
-      } else {
-        setRow(applyRow);
-        const signatureRow = photoData?.[0] as { data_url: string | null } | undefined;
-        setApplicantSignature(signatureRow?.data_url || '');
-      }
-      setLoading(false);
     })();
     return () => { cancelled = true; };
   }, [formId]);
 
+  const formInitialValue = row ? {
+    ...((row.raw_payload as Record<string, unknown>) || {}),
+    applicationDate: row.application_date || '',
+    nameZh: row.name_zh || '',
+    nameEn: row.name_en || '',
+    displayName: row.display_name || '',
+    gender: row.gender || '',
+    birthDate: row.birth_date || '',
+    age: row.age || '',
+    phone: row.phone || '',
+    whatsapp: row.whatsapp || '',
+    email: row.email || '',
+    applicantSignature,
+  } : undefined;
+
+  const handleSave = async (form: ArtistApplyV2Form) => {
+    if (!resolvedApplyId) throw new Error('找不到此筆申請資料。');
+    await updateArtistApplyV2(resolvedApplyId, form, row?.invite_token);
+    await loadSubmission(resolvedApplyId);
+    await onUpdated?.();
+    setIsEditing(false);
+    setSaveSuccess(new Date().toLocaleString('zh-HK'));
+  };
+
   return (
-    <Modal title="申請表格" onClose={onClose} width="max-w-[980px]">
+    <Modal
+      title={isEditing ? '編輯申請表格' : '申請表格'}
+      onClose={onClose}
+      width="max-w-[980px]"
+      headerAction={
+        !loading && !error && row ? (
+          isEditing ? (
+            <button
+              type="button"
+              onClick={() => setIsEditing(false)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[12px] border border-border rounded-md hover:bg-muted/40"
+            >
+              取消編輯
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setSaveSuccess(null);
+                setIsEditing(true);
+              }}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700"
+            >
+              <Pencil size={13} />
+              編輯
+            </button>
+          )
+        ) : null
+      }
+    >
       <div className="overflow-y-auto px-5 py-4">
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
             <Loader2 size={18} className="animate-spin" />
             <span className="text-[13px]">載入中…</span>
           </div>
-        ) : error || !row ? (
+        ) : error || !row || !formInitialValue ? (
           <div className="py-10 text-center">
             <p className="text-[14px] font-bold text-rose-600 mb-1">無法載入表格</p>
             <p className="text-[12px] text-muted-foreground">{error || '可能已被刪除或連結不正確。'}</p>
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="text-center">
+            <div className="text-center space-y-1">
               <p className="text-[12px] text-muted-foreground">
                 遞交時間：{new Date(row.submitted_at).toLocaleString('zh-HK')}
               </p>
+              {saveSuccess && (
+                <p className="text-[12px] text-teal-700 font-medium">已保存修改（{saveSuccess}）</p>
+              )}
             </div>
             <TalentApplicationFormV2
-              mode="view"
-              initialValue={{
-                ...((row.raw_payload as Record<string, unknown>) || {}),
-                applicationDate: row.application_date || '',
-                nameZh: row.name_zh || '',
-                nameEn: row.name_en || '',
-                displayName: row.display_name || '',
-                gender: row.gender || '',
-                birthDate: row.birth_date || '',
-                age: row.age || '',
-                phone: row.phone || '',
-                whatsapp: row.whatsapp || '',
-                email: row.email || '',
-                applicantSignature,
-              }}
+              key={isEditing ? `edit-${resolvedApplyId}` : `view-${resolvedApplyId}`}
+              mode={isEditing ? 'edit' : 'view'}
+              inviteToken={row.invite_token || undefined}
+              initialValue={formInitialValue}
+              onSave={handleSave}
             />
           </div>
         )}

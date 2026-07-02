@@ -98,9 +98,10 @@ interface FormState {
 }
 
 interface TalentApplicationFormV2Props {
-  mode?: 'draft' | 'submit' | 'view';
+  mode?: 'draft' | 'submit' | 'view' | 'edit';
   inviteToken?: string;
   initialValue?: Partial<FormState>;
+  onSave?: (form: FormState) => Promise<void>;
 }
 
 const initialState: FormState = {
@@ -501,6 +502,7 @@ export function TalentApplicationFormV2({
   mode = 'draft',
   inviteToken,
   initialValue,
+  onSave,
 }: TalentApplicationFormV2Props = {}) {
   const readOnly = mode === 'view';
   const [form, setForm] = useState<FormState>(() => ({ ...initialState, ...(initialValue ?? {}) }));
@@ -548,10 +550,16 @@ export function TalentApplicationFormV2({
     setSubmitError(null);
     setSubmitting(true);
     try {
-      await submitArtistApplyV2(form, inviteToken);
-      setSubmittedAt(new Date().toLocaleString('zh-HK'));
+      if (mode === 'edit') {
+        if (!onSave) throw new Error('缺少保存處理程序。');
+        await onSave(form);
+        setSavedAt(new Date().toLocaleString('zh-HK'));
+      } else {
+        await submitArtistApplyV2(form, inviteToken);
+        setSubmittedAt(new Date().toLocaleString('zh-HK'));
+      }
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : '遞交失敗，請稍後再試。');
+      setSubmitError(error instanceof Error ? error.message : mode === 'edit' ? '保存失敗，請稍後再試。' : '遞交失敗，請稍後再試。');
     } finally {
       setSubmitting(false);
     }
@@ -801,6 +809,8 @@ export function TalentApplicationFormV2({
             <div className="text-muted-foreground">
               {mode === 'draft' && savedAt && <span className="text-teal-700">已於 {savedAt} 儲存草稿</span>}
               {mode === 'draft' && !savedAt && '尚未儲存'}
+              {mode === 'edit' && submitError && <span className="text-rose-600">{submitError}</span>}
+              {mode === 'edit' && !submitError && (isLastStep ? '請確認資料後保存修改。' : '請完成本頁後進入下一頁。')}
               {mode === 'submit' && submitError && <span className="text-rose-600">{submitError}</span>}
               {mode === 'submit' && !submitError && (isLastStep ? '請確認資料後遞交表格。' : '請完成本頁後進入下一頁。')}
             </div>
@@ -835,7 +845,7 @@ export function TalentApplicationFormV2({
                   下一頁
                 </button>
               )}
-              {isLastStep && (mode === 'submit' ? (
+              {isLastStep && (mode === 'submit' || mode === 'edit' ? (
                 <button
                   type="button"
                   onClick={handleSubmit}
@@ -843,7 +853,9 @@ export function TalentApplicationFormV2({
                   className="inline-flex items-center gap-1.5 rounded-md bg-teal-600 px-4 py-2 text-[13px] font-bold text-white shadow-sm transition-colors hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Send size={14} />
-                  {submitting ? '正在遞交…' : '遞交表格'}
+                  {submitting
+                    ? (mode === 'edit' ? '正在保存…' : '正在遞交…')
+                    : (mode === 'edit' ? '保存修改' : '遞交表格')}
                 </button>
               ) : (
                 <button
