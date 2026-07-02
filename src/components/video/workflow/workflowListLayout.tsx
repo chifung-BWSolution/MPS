@@ -4,13 +4,13 @@ import { PRODUCTION_TASK_KEYS, PRODUCTION_TASK_LABELS } from '@/lib/videoWorkflo
 
 // 必須使用完整字面量 class，Tailwind 才能掃描並生成 grid 樣式
 export const WORKFLOW_LIST_GRID_PRODUCTION =
-  'grid grid-cols-[minmax(140px,1.15fr)_max-content_minmax(108px,1fr)_92px_repeat(5,52px)_minmax(88px,0.85fr)_108px_64px_88px] gap-2 items-center min-w-[1100px]';
+  'grid grid-cols-[minmax(100px,152px)_minmax(112px,148px)_minmax(120px,1.2fr)_92px_repeat(5,52px)_minmax(88px,0.85fr)_108px_64px_88px] gap-x-3 gap-y-2 items-center min-w-[1100px]';
 
 export const WORKFLOW_LIST_GRID_REVIEW =
-  'grid grid-cols-[minmax(140px,1.15fr)_max-content_minmax(108px,1fr)_92px_repeat(5,52px)_minmax(88px,0.85fr)_108px_56px] gap-2 items-center min-w-[1000px]';
+  'grid grid-cols-[minmax(100px,152px)_minmax(112px,148px)_minmax(120px,1.2fr)_92px_repeat(5,52px)_minmax(88px,0.85fr)_108px_56px] gap-x-3 gap-y-2 items-center min-w-[1000px]';
 
 export const WORKFLOW_LIST_GRID_PUBLISH =
-  'grid grid-cols-[minmax(140px,1.15fr)_max-content_minmax(108px,1fr)_92px_repeat(5,52px)_minmax(88px,0.85fr)_108px_96px_56px] gap-2 items-center min-w-[1040px]';
+  'grid grid-cols-[minmax(100px,152px)_minmax(112px,148px)_minmax(120px,1.2fr)_92px_repeat(5,52px)_minmax(88px,0.85fr)_108px_96px_56px] gap-x-3 gap-y-2 items-center min-w-[1040px]';
 
 export const WORKFLOW_LIST_DATE_CELL = 'text-muted-foreground shrink-0 whitespace-nowrap tabular-nums';
 
@@ -43,9 +43,9 @@ export function WorkflowListVideoCodeCell({
   statusBadge: ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-1 w-max max-w-full">
+    <div className="flex items-center gap-1 min-w-0 pr-1">
       <span
-        className="font-mono text-[11px] text-muted-foreground whitespace-nowrap"
+        className="font-mono text-[11px] text-muted-foreground truncate"
         title={videoCode}
       >
         {videoCode}
