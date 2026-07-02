@@ -63,6 +63,7 @@ export type VideoWorkflowMock = {
   needsEditing?: boolean | null;
   demoDone?: boolean;
   storagePath?: string;
+  submittedForReviewAt?: string;
   reviewRejectReason?: string;
   reviewedAt?: string;
   reviewedBy?: string;

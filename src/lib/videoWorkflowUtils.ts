@@ -23,6 +23,14 @@ export const PRODUCTION_TASK_LABELS: Record<ProductionTaskKey, string> = {
   demo: 'Demo',
 };
 
+export const PRODUCTION_TASK_KEYS: ProductionTaskKey[] = [
+  'copywriting',
+  'script',
+  'rawFootage',
+  'editing',
+  'demo',
+];
+
 export function emptyProductionTask(): ProductionTask {
   return { done: false };
 }
@@ -196,4 +204,41 @@ export function isPublishComplete(video: VideoWorkflowMock): boolean {
 
 export function countPublishedPlatforms(map: PlatformPublishMap = {}): number {
   return MEDIA_PLATFORM_PUBLISH_KEYS.filter(k => isPlatformPublished(map, k)).length;
+}
+
+export type WorkflowListSortMode = 'createdAt' | 'submittedForReviewAt';
+
+export function getWorkflowSortKey(video: VideoWorkflowMock, mode: WorkflowListSortMode): string {
+  if (mode === 'submittedForReviewAt') {
+    return video.submittedForReviewAt ?? video.createdAt ?? video.videoCode;
+  }
+  return video.createdAt ?? video.videoCode;
+}
+
+export function sortWorkflowVideosNewestFirst(
+  videos: VideoWorkflowMock[],
+  mode: WorkflowListSortMode = 'createdAt',
+): VideoWorkflowMock[] {
+  return [...videos].sort((a, b) =>
+    getWorkflowSortKey(b, mode).localeCompare(getWorkflowSortKey(a, mode)),
+  );
+}
+
+export function filterWorkflowVideos(
+  videos: VideoWorkflowMock[],
+  searchQuery: string,
+  vchannelFilter: string,
+  channels: { id: string; channelCode: string }[],
+): VideoWorkflowMock[] {
+  const q = searchQuery.trim().toLowerCase();
+  const filterChannel = vchannelFilter !== 'all' ? channels.find(c => c.id === vchannelFilter) : null;
+  return videos.filter(v => {
+    if (filterChannel) {
+      const matchId = v.vchannelId === filterChannel.id;
+      const matchCode = v.vchannelCode === filterChannel.channelCode;
+      if (!matchId && !matchCode) return false;
+    }
+    if (!q) return true;
+    return v.title.toLowerCase().includes(q) || v.videoCode.toLowerCase().includes(q);
+  });
 }

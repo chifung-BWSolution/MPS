@@ -1,46 +1,24 @@
-import { useMemo, useState } from 'react';
-import { Check, Edit2, Minus, Search } from 'lucide-react';
+import { useState } from 'react';
+import { Edit2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVideoWorkflow } from '@/hooks/useVideoWorkflow';
-import { useVchannels } from '@/hooks/useVchannels';
-import type { ProductionProgress, ProductionTaskKey, VideoWorkflowMock } from '@/types/videoWorkflow';
+import { useVideoWorkflowListFilter } from '@/hooks/useVideoWorkflowListFilter';
+import type { ProductionProgress, VideoWorkflowMock } from '@/types/videoWorkflow';
 import {
   canSubmitProductionForReview,
-  getProductionTaskDisplayStatus,
-  normalizeProductionProgress,
+  PRODUCTION_TASK_KEYS,
   PRODUCTION_TASK_LABELS,
-  type ProductionTaskDisplayStatus,
   VIDEO_WORKFLOW_STAGE_COLORS,
   VIDEO_WORKFLOW_STAGE_LABELS,
 } from '@/lib/videoWorkflowUtils';
 import { ProductionEditModal } from '@/components/video/workflow/ProductionEditModal';
+import { ProductionProgressMarks } from '@/components/video/workflow/ProductionProgressMarks';
+import { WorkflowListFilters } from '@/components/video/workflow/WorkflowListFilters';
 import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-
-const TASK_KEYS: ProductionTaskKey[] = ['copywriting', 'script', 'rawFootage', 'editing', 'demo'];
 
 const LIST_GRID =
   'grid grid-cols-[minmax(140px,1.2fr)_minmax(120px,1.5fr)_56px_72px_repeat(5,40px)_64px_88px] gap-2 items-center min-w-[920px]';
-
-function ProgressMark({ status }: { status: ProductionTaskDisplayStatus }) {
-  if (status === 'done') {
-    return (
-      <span className="inline-flex justify-center text-teal-600" title="完成">
-        <Check size={14} strokeWidth={2.5} />
-      </span>
-    );
-  }
-  if (status === 'na') {
-    return (
-      <span className="inline-flex justify-center text-muted-foreground" title="不適用">
-        <Minus size={14} />
-      </span>
-    );
-  }
-  return <span className="inline-flex justify-center text-[13px] text-muted-foreground" title="未完成">○</span>;
-}
 
 function ProductionListRow({
   video,
@@ -51,7 +29,6 @@ function ProductionListRow({
   onEdit: () => void;
   onSubmit: () => void;
 }) {
-  const progress = normalizeProductionProgress(video);
   const canSubmit = canSubmitProductionForReview(video);
 
   return (
@@ -74,9 +51,7 @@ function ProductionListRow({
       </div>
       <span className="text-muted-foreground">{video.vchannelCode}</span>
       <span className="text-muted-foreground">{video.shootAt ?? '—'}</span>
-      {TASK_KEYS.map(key => (
-        <ProgressMark key={key} status={getProductionTaskDisplayStatus(progress, key)} />
-      ))}
+      <ProductionProgressMarks video={video} />
       <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] gap-1 px-2" onClick={onEdit}>
         <Edit2 size={11} /> 編輯
       </Button>
@@ -96,30 +71,18 @@ function ProductionListRow({
 
 export function VideoProductionModule() {
   const { getByStage, getById, updateVideo, submitForReview } = useVideoWorkflow();
-  const { channels } = useVchannels();
-
-  const [vchannelFilter, setVchannelFilter] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [submitTargetId, setSubmitTargetId] = useState<string | null>(null);
 
   const productionVideos = getByStage('production');
-
-  const filteredVideos = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    const filterChannel = vchannelFilter !== 'all' ? channels.find(c => c.id === vchannelFilter) : null;
-    return productionVideos
-      .filter(v => {
-        if (filterChannel) {
-          const matchId = v.vchannelId === filterChannel.id;
-          const matchCode = v.vchannelCode === filterChannel.channelCode;
-          if (!matchId && !matchCode) return false;
-        }
-        if (!q) return true;
-        return v.title.toLowerCase().includes(q) || v.videoCode.toLowerCase().includes(q);
-      })
-      .sort((a, b) => (b.createdAt ?? b.videoCode).localeCompare(a.createdAt ?? a.videoCode));
-  }, [productionVideos, vchannelFilter, searchQuery, channels]);
+  const {
+    channels,
+    vchannelFilter,
+    setVchannelFilter,
+    searchQuery,
+    setSearchQuery,
+    filteredVideos,
+  } = useVideoWorkflowListFilter(productionVideos, 'createdAt');
 
   const editingVideo = editingId ? getById(editingId) ?? null : null;
   const submitTarget = submitTargetId ? getById(submitTargetId) : undefined;
@@ -141,28 +104,13 @@ export function VideoProductionModule() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Select value={vchannelFilter} onValueChange={setVchannelFilter}>
-          <SelectTrigger className="h-9 w-[180px] text-[12px]">
-            <SelectValue placeholder="Vchannel" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">全部 Vchannel</SelectItem>
-            {channels.map(ch => (
-              <SelectItem key={ch.id} value={ch.id}>{ch.channelCode} — {ch.publicName}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <div className="relative flex-1 min-w-[180px] max-w-[280px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="搜尋主題或 Video Code…"
-            className="h-9 pl-9 text-[12px]"
-          />
-        </div>
-      </div>
+      <WorkflowListFilters
+        channels={channels}
+        vchannelFilter={vchannelFilter}
+        onVchannelFilterChange={setVchannelFilter}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+      />
 
       <p className="text-[12px] text-muted-foreground">{filteredVideos.length} 部製作中</p>
 
@@ -179,7 +127,7 @@ export function VideoProductionModule() {
             <span>主題</span>
             <span>頻道</span>
             <span>拍攝日</span>
-            {TASK_KEYS.map(key => (
+            {PRODUCTION_TASK_KEYS.map(key => (
               <span key={key} className="text-center">{PRODUCTION_TASK_LABELS[key]}</span>
             ))}
             <span />

@@ -125,7 +125,11 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
   }, [videos, updateVideo]);
 
   const submitForReview = useCallback((id: string) => {
-    updateVideo(id, { stage: 'review', reviewRejectReason: undefined });
+    updateVideo(id, {
+      stage: 'review',
+      reviewRejectReason: undefined,
+      submittedForReviewAt: new Date().toISOString(),
+    });
   }, [updateVideo]);
 
   const approveReview = useCallback((id: string, reviewedBy: string) => {
