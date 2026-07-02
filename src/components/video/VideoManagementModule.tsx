@@ -339,16 +339,16 @@ export function VideoManagementModule() {
               <th className="w-8 px-2 py-2.5" />
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">狀態</th>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">Vchannel</th>
-              <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">Video Code</th>
+              <th className="text-left px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap w-[1%]">Video Code</th>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground min-w-[180px]">主題</th>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">拍攝時間</th>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">發佈日期</th>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">拍攝地址</th>
+              <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">文案</th>
               <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">原片拍攝</th>
               <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">是否剪輯</th>
               <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">Demo完成</th>
-              <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">文案</th>
-              <th className="text-right px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">工時</th>
+              <th className="text-right px-4 py-2.5 font-medium text-muted-foreground whitespace-nowrap min-w-[76px]">總工時</th>
             </tr>
           </thead>
           <tbody>
@@ -385,7 +385,9 @@ export function VideoManagementModule() {
                         </p>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 align-middle font-mono text-[11px] whitespace-nowrap">{video.videoCode}</td>
+                    <td className="px-2 py-2.5 align-middle font-mono text-[10px] w-[1%] max-w-[96px]">
+                      <span className="block truncate" title={video.videoCode}>{video.videoCode}</span>
+                    </td>
                     <td className="px-3 py-2.5 align-middle max-w-[240px]">
                       <span className="line-clamp-2" title={video.title}>{video.title}</span>
                     </td>
@@ -398,13 +400,13 @@ export function VideoManagementModule() {
                     <td className="px-3 py-2.5 align-middle whitespace-nowrap text-[12px]">
                       {formatShootLocation(video.shootHk, video.shootSz)}
                     </td>
-                    <td className="px-2 py-2.5 align-middle text-center"><CheckCell value={video.rawFootageDone} /></td>
-                    <td className="px-2 py-2.5 align-middle text-center"><CheckCell value={video.needsEditing} /></td>
-                    <td className="px-2 py-2.5 align-middle text-center"><CheckCell value={video.demoDone} /></td>
                     <td className="px-2 py-2.5 align-middle text-center">
                       <CopywritingCell sc={video.copySc} tc={video.copyTc} en={video.copyEn} />
                     </td>
-                    <td className="px-3 py-2.5 align-middle text-right">
+                    <td className="px-2 py-2.5 align-middle text-center"><CheckCell value={video.rawFootageDone} /></td>
+                    <td className="px-2 py-2.5 align-middle text-center"><CheckCell value={video.needsEditing} /></td>
+                    <td className="px-2 py-2.5 align-middle text-center"><CheckCell value={video.demoDone} /></td>
+                    <td className="px-4 py-2.5 align-middle text-right min-w-[76px]">
                       <WorkHoursCell hours={totalHours} />
                     </td>
                   </tr>
