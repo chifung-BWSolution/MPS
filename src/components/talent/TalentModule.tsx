@@ -1252,7 +1252,11 @@ function TalentList() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <SkillCheckboxRow checkedIds={t.categories} readOnly />
+                    <div className="flex flex-wrap gap-1">
+                      {t.categories.length === 0 ? (
+                        <span className="text-[11px] text-muted-foreground">—</span>
+                      ) : t.categories.map(c => <CategoryChip key={c} id={c} />)}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     {(() => {
