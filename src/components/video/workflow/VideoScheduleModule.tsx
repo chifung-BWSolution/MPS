@@ -30,7 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 type TalentOption = { id: string; displayName: string };
 
 export function VideoScheduleModule() {
-  const { getPreReviewVideos, getById, addVideo, updateVideo, advanceToProduction } = useVideoWorkflow();
+  const { loading: workflowLoading, getPreReviewVideos, getById, addVideo, updateVideo, advanceToProduction } = useVideoWorkflow();
   const { channels } = useVchannels();
 
   const [vchannelFilter, setVchannelFilter] = useState('all');
@@ -125,26 +125,31 @@ export function VideoScheduleModule() {
       if (!payload.vchannelCode || !payload.videoCode || !payload.title?.trim()) {
         return { error: '請填寫完整基本資訊' };
       }
-      const id = addVideo({
-        vchannelId: payload.vchannelId,
-        vchannelCode: payload.vchannelCode,
-        videoCode: payload.videoCode,
-        title: payload.title.trim(),
-        deviceType: payload.deviceType ?? null,
-        productionYear: payload.productionYear,
-        shootAt: payload.shootAt,
-        location: payload.location ?? { sz: false, hk: false },
-        copywriting: payload.copywriting,
-        script: payload.script,
-        model: payload.model,
-        photographer: payload.photographer,
-        onSiteCrew: payload.onSiteCrew,
-      });
-      setEditingId(id);
-      return { error: null, id };
+      try {
+        const id = await addVideo({
+          vchannelId: payload.vchannelId,
+          vchannelCode: payload.vchannelCode,
+          videoCode: payload.videoCode,
+          title: payload.title.trim(),
+          deviceType: payload.deviceType ?? null,
+          productionYear: payload.productionYear,
+          shootAt: payload.shootAt,
+          location: payload.location ?? { sz: false, hk: false },
+          copywriting: payload.copywriting,
+          script: payload.script,
+          model: payload.model,
+          photographer: payload.photographer,
+          onSiteCrew: payload.onSiteCrew,
+        });
+        setEditingId(id);
+        return { error: null, id };
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : '建立影片失敗' };
+      }
     }
     if (!editingId) return { error: '找不到影片' };
-    updateVideo(editingId, payload);
+    const err = await updateVideo(editingId, payload);
+    if (err) return { error: err };
     return { error: null, id: editingId };
   };
 
@@ -152,7 +157,7 @@ export function VideoScheduleModule() {
     return advanceToProduction(videoId);
   };
 
-  if (loading) {
+  if (loading || workflowLoading) {
     return (
       <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
         <Loader2 size={18} className="animate-spin" /> 載入中…

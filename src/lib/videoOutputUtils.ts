@@ -6,6 +6,12 @@ import type {
   VideoOutputStatus,
   VideoProjectCategory,
 } from '@/types/videoOutput';
+import type { VideoWorkflowStage } from '@/types/videoWorkflow';
+import {
+  parsePrepAssignments,
+  parseProductionProgressJson,
+  resolveProductionProgress,
+} from '@/lib/videoOutputWorkflowMapper';
 
 /** Nine media platforms managed via the 發佈 modal. */
 export const MEDIA_PLATFORM_PUBLISH_KEYS: PlatformPublishKey[] = [
@@ -128,8 +134,22 @@ export function formatShootLocation(shootHk: boolean, shootSz: boolean): string 
 
 export function deriveVideoOutputStatus(row: Pick<
   VideoOutput,
-  'shootSz' | 'shootHk' | 'rawFootageDone' | 'needsEditing' | 'demoDone' | 'publishedDate'
+  'workflowStage' | 'shootSz' | 'shootHk' | 'rawFootageDone' | 'needsEditing' | 'demoDone' | 'publishedDate'
 >): VideoOutputStatus {
+  if (row.workflowStage) {
+    switch (row.workflowStage) {
+      case 'published':
+        return 'published';
+      case 'review':
+      case 'publish':
+        return 'demo_done';
+      case 'production':
+        return 'in_production';
+      case 'prep':
+        return 'pending';
+    }
+  }
+
   if (row.publishedDate) return 'published';
   if (row.demoDone) return 'demo_done';
   const anyProgress =
@@ -245,13 +265,23 @@ type DbVideoOutputRow = {
   storage_path: string | null;
   project_category: VideoProjectCategory;
   notes: string | null;
+  workflow_stage?: VideoWorkflowStage;
+  prep_assignments?: unknown;
+  production_progress?: unknown;
+  location_notes?: string | null;
+  review_reject_reason?: string | null;
+  submitted_for_review_at?: string | null;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
   created_at: string;
   updated_at: string;
   vchannels?: { channel_code: string; public_name: string } | null;
 };
 
 export function mapVideoOutputRow(row: DbVideoOutputRow): VideoOutput {
-  return {
+  const prepAssignments = parsePrepAssignments(row.prep_assignments);
+  const productionProgressRaw = parseProductionProgressJson(row.production_progress);
+  const base: VideoOutput = {
     id: row.id,
     vchannelId: row.vchannel_id,
     channelCode: row.vchannels?.channel_code ?? '',
@@ -278,9 +308,24 @@ export function mapVideoOutputRow(row: DbVideoOutputRow): VideoOutput {
     storagePath: row.storage_path ?? undefined,
     projectCategory: row.project_category,
     notes: row.notes ?? undefined,
+    workflowStage: row.workflow_stage ?? 'prep',
+    prepAssignments,
+    productionProgress: productionProgressRaw ?? resolveProductionProgress({
+      productionProgress: undefined,
+      rawFootageDone: row.raw_footage_done,
+      needsEditing: row.needs_editing,
+      demoDone: row.demo_done,
+    }),
+    locationNotes: row.location_notes ?? undefined,
+    reviewRejectReason: row.review_reject_reason ?? undefined,
+    submittedForReviewAt: row.submitted_for_review_at ?? undefined,
+    reviewedAt: row.reviewed_at ?? undefined,
+    reviewedBy: row.reviewed_by ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+  base.productionProgress = resolveProductionProgress(base);
+  return base;
 }
 
 export function videoOutputToDbRow(input: VideoOutputInput) {
@@ -308,6 +353,14 @@ export function videoOutputToDbRow(input: VideoOutputInput) {
     storage_path: input.storagePath ?? null,
     project_category: input.projectCategory ?? 'client',
     notes: input.notes ?? null,
+    workflow_stage: input.workflowStage ?? 'prep',
+    prep_assignments: input.prepAssignments ?? {},
+    production_progress: input.productionProgress ?? {},
+    location_notes: input.locationNotes ?? null,
+    review_reject_reason: input.reviewRejectReason ?? null,
+    submitted_for_review_at: input.submittedForReviewAt ?? null,
+    reviewed_at: input.reviewedAt ?? null,
+    reviewed_by: input.reviewedBy ?? null,
     updated_at: new Date().toISOString(),
   };
 }

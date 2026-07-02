@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Edit2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/AuthContext';
 import { useVideoWorkflow } from '@/hooks/useVideoWorkflow';
 import { useVideoWorkflowListFilter } from '@/hooks/useVideoWorkflowListFilter';
 import type { ProductionProgress, VideoWorkflowMock } from '@/types/videoWorkflow';
@@ -22,6 +23,7 @@ import {
 } from '@/components/video/workflow/workflowListLayout';
 import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
+import { resolveBubbleStaffId } from '@/services/reportLinkService';
 
 function ProductionListRow({
   video,
@@ -78,7 +80,8 @@ function ProductionListRow({
 }
 
 export function VideoProductionModule() {
-  const { getByStage, getById, updateVideo, submitForReview } = useVideoWorkflow();
+  const { systemUser } = useAuth();
+  const { getByStage, getById, saveProductionWithWorkLogs, submitForReview } = useVideoWorkflow();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [submitTargetId, setSubmitTargetId] = useState<string | null>(null);
 
@@ -102,14 +105,23 @@ export function VideoProductionModule() {
     plannedPublishDate?: string;
   }): Promise<string | null> => {
     if (!editingId) return '找不到影片';
-    updateVideo(editingId, payload);
-    return null;
+    const staffId = await resolveBubbleStaffId(systemUser);
+    return saveProductionWithWorkLogs(
+      editingId,
+      {
+        productionProgress: payload.productionProgress,
+        storagePath: payload.storagePath,
+        plannedPublishDate: payload.plannedPublishDate,
+      },
+      staffId ?? undefined,
+    );
   };
 
-  const confirmSubmit = () => {
+  const confirmSubmit = async () => {
     if (!submitTargetId || !submitTarget) return;
     if (getSubmitForReviewBlockers(submitTarget).length > 0) return;
-    submitForReview(submitTargetId);
+    const err = await submitForReview(submitTargetId);
+    if (err) return;
     setSubmitTargetId(null);
   };
 

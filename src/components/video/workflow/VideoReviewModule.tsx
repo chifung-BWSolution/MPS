@@ -157,8 +157,12 @@ export function VideoReviewModule() {
         open={!!reviewTarget}
         video={reviewTarget}
         onClose={() => setReviewTargetId(null)}
-        onApprove={id => approveReview(id, reviewerName)}
-        onReject={(id, reason) => rejectReview(id, reason, reviewerName)}
+        onApprove={async id => {
+          await approveReview(id, reviewerName);
+        }}
+        onReject={async (id, reason) => {
+          await rejectReview(id, reason, reviewerName);
+        }}
       />
     </div>
   );

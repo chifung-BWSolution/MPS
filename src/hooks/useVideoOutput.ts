@@ -81,6 +81,14 @@ export function useVideoOutput() {
       storagePath: input.storagePath ?? existing.storagePath,
       projectCategory: input.projectCategory ?? existing.projectCategory,
       notes: input.notes ?? existing.notes,
+      workflowStage: input.workflowStage ?? existing.workflowStage,
+      prepAssignments: input.prepAssignments ?? existing.prepAssignments,
+      productionProgress: input.productionProgress ?? existing.productionProgress,
+      locationNotes: input.locationNotes ?? existing.locationNotes,
+      reviewRejectReason: input.reviewRejectReason ?? existing.reviewRejectReason,
+      submittedForReviewAt: input.submittedForReviewAt ?? existing.submittedForReviewAt,
+      reviewedAt: input.reviewedAt ?? existing.reviewedAt,
+      reviewedBy: input.reviewedBy ?? existing.reviewedBy,
     };
 
     const row = videoOutputToDbRow(merged);

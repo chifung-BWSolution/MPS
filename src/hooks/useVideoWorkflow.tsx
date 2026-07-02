@@ -7,62 +7,133 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { VIDEO_WORKFLOW_MOCK_SEED } from '@/data/videoWorkflowMock';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/context/AuthContext';
+import type { VideoOutput } from '@/types/videoOutput';
+import type { PrepAssignments } from '@/types/videoOutputWorkflow';
+import type { VideoWorkflowMock, VideoWorkflowStage, VideoWorkflowUpdate } from '@/types/videoWorkflow';
+import { mapVideoOutputRow } from '@/lib/videoOutputUtils';
+import {
+  createVideoDbRow,
+  mapVideoOutputToWorkflow,
+  workflowPatchToDbUpdate,
+} from '@/lib/videoOutputWorkflowMapper';
 import {
   getPrepMissingItems,
   isPrepComplete,
-  normalizeProductionProgress,
   normalizeVideoWorkflow,
 } from '@/lib/videoWorkflowUtils';
-import type { VideoWorkflowMock, VideoWorkflowStage, VideoWorkflowUpdate } from '@/types/videoWorkflow';
+import { inferProjectCategory } from '@/lib/videoOutputUtils';
+import { fetchWorkLogsByVideoId, saveWorkLogsForVideo } from '@/services/videoOutputWorkLogService';
+import { mergeProductionProgressWorkLogs } from '@/services/productionProgressWorkLogService';
+import { resolveBubbleStaffId } from '@/services/reportLinkService';
 
-const STORAGE_KEY = 'mps_video_workflow_mock_v1';
+const SELECT_QUERY = `
+  *,
+  vchannels ( channel_code, public_name )
+`;
 
 type VideoWorkflowContextValue = {
+  loading: boolean;
+  error: string | null;
   videos: VideoWorkflowMock[];
+  refreshVideos: () => Promise<void>;
   getById: (id: string) => VideoWorkflowMock | undefined;
+  getVideoOutputById: (id: string) => VideoOutput | undefined;
   getByStage: (stage: VideoWorkflowStage) => VideoWorkflowMock[];
   getPreReviewVideos: () => VideoWorkflowMock[];
-  addVideo: (payload: Omit<VideoWorkflowMock, 'id' | 'stage' | 'createdAt'>) => string;
-  updateVideo: (id: string, patch: VideoWorkflowUpdate) => void;
-  advanceToProduction: (id: string) => string | null;
-  submitForReview: (id: string) => void;
-  approveReview: (id: string, reviewedBy: string) => void;
-  rejectReview: (id: string, reason: string, reviewedBy: string) => void;
-  completePublish: (id: string, patch: VideoWorkflowUpdate) => void;
-  resetToSeed: () => void;
+  addVideo: (payload: Omit<VideoWorkflowMock, 'id' | 'stage' | 'createdAt'>) => Promise<string>;
+  updateVideo: (id: string, patch: VideoWorkflowUpdate) => Promise<string | null>;
+  advanceToProduction: (id: string) => Promise<string | null>;
+  submitForReview: (id: string) => Promise<string | null>;
+  approveReview: (id: string, reviewedBy: string) => Promise<string | null>;
+  rejectReview: (id: string, reason: string, reviewedBy: string) => Promise<string | null>;
+  completePublish: (id: string, patch: VideoWorkflowUpdate) => Promise<string | null>;
+  saveProductionWithWorkLogs: (
+    id: string,
+    patch: VideoWorkflowUpdate,
+    staffId?: string,
+    staffName?: string,
+  ) => Promise<string | null>;
 };
 
 const VideoWorkflowContext = createContext<VideoWorkflowContextValue | null>(null);
 
-function loadInitialVideos(): VideoWorkflowMock[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as VideoWorkflowMock[];
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map(v => normalizeVideoWorkflow(v));
-      }
-    }
-  } catch {
-    // ignore corrupt storage
-  }
-  return VIDEO_WORKFLOW_MOCK_SEED.map(v =>
-    normalizeVideoWorkflow({
-      ...v,
-      onSiteCrew: v.onSiteCrew ? [...v.onSiteCrew] : undefined,
-    }),
-  );
+function toWorkflowList(rows: VideoOutput[]): VideoWorkflowMock[] {
+  return rows.map(row => normalizeVideoWorkflow(mapVideoOutputToWorkflow(row)));
 }
 
 export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
-  const [videos, setVideos] = useState<VideoWorkflowMock[]>(loadInitialVideos);
+  const { session, systemUser } = useAuth();
+  const [rawVideos, setRawVideos] = useState<VideoOutput[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refreshVideos = useCallback(async () => {
+    setLoading(true);
+    const { data, error: fetchError } = await supabase
+      .from('video_output')
+      .select(SELECT_QUERY)
+      .order('updated_at', { ascending: false });
+
+    if (fetchError) {
+      setError(fetchError.message);
+      setRawVideos([]);
+    } else {
+      setError(null);
+      setRawVideos((data ?? []).map(row => mapVideoOutputRow(row as never)));
+    }
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(videos));
-  }, [videos]);
+    void refreshVideos();
+  }, [session, refreshVideos]);
+
+  const videos = useMemo(() => toWorkflowList(rawVideos), [rawVideos]);
+
+  const upsertLocal = useCallback((mapped: VideoOutput) => {
+    setRawVideos(prev => {
+      const next = prev.some(v => v.id === mapped.id)
+        ? prev.map(v => (v.id === mapped.id ? mapped : v))
+        : [mapped, ...prev];
+      return next;
+    });
+  }, []);
+
+  const fetchOne = useCallback(async (id: string): Promise<VideoOutput | null> => {
+    const { data, error: fetchError } = await supabase
+      .from('video_output')
+      .select(SELECT_QUERY)
+      .eq('id', id)
+      .single();
+    if (fetchError || !data) return null;
+    return mapVideoOutputRow(data as never);
+  }, []);
+
+  const applyPatch = useCallback(async (id: string, patch: VideoWorkflowUpdate): Promise<string | null> => {
+    const existing = rawVideos.find(v => v.id === id);
+    if (!existing) return '找不到影片';
+
+    const row = workflowPatchToDbUpdate(existing, patch);
+    const { data, error: updateError } = await supabase
+      .from('video_output')
+      .update(row)
+      .eq('id', id)
+      .select(SELECT_QUERY)
+      .single();
+
+    if (updateError) return updateError.message;
+    if (data) upsertLocal(mapVideoOutputRow(data as never));
+    return null;
+  }, [rawVideos, upsertLocal]);
 
   const getById = useCallback((id: string) => videos.find(v => v.id === id), [videos]);
+
+  const getVideoOutputById = useCallback(
+    (id: string) => rawVideos.find(v => v.id === id),
+    [rawVideos],
+  );
 
   const getByStage = useCallback(
     (stage: VideoWorkflowStage) => videos.filter(v => v.stage === stage),
@@ -74,101 +145,123 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
     [videos],
   );
 
-  const addVideo = useCallback((payload: Omit<VideoWorkflowMock, 'id' | 'stage' | 'createdAt'>) => {
-    const id = `wf-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const video: VideoWorkflowMock = {
-      ...payload,
-      id,
-      stage: 'prep',
-      location: payload.location ?? { sz: false, hk: false },
-      createdAt: new Date().toISOString(),
+  const addVideo = useCallback(async (payload: Omit<VideoWorkflowMock, 'id' | 'stage' | 'createdAt'>) => {
+    const prepAssignments: PrepAssignments = {
+      copywriting: payload.copywriting,
+      script: payload.script,
+      model: payload.model,
+      photographer: payload.photographer,
+      onSiteCrew: payload.onSiteCrew,
     };
-    setVideos(prev => [video, ...prev]);
-    return id;
-  }, []);
 
-  const updateVideo = useCallback((id: string, patch: VideoWorkflowUpdate) => {
-    setVideos(prev =>
-      prev.map(v => {
-        if (v.id !== id) return v;
-        let next: VideoWorkflowMock = { ...v, ...patch };
-        if (patch.location) next.location = { ...v.location, ...patch.location };
-        if (patch.onSiteCrew) next.onSiteCrew = patch.onSiteCrew;
-        if (patch.platformPublish) next.platformPublish = { ...v.platformPublish, ...patch.platformPublish };
-        if (patch.productionProgress) {
-          const base = normalizeProductionProgress(v);
-          next.productionProgress = {
-            ...base,
-            ...patch.productionProgress,
-            copywriting: { ...base.copywriting, ...patch.productionProgress.copywriting },
-            script: { ...base.script, ...patch.productionProgress.script },
-            rawFootage: { ...base.rawFootage, ...patch.productionProgress.rawFootage },
-            editing: { ...base.editing, ...patch.productionProgress.editing },
-            demo: { ...base.demo, ...patch.productionProgress.demo },
-          };
-        }
-        next = normalizeVideoWorkflow(next);
-        return next;
-      }),
-    );
-  }, []);
+    const row = createVideoDbRow({
+      vchannelId: payload.vchannelId ?? '',
+      videoCode: payload.videoCode,
+      title: payload.title,
+      productionYear: payload.productionYear,
+      projectCategory: inferProjectCategory(payload.vchannelCode),
+      shootAt: payload.shootAt,
+      location: payload.location,
+      prepAssignments,
+    });
 
-  const advanceToProduction = useCallback((id: string): string | null => {
+    const { data, error: insertError } = await supabase
+      .from('video_output')
+      .insert(row)
+      .select(SELECT_QUERY)
+      .single();
+
+    if (insertError) throw new Error(insertError.message);
+    const mapped = mapVideoOutputRow(data as never);
+    upsertLocal(mapped);
+    return mapped.id;
+  }, [upsertLocal]);
+
+  const updateVideo = useCallback(
+    async (id: string, patch: VideoWorkflowUpdate) => applyPatch(id, patch),
+    [applyPatch],
+  );
+
+  const advanceToProduction = useCallback(async (id: string): Promise<string | null> => {
     const video = videos.find(v => v.id === id);
     if (!video) return '找不到影片';
     if (video.stage !== 'prep') return '僅準備中的影片可進入製作';
     if (!isPrepComplete(video)) {
       return `尚有未完成的準備項：${getPrepMissingItems(video).join('、')}`;
     }
-    updateVideo(id, { stage: 'production', reviewRejectReason: undefined });
-    return null;
-  }, [videos, updateVideo]);
+    return applyPatch(id, { stage: 'production', reviewRejectReason: undefined });
+  }, [videos, applyPatch]);
 
-  const submitForReview = useCallback((id: string) => {
-    updateVideo(id, {
+  const submitForReview = useCallback(async (id: string): Promise<string | null> => {
+    return applyPatch(id, {
       stage: 'review',
       reviewRejectReason: undefined,
       submittedForReviewAt: new Date().toISOString(),
     });
-  }, [updateVideo]);
+  }, [applyPatch]);
 
-  const approveReview = useCallback((id: string, reviewedBy: string) => {
-    updateVideo(id, {
+  const approveReview = useCallback(async (id: string, reviewedBy: string): Promise<string | null> => {
+    return applyPatch(id, {
       stage: 'publish',
       reviewedAt: new Date().toISOString(),
       reviewedBy,
       reviewRejectReason: undefined,
     });
-  }, [updateVideo]);
+  }, [applyPatch]);
 
-  const rejectReview = useCallback((id: string, reason: string, reviewedBy: string) => {
-    updateVideo(id, {
+  const rejectReview = useCallback(async (id: string, reason: string, reviewedBy: string): Promise<string | null> => {
+    return applyPatch(id, {
       stage: 'production',
       reviewRejectReason: reason.trim(),
       reviewedAt: new Date().toISOString(),
       reviewedBy,
     });
-  }, [updateVideo]);
+  }, [applyPatch]);
 
-  const completePublish = useCallback((id: string, patch: VideoWorkflowUpdate) => {
-    updateVideo(id, { ...patch, stage: 'published' });
-  }, [updateVideo]);
+  const completePublish = useCallback(async (id: string, patch: VideoWorkflowUpdate): Promise<string | null> => {
+    return applyPatch(id, { ...patch, stage: 'published' });
+  }, [applyPatch]);
 
-  const resetToSeed = useCallback(() => {
-    setVideos(
-      VIDEO_WORKFLOW_MOCK_SEED.map(v =>
-        normalizeVideoWorkflow({
-          ...v,
-          onSiteCrew: v.onSiteCrew ? [...v.onSiteCrew] : undefined,
-        }),
-      ),
-    );
-  }, []);
+  const saveProductionWithWorkLogs = useCallback(async (
+    id: string,
+    patch: VideoWorkflowUpdate,
+    staffId?: string,
+    staffName?: string,
+  ): Promise<string | null> => {
+    const err = await applyPatch(id, patch);
+    if (err) return err;
+
+    if (!patch.productionProgress) return null;
+
+    const bubbleStaffId = staffId ?? (await resolveBubbleStaffId(systemUser)) ?? undefined;
+    if (!bubbleStaffId) return null;
+
+    try {
+      const existingLogs = await fetchWorkLogsByVideoId(id);
+      const merged = mergeProductionProgressWorkLogs(
+        existingLogs,
+        patch.productionProgress,
+        bubbleStaffId,
+        staffName,
+      );
+      await saveWorkLogsForVideo(id, merged, bubbleStaffId);
+    } catch (e) {
+      return e instanceof Error ? e.message : '工時同步失敗';
+    }
+
+    const refreshed = await fetchOne(id);
+    if (refreshed) upsertLocal(refreshed);
+    return null;
+  }, [applyPatch, systemUser, fetchOne, upsertLocal]);
 
   const value = useMemo(
     () => ({
+      loading,
+      error,
       videos,
+      refreshVideos,
       getById,
+      getVideoOutputById,
       getByStage,
       getPreReviewVideos,
       addVideo,
@@ -178,11 +271,15 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
       approveReview,
       rejectReview,
       completePublish,
-      resetToSeed,
+      saveProductionWithWorkLogs,
     }),
     [
+      loading,
+      error,
       videos,
+      refreshVideos,
       getById,
+      getVideoOutputById,
       getByStage,
       getPreReviewVideos,
       addVideo,
@@ -192,7 +289,7 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
       approveReview,
       rejectReview,
       completePublish,
-      resetToSeed,
+      saveProductionWithWorkLogs,
     ],
   );
 

@@ -1,3 +1,5 @@
+import type { VideoOutputWorkflowFields } from '@/types/videoOutputWorkflow';
+
 export type VideoProjectCategory = 'internal' | 'client';
 
 export type VideoOutputStatus = 'pending' | 'in_production' | 'demo_done' | 'published';
@@ -20,7 +22,7 @@ export type PlatformPublishEntry = boolean | { url?: string };
 
 export type PlatformPublishMap = Partial<Record<PlatformPublishKey, PlatformPublishEntry>>;
 
-export interface VideoOutput {
+export interface VideoOutput extends VideoOutputWorkflowFields {
   id: string;
   vchannelId: string;
   channelCode: string;
@@ -75,4 +77,12 @@ export interface VideoOutputInput {
   storagePath?: string;
   projectCategory?: VideoProjectCategory;
   notes?: string;
+  workflowStage?: VideoOutput['workflowStage'];
+  prepAssignments?: VideoOutput['prepAssignments'];
+  productionProgress?: VideoOutput['productionProgress'];
+  locationNotes?: string;
+  reviewRejectReason?: string;
+  submittedForReviewAt?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
 }

@@ -81,7 +81,11 @@ function CopywritingCell({ sc, tc, en }: { sc?: boolean; tc?: boolean; en?: bool
 }
 
 function StatusCell({ video, status }: { video: VideoOutput; status: VideoOutputStatus }) {
-  if (video.reviewed) {
+  if (
+    video.reviewed ||
+    video.workflowStage === 'publish' ||
+    video.workflowStage === 'published'
+  ) {
     return (
       <span className="text-[10px] font-medium px-2 py-0.5 rounded whitespace-nowrap bg-slate-100 text-slate-600">
         已審核
