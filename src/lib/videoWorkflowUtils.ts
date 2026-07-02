@@ -110,8 +110,15 @@ export function getProductionTaskDisplayStatus(
 }
 
 export function canSubmitProductionForReview(video: VideoWorkflowMock): boolean {
+  return getSubmitForReviewBlockers(video).length === 0;
+}
+
+export function getSubmitForReviewBlockers(video: VideoWorkflowMock): string[] {
+  const blockers: string[] = [];
   const progress = normalizeProductionProgress(video);
-  return progress.demo.done;
+  if (!progress.demo.done) blockers.push('Demo 未完成');
+  if (!video.plannedPublishDate?.trim()) blockers.push('計劃發佈日期未填');
+  return blockers;
 }
 
 export function validateProductionProgress(progress: ProductionProgress): string | null {

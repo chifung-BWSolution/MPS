@@ -42,6 +42,7 @@ export const VIDEO_WORKFLOW_MOCK_SEED: VideoWorkflowMock[] = [
     rawFootageDone: true,
     needsEditing: true,
     demoDone: false,
+    plannedPublishDate: '2026-07-20',
   },
   {
     id: 'wf-mock-002b',
@@ -97,9 +98,8 @@ export const VIDEO_WORKFLOW_MOCK_SEED: VideoWorkflowMock[] = [
     needsEditing: true,
     demoDone: true,
     storagePath: 'V:\\V21\\demo\\sample.mp4',
+    plannedPublishDate: '2026-07-18',
   },
-  {
-    id: 'wf-mock-004',
     vchannelCode: 'V03',
     videoCode: 'V03-2026-004M',
     title: '待發佈示範片',

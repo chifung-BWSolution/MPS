@@ -17,7 +17,11 @@ type Props = {
   open: boolean;
   video: VideoWorkflowMock | null;
   onClose: () => void;
-  onSave: (payload: { productionProgress: ProductionProgress; storagePath?: string }) => Promise<string | null>;
+  onSave: (payload: {
+    productionProgress: ProductionProgress;
+    storagePath?: string;
+    plannedPublishDate?: string;
+  }) => Promise<string | null>;
 };
 
 function TaskRow({
@@ -65,6 +69,7 @@ function TaskRow({
 export function ProductionEditModal({ open, video, onClose, onSave }: Props) {
   const [progress, setProgress] = useState<ProductionProgress>(() => normalizeProductionProgress({} as VideoWorkflowMock));
   const [storagePath, setStoragePath] = useState('');
+  const [plannedPublishDate, setPlannedPublishDate] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -73,6 +78,7 @@ export function ProductionEditModal({ open, video, onClose, onSave }: Props) {
     setFormError(null);
     setProgress(normalizeProductionProgress(video));
     setStoragePath(video.storagePath ?? '');
+    setPlannedPublishDate(video.plannedPublishDate ?? '');
   }, [open, video]);
 
   if (!video) return null;
@@ -104,6 +110,7 @@ export function ProductionEditModal({ open, video, onClose, onSave }: Props) {
     const saveErr = await onSave({
       productionProgress: progress,
       storagePath: storagePath.trim() || undefined,
+      plannedPublishDate: plannedPublishDate.trim() || undefined,
     });
     setSaving(false);
     if (saveErr) {
@@ -232,13 +239,24 @@ export function ProductionEditModal({ open, video, onClose, onSave }: Props) {
         </div>
 
         <div>
-          <label className="text-[12px] font-medium block mb-1">視頻鏈接 / 保存地址</label>
+          <label className="text-[12px] font-medium block mb-1">影片存放位置</label>
           <Input
             value={storagePath}
             onChange={e => setStoragePath(e.target.value)}
             placeholder="V:\\... 或 https://..."
             className="h-9 text-[13px]"
           />
+        </div>
+
+        <div>
+          <label className="text-[12px] font-medium block mb-1">計劃發佈日期 *</label>
+          <Input
+            type="date"
+            value={plannedPublishDate}
+            onChange={e => setPlannedPublishDate(e.target.value)}
+            className="h-9 text-[13px]"
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">提交審核前必填</p>
         </div>
       </div>
 

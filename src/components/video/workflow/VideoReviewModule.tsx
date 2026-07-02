@@ -5,24 +5,24 @@ import { useVideoWorkflow } from '@/hooks/useVideoWorkflow';
 import { useVideoWorkflowListFilter } from '@/hooks/useVideoWorkflowListFilter';
 import type { VideoWorkflowMock } from '@/types/videoWorkflow';
 import {
-  PRODUCTION_TASK_KEYS,
-  PRODUCTION_TASK_LABELS,
   VIDEO_WORKFLOW_STAGE_COLORS,
   VIDEO_WORKFLOW_STAGE_LABELS,
 } from '@/lib/videoWorkflowUtils';
-import {
-  ProductionProgressMarks,
-} from '@/components/video/workflow/ProductionProgressMarks';
+import { ProductionProgressMarks } from '@/components/video/workflow/ProductionProgressMarks';
 import { ReviewActionModal } from '@/components/video/workflow/ReviewActionModal';
 import { WorkflowListFilters } from '@/components/video/workflow/WorkflowListFilters';
+import {
+  formatWorkflowPlannedPublishDate,
+  formatWorkflowStoragePath,
+  WORKFLOW_LIST_GRID_REVIEW,
+  WorkflowVideoListHeader,
+} from '@/components/video/workflow/workflowListLayout';
 import { Button } from '@/components/ui/button';
-
-const LIST_GRID =
-  'grid grid-cols-[minmax(130px,1.1fr)_minmax(110px,1.3fr)_48px_68px_minmax(88px,1fr)_repeat(5,36px)_56px] gap-2 items-center min-w-[960px]';
 
 function ReviewListRow({ video, onReview }: { video: VideoWorkflowMock; onReview: () => void }) {
   return (
-    <div className={cn(LIST_GRID, 'px-3 py-2.5 border-b border-border/50 hover:bg-muted/20 text-[12px]')}>
+    <div className={cn(WORKFLOW_LIST_GRID_REVIEW, 'px-3 py-2.5 border-b border-border/50 hover:bg-muted/20 text-[12px]')}>
+      <span className="text-muted-foreground font-medium">{video.vchannelCode}</span>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="font-mono text-[11px] text-muted-foreground truncate">{video.videoCode}</span>
@@ -32,12 +32,12 @@ function ReviewListRow({ video, onReview }: { video: VideoWorkflowMock; onReview
         </div>
       </div>
       <p className="font-semibold truncate min-w-0" title={video.title}>{video.title}</p>
-      <span className="text-muted-foreground">{video.vchannelCode}</span>
       <span className="text-muted-foreground">{video.shootAt ?? '—'}</span>
-      <span className="text-muted-foreground truncate" title={video.storagePath}>
-        {video.storagePath || '—'}
-      </span>
       <ProductionProgressMarks video={video} />
+      <span className="text-muted-foreground truncate" title={video.storagePath}>
+        {formatWorkflowStoragePath(video.storagePath)}
+      </span>
+      <span className="text-muted-foreground">{formatWorkflowPlannedPublishDate(video.plannedPublishDate)}</span>
       <Button type="button" size="sm" className="h-7 text-[11px] px-2 bg-teal-600 hover:bg-teal-700 text-white" onClick={onReview}>
         審核
       </Button>
@@ -85,17 +85,7 @@ export function VideoReviewModule() {
         </div>
       ) : (
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] overflow-x-auto">
-          <div className={cn(LIST_GRID, 'px-3 py-2 bg-muted/40 text-[11px] font-semibold text-muted-foreground border-b border-border/60')}>
-            <span>Video Code</span>
-            <span>主題</span>
-            <span>頻道</span>
-            <span>拍攝日</span>
-            <span>Demo</span>
-            {PRODUCTION_TASK_KEYS.map(key => (
-              <span key={key} className="text-center">{PRODUCTION_TASK_LABELS[key]}</span>
-            ))}
-            <span />
-          </div>
+          <WorkflowVideoListHeader variant="review" />
           {filteredVideos.map(video => (
             <ReviewListRow
               key={video.id}

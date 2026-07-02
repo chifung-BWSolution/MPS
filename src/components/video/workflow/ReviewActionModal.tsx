@@ -66,7 +66,10 @@ export function ReviewActionModal({ open, video, onClose, onApprove, onReject }:
             拍攝 {video.shootAt ?? '—'} · {formatLocation(video.location)}
           </p>
           <p className="text-[12px] text-muted-foreground truncate" title={video.storagePath}>
-            Demo：{video.storagePath || '—'}
+            影片存放位置：{video.storagePath || '—'}
+          </p>
+          <p className="text-[12px] text-muted-foreground">
+            計劃發佈日期：{video.plannedPublishDate?.trim() || '—'}
           </p>
         </div>
 
