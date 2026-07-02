@@ -100,6 +100,8 @@ export const VIDEO_WORKFLOW_MOCK_SEED: VideoWorkflowMock[] = [
     storagePath: 'V:\\V21\\demo\\sample.mp4',
     plannedPublishDate: '2026-07-18',
   },
+  {
+    id: 'wf-mock-004',
     vchannelCode: 'V03',
     videoCode: 'V03-2026-004M',
     title: '待發佈示範片',
