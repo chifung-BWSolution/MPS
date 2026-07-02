@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Edit, Trash2, KeyRound, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Vchannel, VchannelDeviceType, VchannelImportance, VchannelStatus } from '@/types/vchannel';
@@ -20,6 +20,14 @@ import {
   parsePlatformStatus,
   platformStatusSummary,
 } from '@/lib/vchannelPlatformStatus';
+import { fetchWorkLogTotalsByVchannelIds } from '@/services/videoOutputWorkLogService';
+
+function ChannelWorkHoursCell({ hours }: { hours?: number }) {
+  if (hours == null || hours <= 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  return <span className="font-medium text-teal-700 whitespace-nowrap">{hours.toFixed(1)}h</span>;
+}
 
 const importanceConfig = {
   A1: { label: 'A1', color: 'text-rose-700', bg: 'bg-rose-100', description: '最高重要' },
@@ -214,6 +222,28 @@ export function VideoChannelsList() {
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [accountForm, setAccountForm] = useState(emptyAccount);
   const [deleteAccountTarget, setDeleteAccountTarget] = useState<{ id: string; label: string } | null>(null);
+  const [channelWorkHours, setChannelWorkHours] = useState<Map<string, number>>(new Map());
+
+  const refreshChannelWorkHours = useCallback(async (channelIds: string[]) => {
+    if (channelIds.length === 0) {
+      setChannelWorkHours(new Map());
+      return;
+    }
+    try {
+      const totals = await fetchWorkLogTotalsByVchannelIds(channelIds);
+      setChannelWorkHours(totals);
+    } catch {
+      // keep existing totals on refresh failure
+    }
+  }, []);
+
+  useEffect(() => {
+    if (channels.length === 0) {
+      setChannelWorkHours(new Map());
+      return;
+    }
+    void refreshChannelWorkHours(channels.map(ch => ch.id));
+  }, [channels, refreshChannelWorkHours]);
 
   const brandOptions = useMemo(
     () => [...new Set(channels.map(c => c.brandCode).filter(Boolean))].sort(),
@@ -463,6 +493,7 @@ export function VideoChannelsList() {
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">重要性</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">D/M</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">平台</th>
+                  <th className="text-right px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap min-w-[76px]">總工時</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">狀態</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">操作</th>
                 </tr>
@@ -492,6 +523,9 @@ export function VideoChannelsList() {
                         </td>
                         <td className="px-3 py-3"><span className="text-[11px] bg-muted px-2 py-0.5 rounded">{deviceLabel(channel.deviceType)}</span></td>
                         <td className="px-3 py-3 text-[11px] text-muted-foreground">{openedPlatformCount(channel)}/8</td>
+                        <td className="px-3 py-3 text-right">
+                          <ChannelWorkHoursCell hours={channelWorkHours.get(channel.id)} />
+                        </td>
                         <td className="px-3 py-3">
                           <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded', channel.status === 'active' ? 'bg-teal-100 text-teal-700' : 'bg-gray-100 text-gray-600')}>
                             {channel.status === 'active' ? '活躍' : channel.status === 'paused' ? '暫停' : '已歸檔'}
@@ -508,7 +542,7 @@ export function VideoChannelsList() {
                       {isExpanded && (
                         <tr className="border-t border-border/50 bg-slate-50/70">
                           <td />
-                          <td colSpan={9} className="px-3 py-3">
+                          <td colSpan={10} className="px-3 py-3">
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                               <div className="rounded-md border border-border bg-white p-3">
                                 <h4 className="text-[12px] font-bold mb-2">平台狀態（summary）</h4>

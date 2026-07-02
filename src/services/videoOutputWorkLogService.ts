@@ -51,6 +51,38 @@ export async function fetchWorkLogTotalsByVideoIds(
   return totals;
 }
 
+export async function fetchWorkLogTotalsByVchannelIds(
+  vchannelIds: string[],
+): Promise<Map<string, number>> {
+  if (vchannelIds.length === 0) return new Map();
+
+  const { data: videos, error: videoError } = await supabase
+    .from('video_output')
+    .select('id, vchannel_id')
+    .in('vchannel_id', vchannelIds);
+
+  if (videoError) throw videoError;
+
+  const videoToChannel = new Map<string, string>();
+  for (const row of videos ?? []) {
+    videoToChannel.set(row.id as string, row.vchannel_id as string);
+  }
+
+  const videoIds = [...videoToChannel.keys()];
+  if (videoIds.length === 0) return new Map();
+
+  const videoTotals = await fetchWorkLogTotalsByVideoIds(videoIds);
+  const channelTotals = new Map<string, number>();
+
+  for (const [videoId, hours] of videoTotals) {
+    const channelId = videoToChannel.get(videoId);
+    if (!channelId) continue;
+    channelTotals.set(channelId, (channelTotals.get(channelId) ?? 0) + hours);
+  }
+
+  return channelTotals;
+}
+
 export async function fetchWorkLogsByVideoId(videoOutputId: string): Promise<VideoOutputWorkLog[]> {
   const { data, error } = await supabase
     .from('video_output_work_logs')
