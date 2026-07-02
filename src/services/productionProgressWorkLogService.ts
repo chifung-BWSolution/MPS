@@ -46,13 +46,17 @@ export function mergeProductionProgressWorkLogs(
   const productionDrafts: VideoWorkLogDraft[] = PRODUCTION_TASK_KEYS.flatMap(key => {
     const task = progress[key];
     if (!task.done || !task.hours || task.hours <= 0) return [];
+    const label =
+      key === 'rawFootage' && progress.footageMode === 'ai'
+        ? 'AI 生成'
+        : PRODUCTION_TASK_LABELS[key];
     return [{
       staffId,
       staffName,
       workDate: localDateString(),
       hours: task.hours,
       workType: TASK_WORK_TYPE[key],
-      notes: `${PRODUCTION_WORK_LOG_PREFIX} ${PRODUCTION_TASK_LABELS[key]}`,
+      notes: `${PRODUCTION_WORK_LOG_PREFIX} ${label}`,
     }];
   });
 

@@ -87,7 +87,7 @@ export function ProductionEditModal({ open, video, onClose, onSave }: Props) {
     setProgress(p => ({
       ...p,
       footageMode: mode,
-      rawFootage: mode === 'shoot' ? p.rawFootage : { done: false, hours: undefined },
+      rawFootage: mode === 'shoot' || mode === 'ai' ? p.rawFootage : { done: false, hours: undefined },
     }));
   };
 
@@ -187,10 +187,10 @@ export function ProductionEditModal({ open, video, onClose, onSave }: Props) {
           </div>
 
           <TaskRow
-            label={PRODUCTION_TASK_LABELS.rawFootage}
+            label={progress.footageMode === 'ai' ? 'AI 生成' : PRODUCTION_TASK_LABELS.rawFootage}
             task={progress.rawFootage}
-            disabled={progress.footageMode !== 'shoot'}
-            disabledHint={progress.footageMode === 'ai' ? 'AI 生成，無需原片' : progress.footageMode === null ? '請先選原片來源' : undefined}
+            disabled={progress.footageMode === null}
+            disabledHint={progress.footageMode === null ? '請先選原片來源' : undefined}
             onChange={rawFootage => setProgress(p => ({ ...p, rawFootage }))}
           />
 

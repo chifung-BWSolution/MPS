@@ -98,7 +98,7 @@ export function getProductionTaskDisplayStatus(
   key: ProductionTaskKey,
 ): ProductionTaskDisplayStatus {
   if (key === 'rawFootage') {
-    if (progress.footageMode !== 'shoot') return 'na';
+    if (progress.footageMode === null) return 'na';
     return progress.rawFootage.done ? 'done' : 'pending';
   }
   if (key === 'editing') {
@@ -125,7 +125,7 @@ export function validateProductionProgress(progress: ProductionProgress): string
   const checks: { label: string; task: ProductionTask; applicable: boolean }[] = [
     { label: PRODUCTION_TASK_LABELS.copywriting, task: progress.copywriting, applicable: true },
     { label: PRODUCTION_TASK_LABELS.script, task: progress.script, applicable: true },
-    { label: PRODUCTION_TASK_LABELS.rawFootage, task: progress.rawFootage, applicable: progress.footageMode === 'shoot' },
+    { label: PRODUCTION_TASK_LABELS.rawFootage, task: progress.rawFootage, applicable: progress.footageMode === 'shoot' || progress.footageMode === 'ai' },
     { label: PRODUCTION_TASK_LABELS.editing, task: progress.editing, applicable: progress.editingMode === true },
     { label: PRODUCTION_TASK_LABELS.demo, task: progress.demo, applicable: true },
   ];
