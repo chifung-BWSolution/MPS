@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Search, Plus, Star, Link2, Copy, Check, X, Calendar,
-  Tag, Users, Camera, FileText, Loader2,
+  Tag, Users, Camera, FileText, Loader2, ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
