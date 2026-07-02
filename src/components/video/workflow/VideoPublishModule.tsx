@@ -1,26 +1,34 @@
 import { useMemo, useState } from 'react';
-import { Check, Copy, Plus } from 'lucide-react';
+import { Check, Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVideoWorkflow } from '@/hooks/useVideoWorkflow';
+import { useVideoWorkflowListFilter } from '@/hooks/useVideoWorkflowListFilter';
 import type { PlatformPublishKey } from '@/types/videoOutput';
 import type { VideoWorkflowMock } from '@/types/videoWorkflow';
 import {
-  countPublishedPlatforms,
-  formatLocation,
   isPublishComplete,
   VIDEO_WORKFLOW_STAGE_COLORS,
+  VIDEO_WORKFLOW_STAGE_LABELS,
 } from '@/lib/videoWorkflowUtils';
 import {
   formatPlatformPublishCopyText,
-  getPublishedPlatformKeys,
   getPublishedPlatformKeysWithUrl,
-  getPlatformUrl,
   isPlatformPublished,
   MEDIA_PLATFORM_PUBLISH_KEYS,
   mergePlatformUrls,
   PLATFORM_PUBLISH_LABELS,
   urlsFromPlatformPublish,
 } from '@/lib/videoOutputUtils';
+import { ProductionProgressMarks } from '@/components/video/workflow/ProductionProgressMarks';
+import { PublishConfirmModal } from '@/components/video/workflow/PublishConfirmModal';
+import { WorkflowListFilters } from '@/components/video/workflow/WorkflowListFilters';
+import {
+  formatWorkflowPlannedPublishDate,
+  formatWorkflowStoragePath,
+  WORKFLOW_LIST_DATE_CELL,
+  WORKFLOW_LIST_GRID_PUBLISH,
+  WorkflowVideoListHeader,
+} from '@/components/video/workflow/workflowListLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CrudModal } from '@/components/ui/crud-modal';
@@ -45,34 +53,83 @@ function WorkflowPublishModal({
     for (const key of MEDIA_PLATFORM_PUBLISH_KEYS) initial[key] = existing[key] ?? '';
     return initial;
   });
-  const [plannedPublishDate, setPlannedPublishDate] = useState(video.plannedPublishDate ?? '');
   const [publishedDate, setPublishedDate] = useState(video.publishedDate ?? '');
+  const [hours, setHours] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
+  const [copyDone, setCopyDone] = useState(false);
 
   const previewPublish = useMemo(
     () => mergePlatformUrls(video.platformPublish ?? {}, urls),
     [video.platformPublish, urls],
   );
 
+  const handleCopyAll = async () => {
+    const text = formatPlatformPublishCopyText(previewPublish);
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyDone(true);
+      setTimeout(() => setCopyDone(false), 1500);
+    } catch {
+      // ignore
+    }
+  };
+
   const handleSubmit = () => {
+    setFormError(null);
+
+    const hoursNum = parseFloat(hours);
+    if (hours.trim() && (Number.isNaN(hoursNum) || hoursNum <= 0)) {
+      setFormError('工時必須大於 0');
+      return;
+    }
+
     const platformPublish = mergePlatformUrls(video.platformPublish ?? {}, urls);
     const anyPublished = MEDIA_PLATFORM_PUBLISH_KEYS.some(k => isPlatformPublished(platformPublish, k));
     onSave({
       platformPublish,
-      plannedPublishDate: plannedPublishDate || undefined,
       publishedDate: anyPublished && !publishedDate ? new Date().toISOString().slice(0, 10) : publishedDate || undefined,
+      publishHours: hoursNum > 0 ? hoursNum : undefined,
     });
     onClose();
   };
 
+  const hasCopyableUrls = getPublishedPlatformKeysWithUrl(previewPublish).length > 0;
+
   return (
-    <CrudModal isOpen onClose={onClose} title={`平台發佈 — ${video.videoCode}`} size="lg">
+    <CrudModal
+      isOpen
+      onClose={onClose}
+      title={`平台發佈 — ${video.videoCode}`}
+      size="lg"
+      headerActions={
+        hasCopyableUrls ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-[11px] gap-1"
+            onClick={handleCopyAll}
+          >
+            <Copy size={12} />
+            {copyDone ? '已複製' : '一鍵複製'}
+          </Button>
+        ) : undefined
+      }
+    >
       <div className="space-y-4">
+        {formError && (
+          <p className="text-[12px] text-rose-600 bg-rose-50 border border-rose-200 rounded px-3 py-2">{formError}</p>
+        )}
+
         <p className="text-[12px] text-muted-foreground">{video.title}</p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-[12px] font-medium mb-1 block">預計發佈</label>
-            <Input type="date" value={plannedPublishDate} onChange={e => setPlannedPublishDate(e.target.value)} className="h-9 text-[13px]" />
+            <div className="h-9 px-3 flex items-center text-[13px] text-muted-foreground bg-muted/30 border border-border/60 rounded-md">
+              {formatWorkflowPlannedPublishDate(video.plannedPublishDate)}
+            </div>
           </div>
           <div>
             <label className="text-[12px] font-medium mb-1 block">最終發佈日期</label>
@@ -112,6 +169,19 @@ function WorkflowPublishModal({
           </div>
         </div>
 
+        <div className="border-t border-border pt-4">
+          <label className="text-[12px] font-medium mb-1 block">工時（小時）</label>
+          <Input
+            type="number"
+            min={0}
+            step={0.5}
+            value={hours}
+            onChange={e => setHours(e.target.value)}
+            placeholder="選填"
+            className="h-9 text-[13px] max-w-[200px]"
+          />
+        </div>
+
         <div className="flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={onClose}>取消</Button>
           <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSubmit}>保存發佈</Button>
@@ -121,120 +191,129 @@ function WorkflowPublishModal({
   );
 }
 
-function PublishCard({ video }: { video: VideoWorkflowMock }) {
-  const { updateVideo, completePublish } = useVideoWorkflow();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [copyDone, setCopyDone] = useState(false);
-  const platformPublish = video.platformPublish ?? {};
-  const publishedCount = countPublishedPlatforms(platformPublish);
-  const copyableKeys = getPublishedPlatformKeysWithUrl(platformPublish);
-
-  const handleCopy = async () => {
-    const text = formatPlatformPublishCopyText(platformPublish);
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopyDone(true);
-      setTimeout(() => setCopyDone(false), 1500);
-    } catch {
-      // ignore
-    }
-  };
-
-  const handleSavePublish = (patch: Partial<VideoWorkflowMock>) => {
-    const merged = { ...video, ...patch, platformPublish: patch.platformPublish ?? video.platformPublish };
-    if (isPublishComplete(merged)) {
-      completePublish(video.id, patch);
-    } else {
-      updateVideo(video.id, patch);
-    }
-  };
+function PublishListRow({
+  video,
+  onOpenPublishRecord,
+  onPublish,
+}: {
+  video: VideoWorkflowMock;
+  onOpenPublishRecord: () => void;
+  onPublish: () => void;
+}) {
+  const canPublish = isPublishComplete(video);
 
   return (
-    <>
-      <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-4 space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[11px] text-muted-foreground">{video.videoCode} · {video.vchannelCode}</p>
-            <h3 className="text-[16px] font-bold">{video.title}</h3>
-            <p className="text-[11px] text-muted-foreground mt-1">{formatLocation(video.location)}</p>
-          </div>
-          <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded', VIDEO_WORKFLOW_STAGE_COLORS.publish)}>
-            待發佈
+    <div className={cn(WORKFLOW_LIST_GRID_PUBLISH, 'px-3 py-2.5 border-b border-border/50 hover:bg-muted/20 text-[12px]')}>
+      <span className="text-muted-foreground font-medium">{video.vchannelCode}</span>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-mono text-[11px] text-muted-foreground truncate">{video.videoCode}</span>
+          <span className={cn('text-[10px] px-1.5 py-0.5 rounded shrink-0', VIDEO_WORKFLOW_STAGE_COLORS.publish)}>
+            {VIDEO_WORKFLOW_STAGE_LABELS.publish}
           </span>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2 text-[12px]">
-          <span className="text-muted-foreground">已發佈平台：</span>
-          <span className="font-medium text-teal-700">{publishedCount} / {MEDIA_PLATFORM_PUBLISH_KEYS.length}</span>
-          {video.plannedPublishDate && (
-            <span className="text-muted-foreground">· 預計 {video.plannedPublishDate}</span>
-          )}
-        </div>
-
-        {getPublishedPlatformKeys(platformPublish).length > 0 && (
-          <div className="space-y-1">
-            {getPublishedPlatformKeys(platformPublish).map(key => (
-              <div key={key} className="flex items-center gap-2 text-[11px]">
-                <span className="text-muted-foreground w-16 shrink-0">{PLATFORM_PUBLISH_LABELS[key]}</span>
-                <span className="truncate text-teal-700">{getPlatformUrl(platformPublish, key) || '已發佈'}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" className="bg-teal-600 hover:bg-teal-700 text-white gap-1" onClick={() => setModalOpen(true)}>
-            <Plus size={12} /> 編輯發佈
-          </Button>
-          {copyableKeys.length > 0 && (
-            <Button type="button" variant="outline" size="sm" className="gap-1" onClick={handleCopy}>
-              <Copy size={12} /> {copyDone ? '已複製' : '複製文案'}
-            </Button>
-          )}
-          {isPublishComplete(video) && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="border-teal-300 text-teal-700"
-              onClick={() => completePublish(video.id, {})}
-            >
-              標記為已發佈
-            </Button>
-          )}
-        </div>
       </div>
-
-      {modalOpen && (
-        <WorkflowPublishModal
-          video={video}
-          onClose={() => setModalOpen(false)}
-          onSave={handleSavePublish}
-        />
-      )}
-    </>
+      <p className="font-semibold truncate min-w-0" title={video.title}>{video.title}</p>
+      <span className={WORKFLOW_LIST_DATE_CELL}>{video.shootAt ?? '—'}</span>
+      <ProductionProgressMarks video={video} />
+      <span className="text-muted-foreground truncate" title={video.storagePath}>
+        {formatWorkflowStoragePath(video.storagePath)}
+      </span>
+      <span className={WORKFLOW_LIST_DATE_CELL}>{formatWorkflowPlannedPublishDate(video.plannedPublishDate)}</span>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-7 text-[11px] px-2"
+        onClick={onOpenPublishRecord}
+      >
+        平台發佈記錄
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        className="h-7 text-[11px] px-2 bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-50"
+        onClick={onPublish}
+        disabled={!canPublish}
+        title={canPublish ? undefined : '請先填寫至少一個平台發佈鏈接'}
+      >
+        發佈
+      </Button>
+    </div>
   );
 }
 
 export function VideoPublishModule() {
-  const { getByStage } = useVideoWorkflow();
+  const { getByStage, getById, updateVideo, completePublish } = useVideoWorkflow();
+  const [publishRecordTargetId, setPublishRecordTargetId] = useState<string | null>(null);
+  const [publishConfirmTargetId, setPublishConfirmTargetId] = useState<string | null>(null);
+
   const publishVideos = getByStage('publish');
+  const {
+    channels,
+    vchannelFilter,
+    setVchannelFilter,
+    searchQuery,
+    setSearchQuery,
+    filteredVideos,
+  } = useVideoWorkflowListFilter(publishVideos, 'submittedForReviewAt');
+
+  const publishRecordTarget = publishRecordTargetId ? getById(publishRecordTargetId) ?? null : null;
+  const publishConfirmTarget = publishConfirmTargetId ? getById(publishConfirmTargetId) ?? null : null;
+
+  const handleSavePublishRecord = (patch: Partial<VideoWorkflowMock>) => {
+    if (!publishRecordTargetId) return;
+    updateVideo(publishRecordTargetId, patch);
+  };
+
+  const handleConfirmPublish = (videoId: string) => {
+    completePublish(videoId, {});
+  };
 
   return (
     <div className="space-y-4">
-      <p className="text-[12px] text-muted-foreground">{publishVideos.length} 部待發佈</p>
-      {publishVideos.length === 0 ? (
+      <WorkflowListFilters
+        channels={channels}
+        vchannelFilter={vchannelFilter}
+        onVchannelFilterChange={setVchannelFilter}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+      />
+
+      <p className="text-[12px] text-muted-foreground">{filteredVideos.length} 部待發佈</p>
+
+      {filteredVideos.length === 0 ? (
         <div className="text-center py-16 text-[13px] text-muted-foreground bg-white rounded-md border">
-          目前沒有待發佈的影片（需先完成審核）
+          {publishVideos.length === 0 ? '目前沒有待發佈的影片（需先完成審核）' : '沒有符合條件的影片'}
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {publishVideos.map(video => (
-            <PublishCard key={video.id} video={video} />
+        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] overflow-x-auto">
+          <WorkflowVideoListHeader variant="publish" />
+          {filteredVideos.map(video => (
+            <PublishListRow
+              key={video.id}
+              video={video}
+              onOpenPublishRecord={() => setPublishRecordTargetId(video.id)}
+              onPublish={() => setPublishConfirmTargetId(video.id)}
+            />
           ))}
         </div>
       )}
+
+      {publishRecordTarget && (
+        <WorkflowPublishModal
+          video={publishRecordTarget}
+          onClose={() => setPublishRecordTargetId(null)}
+          onSave={handleSavePublishRecord}
+        />
+      )}
+
+      <PublishConfirmModal
+        open={!!publishConfirmTarget}
+        video={publishConfirmTarget}
+        onClose={() => setPublishConfirmTargetId(null)}
+        onConfirm={handleConfirmPublish}
+      />
     </div>
   );
 }

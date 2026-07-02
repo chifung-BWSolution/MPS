@@ -69,6 +69,7 @@ export type VideoWorkflowMock = {
   reviewedBy?: string;
   plannedPublishDate?: string;
   publishedDate?: string;
+  publishHours?: number;
   platformPublish?: PlatformPublishMap;
 };
 

@@ -7,9 +7,10 @@ interface CrudModalProps {
   title: string;
   children: ReactNode;
   size?: 'sm' | 'md' | 'lg';
+  headerActions?: ReactNode;
 }
 
-export function CrudModal({ isOpen, onClose, title, children, size = 'md' }: CrudModalProps) {
+export function CrudModal({ isOpen, onClose, title, children, size = 'md', headerActions }: CrudModalProps) {
   if (!isOpen) return null;
 
   const sizeClass = size === 'sm' ? 'max-w-[400px]' : size === 'lg' ? 'max-w-[700px]' : 'max-w-[550px]';
@@ -20,9 +21,12 @@ export function CrudModal({ isOpen, onClose, title, children, size = 'md' }: Cru
       <div className={`relative bg-white rounded-lg shadow-xl w-full ${sizeClass} mx-4 max-h-[85vh] flex flex-col`}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h2 className="text-[16px] font-bold">{title}</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            {headerActions}
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+              <X size={18} />
+            </button>
+          </div>
         </div>
         <div className="px-6 py-4 overflow-y-auto flex-1">
           {children}
