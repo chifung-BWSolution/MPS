@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Search, Plus, Star, Link2, Copy, Check, X, Pencil, Calendar,
-  Tag, Users, Camera, FileText, ExternalLink,
+  Search, Plus, Star, Link2, Copy, Check, X, Calendar,
+  Tag, Users, Camera, FileText, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { getSiteOrigin } from '@/lib/siteUrl';
 import { useAuth } from '@/context/AuthContext';
+import { TalentApplicationFormV2 } from '@/components/settings/TalentApplicationFormV2';
 import {
   createPendingReportItem,
   localDateString,
@@ -18,7 +19,7 @@ import {
 // Types
 // =====================================================================
 type Region = 'HK' | 'SZ' | 'OTHER';
-type CooperationStatus = 'cooperated' | 'pending' | 'not_yet';
+type CooperationStage = 'stage1' | 'stage2' | 'stage3' | 'stage4' | 'stage5';
 
 const TALENT_CATEGORIES = [
   { id: 'photo_model', label: '平面拍攝模特兒' },
@@ -56,15 +57,17 @@ interface Talent {
   name: string;
   stageName?: string;
   age?: number;
+  gender?: string;
   height?: number;
   measurements?: string;     // e.g. 32-24-34
+  instagramAccount?: string;
   region: Region;
   // Tags
   categories: TalentCategoryId[];
   hasLiveExperience: boolean;
   aspirations?: string;      // 志向 / 夢想
   // Status
-  cooperationStatus: CooperationStatus;
+  cooperationStage: CooperationStage;
   recentVideoCount: number;
   // Ratings
   rating?: TalentRating;
@@ -89,11 +92,44 @@ const REGION_LABELS: Record<Region, string> = {
   OTHER: '其他',
 };
 
-const COOP_LABELS: Record<CooperationStatus, { text: string; color: string }> = {
-  cooperated: { text: '已合作', color: 'bg-teal-50 text-teal-700 border-teal-200' },
-  pending: { text: '待跟進', color: 'bg-amber-50 text-amber-700 border-amber-200' },
-  not_yet: { text: '未合作', color: 'bg-slate-100 text-slate-600 border-slate-200' },
+const STAGE_LABELS: Record<CooperationStage, { text: string; color: string }> = {
+  stage1: { text: 'Stage1：邀請', color: 'bg-slate-100 text-slate-700 border-slate-200' },
+  stage2: { text: 'Stage2：待面試', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  stage3: { text: 'Stage3：待合作', color: 'bg-violet-50 text-violet-700 border-violet-200' },
+  stage4: { text: 'Stage4：有合作', color: 'bg-teal-50 text-teal-700 border-teal-200' },
+  stage5: { text: 'Stage5：停止合作', color: 'bg-rose-50 text-rose-700 border-rose-200' },
 };
+
+const COOPERATION_STAGES: CooperationStage[] = ['stage1', 'stage2', 'stage3', 'stage4', 'stage5'];
+
+const migrateCooperationStage = (value: unknown): CooperationStage => {
+  if (value === 'stage1' || value === 'stage2' || value === 'stage3' || value === 'stage4' || value === 'stage5') {
+    return value;
+  }
+  if (value === 'not_yet') return 'stage1';
+  if (value === 'pending') return 'stage3';
+  if (value === 'cooperated') return 'stage4';
+  return 'stage3';
+};
+
+const extractInstagramAccount = (payload: Record<string, unknown> | null | undefined): string | undefined => {
+  const raw = payload?.instagramAccount;
+  if (typeof raw !== 'string' || !raw.trim()) return undefined;
+  return raw.trim();
+};
+
+const formatInstagramHandle = (account: string): string => {
+  const trimmed = account.trim();
+  return trimmed.startsWith('@') ? trimmed : `@${trimmed.replace(/^@/, '')}`;
+};
+
+const instagramProfileUrl = (account: string): string => {
+  const handle = account.replace(/^@/, '').trim();
+  return `https://instagram.com/${encodeURIComponent(handle)}`;
+};
+
+const getStageDisplay = (stage: CooperationStage): { text: string; color: string } =>
+  STAGE_LABELS[stage];
 
 const categoryLabel = (id: TalentCategoryId): string => {
   const known = TALENT_CATEGORIES.find(c => c.id === id);
@@ -117,7 +153,15 @@ const loadTalents = (): Talent[] => {
     const raw = window.localStorage.getItem(TALENTS_STORAGE_KEY);
     if (!raw) return seedTalents;
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as Talent[]) : seedTalents;
+    return Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>[]).map(row => ({
+          ...(row as Talent),
+          cooperationStage: migrateCooperationStage(
+            (row as Record<string, unknown>).cooperationStage
+            ?? (row as Record<string, unknown>).cooperationStatus,
+          ),
+        }))
+      : seedTalents;
   } catch {
     return seedTalents;
   }
@@ -172,7 +216,6 @@ const COOPERATION_STORAGE_KEY = 'mps:talent-cooperation';
 
 type CooperationOverlay = {
   collaborations: CollaborationRecord[];
-  cooperationStopped?: boolean;
 };
 
 const loadAllCooperationOverlays = (): Record<string, CooperationOverlay> => {
@@ -201,6 +244,21 @@ const saveCooperationOverlay = (talentId: string, overlay: CooperationOverlay) =
   }
 };
 
+const getCooperationCount = (talent: Talent): number => {
+  const overlay = loadCooperationOverlay(talent.id);
+  if (overlay?.collaborations.length) return overlay.collaborations.length;
+  return talent.collaborations.length;
+};
+
+const resolveTalentFormId = (
+  talent: Talent & { _formId?: string; _legacyFormId?: string },
+  formIdByToken: Record<string, string>,
+  formIdByLegacyId: Record<string, string>,
+): string | undefined =>
+  talent._formId
+  || (talent._legacyFormId ? formIdByLegacyId[talent._legacyFormId] : undefined)
+  || (talent.inviteToken ? formIdByToken[talent.inviteToken] : undefined);
+
 const createMockCollaborations = (): CollaborationRecord[] => [
   {
     id: `mock_${Date.now()}_1`,
@@ -220,16 +278,6 @@ const createMockCollaborations = (): CollaborationRecord[] => [
     notes: '口才流利，帶貨節奏佳，現場應變能力強。',
   },
 ];
-
-const getCooperationStatusDisplay = (
-  talent: Talent,
-  overlay: CooperationOverlay | null,
-): { text: string; color: string } => {
-  if (overlay?.cooperationStopped) {
-    return { text: '停止合作', color: 'bg-rose-50 text-rose-700 border-rose-200' };
-  }
-  return COOP_LABELS[talent.cooperationStatus];
-};
 
 const formatCooperationDate = (date: string) => {
   const parsed = new Date(date);
@@ -294,6 +342,7 @@ interface ConfirmedArtistRow {
   signature_image: string | null;
   source: 'direct' | 'after_interview';
   confirmed_at: string;
+  cooperation_stage?: CooperationStage | null;
 }
 
 const formDisplayName = (row: { name_zh: string | null; name_en: string | null }) =>
@@ -365,7 +414,7 @@ function TalentForm({
     name: '',
     region: 'HK',
     categories: [],
-    cooperationStatus: 'not_yet',
+    cooperationStage: 'stage3',
     hasLiveExperience: false,
     hasInterviewed: false,
     galleryUrls: [],
@@ -724,13 +773,15 @@ const confirmedRowToTalent = (c: ConfirmedArtistRow): Talent & { _confirmed: tru
   name: c.name_zh || c.name_en || '（未填姓名）',
   stageName: c.name_en || undefined,
   age: c.age ? Number(c.age) || undefined : undefined,
+  gender: c.gender || undefined,
   height: c.height ? Number(c.height) || undefined : undefined,
+  instagramAccount: extractInstagramAccount(c.payload),
   measurements: undefined,
   region: (c.region === 'HK' || c.region === 'SZ' ? c.region : 'OTHER') as Region,
   categories: c.categories || [],
   hasLiveExperience: false,
   aspirations: undefined,
-  cooperationStatus: 'not_yet',
+  cooperationStage: migrateCooperationStage(c.cooperation_stage ?? 'stage3'),
   recentVideoCount: 0,
   hasInterviewed: true,
   rating: c.rating || undefined,
@@ -754,7 +805,7 @@ function TalentList() {
   const [search, setSearch] = useState('');
   const [regionFilter, setRegionFilter] = useState<'all' | Region>('all');
   const [categoryFilter, setCategoryFilter] = useState<'all' | string>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | CooperationStatus>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | CooperationStage>('all');
   const [liveOnly, setLiveOnly] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<Talent | null>(null);
@@ -771,6 +822,9 @@ function TalentList() {
   const [ratingRecordTarget, setRatingRecordTarget] = useState<Talent | null>(null);
   const [cooperationTarget, setCooperationTarget] = useState<Talent | null>(null);
   const [cooperationOverlayVersion, setCooperationOverlayVersion] = useState(0);
+  const [stageSelectTarget, setStageSelectTarget] = useState<Talent | null>(null);
+  const [submissionModalFormId, setSubmissionModalFormId] = useState<string | null>(null);
+  const [stageUpdating, setStageUpdating] = useState(false);
 
   const handleAvatarReplace = (rowId: string, file: File | null) => {
     setPhotoUploadError(null);
@@ -867,7 +921,7 @@ function TalentList() {
     if (search && !`${t.name} ${t.stageName || ''}`.toLowerCase().includes(search.toLowerCase())) return false;
     if (regionFilter !== 'all' && t.region !== regionFilter) return false;
     if (categoryFilter !== 'all' && !t.categories.includes(categoryFilter)) return false;
-    if (statusFilter !== 'all' && t.cooperationStatus !== statusFilter) return false;
+    if (statusFilter !== 'all' && t.cooperationStage !== statusFilter) return false;
     if (liveOnly && !t.hasLiveExperience) return false;
     return true;
   });
@@ -955,6 +1009,31 @@ function TalentList() {
     }
   };
 
+  const handleStageChange = async (talent: Talent, stage: CooperationStage) => {
+    setStageUpdating(true);
+    try {
+      if (talent.id.startsWith('ca_')) {
+        const supabaseId = talent.id.slice(3);
+        const { error } = await supabase
+          .from('confirmed_artist')
+          .update({ cooperation_stage: stage })
+          .eq('id', supabaseId);
+        if (error) throw error;
+        setConfirmed(prev => prev.map(c =>
+          c.id === supabaseId ? { ...c, cooperation_stage: stage } : c,
+        ));
+      } else {
+        update(talent.id, { cooperationStage: stage });
+      }
+      setCooperationOverlayVersion(v => v + 1);
+      setStageSelectTarget(null);
+    } catch (err) {
+      alert(`更新合作狀態失敗：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setStageUpdating(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -1008,18 +1087,18 @@ function TalentList() {
           onChange={(e) => setCategoryFilter(e.target.value)}
           className="px-3 py-1.5 border border-border rounded-md text-[13px]"
         >
-          <option value="all">所有分類</option>
+          <option value="all">所有技能</option>
           {TALENT_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
         </select>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as 'all' | CooperationStatus)}
+          onChange={(e) => setStatusFilter(e.target.value as 'all' | CooperationStage)}
           className="px-3 py-1.5 border border-border rounded-md text-[13px]"
         >
           <option value="all">所有合作狀態</option>
-          <option value="cooperated">已合作</option>
-          <option value="pending">待跟進</option>
-          <option value="not_yet">未合作</option>
+          {COOPERATION_STAGES.map(stage => (
+            <option key={stage} value={stage}>{STAGE_LABELS[stage].text}</option>
+          ))}
         </select>
         <label className="flex items-center gap-2 text-[12px] cursor-pointer">
           <input
@@ -1049,13 +1128,10 @@ function TalentList() {
                 <th className="w-10 px-3 py-3" aria-label="選取" />
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">藝人</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">基本資料</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">分類</th>
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">技能</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">合作狀態</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">合作&評價</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">最近影片</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">綜合評分</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">申請表格</th>
-                <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -1103,12 +1179,39 @@ function TalentList() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-[12px] text-muted-foreground">
-                    {[
-                      t.age && `${t.age}歲`,
-                      t.height && `${t.height}cm`,
-                      t.measurements,
-                      REGION_LABELS[t.region],
-                    ].filter(Boolean).join(' · ')}
+                    <div className="space-y-1">
+                      <div>
+                        {[
+                          t.age && `${t.age}歲`,
+                          t.gender,
+                          t.height && `${t.height}cm`,
+                        ].filter(Boolean).join(' · ') || '—'}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {t.instagramAccount ? (
+                          <button
+                            type="button"
+                            onClick={() => window.open(instagramProfileUrl(t.instagramAccount!), '_blank', 'noopener,noreferrer')}
+                            className="text-teal-600 hover:underline"
+                          >
+                            {formatInstagramHandle(t.instagramAccount)}
+                          </button>
+                        ) : null}
+                        {(() => {
+                          const formId = resolveTalentFormId(t as Talent & { _formId?: string; _legacyFormId?: string }, formIdByToken, formIdByLegacyId);
+                          if (!formId) return null;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setSubmissionModalFormId(formId)}
+                              className="text-[11px] px-2 py-0.5 border border-border rounded-md hover:bg-muted/40 text-[#0d1a2d]"
+                            >
+                              詳情
+                            </button>
+                          );
+                        })()}
+                      </div>
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
@@ -1120,14 +1223,18 @@ function TalentList() {
                   <td className="px-4 py-3">
                     {(() => {
                       void cooperationOverlayVersion;
-                      const coopDisplay = getCooperationStatusDisplay(
-                        t,
-                        loadCooperationOverlay(t.id),
-                      );
+                      const stageDisplay = getStageDisplay(t.cooperationStage);
                       return (
-                        <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full border text-[11px]', coopDisplay.color)}>
-                          {coopDisplay.text}
-                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setStageSelectTarget(t)}
+                          className={cn(
+                            'inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] cursor-pointer hover:opacity-80 transition-opacity',
+                            stageDisplay.color,
+                          )}
+                        >
+                          {stageDisplay.text}
+                        </button>
                       );
                     })()}
                   </td>
@@ -1135,12 +1242,11 @@ function TalentList() {
                     <button
                       type="button"
                       onClick={() => setCooperationTarget(t)}
-                      className="text-[12px] px-2.5 py-1 border border-teal-200 text-teal-700 rounded-md hover:bg-teal-50"
+                      className="text-[12px] text-teal-700 hover:underline"
                     >
-                      查看
+                      {getCooperationCount(t)}次合作
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-[13px]">{t.recentVideoCount}</td>
                   <td className="px-4 py-3">
                     {t.overallRating ? (
                       <button
@@ -1154,50 +1260,6 @@ function TalentList() {
                         {t.overallRating.toFixed(1)}
                       </button>
                     ) : <span className="text-[12px] text-muted-foreground">未評</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    {(() => {
-                      const formId = (t as any)._formId
-                        || ((t as any)._legacyFormId ? formIdByLegacyId[(t as any)._legacyFormId] : undefined)
-                        || (t.inviteToken ? formIdByToken[t.inviteToken] : undefined);
-                      if (!formId) return <span className="text-[12px] text-muted-foreground">—</span>;
-                      const url = `/talent/submissions/${formId}`;
-                      return (
-                        <a
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-[12px] text-teal-600 inline-flex items-center gap-1 hover:underline"
-                        >
-                          開啟表格 <ExternalLink size={12} />
-                        </a>
-                      );
-                    })()}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {(t as any)._confirmed ? (
-                      <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        已取錄
-                      </span>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => setEditing(t)}
-                          className="text-muted-foreground hover:text-teal-600 mr-2"
-                          title="編輯"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          onClick={() => { if (confirm(`刪除 ${t.name}？`)) remove(t.id); }}
-                          className="text-muted-foreground hover:text-rose-600"
-                          title="刪除"
-                        >
-                          <X size={14} />
-                        </button>
-                      </>
-                    )}
                   </td>
                 </tr>
               ))}
@@ -1225,7 +1287,7 @@ function TalentList() {
                 categories: data.categories || [],
                 hasLiveExperience: data.hasLiveExperience || false,
                 aspirations: data.aspirations,
-                cooperationStatus: 'not_yet',
+                cooperationStage: 'stage3',
                 recentVideoCount: 0,
                 hasInterviewed: false,
                 collaborations: [],
@@ -1333,6 +1395,24 @@ function TalentList() {
           talent={cooperationTarget}
           onClose={() => setCooperationTarget(null)}
           onUpdate={() => setCooperationOverlayVersion(v => v + 1)}
+          onStageChange={(stage) => handleStageChange(cooperationTarget, stage)}
+        />
+      )}
+
+      {stageSelectTarget && (
+        <StageSelectModal
+          talent={stageSelectTarget}
+          currentStage={stageSelectTarget.cooperationStage}
+          saving={stageUpdating}
+          onClose={() => !stageUpdating && setStageSelectTarget(null)}
+          onSelect={(stage) => handleStageChange(stageSelectTarget, stage)}
+        />
+      )}
+
+      {submissionModalFormId && (
+        <TalentSubmissionModal
+          formId={submissionModalFormId}
+          onClose={() => setSubmissionModalFormId(null)}
         />
       )}
     </div>
@@ -1361,25 +1441,199 @@ function Modal({ title, onClose, children, width = 'max-w-[640px]' }: {
   );
 }
 
+function StageSelectModal({
+  talent,
+  currentStage,
+  saving,
+  onClose,
+  onSelect,
+}: {
+  talent: Talent;
+  currentStage: CooperationStage;
+  saving: boolean;
+  onClose: () => void;
+  onSelect: (stage: CooperationStage) => void;
+}) {
+  return (
+    <Modal title={`選擇合作狀態 — ${talent.stageName || talent.name}`} onClose={onClose} width="max-w-[420px]">
+      <div className="px-5 py-4 space-y-2">
+        {COOPERATION_STAGES.map(stage => {
+          const display = STAGE_LABELS[stage];
+          const active = stage === currentStage;
+          return (
+            <button
+              key={stage}
+              type="button"
+              disabled={saving}
+              onClick={() => onSelect(stage)}
+              className={cn(
+                'w-full text-left rounded-md border px-3 py-2.5 text-[13px] transition-colors disabled:opacity-50',
+                active
+                  ? cn(display.color, 'font-medium')
+                  : 'border-border bg-white hover:bg-muted/30',
+              )}
+            >
+              {display.text}
+            </button>
+          );
+        })}
+      </div>
+    </Modal>
+  );
+}
+
+interface SubmissionArtistApplyRow {
+  id: string;
+  invite_token: string | null;
+  application_date: string | null;
+  name_zh: string | null;
+  name_en: string | null;
+  display_name: string | null;
+  gender: string | null;
+  birth_date: string | null;
+  age: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  email: string | null;
+  raw_payload: Record<string, unknown> | null;
+  submitted_at: string;
+}
+
+function TalentSubmissionModal({ formId, onClose }: { formId: string; onClose: () => void }) {
+  const [row, setRow] = useState<SubmissionArtistApplyRow | null>(null);
+  const [applicantSignature, setApplicantSignature] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      const { data: directData, error: directError } = await supabase
+        .from('artist_apply')
+        .select('*')
+        .eq('id', formId)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      let applyRow = directData as SubmissionArtistApplyRow | null;
+      let applyError = directError;
+
+      if (!applyRow && !directError) {
+        const { data: legacyData, error: legacyError } = await supabase
+          .from('artist_apply')
+          .select('*')
+          .filter('raw_payload->>legacyTalentFormId', 'eq', formId)
+          .order('submitted_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (cancelled) return;
+        applyRow = legacyData as SubmissionArtistApplyRow | null;
+        applyError = legacyError;
+      }
+
+      if (applyError) {
+        setError(applyError.message);
+        setLoading(false);
+        return;
+      }
+
+      if (!applyRow) {
+        setRow(null);
+        setError('找不到此筆資料');
+        setLoading(false);
+        return;
+      }
+
+      const { data: photoData, error: photoError } = await supabase
+        .from('artist_apply_photo')
+        .select('data_url')
+        .eq('artist_apply_id', applyRow.id)
+        .eq('file_role', 'applicant_signature')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (cancelled) return;
+
+      if (photoError) {
+        setError(photoError.message);
+      } else {
+        setRow(applyRow);
+        const signatureRow = photoData?.[0] as { data_url: string | null } | undefined;
+        setApplicantSignature(signatureRow?.data_url || '');
+      }
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [formId]);
+
+  return (
+    <Modal title="申請表格" onClose={onClose} width="max-w-[980px]">
+      <div className="overflow-y-auto px-5 py-4">
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
+            <Loader2 size={18} className="animate-spin" />
+            <span className="text-[13px]">載入中…</span>
+          </div>
+        ) : error || !row ? (
+          <div className="py-10 text-center">
+            <p className="text-[14px] font-bold text-rose-600 mb-1">無法載入表格</p>
+            <p className="text-[12px] text-muted-foreground">{error || '可能已被刪除或連結不正確。'}</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="text-center">
+              <p className="text-[12px] text-muted-foreground">
+                遞交時間：{new Date(row.submitted_at).toLocaleString('zh-HK')}
+              </p>
+            </div>
+            <TalentApplicationFormV2
+              mode="view"
+              initialValue={{
+                ...((row.raw_payload as Record<string, unknown>) || {}),
+                applicationDate: row.application_date || '',
+                nameZh: row.name_zh || '',
+                nameEn: row.name_en || '',
+                displayName: row.display_name || '',
+                gender: row.gender || '',
+                birthDate: row.birth_date || '',
+                age: row.age || '',
+                phone: row.phone || '',
+                whatsapp: row.whatsapp || '',
+                email: row.email || '',
+                applicantSignature,
+              }}
+            />
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 function CollaborationReviewModal({
   talent,
   onClose,
   onUpdate,
+  onStageChange,
 }: {
   talent: Talent;
   onClose: () => void;
   onUpdate: () => void;
+  onStageChange: (stage: CooperationStage) => void | Promise<void>;
 }) {
   const [overlay, setOverlay] = useState<CooperationOverlay>(() => {
     const existing = loadCooperationOverlay(talent.id);
     if (existing && existing.collaborations.length > 0) return existing;
     if (existing) return existing;
     if (talent.collaborations.length > 0) {
-      const initial = { collaborations: talent.collaborations, cooperationStopped: false };
+      const initial = { collaborations: talent.collaborations };
       saveCooperationOverlay(talent.id, initial);
       return initial;
     }
-    const initial = { collaborations: createMockCollaborations(), cooperationStopped: false };
+    const initial = { collaborations: createMockCollaborations() };
     saveCooperationOverlay(talent.id, initial);
     return initial;
   });
@@ -1404,9 +1658,9 @@ function CollaborationReviewModal({
   const selected = overlay.collaborations.find(c => c.id === selectedId);
 
   const handleStopCooperation = () => {
-    if (overlay.cooperationStopped) return;
+    if (talent.cooperationStage === 'stage5') return;
     if (!confirm(`確認停止與 ${talent.name} 的合作？`)) return;
-    persist({ ...overlay, cooperationStopped: true });
+    void onStageChange('stage5');
   };
 
   return (
@@ -1461,7 +1715,7 @@ function CollaborationReviewModal({
           <button
             type="button"
             onClick={handleStopCooperation}
-            disabled={overlay.cooperationStopped}
+            disabled={talent.cooperationStage === 'stage5'}
             className="px-4 py-2 text-[13px] border border-rose-200 text-rose-600 rounded-md hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             停止合作
@@ -1530,7 +1784,7 @@ function TalentInvite() {
       region: 'HK',
       categories: [],
       hasLiveExperience: false,
-      cooperationStatus: 'pending',
+      cooperationStage: 'stage1',
       recentVideoCount: 0,
       hasInterviewed: false,
       collaborations: [],
@@ -1558,7 +1812,7 @@ function TalentInvite() {
             <h3 className="text-[14px] font-bold mb-1">產生填表連結</h3>
             <p className="text-[12px] text-muted-foreground mb-3">
               點擊「加入新人」後，系統會產生一個專屬連結。將連結傳送給藝人，他們可自行填寫姓名、照片、三圍、分類等資料；
-              完成後會自動加入藝人列表並標記為「待跟進」。
+              完成後會自動加入藝人列表並標記為「Stage1：邀請」。
             </p>
             <button
               onClick={generate}
@@ -2175,6 +2429,7 @@ function TalentInterviews() {
         payload: { ...payload, artistApplyId: row.id },
         signature_image: row.signature_image,
         source,
+        cooperation_stage: 'stage3',
       });
       if (insErr) throw insErr;
       const { error: updErr } = await supabase
@@ -2345,7 +2600,7 @@ function TalentInterviews() {
               region: residenceToRegion(editing.payload?.residence),
               categories: [],
               hasLiveExperience: false,
-              cooperationStatus: 'pending',
+              cooperationStage: 'stage1',
               recentVideoCount: 0,
               hasInterviewed: editing.interviewed,
               interviewNotes: editing.interview_notes || undefined,
@@ -2443,14 +2698,14 @@ function TalentInterviews() {
 // =====================================================================
 function TalentCollaborated() {
   const { talents } = useTalents();
-  const cooperated = talents.filter(t => t.cooperationStatus === 'cooperated' || t.collaborations.length > 0);
+  const cooperated = talents.filter(t => t.cooperationStage === 'stage4' || t.collaborations.length > 0);
 
   return (
     <div className="space-y-6">
       <PageHeader title="已合作藝人" subtitle="快速查看曾合作藝人、合作次數、費用及適合類型。" />
 
       {cooperated.length === 0 ? (
-        <EmptyState icon={Users} title="尚無合作紀錄" hint="在「藝人列表」編輯藝人並將合作狀態設為「已合作」即可顯示。" />
+        <EmptyState icon={Users} title="尚無合作紀錄" hint="在「藝人列表」將合作狀態設為「Stage4：有合作」即可顯示。" />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {cooperated.map(t => {
