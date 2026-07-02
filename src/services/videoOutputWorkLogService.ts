@@ -31,6 +31,26 @@ function mapRow(row: DbWorkLogRow): VideoOutputWorkLog {
   };
 }
 
+export async function fetchWorkLogTotalsByVideoIds(
+  videoOutputIds: string[],
+): Promise<Map<string, number>> {
+  if (videoOutputIds.length === 0) return new Map();
+
+  const { data, error } = await supabase
+    .from('video_output_work_logs')
+    .select('video_output_id, hours')
+    .in('video_output_id', videoOutputIds);
+
+  if (error) throw error;
+
+  const totals = new Map<string, number>();
+  for (const row of data ?? []) {
+    const id = row.video_output_id as string;
+    totals.set(id, (totals.get(id) ?? 0) + Number(row.hours));
+  }
+  return totals;
+}
+
 export async function fetchWorkLogsByVideoId(videoOutputId: string): Promise<VideoOutputWorkLog[]> {
   const { data, error } = await supabase
     .from('video_output_work_logs')
