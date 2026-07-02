@@ -1242,8 +1242,9 @@ function TalentList() {
                             <button
                               type="button"
                               onClick={() => setSubmissionModalFormId(formId)}
-                              className="text-[11px] px-2 py-0.5 border border-border rounded-md hover:bg-muted/40 text-[#0d1a2d]"
+                              className="inline-flex items-center gap-1 text-[12px] px-2.5 py-1 rounded-md font-medium bg-teal-600 text-white hover:bg-teal-700 shadow-sm transition-colors"
                             >
+                              <FileText size={12} />
                               詳情
                             </button>
                           );
