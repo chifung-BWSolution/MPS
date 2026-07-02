@@ -102,7 +102,7 @@ export function VideoPublishModule() {
   const { videos, getVideoOutputById, updateVideo, completePublish } = useVideoWorkflow();
   const [publishRecordTargetId, setPublishRecordTargetId] = useState<string | null>(null);
   const [publishConfirmTargetId, setPublishConfirmTargetId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<WorkflowBinaryStatusFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<WorkflowBinaryStatusFilter>('pending');
 
   const scopeVideos = useMemo(() => getPublishScopeVideos(videos), [videos]);
   const {
