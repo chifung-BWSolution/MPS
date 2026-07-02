@@ -2,72 +2,15 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { PRODUCTION_TASK_KEYS, PRODUCTION_TASK_LABELS } from '@/lib/videoWorkflowUtils';
 
-/** 頻道：編號 + 公開名稱 */
-const WORKFLOW_LIST_COL_CHANNEL = 'minmax(140px, 1.15fr)';
-/** Video Code + 狀態徽章，僅佔內容寬度 */
-const WORKFLOW_LIST_COL_VIDEO_CODE = 'max-content';
-const WORKFLOW_LIST_COL_TITLE = 'minmax(108px, 1fr)';
-const WORKFLOW_LIST_COL_SHOOT_DATE = '92px';
-const WORKFLOW_LIST_COL_PROGRESS = 'repeat(5, 52px)';
-const WORKFLOW_LIST_COL_STORAGE = 'minmax(88px, 0.85fr)';
-const WORKFLOW_LIST_COL_PLANNED_DATE = '108px';
+// 必須使用完整字面量 class，Tailwind 才能掃描並生成 grid 樣式
+export const WORKFLOW_LIST_GRID_PRODUCTION =
+  'grid grid-cols-[minmax(140px,1.15fr)_max-content_minmax(108px,1fr)_92px_repeat(5,52px)_minmax(88px,0.85fr)_108px_64px_88px] gap-2 items-center min-w-[1100px]';
 
-export const WORKFLOW_LIST_GRID_PRODUCTION = [
-  'grid grid-cols-[',
-  WORKFLOW_LIST_COL_CHANNEL,
-  '_',
-  WORKFLOW_LIST_COL_VIDEO_CODE,
-  '_',
-  WORKFLOW_LIST_COL_TITLE,
-  '_',
-  WORKFLOW_LIST_COL_SHOOT_DATE,
-  '_',
-  WORKFLOW_LIST_COL_PROGRESS,
-  '_',
-  WORKFLOW_LIST_COL_STORAGE,
-  '_',
-  WORKFLOW_LIST_COL_PLANNED_DATE,
-  '_64px_88px]',
-  'gap-2 items-center min-w-[1100px]',
-].join('');
+export const WORKFLOW_LIST_GRID_REVIEW =
+  'grid grid-cols-[minmax(140px,1.15fr)_max-content_minmax(108px,1fr)_92px_repeat(5,52px)_minmax(88px,0.85fr)_108px_56px] gap-2 items-center min-w-[1000px]';
 
-export const WORKFLOW_LIST_GRID_REVIEW = [
-  'grid grid-cols-[',
-  WORKFLOW_LIST_COL_CHANNEL,
-  '_',
-  WORKFLOW_LIST_COL_VIDEO_CODE,
-  '_',
-  WORKFLOW_LIST_COL_TITLE,
-  '_',
-  WORKFLOW_LIST_COL_SHOOT_DATE,
-  '_',
-  WORKFLOW_LIST_COL_PROGRESS,
-  '_',
-  WORKFLOW_LIST_COL_STORAGE,
-  '_',
-  WORKFLOW_LIST_COL_PLANNED_DATE,
-  '_56px]',
-  'gap-2 items-center min-w-[1000px]',
-].join('');
-
-export const WORKFLOW_LIST_GRID_PUBLISH = [
-  'grid grid-cols-[',
-  WORKFLOW_LIST_COL_CHANNEL,
-  '_',
-  WORKFLOW_LIST_COL_VIDEO_CODE,
-  '_',
-  WORKFLOW_LIST_COL_TITLE,
-  '_',
-  WORKFLOW_LIST_COL_SHOOT_DATE,
-  '_',
-  WORKFLOW_LIST_COL_PROGRESS,
-  '_',
-  WORKFLOW_LIST_COL_STORAGE,
-  '_',
-  WORKFLOW_LIST_COL_PLANNED_DATE,
-  '_96px_56px]',
-  'gap-2 items-center min-w-[1040px]',
-].join('');
+export const WORKFLOW_LIST_GRID_PUBLISH =
+  'grid grid-cols-[minmax(140px,1.15fr)_max-content_minmax(108px,1fr)_92px_repeat(5,52px)_minmax(88px,0.85fr)_108px_96px_56px] gap-2 items-center min-w-[1040px]';
 
 export const WORKFLOW_LIST_DATE_CELL = 'text-muted-foreground shrink-0 whitespace-nowrap tabular-nums';
 
