@@ -150,6 +150,31 @@ export function formatPublishDate(row: Pick<VideoOutput, 'publishedDate' | 'plan
   return { text: '—', planned: false };
 }
 
+/** 發佈日期優先，無則用預計發佈日期（與列表「發佈日期」欄一致） */
+export function getEffectivePublishDate(
+  row: Pick<VideoOutput, 'publishedDate' | 'plannedPublishDate'>,
+): string | null {
+  const published = row.publishedDate?.trim();
+  if (published) return published;
+  const planned = row.plannedPublishDate?.trim();
+  return planned || null;
+}
+
+export function compareVideoOutputByPublishDateDesc(a: VideoOutput, b: VideoOutput): number {
+  const dateA = getEffectivePublishDate(a);
+  const dateB = getEffectivePublishDate(b);
+  if (!dateA && !dateB) return a.videoCode.localeCompare(b.videoCode);
+  if (!dateA) return 1;
+  if (!dateB) return -1;
+  const byDate = dateB.localeCompare(dateA);
+  if (byDate !== 0) return byDate;
+  return a.videoCode.localeCompare(b.videoCode);
+}
+
+export function sortVideoOutputsByPublishDateDesc(rows: VideoOutput[]): VideoOutput[] {
+  return [...rows].sort(compareVideoOutputByPublishDateDesc);
+}
+
 export function formatStorageOrLink(row: Pick<VideoOutput, 'storagePath' | 'platformPublish'>) {
   if (row.storagePath?.trim()) return row.storagePath.trim();
   return firstPublishedPlatformUrl(row.platformPublish) ?? '';

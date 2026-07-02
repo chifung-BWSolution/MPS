@@ -18,6 +18,7 @@ import {
   getPublishedPlatformKeys,
   getPublishedPlatformKeysWithUrl,
   isHttpUrl,
+  sortVideoOutputsByPublishDateDesc,
 } from '@/lib/videoOutputUtils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PlatformPublishModal } from '@/components/video/PlatformPublishModal';
@@ -286,13 +287,13 @@ export function VideoManagementModule() {
     [videos, vchannelFilter, searchQuery, categoryFilter],
   );
 
-  const filteredVideos = useMemo(
-    () =>
+  const filteredVideos = useMemo(() => {
+    const rows =
       statusFilter === 'all'
         ? contextVideos
-        : contextVideos.filter(v => deriveVideoOutputStatus(v) === statusFilter),
-    [contextVideos, statusFilter],
-  );
+        : contextVideos.filter(v => deriveVideoOutputStatus(v) === statusFilter);
+    return sortVideoOutputsByPublishDateDesc(rows);
+  }, [contextVideos, statusFilter]);
 
   const statusCounts = useMemo(() => countVideosByStatus(contextVideos), [contextVideos]);
 
