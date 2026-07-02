@@ -73,7 +73,7 @@ export function VideoReviewModule() {
   const { videos, getById, approveReview, rejectReview } = useVideoWorkflow();
   const { user, userInfo, systemUser } = useAuth();
   const [reviewTargetId, setReviewTargetId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<WorkflowBinaryStatusFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<WorkflowBinaryStatusFilter>('pending');
 
   const scopeVideos = useMemo(() => getReviewScopeVideos(videos), [videos]);
   const {
