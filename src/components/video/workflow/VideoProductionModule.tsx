@@ -16,6 +16,7 @@ import { WorkflowListFilters } from '@/components/video/workflow/WorkflowListFil
 import {
   formatWorkflowPlannedPublishDate,
   formatWorkflowStoragePath,
+  WORKFLOW_LIST_DATE_CELL,
   WORKFLOW_LIST_GRID_PRODUCTION,
   WorkflowVideoListHeader,
 } from '@/components/video/workflow/workflowListLayout';
@@ -53,12 +54,12 @@ function ProductionListRow({
           </p>
         )}
       </div>
-      <span className="text-muted-foreground">{video.shootAt ?? '—'}</span>
+      <span className={WORKFLOW_LIST_DATE_CELL}>{video.shootAt ?? '—'}</span>
       <ProductionProgressMarks video={video} />
       <span className="text-muted-foreground truncate" title={video.storagePath}>
         {formatWorkflowStoragePath(video.storagePath)}
       </span>
-      <span className="text-muted-foreground">{formatWorkflowPlannedPublishDate(video.plannedPublishDate)}</span>
+      <span className={WORKFLOW_LIST_DATE_CELL}>{formatWorkflowPlannedPublishDate(video.plannedPublishDate)}</span>
       <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] gap-1 px-2" onClick={onEdit}>
         <Edit2 size={11} /> 編輯
       </Button>

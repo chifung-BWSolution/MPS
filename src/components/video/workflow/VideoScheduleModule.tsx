@@ -183,12 +183,12 @@ export function VideoScheduleModule() {
             className="h-9 pl-9 text-[12px]"
           />
         </div>
-        <Button type="button" className="ml-auto h-9 bg-teal-600 hover:bg-teal-700 text-white text-[12px] gap-1.5" onClick={openNew}>
+        <Button type="button" className="h-9 bg-teal-600 hover:bg-teal-700 text-white text-[12px] gap-1.5 shrink-0" onClick={openNew}>
           <Plus size={14} /> 新建影片
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div className="space-y-2 min-h-[320px]">
           <p className="text-[12px] text-muted-foreground">
             未審核前 {filteredVideos.length} 部（準備中 + 製作中）

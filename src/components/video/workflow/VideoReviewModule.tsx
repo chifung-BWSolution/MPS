@@ -14,6 +14,7 @@ import { WorkflowListFilters } from '@/components/video/workflow/WorkflowListFil
 import {
   formatWorkflowPlannedPublishDate,
   formatWorkflowStoragePath,
+  WORKFLOW_LIST_DATE_CELL,
   WORKFLOW_LIST_GRID_REVIEW,
   WorkflowVideoListHeader,
 } from '@/components/video/workflow/workflowListLayout';
@@ -32,12 +33,12 @@ function ReviewListRow({ video, onReview }: { video: VideoWorkflowMock; onReview
         </div>
       </div>
       <p className="font-semibold truncate min-w-0" title={video.title}>{video.title}</p>
-      <span className="text-muted-foreground">{video.shootAt ?? '—'}</span>
+      <span className={WORKFLOW_LIST_DATE_CELL}>{video.shootAt ?? '—'}</span>
       <ProductionProgressMarks video={video} />
       <span className="text-muted-foreground truncate" title={video.storagePath}>
         {formatWorkflowStoragePath(video.storagePath)}
       </span>
-      <span className="text-muted-foreground">{formatWorkflowPlannedPublishDate(video.plannedPublishDate)}</span>
+      <span className={WORKFLOW_LIST_DATE_CELL}>{formatWorkflowPlannedPublishDate(video.plannedPublishDate)}</span>
       <Button type="button" size="sm" className="h-7 text-[11px] px-2 bg-teal-600 hover:bg-teal-700 text-white" onClick={onReview}>
         審核
       </Button>
