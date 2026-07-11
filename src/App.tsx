@@ -7,6 +7,7 @@ import { LoginPage } from "./components/auth/LoginPage";
 import { Loader2 } from "lucide-react";
 import { TalentInvitePublicPage } from "./components/talent/TalentInvitePublicPage";
 import { TalentSubmissionViewPage } from "./components/talent/TalentSubmissionViewPage";
+import { VolunteerApplyPublicPage } from "./components/marketing/VolunteerApplyPublicPage";
 
 function AuthGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated, isAuthorized, loading, authError } = useAuth();
@@ -46,6 +47,8 @@ function App() {
           <Routes>
             {/* Public talent self-fill form — no auth required */}
             <Route path="/talent/invite/:token" element={<TalentInvitePublicPage />} />
+            {/* Public volunteer recruitment form — shared campaign link, no auth */}
+            <Route path="/volunteer/apply/:slug" element={<VolunteerApplyPublicPage />} />
             {/* Auth-required read-only view of a submitted form */}
             <Route
               path="/talent/submissions/:id"

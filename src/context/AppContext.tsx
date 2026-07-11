@@ -105,6 +105,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'seo', label: 'SEO 關鍵字' },
       { id: 'seo-upgrade', label: 'SEO 升級' },
       { id: 'graphic-design', label: '平面設計' },
+      { id: 'volunteer', label: '志願招募' },
     ],
   },
   {
