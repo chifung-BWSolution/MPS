@@ -275,7 +275,7 @@ export function VolunteerRecruitmentModule() {
               <Input
                 value={form.title}
                 onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                placeholder="例如：Doctor Peel 志願招募"
+                placeholder="例如：Doctor Peel KOL活動"
               />
             </div>
             <div className="space-y-1.5">
@@ -624,7 +624,7 @@ export function VolunteerRecruitmentModule() {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <p className="text-[13px] text-muted-foreground">
-          管理志願招募活動、公開報名連結與篩選結果。
+          建立活動、複製公開報名連結，並在此篩選申請。
         </p>
         <Button size="sm" className="gap-1.5 bg-teal-600 hover:bg-teal-700" onClick={openCreate}>
           <Plus size={14} /> 新建活動

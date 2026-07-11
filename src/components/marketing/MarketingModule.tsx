@@ -5,7 +5,6 @@ import { SeoKeywordsModule } from './SeoKeywordsModule';
 import { SeoUpgradeModule } from './SeoUpgradeModule';
 import { GraphicDesignModule } from './GraphicDesignModule';
 import { MarketingCalendar } from './MarketingCalendar';
-import { VolunteerRecruitmentModule } from './VolunteerRecruitmentModule';
 
 export function MarketingModule({ subModule }: { subModule?: string }) {
   const activeTab = subModule || 'calendar';
@@ -19,7 +18,6 @@ export function MarketingModule({ subModule }: { subModule?: string }) {
       case 'seo': return { title: 'SEO 關鍵字', subtitle: '三級關鍵字管理及排名追蹤。' };
       case 'seo-upgrade': return { title: 'SEO 升級', subtitle: '記錄 SEO 升級動作及費用。' };
       case 'graphic-design': return { title: '平面設計', subtitle: '管理各平台平面設計製作及成果追蹤。' };
-      case 'volunteer': return { title: '志願招募', subtitle: '管理 KOL / 志願者招募活動、公開報名與篩選。' };
       default: return { title: '行銷日曆', subtitle: '綜覽各渠道行銷活動排期與進度。' };
     }
   };
@@ -42,7 +40,6 @@ export function MarketingModule({ subModule }: { subModule?: string }) {
       {activeTab === 'seo' && <SeoKeywordsModule />}
       {activeTab === 'seo-upgrade' && <SeoUpgradeModule />}
       {activeTab === 'graphic-design' && <GraphicDesignModule />}
-      {activeTab === 'volunteer' && <VolunteerRecruitmentModule />}
     </div>
   );
 }

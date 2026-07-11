@@ -401,7 +401,7 @@ INSERT INTO public.volunteer_campaign (
 )
 VALUES (
   'doctor-peel',
-  'Doctor Peel 志願招募',
+  'Doctor Peel KOL活動',
   'Doctor Peel',
   '招募對美妝有興趣的 KOL，免費試用 Doctor Peel（Face / Body）。適合色素、角質、黑頭、暗瘡、皮膚屏障受損、暗沉等肌膚問題；配方無化學添加、純素。',
   '免費贊助 4 次療程',

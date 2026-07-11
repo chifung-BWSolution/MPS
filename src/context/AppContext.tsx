@@ -105,7 +105,6 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'seo', label: 'SEO 關鍵字' },
       { id: 'seo-upgrade', label: 'SEO 升級' },
       { id: 'graphic-design', label: '平面設計' },
-      { id: 'volunteer', label: '志願招募' },
     ],
   },
   {
@@ -127,6 +126,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'list', label: '藝人列表' },
       { id: 'invite', label: '新增藝人' },
       { id: 'interviews', label: '面試安排' },
+      { id: 'kol-campaigns', label: 'KOL活動' },
     ],
   },
   {

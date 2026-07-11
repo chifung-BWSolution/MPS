@@ -15,6 +15,7 @@ import {
   resolveBubbleStaffId,
   updatePendingReportHours,
 } from '@/services/reportLinkService';
+import { VolunteerRecruitmentModule } from '@/components/marketing/VolunteerRecruitmentModule';
 
 // =====================================================================
 // Types
@@ -2899,6 +2900,18 @@ export function TalentModule({ subModule }: { subModule?: string }) {
     case 'categories': return <TalentCategoriesView />;
     case 'interviews': return <TalentInterviews />;
     case 'collaborated': return <TalentCollaborated />;
+    case 'kol-campaigns':
+      return (
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-[32px] font-bold tracking-tight">KOL活動</h1>
+            <p className="text-[14px] text-muted-foreground mt-1">
+              管理 KOL 活動、公開報名連結與篩選結果。
+            </p>
+          </div>
+          <VolunteerRecruitmentModule />
+        </div>
+      );
     case 'list':
     default:
       return <TalentList />;
