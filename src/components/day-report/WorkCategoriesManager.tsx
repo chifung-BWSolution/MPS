@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Edit2, Trash2, GripVertical, Globe, Building2, FolderOpen, Tag, Check, X, Info, Save, MonitorSmartphone, Megaphone, Video, RefreshCw } from 'lucide-react';
+import { Plus, Edit2, Trash2, GripVertical, Globe, Building2, FolderOpen, Tag, Check, X, Info, Save, MonitorSmartphone, Megaphone, Video, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { WorkCategory } from '@/data/dayReportDataV2';
@@ -12,7 +12,7 @@ import { useDayReportTypes } from '@/hooks/useDayReportTypes';
 export type CategoryRelationType = 'project_website' | 'internal_project' | 'none';
 
 // Project Module Groups — work categories associate with these
-export type ProjectModuleGroup = 'website_system' | 'marketing' | 'video_production';
+export type ProjectModuleGroup = 'website_system' | 'marketing' | 'video_production' | 'talent';
 
 export const projectModuleGroupConfig: Record<ProjectModuleGroup, { label: string; icon: React.ElementType; color: string; bg: string; projectTypes: string[] }> = {
   website_system: {
@@ -35,6 +35,13 @@ export const projectModuleGroupConfig: Record<ProjectModuleGroup, { label: strin
     color: 'text-purple-700',
     bg: 'bg-purple-50',
     projectTypes: ['video'],
+  },
+  talent: {
+    label: '藝人管理',
+    icon: Users,
+    color: 'text-fuchsia-700',
+    bg: 'bg-fuchsia-50',
+    projectTypes: ['talent'],
   },
 };
 
@@ -177,12 +184,12 @@ export function WorkCategoriesManager() {
     setEditingId(cat.id);
     setEditForm({
       label: cat.label,
-      relationType: cat.relationType,
+      relationType: cat.relationType in relationTypeLabels ? cat.relationType : 'none',
       description: cat.description,
       icon: cat.icon,
       color: cat.color,
       bg: cat.bg,
-      associatedModules: cat.associatedModules,
+      associatedModules: Array.isArray(cat.associatedModules) ? cat.associatedModules : [],
     });
   };
 
@@ -463,8 +470,9 @@ export function WorkCategoriesManager() {
         <div className="divide-y divide-border/30">
           {categories.map((cat) => {
             const isEditing = editingId === cat.id;
-            const relationConfig = relationTypeLabels[cat.relationType];
+            const relationConfig = relationTypeLabels[cat.relationType] ?? relationTypeLabels.none;
             const RelationIcon = relationConfig.icon;
+            const associatedModules = Array.isArray(cat.associatedModules) ? cat.associatedModules : [];
             const isConfirmingDelete = deleteConfirmId === cat.id;
 
             return (
@@ -609,10 +617,11 @@ export function WorkCategoriesManager() {
                           {relationConfig.label}
                         </span>
                         {/* Associated Module Badges */}
-                        {cat.associatedModules.length > 0 && (
+                        {associatedModules.length > 0 && (
                           <div className="flex items-center gap-1">
-                            {cat.associatedModules.map(mod => {
+                            {associatedModules.map(mod => {
                               const modConfig = projectModuleGroupConfig[mod];
+                              if (!modConfig) return null;
                               const ModIcon = modConfig.icon;
                               return (
                                 <span key={mod} className={cn('inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium', modConfig.bg, modConfig.color)}>
@@ -670,7 +679,7 @@ export function WorkCategoriesManager() {
         <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
           {(Object.entries(projectModuleGroupConfig) as [ProjectModuleGroup, typeof projectModuleGroupConfig['website_system']][]).map(([key, config]) => {
             const Icon = config.icon;
-            const linkedCategories = categories.filter(c => c.associatedModules.includes(key) && c.isActive);
+            const linkedCategories = categories.filter(c => (c.associatedModules ?? []).includes(key) && c.isActive);
             return (
               <div key={key} className={cn('p-4 rounded-lg border', config.bg, 'border-opacity-60')}>
                 <div className="flex items-center gap-2 mb-3">

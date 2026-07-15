@@ -65,7 +65,17 @@ type DbRow = {
   associated_modules: string[];
 };
 
+const validRelationTypes = new Set<CategoryRelationType>(['project_website', 'internal_project', 'none']);
+const validModuleGroups = new Set<ProjectModuleGroup>(['website_system', 'marketing', 'video_production', 'talent']);
+
 function mapRow(row: DbRow): WorkCategoryConfig {
+  const relationType = validRelationTypes.has(row.relation_type as CategoryRelationType)
+    ? (row.relation_type as CategoryRelationType)
+    : 'none';
+  const associatedModules = (row.associated_modules || []).filter(
+    (m): m is ProjectModuleGroup => validModuleGroups.has(m as ProjectModuleGroup)
+  );
+
   return {
     id: row.id,
     category: row.id,
@@ -73,11 +83,11 @@ function mapRow(row: DbRow): WorkCategoryConfig {
     icon: row.icon,
     color: row.color,
     bg: row.bg,
-    relationType: row.relation_type as CategoryRelationType,
+    relationType,
     description: row.description,
     isActive: row.is_active,
     sortOrder: row.sort_order,
-    associatedModules: (row.associated_modules || []) as ProjectModuleGroup[],
+    associatedModules,
   };
 }
 
