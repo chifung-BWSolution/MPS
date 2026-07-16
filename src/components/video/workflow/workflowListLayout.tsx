@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useState, type MouseEvent, type ReactNode } from 'react';
+import { Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PRODUCTION_TASK_KEYS, PRODUCTION_TASK_LABELS } from '@/lib/videoWorkflowUtils';
 
@@ -7,10 +8,10 @@ export const WORKFLOW_LIST_GRID_PRODUCTION =
   'grid grid-cols-[minmax(100px,152px)_minmax(112px,148px)_minmax(120px,1.2fr)_92px_repeat(5,52px)_minmax(88px,0.85fr)_108px_64px_88px] gap-x-3 gap-y-2 items-center min-w-[1100px]';
 
 export const WORKFLOW_LIST_GRID_REVIEW =
-  'grid grid-cols-[minmax(100px,152px)_minmax(112px,148px)_minmax(120px,1.2fr)_92px_repeat(5,52px)_minmax(88px,0.85fr)_108px_88px_88px] gap-x-3 gap-y-2 items-center min-w-[1120px]';
+  'grid grid-cols-[minmax(100px,152px)_minmax(112px,148px)_minmax(120px,1.2fr)_92px_repeat(5,52px)_minmax(118px,0.9fr)_108px_88px_88px] gap-x-3 gap-y-2 items-center min-w-[1150px]';
 
 export const WORKFLOW_LIST_GRID_PUBLISH =
-  'grid grid-cols-[minmax(100px,152px)_minmax(112px,148px)_minmax(120px,1.2fr)_92px_repeat(5,52px)_minmax(88px,0.85fr)_108px_96px_56px] gap-x-3 gap-y-2 items-center min-w-[1040px]';
+  'grid grid-cols-[minmax(100px,152px)_minmax(112px,148px)_minmax(120px,1.2fr)_92px_repeat(5,52px)_minmax(118px,0.9fr)_108px_96px_56px] gap-x-3 gap-y-2 items-center min-w-[1070px]';
 
 export const WORKFLOW_LIST_DATE_CELL = 'text-muted-foreground shrink-0 whitespace-nowrap tabular-nums';
 
@@ -104,4 +105,48 @@ export function formatWorkflowPlannedPublishDate(value?: string): string {
 
 export function formatWorkflowStoragePath(value?: string): string {
   return value?.trim() || '—';
+}
+
+/** Copy storage path to clipboard; shows — when empty. */
+export function CopyStoragePathButton({
+  path,
+  className,
+}: {
+  path?: string;
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const trimmed = path?.trim() ?? '';
+
+  if (!trimmed) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+
+  const handleCopy = async (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(trimmed);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // ignore clipboard failures
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={trimmed}
+      className={cn(
+        'inline-flex items-center gap-1 h-7 px-2 rounded text-[11px] font-medium whitespace-nowrap',
+        'border border-border bg-white text-teal-700 hover:bg-teal-50 hover:border-teal-200 transition-colors',
+        className,
+      )}
+    >
+      <Copy size={12} />
+      {copied ? '已複製' : '複製視頻地址'}
+    </button>
+  );
 }

@@ -17,7 +17,10 @@ import type { VideoOutput } from '@/types/videoOutput';
 import {
   VIDEO_OUTPUT_STATUS_COLORS,
   VIDEO_OUTPUT_STATUS_LABELS,
+  buildProductionYearOptions,
   deriveVideoOutputStatus,
+  filterVideoOutputs,
+  getCurrentProductionYear,
   PLATFORM_PUBLISH_LABELS,
   getPublishedPlatformKeys,
 } from '@/lib/videoOutputUtils';
@@ -28,6 +31,8 @@ import {
   unlinkVideoFromWebsite,
   type WebsiteLinkedVideo,
 } from '@/services/websiteVideoLinkService';
+import { useVchannels } from '@/hooks/useVchannels';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 // ============================================================
 // Shared Configs
@@ -107,6 +112,7 @@ export function WebsiteVideosTab({
   site: WebsiteProfileFull;
   onVideosCountChange?: (count: number) => void;
 }) {
+  const { channels } = useVchannels();
   const [videos, setVideos] = useState<WebsiteLinkedVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +120,9 @@ export function WebsiteVideosTab({
   const [linkable, setLinkable] = useState<VideoOutput[]>([]);
   const [loadingLinkable, setLoadingLinkable] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [pickerSearch, setPickerSearch] = useState('');
+  const [yearFilter, setYearFilter] = useState(getCurrentProductionYear);
+  const [vchannelFilter, setVchannelFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [unlinkingId, setUnlinkingId] = useState<string | null>(null);
 
@@ -139,7 +147,9 @@ export function WebsiteVideosTab({
   const openLinkModal = async () => {
     setShowModal(true);
     setSelectedIds(new Set());
-    setPickerSearch('');
+    setYearFilter(getCurrentProductionYear());
+    setVchannelFilter('all');
+    setSearchQuery('');
     setLoadingLinkable(true);
     try {
       const rows = await fetchLinkableVideoOutputs(site.id);
@@ -151,17 +161,22 @@ export function WebsiteVideosTab({
     }
   };
 
-  const filteredLinkable = useMemo(() => {
-    const q = pickerSearch.trim().toLowerCase();
-    if (!q) return linkable;
-    return linkable.filter(
-      v =>
-        v.title.toLowerCase().includes(q) ||
-        v.videoCode.toLowerCase().includes(q) ||
-        v.channelCode.toLowerCase().includes(q) ||
-        (v.channelPublicName ?? '').toLowerCase().includes(q),
-    );
-  }, [linkable, pickerSearch]);
+  const yearOptions = useMemo(
+    () => buildProductionYearOptions(linkable.map(v => v.productionYear)),
+    [linkable],
+  );
+
+  const filteredLinkable = useMemo(
+    () =>
+      filterVideoOutputs(linkable, {
+        vchannelId: vchannelFilter,
+        searchQuery,
+        category: 'all',
+        status: 'all',
+        productionYear: yearFilter,
+      }),
+    [linkable, vchannelFilter, searchQuery, yearFilter],
+  );
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -343,14 +358,43 @@ export function WebsiteVideosTab({
             </div>
 
             <div className="px-6 py-3 border-b border-border shrink-0">
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  value={pickerSearch}
-                  onChange={e => setPickerSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
-                  placeholder="搜尋編號、標題或頻道..."
-                />
+              <div className="flex items-center gap-2 flex-wrap">
+                <Select value={String(yearFilter)} onValueChange={value => setYearFilter(Number(value))}>
+                  <SelectTrigger className="w-[100px] h-9 text-[12px]">
+                    <SelectValue placeholder="年份" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {yearOptions.map(year => (
+                      <SelectItem key={year} value={String(year)}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={vchannelFilter} onValueChange={setVchannelFilter}>
+                  <SelectTrigger className="w-[220px] h-9 text-[12px]">
+                    <SelectValue placeholder="Vchannel" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部 Vchannel</SelectItem>
+                    {channels.map(ch => (
+                      <SelectItem key={ch.id} value={ch.id}>
+                        {ch.channelCode} — {ch.publicName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <div className="relative flex-1 min-w-[180px]">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full h-9 pl-9 pr-3 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                    placeholder="搜尋主題或 Video Code..."
+                  />
+                </div>
               </div>
             </div>
 
@@ -362,7 +406,7 @@ export function WebsiteVideosTab({
                 </div>
               ) : filteredLinkable.length === 0 ? (
                 <div className="text-center py-10 text-[13px] text-muted-foreground">
-                  {linkable.length === 0 ? '沒有可關聯的影片（可能皆已關聯）' : '沒有符合搜尋的影片'}
+                  {linkable.length === 0 ? '沒有可關聯的影片（可能皆已關聯）' : '沒有符合篩選條件的影片'}
                 </div>
               ) : (
                 <ul className="space-y-1">

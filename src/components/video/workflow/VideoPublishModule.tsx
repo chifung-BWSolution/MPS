@@ -21,8 +21,8 @@ import { WorkflowListFilters } from '@/components/video/workflow/WorkflowListFil
 import { WorkflowStatusSummaryBar } from '@/components/video/workflow/WorkflowStatusSummaryBar';
 import { PlatformPublishModal } from '@/components/video/PlatformPublishModal';
 import {
+  CopyStoragePathButton,
   formatWorkflowPlannedPublishDate,
-  formatWorkflowStoragePath,
   WORKFLOW_LIST_DATE_CELL,
   WORKFLOW_LIST_GRID_PUBLISH,
   WorkflowListChannelCell,
@@ -67,9 +67,7 @@ function PublishListRow({
       <p className="font-semibold truncate min-w-0" title={video.title}>{video.title}</p>
       <span className={WORKFLOW_LIST_DATE_CELL}>{video.shootAt ?? '—'}</span>
       <ProductionProgressMarks video={video} />
-      <span className="text-muted-foreground truncate" title={video.storagePath}>
-        {formatWorkflowStoragePath(video.storagePath)}
-      </span>
+      <CopyStoragePathButton path={video.storagePath} />
       <span className={WORKFLOW_LIST_DATE_CELL}>{formatWorkflowPlannedPublishDate(video.plannedPublishDate)}</span>
       <Button
         type="button"

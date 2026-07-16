@@ -22,8 +22,8 @@ import { ReviewActionModal, type ReviewActionMode } from '@/components/video/wor
 import { WorkflowListFilters } from '@/components/video/workflow/WorkflowListFilters';
 import { WorkflowStatusSummaryBar } from '@/components/video/workflow/WorkflowStatusSummaryBar';
 import {
+  CopyStoragePathButton,
   formatWorkflowPlannedPublishDate,
-  formatWorkflowStoragePath,
   WORKFLOW_LIST_DATE_CELL,
   WORKFLOW_LIST_GRID_REVIEW,
   WorkflowListChannelCell,
@@ -72,9 +72,7 @@ function ReviewListRow({
       <p className="font-semibold truncate min-w-0" title={video.title}>{video.title}</p>
       <span className={WORKFLOW_LIST_DATE_CELL}>{video.shootAt ?? '—'}</span>
       <ProductionProgressMarks video={video} />
-      <span className="text-muted-foreground truncate" title={video.storagePath}>
-        {formatWorkflowStoragePath(video.storagePath)}
-      </span>
+      <CopyStoragePathButton path={video.storagePath} />
       <span className={WORKFLOW_LIST_DATE_CELL}>{formatWorkflowPlannedPublishDate(video.plannedPublishDate)}</span>
       {pending ? (
         <>

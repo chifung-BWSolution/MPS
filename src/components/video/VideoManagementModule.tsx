@@ -30,6 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PlatformPublishModal } from '@/components/video/PlatformPublishModal';
 import { fetchWorkLogTotalsByVideoIds } from '@/services/videoOutputWorkLogService';
 import { WorkflowStatusSummaryBar } from '@/components/video/workflow/WorkflowStatusSummaryBar';
+import { CopyStoragePathButton } from '@/components/video/workflow/workflowListLayout';
 
 const TABLE_COL_COUNT = 13;
 /** Columns before 拍攝時間: 狀態 / Vchannel / Video Code / 主題 */
@@ -445,7 +446,11 @@ export function VideoManagementModule() {
                       <CheckCell value={video.needsEditing} />
                     </td>
                     <td className={cn('px-2 align-middle text-center', cellPad)}>
-                      <CheckCell value={video.demoDone} />
+                      {video.storagePath?.trim() ? (
+                        <CopyStoragePathButton path={video.storagePath} />
+                      ) : (
+                        <CheckCell value={video.demoDone} />
+                      )}
                     </td>
                     <td className={cn('px-4 align-middle text-right min-w-[76px]', cellPad)}>
                       <WorkHoursCell hours={totalHours} />
