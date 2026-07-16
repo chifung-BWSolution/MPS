@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, Copy, Loader2, Plus, Search } from 'lucide-react';
+import { Check, Copy, Loader2, Plus, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVideoOutput } from '@/hooks/useVideoOutput';
 import { useVchannels } from '@/hooks/useVchannels';
@@ -8,7 +8,6 @@ import {
   PLATFORM_PUBLISH_LABELS,
   VIDEO_OUTPUT_STATUS_COLORS,
   VIDEO_OUTPUT_STATUS_LABELS,
-  countPublishedPlatforms,
   buildProductionYearOptions,
   deriveVideoOutputStatus,
   filterVideoOutputs,
@@ -26,7 +25,7 @@ import { PlatformPublishModal } from '@/components/video/PlatformPublishModal';
 import { fetchWorkLogTotalsByVideoIds } from '@/services/videoOutputWorkLogService';
 import { WorkflowStatusSummaryBar } from '@/components/video/workflow/WorkflowStatusSummaryBar';
 
-const TABLE_COL_COUNT = 14;
+const TABLE_COL_COUNT = 13;
 
 const STATUS_SUMMARY_KEYS: VideoOutputStatus[] = [
   'pending',
@@ -115,8 +114,7 @@ function PlatformPublishRow({
   const copyableKeys = getPublishedPlatformKeysWithUrl(platformPublish);
   const canCopy = copyableKeys.length > 0;
 
-  const handleCopy = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleCopy = async () => {
     const text = formatPlatformPublishCopyText(platformPublish);
     if (!text) return;
     try {
@@ -129,62 +127,62 @@ function PlatformPublishRow({
   };
 
   return (
-    <div className="px-4 py-3 bg-slate-50/80 border-t border-border/60">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-[11px] font-bold text-muted-foreground">平台發佈</p>
-        <div className="flex items-center gap-1.5">
-          {canCopy && (
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="flex items-center gap-1 px-2.5 py-1 border border-border/60 bg-white text-muted-foreground rounded text-[11px] font-medium hover:bg-muted/50 transition-colors"
-            >
-              <Copy size={11} /> {copyDone ? '已複製' : '複製'}
-            </button>
+    <div className="px-4 py-2.5 bg-slate-50/80 border-t border-border/40">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="flex-1 min-w-0 flex flex-wrap items-center gap-1.5">
+          {publishedKeys.length === 0 ? (
+            <span className="text-[12px] text-muted-foreground">尚未發佈任何平台</span>
+          ) : (
+            publishedKeys.map(key => {
+              const url = getPlatformUrl(platformPublish, key);
+              const label = PLATFORM_PUBLISH_LABELS[key];
+              const openable = !!url && isHttpUrl(url);
+
+              if (openable) {
+                return (
+                  <a
+                    key={key}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center px-2 py-1 rounded border border-teal-200 bg-white text-[11px] font-medium text-teal-700 hover:bg-teal-50 hover:border-teal-300 transition-colors"
+                    title={`打開 ${label}`}
+                  >
+                    {label}
+                  </a>
+                );
+              }
+
+              return (
+                <span
+                  key={key}
+                  className="inline-flex items-center px-2 py-1 rounded border border-border/60 bg-white text-[11px] font-medium text-muted-foreground"
+                  title={url || '尚未填寫連結'}
+                >
+                  {label}
+                </span>
+              );
+            })
           )}
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
-            onClick={e => {
-              e.stopPropagation();
-              onPublish();
-            }}
+            onClick={handleCopy}
+            disabled={!canCopy}
+            className="flex items-center gap-1 px-2.5 py-1 border border-border/60 bg-white text-muted-foreground rounded text-[11px] font-medium hover:bg-muted/50 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <Copy size={11} /> {copyDone ? '已複製' : '複製'}
+          </button>
+          <button
+            type="button"
+            onClick={onPublish}
             className="flex items-center gap-1 px-2.5 py-1 bg-teal-600 text-white rounded text-[11px] font-medium hover:bg-teal-700 transition-colors"
           >
             <Plus size={11} /> 發佈
           </button>
         </div>
       </div>
-      {publishedKeys.length === 0 ? (
-        <p className="text-[12px] text-muted-foreground py-1">尚未發佈任何平台</p>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-          {publishedKeys.map(key => {
-            const url = getPlatformUrl(platformPublish, key);
-            return (
-              <div key={key} className="flex items-center gap-2 text-[11px] bg-white border border-border/60 rounded px-2 py-1.5 min-w-0">
-                <CheckCell value />
-                <span className="text-muted-foreground shrink-0">{PLATFORM_PUBLISH_LABELS[key]}</span>
-                {url && (
-                  isHttpUrl(url) ? (
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={e => e.stopPropagation()}
-                      className="truncate text-teal-700 hover:underline ml-auto min-w-0"
-                      title={url}
-                    >
-                      鏈接
-                    </a>
-                  ) : (
-                    <span className="truncate text-teal-700 ml-auto min-w-0" title={url}>{url}</span>
-                  )
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
@@ -198,7 +196,6 @@ export function VideoManagementModule() {
   const [yearFilter, setYearFilter] = useState(getCurrentProductionYear);
   const [categoryFilter, setCategoryFilter] = useState<'all' | VideoProjectCategory>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | VideoOutputStatus>('all');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [publishingVideo, setPublishingVideo] = useState<VideoOutput | null>(null);
   const [workLogTotals, setWorkLogTotals] = useState<Map<string, number>>(new Map());
 
@@ -364,7 +361,6 @@ export function VideoManagementModule() {
         <table className="w-full text-[13px] min-w-[1180px]">
           <thead className="bg-muted/30">
             <tr>
-              <th className="w-8 px-2 py-2.5" />
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">狀態</th>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">Vchannel</th>
               <th className="text-left px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap w-[1%]">Video Code</th>
@@ -383,23 +379,12 @@ export function VideoManagementModule() {
           <tbody>
             {filteredVideos.map(video => {
               const status = deriveVideoOutputStatus(video);
-              const platformCount = countPublishedPlatforms(video.platformPublish);
-              const isExpanded = expandedId === video.id;
+              const isPublished = status === 'published';
               const totalHours = workLogTotals.get(video.id);
 
               return (
                 <Fragment key={video.id}>
                   <tr className="border-t border-border/50 hover:bg-muted/10">
-                    <td className="px-2 py-2.5 align-middle">
-                      <button
-                        type="button"
-                        onClick={() => setExpandedId(isExpanded ? null : video.id)}
-                        className="p-0.5 rounded hover:bg-muted text-muted-foreground"
-                        title="平台發佈"
-                      >
-                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                      </button>
-                    </td>
                     <td className="px-3 py-2.5 align-middle">
                       <StatusCell status={status} />
                     </td>
@@ -407,11 +392,6 @@ export function VideoManagementModule() {
                       <span className="font-mono text-[12px] font-bold" title={video.channelPublicName}>
                         {video.channelCode}
                       </span>
-                      {!isExpanded && platformCount.done > 0 && (
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {platformCount.done}/{platformCount.total} 已發佈
-                        </p>
-                      )}
                     </td>
                     <td className="px-2 py-2.5 align-middle font-mono text-[10px] w-[1%] max-w-[96px]">
                       <span className="block truncate" title={video.videoCode}>{video.videoCode}</span>
@@ -439,7 +419,7 @@ export function VideoManagementModule() {
                       <WorkHoursCell hours={totalHours} />
                     </td>
                   </tr>
-                  {isExpanded && (
+                  {isPublished && (
                     <tr className="border-t border-border/30">
                       <td colSpan={TABLE_COL_COUNT} className="p-0">
                         <PlatformPublishRow
