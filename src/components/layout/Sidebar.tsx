@@ -101,10 +101,26 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-3 px-2">
         {hasSubMenus ? (
           <ul className="space-y-0.5">
-            {currentMenuData.subMenus.map((subItem) => {
+            {currentMenuData.subMenus.map((subItem, index) => {
               const isSubActive = currentSubModule === subItem.id;
+              const prevSection = index > 0 ? currentMenuData.subMenus[index - 1]?.section : undefined;
+              const showSection =
+                !sidebarCollapsed &&
+                !!subItem.section &&
+                subItem.section !== prevSection;
+
               return (
                 <li key={subItem.id}>
+                  {showSection && (
+                    <div
+                      className={cn(
+                        'px-3 pt-3 pb-1 text-[11px] font-semibold text-muted-foreground',
+                        index === 0 && 'pt-1',
+                      )}
+                    >
+                      {subItem.section}
+                    </div>
+                  )}
                   <button
                     onClick={() => navigateTo(currentModule, subItem.id)}
                     className={cn(
