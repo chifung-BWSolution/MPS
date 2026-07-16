@@ -128,37 +128,33 @@ function PlatformPublishRow({
 
   return (
     <div className="flex items-center gap-3 min-w-0">
-      <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
+      <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px]">
         {publishedKeys.length === 0 ? (
-          <span className="text-[11px] text-muted-foreground">尚未發佈任何平台</span>
+          <span className="text-muted-foreground">尚未發佈任何平台</span>
         ) : (
-          publishedKeys.map(key => {
+          publishedKeys.map((key, index) => {
             const url = getPlatformUrl(platformPublish, key);
             const label = PLATFORM_PUBLISH_LABELS[key];
             const openable = !!url && isHttpUrl(url);
 
-            if (openable) {
-              return (
-                <a
-                  key={key}
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[11px] font-medium text-teal-700 hover:underline underline-offset-2"
-                  title={`打開 ${label}`}
-                >
-                  {label}
-                </a>
-              );
-            }
-
             return (
-              <span
-                key={key}
-                className="text-[11px] font-medium text-muted-foreground"
-                title={url || '尚未填寫連結'}
-              >
-                {label}
+              <span key={key} className="inline-flex items-center gap-x-1.5">
+                {index > 0 && <span className="text-border select-none">·</span>}
+                {openable ? (
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-teal-700 hover:underline underline-offset-2"
+                    title={`打開 ${label}`}
+                  >
+                    {label}
+                  </a>
+                ) : (
+                  <span className="font-medium text-muted-foreground" title={url || '尚未填寫連結'}>
+                    {label}
+                  </span>
+                )}
               </span>
             );
           })
@@ -169,7 +165,7 @@ function PlatformPublishRow({
           type="button"
           onClick={handleCopy}
           disabled={!canCopy}
-          className="flex items-center gap-1 px-2 py-0.5 border border-border/60 bg-white text-muted-foreground rounded text-[11px] font-medium hover:bg-muted/50 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          className="flex items-center gap-1 px-2 py-0.5 border border-border/60 text-muted-foreground rounded text-[11px] font-medium hover:bg-muted/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
         >
           <Copy size={11} /> {copyDone ? '已複製' : '複製'}
         </button>
@@ -378,55 +374,60 @@ export function VideoManagementModule() {
               const status = deriveVideoOutputStatus(video);
               const isPublished = status === 'published';
               const totalHours = workLogTotals.get(video.id);
+              const cellPad = isPublished ? 'pt-2.5 pb-1' : 'py-2.5';
 
               return (
-                <tbody key={video.id} className="border-t border-border/50 hover:bg-muted/10">
-                  <tr>
-                    <td className={cn('px-3 align-middle', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
+                <tbody
+                  key={video.id}
+                  className="border-t border-border/50 group"
+                >
+                  <tr className="group-hover:bg-muted/10 transition-colors">
+                    <td className={cn('px-3 align-middle', cellPad)}>
                       <StatusCell status={status} />
                     </td>
-                    <td className={cn('px-3 align-middle', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
+                    <td className={cn('px-3 align-middle', cellPad)}>
                       <span className="font-mono text-[12px] font-bold" title={video.channelPublicName}>
                         {video.channelCode}
                       </span>
                     </td>
-                    <td className={cn('px-2 align-middle font-mono text-[10px] w-[1%] max-w-[96px]', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
+                    <td className={cn('px-2 align-middle font-mono text-[10px] w-[1%] max-w-[96px]', cellPad)}>
                       <span className="block truncate" title={video.videoCode}>{video.videoCode}</span>
                     </td>
-                    <td className={cn('px-3 align-middle max-w-[240px]', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
+                    <td className={cn('px-3 align-middle max-w-[240px]', cellPad)}>
                       <span className="line-clamp-2" title={video.title}>{video.title}</span>
                     </td>
-                    <td className={cn('px-3 align-middle text-[12px] whitespace-nowrap', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
+                    <td className={cn('px-3 align-middle text-[12px] whitespace-nowrap', cellPad)}>
                       {video.shootAt ?? '—'}
                     </td>
-                    <td className={cn('px-3 align-middle text-[12px] whitespace-nowrap text-muted-foreground', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
+                    <td className={cn('px-3 align-middle text-[12px] whitespace-nowrap text-muted-foreground', cellPad)}>
                       {video.plannedPublishDate?.trim() || '—'}
                     </td>
-                    <td className={cn('px-3 align-middle text-[12px] whitespace-nowrap', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
+                    <td className={cn('px-3 align-middle text-[12px] whitespace-nowrap', cellPad)}>
                       {video.publishedDate?.trim() || '—'}
                     </td>
-                    <td className={cn('px-3 align-middle whitespace-nowrap text-[12px]', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
+                    <td className={cn('px-3 align-middle whitespace-nowrap text-[12px]', cellPad)}>
                       {formatShootLocation(video.shootHk, video.shootSz)}
                     </td>
-                    <td className={cn('px-2 align-middle text-center', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
+                    <td className={cn('px-2 align-middle text-center', cellPad)}>
                       <CopywritingCell sc={video.copySc} tc={video.copyTc} en={video.copyEn} />
                     </td>
-                    <td className={cn('px-2 align-middle text-center', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
+                    <td className={cn('px-2 align-middle text-center', cellPad)}>
                       <CheckCell value={video.rawFootageDone} />
                     </td>
-                    <td className={cn('px-2 align-middle text-center', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
+                    <td className={cn('px-2 align-middle text-center', cellPad)}>
                       <CheckCell value={video.needsEditing} />
                     </td>
-                    <td className={cn('px-2 align-middle text-center', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
+                    <td className={cn('px-2 align-middle text-center', cellPad)}>
                       <CheckCell value={video.demoDone} />
                     </td>
-                    <td className={cn('px-4 align-middle text-right min-w-[76px]', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
+                    <td className={cn('px-4 align-middle text-right min-w-[76px]', cellPad)}>
                       <WorkHoursCell hours={totalHours} />
                     </td>
                   </tr>
                   {isPublished && (
-                    <tr>
-                      <td colSpan={TABLE_COL_COUNT} className="px-3 pt-0 pb-2.5">
+                    <tr className="group-hover:bg-muted/10 transition-colors">
+                      <td className="px-3 pt-0 pb-2.5" />
+                      <td colSpan={TABLE_COL_COUNT - 1} className="px-3 pt-0 pb-2.5">
                         <PlatformPublishRow
                           platformPublish={video.platformPublish}
                           onPublish={() => setPublishingVideo(video)}
