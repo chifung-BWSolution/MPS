@@ -106,6 +106,32 @@ export interface CalendarEvent {
   websiteName: string;
   hours?: number;
   sourceId?: string;
+  /** Live video_output fields for calendar chips */
+  videoCode?: string;
+  themeTitle?: string;
+  /** 主號 | 小號 — inferred from title markers like（小號only） */
+  accountKind?: 'main' | 'secondary';
+  channelName?: string;
+}
+
+/** Parse theme + 主號/小號 from a video_output title. */
+export function parseVideoCalendarTheme(input: {
+  videoCode: string;
+  title: string;
+}): { theme: string; isSecondary: boolean } {
+  const raw = input.title?.trim() || '';
+  const isSecondary = /小號/.test(raw);
+  let theme = raw;
+  const code = input.videoCode?.trim();
+  if (code && theme.toUpperCase().startsWith(code.toUpperCase())) {
+    theme = theme.slice(code.length).trim().replace(/^[-–—:：\s]+/, '');
+  }
+  theme = theme
+    .replace(/[（(]\s*小號\s*only\s*[）)]/gi, '')
+    .replace(/[（(]\s*小號\s*[）)]/gi, '')
+    .replace(/小號\s*only/gi, '')
+    .trim();
+  return { theme: theme || raw || code || '影片', isSecondary };
 }
 
 export function getCalendarEventsForMonth(year: number, month: number): CalendarEvent[] {

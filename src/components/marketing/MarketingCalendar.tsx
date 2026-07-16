@@ -2,9 +2,11 @@ import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Plus, X, Calendar, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { getCalendarEventsForMonth, CalendarEvent } from '@/data/marketingData';
+import { getCalendarEventsForMonth, CalendarEvent, parseVideoCalendarTheme } from '@/data/marketingData';
 import { projects as allProjects, statusConfig } from '@/data/mockData';
 import { useUpcomingEvents } from '@/hooks/useUpcomingEvents';
+import { useVideoOutput } from '@/hooks/useVideoOutput';
+import { useVchannels } from '@/hooks/useVchannels';
 
 const calendarDays = ['一', '二', '三', '四', '五', '六', '日'];
 
@@ -18,7 +20,49 @@ const typeConfig: Record<string, { bg: string; text: string; label: string; dot:
   project:  { bg: 'bg-indigo-100',  text: 'text-indigo-700',  label: '項目',     dot: 'bg-indigo-500',  border: 'border-indigo-200' },
 };
 
-type CustomEvent = CalendarEvent & { isProject?: boolean; projectCategory?: string; projectStatus?: string };
+const accountKindStyle = {
+  main: { label: '主號', className: 'text-blue-600' },
+  secondary: { label: '小號', className: 'text-rose-500' },
+} as const;
+
+type CustomEvent = CalendarEvent & {
+  isProject?: boolean;
+  projectCategory?: string;
+  projectStatus?: string;
+  _fullDate?: string;
+};
+
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function VideoCalendarChip({ event }: { event: CustomEvent }) {
+  const kind = event.accountKind === 'secondary' ? 'secondary' : 'main';
+  const kindCfg = accountKindStyle[kind];
+  const theme = event.themeTitle || event.title;
+
+  return (
+    <div
+      className={cn(
+        'rounded border bg-white/90 leading-tight px-1.5 py-1 text-[10px]',
+        kind === 'main' ? 'border-blue-100' : 'border-rose-100',
+      )}
+    >
+      <div className={cn('font-semibold', kindCfg.className)}>{kindCfg.label}</div>
+      {event.videoCode ? (
+        <div className="font-medium text-foreground mt-0.5 break-words whitespace-normal">
+          {event.videoCode}
+        </div>
+      ) : null}
+      {theme ? (
+        <div className="text-muted-foreground mt-0.5 break-words whitespace-normal">{theme}</div>
+      ) : null}
+    </div>
+  );
+}
 
 type NewEventForm = {
   title: string;
@@ -45,7 +89,7 @@ const emptyForm = (): NewEventForm => ({
 export function MarketingCalendar() {
   // Default to today's month for weekly view accuracy
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<'monthly' | 'weekly'>('weekly');
+  const [viewMode, setViewMode] = useState<'monthly' | 'weekly'>('monthly');
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
   const [filterCompany, setFilterCompany] = useState<string>('all');
@@ -53,10 +97,12 @@ export function MarketingCalendar() {
   const [addForm, setAddForm] = useState<NewEventForm>(emptyForm());
   const [saving, setSaving] = useState(false);
   const { events: upcomingEvents, addEvent: addUpcomingEvent } = useUpcomingEvents();
+  const { videos } = useVideoOutput();
+  const { channels } = useVchannels();
 
-  const customEvents = useMemo<(CustomEvent & { _fullDate?: string })[]>(() =>
+  const customEvents = useMemo<CustomEvent[]>(() =>
     upcomingEvents.map(ev => {
-      const d = new Date(ev.date);
+      const d = new Date(ev.date + 'T00:00:00');
       return {
         id: ev.id,
         day: d.getDate(),
@@ -71,6 +117,37 @@ export function MarketingCalendar() {
       };
     }),
   [upcomingEvents]);
+
+  /** Live 影片製作 → calendar by 計劃發佈日期 */
+  const videoEvents = useMemo<CustomEvent[]>(() => {
+    const channelById = new Map(channels.map(c => [c.id, c]));
+    return videos
+      .filter(v => !!v.plannedPublishDate?.trim())
+      .map(v => {
+        const dateStr = v.plannedPublishDate!.trim();
+        const d = new Date(dateStr + 'T00:00:00');
+        const ch = channelById.get(v.vchannelId);
+        const { theme, isSecondary } = parseVideoCalendarTheme({
+          videoCode: v.videoCode,
+          title: v.title,
+        });
+        return {
+          id: `vo-${v.id}`,
+          day: d.getDate(),
+          title: theme,
+          type: 'video' as const,
+          company: ch?.brandCode || v.channelCode || '',
+          brand: ch?.brandCode || '',
+          websiteName: ch?.publicName || v.channelPublicName || '',
+          videoCode: v.videoCode,
+          themeTitle: theme,
+          accountKind: isSecondary ? 'secondary' : 'main',
+          channelName: ch?.publicName || v.channelPublicName,
+          sourceId: v.id,
+          _fullDate: dateStr,
+        };
+      });
+  }, [videos, channels]);
 
   const today = new Date();
 
@@ -116,7 +193,7 @@ export function MarketingCalendar() {
     return allProjects
       .filter(p => p.startDate)
       .map(p => {
-        const date = new Date(p.startDate!);
+        const date = new Date(p.startDate! + 'T00:00:00');
         return {
           id: `proj-${p.id}`,
           day: date.getDate(),
@@ -128,20 +205,21 @@ export function MarketingCalendar() {
           isProject: true,
           projectCategory: p.projectCategory,
           projectStatus: p.status,
-          // Store full date for weekly filtering
           _fullDate: p.startDate,
-        } as CustomEvent & { _fullDate?: string };
+        };
       });
   }, []);
 
-  // All events combined
-  const allBaseEvents = useMemo<(CustomEvent & { _fullDate?: string })[]>(() => {
-    const mEvents = marketingEvents.map(e => ({
-      ...e,
-      _fullDate: `${year}-${String(month + 1).padStart(2, '0')}-${String(e.day).padStart(2, '0')}`,
-    }));
-    return [...mEvents, ...projectEvents, ...customEvents];
-  }, [marketingEvents, projectEvents, customEvents, year, month]);
+  // All events combined — live video_output replaces mock video rows
+  const allBaseEvents = useMemo<CustomEvent[]>(() => {
+    const mEvents = marketingEvents
+      .filter(e => e.type !== 'video')
+      .map(e => ({
+        ...e,
+        _fullDate: `${year}-${String(month + 1).padStart(2, '0')}-${String(e.day).padStart(2, '0')}`,
+      }));
+    return [...mEvents, ...projectEvents, ...customEvents, ...videoEvents];
+  }, [marketingEvents, projectEvents, customEvents, videoEvents, year, month]);
 
   const companies = useMemo(() => {
     const set = new Set(allBaseEvents.map(e => e.company).filter(Boolean));
@@ -171,13 +249,11 @@ export function MarketingCalendar() {
     return eventsForDate(dateStr);
   };
 
-  const selectedDayEvents = selectedDay
-    ? eventsForDate(selectedDay.toISOString().split('T')[0])
-    : [];
+  const selectedDayEvents = selectedDay ? eventsForDate(toLocalDateStr(selectedDay)) : [];
 
   // Weekly summary stats
   const weekEvents = useMemo(() => {
-    return weekDays.flatMap(d => eventsForDate(d.toISOString().split('T')[0]));
+    return weekDays.flatMap(d => eventsForDate(toLocalDateStr(d)));
   }, [weekDays, allBaseEvents, filterType, filterCompany]);
 
   // --- Add event ---
@@ -331,7 +407,7 @@ export function MarketingCalendar() {
               {/* Events per day */}
               <div className="grid grid-cols-7">
                 {weekDays.map((d, i) => {
-                  const dateStr = d.toISOString().split('T')[0];
+                  const dateStr = toLocalDateStr(d);
                   const dayEvents = eventsForDate(dateStr);
                   const isToday = d.toDateString() === today.toDateString();
                   return (
@@ -345,6 +421,17 @@ export function MarketingCalendar() {
                       <div className="space-y-1">
                         {dayEvents.map(event => {
                           const cfg = typeConfig[event.type] || typeConfig.social;
+                          if (event.type === 'video' && event.videoCode) {
+                            return (
+                              <div
+                                key={event.id}
+                                className="cursor-pointer hover:opacity-80 transition-opacity"
+                                onClick={() => setSelectedDay(d)}
+                              >
+                                <VideoCalendarChip event={event} />
+                              </div>
+                            );
+                          }
                           return (
                             <div
                               key={event.id}
@@ -356,8 +443,8 @@ export function MarketingCalendar() {
                             >
                               <div className="truncate font-semibold leading-tight">{event.title}</div>
                               {event.platform && <div className="opacity-60 mt-0.5 truncate">{event.platform}</div>}
-                              {(event as any).projectCategory && (
-                                <div className="opacity-60 mt-0.5">{(event as any).projectCategory === 'internal' ? '內部' : '客戶'}</div>
+                              {event.projectCategory && (
+                                <div className="opacity-60 mt-0.5">{event.projectCategory === 'internal' ? '內部' : '客戶'}</div>
                               )}
                               {event.hours && <div className="opacity-60">{event.hours}h</div>}
                             </div>
@@ -443,7 +530,7 @@ export function MarketingCalendar() {
                   <div className="py-6 text-center">
                     <p className="text-[12px] text-muted-foreground mb-2">當日無行銷活動</p>
                     <button
-                      onClick={() => openAddModal(selectedDay.toISOString().split('T')[0])}
+                      onClick={() => openAddModal(toLocalDateStr(selectedDay))}
                       className="text-[11px] text-teal-600 hover:underline flex items-center gap-1 mx-auto"
                     >
                       <Plus size={10} /> 新增活動
@@ -455,6 +542,17 @@ export function MarketingCalendar() {
                     {selectedDayEvents.map(event => {
                       const cfg = typeConfig[event.type] || typeConfig.social;
                       const proj = event.type === 'project' ? allProjects.find(p => `proj-${p.id}` === event.id) : null;
+                      if (event.type === 'video' && event.videoCode) {
+                        return (
+                          <div key={event.id} className="border border-border/50 rounded-md p-2.5 hover:border-teal-200 transition-colors space-y-1.5">
+                            <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded', cfg.bg, cfg.text)}>{cfg.label}</span>
+                            <VideoCalendarChip event={event} />
+                            {event.channelName && (
+                              <p className="text-[10px] text-muted-foreground">{event.channelName}</p>
+                            )}
+                          </div>
+                        );
+                      }
                       return (
                         <div key={event.id} className="border border-border/50 rounded-md p-2.5 hover:border-teal-200 transition-colors">
                           <div className="flex items-start justify-between mb-1.5">
@@ -477,7 +575,7 @@ export function MarketingCalendar() {
                       );
                     })}
                     <button
-                      onClick={() => openAddModal(selectedDay.toISOString().split('T')[0])}
+                      onClick={() => openAddModal(toLocalDateStr(selectedDay))}
                       className="w-full mt-1 py-1.5 border border-dashed border-border rounded text-[11px] text-muted-foreground hover:text-teal-600 hover:border-teal-300 transition-colors flex items-center justify-center gap-1"
                     >
                       <Plus size={10} /> 新增活動
@@ -508,20 +606,24 @@ export function MarketingCalendar() {
                   const day = i + 1;
                   const dayEvents = eventsForDayNum(day);
                   const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                  const dateObj = new Date(dateStr);
+                  const dateObj = new Date(dateStr + 'T00:00:00');
                   const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
                   const isSelected = selectedDay?.toDateString() === dateObj.toDateString();
+                  const previewLimit = 4;
                   return (
                     <div
                       key={day}
                       onClick={() => setSelectedDay(isSelected ? null : dateObj)}
-                      className={cn('min-h-[100px] border-t border-r border-border/30 p-1.5 cursor-pointer transition-colors', isSelected ? 'bg-teal-50 ring-1 ring-inset ring-teal-300' : 'hover:bg-muted/10')}
+                      className={cn('min-h-[120px] border-t border-r border-border/30 p-1.5 cursor-pointer transition-colors', isSelected ? 'bg-teal-50 ring-1 ring-inset ring-teal-300' : 'hover:bg-muted/10')}
                     >
                       <div className={cn('w-6 h-6 flex items-center justify-center rounded-full text-[12px] font-medium mb-1', isToday ? 'bg-teal-600 text-white' : 'text-foreground')}>
                         {day}
                       </div>
                       <div className="space-y-0.5">
-                        {dayEvents.slice(0, 3).map(event => {
+                        {dayEvents.slice(0, previewLimit).map(event => {
+                          if (event.type === 'video' && event.videoCode) {
+                            return <VideoCalendarChip key={event.id} event={event} />;
+                          }
                           const cfg = typeConfig[event.type] || typeConfig.social;
                           return (
                             <div key={event.id} className={cn('text-[10px] px-1.5 py-0.5 rounded truncate font-medium', cfg.bg, cfg.text)}>
@@ -529,8 +631,8 @@ export function MarketingCalendar() {
                             </div>
                           );
                         })}
-                        {dayEvents.length > 3 && (
-                          <div className="text-[10px] text-muted-foreground px-1">+{dayEvents.length - 3} 更多</div>
+                        {dayEvents.length > previewLimit && (
+                          <div className="text-[10px] text-muted-foreground px-1">+{dayEvents.length - previewLimit} 更多</div>
                         )}
                       </div>
                     </div>
@@ -554,7 +656,7 @@ export function MarketingCalendar() {
                 {selectedDayEvents.length === 0 ? (
                   <div className="py-6 text-center">
                     <p className="text-[12px] text-muted-foreground mb-2">當日無活動</p>
-                    <button onClick={() => openAddModal(selectedDay.toISOString().split('T')[0])} className="text-[11px] text-teal-600 hover:underline flex items-center gap-1 mx-auto"><Plus size={10} /> 新增活動</button>
+                    <button onClick={() => openAddModal(toLocalDateStr(selectedDay))} className="text-[11px] text-teal-600 hover:underline flex items-center gap-1 mx-auto"><Plus size={10} /> 新增活動</button>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -562,6 +664,17 @@ export function MarketingCalendar() {
                     {selectedDayEvents.map(event => {
                       const cfg = typeConfig[event.type] || typeConfig.social;
                       const proj = event.type === 'project' ? allProjects.find(p => `proj-${p.id}` === event.id) : null;
+                      if (event.type === 'video' && event.videoCode) {
+                        return (
+                          <div key={event.id} className="border border-border/50 rounded-md p-2.5 hover:border-teal-200 transition-colors space-y-1.5">
+                            <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded', cfg.bg, cfg.text)}>{cfg.label}</span>
+                            <VideoCalendarChip event={event} />
+                            {event.channelName && (
+                              <p className="text-[10px] text-muted-foreground">{event.channelName}</p>
+                            )}
+                          </div>
+                        );
+                      }
                       return (
                         <div key={event.id} className="border border-border/50 rounded-md p-2.5 hover:border-teal-200 transition-colors">
                           <div className="flex items-start justify-between mb-1">
@@ -581,7 +694,7 @@ export function MarketingCalendar() {
                         </div>
                       );
                     })}
-                    <button onClick={() => openAddModal(selectedDay.toISOString().split('T')[0])} className="w-full mt-1 py-1.5 border border-dashed border-border rounded text-[11px] text-muted-foreground hover:text-teal-600 hover:border-teal-300 transition-colors flex items-center justify-center gap-1">
+                    <button onClick={() => openAddModal(toLocalDateStr(selectedDay))} className="w-full mt-1 py-1.5 border border-dashed border-border rounded text-[11px] text-muted-foreground hover:text-teal-600 hover:border-teal-300 transition-colors flex items-center justify-center gap-1">
                       <Plus size={10} /> 新增活動
                     </button>
                   </div>
