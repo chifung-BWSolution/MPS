@@ -80,5 +80,34 @@ export function useUpcomingEvents() {
     return error;
   }, []);
 
-  return { events, loading, error, addEvent };
+  const updateEvent = useCallback(async (id: string, updates: Omit<UpcomingEvent, 'id'>) => {
+    const row = {
+      title: updates.title,
+      type: updates.type,
+      event_date: updates.date,
+      company: updates.company,
+      brand: updates.brand,
+      platform: updates.platform ?? null,
+      hours: updates.hours ?? null,
+      notes: updates.notes ?? null,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from('upcoming_event').update(row).eq('id', id);
+    if (!error) {
+      setEvents(prev =>
+        prev.map(e => (e.id === id ? { id, ...updates } : e)),
+      );
+    }
+    return error;
+  }, []);
+
+  const deleteEvent = useCallback(async (id: string) => {
+    const { error } = await supabase.from('upcoming_event').delete().eq('id', id);
+    if (!error) {
+      setEvents(prev => prev.filter(e => e.id !== id));
+    }
+    return error;
+  }, []);
+
+  return { events, loading, error, addEvent, updateEvent, deleteEvent };
 }

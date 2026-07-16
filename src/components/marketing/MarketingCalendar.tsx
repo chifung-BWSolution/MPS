@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, ChevronDown, Plus, X, Calendar, Briefcase } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Plus, X, Calendar, Briefcase, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getCalendarEventsForMonth, CalendarEvent, parseVideoCalendarTheme } from '@/data/marketingData';
@@ -30,6 +30,9 @@ type CustomEvent = CalendarEvent & {
   projectCategory?: string;
   projectStatus?: string;
   _fullDate?: string;
+  /** Manual upcoming_event rows — editable/deletable (not video / mock / project) */
+  canManage?: boolean;
+  notes?: string;
 };
 
 function toLocalDateStr(d: Date): string {
@@ -96,11 +99,17 @@ export function MarketingCalendar() {
   const [filterType, setFilterType] = useState<string>('all');
   const [filterCompany, setFilterCompany] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [addForm, setAddForm] = useState<NewEventForm>(emptyForm());
   const [saving, setSaving] = useState(false);
   /** Dates collapsed in list view (YYYY-MM-DD) */
   const [collapsedDates, setCollapsedDates] = useState<Set<string>>(() => new Set());
-  const { events: upcomingEvents, addEvent: addUpcomingEvent } = useUpcomingEvents();
+  const {
+    events: upcomingEvents,
+    addEvent: addUpcomingEvent,
+    updateEvent: updateUpcomingEvent,
+    deleteEvent: deleteUpcomingEvent,
+  } = useUpcomingEvents();
   const { videos } = useVideoOutput();
   const { channels } = useVchannels();
 
@@ -117,6 +126,8 @@ export function MarketingCalendar() {
         brand: ev.brand,
         websiteName: '',
         hours: ev.hours,
+        notes: ev.notes,
+        canManage: true,
         _fullDate: ev.date,
       };
     }),
@@ -148,6 +159,7 @@ export function MarketingCalendar() {
           accountKind: isSecondary ? 'secondary' : 'main',
           channelName: ch?.publicName || v.channelPublicName,
           sourceId: v.id,
+          canManage: false,
           _fullDate: dateStr,
         };
       });
@@ -294,17 +306,43 @@ export function MarketingCalendar() {
   const collapseAllDates = () =>
     setCollapsedDates(new Set(monthListGroups.map(g => g.dateStr)));
 
-  // --- Add event ---
+  // --- Add / edit / delete (manual upcoming_event only; videos are read-only here) ---
+  function closeEventModal() {
+    setShowAddModal(false);
+    setEditingEventId(null);
+    setAddForm(emptyForm());
+  }
+
   function openAddModal(dateStr?: string) {
+    setEditingEventId(null);
     setAddForm({ ...emptyForm(), date: dateStr || toLocalDateStr(new Date()) });
+    setShowAddModal(true);
+  }
+
+  function openEditModal(event: CustomEvent) {
+    if (!event.canManage || event.type === 'video') return;
+    setEditingEventId(event.id);
+    setAddForm({
+      title: event.title,
+      type: event.type === 'video' || event.type === 'project' ? 'social' : event.type,
+      date: event._fullDate || toLocalDateStr(new Date()),
+      company: event.company || '',
+      brand: event.brand || '',
+      platform: event.platform || '',
+      hours: event.hours != null ? String(event.hours) : '',
+      notes: event.notes || '',
+    });
     setShowAddModal(true);
   }
 
   async function saveEvent() {
     if (!addForm.title || !addForm.date || saving) return;
+    if (addForm.type === 'video') {
+      toast.error('影片請至「影片製作」維護，不可在此新增');
+      return;
+    }
     setSaving(true);
-    const err = await addUpcomingEvent({
-      id: `evt_${Date.now()}`,
+    const payload = {
       title: addForm.title,
       type: addForm.type,
       date: addForm.date,
@@ -313,15 +351,28 @@ export function MarketingCalendar() {
       platform: addForm.platform || undefined,
       hours: addForm.hours ? Number(addForm.hours) : undefined,
       notes: addForm.notes || undefined,
-    });
+    };
+    const err = editingEventId
+      ? await updateUpcomingEvent(editingEventId, payload)
+      : await addUpcomingEvent({ id: `evt_${Date.now()}`, ...payload });
     setSaving(false);
     if (err) {
-      toast.error('新增失敗', { description: err.message });
+      toast.error(editingEventId ? '更新失敗' : '新增失敗', { description: err.message });
       return;
     }
-    toast.success('活動已新增');
-    setShowAddModal(false);
-    setAddForm(emptyForm());
+    toast.success(editingEventId ? '活動已更新' : '活動已新增');
+    closeEventModal();
+  }
+
+  async function handleDeleteEvent(event: CustomEvent) {
+    if (!event.canManage || event.type === 'video') return;
+    if (!confirm(`確定刪除活動「${event.title}」？`)) return;
+    const err = await deleteUpcomingEvent(event.id);
+    if (err) {
+      toast.error('刪除失敗', { description: err.message });
+      return;
+    }
+    toast.success('活動已刪除');
   }
 
   return (
@@ -332,7 +383,7 @@ export function MarketingCalendar() {
           {/* View toggle — Listview first (default) */}
           <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg">
             {([
-              { id: 'list' as const, label: 'Listview（月列表）' },
+              { id: 'list' as const, label: '月列表' },
               { id: 'weekly' as const, label: '週視圖' },
               { id: 'monthly' as const, label: '月視圖' },
             ]).map(v => (
@@ -488,7 +539,8 @@ export function MarketingCalendar() {
                       <div className="px-4 pb-3 pt-0.5 space-y-1.5">
                         {events.map(event => {
                           const cfg = typeConfig[event.type] || typeConfig.social;
-                          if (event.type === 'video' && event.videoCode) {
+                          const isVideo = event.type === 'video';
+                          if (isVideo && event.videoCode) {
                             return (
                               <div
                                 key={event.id}
@@ -502,6 +554,9 @@ export function MarketingCalendar() {
                                   {event.channelName && (
                                     <p className="text-[10px] text-muted-foreground mt-1">{event.channelName}</p>
                                   )}
+                                  <p className="text-[10px] text-muted-foreground/70 mt-1">
+                                    影片資料請至「影片製作」維護
+                                  </p>
                                 </div>
                               </div>
                             );
@@ -510,7 +565,7 @@ export function MarketingCalendar() {
                             <div
                               key={event.id}
                               className={cn(
-                                'flex items-start gap-3 pl-6 py-1.5 border-l-2 ml-1',
+                                'flex items-start gap-3 pl-6 py-1.5 border-l-2 ml-1 group',
                                 cfg.border,
                               )}
                             >
@@ -534,6 +589,26 @@ export function MarketingCalendar() {
                                   )}
                                 </div>
                               </div>
+                              {event.canManage && (
+                                <div className="flex items-center gap-0.5 shrink-0 opacity-70 group-hover:opacity-100">
+                                  <button
+                                    type="button"
+                                    title="編輯"
+                                    onClick={() => openEditModal(event)}
+                                    className="p-1.5 rounded text-muted-foreground hover:text-teal-700 hover:bg-teal-50 transition-colors"
+                                  >
+                                    <Pencil size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    title="刪除"
+                                    onClick={() => void handleDeleteEvent(event)}
+                                    className="p-1.5 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -903,16 +978,18 @@ export function MarketingCalendar() {
         </div>
       )}
 
-      {/* === ADD EVENT MODAL === */}
+      {/* === ADD / EDIT EVENT MODAL === */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowAddModal(false)}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={closeEventModal}>
           <div className="bg-white rounded-lg shadow-xl p-6 w-[480px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
                 <Calendar size={16} className="text-teal-600" />
-                <h3 className="text-[16px] font-bold">新增行銷活動</h3>
+                <h3 className="text-[16px] font-bold">
+                  {editingEventId ? '編輯行銷活動' : '新增行銷活動'}
+                </h3>
               </div>
-              <button onClick={() => setShowAddModal(false)} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
+              <button type="button" onClick={closeEventModal} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
             </div>
 
             <div className="space-y-4">
@@ -1010,13 +1087,15 @@ export function MarketingCalendar() {
             </div>
 
             <div className="flex justify-end gap-2 mt-5">
-              <button onClick={() => setShowAddModal(false)} className="px-4 py-2 border border-border rounded text-[12px] font-medium text-muted-foreground hover:bg-muted transition-colors">取消</button>
+              <button type="button" onClick={closeEventModal} className="px-4 py-2 border border-border rounded text-[12px] font-medium text-muted-foreground hover:bg-muted transition-colors">取消</button>
               <button
-                onClick={saveEvent}
+                type="button"
+                onClick={() => void saveEvent()}
                 disabled={!addForm.title || !addForm.date || saving}
                 className="px-4 py-2 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
               >
-                <Plus size={13} /> {saving ? '儲存中...' : '新增活動'}
+                {editingEventId ? <Pencil size={13} /> : <Plus size={13} />}
+                {saving ? '儲存中...' : editingEventId ? '儲存變更' : '新增活動'}
               </button>
             </div>
           </div>
