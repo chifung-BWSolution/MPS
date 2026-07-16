@@ -2,7 +2,12 @@ import type { VideoOutputWorkflowFields } from '@/types/videoOutputWorkflow';
 
 export type VideoProjectCategory = 'internal' | 'client';
 
-export type VideoOutputStatus = 'pending' | 'in_production' | 'demo_done' | 'published';
+export type VideoOutputStatus =
+  | 'pending'
+  | 'in_production'
+  | 'pending_review'
+  | 'pending_publish'
+  | 'published';
 
 export type PlatformPublishKey =
   | 'youtube'

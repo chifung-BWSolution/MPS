@@ -13,7 +13,6 @@ import {
   deriveVideoOutputStatus,
   filterVideoOutputs,
   formatPlatformPublishCopyText,
-  formatPublishDate,
   formatShootLocation,
   getCurrentProductionYear,
   getPlatformUrl,
@@ -27,9 +26,15 @@ import { PlatformPublishModal } from '@/components/video/PlatformPublishModal';
 import { fetchWorkLogTotalsByVideoIds } from '@/services/videoOutputWorkLogService';
 import { WorkflowStatusSummaryBar } from '@/components/video/workflow/WorkflowStatusSummaryBar';
 
-const TABLE_COL_COUNT = 13;
+const TABLE_COL_COUNT = 14;
 
-const STATUS_SUMMARY_KEYS: VideoOutputStatus[] = ['pending', 'in_production', 'demo_done', 'published'];
+const STATUS_SUMMARY_KEYS: VideoOutputStatus[] = [
+  'pending',
+  'in_production',
+  'pending_review',
+  'pending_publish',
+  'published',
+];
 
 const COORDINATION_STATUS_ITEMS = STATUS_SUMMARY_KEYS.map(status => ({
   id: status,
@@ -41,7 +46,8 @@ function countVideosByStatus(videos: VideoOutput[]): Record<VideoOutputStatus, n
   const counts: Record<VideoOutputStatus, number> = {
     pending: 0,
     in_production: 0,
-    demo_done: 0,
+    pending_review: 0,
+    pending_publish: 0,
     published: 0,
   };
   for (const video of videos) {
@@ -82,19 +88,7 @@ function CopywritingCell({ sc, tc, en }: { sc?: boolean; tc?: boolean; en?: bool
   );
 }
 
-function StatusCell({ video, status }: { video: VideoOutput; status: VideoOutputStatus }) {
-  if (
-    video.reviewed ||
-    video.workflowStage === 'publish' ||
-    video.workflowStage === 'published'
-  ) {
-    return (
-      <span className="text-[10px] font-medium px-2 py-0.5 rounded whitespace-nowrap bg-slate-100 text-slate-600">
-        已審核
-      </span>
-    );
-  }
-
+function StatusCell({ status }: { status: VideoOutputStatus }) {
   return (
     <span className={cn('text-[10px] font-medium px-2 py-0.5 rounded whitespace-nowrap', VIDEO_OUTPUT_STATUS_COLORS[status])}>
       {VIDEO_OUTPUT_STATUS_LABELS[status]}
@@ -291,16 +285,25 @@ export function VideoManagementModule() {
 
   return (
     <div className="space-y-4">
-      <WorkflowStatusSummaryBar
-        filteredCount={filteredVideos.length}
-        contextCount={contextVideos.length}
-        activeFilter={statusFilter}
-        items={COORDINATION_STATUS_ITEMS}
-        counts={statusCounts}
-        onSelectAll={() => setStatusFilter('all')}
-        onSelectItem={id => handleStatusSummaryClick(id as VideoOutputStatus)}
-        ariaLabel="狀態篩選"
-      />
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-[32px] font-bold tracking-tight">影片統籌</h1>
+          <p className="text-[14px] text-muted-foreground mt-1">
+            全局影片產出時間軸，查看所有狀態的影片記錄。
+          </p>
+        </div>
+        <WorkflowStatusSummaryBar
+          filteredCount={filteredVideos.length}
+          contextCount={contextVideos.length}
+          activeFilter={statusFilter}
+          items={COORDINATION_STATUS_ITEMS}
+          counts={statusCounts}
+          onSelectAll={() => setStatusFilter('all')}
+          onSelectItem={id => handleStatusSummaryClick(id as VideoOutputStatus)}
+          ariaLabel="狀態篩選"
+          tintInactive
+        />
+      </div>
 
       <div className="flex items-center gap-3 flex-wrap">
         <Select value={String(yearFilter)} onValueChange={value => setYearFilter(Number(value))}>
@@ -358,7 +361,7 @@ export function VideoManagementModule() {
       </div>
 
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-x-auto">
-        <table className="w-full text-[13px] min-w-[1080px]">
+        <table className="w-full text-[13px] min-w-[1180px]">
           <thead className="bg-muted/30">
             <tr>
               <th className="w-8 px-2 py-2.5" />
@@ -367,7 +370,8 @@ export function VideoManagementModule() {
               <th className="text-left px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap w-[1%]">Video Code</th>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground min-w-[180px]">主題</th>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">拍攝時間</th>
-              <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">發佈日期</th>
+              <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">計劃發佈時間</th>
+              <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">實際發佈時間</th>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">拍攝地址</th>
               <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">文案</th>
               <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">原片拍攝</th>
@@ -379,7 +383,6 @@ export function VideoManagementModule() {
           <tbody>
             {filteredVideos.map(video => {
               const status = deriveVideoOutputStatus(video);
-              const publish = formatPublishDate(video);
               const platformCount = countPublishedPlatforms(video.platformPublish);
               const isExpanded = expandedId === video.id;
               const totalHours = workLogTotals.get(video.id);
@@ -398,7 +401,7 @@ export function VideoManagementModule() {
                       </button>
                     </td>
                     <td className="px-3 py-2.5 align-middle">
-                      <StatusCell video={video} status={status} />
+                      <StatusCell status={status} />
                     </td>
                     <td className="px-3 py-2.5 align-middle">
                       <span className="font-mono text-[12px] font-bold" title={video.channelPublicName}>
@@ -417,10 +420,11 @@ export function VideoManagementModule() {
                       <span className="line-clamp-2" title={video.title}>{video.title}</span>
                     </td>
                     <td className="px-3 py-2.5 align-middle text-[12px] whitespace-nowrap">{video.shootAt ?? '—'}</td>
+                    <td className="px-3 py-2.5 align-middle text-[12px] whitespace-nowrap text-muted-foreground">
+                      {video.plannedPublishDate?.trim() || '—'}
+                    </td>
                     <td className="px-3 py-2.5 align-middle text-[12px] whitespace-nowrap">
-                      <span className={cn(publish.planned && 'text-muted-foreground')} title={publish.planned ? '預計發佈' : undefined}>
-                        {publish.text}
-                      </span>
+                      {video.publishedDate?.trim() || '—'}
                     </td>
                     <td className="px-3 py-2.5 align-middle whitespace-nowrap text-[12px]">
                       {formatShootLocation(video.shootHk, video.shootSz)}

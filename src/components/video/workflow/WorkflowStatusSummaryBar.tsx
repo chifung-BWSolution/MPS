@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 
 export const WORKFLOW_STATUS_PILL_BASE =
-  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium border transition-all duration-200 cursor-pointer select-none';
+  'inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md text-[13px] font-medium border transition-all duration-200 cursor-pointer select-none';
 
 export const WORKFLOW_STATUS_PILL_INACTIVE =
   'border-border/70 bg-white text-muted-foreground shadow-sm hover:bg-muted/50 hover:border-border hover:text-foreground hover:shadow';
@@ -21,6 +21,8 @@ type Props = {
   onSelectAll: () => void;
   onSelectItem: (id: string) => void;
   ariaLabel: string;
+  /** Soft color on inactive pills so statuses stay visually distinct */
+  tintInactive?: boolean;
 };
 
 export function WorkflowStatusSummaryBar({
@@ -32,9 +34,10 @@ export function WorkflowStatusSummaryBar({
   onSelectAll,
   onSelectItem,
   ariaLabel,
+  tintInactive = false,
 }: Props) {
   return (
-    <div className="flex flex-wrap items-center gap-2" role="group" aria-label={ariaLabel}>
+    <div className="flex flex-wrap items-center gap-2.5" role="group" aria-label={ariaLabel}>
       <button
         type="button"
         onClick={onSelectAll}
@@ -51,24 +54,29 @@ export function WorkflowStatusSummaryBar({
         <span className="tabular-nums">{contextCount}</span>
         <span>部</span>
       </button>
-      {items.map(item => (
-        <button
-          key={item.id}
-          type="button"
-          onClick={() => onSelectItem(item.id)}
-          className={cn(
-            WORKFLOW_STATUS_PILL_BASE,
-            activeFilter === item.id
-              ? cn(item.activeClassName, 'border-transparent ring-2 ring-teal-600/25 shadow-sm')
-              : WORKFLOW_STATUS_PILL_INACTIVE,
-          )}
-        >
-          <span>{item.label}</span>
-          <span className={cn('tabular-nums font-semibold', activeFilter !== item.id && 'text-foreground/80')}>
-            {counts[item.id] ?? 0}
-          </span>
-        </button>
-      ))}
+      {items.map(item => {
+        const isActive = activeFilter === item.id;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onSelectItem(item.id)}
+            className={cn(
+              WORKFLOW_STATUS_PILL_BASE,
+              isActive
+                ? cn(item.activeClassName, 'border-transparent ring-2 ring-teal-600/30 shadow-sm')
+                : tintInactive
+                  ? cn(item.activeClassName, 'border-transparent/0 opacity-80 hover:opacity-100')
+                  : WORKFLOW_STATUS_PILL_INACTIVE,
+            )}
+          >
+            <span>{item.label}</span>
+            <span className={cn('tabular-nums font-semibold', !isActive && !tintInactive && 'text-foreground/80')}>
+              {counts[item.id] ?? 0}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

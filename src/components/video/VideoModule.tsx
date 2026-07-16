@@ -83,15 +83,18 @@ function VideoModuleContent({ subModule }: { subModule?: string }) {
 
   const { title, subtitle } = getTitle();
   const resolvedTab = activeTab === 'management' ? 'coordination' : activeTab;
+  const ownsHeader = resolvedTab === 'coordination';
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-[32px] font-bold tracking-tight">{title}</h1>
-          <p className="text-[14px] text-muted-foreground mt-1">{subtitle}</p>
+      {!ownsHeader && (
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-[32px] font-bold tracking-tight">{title}</h1>
+            <p className="text-[14px] text-muted-foreground mt-1">{subtitle}</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {resolvedTab === 'schedule' && <VideoScheduleModule />}
       {resolvedTab === 'production' && <VideoProductionModule />}
