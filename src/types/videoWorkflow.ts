@@ -69,6 +69,9 @@ export type VideoWorkflowMock = {
   reviewRejectReason?: string;
   reviewedAt?: string;
   reviewedBy?: string;
+  adminReviewPassed?: boolean;
+  adminReviewedAt?: string;
+  adminReviewedBy?: string;
   plannedPublishDate?: string;
   publishedDate?: string;
   publishHours?: number;

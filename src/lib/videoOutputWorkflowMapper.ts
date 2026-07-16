@@ -79,6 +79,9 @@ export function mapVideoOutputToWorkflow(video: VideoOutput): VideoWorkflowMock 
     reviewRejectReason: video.reviewRejectReason,
     reviewedAt: video.reviewedAt,
     reviewedBy: video.reviewedBy,
+    adminReviewPassed: video.adminReviewPassed,
+    adminReviewedAt: video.adminReviewedAt,
+    adminReviewedBy: video.adminReviewedBy,
     plannedPublishDate: video.plannedPublishDate,
     publishedDate: video.publishedDate,
     platformPublish: video.platformPublish,
@@ -115,6 +118,9 @@ export function workflowPatchToDbUpdate(
   if (patch.submittedForReviewAt !== undefined) row.submitted_for_review_at = patch.submittedForReviewAt || null;
   if (patch.reviewedAt !== undefined) row.reviewed_at = patch.reviewedAt || null;
   if (patch.reviewedBy !== undefined) row.reviewed_by = patch.reviewedBy || null;
+  if (patch.adminReviewPassed !== undefined) row.admin_review_passed = patch.adminReviewPassed;
+  if (patch.adminReviewedAt !== undefined) row.admin_reviewed_at = patch.adminReviewedAt || null;
+  if (patch.adminReviewedBy !== undefined) row.admin_reviewed_by = patch.adminReviewedBy || null;
   if (patch.productionYear !== undefined) row.production_year = patch.productionYear ?? null;
   if (patch.vchannelId !== undefined) row.vchannel_id = patch.vchannelId;
 

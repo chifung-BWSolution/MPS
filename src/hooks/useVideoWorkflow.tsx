@@ -47,6 +47,8 @@ type VideoWorkflowContextValue = {
   deleteVideo: (id: string) => Promise<string | null>;
   advanceToProduction: (id: string) => Promise<string | null>;
   submitForReview: (id: string) => Promise<string | null>;
+  approveAdminReview: (id: string, reviewedBy: string) => Promise<string | null>;
+  rejectAdminReview: (id: string, reason: string, reviewedBy: string) => Promise<string | null>;
   approveReview: (id: string, reviewedBy: string) => Promise<string | null>;
   rejectReview: (id: string, reason: string, reviewedBy: string) => Promise<string | null>;
   completePublish: (id: string, patch: VideoWorkflowUpdate) => Promise<string | null>;
@@ -205,30 +207,78 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
   }, [videos, applyPatch]);
 
   const submitForReview = useCallback(async (id: string): Promise<string | null> => {
+    const video = videos.find(v => v.id === id);
+    if (!video) return '找不到影片';
+    if (video.stage !== 'production') return '僅製作中的影片可提交審核';
     return applyPatch(id, {
       stage: 'review',
-      reviewRejectReason: undefined,
+      reviewRejectReason: '',
       submittedForReviewAt: new Date().toISOString(),
+      adminReviewPassed: false,
+      adminReviewedAt: '',
+      adminReviewedBy: '',
+      reviewedAt: '',
+      reviewedBy: '',
     });
-  }, [applyPatch]);
+  }, [videos, applyPatch]);
+
+  const approveAdminReview = useCallback(async (id: string, reviewedBy: string): Promise<string | null> => {
+    const video = videos.find(v => v.id === id);
+    if (!video) return '找不到影片';
+    if (video.stage !== 'review') return '僅待審核影片可進行行政審查';
+    if (video.adminReviewPassed) return '行政審查已通過';
+    return applyPatch(id, {
+      adminReviewPassed: true,
+      adminReviewedAt: new Date().toISOString(),
+      adminReviewedBy: reviewedBy,
+      reviewRejectReason: '',
+    });
+  }, [videos, applyPatch]);
+
+  const rejectAdminReview = useCallback(async (id: string, reason: string, reviewedBy: string): Promise<string | null> => {
+    const video = videos.find(v => v.id === id);
+    if (!video) return '找不到影片';
+    if (video.stage !== 'review') return '僅待審核影片可進行行政審查';
+    if (video.adminReviewPassed) return '行政審查已通過，請使用管理批核';
+    const trimmed = reason.trim();
+    if (!trimmed) return '請填寫拒絕理由';
+    return applyPatch(id, {
+      stage: 'production',
+      adminReviewPassed: false,
+      adminReviewedAt: new Date().toISOString(),
+      adminReviewedBy: reviewedBy,
+      reviewRejectReason: `【行政審查】${trimmed}`,
+    });
+  }, [videos, applyPatch]);
 
   const approveReview = useCallback(async (id: string, reviewedBy: string): Promise<string | null> => {
+    const video = videos.find(v => v.id === id);
+    if (!video) return '找不到影片';
+    if (video.stage !== 'review') return '僅待審核影片可進行管理批核';
+    if (!video.adminReviewPassed) return '請先完成行政審查';
     return applyPatch(id, {
       stage: 'publish',
       reviewedAt: new Date().toISOString(),
       reviewedBy,
-      reviewRejectReason: undefined,
+      reviewRejectReason: '',
     });
-  }, [applyPatch]);
+  }, [videos, applyPatch]);
 
   const rejectReview = useCallback(async (id: string, reason: string, reviewedBy: string): Promise<string | null> => {
+    const video = videos.find(v => v.id === id);
+    if (!video) return '找不到影片';
+    if (video.stage !== 'review') return '僅待審核影片可進行管理批核';
+    if (!video.adminReviewPassed) return '請先完成行政審查';
+    const trimmed = reason.trim();
+    if (!trimmed) return '請填寫拒絕理由';
     return applyPatch(id, {
       stage: 'production',
-      reviewRejectReason: reason.trim(),
+      reviewRejectReason: `【管理批核】${trimmed}`,
       reviewedAt: new Date().toISOString(),
       reviewedBy,
+      adminReviewPassed: false,
     });
-  }, [applyPatch]);
+  }, [videos, applyPatch]);
 
   const completePublish = useCallback(async (id: string, patch: VideoWorkflowUpdate): Promise<string | null> => {
     return applyPatch(id, { ...patch, stage: 'published' });
@@ -281,6 +331,8 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
       deleteVideo,
       advanceToProduction,
       submitForReview,
+      approveAdminReview,
+      rejectAdminReview,
       approveReview,
       rejectReview,
       completePublish,
@@ -300,6 +352,8 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
       deleteVideo,
       advanceToProduction,
       submitForReview,
+      approveAdminReview,
+      rejectAdminReview,
       approveReview,
       rejectReview,
       completePublish,

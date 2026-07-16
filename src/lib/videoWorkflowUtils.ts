@@ -155,6 +155,26 @@ export const VIDEO_WORKFLOW_STAGE_COLORS: Record<VideoWorkflowStage, string> = {
   published: 'bg-teal-100 text-teal-800',
 };
 
+/** 製作中被審核拒絕後回到製作，顯示為「待修正」 */
+export function isNeedsRevision(video: VideoWorkflowMock): boolean {
+  return video.stage === 'production' && !!video.reviewRejectReason?.trim();
+}
+
+export function isAdminReviewPassed(video: VideoWorkflowMock): boolean {
+  return !!video.adminReviewPassed;
+}
+
+export function canDoAdminReview(video: VideoWorkflowMock): boolean {
+  return video.stage === 'review' && !isAdminReviewPassed(video);
+}
+
+export function canDoManagementReview(video: VideoWorkflowMock): boolean {
+  return video.stage === 'review' && isAdminReviewPassed(video);
+}
+
+export const REVISION_STATUS_LABEL = '待修正';
+export const REVISION_STATUS_COLOR = 'bg-rose-100 text-rose-700';
+
 export function isStaffAssignmentComplete(a?: StaffAssignment): boolean {
   return !!(a?.userId?.trim() && a?.scheduledAt?.trim());
 }

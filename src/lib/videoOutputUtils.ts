@@ -309,6 +309,9 @@ type DbVideoOutputRow = {
   submitted_for_review_at?: string | null;
   reviewed_at?: string | null;
   reviewed_by?: string | null;
+  admin_review_passed?: boolean | null;
+  admin_reviewed_at?: string | null;
+  admin_reviewed_by?: string | null;
   created_at: string;
   updated_at: string;
   vchannels?: { channel_code: string; public_name: string } | null;
@@ -357,6 +360,9 @@ export function mapVideoOutputRow(row: DbVideoOutputRow): VideoOutput {
     submittedForReviewAt: row.submitted_for_review_at ?? undefined,
     reviewedAt: row.reviewed_at ?? undefined,
     reviewedBy: row.reviewed_by ?? undefined,
+    adminReviewPassed: row.admin_review_passed ?? false,
+    adminReviewedAt: row.admin_reviewed_at ?? undefined,
+    adminReviewedBy: row.admin_reviewed_by ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

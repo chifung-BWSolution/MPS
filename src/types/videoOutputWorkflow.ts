@@ -22,4 +22,8 @@ export type VideoOutputWorkflowFields = {
   submittedForReviewAt?: string;
   reviewedAt?: string;
   reviewedBy?: string;
+  /** 行政審查是否已通過（通過後才可管理批核） */
+  adminReviewPassed?: boolean;
+  adminReviewedAt?: string;
+  adminReviewedBy?: string;
 };

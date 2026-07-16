@@ -8,6 +8,9 @@ import type { ProductionProgress, VideoWorkflowMock } from '@/types/videoWorkflo
 import {
   canSubmitProductionForReview,
   getSubmitForReviewBlockers,
+  isNeedsRevision,
+  REVISION_STATUS_COLOR,
+  REVISION_STATUS_LABEL,
   VIDEO_WORKFLOW_STAGE_COLORS,
   VIDEO_WORKFLOW_STAGE_LABELS,
 } from '@/lib/videoWorkflowUtils';
@@ -31,13 +34,16 @@ function ProductionListRow({
   video,
   onEdit,
   onSubmit,
+  onShowRevision,
 }: {
   video: VideoWorkflowMock;
   onEdit: () => void;
   onSubmit: () => void;
+  onShowRevision: () => void;
 }) {
   const blockers = getSubmitForReviewBlockers(video);
   const canSubmit = canSubmitProductionForReview(video);
+  const needsRevision = isNeedsRevision(video);
 
   return (
     <div className={cn(WORKFLOW_LIST_GRID_PRODUCTION, 'px-3 py-2.5 border-b border-border/50 hover:bg-muted/20 text-[12px]')}>
@@ -45,16 +51,30 @@ function ProductionListRow({
       <WorkflowListVideoCodeCell
         videoCode={video.videoCode}
         statusBadge={
-          <span className={cn('text-[10px] px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap', VIDEO_WORKFLOW_STAGE_COLORS.production)}>
-            {VIDEO_WORKFLOW_STAGE_LABELS.production}
-          </span>
+          needsRevision ? (
+            <button
+              type="button"
+              onClick={onShowRevision}
+              className={cn(
+                'text-[10px] px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap hover:ring-2 hover:ring-rose-300/60 transition-shadow',
+                REVISION_STATUS_COLOR,
+              )}
+              title="查看修正意見"
+            >
+              {REVISION_STATUS_LABEL}
+            </button>
+          ) : (
+            <span className={cn('text-[10px] px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap', VIDEO_WORKFLOW_STAGE_COLORS.production)}>
+              {VIDEO_WORKFLOW_STAGE_LABELS.production}
+            </span>
+          )
         }
       />
       <div className="min-w-0">
         <p className="font-semibold truncate" title={video.title}>{video.title}</p>
-        {video.reviewRejectReason && (
+        {needsRevision && video.reviewRejectReason && (
           <p className="text-[10px] text-rose-600 truncate" title={video.reviewRejectReason}>
-            拒絕：{video.reviewRejectReason}
+            {video.reviewRejectReason}
           </p>
         )}
       </div>
@@ -86,6 +106,8 @@ export function VideoProductionModule() {
   const { getByStage, getById, saveProductionWithWorkLogs, submitForReview } = useVideoWorkflow();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [submitTargetId, setSubmitTargetId] = useState<string | null>(null);
+  const [revisionTargetId, setRevisionTargetId] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const productionVideos = getByStage('production');
   const {
@@ -102,6 +124,7 @@ export function VideoProductionModule() {
 
   const editingVideo = editingId ? getById(editingId) ?? null : null;
   const submitTarget = submitTargetId ? getById(submitTargetId) : undefined;
+  const revisionTarget = revisionTargetId ? getById(revisionTargetId) : undefined;
   const submitBlockers = submitTarget ? getSubmitForReviewBlockers(submitTarget) : [];
 
   const handleSave = async (payload: {
@@ -125,8 +148,12 @@ export function VideoProductionModule() {
   const confirmSubmit = async () => {
     if (!submitTargetId || !submitTarget) return;
     if (getSubmitForReviewBlockers(submitTarget).length > 0) return;
+    setSubmitError(null);
     const err = await submitForReview(submitTargetId);
-    if (err) return;
+    if (err) {
+      setSubmitError(err);
+      return;
+    }
     setSubmitTargetId(null);
   };
 
@@ -159,7 +186,11 @@ export function VideoProductionModule() {
               key={video.id}
               video={video}
               onEdit={() => setEditingId(video.id)}
-              onSubmit={() => setSubmitTargetId(video.id)}
+              onSubmit={() => {
+                setSubmitError(null);
+                setSubmitTargetId(video.id);
+              }}
+              onShowRevision={() => setRevisionTargetId(video.id)}
             />
           ))}
         </div>
@@ -174,7 +205,7 @@ export function VideoProductionModule() {
 
       <CrudModal
         isOpen={!!submitTargetId}
-        onClose={() => setSubmitTargetId(null)}
+        onClose={() => { setSubmitTargetId(null); setSubmitError(null); }}
         title="提交審核"
         size="sm"
       >
@@ -196,11 +227,14 @@ export function VideoProductionModule() {
                   計劃發佈日期：{submitTarget.plannedPublishDate}
                 </span>
               )}
-              提交後影片將進入審核階段。
+              提交後影片將進入「待行政審查」，並從本列表移除。
             </p>
           )}
+          {submitError && (
+            <p className="text-[12px] text-rose-600">{submitError}</p>
+          )}
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setSubmitTargetId(null)}>取消</Button>
+            <Button variant="outline" size="sm" onClick={() => { setSubmitTargetId(null); setSubmitError(null); }}>取消</Button>
             <Button
               size="sm"
               className="bg-teal-600 hover:bg-teal-700 text-white"
@@ -208,6 +242,43 @@ export function VideoProductionModule() {
               onClick={confirmSubmit}
             >
               確認提交
+            </Button>
+          </div>
+        </div>
+      </CrudModal>
+
+      <CrudModal
+        isOpen={!!revisionTarget}
+        onClose={() => setRevisionTargetId(null)}
+        title="修正意見"
+        size="sm"
+      >
+        <div className="space-y-3">
+          {revisionTarget && (
+            <>
+              <div>
+                <p className="text-[12px] text-muted-foreground">{revisionTarget.videoCode}</p>
+                <p className="text-[14px] font-bold mt-0.5">{revisionTarget.title}</p>
+              </div>
+              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2.5">
+                <p className="text-[11px] font-semibold text-rose-700 mb-1">拒絕理由</p>
+                <p className="text-[13px] text-rose-800 whitespace-pre-wrap">
+                  {revisionTarget.reviewRejectReason || '—'}
+                </p>
+              </div>
+              {(revisionTarget.reviewedBy || revisionTarget.adminReviewedBy) && (
+                <p className="text-[12px] text-muted-foreground">
+                  審核人：{revisionTarget.reviewedBy || revisionTarget.adminReviewedBy}
+                </p>
+              )}
+              <p className="text-[12px] text-muted-foreground">
+                請依意見修正後，再次「提交審核」。
+              </p>
+            </>
+          )}
+          <div className="flex justify-end">
+            <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => setRevisionTargetId(null)}>
+              知道了
             </Button>
           </div>
         </div>

@@ -7,7 +7,7 @@ export const WORKFLOW_LIST_GRID_PRODUCTION =
   'grid grid-cols-[minmax(100px,152px)_minmax(112px,148px)_minmax(120px,1.2fr)_92px_repeat(5,52px)_minmax(88px,0.85fr)_108px_64px_88px] gap-x-3 gap-y-2 items-center min-w-[1100px]';
 
 export const WORKFLOW_LIST_GRID_REVIEW =
-  'grid grid-cols-[minmax(100px,152px)_minmax(112px,148px)_minmax(120px,1.2fr)_92px_repeat(5,52px)_minmax(88px,0.85fr)_108px_56px] gap-x-3 gap-y-2 items-center min-w-[1000px]';
+  'grid grid-cols-[minmax(100px,152px)_minmax(112px,148px)_minmax(120px,1.2fr)_92px_repeat(5,52px)_minmax(88px,0.85fr)_108px_88px_88px] gap-x-3 gap-y-2 items-center min-w-[1120px]';
 
 export const WORKFLOW_LIST_GRID_PUBLISH =
   'grid grid-cols-[minmax(100px,152px)_minmax(112px,148px)_minmax(120px,1.2fr)_92px_repeat(5,52px)_minmax(88px,0.85fr)_108px_96px_56px] gap-x-3 gap-y-2 items-center min-w-[1040px]';
@@ -89,7 +89,10 @@ export function WorkflowVideoListHeader({ variant, className }: HeaderProps) {
           <span />
         </>
       ) : (
-        <span />
+        <>
+          <span className="text-center whitespace-nowrap">行政審查</span>
+          <span className="text-center whitespace-nowrap">管理批核</span>
+        </>
       )}
     </div>
   );
