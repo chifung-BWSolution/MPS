@@ -19,6 +19,7 @@ import {
   formatLocation,
   getPrepMissingItems,
   isPrepComplete,
+  validateNewVideoScheduleRequired,
   VIDEO_WORKFLOW_STAGE_COLORS,
   VIDEO_WORKFLOW_STAGE_LABELS,
 } from '@/lib/videoWorkflowUtils';
@@ -124,6 +125,10 @@ export function VideoScheduleModule() {
     if (isNew) {
       if (!payload.vchannelCode || !payload.videoCode || !payload.title?.trim()) {
         return { error: '請填寫完整基本資訊' };
+      }
+      const scheduleErr = validateNewVideoScheduleRequired(payload);
+      if (scheduleErr) {
+        return { error: scheduleErr };
       }
       try {
         const id = await addVideo({
@@ -231,7 +236,9 @@ export function VideoScheduleModule() {
                     </div>
                     {video.stage === 'prep' && (
                       <p className="text-[11px] mt-1 text-muted-foreground">
-                        {isPrepComplete(video) ? '準備已完成，可進製作' : `待完成 ${getPrepMissingItems(video).length} 項`}
+                        {isPrepComplete(video)
+                          ? '可進製作'
+                          : `進入製作前需填寫：${getPrepMissingItems(video).join('、')}`}
                       </p>
                     )}
                   </div>

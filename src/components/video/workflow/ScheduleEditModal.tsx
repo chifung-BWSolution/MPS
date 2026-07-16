@@ -13,6 +13,7 @@ import {
 import {
   getPrepMissingItems,
   isPrepComplete,
+  validateNewVideoScheduleRequired,
   VIDEO_WORKFLOW_STAGE_COLORS,
   VIDEO_WORKFLOW_STAGE_LABELS,
 } from '@/lib/videoWorkflowUtils';
@@ -249,6 +250,13 @@ export function ScheduleEditModal({
       setFormError('Video Code 生成失敗，請重選 Vchannel');
       return;
     }
+    if (isNew) {
+      const scheduleErr = validateNewVideoScheduleRequired(prepVideo);
+      if (scheduleErr) {
+        setFormError(scheduleErr);
+        return;
+      }
+    }
     setSaving(true);
     const result = await onSave(buildPayload(), isNew);
     setSaving(false);
@@ -262,7 +270,7 @@ export function ScheduleEditModal({
   const handleEnter = async () => {
     setEnterError(null);
     if (!prepReady) {
-      setEnterError(`尚有未完成的準備項：${missing.join('、')}`);
+      setEnterError(`進入製作前需填寫：${missing.join('、')}`);
       return;
     }
     setSaving(true);
@@ -388,7 +396,9 @@ export function ScheduleEditModal({
           <p className="text-[12px] font-bold text-teal-800">準備工作</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] text-muted-foreground block mb-1">拍攝日期</label>
+              <label className="text-[11px] text-muted-foreground block mb-1">
+                拍攝日期{isNew ? ' *' : ''}
+              </label>
               <Input type="date" value={draft.shootAt}
                 onChange={e => setDraft(d => ({ ...d, shootAt: e.target.value }))}
                 className="h-8 text-[12px]" />
@@ -419,7 +429,7 @@ export function ScheduleEditModal({
             onChange={script => setDraft(d => ({ ...d, script }))} />
           <ModelAssignmentField value={draft.model} talentOptions={talentOptions}
             onChange={model => setDraft(d => ({ ...d, model }))} />
-          <StaffAssignmentField label="攝影師" value={draft.photographer} staffOptions={staffOptions}
+          <StaffAssignmentField label={isNew ? '攝影師 *' : '攝影師'} value={draft.photographer} staffOptions={staffOptions}
             onChange={photographer => setDraft(d => ({ ...d, photographer }))} />
 
           <div className="space-y-2">
@@ -453,7 +463,7 @@ export function ScheduleEditModal({
         )}
         {isPrep && !prepReady && !enterError && (
           <p className="text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-            待完成：{missing.join('、')}
+            進入製作前需填寫：{missing.join('、')}
           </p>
         )}
       </div>

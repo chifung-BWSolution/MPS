@@ -187,7 +187,7 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
     if (!video) return '找不到影片';
     if (video.stage !== 'prep') return '僅準備中的影片可進入製作';
     if (!isPrepComplete(video)) {
-      return `尚有未完成的準備項：${getPrepMissingItems(video).join('、')}`;
+      return `進入製作前需填寫：${getPrepMissingItems(video).join('、')}`;
     }
     return applyPatch(id, { stage: 'production', reviewRejectReason: undefined });
   }, [videos, applyPatch]);

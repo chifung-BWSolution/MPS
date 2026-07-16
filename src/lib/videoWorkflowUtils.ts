@@ -167,20 +167,28 @@ export function isLocationComplete(location?: VideoWorkflowMock['location']): bo
   return !!(location?.sz || location?.hk);
 }
 
+export function isPhotographerAssigned(a?: StaffAssignment): boolean {
+  return !!(a?.userId?.trim());
+}
+
+/** 進入製作所需：拍攝日期 + 攝影師 */
 export function getPrepMissingItems(video: VideoWorkflowMock): string[] {
   const missing: string[] = [];
-  if (!isStaffAssignmentComplete(video.copywriting)) missing.push('文案');
-  if (!isStaffAssignmentComplete(video.script)) missing.push('腳本');
-  if (!isModelAssignmentComplete(video.model)) missing.push('Model');
-  if (!isLocationComplete(video.location)) missing.push('場地（SZ/HK）');
-  if (!video.shootAt?.trim()) missing.push('拍攝時間');
-  if (!isStaffAssignmentComplete(video.photographer)) missing.push('攝影師');
-  if (!video.onSiteCrew?.some(isStaffAssignmentComplete)) missing.push('到場人員');
+  if (!video.shootAt?.trim()) missing.push('拍攝日期');
+  if (!isPhotographerAssigned(video.photographer)) missing.push('攝影師');
   return missing;
 }
 
 export function isPrepComplete(video: VideoWorkflowMock): boolean {
   return getPrepMissingItems(video).length === 0;
+}
+
+export function validateNewVideoScheduleRequired(
+  video: Pick<VideoWorkflowMock, 'shootAt' | 'photographer'>,
+): string | null {
+  const missing = getPrepMissingItems(video as VideoWorkflowMock);
+  if (missing.length === 0) return null;
+  return `請填寫：${missing.join('、')}`;
 }
 
 export function formatLocation(location?: VideoWorkflowMock['location']): string {
