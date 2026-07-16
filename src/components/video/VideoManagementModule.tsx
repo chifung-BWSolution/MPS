@@ -3,7 +3,13 @@ import { Check, Copy, Loader2, Plus, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVideoOutput } from '@/hooks/useVideoOutput';
 import { useVchannels } from '@/hooks/useVchannels';
-import type { VideoOutput, VideoOutputInput, VideoOutputStatus, VideoProjectCategory } from '@/types/videoOutput';
+import type {
+  PlatformPublishKey,
+  VideoOutput,
+  VideoOutputInput,
+  VideoOutputStatus,
+  VideoProjectCategory,
+} from '@/types/videoOutput';
 import {
   PLATFORM_PUBLISH_LABELS,
   VIDEO_OUTPUT_STATUS_COLORS,
@@ -26,6 +32,22 @@ import { fetchWorkLogTotalsByVideoIds } from '@/services/videoOutputWorkLogServi
 import { WorkflowStatusSummaryBar } from '@/components/video/workflow/WorkflowStatusSummaryBar';
 
 const TABLE_COL_COUNT = 13;
+/** Columns before 拍攝時間: 狀態 / Vchannel / Video Code / 主題 */
+const PLATFORM_ROW_LEAD_COLS = 4;
+
+const PLATFORM_TAG_COLORS: Record<PlatformPublishKey, string> = {
+  youtube: 'bg-red-50 text-red-700 border-red-200',
+  instagram: 'bg-pink-50 text-pink-700 border-pink-200',
+  facebook: 'bg-blue-50 text-blue-700 border-blue-200',
+  threads: 'bg-slate-100 text-slate-700 border-slate-300',
+  linkedin: 'bg-sky-50 text-sky-700 border-sky-200',
+  xiaohongshu: 'bg-rose-50 text-rose-700 border-rose-200',
+  douyin: 'bg-cyan-50 text-cyan-800 border-cyan-200',
+  wechat_channels: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  wechat_official: 'bg-green-50 text-green-700 border-green-200',
+  zh_cn: 'bg-amber-50 text-amber-800 border-amber-200',
+  zh_tw: 'bg-orange-50 text-orange-700 border-orange-200',
+};
 
 const STATUS_SUMMARY_KEYS: VideoOutputStatus[] = [
   'pending',
@@ -81,7 +103,7 @@ function CopywritingCell({ sc, tc, en }: { sc?: boolean; tc?: boolean; en?: bool
   }
 
   return (
-    <span className="text-[11px] text-teal-700 font-medium whitespace-nowrap">
+    <span className="text-[12px] text-teal-700 font-medium whitespace-nowrap">
       {labels.join('|')}
     </span>
   );
@@ -89,7 +111,7 @@ function CopywritingCell({ sc, tc, en }: { sc?: boolean; tc?: boolean; en?: bool
 
 function StatusCell({ status }: { status: VideoOutputStatus }) {
   return (
-    <span className={cn('text-[10px] font-medium px-2 py-0.5 rounded whitespace-nowrap', VIDEO_OUTPUT_STATUS_COLORS[status])}>
+    <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded whitespace-nowrap', VIDEO_OUTPUT_STATUS_COLORS[status])}>
       {VIDEO_OUTPUT_STATUS_LABELS[status]}
     </span>
   );
@@ -128,33 +150,38 @@ function PlatformPublishRow({
 
   return (
     <div className="flex items-center gap-3 min-w-0">
-      <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px]">
+      <div className="flex-1 min-w-0 flex flex-wrap items-center gap-1.5">
         {publishedKeys.length === 0 ? (
-          <span className="text-muted-foreground">尚未發佈任何平台</span>
+          <span className="text-[12px] text-muted-foreground">尚未發佈任何平台</span>
         ) : (
-          publishedKeys.map((key, index) => {
+          publishedKeys.map(key => {
             const url = getPlatformUrl(platformPublish, key);
             const label = PLATFORM_PUBLISH_LABELS[key];
             const openable = !!url && isHttpUrl(url);
+            const tagClass = cn(
+              'inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-medium transition-colors',
+              PLATFORM_TAG_COLORS[key],
+              openable && 'hover:opacity-80 cursor-pointer',
+            );
+
+            if (openable) {
+              return (
+                <a
+                  key={key}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={tagClass}
+                  title={`打開 ${label}`}
+                >
+                  {label}
+                </a>
+              );
+            }
 
             return (
-              <span key={key} className="inline-flex items-center gap-x-1.5">
-                {index > 0 && <span className="text-border select-none">·</span>}
-                {openable ? (
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-teal-700 hover:underline underline-offset-2"
-                    title={`打開 ${label}`}
-                  >
-                    {label}
-                  </a>
-                ) : (
-                  <span className="font-medium text-muted-foreground" title={url || '尚未填寫連結'}>
-                    {label}
-                  </span>
-                )}
+              <span key={key} className={tagClass} title={url || '尚未填寫連結'}>
+                {label}
               </span>
             );
           })
@@ -165,16 +192,16 @@ function PlatformPublishRow({
           type="button"
           onClick={handleCopy}
           disabled={!canCopy}
-          className="flex items-center gap-1 px-2 py-0.5 border border-border/60 text-muted-foreground rounded text-[11px] font-medium hover:bg-muted/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+          className="flex items-center gap-1 px-2 py-0.5 border border-border/60 text-muted-foreground rounded text-[12px] font-medium hover:bg-muted/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
         >
-          <Copy size={11} /> {copyDone ? '已複製' : '複製'}
+          <Copy size={12} /> {copyDone ? '已複製' : '複製'}
         </button>
         <button
           type="button"
           onClick={onPublish}
-          className="flex items-center gap-1 px-2 py-0.5 bg-teal-600 text-white rounded text-[11px] font-medium hover:bg-teal-700 transition-colors"
+          className="flex items-center gap-1 px-2 py-0.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700 transition-colors"
         >
-          <Plus size={11} /> 發佈
+          <Plus size={12} /> 發佈
         </button>
       </div>
     </div>
@@ -352,7 +379,7 @@ export function VideoManagementModule() {
       </div>
 
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-x-auto">
-        <table className="w-full text-[13px] min-w-[1180px]">
+        <table className="w-full text-[14px] min-w-[1180px]">
           <thead className="bg-muted/30">
             <tr>
               <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">狀態</th>
@@ -386,26 +413,26 @@ export function VideoManagementModule() {
                       <StatusCell status={status} />
                     </td>
                     <td className={cn('px-3 align-middle', cellPad)}>
-                      <span className="font-mono text-[12px] font-bold" title={video.channelPublicName}>
+                      <span className="font-mono text-[13px] font-bold" title={video.channelPublicName}>
                         {video.channelCode}
                       </span>
                     </td>
-                    <td className={cn('px-2 align-middle font-mono text-[10px] w-[1%] max-w-[96px]', cellPad)}>
+                    <td className={cn('px-2 align-middle font-mono text-[11px] w-[1%] max-w-[96px]', cellPad)}>
                       <span className="block truncate" title={video.videoCode}>{video.videoCode}</span>
                     </td>
                     <td className={cn('px-3 align-middle max-w-[240px]', cellPad)}>
-                      <span className="line-clamp-2" title={video.title}>{video.title}</span>
+                      <span className="line-clamp-2 font-bold" title={video.title}>{video.title}</span>
                     </td>
-                    <td className={cn('px-3 align-middle text-[12px] whitespace-nowrap', cellPad)}>
+                    <td className={cn('px-3 align-middle text-[13px] whitespace-nowrap', cellPad)}>
                       {video.shootAt ?? '—'}
                     </td>
-                    <td className={cn('px-3 align-middle text-[12px] whitespace-nowrap text-muted-foreground', cellPad)}>
+                    <td className={cn('px-3 align-middle text-[13px] whitespace-nowrap text-muted-foreground', cellPad)}>
                       {video.plannedPublishDate?.trim() || '—'}
                     </td>
-                    <td className={cn('px-3 align-middle text-[12px] whitespace-nowrap', cellPad)}>
+                    <td className={cn('px-3 align-middle text-[13px] whitespace-nowrap', cellPad)}>
                       {video.publishedDate?.trim() || '—'}
                     </td>
-                    <td className={cn('px-3 align-middle whitespace-nowrap text-[12px]', cellPad)}>
+                    <td className={cn('px-3 align-middle whitespace-nowrap text-[13px]', cellPad)}>
                       {formatShootLocation(video.shootHk, video.shootSz)}
                     </td>
                     <td className={cn('px-2 align-middle text-center', cellPad)}>
@@ -426,8 +453,10 @@ export function VideoManagementModule() {
                   </tr>
                   {isPublished && (
                     <tr className="group-hover:bg-muted/10 transition-colors">
-                      <td className="px-3 pt-0 pb-2.5" />
-                      <td colSpan={TABLE_COL_COUNT - 1} className="px-3 pt-0 pb-2.5">
+                      {Array.from({ length: PLATFORM_ROW_LEAD_COLS }).map((_, i) => (
+                        <td key={i} className="px-3 pt-0 pb-2.5" />
+                      ))}
+                      <td colSpan={TABLE_COL_COUNT - PLATFORM_ROW_LEAD_COLS} className="px-3 pt-0 pb-2.5">
                         <PlatformPublishRow
                           platformPublish={video.platformPublish}
                           onPublish={() => setPublishingVideo(video)}
