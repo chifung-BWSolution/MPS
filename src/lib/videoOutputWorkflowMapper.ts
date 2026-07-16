@@ -105,6 +105,7 @@ export function workflowPatchToDbUpdate(
 
   if (patch.stage !== undefined) row.workflow_stage = patch.stage;
   if (patch.title !== undefined) row.title = patch.title;
+  if (patch.videoCode !== undefined) row.video_code = patch.videoCode;
   if (patch.shootAt !== undefined) row.shoot_at = patch.shootAt || null;
   if (patch.plannedPublishDate !== undefined) row.planned_publish_date = patch.plannedPublishDate || null;
   if (patch.publishedDate !== undefined) row.published_date = patch.publishedDate || null;

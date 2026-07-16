@@ -18,7 +18,7 @@ import {
   VIDEO_WORKFLOW_STAGE_LABELS,
 } from '@/lib/videoWorkflowUtils';
 import { StaffAssignmentField } from '@/components/video/workflow/StaffAssignmentField';
-import { CrudModal } from '@/components/ui/crud-modal';
+import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -136,6 +136,7 @@ type Props = {
   onClose: () => void;
   onSave: (payload: Partial<VideoWorkflowMock>, isNew: boolean) => Promise<{ error: string | null; id?: string }>;
   onEnterProduction?: (videoId: string) => Promise<string | null>;
+  onDelete?: (videoId: string) => Promise<string | null>;
 };
 
 export function ScheduleEditModal({
@@ -147,6 +148,7 @@ export function ScheduleEditModal({
   onClose,
   onSave,
   onEnterProduction,
+  onDelete,
 }: Props) {
   const isNew = !video;
   const isPrep = isNew || video?.stage === 'prep';
@@ -156,11 +158,14 @@ export function ScheduleEditModal({
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [enterError, setEnterError] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setFormError(null);
     setEnterError(null);
+    setDeleteConfirmOpen(false);
     if (video) {
       setDraft(draftFromVideo(video));
     } else {
@@ -314,6 +319,21 @@ export function ScheduleEditModal({
     onClose();
   };
 
+  const handleConfirmDelete = async () => {
+    if (!video?.id || !onDelete) return;
+    setDeleting(true);
+    setFormError(null);
+    const err = await onDelete(video.id);
+    setDeleting(false);
+    if (err) {
+      setDeleteConfirmOpen(false);
+      setFormError(err);
+      return;
+    }
+    setDeleteConfirmOpen(false);
+    onClose();
+  };
+
   const updateCrew = (index: number, next?: StaffAssignment) => {
     const crew = [...draft.onSiteCrew];
     if (next) crew[index] = next;
@@ -364,18 +384,16 @@ export function ScheduleEditModal({
               </Select>
             </div>
             <div>
-              <label className="text-[11px] text-muted-foreground block mb-1">
-                Video Code{isNew ? ' *' : ''}
-              </label>
+              <label className="text-[11px] text-muted-foreground block mb-1">Video Code *</label>
               <div className="relative">
                 <Input
                   value={codeLoading ? '生成中…' : draft.videoCode}
-                  readOnly={!isNew || codeLoading}
+                  readOnly={codeLoading}
                   onChange={e => handleVideoCodeChange(e.target.value)}
-                  placeholder={isNew ? '選擇頻道後自動生成，可再編輯' : undefined}
+                  placeholder={isNew ? '選擇頻道後自動生成，可再編輯' : '可編輯 Video Code'}
                   className={cn(
                     'h-9 text-[13px] font-mono',
-                    (!isNew || codeLoading) && 'bg-muted/40',
+                    codeLoading && 'bg-muted/40',
                   )}
                 />
                 {codeLoading && (
@@ -494,18 +512,42 @@ export function ScheduleEditModal({
         )}
       </div>
 
-      <div className="flex flex-wrap justify-end gap-2 pt-4 border-t border-border mt-4">
-        <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>取消</Button>
-        <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSave} disabled={saving || codeLoading}>
-          {saving ? <><Loader2 size={14} className="animate-spin mr-1" />保存中…</> : '保存'}
-        </Button>
-        {isPrep && onEnterProduction && (
-          <Button size="sm" className="bg-teal-700 hover:bg-teal-800 text-white" disabled={!prepReady || saving || codeLoading}
-            onClick={handleEnter}>
-            進入製作
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-4 border-t border-border mt-4">
+        <div>
+          {!isNew && onDelete && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+              onClick={() => setDeleteConfirmOpen(true)}
+              disabled={saving || deleting || codeLoading}
+            >
+              刪除
+            </Button>
+          )}
+        </div>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={saving || deleting}>取消</Button>
+          <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSave} disabled={saving || deleting || codeLoading}>
+            {saving ? <><Loader2 size={14} className="animate-spin mr-1" />保存中…</> : '保存'}
           </Button>
-        )}
+          {isPrep && onEnterProduction && (
+            <Button size="sm" className="bg-teal-700 hover:bg-teal-800 text-white" disabled={!prepReady || saving || deleting || codeLoading}
+              onClick={handleEnter}>
+              進入製作
+            </Button>
+          )}
+        </div>
       </div>
+
+      <DeleteConfirmModal
+        isOpen={deleteConfirmOpen}
+        onClose={() => !deleting && setDeleteConfirmOpen(false)}
+        onConfirm={handleConfirmDelete}
+        itemName={video ? `${video.videoCode} — ${video.title}` : draft.videoCode || '此影片'}
+        canDelete
+      />
     </CrudModal>
   );
 }

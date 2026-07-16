@@ -44,6 +44,7 @@ type VideoWorkflowContextValue = {
   getPreReviewVideos: () => VideoWorkflowMock[];
   addVideo: (payload: Omit<VideoWorkflowMock, 'id' | 'stage' | 'createdAt'>) => Promise<string>;
   updateVideo: (id: string, patch: VideoWorkflowUpdate) => Promise<string | null>;
+  deleteVideo: (id: string) => Promise<string | null>;
   advanceToProduction: (id: string) => Promise<string | null>;
   submitForReview: (id: string) => Promise<string | null>;
   approveReview: (id: string, reviewedBy: string) => Promise<string | null>;
@@ -182,6 +183,17 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
     [applyPatch],
   );
 
+  const deleteVideo = useCallback(async (id: string): Promise<string | null> => {
+    const { error: deleteError } = await supabase
+      .from('video_output')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) return deleteError.message;
+    setRawVideos(prev => prev.filter(v => v.id !== id));
+    return null;
+  }, []);
+
   const advanceToProduction = useCallback(async (id: string): Promise<string | null> => {
     const video = videos.find(v => v.id === id);
     if (!video) return '找不到影片';
@@ -266,6 +278,7 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
       getPreReviewVideos,
       addVideo,
       updateVideo,
+      deleteVideo,
       advanceToProduction,
       submitForReview,
       approveReview,
@@ -284,6 +297,7 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
       getPreReviewVideos,
       addVideo,
       updateVideo,
+      deleteVideo,
       advanceToProduction,
       submitForReview,
       approveReview,
