@@ -736,9 +736,11 @@ export function MarketingCalendar() {
                     onChange={e => setAddForm(f => ({ ...f, type: e.target.value }))}
                     className="w-full px-3 py-2 border border-border rounded text-[13px] bg-white focus:outline-none focus:ring-1 focus:ring-teal-600"
                   >
-                    {Object.entries(typeConfig).map(([key, cfg]) => (
-                      <option key={key} value={key}>{cfg.label}</option>
-                    ))}
+                    {Object.entries(typeConfig)
+                      .filter(([key]) => key !== 'video' && key !== 'project')
+                      .map(([key, cfg]) => (
+                        <option key={key} value={key}>{cfg.label}</option>
+                      ))}
                   </select>
                 </div>
                 <div>
