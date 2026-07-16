@@ -14,6 +14,10 @@ import { useVideoWorkflow } from '@/hooks/useVideoWorkflow';
 import { useVchannels } from '@/hooks/useVchannels';
 import { fetchStaffDirectoryOptions } from '@/services/videoOutputWorkLogService';
 import { supabase } from '@/lib/supabase';
+import {
+  buildProductionYearOptions,
+  getCurrentProductionYear,
+} from '@/lib/videoOutputUtils';
 import type { VideoWorkflowMock } from '@/types/videoWorkflow';
 import {
   formatLocation,
@@ -36,6 +40,7 @@ export function VideoScheduleModule() {
 
   const [vchannelFilter, setVchannelFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [yearFilter, setYearFilter] = useState(getCurrentProductionYear);
   const [currentMonth, setCurrentMonth] = useState(() => new Date());
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -46,11 +51,17 @@ export function VideoScheduleModule() {
 
   const preReviewVideos = getPreReviewVideos();
 
+  const yearOptions = useMemo(
+    () => buildProductionYearOptions(preReviewVideos.map(v => v.productionYear)),
+    [preReviewVideos],
+  );
+
   const filteredVideos = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const filterChannel = vchannelFilter !== 'all' ? channels.find(c => c.id === vchannelFilter) : null;
     return preReviewVideos
       .filter(v => {
+        if (v.productionYear !== yearFilter) return false;
         if (filterChannel) {
           const matchId = v.vchannelId === filterChannel.id;
           const matchCode = v.vchannelCode === filterChannel.channelCode;
@@ -60,11 +71,11 @@ export function VideoScheduleModule() {
         return v.title.toLowerCase().includes(q) || v.videoCode.toLowerCase().includes(q);
       })
       .sort((a, b) => (b.createdAt ?? b.videoCode).localeCompare(a.createdAt ?? a.videoCode));
-  }, [preReviewVideos, vchannelFilter, searchQuery, channels]);
+  }, [preReviewVideos, vchannelFilter, searchQuery, channels, yearFilter]);
 
   const calendarVideos = useMemo(
-    () => preReviewVideos.filter(v => v.shootAt),
-    [preReviewVideos],
+    () => preReviewVideos.filter(v => v.shootAt && v.productionYear === yearFilter),
+    [preReviewVideos, yearFilter],
   );
 
   useEffect(() => {
@@ -193,6 +204,18 @@ export function VideoScheduleModule() {
             className="h-9 pl-9 text-[12px]"
           />
         </div>
+        <Select value={String(yearFilter)} onValueChange={value => setYearFilter(Number(value))}>
+          <SelectTrigger className="h-9 w-[100px] text-[12px] shrink-0">
+            <SelectValue placeholder="年份" />
+          </SelectTrigger>
+          <SelectContent>
+            {yearOptions.map(year => (
+              <SelectItem key={year} value={String(year)}>
+                {year}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button type="button" className="h-9 bg-teal-600 hover:bg-teal-700 text-white text-[12px] gap-1.5 shrink-0" onClick={openNew}>
           <Plus size={14} /> 新建影片
         </Button>
