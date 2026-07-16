@@ -40,6 +40,9 @@ export function PlatformPublishModal({ video, onClose, onSave }: Props) {
     }
     return initial;
   });
+  const [publishedDate, setPublishedDate] = useState(
+    () => video.publishedDate?.trim() || localDateString(),
+  );
   const [hours, setHours] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -64,14 +67,17 @@ export function PlatformPublishModal({ video, onClose, onSave }: Props) {
       return;
     }
 
+    if (!publishedDate.trim()) {
+      setFormError('請選擇實際發佈日期');
+      return;
+    }
+
     setSaving(true);
     try {
       const platformPublish = mergePlatformUrls(video.platformPublish, urls);
-      const anyPublished = MEDIA_PLATFORM_PUBLISH_KEYS.some(k => isPlatformPublished(platformPublish, k));
-      const publishedDate =
-        anyPublished && !video.publishedDate ? localDateString() : video.publishedDate;
+      const resolvedPublishedDate = publishedDate.trim();
 
-      const err = await onSave({ platformPublish, publishedDate });
+      const err = await onSave({ platformPublish, publishedDate: resolvedPublishedDate });
       if (err) {
         setFormError(err.message || '儲存失敗');
         return;
@@ -82,7 +88,7 @@ export function PlatformPublishModal({ video, onClose, onSave }: Props) {
         const existingLogs = await fetchWorkLogsByVideoId(video.id);
         const publishLog: VideoWorkLogDraft = {
           staffId,
-          workDate: localDateString(),
+          workDate: resolvedPublishedDate,
           hours: hoursNum,
           workType: 'other',
           notes: '平台發佈',
@@ -100,7 +106,7 @@ export function PlatformPublishModal({ video, onClose, onSave }: Props) {
         const updatedVideo: VideoOutput = {
           ...video,
           platformPublish,
-          publishedDate,
+          publishedDate: resolvedPublishedDate,
         };
         const allLogs = [...existingLogs.map(l => ({
           staffId: l.staffId,
@@ -133,7 +139,23 @@ export function PlatformPublishModal({ video, onClose, onSave }: Props) {
   };
 
   return (
-    <CrudModal isOpen onClose={onClose} title={`平台發佈 — ${video.videoCode}`} size="lg">
+    <CrudModal
+      isOpen
+      onClose={onClose}
+      title={`平台發佈 — ${video.videoCode}`}
+      size="lg"
+      headerActions={
+        <div className="flex items-center gap-2 mr-1">
+          <label className="text-[12px] text-muted-foreground whitespace-nowrap">實際發佈日期</label>
+          <Input
+            type="date"
+            value={publishedDate}
+            onChange={e => setPublishedDate(e.target.value)}
+            className="h-8 w-[150px] text-[12px]"
+          />
+        </div>
+      }
+    >
       <div className="space-y-4">
         {formError && (
           <p className="text-[12px] text-rose-600 bg-rose-50 border border-rose-200 rounded px-3 py-2">{formError}</p>
