@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, Copy, Loader2, Plus, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVideoOutput } from '@/hooks/useVideoOutput';
@@ -127,61 +127,59 @@ function PlatformPublishRow({
   };
 
   return (
-    <div className="px-4 py-2.5 bg-slate-50/80 border-t border-border/40">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="flex-1 min-w-0 flex flex-wrap items-center gap-1.5">
-          {publishedKeys.length === 0 ? (
-            <span className="text-[12px] text-muted-foreground">尚未發佈任何平台</span>
-          ) : (
-            publishedKeys.map(key => {
-              const url = getPlatformUrl(platformPublish, key);
-              const label = PLATFORM_PUBLISH_LABELS[key];
-              const openable = !!url && isHttpUrl(url);
+    <div className="flex items-center gap-3 min-w-0">
+      <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
+        {publishedKeys.length === 0 ? (
+          <span className="text-[11px] text-muted-foreground">尚未發佈任何平台</span>
+        ) : (
+          publishedKeys.map(key => {
+            const url = getPlatformUrl(platformPublish, key);
+            const label = PLATFORM_PUBLISH_LABELS[key];
+            const openable = !!url && isHttpUrl(url);
 
-              if (openable) {
-                return (
-                  <a
-                    key={key}
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center px-2 py-1 rounded border border-teal-200 bg-white text-[11px] font-medium text-teal-700 hover:bg-teal-50 hover:border-teal-300 transition-colors"
-                    title={`打開 ${label}`}
-                  >
-                    {label}
-                  </a>
-                );
-              }
-
+            if (openable) {
               return (
-                <span
+                <a
                   key={key}
-                  className="inline-flex items-center px-2 py-1 rounded border border-border/60 bg-white text-[11px] font-medium text-muted-foreground"
-                  title={url || '尚未填寫連結'}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] font-medium text-teal-700 hover:underline underline-offset-2"
+                  title={`打開 ${label}`}
                 >
                   {label}
-                </span>
+                </a>
               );
-            })
-          )}
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            type="button"
-            onClick={handleCopy}
-            disabled={!canCopy}
-            className="flex items-center gap-1 px-2.5 py-1 border border-border/60 bg-white text-muted-foreground rounded text-[11px] font-medium hover:bg-muted/50 transition-colors disabled:opacity-40 disabled:pointer-events-none"
-          >
-            <Copy size={11} /> {copyDone ? '已複製' : '複製'}
-          </button>
-          <button
-            type="button"
-            onClick={onPublish}
-            className="flex items-center gap-1 px-2.5 py-1 bg-teal-600 text-white rounded text-[11px] font-medium hover:bg-teal-700 transition-colors"
-          >
-            <Plus size={11} /> 發佈
-          </button>
-        </div>
+            }
+
+            return (
+              <span
+                key={key}
+                className="text-[11px] font-medium text-muted-foreground"
+                title={url || '尚未填寫連結'}
+              >
+                {label}
+              </span>
+            );
+          })
+        )}
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <button
+          type="button"
+          onClick={handleCopy}
+          disabled={!canCopy}
+          className="flex items-center gap-1 px-2 py-0.5 border border-border/60 bg-white text-muted-foreground rounded text-[11px] font-medium hover:bg-muted/50 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+        >
+          <Copy size={11} /> {copyDone ? '已複製' : '複製'}
+        </button>
+        <button
+          type="button"
+          onClick={onPublish}
+          className="flex items-center gap-1 px-2 py-0.5 bg-teal-600 text-white rounded text-[11px] font-medium hover:bg-teal-700 transition-colors"
+        >
+          <Plus size={11} /> 發佈
+        </button>
       </div>
     </div>
   );
@@ -376,52 +374,59 @@ export function VideoManagementModule() {
               <th className="text-right px-4 py-2.5 font-medium text-muted-foreground whitespace-nowrap min-w-[76px]">總工時</th>
             </tr>
           </thead>
-          <tbody>
             {filteredVideos.map(video => {
               const status = deriveVideoOutputStatus(video);
               const isPublished = status === 'published';
               const totalHours = workLogTotals.get(video.id);
 
               return (
-                <Fragment key={video.id}>
-                  <tr className="border-t border-border/50 hover:bg-muted/10">
-                    <td className="px-3 py-2.5 align-middle">
+                <tbody key={video.id} className="border-t border-border/50 hover:bg-muted/10">
+                  <tr>
+                    <td className={cn('px-3 align-middle', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
                       <StatusCell status={status} />
                     </td>
-                    <td className="px-3 py-2.5 align-middle">
+                    <td className={cn('px-3 align-middle', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
                       <span className="font-mono text-[12px] font-bold" title={video.channelPublicName}>
                         {video.channelCode}
                       </span>
                     </td>
-                    <td className="px-2 py-2.5 align-middle font-mono text-[10px] w-[1%] max-w-[96px]">
+                    <td className={cn('px-2 align-middle font-mono text-[10px] w-[1%] max-w-[96px]', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
                       <span className="block truncate" title={video.videoCode}>{video.videoCode}</span>
                     </td>
-                    <td className="px-3 py-2.5 align-middle max-w-[240px]">
+                    <td className={cn('px-3 align-middle max-w-[240px]', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
                       <span className="line-clamp-2" title={video.title}>{video.title}</span>
                     </td>
-                    <td className="px-3 py-2.5 align-middle text-[12px] whitespace-nowrap">{video.shootAt ?? '—'}</td>
-                    <td className="px-3 py-2.5 align-middle text-[12px] whitespace-nowrap text-muted-foreground">
+                    <td className={cn('px-3 align-middle text-[12px] whitespace-nowrap', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
+                      {video.shootAt ?? '—'}
+                    </td>
+                    <td className={cn('px-3 align-middle text-[12px] whitespace-nowrap text-muted-foreground', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
                       {video.plannedPublishDate?.trim() || '—'}
                     </td>
-                    <td className="px-3 py-2.5 align-middle text-[12px] whitespace-nowrap">
+                    <td className={cn('px-3 align-middle text-[12px] whitespace-nowrap', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
                       {video.publishedDate?.trim() || '—'}
                     </td>
-                    <td className="px-3 py-2.5 align-middle whitespace-nowrap text-[12px]">
+                    <td className={cn('px-3 align-middle whitespace-nowrap text-[12px]', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
                       {formatShootLocation(video.shootHk, video.shootSz)}
                     </td>
-                    <td className="px-2 py-2.5 align-middle text-center">
+                    <td className={cn('px-2 align-middle text-center', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
                       <CopywritingCell sc={video.copySc} tc={video.copyTc} en={video.copyEn} />
                     </td>
-                    <td className="px-2 py-2.5 align-middle text-center"><CheckCell value={video.rawFootageDone} /></td>
-                    <td className="px-2 py-2.5 align-middle text-center"><CheckCell value={video.needsEditing} /></td>
-                    <td className="px-2 py-2.5 align-middle text-center"><CheckCell value={video.demoDone} /></td>
-                    <td className="px-4 py-2.5 align-middle text-right min-w-[76px]">
+                    <td className={cn('px-2 align-middle text-center', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
+                      <CheckCell value={video.rawFootageDone} />
+                    </td>
+                    <td className={cn('px-2 align-middle text-center', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
+                      <CheckCell value={video.needsEditing} />
+                    </td>
+                    <td className={cn('px-2 align-middle text-center', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
+                      <CheckCell value={video.demoDone} />
+                    </td>
+                    <td className={cn('px-4 align-middle text-right min-w-[76px]', isPublished ? 'pt-2.5 pb-1' : 'py-2.5')}>
                       <WorkHoursCell hours={totalHours} />
                     </td>
                   </tr>
                   {isPublished && (
-                    <tr className="border-t border-border/30">
-                      <td colSpan={TABLE_COL_COUNT} className="p-0">
+                    <tr>
+                      <td colSpan={TABLE_COL_COUNT} className="px-3 pt-0 pb-2.5">
                         <PlatformPublishRow
                           platformPublish={video.platformPublish}
                           onPublish={() => setPublishingVideo(video)}
@@ -429,10 +434,9 @@ export function VideoManagementModule() {
                       </td>
                     </tr>
                   )}
-                </Fragment>
+                </tbody>
               );
             })}
-          </tbody>
         </table>
       </div>
 
