@@ -134,10 +134,27 @@ export function formatShootLocation(shootHk: boolean, shootSz: boolean): string 
   return '—';
 }
 
+export function hasAnyMediaPlatformPublished(platformPublish?: PlatformPublishMap): boolean {
+  if (!platformPublish) return false;
+  return MEDIA_PLATFORM_PUBLISH_KEYS.some(key => isPlatformPublished(platformPublish, key));
+}
+
 export function deriveVideoOutputStatus(row: Pick<
   VideoOutput,
-  'workflowStage' | 'shootSz' | 'shootHk' | 'rawFootageDone' | 'needsEditing' | 'demoDone' | 'publishedDate'
+  | 'workflowStage'
+  | 'shootSz'
+  | 'shootHk'
+  | 'rawFootageDone'
+  | 'needsEditing'
+  | 'demoDone'
+  | 'publishedDate'
+  | 'platformPublish'
 >): VideoOutputStatus {
+  // Prefer concrete publish evidence over a stale workflow_stage
+  if (row.publishedDate?.trim() || hasAnyMediaPlatformPublished(row.platformPublish)) {
+    return 'published';
+  }
+
   if (row.workflowStage) {
     switch (row.workflowStage) {
       case 'published':
@@ -153,7 +170,6 @@ export function deriveVideoOutputStatus(row: Pick<
     }
   }
 
-  if (row.publishedDate) return 'published';
   if (row.demoDone) return 'pending_review';
   const anyProgress =
     row.shootSz || row.shootHk || row.rawFootageDone || row.needsEditing === true || row.demoDone;
