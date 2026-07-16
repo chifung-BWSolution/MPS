@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Plus, X, Calendar, Briefcase } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, ChevronDown, Plus, X, Calendar, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getCalendarEventsForMonth, CalendarEvent, parseVideoCalendarTheme } from '@/data/marketingData';
@@ -86,16 +86,20 @@ const emptyForm = (): NewEventForm => ({
   notes: '',
 });
 
+type CalendarViewMode = 'list' | 'weekly' | 'monthly';
+
 export function MarketingCalendar() {
   // Default to today's month for weekly view accuracy
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<'monthly' | 'weekly'>('monthly');
+  const [viewMode, setViewMode] = useState<CalendarViewMode>('list');
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [filterType, setFilterType] = useState<string>('all');
   const [filterCompany, setFilterCompany] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState<NewEventForm>(emptyForm());
   const [saving, setSaving] = useState(false);
+  /** Dates collapsed in list view (YYYY-MM-DD) */
+  const [collapsedDates, setCollapsedDates] = useState<Set<string>>(() => new Set());
   const { events: upcomingEvents, addEvent: addUpcomingEvent } = useUpcomingEvents();
   const { videos } = useVideoOutput();
   const { channels } = useVchannels();
@@ -256,9 +260,43 @@ export function MarketingCalendar() {
     return weekDays.flatMap(d => eventsForDate(toLocalDateStr(d)));
   }, [weekDays, allBaseEvents, filterType, filterCompany]);
 
+  /** Month list: group filtered events by date for current month */
+  const monthListGroups = useMemo(() => {
+    const prefix = `${year}-${String(month + 1).padStart(2, '0')}-`;
+    const map = new Map<string, CustomEvent[]>();
+    for (const event of applyFilters(allBaseEvents)) {
+      const dateStr = event._fullDate;
+      if (!dateStr || !dateStr.startsWith(prefix)) continue;
+      const list = map.get(dateStr) ?? [];
+      list.push(event);
+      map.set(dateStr, list);
+    }
+    return [...map.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([dateStr, events]) => ({ dateStr, events }));
+  }, [allBaseEvents, year, month, filterType, filterCompany]);
+
+  // Reset collapse state when month changes
+  useEffect(() => {
+    setCollapsedDates(new Set());
+  }, [year, month]);
+
+  const toggleDateCollapsed = (dateStr: string) => {
+    setCollapsedDates(prev => {
+      const next = new Set(prev);
+      if (next.has(dateStr)) next.delete(dateStr);
+      else next.add(dateStr);
+      return next;
+    });
+  };
+
+  const expandAllDates = () => setCollapsedDates(new Set());
+  const collapseAllDates = () =>
+    setCollapsedDates(new Set(monthListGroups.map(g => g.dateStr)));
+
   // --- Add event ---
   function openAddModal(dateStr?: string) {
-    setAddForm({ ...emptyForm(), date: dateStr || new Date().toISOString().split('T')[0] });
+    setAddForm({ ...emptyForm(), date: dateStr || toLocalDateStr(new Date()) });
     setShowAddModal(true);
   }
 
@@ -291,17 +329,25 @@ export function MarketingCalendar() {
       {/* Top Controls */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
-          {/* View toggle */}
+          {/* View toggle — Listview first (default) */}
           <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg">
-            {(['weekly', 'monthly'] as const).map(v => (
+            {([
+              { id: 'list' as const, label: 'Listview（月列表）' },
+              { id: 'weekly' as const, label: '週視圖' },
+              { id: 'monthly' as const, label: '月視圖' },
+            ]).map(v => (
               <button
-                key={v}
-                onClick={() => setViewMode(v)}
-                className={cn('px-3 py-1 rounded text-[12px] font-medium transition-colors duration-200',
-                  viewMode === v ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                key={v.id}
+                type="button"
+                onClick={() => setViewMode(v.id)}
+                className={cn(
+                  'px-3 py-1 rounded text-[12px] font-medium transition-colors duration-200',
+                  viewMode === v.id
+                    ? 'bg-white text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
                 )}
               >
-                {v === 'weekly' ? '週視圖' : '月視圖'}
+                {v.label}
               </button>
             ))}
           </div>
@@ -355,6 +401,158 @@ export function MarketingCalendar() {
           </div>
         ))}
       </div>
+
+      {/* === LIST VIEW (月列表) === */}
+      {viewMode === 'list' && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <p className="text-[12px] text-muted-foreground">
+              本月共{' '}
+              <span className="font-semibold text-foreground">
+                {monthListGroups.reduce((n, g) => n + g.events.length, 0)}
+              </span>{' '}
+              項活動 · {monthListGroups.length} 個日期
+            </p>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={expandAllDates}
+                className="px-2.5 py-1 rounded border border-border text-[11px] text-muted-foreground hover:bg-muted transition-colors"
+              >
+                全部展開
+              </button>
+              <button
+                type="button"
+                onClick={collapseAllDates}
+                className="px-2.5 py-1 rounded border border-border text-[11px] text-muted-foreground hover:bg-muted transition-colors"
+              >
+                全部摺疊
+              </button>
+            </div>
+          </div>
+
+          {monthListGroups.length === 0 ? (
+            <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card py-16 text-center">
+              <Calendar size={28} className="mx-auto text-muted-foreground/40 mb-2" />
+              <p className="text-[13px] text-muted-foreground">本月暫無活動</p>
+              <button
+                type="button"
+                onClick={() => openAddModal(`${year}-${String(month + 1).padStart(2, '0')}-01`)}
+                className="mt-3 text-[12px] text-teal-600 hover:underline inline-flex items-center gap-1"
+              >
+                <Plus size={12} /> 新增活動
+              </button>
+            </div>
+          ) : (
+            <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-hidden divide-y divide-border/60">
+              {monthListGroups.map(({ dateStr, events }) => {
+                const d = new Date(dateStr + 'T00:00:00');
+                const weekday = calendarDays[(d.getDay() + 6) % 7];
+                const isToday = dateStr === toLocalDateStr(today);
+                const collapsed = collapsedDates.has(dateStr);
+                return (
+                  <div key={dateStr}>
+                    <button
+                      type="button"
+                      onClick={() => toggleDateCollapsed(dateStr)}
+                      className={cn(
+                        'w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-muted/40 transition-colors',
+                        isToday && 'bg-teal-50/50',
+                      )}
+                    >
+                      {collapsed ? (
+                        <ChevronRight size={14} className="text-muted-foreground shrink-0" />
+                      ) : (
+                        <ChevronDown size={14} className="text-muted-foreground shrink-0" />
+                      )}
+                      <span
+                        className={cn(
+                          'text-[13px] font-semibold tabular-nums',
+                          isToday ? 'text-teal-700' : 'text-foreground',
+                        )}
+                      >
+                        {month + 1}月{d.getDate()}日
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">週{weekday}</span>
+                      {isToday && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-teal-600 text-white">
+                          今天
+                        </span>
+                      )}
+                      <span className="ml-auto text-[11px] text-muted-foreground">
+                        {events.length} 項
+                      </span>
+                    </button>
+
+                    {!collapsed && (
+                      <div className="px-4 pb-3 pt-0.5 space-y-1.5">
+                        {events.map(event => {
+                          const cfg = typeConfig[event.type] || typeConfig.social;
+                          if (event.type === 'video' && event.videoCode) {
+                            return (
+                              <div
+                                key={event.id}
+                                className="flex items-start gap-3 pl-6 py-1.5 border-l-2 border-purple-200 ml-1"
+                              >
+                                <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0 mt-0.5', cfg.bg, cfg.text)}>
+                                  {cfg.label}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <VideoCalendarChip event={event} />
+                                  {event.channelName && (
+                                    <p className="text-[10px] text-muted-foreground mt-1">{event.channelName}</p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          }
+                          return (
+                            <div
+                              key={event.id}
+                              className={cn(
+                                'flex items-start gap-3 pl-6 py-1.5 border-l-2 ml-1',
+                                cfg.border,
+                              )}
+                            >
+                              <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0', cfg.bg, cfg.text)}>
+                                {cfg.label}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[13px] font-medium leading-snug">{event.title}</p>
+                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                  {event.platform && (
+                                    <span className="text-[10px] text-muted-foreground">{event.platform}</span>
+                                  )}
+                                  {event.company && (
+                                    <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">{event.company}</span>
+                                  )}
+                                  {event.brand && (
+                                    <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">{event.brand}</span>
+                                  )}
+                                  {event.hours != null && (
+                                    <span className="text-[10px] text-muted-foreground">{event.hours}h</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          onClick={() => openAddModal(dateStr)}
+                          className="ml-7 mt-1 text-[11px] text-muted-foreground hover:text-teal-600 inline-flex items-center gap-1 transition-colors"
+                        >
+                          <Plus size={11} /> 此日新增
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* === WEEKLY VIEW === */}
       {viewMode === 'weekly' && (
