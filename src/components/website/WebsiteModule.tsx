@@ -517,7 +517,15 @@ function WebsiteArticlesTab({ site }: { site: WebsiteProfileFull }) {
 }
 
 // ===== Website Detail =====
-function WebsiteDetail({ site, onBack }: { site: WebsiteProfileFull; onBack: () => void }) {
+function WebsiteDetail({
+  site,
+  onBack,
+  onSitePatch,
+}: {
+  site: WebsiteProfileFull;
+  onBack: () => void;
+  onSitePatch?: (patch: Partial<WebsiteProfileFull>) => void;
+}) {
   const [activeTab, setActiveTab] = useState('overview');
   const [currentLevel, setCurrentLevel] = useState<WebsiteLevel>(site.level);
   const [showLevelDropdown, setShowLevelDropdown] = useState(false);
@@ -798,7 +806,12 @@ function WebsiteDetail({ site, onBack }: { site: WebsiteProfileFull; onBack: () 
 
         {activeTab === 'articles' && <WebsiteArticlesTab site={site} />}
 
-        {activeTab === 'videos' && <WebsiteVideosTab site={site} />}
+        {activeTab === 'videos' && (
+          <WebsiteVideosTab
+            site={site}
+            onVideosCountChange={count => onSitePatch?.({ videosCount: count })}
+          />
+        )}
         {activeTab === 'social' && <WebsiteSocialTab site={site} />}
         {activeTab === 'ads' && <WebsiteAdsTab site={site} />}
         {activeTab === 'seo' && <WebsiteSeoTab site={site} />}
@@ -2781,7 +2794,13 @@ export function WebsiteModule({ subModule }: { subModule?: string }) {
 
   // Website detail view (from list or featured)
   if (selectedSite) {
-    return <WebsiteDetail site={selectedSite} onBack={() => setSelectedSite(null)} />;
+    return (
+      <WebsiteDetail
+        site={selectedSite}
+        onBack={() => setSelectedSite(null)}
+        onSitePatch={patch => setSelectedSite(s => (s ? { ...s, ...patch } : null))}
+      />
+    );
   }
 
   switch (subModule) {

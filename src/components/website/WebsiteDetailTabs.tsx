@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { Plus, X, ExternalLink, Video, Share2, Megaphone, TrendingUp, Mail, Puzzle, Link2, ChevronLeft, ChevronRight, Sparkles, AlertTriangle } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Plus, X, ExternalLink, Video, Share2, Megaphone, TrendingUp, Mail, Puzzle, Link2, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Loader2, Unlink, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { WebsiteProfileFull, Video as VideoType, SocialPost, PaidAd, SeoKeyword, EdmCampaign } from '@/types/app';
+import { WebsiteProfileFull, SocialPost, PaidAd, SeoKeyword, EdmCampaign } from '@/types/app';
 import {
   getVideosForWebsite,
   getSocialPostsForWebsite,
@@ -13,18 +13,26 @@ import {
   Plugin,
   ExternalLink as ExternalLinkType,
 } from '@/data/websiteDetailData';
+import type { VideoOutput } from '@/types/videoOutput';
+import {
+  VIDEO_OUTPUT_STATUS_COLORS,
+  VIDEO_OUTPUT_STATUS_LABELS,
+  deriveVideoOutputStatus,
+  PLATFORM_PUBLISH_LABELS,
+  getPublishedPlatformKeys,
+} from '@/lib/videoOutputUtils';
+import {
+  fetchLinkedVideosForWebsite,
+  fetchLinkableVideoOutputs,
+  linkVideosToWebsite,
+  unlinkVideoFromWebsite,
+  type WebsiteLinkedVideo,
+} from '@/services/websiteVideoLinkService';
 
 // ============================================================
 // Shared Configs
 // ============================================================
 
-const videoStatusConfig = {
-  planning: { label: '規劃中', color: 'text-slate-700', bgColor: 'bg-slate-50' },
-  shooting: { label: '拍攝中', color: 'text-amber-700', bgColor: 'bg-amber-50' },
-  post_production: { label: '後期製作', color: 'text-blue-700', bgColor: 'bg-blue-50' },
-  completed: { label: '已完成', color: 'text-teal-700', bgColor: 'bg-teal-50' },
-  published: { label: '已發佈', color: 'text-green-700', bgColor: 'bg-green-50' },
-};
 
 const socialPlatformConfig: Record<string, { label: string; color: string; bgColor: string }> = {
   facebook: { label: 'Facebook', color: 'text-blue-700', bgColor: 'bg-blue-50' },
@@ -90,126 +98,334 @@ const linkTypeConfig: Record<string, { label: string; icon: string; color: strin
 };
 
 // ============================================================
-// VIDEOS TAB
+// VIDEOS TAB — link to 影片製作 (video_output)
 // ============================================================
-export function WebsiteVideosTab({ site }: { site: WebsiteProfileFull }) {
-  const [videos] = useState<VideoType[]>(() => getVideosForWebsite(site.id));
+export function WebsiteVideosTab({
+  site,
+  onVideosCountChange,
+}: {
+  site: WebsiteProfileFull;
+  onVideosCountChange?: (count: number) => void;
+}) {
+  const [videos, setVideos] = useState<WebsiteLinkedVideo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [newVideo, setNewVideo] = useState({ title: '', videoType: 'promo', shootDate: '', notes: '' });
+  const [linkable, setLinkable] = useState<VideoOutput[]>([]);
+  const [loadingLinkable, setLoadingLinkable] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [unlinkingId, setUnlinkingId] = useState<string | null>(null);
 
-  const handleAddVideo = () => {
-    // Mock add
-    setShowModal(false);
-    setNewVideo({ title: '', videoType: 'promo', shootDate: '', notes: '' });
+  const loadLinked = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const rows = await fetchLinkedVideosForWebsite(site.id);
+      setVideos(rows);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '載入關聯影片失敗');
+      setVideos([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [site.id]);
+
+  useEffect(() => {
+    void loadLinked();
+  }, [loadLinked]);
+
+  const openLinkModal = async () => {
+    setShowModal(true);
+    setSelectedIds(new Set());
+    setPickerSearch('');
+    setLoadingLinkable(true);
+    try {
+      const rows = await fetchLinkableVideoOutputs(site.id);
+      setLinkable(rows);
+    } catch {
+      setLinkable([]);
+    } finally {
+      setLoadingLinkable(false);
+    }
   };
+
+  const filteredLinkable = useMemo(() => {
+    const q = pickerSearch.trim().toLowerCase();
+    if (!q) return linkable;
+    return linkable.filter(
+      v =>
+        v.title.toLowerCase().includes(q) ||
+        v.videoCode.toLowerCase().includes(q) ||
+        v.channelCode.toLowerCase().includes(q) ||
+        (v.channelPublicName ?? '').toLowerCase().includes(q),
+    );
+  }, [linkable, pickerSearch]);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleLink = async () => {
+    if (selectedIds.size === 0) return;
+    setSaving(true);
+    try {
+      const count = await linkVideosToWebsite(site.id, [...selectedIds]);
+      onVideosCountChange?.(count);
+      setShowModal(false);
+      await loadLinked();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '關聯失敗');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUnlink = async (linkId: string) => {
+    if (!confirm('確定取消關聯此影片？')) return;
+    setUnlinkingId(linkId);
+    try {
+      const count = await unlinkVideoFromWebsite(site.id, linkId);
+      onVideosCountChange?.(count);
+      await loadLinked();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '取消關聯失敗');
+    } finally {
+      setUnlinkingId(null);
+    }
+  };
+
+  const totalHours = videos.reduce((sum, v) => sum + v.totalHours, 0);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h4 className="text-[15px] font-bold">影片列表</h4>
-          <p className="text-[12px] text-muted-foreground mt-0.5">共 {videos.length} 部影片關聯至此網站</p>
+          <p className="text-[12px] text-muted-foreground mt-0.5">
+            共 {videos.length} 部影片關聯至此網站
+            {videos.length > 0 && (
+              <span className="ml-2">· 合計工時 {totalHours.toFixed(1).replace(/\.0$/, '')}h</span>
+            )}
+          </p>
         </div>
-        <button onClick={() => setShowModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-medium hover:bg-teal-700 transition-colors">
-          <Plus size={13} />新增影片
+        <button
+          type="button"
+          onClick={() => void openLinkModal()}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-medium hover:bg-teal-700 transition-colors"
+        >
+          <Link2 size={13} />關聯影片
         </button>
       </div>
 
-      {videos.length === 0 ? (
-        <div className="text-center py-12 border border-dashed border-border rounded-md">
-          <Video size={32} className="text-muted-foreground mx-auto mb-3" />
-          <p className="text-[14px] font-medium text-muted-foreground">尚未關聯任何影片</p>
-          <p className="text-[12px] text-muted-foreground mt-1">點擊「新增影片」開始</p>
-        </div>
-      ) : (
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">影片標題</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">類型</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">製作狀態</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">拍攝日期</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">剪輯師</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">工時</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">發佈平台</th>
-              </tr>
-            </thead>
-            <tbody>
-              {videos.map(video => {
-                const statusCfg = videoStatusConfig[video.status];
-                const editorNames: Record<string, string> = { u1: '陳小華', u2: '王志明', u4: '李芳', u5: '朴賢俊' };
-                return (
-                  <tr key={video.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3">
-                      <span className="text-[13px] font-medium">{video.title}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-[11px] bg-muted px-1.5 py-0.5 rounded capitalize">{video.videoType}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', statusCfg.bgColor, statusCfg.color)}>{statusCfg.label}</span>
-                    </td>
-                    <td className="px-4 py-3 text-[12px] text-muted-foreground">{video.shootDate || '—'}</td>
-                    <td className="px-4 py-3 text-[13px]">{video.editorId ? editorNames[video.editorId] || '—' : '—'}</td>
-                    <td className="px-4 py-3 text-[13px] font-medium">{video.editingHours ? `${video.editingHours}h` : '—'}</td>
-                    <td className="px-4 py-3">
-                      {video.platforms && video.platforms.length > 0 ? (
-                        <div className="flex gap-1 flex-wrap">
-                          {video.platforms.map((p, i) => (
-                            <span key={i} className="text-[10px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{p.platform}</span>
-                          ))}
-                        </div>
-                      ) : <span className="text-[11px] text-muted-foreground">—</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {error && (
+        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700">
+          {error}
         </div>
       )}
 
-      {/* Add Video Modal */}
+      {loading ? (
+        <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+          <Loader2 size={16} className="animate-spin" />
+          <span className="text-[13px]">載入關聯影片...</span>
+        </div>
+      ) : videos.length === 0 ? (
+        <div className="text-center py-12 border border-dashed border-border rounded-md">
+          <Video size={32} className="text-muted-foreground mx-auto mb-3" />
+          <p className="text-[14px] font-medium text-muted-foreground">尚未關聯任何影片</p>
+          <p className="text-[12px] text-muted-foreground mt-1">點擊「關聯影片」從影片製作選擇</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[880px]">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">編號</th>
+                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">影片標題</th>
+                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">頻道</th>
+                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
+                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">拍攝日期</th>
+                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">發佈日期</th>
+                  <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">工時</th>
+                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">發佈平台</th>
+                  <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {videos.map(video => {
+                  const status = deriveVideoOutputStatus(video);
+                  const platforms = getPublishedPlatformKeys(video.platformPublish);
+                  return (
+                    <tr key={video.linkId} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                      <td className="px-4 py-3 text-[12px] text-muted-foreground font-mono whitespace-nowrap">
+                        {video.videoCode}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-[13px] font-medium">{video.title}</span>
+                      </td>
+                      <td className="px-4 py-3 text-[12px] text-muted-foreground whitespace-nowrap">
+                        {video.channelPublicName || video.channelCode || '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', VIDEO_OUTPUT_STATUS_COLORS[status])}>
+                          {VIDEO_OUTPUT_STATUS_LABELS[status]}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-[12px] text-muted-foreground whitespace-nowrap">
+                        {video.shootAt || '—'}
+                      </td>
+                      <td className="px-4 py-3 text-[12px] text-muted-foreground whitespace-nowrap">
+                        {video.publishedDate || '—'}
+                      </td>
+                      <td className="px-4 py-3 text-[13px] font-medium text-right whitespace-nowrap">
+                        {video.totalHours > 0
+                          ? `${video.totalHours.toFixed(1).replace(/\.0$/, '')}h`
+                          : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        {platforms.length > 0 ? (
+                          <div className="flex gap-1 flex-wrap">
+                            {platforms.map(key => (
+                              <span key={key} className="text-[10px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">
+                                {PLATFORM_PUBLISH_LABELS[key]}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => void handleUnlink(video.linkId)}
+                          disabled={unlinkingId === video.linkId}
+                          className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-rose-600 disabled:opacity-50"
+                          title="取消關聯"
+                        >
+                          {unlinkingId === video.linkId ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            <Unlink size={12} />
+                          )}
+                          取消關聯
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-[540px]">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h3 className="text-[16px] font-bold">新增影片</h3>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+              <div>
+                <h3 className="text-[16px] font-bold">關聯影片</h3>
+                <p className="text-[12px] text-muted-foreground mt-0.5">
+                  從「影片製作」選擇要關聯至 {site.websiteName} 的影片
+                </p>
+              </div>
+              <button type="button" onClick={() => setShowModal(false)} className="p-1 hover:bg-muted rounded">
+                <X size={16} />
+              </button>
             </div>
-            <div className="px-6 py-4 space-y-4">
-              <div className="bg-muted/30 rounded-md p-3 text-[12px] text-muted-foreground">
-                公司：<span className="font-medium text-foreground">{site.company}</span> · 品牌：<span className="font-medium text-foreground">{site.brand}</span>
-              </div>
-              <div>
-                <label className="text-[12px] font-medium text-muted-foreground block mb-1">影片標題 *</label>
-                <input value={newVideo.title} onChange={e => setNewVideo(p => ({ ...p, title: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" placeholder="輸入影片標題" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[12px] font-medium text-muted-foreground block mb-1">影片類型</label>
-                  <select value={newVideo.videoType} onChange={e => setNewVideo(p => ({ ...p, videoType: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600">
-                    <option value="promo">宣傳片</option>
-                    <option value="tutorial">教學</option>
-                    <option value="testimonial">客戶見證</option>
-                    <option value="event">活動</option>
-                    <option value="social_clip">社交短片</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[12px] font-medium text-muted-foreground block mb-1">拍攝日期</label>
-                  <input type="date" value={newVideo.shootDate} onChange={e => setNewVideo(p => ({ ...p, shootDate: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" />
-                </div>
-              </div>
-              <div>
-                <label className="text-[12px] font-medium text-muted-foreground block mb-1">備註</label>
-                <textarea value={newVideo.notes} onChange={e => setNewVideo(p => ({ ...p, notes: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 h-20 resize-none" placeholder="選填" />
+
+            <div className="px-6 py-3 border-b border-border shrink-0">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={pickerSearch}
+                  onChange={e => setPickerSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                  placeholder="搜尋編號、標題或頻道..."
+                />
               </div>
             </div>
-            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted rounded-md">取消</button>
-              <button onClick={handleAddVideo} disabled={!newVideo.title} className="px-4 py-2 text-[13px] font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed">新增影片</button>
+
+            <div className="flex-1 overflow-y-auto px-6 py-3 min-h-[200px]">
+              {loadingLinkable ? (
+                <div className="flex items-center justify-center py-10 text-muted-foreground gap-2">
+                  <Loader2 size={16} className="animate-spin" />
+                  <span className="text-[13px]">載入可關聯影片...</span>
+                </div>
+              ) : filteredLinkable.length === 0 ? (
+                <div className="text-center py-10 text-[13px] text-muted-foreground">
+                  {linkable.length === 0 ? '沒有可關聯的影片（可能皆已關聯）' : '沒有符合搜尋的影片'}
+                </div>
+              ) : (
+                <ul className="space-y-1">
+                  {filteredLinkable.map(v => {
+                    const status = deriveVideoOutputStatus(v);
+                    const checked = selectedIds.has(v.id);
+                    return (
+                      <li key={v.id}>
+                        <label
+                          className={cn(
+                            'flex items-start gap-3 px-3 py-2.5 rounded-md border cursor-pointer transition-colors',
+                            checked
+                              ? 'border-teal-300 bg-teal-50/60'
+                              : 'border-transparent hover:bg-muted/40',
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleSelect(v.id)}
+                            className="mt-1 accent-teal-600"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[11px] font-mono text-muted-foreground">{v.videoCode}</span>
+                              <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded', VIDEO_OUTPUT_STATUS_COLORS[status])}>
+                                {VIDEO_OUTPUT_STATUS_LABELS[status]}
+                              </span>
+                            </div>
+                            <p className="text-[13px] font-medium mt-0.5 truncate">{v.title}</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                              {v.channelPublicName || v.channelCode}
+                              {v.shootAt ? ` · 拍攝 ${v.shootAt}` : ''}
+                            </p>
+                          </div>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-2 px-6 py-4 border-t border-border shrink-0">
+              <span className="text-[12px] text-muted-foreground">已選 {selectedIds.size} 部</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted rounded-md"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleLink()}
+                  disabled={selectedIds.size === 0 || saving}
+                  className="px-4 py-2 text-[13px] font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+                >
+                  {saving && <Loader2 size={14} className="animate-spin" />}
+                  確認關聯
+                </button>
+              </div>
             </div>
           </div>
         </div>
