@@ -31,6 +31,7 @@ type Draft = {
   productionYear: number;
   baseSeq: number;
   deviceType: VideoWorkflowDeviceSuffix;
+  videoCode: string;
   title: string;
   shootAt: string;
   location: VideoWorkflowMock['location'];
@@ -48,6 +49,7 @@ function emptyDraft(): Draft {
     productionYear: new Date().getFullYear(),
     baseSeq: 0,
     deviceType: null,
+    videoCode: '',
     title: '',
     shootAt: '',
     location: { sz: false, hk: false, notes: '' },
@@ -64,6 +66,7 @@ function draftFromVideo(video: VideoWorkflowMock): Draft {
     productionYear: year,
     baseSeq: seq,
     deviceType: video.deviceType ?? parseDeviceSuffixFromVideoCode(video.videoCode),
+    videoCode: video.videoCode,
     title: video.title,
     shootAt: video.shootAt ?? '',
     location: { ...video.location },
@@ -165,16 +168,11 @@ export function ScheduleEditModal({
     }
   }, [open, video]);
 
-  const videoCode = useMemo(() => {
-    if (!draft.vchannelCode || !draft.baseSeq) return '';
-    return formatVideoCode(draft.vchannelCode, draft.productionYear, draft.baseSeq, draft.deviceType);
-  }, [draft.vchannelCode, draft.productionYear, draft.baseSeq, draft.deviceType]);
-
   const prepVideo = useMemo((): VideoWorkflowMock => ({
     id: video?.id ?? 'draft',
     vchannelId: draft.vchannelId,
     vchannelCode: draft.vchannelCode,
-    videoCode,
+    videoCode: draft.videoCode.trim(),
     title: draft.title,
     deviceType: draft.deviceType,
     productionYear: draft.productionYear,
@@ -186,7 +184,7 @@ export function ScheduleEditModal({
     model: draft.model,
     photographer: draft.photographer,
     onSiteCrew: draft.onSiteCrew,
-  }), [draft, video, videoCode]);
+  }), [draft, video]);
 
   const prepReady = isPrepComplete(prepVideo);
   const missing = getPrepMissingItems(prepVideo);
@@ -198,7 +196,7 @@ export function ScheduleEditModal({
     setCodeLoading(true);
     setFormError(null);
     try {
-      const { seq, year } = await generateNextVideoCode(ch.channelCode, defaultSuffix);
+      const { seq, year, videoCode } = await generateNextVideoCode(ch.channelCode, defaultSuffix);
       setDraft(d => ({
         ...d,
         vchannelId: ch.id,
@@ -206,6 +204,7 @@ export function ScheduleEditModal({
         productionYear: year,
         baseSeq: seq,
         deviceType: defaultSuffix,
+        videoCode,
       }));
     } catch (e) {
       setFormError(e instanceof Error ? e.message : '無法生成 Video Code');
@@ -217,13 +216,33 @@ export function ScheduleEditModal({
   const handleDeviceTypeChange = (value: string) => {
     const deviceType: VideoWorkflowDeviceSuffix =
       value === 'D' ? 'D' : value === 'M' ? 'M' : null;
-    setDraft(d => ({ ...d, deviceType }));
+    setDraft(d => {
+      if (!d.vchannelCode || !d.baseSeq) {
+        return { ...d, deviceType };
+      }
+      return {
+        ...d,
+        deviceType,
+        videoCode: formatVideoCode(d.vchannelCode, d.productionYear, d.baseSeq, deviceType),
+      };
+    });
+  };
+
+  const handleVideoCodeChange = (value: string) => {
+    setDraft(d => {
+      const next: Draft = { ...d, videoCode: value };
+      if (!d.vchannelCode) return next;
+      const seq = parseSeqFromVideoCode(value.trim(), d.vchannelCode, d.productionYear);
+      if (seq != null) next.baseSeq = seq;
+      next.deviceType = parseDeviceSuffixFromVideoCode(value.trim());
+      return next;
+    });
   };
 
   const buildPayload = (): Partial<VideoWorkflowMock> => ({
     vchannelId: draft.vchannelId,
     vchannelCode: draft.vchannelCode,
-    videoCode,
+    videoCode: draft.videoCode.trim(),
     title: draft.title.trim(),
     deviceType: draft.deviceType,
     productionYear: draft.productionYear,
@@ -246,8 +265,8 @@ export function ScheduleEditModal({
       setFormError('請填寫主題');
       return;
     }
-    if (!videoCode) {
-      setFormError('Video Code 生成失敗，請重選 Vchannel');
+    if (!draft.videoCode.trim()) {
+      setFormError(isNew ? '請填寫或生成 Video Code' : 'Video Code 不可為空');
       return;
     }
     if (isNew) {
@@ -345,12 +364,19 @@ export function ScheduleEditModal({
               </Select>
             </div>
             <div>
-              <label className="text-[11px] text-muted-foreground block mb-1">Video Code</label>
+              <label className="text-[11px] text-muted-foreground block mb-1">
+                Video Code{isNew ? ' *' : ''}
+              </label>
               <div className="relative">
                 <Input
-                  value={codeLoading ? '生成中…' : videoCode}
-                  readOnly
-                  className="h-9 text-[13px] font-mono bg-muted/40"
+                  value={codeLoading ? '生成中…' : draft.videoCode}
+                  readOnly={!isNew || codeLoading}
+                  onChange={e => handleVideoCodeChange(e.target.value)}
+                  placeholder={isNew ? '選擇頻道後自動生成，可再編輯' : undefined}
+                  className={cn(
+                    'h-9 text-[13px] font-mono',
+                    (!isNew || codeLoading) && 'bg-muted/40',
+                  )}
                 />
                 {codeLoading && (
                   <Loader2 size={14} className="absolute right-2 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />
