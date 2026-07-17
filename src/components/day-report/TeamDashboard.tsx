@@ -215,32 +215,56 @@ function CategoryHoursList({
   hoursByCategory: Record<string, number>;
   totalHours: number;
 }) {
+  const byId = new Map(categories.map((c) => [c.id, c]));
+  const ids = new Set([
+    ...categories.map((c) => c.id),
+    ...Object.keys(hoursByCategory),
+  ]);
+
+  const rows = Array.from(ids)
+    .map((id) => {
+      const hours = hoursByCategory[id] || 0;
+      const cat = byId.get(id) || {
+        id,
+        label: id,
+        icon: '📋',
+        color: 'text-gray-600',
+        bg: 'bg-gray-100',
+        sortOrder: 999,
+      };
+      return { cat, hours, percentage: pct(hours, totalHours) };
+    })
+    .filter((row) => row.hours > 0)
+    .sort((a, b) => b.hours - a.hours || b.percentage - a.percentage);
+
+  if (rows.length === 0) {
+    return (
+      <p className="text-[12px] text-muted-foreground text-center py-1">暫無工作類型工時</p>
+    );
+  }
+
   return (
     <div className="space-y-2">
-      {categories.map((cat) => {
-        const hours = hoursByCategory[cat.id] || 0;
-        const percentage = pct(hours, totalHours);
-        return (
-          <div key={cat.id} className="flex items-center gap-2">
-            <span className={cn(
-              'text-[10px] px-1.5 py-0.5 rounded w-[72px] text-center shrink-0 font-medium truncate',
-              cat.bg, cat.color,
-            )}>
-              {cat.icon} {cat.label}
-            </span>
-            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-teal-500 rounded-full transition-all"
-                style={{ width: `${Math.min(percentage, 100)}%` }}
-              />
-            </div>
-            <span className="text-[11px] font-semibold w-[36px] text-right tabular-nums">{hours}h</span>
-            <span className="text-[10px] text-muted-foreground w-[32px] text-right tabular-nums">
-              {percentage.toFixed(0)}%
-            </span>
+      {rows.map(({ cat, hours, percentage }) => (
+        <div key={cat.id} className="flex items-center gap-2 min-w-0">
+          <span className={cn(
+            'text-[10px] px-1.5 py-0.5 rounded shrink-0 font-medium whitespace-nowrap',
+            cat.bg, cat.color,
+          )}>
+            {cat.icon} {cat.label}
+          </span>
+          <div className="flex-1 min-w-[48px] h-2 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-teal-500 rounded-full transition-all"
+              style={{ width: `${Math.min(percentage, 100)}%` }}
+            />
           </div>
-        );
-      })}
+          <span className="text-[11px] font-semibold w-[36px] text-right tabular-nums shrink-0">{hours}h</span>
+          <span className="text-[10px] text-muted-foreground w-[32px] text-right tabular-nums shrink-0">
+            {percentage.toFixed(0)}%
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
