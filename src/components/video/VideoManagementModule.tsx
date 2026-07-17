@@ -402,24 +402,26 @@ export function VideoManagementModule() {
         </div>
       </div>
 
-      <WorkflowStatusSummaryBar
-        filteredCount={filteredVideos.length}
-        contextCount={contextVideos.length}
-        activeFilter={statusFilter}
-        items={COORDINATION_STATUS_ITEMS}
-        counts={statusCounts}
-        onSelectAll={() => setStatusFilter('all')}
-        onSelectItem={id => handleStatusSummaryClick(id as VideoOutputStatus)}
-        ariaLabel="狀態篩選"
-        tintInactive
-      />
+      {view === 'list' && (
+        <WorkflowStatusSummaryBar
+          filteredCount={filteredVideos.length}
+          contextCount={contextVideos.length}
+          activeFilter={statusFilter}
+          items={COORDINATION_STATUS_ITEMS}
+          counts={statusCounts}
+          onSelectAll={() => setStatusFilter('all')}
+          onSelectItem={id => handleStatusSummaryClick(id as VideoOutputStatus)}
+          ariaLabel="狀態篩選"
+          tintInactive
+        />
+      )}
 
       {view === 'status' ? (
-        filteredVideos.length === 0 ? (
+        contextVideos.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground text-[13px]">沒有符合條件的影片</div>
         ) : (
           <VideoCoordinationStatusView
-            videos={filteredVideos}
+            videos={contextVideos}
             workLogTotals={workLogTotals}
             onPublish={setPublishingVideo}
           />
