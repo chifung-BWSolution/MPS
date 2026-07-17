@@ -1,3 +1,5 @@
+import { useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { VideoOutput, VideoOutputStatus } from '@/types/videoOutput';
 import {
@@ -5,6 +7,7 @@ import {
   VIDEO_OUTPUT_STATUS_LABELS,
   deriveVideoOutputStatus,
   formatShootLocation,
+  getEffectivePublishDate,
 } from '@/lib/videoOutputUtils';
 
 const STATUS_COLUMNS: VideoOutputStatus[] = [
@@ -35,6 +38,28 @@ const CATEGORY_COLORS = {
   internal: 'bg-sky-100 text-sky-700',
   client: 'bg-orange-100 text-orange-700',
 } as const;
+
+const UNASSIGNED_MONTH_KEY = 'unassigned';
+
+function getCurrentMonthKey(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Group by publish/planned date month; fall back to shoot date; undated → unassigned */
+function getVideoMonthKey(video: VideoOutput): string {
+  const date = getEffectivePublishDate(video) || video.shootAt?.trim() || null;
+  if (!date) return UNASSIGNED_MONTH_KEY;
+  const match = date.match(/^(\d{4})-(\d{2})/);
+  if (!match) return UNASSIGNED_MONTH_KEY;
+  return `${match[1]}-${match[2]}`;
+}
+
+function formatMonthLabel(monthKey: string): string {
+  if (monthKey === UNASSIGNED_MONTH_KEY) return '未定日期';
+  const [year, month] = monthKey.split('-');
+  return `${year}年${Number(month)}月`;
+}
 
 function getMilestoneProgress(video: VideoOutput): { done: number; total: number } {
   const milestones = [
@@ -120,13 +145,15 @@ function StatusVideoCard({
   );
 }
 
-type Props = {
+function MonthStatusBoard({
+  videos,
+  workLogTotals,
+  onPublish,
+}: {
   videos: VideoOutput[];
   workLogTotals: Map<string, number>;
   onPublish?: (video: VideoOutput) => void;
-};
-
-export function VideoCoordinationStatusView({ videos, workLogTotals, onPublish }: Props) {
+}) {
   const columns = STATUS_COLUMNS.reduce(
     (acc, status) => {
       acc[status] = videos.filter(v => deriveVideoOutputStatus(v) === status);
@@ -142,7 +169,7 @@ export function VideoCoordinationStatusView({ videos, workLogTotals, onPublish }
           <div
             key={status}
             className={cn(
-              'rounded-md p-3 border-t-2 min-h-[280px] bg-muted/20',
+              'rounded-md p-3 border-t-2 min-h-[160px] bg-muted/20',
               COLUMN_BORDER[status],
             )}
           >
@@ -176,12 +203,127 @@ export function VideoCoordinationStatusView({ videos, workLogTotals, onPublish }
                 />
               ))}
               {columns[status].length === 0 && (
-                <div className="text-center py-8 text-[12px] text-muted-foreground">暫無影片</div>
+                <div className="text-center py-6 text-[12px] text-muted-foreground">暫無影片</div>
               )}
             </div>
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+type MonthGroup = {
+  key: string;
+  videos: VideoOutput[];
+};
+
+type Props = {
+  videos: VideoOutput[];
+  workLogTotals: Map<string, number>;
+  onPublish?: (video: VideoOutput) => void;
+};
+
+export function VideoCoordinationStatusView({ videos, workLogTotals, onPublish }: Props) {
+  const currentMonthKey = useMemo(() => getCurrentMonthKey(), []);
+
+  const monthGroups = useMemo((): MonthGroup[] => {
+    const map = new Map<string, VideoOutput[]>();
+    for (const video of videos) {
+      const key = getVideoMonthKey(video);
+      const list = map.get(key);
+      if (list) list.push(video);
+      else map.set(key, [video]);
+    }
+
+    return [...map.entries()]
+      .sort(([a], [b]) => {
+        if (a === UNASSIGNED_MONTH_KEY) return 1;
+        if (b === UNASSIGNED_MONTH_KEY) return -1;
+        return b.localeCompare(a); // YYYY-MM descending
+      })
+      .map(([key, groupVideos]) => ({ key, videos: groupVideos }));
+  }, [videos]);
+
+  /** null = use default (current month, or newest if current has no videos) */
+  const [expandedOverride, setExpandedOverride] = useState<Set<string> | null>(null);
+
+  const defaultExpanded = useMemo(() => {
+    const keys = new Set<string>();
+    if (monthGroups.some(g => g.key === currentMonthKey)) {
+      keys.add(currentMonthKey);
+    } else if (monthGroups[0]) {
+      keys.add(monthGroups[0].key);
+    }
+    return keys;
+  }, [monthGroups, currentMonthKey]);
+
+  const expandedMonths = expandedOverride ?? defaultExpanded;
+
+  const toggleMonth = (key: string) => {
+    setExpandedOverride(prev => {
+      const base = prev ?? defaultExpanded;
+      const next = new Set(base);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  return (
+    <div className="space-y-3">
+      {monthGroups.map(group => {
+        const expanded = expandedMonths.has(group.key);
+        const isCurrent = group.key === currentMonthKey;
+
+        return (
+          <div
+            key={group.key}
+            className="rounded-md border border-[rgba(13,26,45,0.08)] bg-white shadow-card overflow-hidden"
+          >
+            <button
+              type="button"
+              onClick={() => toggleMonth(group.key)}
+              className={cn(
+                'w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-muted/40 transition-colors',
+                isCurrent && 'bg-teal-50/40',
+              )}
+            >
+              {expanded ? (
+                <ChevronDown size={14} className="text-muted-foreground shrink-0" />
+              ) : (
+                <ChevronRight size={14} className="text-muted-foreground shrink-0" />
+              )}
+              <span
+                className={cn(
+                  'text-[14px] font-semibold',
+                  isCurrent ? 'text-teal-700' : 'text-foreground',
+                )}
+              >
+                {formatMonthLabel(group.key)}
+              </span>
+              {isCurrent && (
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-teal-600 text-white">
+                  本月
+                </span>
+              )}
+              <span className="ml-auto text-[12px] text-muted-foreground tabular-nums">
+                {group.videos.length} 部
+              </span>
+            </button>
+
+            {expanded && (
+              <div className="px-3 pb-3 pt-1 border-t border-border/50">
+                <MonthStatusBoard
+                  videos={group.videos}
+                  workLogTotals={workLogTotals}
+                  onPublish={onPublish}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
