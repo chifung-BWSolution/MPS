@@ -2747,9 +2747,9 @@ export function DayReportModule({ subModule }: { subModule?: string }) {
       case 'submit': return { title: '提交匯報', subtitle: '支援香港/深圳雙辦公室 · 14天匯報總覽 · 常用項目快速填入 · 週六加班匯報 · 多日假期申報 · AI 追蹤 · 8h驗證。' };
       case 'today-team': return { title: '今日團隊', subtitle: '查看今日團隊提交狀況及工作匯報詳情。' };
       case 'calendar': return { title: '工作日曆', subtitle: '以日曆視圖查看歷史工作記錄，13種工作類型顏色標記。' };
-      case 'team-view': return { title: '團隊總覽', subtitle: '管理儀表板 — 過去14天缺交名單 · 團隊工時分析 · 匯報狀態總覽。' };
+      case 'team-view': return { title: '團隊&個人分析', subtitle: '管理儀表板 — 過去14天缺交名單 · 團隊工時分析 · 匯報狀態總覽。' };
       case 'monthly': return { title: '月度報告', subtitle: '本月工時排名、AI 使用統計及類別分佈分析。' };
-      case 'analytics': return { title: '工時分析', subtitle: '工作類型分佈、效率對比及 AI 效率深度分析。' };
+      case 'analytics': return { title: '項目分析', subtitle: '工作類型分佈、效率對比及 AI 效率深度分析。' };
       case 'work-categories': return { title: '工作類型管理', subtitle: '管理匯報工作類別的關聯規則 — 設定哪些類別關聯項目/網站、內部項目或無需關聯。' };
       case 'holiday-settings': return { title: '假期設定', subtitle: '自動載入香港及深圳公眾假期 · Admin 可設定星期六上班人員、公司活動日、免匯報日。' };
       default: return { title: '提交匯報', subtitle: '支援香港/深圳雙辦公室 · 14天匯報總覽 · 常用項目快速填入 · 週六加班匯報 · 多日假期申報 · AI 追蹤 · 8h驗證。' };

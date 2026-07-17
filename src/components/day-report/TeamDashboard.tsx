@@ -443,7 +443,7 @@ export function TeamDashboard() {
         <div>
           <h3 className="text-[18px] font-bold flex items-center gap-2">
             <Shield size={18} className="text-teal-600" />
-            團隊總覽 · 管理儀表板
+            團隊&個人分析 · 管理儀表板
           </h3>
           <div className="flex items-center gap-2 mt-0.5">
             <p className="text-[12px] text-muted-foreground">過去 14 天匯報狀況 · 審核管理 · 工時分析</p>
