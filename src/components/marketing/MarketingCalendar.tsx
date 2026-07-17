@@ -67,6 +67,107 @@ function VideoCalendarChip({ event }: { event: CustomEvent }) {
   );
 }
 
+/** Compact card for 月列表 — dense info, fixed height for even grid */
+function MonthListEventCard({
+  event,
+  onEdit,
+  onDelete,
+}: {
+  event: CustomEvent;
+  onEdit: (event: CustomEvent) => void;
+  onDelete: (event: CustomEvent) => void;
+}) {
+  const cfg = typeConfig[event.type] || typeConfig.social;
+  const isVideo = event.type === 'video';
+  const kind = event.accountKind === 'secondary' ? 'secondary' : 'main';
+  const kindCfg = accountKindStyle[kind];
+  const theme = event.themeTitle || event.title;
+  const metaBits = [event.company, event.brand, event.platform].filter(Boolean) as string[];
+  const titleText = isVideo ? theme : event.title;
+
+  return (
+    <div
+      className={cn(
+        'relative flex flex-col h-[112px] rounded-md border border-border/70 bg-white overflow-hidden',
+        'shadow-[0_1px_2px_rgba(0,20,40,0.04)] hover:border-teal-300/70 hover:shadow-sm transition-all',
+      )}
+    >
+      <div className={cn('absolute left-0 top-0 bottom-0 w-[3px]', cfg.dot)} />
+      <div className="flex flex-col h-full pl-3 pr-2 py-2 min-w-0">
+        <div className="flex items-start justify-between gap-1">
+          <div className="flex items-center gap-1 min-w-0 flex-wrap">
+            <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0', cfg.bg, cfg.text)}>
+              {cfg.label}
+            </span>
+            {isVideo && (
+              <span className={cn('text-[10px] font-semibold shrink-0', kindCfg.className)}>
+                {kindCfg.label}
+              </span>
+            )}
+            {event.hours != null && !isVideo && (
+              <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">{event.hours}h</span>
+            )}
+          </div>
+          {event.canManage && !isVideo ? (
+            <div className="flex items-center shrink-0">
+              <button
+                type="button"
+                title="編輯"
+                onClick={() => onEdit(event)}
+                className="p-1 rounded text-muted-foreground hover:text-teal-700 hover:bg-teal-50 transition-colors"
+              >
+                <Pencil size={12} />
+              </button>
+              <button
+                type="button"
+                title="刪除"
+                onClick={() => onDelete(event)}
+                className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 transition-colors"
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ) : null}
+        </div>
+
+        {isVideo && event.videoCode ? (
+          <p className="text-[10px] font-mono text-muted-foreground mt-1 truncate" title={event.videoCode}>
+            {event.videoCode}
+          </p>
+        ) : null}
+
+        <p
+          className={cn(
+            'text-[12px] font-semibold text-foreground leading-snug line-clamp-2',
+            isVideo && event.videoCode ? 'mt-0.5' : 'mt-1',
+          )}
+          title={titleText}
+        >
+          {titleText}
+        </p>
+
+        <div className="mt-auto pt-1 space-y-0.5 min-w-0">
+          {isVideo && event.channelName ? (
+            <p className="text-[10px] text-muted-foreground truncate" title={event.channelName}>
+              {event.channelName}
+            </p>
+          ) : null}
+          {metaBits.length > 0 ? (
+            <p className="text-[10px] text-muted-foreground truncate" title={metaBits.join(' · ')}>
+              {metaBits.join(' · ')}
+            </p>
+          ) : null}
+          {!isVideo && event.notes ? (
+            <p className="text-[10px] text-muted-foreground/75 truncate" title={event.notes}>
+              {event.notes}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type NewEventForm = {
   title: string;
   type: string;
@@ -536,86 +637,21 @@ export function MarketingCalendar() {
                     </button>
 
                     {!collapsed && (
-                      <div className="px-4 pb-3 pt-0.5 space-y-1.5">
-                        {events.map(event => {
-                          const cfg = typeConfig[event.type] || typeConfig.social;
-                          const isVideo = event.type === 'video';
-                          if (isVideo && event.videoCode) {
-                            return (
-                              <div
-                                key={event.id}
-                                className="flex items-start gap-3 pl-6 py-1.5 border-l-2 border-purple-200 ml-1"
-                              >
-                                <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0 mt-0.5', cfg.bg, cfg.text)}>
-                                  {cfg.label}
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                  <VideoCalendarChip event={event} />
-                                  {event.channelName && (
-                                    <p className="text-[10px] text-muted-foreground mt-1">{event.channelName}</p>
-                                  )}
-                                  <p className="text-[10px] text-muted-foreground/70 mt-1">
-                                    影片資料請至「影片製作」維護
-                                  </p>
-                                </div>
-                              </div>
-                            );
-                          }
-                          return (
-                            <div
+                      <div className="px-4 pb-4 pt-2 bg-muted/10">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5">
+                          {events.map(event => (
+                            <MonthListEventCard
                               key={event.id}
-                              className={cn(
-                                'flex items-start gap-3 pl-6 py-1.5 border-l-2 ml-1 group',
-                                cfg.border,
-                              )}
-                            >
-                              <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0', cfg.bg, cfg.text)}>
-                                {cfg.label}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-[13px] font-medium leading-snug">{event.title}</p>
-                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                  {event.platform && (
-                                    <span className="text-[10px] text-muted-foreground">{event.platform}</span>
-                                  )}
-                                  {event.company && (
-                                    <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">{event.company}</span>
-                                  )}
-                                  {event.brand && (
-                                    <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">{event.brand}</span>
-                                  )}
-                                  {event.hours != null && (
-                                    <span className="text-[10px] text-muted-foreground">{event.hours}h</span>
-                                  )}
-                                </div>
-                              </div>
-                              {event.canManage && (
-                                <div className="flex items-center gap-0.5 shrink-0 opacity-70 group-hover:opacity-100">
-                                  <button
-                                    type="button"
-                                    title="編輯"
-                                    onClick={() => openEditModal(event)}
-                                    className="p-1.5 rounded text-muted-foreground hover:text-teal-700 hover:bg-teal-50 transition-colors"
-                                  >
-                                    <Pencil size={13} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    title="刪除"
-                                    onClick={() => void handleDeleteEvent(event)}
-                                    className="p-1.5 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                                  >
-                                    <Trash2 size={13} />
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                              event={event}
+                              onEdit={openEditModal}
+                              onDelete={ev => void handleDeleteEvent(ev)}
+                            />
+                          ))}
+                        </div>
                         <button
                           type="button"
                           onClick={() => openAddModal(dateStr)}
-                          className="ml-7 mt-1 text-[11px] text-muted-foreground hover:text-teal-600 inline-flex items-center gap-1 transition-colors"
+                          className="mt-2.5 text-[11px] text-muted-foreground hover:text-teal-600 inline-flex items-center gap-1 transition-colors"
                         >
                           <Plus size={11} /> 此日新增
                         </button>
