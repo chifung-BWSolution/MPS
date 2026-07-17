@@ -129,39 +129,34 @@ function getMonthRange(anchor: Date): { start: string; end: string } {
   return { start: toDateStr(start), end: toDateStr(end) };
 }
 
-function getWeeksInMonth(anchor: Date): { key: string; label: string; start: string; end: string; dates: string[] }[] {
+/** Full Mon–Sun rows for a month; null = day outside this month */
+function getMonthWeekRows(anchor: Date): (string | null)[][] {
   const { start: monthStart, end: monthEnd } = getMonthRange(anchor);
-  const monthStartDate = parseDateStr(monthStart);
   const monthEndDate = parseDateStr(monthEnd);
-  let cursor = startOfWeekMonday(monthStartDate);
-  const weeks: { key: string; label: string; start: string; end: string; dates: string[] }[] = [];
-  let weekIndex = 1;
+  let cursor = startOfWeekMonday(parseDateStr(monthStart));
+  const rows: (string | null)[][] = [];
 
   while (cursor <= monthEndDate) {
-    const weekDates: string[] = [];
+    const row: (string | null)[] = [];
     for (let i = 0; i < 7; i++) {
-      const d = addDays(cursor, i);
-      const ds = toDateStr(d);
-      if (ds >= monthStart && ds <= monthEnd) weekDates.push(ds);
+      const ds = toDateStr(addDays(cursor, i));
+      row.push(ds >= monthStart && ds <= monthEnd ? ds : null);
     }
-    if (weekDates.length > 0) {
-      const start = weekDates[0];
-      const end = weekDates[weekDates.length - 1];
-      const s = parseDateStr(start);
-      const e = parseDateStr(end);
-      weeks.push({
-        key: `W${weekIndex}`,
-        label: `W${weekIndex} ${s.getMonth() + 1}/${s.getDate()}–${e.getMonth() + 1}/${e.getDate()}`,
-        start,
-        end,
-        dates: weekDates,
-      });
-      weekIndex++;
-    }
+    rows.push(row);
     cursor = addDays(cursor, 7);
   }
-  return weeks;
+  return rows;
 }
+
+type PersonalDayData = {
+  dateStr: string;
+  label: string;
+  isLeave: boolean;
+  leaveType: string | null;
+  isOff: boolean;
+  hoursByCategory: Record<string, number>;
+  totalHours: number;
+};
 
 function isWeekend(dateStr: string): boolean {
   const day = parseDateStr(dateStr).getDay();
@@ -367,8 +362,8 @@ export function TeamDashboard() {
     [periodType, anchorDate],
   );
 
-  const monthWeeks = useMemo(
-    () => (periodType === 'month' ? getWeeksInMonth(anchorDate) : []),
+  const monthWeekRows = useMemo(
+    () => (periodType === 'month' ? getMonthWeekRows(anchorDate) : []),
     [periodType, anchorDate],
   );
 
@@ -626,14 +621,20 @@ export function TeamDashboard() {
     });
   }, [staff, getStaffName, selectedDepartment]);
 
-  // Personal: daily breakdown
-  const personalDaily = useMemo(() => {
-    if (mode !== 'personal' || periodType !== 'week' || !selectedStaffId) return [];
+  // Personal: daily breakdown (week = 7 days; month = all days in month)
+  const personalDayByDate = useMemo(() => {
+    const map = new Map<string, PersonalDayData>();
+    if (mode !== 'personal' || !selectedStaffId) return map;
+
     const person = pickerStaff.find((s) => s.bubble_staff_id === selectedStaffId)
       || staff.find((s) => s.bubble_staff_id === selectedStaffId);
     const office = resolveOffice(person?.base_location);
 
-    return weekDates.map((dateStr) => {
+    const dates = periodType === 'week'
+      ? weekDates
+      : monthWeekRows.flatMap((row) => row.filter((d): d is string => !!d));
+
+    dates.forEach((dateStr) => {
       const report = reports.find((r) => r.staff_id === selectedStaffId && r.report_date === dateStr);
       const dayOffice = resolveOffice(person?.base_location, report?.office_location);
       const hoursByCategory: Record<string, number> = {};
@@ -652,7 +653,7 @@ export function TeamDashboard() {
       const offDay = isWeekend(dateStr) || isPublicHoliday(dateStr, dayOffice) || isPublicHoliday(dateStr, office);
       const isOff = !isLeave && offDay && totalHours === 0;
 
-      return {
+      map.set(dateStr, {
         dateStr,
         label: formatDayLabel(dateStr),
         isLeave,
@@ -660,55 +661,48 @@ export function TeamDashboard() {
         isOff,
         hoursByCategory,
         totalHours,
-      };
-    });
-  }, [mode, periodType, selectedStaffId, weekDates, reports, entries, categories, pickerStaff, staff]);
-
-  // Personal: weekly breakdown within month
-  const personalWeekly = useMemo(() => {
-    if (mode !== 'personal' || periodType !== 'month' || !selectedStaffId) return [];
-
-    return monthWeeks.map((week) => {
-      const hoursByCategory: Record<string, number> = {};
-      categories.forEach((c) => { hoursByCategory[c.id] = 0; });
-      let leaveDays = 0;
-      let offDays = 0;
-
-      const person = pickerStaff.find((s) => s.bubble_staff_id === selectedStaffId)
-        || staff.find((s) => s.bubble_staff_id === selectedStaffId);
-      const office = resolveOffice(person?.base_location);
-
-      week.dates.forEach((dateStr) => {
-        const report = reports.find((r) => r.staff_id === selectedStaffId && r.report_date === dateStr);
-        if (report?.is_leave) {
-          leaveDays++;
-          return;
-        }
-        let dayHours = 0;
-        if (report) {
-          entries
-            .filter((e) => e.day_report_id === report.id)
-            .forEach((e) => {
-              const h = Number(e.hours) || 0;
-              hoursByCategory[e.category] = (hoursByCategory[e.category] || 0) + h;
-              dayHours += h;
-            });
-        }
-        const dayOffice = resolveOffice(person?.base_location, report?.office_location);
-        const offDay = isWeekend(dateStr) || isPublicHoliday(dateStr, dayOffice) || isPublicHoliday(dateStr, office);
-        if (offDay && dayHours === 0) offDays++;
       });
-
-      const totalHours = Object.values(hoursByCategory).reduce((s, h) => s + h, 0);
-      return {
-        ...week,
-        hoursByCategory,
-        totalHours,
-        leaveDays,
-        offDays,
-      };
     });
-  }, [mode, periodType, selectedStaffId, monthWeeks, reports, entries, categories, pickerStaff, staff]);
+
+    return map;
+  }, [mode, periodType, selectedStaffId, weekDates, monthWeekRows, reports, entries, categories, pickerStaff, staff]);
+
+  const personalDaily = useMemo(
+    () => weekDates.map((d) => personalDayByDate.get(d)!).filter(Boolean),
+    [weekDates, personalDayByDate],
+  );
+
+  const renderPersonalDayCard = (day: PersonalDayData) => (
+    <div
+      key={day.dateStr}
+      className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-2.5 space-y-2 min-w-0"
+    >
+      <div className="space-y-1">
+        <p className="text-[12px] font-semibold leading-tight">{day.label}</p>
+        <div className="flex flex-wrap items-center gap-1">
+          {day.isLeave && (
+            <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
+              請假{day.leaveType ? ` · ${day.leaveType}` : ''}
+            </span>
+          )}
+          {day.isOff && (
+            <span className="text-[9px] px-1 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
+              放假
+            </span>
+          )}
+          {!day.isLeave && !day.isOff && (
+            <span className="text-[11px] font-bold text-teal-700 tabular-nums">{day.totalHours}h</span>
+          )}
+        </div>
+      </div>
+      <CategoryHoursList
+        categories={categories}
+        hoursByCategory={(day.isLeave || day.isOff) ? {} : day.hoursByCategory}
+        totalHours={(day.isLeave || day.isOff) ? 0 : day.totalHours}
+        layout="stack"
+      />
+    </div>
+  );
 
   const showInitialLoading = loading && staff.length === 0 && reports.length === 0;
 
@@ -924,72 +918,34 @@ export function TeamDashboard() {
       ) : (
         <div className="space-y-3">
           <div className="text-[13px] text-muted-foreground">
-            {getStaffName(selectedStaffId || '')}
-            {periodType === 'week' ? ' · 每日工作類別工時' : ' · 每周工作類別工時'}
+            {getStaffName(selectedStaffId || '')} · 每日工作類別工時
           </div>
 
           {periodType === 'week' ? (
             <div className="grid grid-cols-7 gap-2">
-              {personalDaily.map((day) => (
-                <div
-                  key={day.dateStr}
-                  className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-2.5 space-y-2 min-w-0"
-                >
-                  <div className="space-y-1">
-                    <p className="text-[12px] font-semibold leading-tight">{day.label}</p>
-                    <div className="flex flex-wrap items-center gap-1">
-                      {day.isLeave && (
-                        <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
-                          請假{day.leaveType ? ` · ${day.leaveType}` : ''}
-                        </span>
-                      )}
-                      {day.isOff && (
-                        <span className="text-[9px] px-1 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
-                          放假
-                        </span>
-                      )}
-                      {!day.isLeave && !day.isOff && (
-                        <span className="text-[11px] font-bold text-teal-700 tabular-nums">{day.totalHours}h</span>
-                      )}
-                    </div>
-                  </div>
-                  <CategoryHoursList
-                    categories={categories}
-                    hoursByCategory={(day.isLeave || day.isOff) ? {} : day.hoursByCategory}
-                    totalHours={(day.isLeave || day.isOff) ? 0 : day.totalHours}
-                    layout="stack"
-                  />
-                </div>
-              ))}
+              {personalDaily.map((day) => renderPersonalDayCard(day))}
             </div>
           ) : (
-            <div className="space-y-3">
-              {personalWeekly.map((week) => (
-                <div
-                  key={week.key}
-                  className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-4 space-y-3"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <p className="text-[13px] font-semibold">{week.label}</p>
-                      {week.leaveDays > 0 && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
-                          請假 {week.leaveDays} 日
-                        </span>
-                      )}
-                      {week.offDays > 0 && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
-                          放假 {week.offDays} 日
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[13px] font-bold text-teal-700 tabular-nums">{week.totalHours}h</span>
-                  </div>
-                  <CategoryHoursList
-                    categories={categories}
-                    hoursByCategory={week.hoursByCategory}
-                    totalHours={week.totalHours}
-                  />
+            <div className="space-y-2">
+              {monthWeekRows.map((row, rowIndex) => (
+                <div key={`month-row-${rowIndex}`} className="grid grid-cols-7 gap-2">
+                  {row.map((dateStr, colIndex) => {
+                    if (!dateStr) {
+                      return (
+                        <div
+                          key={`empty-${rowIndex}-${colIndex}`}
+                          className="rounded-lg border border-transparent bg-transparent min-h-[1px]"
+                        />
+                      );
+                    }
+                    const day = personalDayByDate.get(dateStr);
+                    return day ? renderPersonalDayCard(day) : (
+                      <div
+                        key={dateStr}
+                        className="rounded-lg border border-dashed border-[rgba(13,26,45,0.08)] bg-white/50 min-h-[80px]"
+                      />
+                    );
+                  })}
                 </div>
               ))}
             </div>
