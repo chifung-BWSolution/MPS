@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Users, Clock, AlertTriangle, BarChart3, Calendar,
-  Eye, ChevronDown, ChevronUp, Shield, Loader2,
-  UserCheck, RefreshCw, Bot
+  Users, Calendar, ChevronLeft, ChevronRight, Loader2, RefreshCw, User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -13,6 +11,7 @@ import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
 import {
   fetchDepartmentByStaffId,
   fetchDepartmentMap,
+  fetchDistinctDepartments,
   fetchStaffIdsByDepartment,
   isValidDepartment,
 } from '@/components/day-report/departmentLookup';
@@ -39,19 +38,11 @@ interface DayReport {
   staff_id: string;
   report_date: string;
   total_hours: number;
-  target_hours: number;
-  ot_hours: number;
   is_leave: boolean;
-  is_half_day: boolean;
   leave_type: string | null;
   office_location: string;
   is_holiday: boolean;
   is_weekend: boolean;
-  under_hours_reason: string | null;
-  status: string;
-  reviewer_id: string | null;
-  submitted_at: string | null;
-  reviewed_at: string | null;
 }
 
 interface DayReportEntry {
@@ -59,938 +50,864 @@ interface DayReportEntry {
   day_report_id: string;
   staff_id: string;
   category: string;
-  related_id: string | null;
-  related_name: string | null;
-  title: string;
   hours: number;
-  outcome_type: string | null;
-  outcome_url: string | null;
-  growth_experience: string | null;
-  is_ai_assisted: boolean;
 }
 
-
+type CategoryMeta = { id: string; label: string; icon: string; color: string; bg: string; sortOrder: number };
+type Mode = 'team' | 'personal';
+type PeriodType = 'week' | 'month';
+type OfficeLocation = 'hk' | 'sz';
 
 // ============================
-// Helpers
+// Date / Holiday Helpers
 // ============================
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  const days = ['日', '一', '二', '三', '四', '五', '六'];
-  return `${d.getMonth() + 1}/${d.getDate()} (${days[d.getDay()]})`;
+const hkPublicHolidays2025 = [
+  '2025-01-01',
+  '2025-01-29', '2025-01-30', '2025-01-31', '2025-02-01',
+  '2025-04-04',
+  '2025-04-18', '2025-04-19',
+  '2025-04-21',
+  '2025-05-01',
+  '2025-05-05',
+  '2025-05-31',
+  '2025-07-01',
+  '2025-10-01',
+  '2025-10-07',
+  '2025-12-25', '2025-12-26',
+];
+
+const szPublicHolidays2025 = [
+  '2025-01-01',
+  '2025-01-28', '2025-01-29', '2025-01-30', '2025-01-31', '2025-02-01', '2025-02-02', '2025-02-03', '2025-02-04',
+  '2025-04-04', '2025-04-05', '2025-04-06',
+  '2025-05-01', '2025-05-02', '2025-05-03', '2025-05-04', '2025-05-05',
+  '2025-05-31', '2025-06-01', '2025-06-02',
+  '2025-10-01', '2025-10-02', '2025-10-03', '2025-10-04', '2025-10-05', '2025-10-06', '2025-10-07',
+];
+
+const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
+
+function toDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
-function getLast14Days(): string[] {
+function parseDateStr(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function startOfWeekMonday(date: Date): Date {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function getWeekRange(anchor: Date): { start: string; end: string; dates: string[] } {
+  const start = startOfWeekMonday(anchor);
   const dates: string[] = [];
-  const today = new Date();
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    dates.push(d.toISOString().split('T')[0]);
+  for (let i = 0; i < 7; i++) dates.push(toDateStr(addDays(start, i)));
+  return { start: dates[0], end: dates[6], dates };
+}
+
+function getMonthRange(anchor: Date): { start: string; end: string } {
+  const start = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const end = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
+  return { start: toDateStr(start), end: toDateStr(end) };
+}
+
+function getWeeksInMonth(anchor: Date): { key: string; label: string; start: string; end: string; dates: string[] }[] {
+  const { start: monthStart, end: monthEnd } = getMonthRange(anchor);
+  const monthStartDate = parseDateStr(monthStart);
+  const monthEndDate = parseDateStr(monthEnd);
+  let cursor = startOfWeekMonday(monthStartDate);
+  const weeks: { key: string; label: string; start: string; end: string; dates: string[] }[] = [];
+  let weekIndex = 1;
+
+  while (cursor <= monthEndDate) {
+    const weekDates: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(cursor, i);
+      const ds = toDateStr(d);
+      if (ds >= monthStart && ds <= monthEnd) weekDates.push(ds);
+    }
+    if (weekDates.length > 0) {
+      const start = weekDates[0];
+      const end = weekDates[weekDates.length - 1];
+      const s = parseDateStr(start);
+      const e = parseDateStr(end);
+      weeks.push({
+        key: `W${weekIndex}`,
+        label: `W${weekIndex} ${s.getMonth() + 1}/${s.getDate()}–${e.getMonth() + 1}/${e.getDate()}`,
+        start,
+        end,
+        dates: weekDates,
+      });
+      weekIndex++;
+    }
+    cursor = addDays(cursor, 7);
   }
-  return dates;
+  return weeks;
 }
 
 function isWeekend(dateStr: string): boolean {
-  const d = new Date(dateStr);
-  return d.getDay() === 0 || d.getDay() === 6;
+  const day = parseDateStr(dateStr).getDay();
+  return day === 0 || day === 6;
 }
 
+function isPublicHoliday(dateStr: string, office: OfficeLocation): boolean {
+  const list = office === 'sz' ? szPublicHolidays2025 : hkPublicHolidays2025;
+  return list.includes(dateStr);
+}
+
+function resolveOffice(baseLocation: string | null | undefined, officeLocation?: string | null): OfficeLocation {
+  const raw = `${officeLocation || ''} ${baseLocation || ''}`.toLowerCase();
+  if (raw.includes('sz') || raw.includes('深圳') || raw.includes('shenzhen')) return 'sz';
+  return 'hk';
+}
+
+function formatDayLabel(dateStr: string): string {
+  const d = parseDateStr(dateStr);
+  return `${d.getMonth() + 1}/${d.getDate()}（${WEEKDAY_LABELS[d.getDay()]}）`;
+}
+
+function formatPeriodLabel(periodType: PeriodType, anchor: Date): string {
+  if (periodType === 'week') {
+    const { start, end } = getWeekRange(anchor);
+    const s = parseDateStr(start);
+    const e = parseDateStr(end);
+    return `${s.getFullYear()}/${s.getMonth() + 1}/${s.getDate()} – ${e.getMonth() + 1}/${e.getDate()}`;
+  }
+  return `${anchor.getFullYear()}年${anchor.getMonth() + 1}月`;
+}
+
+function pct(hours: number, total: number): number {
+  return total > 0 ? (hours / total) * 100 : 0;
+}
+
+function isAdminRole(role: string | null | undefined): boolean {
+  const normalized = (role || '').toLowerCase().replace(/[\s-]/g, '_');
+  return normalized === 'super_admin'
+    || normalized === 'management'
+    || normalized === 'administrator'
+    || normalized === 'admin';
+}
 
 // ============================
-// Team Dashboard Component
+// Category hours bar list
+// ============================
+function CategoryHoursList({
+  categories,
+  hoursByCategory,
+  totalHours,
+}: {
+  categories: CategoryMeta[];
+  hoursByCategory: Record<string, number>;
+  totalHours: number;
+}) {
+  return (
+    <div className="space-y-2">
+      {categories.map((cat) => {
+        const hours = hoursByCategory[cat.id] || 0;
+        const percentage = pct(hours, totalHours);
+        return (
+          <div key={cat.id} className="flex items-center gap-2">
+            <span className={cn(
+              'text-[10px] px-1.5 py-0.5 rounded w-[72px] text-center shrink-0 font-medium truncate',
+              cat.bg, cat.color,
+            )}>
+              {cat.icon} {cat.label}
+            </span>
+            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-teal-500 rounded-full transition-all"
+                style={{ width: `${Math.min(percentage, 100)}%` }}
+              />
+            </div>
+            <span className="text-[11px] font-semibold w-[36px] text-right tabular-nums">{hours}h</span>
+            <span className="text-[10px] text-muted-foreground w-[32px] text-right tabular-nums">
+              {percentage.toFixed(0)}%
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ============================
+// Main Component
 // ============================
 export function TeamDashboard() {
   const { systemUser } = useAuth();
   const { types: dynamicTypes } = useDayReportTypes();
-  // Build a lookup that includes both built-in categories and any
-  // custom 工作類型 the user has added in 工作類型管理. Custom rows fall
-  // back to a neutral icon/colour so they no longer render as the raw id.
-  const categoryLookup = useMemo(() => {
-    const map: Record<string, { label: string; icon: string; color: string; bg: string }> = {};
-    for (const [k, v] of Object.entries(categoryConfig)) {
-      map[k] = { label: v.label, icon: v.icon, color: v.color, bg: v.bg };
+
+  const isAdmin = useMemo(() => isAdminRole(systemUser?.role), [systemUser?.role]);
+
+  const categories = useMemo((): CategoryMeta[] => {
+    if (dynamicTypes.length > 0) {
+      return dynamicTypes
+        .filter((t) => t.isActive)
+        .slice()
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((t) => ({
+          id: t.id,
+          label: t.label,
+          icon: t.icon || '📋',
+          color: t.color || 'text-gray-600',
+          bg: t.bg || 'bg-gray-100',
+          sortOrder: t.sortOrder,
+        }));
     }
-    for (const t of dynamicTypes) {
-      map[t.id] = {
-        label: t.label,
-        icon: t.icon || '📋',
-        color: t.color || 'text-gray-600',
-        bg: t.bg || 'bg-gray-100',
-      };
-    }
-    return map;
+    return Object.entries(categoryConfig).map(([id, cfg], index) => ({
+      id,
+      label: cfg.label,
+      icon: cfg.icon,
+      color: cfg.color,
+      bg: cfg.bg,
+      sortOrder: index,
+    }));
   }, [dynamicTypes]);
+
+  const [mode, setMode] = useState<Mode>('team');
+  const [periodType, setPeriodType] = useState<PeriodType>('week');
+  const [anchorDate, setAnchorDate] = useState(() => new Date());
+  const [ownDepartment, setOwnDepartment] = useState<string | null>(null);
+  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
+  const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
+
   const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [pickerStaff, setPickerStaff] = useState<StaffMember[]>([]);
   const [staffNameById, setStaffNameById] = useState<Record<string, string>>({});
-  const [activeStaffCount, setActiveStaffCount] = useState(0);
   const [reports, setReports] = useState<DayReport[]>([]);
   const [entries, setEntries] = useState<DayReportEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [expandedReports, setExpandedReports] = useState<Set<string>>(new Set());
-  const toggleExpandedReport = (id: string) => {
-    setExpandedReports(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-  const [viewTab, setViewTab] = useState<'missing' | 'all'>('all');
 
-  const [currentDepartment, setCurrentDepartment] = useState<string | null>(null);
-  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null); // null = not yet initialized
+  const dateRange = useMemo(() => {
+    if (periodType === 'week') {
+      const { start, end } = getWeekRange(anchorDate);
+      return { start, end };
+    }
+    return getMonthRange(anchorDate);
+  }, [periodType, anchorDate]);
 
-  const last14Days = useMemo(() => getLast14Days(), []);
-  const workingDays = useMemo(() => last14Days.filter(d => !isWeekend(d)), [last14Days]);
+  const weekDates = useMemo(
+    () => (periodType === 'week' ? getWeekRange(anchorDate).dates : []),
+    [periodType, anchorDate],
+  );
 
-  // Available department options for the admin dropdown
-  const DEPARTMENT_OPTIONS = [
-    { value: 'System', label: 'System' },
-    { value: '__ALL__', label: '全部門 (All)' },
-    { value: 'FC', label: 'FC' },
-    { value: 'Wine', label: 'Wine' },
-    { value: 'Accounting & Admin', label: 'Accounting & Admin' },
-    { value: 'Marketing & Video', label: 'Marketing & Video' },
-  ];
+  const monthWeeks = useMemo(
+    () => (periodType === 'month' ? getWeeksInMonth(anchorDate) : []),
+    [periodType, anchorDate],
+  );
 
-  // ============================
-  // Initialize: Detect user's own department on mount
-  // IMPORTANT: Even super_admin defaults to their own department (no bypass)
-  // ============================
+  // Resolve own department
   useEffect(() => {
-    const detectOwnDepartment = async () => {
+    const detect = async () => {
       if (!systemUser) return;
-      let dept: string | null = null;
-
-      // First try from systemUser context (from system_users table)
-      if (systemUser.department) {
-        dept = systemUser.department;
-        console.log('[TeamDashboard] 🏢 Got department from systemUser context:', dept);
-      }
-
-      // Fallback: query user_info by staff_id for department
+      let dept = systemUser.department || null;
       if (!dept) {
         try {
           dept = await fetchDepartmentByStaffId(systemUser.bubble_staff_id);
-          console.log('[TeamDashboard] 🏢 Got department from user_info:', dept);
-        } catch (err) {
-          console.warn('[TeamDashboard] ⚠️ user_info query failed:', err);
+        } catch {
+          dept = null;
         }
       }
-
-      // Validate the detected department exists in our options list
-      const validDepts = DEPARTMENT_OPTIONS.map(o => o.value).filter(v => v !== '__ALL__');
-      if (dept && !validDepts.includes(dept)) {
-        console.warn(`[TeamDashboard] ⚠️ Detected department "${dept}" is not in DEPARTMENT_OPTIONS. Defaulting to 'System'.`);
-        dept = 'System'; // Hard fallback for safety
+      const valid = isValidDepartment(dept) ? dept!.trim() : null;
+      setOwnDepartment(valid);
+      if (isAdmin) {
+        setSelectedDepartment((prev) => prev ?? '__ALL__');
+      } else {
+        setSelectedDepartment(valid);
       }
-
-      // Default selection = user's own department (even for super_admin — NO BYPASS)
-      const finalDept = dept || 'System';
-      setSelectedDepartment(finalDept);
-      setCurrentDepartment(finalDept);
-      console.log('[TeamDashboard] ✅ Final department selection:', finalDept);
+      setSelectedStaffId((prev) => prev ?? systemUser.bubble_staff_id);
     };
-    detectOwnDepartment();
-  }, [systemUser]);
+    detect();
+  }, [systemUser, isAdmin]);
 
-  // ============================
-  // Data Fetching (reactive to selectedDepartment)
-  // ============================
+  // Load department options for admin
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetchDistinctDepartments().then(setDepartmentOptions);
+  }, [isAdmin]);
+
+  const cleanStaffRows = useCallback(async (rawStaffData: Omit<StaffMember, 'department'>[]): Promise<StaffMember[]> => {
+    const deptMap = await fetchDepartmentMap(
+      rawStaffData.map((s) => s.bubble_staff_id).filter(Boolean),
+    );
+    const EXCLUDED_POSITIONS = ['director', 'director / management'];
+    const EXCLUDED_DEPARTMENTS = ['management'];
+    const cleaned = rawStaffData.map((s) => ({
+      ...s,
+      department: deptMap[s.bubble_staff_id] || null,
+    })).filter((s) => {
+      const pos = (s.position || '').toLowerCase().trim();
+      const dept = (s.department || '').toLowerCase().trim();
+      return !EXCLUDED_POSITIONS.includes(pos) && !EXCLUDED_DEPARTMENTS.includes(dept);
+    });
+
+    const seen = new Set<string>();
+    return cleaned.filter((s) => {
+      if (!s.bubble_staff_id || seen.has(s.bubble_staff_id)) return false;
+      seen.add(s.bubble_staff_id);
+      return true;
+    });
+  }, []);
+
   const fetchData = useCallback(async () => {
-    if (selectedDepartment === null) return; // Not yet initialized
+    if (!systemUser || selectedDepartment === null || !selectedStaffId) return;
 
     try {
-      const activeDept = selectedDepartment === '__ALL__' ? null : selectedDepartment;
-      setCurrentDepartment(activeDept);
-
-      // Step 1: Determine which staff IDs are visible based on active department
-      let allowedStaffIds: string[] | null = null; // null = no filter (show all)
-
-      if (activeDept) {
-        allowedStaffIds = await fetchStaffIdsByDepartment(activeDept);
-        console.log(`[TeamDashboard] 🏢 Department filter: "${activeDept}" — ${allowedStaffIds.length} staff IDs`, allowedStaffIds);
-
-        // If no staff found for this department, set empty and return early
-        if (allowedStaffIds.length === 0) {
-          console.warn(`[TeamDashboard] ⚠️ No staff found for department "${activeDept}". Showing empty state.`);
-          setStaff([]);
-          setStaffNameById({});
-          setActiveStaffCount(0);
-          setReports([]);
-          setEntries([]);
-          setLoading(false);
-          setRefreshing(false);
-          return;
+      // --- Picker staff (personal mode dropdown) ---
+      let pickerIds: string[] | null = null;
+      if (!isAdmin) {
+        if (!ownDepartment) {
+          pickerIds = [systemUser.bubble_staff_id];
+        } else {
+          pickerIds = await fetchStaffIdsByDepartment(ownDepartment);
+          if (!pickerIds.includes(systemUser.bubble_staff_id)) {
+            pickerIds = [...pickerIds, systemUser.bubble_staff_id];
+          }
         }
-      } else {
-        console.log('[TeamDashboard] 🌐 Showing ALL departments (no filter)');
       }
 
-      // Step 2: Fetch active staff in scope (department filter via user_info → allowedStaffIds)
+      let pickerQuery = supabase
+        .from('staff_directory')
+        .select('id, bubble_staff_id, display_name, position, user_role, status, base_location, team_id, business_unit, profile_pic_url')
+        .eq('status', 'active')
+        .neq('position', 'Director');
+      if (pickerIds !== null) pickerQuery = pickerQuery.in('bubble_staff_id', pickerIds);
+      const { data: rawPicker } = await pickerQuery;
+      const cleanedPicker = await cleanStaffRows(rawPicker || []);
+      setPickerStaff(cleanedPicker);
+
+      // Ensure selected staff is visible under permission
+      const allowedPickerIds = new Set(cleanedPicker.map((s) => s.bubble_staff_id));
+      let effectiveStaffId = selectedStaffId;
+      if (!allowedPickerIds.has(effectiveStaffId)) {
+        effectiveStaffId = systemUser.bubble_staff_id;
+        setSelectedStaffId(effectiveStaffId);
+      }
+
+      // --- Scope staff for data fetch ---
+      let allowedStaffIds: string[] | null = null;
+      if (mode === 'personal') {
+        allowedStaffIds = [effectiveStaffId];
+      } else if (!isAdmin) {
+        allowedStaffIds = ownDepartment
+          ? await fetchStaffIdsByDepartment(ownDepartment)
+          : [systemUser.bubble_staff_id];
+      } else if (selectedDepartment !== '__ALL__') {
+        allowedStaffIds = await fetchStaffIdsByDepartment(selectedDepartment);
+      }
+
+      if (allowedStaffIds !== null && allowedStaffIds.length === 0) {
+        setStaff([]);
+        setStaffNameById({});
+        setReports([]);
+        setEntries([]);
+        return;
+      }
+
       let staffQuery = supabase
         .from('staff_directory')
         .select('id, bubble_staff_id, display_name, position, user_role, status, base_location, team_id, business_unit, profile_pic_url')
         .eq('status', 'active')
         .neq('position', 'Director');
+      if (allowedStaffIds !== null) staffQuery = staffQuery.in('bubble_staff_id', allowedStaffIds);
+      const { data: rawStaff } = await staffQuery;
+      const staffData = await cleanStaffRows(rawStaff || []);
 
-      if (allowedStaffIds !== null) {
-        staffQuery = staffQuery.in('bubble_staff_id', allowedStaffIds);
-      }
-
-      const { data: rawStaffData } = await staffQuery;
-
-      const deptMap = await fetchDepartmentMap(
-        (rawStaffData || []).map(s => s.bubble_staff_id).filter(Boolean),
-      );
-
-      // Post-fetch exclusion: Remove legacy Director rows and Management department (from user_info)
-      const EXCLUDED_POSITIONS = ['director', 'director / management'];
-      const EXCLUDED_DEPARTMENTS = ['management'];
-      const cleanedStaffData = (rawStaffData || []).map(s => ({
-        ...s,
-        department: deptMap[s.bubble_staff_id] || null,
-      })).filter(s => {
-        const pos = (s.position || '').toLowerCase().trim();
-        const dept = (s.department || '').toLowerCase().trim();
-        if (EXCLUDED_POSITIONS.includes(pos) || EXCLUDED_DEPARTMENTS.includes(dept)) {
-          console.log(`[TeamDashboard] 🚫 Excluding legacy row: "${s.display_name}" (position: "${s.position}", dept: "${s.department}")`);
-          return false;
-        }
-        return true;
-      });
-
-      // Deduplicate by bubble_staff_id — keep only the first occurrence per unique employee
-      // This prevents duplicate rows (e.g., same person with different positions) from appearing
-      const seenStaffIds = new Set<string>();
-      const staffData = cleanedStaffData.filter(s => {
-        if (!s.bubble_staff_id || seenStaffIds.has(s.bubble_staff_id)) {
-          return false;
-        }
-        seenStaffIds.add(s.bubble_staff_id);
-        return true;
-      });
-
-      console.log(`[TeamDashboard] ✅ Staff fetched: ${rawStaffData?.length || 0} raw → ${cleanedStaffData.length} after exclusion → ${staffData.length} after dedup`);
-
-      // Step 3: Fetch reports for last 14 days (filtered by allowed staff)
-      const startDate = last14Days[last14Days.length - 1];
-      const endDate = last14Days[0];
       let reportQuery = supabase
         .from('day_reports')
-        .select('*')
-        .gte('report_date', startDate)
-        .lte('report_date', endDate);
-
-      if (allowedStaffIds !== null) {
-        reportQuery = reportQuery.in('staff_id', allowedStaffIds);
-      }
-
+        .select('id, staff_id, report_date, total_hours, is_leave, leave_type, office_location, is_holiday, is_weekend')
+        .gte('report_date', dateRange.start)
+        .lte('report_date', dateRange.end);
+      if (allowedStaffIds !== null) reportQuery = reportQuery.in('staff_id', allowedStaffIds);
       const { data: reportData } = await reportQuery;
 
-      // Fetch entries for those reports
+      let entryData: DayReportEntry[] = [];
       if (reportData && reportData.length > 0) {
-        const reportIds = reportData.map(r => r.id);
-        const { data: entryData } = await supabase
-          .from('day_report_entries')
-          .select('*')
-          .in('day_report_id', reportIds);
-        setEntries(entryData || []);
-      } else {
-        setEntries([]);
+        const reportIds = reportData.map((r) => r.id);
+        // Chunk in case of many IDs
+        const chunkSize = 200;
+        for (let i = 0; i < reportIds.length; i += chunkSize) {
+          const chunk = reportIds.slice(i, i + chunkSize);
+          const { data } = await supabase
+            .from('day_report_entries')
+            .select('id, day_report_id, staff_id, category, hours')
+            .in('day_report_id', chunk);
+          if (data) entryData = entryData.concat(data);
+        }
       }
 
-      // Build display-name map for everyone in scope (A: staff_directory + user_info fallback)
-      const scopeStaffIds = allowedStaffIds !== null
-        ? allowedStaffIds
-        : [...new Set((staffData || []).map(s => s.bubble_staff_id).filter(Boolean))];
-      const reportStaffIds = [...new Set((reportData || []).map(r => r.staff_id).filter(Boolean))];
-      const nameLookupIds = [...new Set([...scopeStaffIds, ...reportStaffIds])];
-      const nameMap = await fetchStaffNameMap(nameLookupIds);
+      const nameIds = [
+        ...new Set([
+          ...staffData.map((s) => s.bubble_staff_id),
+          ...cleanedPicker.map((s) => s.bubble_staff_id),
+          ...(reportData || []).map((r) => r.staff_id),
+        ].filter(Boolean)),
+      ];
+      const nameMap = await fetchStaffNameMap(nameIds);
 
-      setStaff(staffData || []);
+      setStaff(staffData);
       setStaffNameById(nameMap);
-      // KPI: active staff in department scope (department from user_info)
-      setActiveStaffCount(
-        allowedStaffIds !== null
-          ? staffData.length
-          : staffData.filter(s => isValidDepartment(s.department)).length,
-      );
-      setReports(reportData || []);
+      setReports((reportData || []) as DayReport[]);
+      setEntries(entryData);
     } catch (err) {
-      console.error('Failed to fetch team dashboard data:', err);
+      console.error('[TeamDashboard] Failed to fetch analysis data:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [last14Days, selectedDepartment]);
+  }, [
+    systemUser,
+    selectedDepartment,
+    selectedStaffId,
+    isAdmin,
+    ownDepartment,
+    mode,
+    dateRange.start,
+    dateRange.end,
+    cleanStaffRows,
+  ]);
 
   useEffect(() => {
-    if (selectedDepartment !== null) {
+    if (selectedDepartment !== null && selectedStaffId) {
+      setLoading(true);
       fetchData();
     }
-  }, [fetchData, selectedDepartment]);
+  }, [fetchData, selectedDepartment, selectedStaffId]);
 
   const handleRefresh = () => {
     setRefreshing(true);
     fetchData();
   };
 
-  // ============================
-  // Computed Data
-  // ============================
-  const missingReports = useMemo(() => {
-    const missing: { staff: StaffMember; missingDates: string[] }[] = [];
-    staff.forEach(s => {
-      const staffReports = reports.filter(r => r.staff_id === s.bubble_staff_id);
-      const reportedDates = staffReports.map(r => r.report_date);
-      const missingDates = workingDays.filter(d => !reportedDates.includes(d));
-      if (missingDates.length > 0) {
-        missing.push({ staff: s, missingDates });
-      }
+  const shiftPeriod = (dir: -1 | 1) => {
+    setAnchorDate((prev) => {
+      if (periodType === 'week') return addDays(startOfWeekMonday(prev), dir * 7);
+      return new Date(prev.getFullYear(), prev.getMonth() + dir, 1);
     });
-    return missing.sort((a, b) => b.missingDates.length - a.missingDates.length);
-  }, [staff, reports, workingDays]);
+  };
 
-  const teamHoursData = useMemo(() => {
-    const grouped: Record<string, { totalHours: number; otHours: number; reportCount: number; aiCount: number }> = {};
-    const businessUnits = [...new Set(staff.map(s => s.business_unit || '未分組'))];
+  const getStaffName = useCallback((staffId: string): string => {
+    return staffNameById[staffId]
+      || staff.find((s) => s.bubble_staff_id === staffId)?.display_name
+      || pickerStaff.find((s) => s.bubble_staff_id === staffId)?.display_name
+      || staffId;
+  }, [staffNameById, staff, pickerStaff]);
 
-    businessUnits.forEach(bu => {
-      const teamStaff = staff.filter(s => (s.business_unit || '未分組') === bu);
-      let totalHours = 0;
-      let otHours = 0;
-      let reportCount = 0;
-      let aiCount = 0;
+  // Hours by staff → category
+  const staffCategoryHours = useMemo(() => {
+    const map = new Map<string, Record<string, number>>();
+    const ensure = (staffId: string) => {
+      if (!map.has(staffId)) {
+        const empty: Record<string, number> = {};
+        categories.forEach((c) => { empty[c.id] = 0; });
+        map.set(staffId, empty);
+      }
+      return map.get(staffId)!;
+    };
+    staff.forEach((s) => ensure(s.bubble_staff_id));
+    entries.forEach((e) => {
+      const row = ensure(e.staff_id);
+      row[e.category] = (row[e.category] || 0) + (Number(e.hours) || 0);
+    });
+    return map;
+  }, [staff, entries, categories]);
 
-      teamStaff.forEach(s => {
-        const staffReports = reports.filter(r => r.staff_id === s.bubble_staff_id && !r.is_leave);
-        staffReports.forEach(r => {
-          totalHours += Number(r.total_hours) || 0;
-          otHours += Number(r.ot_hours) || 0;
-          reportCount++;
-        });
-        // Check AI usage in entries
-        const staffEntries = entries.filter(e => e.staff_id === s.bubble_staff_id && e.is_ai_assisted);
-        aiCount += staffEntries.length;
+  const teamGroups = useMemo(() => {
+    const groups = new Map<string, StaffMember[]>();
+    const sorted = [...staff].sort((a, b) => getStaffName(a.bubble_staff_id).localeCompare(getStaffName(b.bubble_staff_id), 'zh-Hant'));
+    sorted.forEach((s) => {
+      const dept = s.department || '未分組';
+      if (!groups.has(dept)) groups.set(dept, []);
+      groups.get(dept)!.push(s);
+    });
+    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b, 'zh-Hant'));
+  }, [staff, getStaffName]);
+
+  // Personal: daily breakdown
+  const personalDaily = useMemo(() => {
+    if (mode !== 'personal' || periodType !== 'week' || !selectedStaffId) return [];
+    const person = pickerStaff.find((s) => s.bubble_staff_id === selectedStaffId)
+      || staff.find((s) => s.bubble_staff_id === selectedStaffId);
+    const office = resolveOffice(person?.base_location);
+
+    return weekDates.map((dateStr) => {
+      const report = reports.find((r) => r.staff_id === selectedStaffId && r.report_date === dateStr);
+      const dayOffice = resolveOffice(person?.base_location, report?.office_location);
+      const hoursByCategory: Record<string, number> = {};
+      categories.forEach((c) => { hoursByCategory[c.id] = 0; });
+
+      if (report && !report.is_leave) {
+        entries
+          .filter((e) => e.day_report_id === report.id)
+          .forEach((e) => {
+            hoursByCategory[e.category] = (hoursByCategory[e.category] || 0) + (Number(e.hours) || 0);
+          });
+      }
+
+      const totalHours = Object.values(hoursByCategory).reduce((s, h) => s + h, 0);
+      const isLeave = !!report?.is_leave;
+      const offDay = isWeekend(dateStr) || isPublicHoliday(dateStr, dayOffice) || isPublicHoliday(dateStr, office);
+      const isOff = !isLeave && offDay && totalHours === 0;
+
+      return {
+        dateStr,
+        label: formatDayLabel(dateStr),
+        isLeave,
+        leaveType: report?.leave_type || null,
+        isOff,
+        hoursByCategory,
+        totalHours,
+      };
+    });
+  }, [mode, periodType, selectedStaffId, weekDates, reports, entries, categories, pickerStaff, staff]);
+
+  // Personal: weekly breakdown within month
+  const personalWeekly = useMemo(() => {
+    if (mode !== 'personal' || periodType !== 'month' || !selectedStaffId) return [];
+
+    return monthWeeks.map((week) => {
+      const hoursByCategory: Record<string, number> = {};
+      categories.forEach((c) => { hoursByCategory[c.id] = 0; });
+      let leaveDays = 0;
+      let offDays = 0;
+
+      const person = pickerStaff.find((s) => s.bubble_staff_id === selectedStaffId)
+        || staff.find((s) => s.bubble_staff_id === selectedStaffId);
+      const office = resolveOffice(person?.base_location);
+
+      week.dates.forEach((dateStr) => {
+        const report = reports.find((r) => r.staff_id === selectedStaffId && r.report_date === dateStr);
+        if (report?.is_leave) {
+          leaveDays++;
+          return;
+        }
+        let dayHours = 0;
+        if (report) {
+          entries
+            .filter((e) => e.day_report_id === report.id)
+            .forEach((e) => {
+              const h = Number(e.hours) || 0;
+              hoursByCategory[e.category] = (hoursByCategory[e.category] || 0) + h;
+              dayHours += h;
+            });
+        }
+        const dayOffice = resolveOffice(person?.base_location, report?.office_location);
+        const offDay = isWeekend(dateStr) || isPublicHoliday(dateStr, dayOffice) || isPublicHoliday(dateStr, office);
+        if (offDay && dayHours === 0) offDays++;
       });
 
-      grouped[bu] = { totalHours, otHours, reportCount, aiCount };
+      const totalHours = Object.values(hoursByCategory).reduce((s, h) => s + h, 0);
+      return {
+        ...week,
+        hoursByCategory,
+        totalHours,
+        leaveDays,
+        offDays,
+      };
     });
-    return grouped;
-  }, [staff, reports, entries]);
+  }, [mode, periodType, selectedStaffId, monthWeeks, reports, entries, categories, pickerStaff, staff]);
 
-  const allReportsSorted = useMemo(() => {
-    return [...reports].sort((a, b) => {
-      if (a.report_date !== b.report_date) return b.report_date.localeCompare(a.report_date);
-      return (b.submitted_at || '').localeCompare(a.submitted_at || '');
-    });
-  }, [reports]);
-
-  // Overall stats
-  const totalReportsCount = reports.length;
-  const totalHoursAll = reports.reduce((sum, r) => sum + (Number(r.total_hours) || 0), 0);
-  const avgHoursPerReport = totalReportsCount > 0 ? (totalHoursAll / totalReportsCount).toFixed(1) : '0';
-  const missingStaffCount = missingReports.length;
-
-  // ============================
-  // Get staff info by bubble_staff_id
-  // ============================
-  const getStaffName = (staffId: string): string => {
-    const fromMap = staffNameById[staffId];
-    if (fromMap) return fromMap;
-    const s = staff.find(st => st.bubble_staff_id === staffId);
-    return s?.display_name || staffId;
-  };
-
-  const getStaffAvatar = (staffId: string): string => {
-    const name = getStaffName(staffId);
-    return name !== staffId ? name.slice(0, 1) : '?';
-  };
-
-  // ============================
-  // Render
-  // ============================
-  if (loading) {
+  if (loading && staff.length === 0 && reports.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="animate-spin text-teal-600" size={24} />
-        <span className="ml-3 text-[14px] text-muted-foreground">載入團隊數據中...</span>
+        <span className="ml-3 text-[14px] text-muted-foreground">載入分析數據中...</span>
       </div>
     );
   }
 
-  const statusColors: Record<string, string> = {
-    submitted: 'bg-teal-100 text-teal-700',
-    approved: 'bg-teal-100 text-teal-700',
-    rejected: 'bg-teal-100 text-teal-700',
-    draft: 'bg-teal-100 text-teal-700',
-  };
-  const statusLabels: Record<string, string> = {
-    submitted: '已通過',
-    approved: '已通過',
-    rejected: '已通過',
-    draft: '已通過',
-  };
+  const activeDeptLabel = !isAdmin
+    ? (ownDepartment || '本部門')
+    : selectedDepartment === '__ALL__'
+      ? '全部門'
+      : selectedDepartment;
 
   return (
     <div className="space-y-5">
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-[18px] font-bold flex items-center gap-2">
-            <Shield size={18} className="text-teal-600" />
-            團隊&個人分析 · 管理儀表板
-          </h3>
-          <div className="flex items-center gap-2 mt-0.5">
-            <p className="text-[12px] text-muted-foreground">過去 14 天匯報狀況 · 審核管理 · 工時分析</p>
-            {currentDepartment ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
-                <Users size={10} />
-                {currentDepartment}
-              </span>
-            ) : selectedDepartment === '__ALL__' ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-700 border border-red-200">
-                <Shield size={10} />
-                全部門
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                未設定部門
-              </span>
-            )}
-          </div>
+      {/* Mode tags */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-lg border border-[rgba(13,26,45,0.08)] bg-white p-0.5">
+          {([
+            { id: 'team' as const, label: '團隊', icon: Users },
+            { id: 'personal' as const, label: '個人', icon: User },
+          ]).map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setMode(id)}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                mode === id
+                  ? 'bg-teal-50 text-teal-700 border border-teal-100'
+                  : 'text-muted-foreground hover:text-[#0d1a2d]',
+              )}
+            >
+              <Icon size={14} />
+              {label}
+            </button>
+          ))}
         </div>
-        <button onClick={handleRefresh} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-[12px] font-medium hover:bg-muted/50 transition-colors disabled:opacity-50">
-          <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-teal-700 hover:bg-teal-50 transition-colors"
+        >
+          <RefreshCw size={13} className={cn(refreshing && 'animate-spin')} />
           重新整理
         </button>
       </div>
 
-      {/* KPI Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: '活躍員工', value: activeStaffCount, icon: <Users size={14} />, color: 'text-teal-600', bgColor: 'bg-teal-50' },
-          { label: '14天總工時', value: `${totalHoursAll.toFixed(0)}h`, icon: <BarChart3 size={14} />, color: 'text-blue-600', bgColor: 'bg-blue-50' },
-          { label: '平均工時/份', value: `${avgHoursPerReport}h`, icon: <Clock size={14} />, color: 'text-indigo-600', bgColor: 'bg-indigo-50' },
-        ].map(stat => (
-          <div key={stat.label} className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm px-4 py-3 hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-2 mb-1">
-              <span className={cn('p-1 rounded', stat.bgColor, stat.color)}>{stat.icon}</span>
-              <span className="text-[12px] font-medium text-muted-foreground">{stat.label}</span>
-            </div>
-            <span className={cn('text-[22px] font-bold', stat.color)}>{stat.value}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Tab Navigation with Department Selector */}
-      <div className="flex items-center gap-3 flex-wrap">
-        {/* Department Dropdown — open to all authenticated users */}
-        <div className="flex items-center gap-2">
-          <label className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">部門:</label>
-          <select
-            value={selectedDepartment || 'System'}
-            onChange={(e) => {
-              console.log('[TeamDashboard] 🔄 Department changed to:', e.target.value);
-              setSelectedDepartment(e.target.value);
-              setLoading(true);
-            }}
-            className="h-[34px] px-3 py-1 rounded-md border border-teal-300 bg-white text-[12px] font-medium text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500 cursor-pointer min-w-[140px]"
-          >
-            {DEPARTMENT_OPTIONS.map(opt => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Status filter tabs */}
-        <div className="flex items-center gap-1 p-0.5 bg-muted rounded-md w-fit">
-          {[
-            { id: 'all' as const, label: '全部匯報', badge: totalReportsCount },
-            { id: 'missing' as const, label: '缺交名單', badge: missingStaffCount },
-          ].map(tab => (
+      {/* Period + filters */}
+      <div className="flex flex-wrap items-center gap-3 bg-white rounded-lg border border-[rgba(13,26,45,0.08)] px-3 py-2.5">
+        <div className="inline-flex rounded-md border border-[rgba(13,26,45,0.08)] p-0.5">
+          {([
+            { id: 'week' as const, label: '本週' },
+            { id: 'month' as const, label: '本月' },
+          ]).map(({ id, label }) => (
             <button
-              key={tab.id}
-              onClick={() => setViewTab(tab.id)}
+              key={id}
+              type="button"
+              onClick={() => setPeriodType(id)}
               className={cn(
-                'px-3 py-1.5 rounded text-[12px] font-medium transition-colors flex items-center gap-1.5',
-                viewTab === tab.id ? 'bg-white shadow-sm text-teal-700' : 'text-muted-foreground hover:text-foreground'
+                'px-3 py-1 rounded text-[12px] font-medium transition-colors',
+                periodType === id
+                  ? 'bg-teal-600 text-white'
+                  : 'text-muted-foreground hover:text-[#0d1a2d]',
               )}
             >
-              {tab.label}
-              {tab.badge !== null && tab.badge > 0 && (
-                <span className={cn(
-                  'text-[10px] px-1.5 py-0.5 rounded-full font-bold',
-                  viewTab === tab.id ? 'bg-teal-100 text-teal-700' : 'bg-muted-foreground/20 text-muted-foreground'
-                )}>
-                  {tab.badge}
-                </span>
-              )}
+              {label}
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Tab Content */}
-      {viewTab === 'missing' && (
-        <MissingReportsPanel missingReports={missingReports} />
-      )}
-
-
-
-      {viewTab === 'all' && (
-        <AllReportsPanel
-          reports={allReportsSorted}
-          entries={entries}
-          staff={staff}
-          getStaffName={getStaffName}
-          getStaffAvatar={getStaffAvatar}
-          expandedReports={expandedReports}
-          toggleExpandedReport={toggleExpandedReport}
-          statusColors={statusColors}
-          statusLabels={statusLabels}
-          categoryLookup={categoryLookup}
-        />
-      )}
-
-    </div>
-  );
-}
-
-// ============================
-// Missing Reports Panel
-// ============================
-function MissingReportsPanel({ missingReports }: { missingReports: { staff: StaffMember; missingDates: string[] }[] }) {
-  if (missingReports.length === 0) {
-    return (
-      <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-8 text-center">
-        <UserCheck size={32} className="text-teal-500 mx-auto mb-3" />
-        <p className="text-[15px] font-bold text-teal-700">所有同事已完成匯報 🎉</p>
-        <p className="text-[12px] text-muted-foreground mt-1">過去14天工作日全部已提交</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <AlertTriangle size={16} className="text-rose-500" />
-          <h4 className="text-[15px] font-bold">缺交匯報名單</h4>
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 font-bold">{missingReports.length} 人</span>
+        <div className="inline-flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => shiftPeriod(-1)}
+            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
+            aria-label="上一週期"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span className="inline-flex items-center gap-1.5 text-[13px] font-medium min-w-[140px] justify-center">
+            <Calendar size={14} className="text-teal-600" />
+            {formatPeriodLabel(periodType, anchorDate)}
+          </span>
+          <button
+            type="button"
+            onClick={() => shiftPeriod(1)}
+            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
+            aria-label="下一週期"
+          >
+            <ChevronRight size={16} />
+          </button>
         </div>
-        <span className="text-[12px] text-muted-foreground">過去 14 天工作日</span>
-      </div>
-      <div className="divide-y divide-border/30">
-        {missingReports.map(({ staff, missingDates }) => (
-          <div key={staff.id} className="px-5 py-4 hover:bg-muted/10 transition-colors">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-rose-100 to-rose-200 flex items-center justify-center text-[13px] font-bold text-rose-700 shrink-0">
-                  {staff.display_name.slice(0, 1)}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[14px] font-bold">{staff.display_name}</span>
-                    {staff.position && <span className="text-[11px] text-muted-foreground">{staff.position}</span>}
-                  </div>
-                  {staff.business_unit && (
-                    <span className="text-[11px] text-muted-foreground">{staff.business_unit}</span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[12px] font-bold text-rose-600">{missingDates.length} 天缺交</span>
-              </div>
-            </div>
-            <div className="mt-2 ml-12 flex flex-wrap gap-1.5">
-              {missingDates.slice(0, 10).map(d => (
-                <span key={d} className="text-[11px] px-2 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-100">
-                  {formatDate(d)}
-                </span>
+
+        {mode === 'team' && (
+          isAdmin ? (
+            <select
+              value={selectedDepartment || '__ALL__'}
+              onChange={(e) => setSelectedDepartment(e.target.value)}
+              className="ml-auto px-2.5 py-1.5 border border-border rounded-md text-[12px] bg-white"
+            >
+              <option value="__ALL__">全部門</option>
+              {departmentOptions.map((d) => (
+                <option key={d} value={d}>{d}</option>
               ))}
-              {missingDates.length > 10 && (
-                <span className="text-[11px] px-2 py-0.5 rounded bg-muted text-muted-foreground">
-                  +{missingDates.length - 10} 天
-                </span>
-              )}
+            </select>
+          ) : (
+            <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+              <Users size={10} />
+              {activeDeptLabel}
+            </span>
+          )
+        )}
+
+        {mode === 'personal' && (
+          pickerStaff.length > 1 ? (
+            <select
+              value={selectedStaffId || ''}
+              onChange={(e) => setSelectedStaffId(e.target.value)}
+              className="ml-auto px-2.5 py-1.5 border border-border rounded-md text-[12px] bg-white max-w-[220px]"
+            >
+              {pickerStaff
+                .slice()
+                .sort((a, b) => getStaffName(a.bubble_staff_id).localeCompare(getStaffName(b.bubble_staff_id), 'zh-Hant'))
+                .map((s) => (
+                  <option key={s.bubble_staff_id} value={s.bubble_staff_id}>
+                    {getStaffName(s.bubble_staff_id)}
+                    {s.department ? ` · ${s.department}` : ''}
+                  </option>
+                ))}
+            </select>
+          ) : (
+            <span className="ml-auto text-[12px] text-muted-foreground">
+              {getStaffName(selectedStaffId || systemUser?.bubble_staff_id || '')}
+            </span>
+          )
+        )}
+      </div>
+
+      {/* Content */}
+      {mode === 'team' ? (
+        <div className="space-y-6">
+          {teamGroups.length === 0 ? (
+            <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] p-10 text-center text-[13px] text-muted-foreground">
+              此週期暫無團隊成員資料
             </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ============================
-// All Reports Panel
-// ============================
-interface ReportsPanelProps {
-  reports: DayReport[];
-  entries: DayReportEntry[];
-  staff?: StaffMember[];
-  getStaffName: (id: string) => string;
-  getStaffAvatar: (id: string) => string;
-  expandedReports: Set<string>;
-  toggleExpandedReport: (id: string) => void;
-  statusColors: Record<string, string>;
-  statusLabels: Record<string, string>;
-  categoryLookup: Record<string, { label: string; icon: string; color: string; bg: string }>;
-}
-
-function AllReportsPanel(props: ReportsPanelProps) {
-  const { reports, staff = [], getStaffName } = props;
-  const [selectedStaffId, setSelectedStaffId] = useState<string>('__ALL__');
-  const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 50;
-
-  // Filter reports by selected employee
-  const filteredReports = useMemo(() => {
-    if (selectedStaffId === '__ALL__') return reports;
-    return reports.filter(r => r.staff_id === selectedStaffId);
-  }, [reports, selectedStaffId]);
-
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(filteredReports.length / ITEMS_PER_PAGE));
-  const paginatedReports = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredReports.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredReports, currentPage]);
-
-  // Reset page when filter changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedStaffId]);
-
-  // Get unique staff who have reports (sorted alphabetically by name)
-  const staffWithReports = useMemo(() => {
-    const staffIds = [...new Set(reports.map(r => r.staff_id))];
-    const fromStaff = staff.filter(s => staffIds.includes(s.bubble_staff_id));
-    const knownIds = new Set(fromStaff.map(s => s.bubble_staff_id));
-    const extras = staffIds
-      .filter(id => !knownIds.has(id))
-      .map(id => ({
-        bubble_staff_id: id,
-        display_name: getStaffName(id),
-        position: null as string | null,
-      }));
-    return [...fromStaff, ...extras].sort((a, b) => a.display_name.localeCompare(b.display_name));
-  }, [reports, staff, getStaffName]);
-
-  if (reports.length === 0) {
-    return (
-      <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-8 text-center">
-        <Calendar size={32} className="text-muted-foreground mx-auto mb-3" />
-        <p className="text-[15px] font-bold text-muted-foreground">暫無匯報記錄</p>
-        <p className="text-[12px] text-muted-foreground mt-1">過去14天無任何匯報提交</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {/* Employee Filter Bar */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <label className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">員工:</label>
-          <select
-            value={selectedStaffId}
-            onChange={(e) => setSelectedStaffId(e.target.value)}
-            className="h-[34px] px-3 py-1 rounded-md border border-teal-300 bg-white text-[12px] font-medium text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500 cursor-pointer min-w-[160px]"
-          >
-            <option value="__ALL__">全部同事 (All)</option>
-            {staffWithReports.map(s => (
-              <option key={s.bubble_staff_id} value={s.bubble_staff_id}>
-                {s.display_name}{s.position ? ` — ${s.position}` : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-        <span className="text-[11px] text-muted-foreground">
-          共 {filteredReports.length} 份匯報
-          {totalPages > 1 && ` · 第 ${currentPage}/${totalPages} 頁`}
-        </span>
-      </div>
-
-      {/* Reports List */}
-      <ReportsList {...props} reports={paginatedReports} title="全部匯報" />
-
-      {/* Pagination Controls */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 pt-2">
-          <button
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-            className="px-3 py-1.5 rounded-md border border-border text-[12px] font-medium hover:bg-muted/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            上一頁
-          </button>
-          <div className="flex items-center gap-1">
-            {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-              let pageNum: number;
-              if (totalPages <= 7) {
-                pageNum = i + 1;
-              } else if (currentPage <= 4) {
-                pageNum = i + 1;
-              } else if (currentPage >= totalPages - 3) {
-                pageNum = totalPages - 6 + i;
-              } else {
-                pageNum = currentPage - 3 + i;
-              }
-              return (
-                <button
-                  key={pageNum}
-                  onClick={() => setCurrentPage(pageNum)}
-                  className={cn(
-                    'w-8 h-8 rounded-md text-[12px] font-medium transition-colors',
-                    currentPage === pageNum
-                      ? 'bg-teal-600 text-white shadow-sm'
-                      : 'hover:bg-muted/50 text-muted-foreground'
-                  )}
-                >
-                  {pageNum}
-                </button>
-              );
-            })}
-          </div>
-          <button
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-            className="px-3 py-1.5 rounded-md border border-border text-[12px] font-medium hover:bg-muted/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            下一頁
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ReportsList({ reports, entries, getStaffName, getStaffAvatar, expandedReports, toggleExpandedReport, statusColors, statusLabels, categoryLookup, title }: ReportsPanelProps & { title: string }) {
-  return (
-    <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm overflow-hidden">
-      <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Eye size={16} className="text-teal-600" />
-          <h4 className="text-[15px] font-bold">{title}</h4>
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 font-bold">{reports.length}</span>
-        </div>
-      </div>
-      <div className="divide-y divide-border/30">
-        {reports.map(report => {
-          const reportEntries = entries.filter(e => e.day_report_id === report.id);
-          const isExpanded = expandedReports.has(report.id);
-
-          return (
-            <div key={report.id} className="px-5 py-3.5 hover:bg-muted/10 transition-colors">
-              {/* Report Header */}
-              <div
-                className="flex items-center justify-between cursor-pointer"
-                onClick={() => toggleExpandedReport(report.id)}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-teal-100 to-teal-200 flex items-center justify-center text-[13px] font-bold text-teal-700 shrink-0">
-                    {getStaffAvatar(report.staff_id)}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[14px] font-bold">{getStaffName(report.staff_id)}</span>
-                      <span className="text-[11px] text-muted-foreground">{formatDate(report.report_date)}</span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {report.is_leave && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">{report.leave_type || '請假'}</span>}
-                      {report.ot_hours > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">OT {report.ot_hours}h</span>}
-                      <span className="text-[10px] text-muted-foreground">{reportEntries.length} 項工作</span>
-                    </div>
-                  </div>
+          ) : (
+            teamGroups.map(([dept, members]) => (
+              <section key={dept} className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-[14px] font-bold text-[#0d1a2d]">{dept}</h4>
+                  <span className="text-[11px] text-muted-foreground">{members.length} 人</span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className={cn('text-[15px] font-bold', report.ot_hours > 0 ? 'text-amber-600' : 'text-foreground')}>
-                    {report.total_hours}h
-                  </span>
-                  <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded-full', statusColors[report.status] || 'bg-slate-100 text-slate-600')}>
-                    {statusLabels[report.status] || report.status}
-                  </span>
-                  {isExpanded ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-                </div>
-              </div>
-
-              {/* Expanded Content */}
-              {isExpanded && (
-                <div className="mt-3 ml-12 space-y-3">
-                  {/* Entries */}
-                  {reportEntries.length > 0 ? (
-                    <div className="space-y-2">
-                      {reportEntries.map(entry => {
-                        const config = categoryLookup[entry.category];
-                        return (
-                          <div key={entry.id} className="flex items-start gap-2 p-2.5 rounded-lg bg-muted/20 border border-border/20">
-                            <div className="flex items-center gap-1.5 shrink-0 mt-0.5 flex-wrap">
-                              <span className={cn('text-[11px] px-1.5 py-0.5 rounded', config?.bg || 'bg-gray-100', config?.color || 'text-gray-600')}>
-                                {config?.icon || '📋'} {config?.label || entry.category}
-                              </span>
-                              {entry.related_name && <span className="text-[11px] px-1.5 py-0.5 rounded bg-sky-50 text-sky-600 border border-sky-100">{entry.related_name}</span>}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[13px] font-medium">{entry.title || '(無標題)'}</p>
-                              {entry.outcome_url && (
-                                <a href={entry.outcome_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-blue-600 hover:underline mt-0.5 block truncate">
-                                  {entry.outcome_url}
-                                </a>
-                              )}
-                              {entry.growth_experience && <p className="text-[11px] text-emerald-600 mt-0.5 italic">🌱 {entry.growth_experience}</p>}
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              {entry.is_ai_assisted && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700"><Bot size={9} className="inline mr-0.5" />AI</span>}
-                              <span className="text-[12px] font-bold text-teal-600">{entry.hours}h</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {members.map((member) => {
+                    const hoursByCategory = staffCategoryHours.get(member.bubble_staff_id) || {};
+                    const totalHours = Object.values(hoursByCategory).reduce((s, h) => s + h, 0);
+                    return (
+                      <div
+                        key={member.bubble_staff_id}
+                        className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-4 space-y-3"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full bg-teal-100 flex items-center justify-center shrink-0">
+                                <span className="text-[11px] font-bold text-teal-700">
+                                  {getStaffName(member.bubble_staff_id).charAt(0)}
+                                </span>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[13px] font-semibold truncate">
+                                  {getStaffName(member.bubble_staff_id)}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground truncate">
+                                  {member.department || '未分組'}
+                                </p>
+                              </div>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-[12px] text-muted-foreground italic py-2">尚無工作條目</p>
-                  )}
-
-                  {/* Under hours reason */}
-                  {report.under_hours_reason && (
-                    <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-100">
-                      <p className="text-[11px] font-medium text-amber-700">低於目標工時原因:</p>
-                      <p className="text-[12px] text-amber-800 mt-0.5">{report.under_hours_reason}</p>
-                    </div>
-                  )}
+                          <div className="text-right shrink-0">
+                            <p className="text-[15px] font-bold text-teal-700 tabular-nums">{totalHours}h</p>
+                            <p className="text-[10px] text-muted-foreground">總工時</p>
+                          </div>
+                        </div>
+                        <CategoryHoursList
+                          categories={categories}
+                          hoursByCategory={hoursByCategory}
+                          totalHours={totalHours}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ============================
-// Team Hours Panel
-// ============================
-function TeamHoursPanel({
-  teamHoursData,
-  staff,
-  reports,
-  entries,
-}: {
-  teamHoursData: Record<string, { totalHours: number; otHours: number; reportCount: number; aiCount: number }>;
-  staff: StaffMember[];
-  reports: DayReport[];
-  entries: DayReportEntry[];
-}) {
-  // Individual staff hours sorted descending
-  const staffHours = useMemo(() => {
-    return staff.map(s => {
-      const staffReports = reports.filter(r => r.staff_id === s.bubble_staff_id && !r.is_leave);
-      const totalHours = staffReports.reduce((sum, r) => sum + (Number(r.total_hours) || 0), 0);
-      const otHours = staffReports.reduce((sum, r) => sum + (Number(r.ot_hours) || 0), 0);
-      const reportCount = staffReports.length;
-      const staffEntries = entries.filter(e => e.staff_id === s.bubble_staff_id);
-      const aiEntries = staffEntries.filter(e => e.is_ai_assisted).length;
-      return { ...s, totalHours, otHours, reportCount, aiEntries };
-    }).sort((a, b) => b.totalHours - a.totalHours);
-  }, [staff, reports, entries]);
-
-  const maxHours = Math.max(...staffHours.map(s => s.totalHours), 1);
-
-  return (
-    <div className="space-y-4">
-      {/* Team Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {Object.entries(teamHoursData).map(([teamName, data]) => (
-          <div key={teamName} className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[14px] font-bold">{teamName}</span>
-              <span className="text-[11px] px-2 py-0.5 rounded bg-muted text-muted-foreground">
-                {staff.filter(s => (s.business_unit || '未分組') === teamName).length} 人
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <span className="text-[11px] text-muted-foreground">總工時</span>
-                <span className="text-[18px] font-bold text-teal-600 block">{data.totalHours.toFixed(0)}h</span>
-              </div>
-              <div>
-                <span className="text-[11px] text-muted-foreground">加班</span>
-                <span className={cn('text-[18px] font-bold block', data.otHours > 0 ? 'text-amber-600' : 'text-gray-400')}>{data.otHours.toFixed(0)}h</span>
-              </div>
-              <div>
-                <span className="text-[11px] text-muted-foreground">匯報數</span>
-                <span className="text-[18px] font-bold block">{data.reportCount}</span>
-              </div>
-              <div>
-                <span className="text-[11px] text-muted-foreground">AI 條目</span>
-                <span className="text-[18px] font-bold text-purple-600 block">{data.aiCount}</span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Individual Staff Hours Ranking */}
-      <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-border/50">
-          <h4 className="text-[15px] font-bold flex items-center gap-2">
-            <BarChart3 size={16} className="text-teal-600" />
-            個人工時排名（14天）
-          </h4>
+              </section>
+            ))
+          )}
         </div>
-        <div className="divide-y divide-border/30">
-          {staffHours.map((s, idx) => (
-            <div key={s.id} className="px-5 py-3 hover:bg-muted/10 transition-colors">
-              <div className="flex items-center gap-3">
-                <span className={cn(
-                  'w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0',
-                  idx < 3 ? 'bg-teal-100 text-teal-700' : 'bg-muted text-muted-foreground'
-                )}>
-                  {idx + 1}
-                </span>
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-100 to-teal-200 flex items-center justify-center text-[12px] font-bold text-teal-700 shrink-0">
-                  {s.display_name.slice(0, 1)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[13px] font-medium">{s.display_name}</span>
-                    {s.position && <span className="text-[11px] text-muted-foreground truncate">{s.position}</span>}
-                  </div>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-teal-400 to-teal-600 rounded-full transition-all duration-500"
-                        style={{ width: `${(s.totalHours / maxHours) * 100}%` }}
-                      />
+      ) : (
+        <div className="space-y-3">
+          <div className="text-[13px] text-muted-foreground">
+            {getStaffName(selectedStaffId || '')}
+            {periodType === 'week' ? ' · 每日工作類別工時' : ' · 每周工作類別工時'}
+          </div>
+
+          {periodType === 'week' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {personalDaily.map((day) => (
+                <div
+                  key={day.dateStr}
+                  className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-4 space-y-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[13px] font-semibold">{day.label}</p>
+                    <div className="flex items-center gap-1.5">
+                      {day.isLeave && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
+                          請假{day.leaveType ? ` · ${day.leaveType}` : ''}
+                        </span>
+                      )}
+                      {day.isOff && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
+                          放假
+                        </span>
+                      )}
+                      {!day.isLeave && !day.isOff && (
+                        <span className="text-[12px] font-bold text-teal-700 tabular-nums">{day.totalHours}h</span>
+                      )}
                     </div>
-                    <span className="text-[12px] font-bold text-teal-600 w-14 text-right">{s.totalHours.toFixed(0)}h</span>
                   </div>
+                  {(day.isLeave || day.isOff) ? (
+                    <CategoryHoursList
+                      categories={categories}
+                      hoursByCategory={Object.fromEntries(categories.map((c) => [c.id, 0]))}
+                      totalHours={0}
+                    />
+                  ) : (
+                    <CategoryHoursList
+                      categories={categories}
+                      hoursByCategory={day.hoursByCategory}
+                      totalHours={day.totalHours}
+                    />
+                  )}
                 </div>
-                <div className="flex items-center gap-2 shrink-0 ml-2">
-                  {s.otHours > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">OT {s.otHours.toFixed(0)}h</span>}
-                  {s.aiEntries > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700"><Bot size={9} className="inline mr-0.5" />{s.aiEntries}</span>}
-                  <span className="text-[11px] text-muted-foreground">{s.reportCount} 份</span>
-                </div>
-              </div>
+              ))}
             </div>
-          ))}
-          {staffHours.length === 0 && (
-            <div className="px-5 py-8 text-center">
-              <p className="text-[13px] text-muted-foreground">暫無工時數據</p>
+          ) : (
+            <div className="space-y-3">
+              {personalWeekly.map((week) => (
+                <div
+                  key={week.key}
+                  className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-4 space-y-3"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <p className="text-[13px] font-semibold">{week.label}</p>
+                      {week.leaveDays > 0 && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
+                          請假 {week.leaveDays} 日
+                        </span>
+                      )}
+                      {week.offDays > 0 && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
+                          放假 {week.offDays} 日
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[13px] font-bold text-teal-700 tabular-nums">{week.totalHours}h</span>
+                  </div>
+                  <CategoryHoursList
+                    categories={categories}
+                    hoursByCategory={week.hoursByCategory}
+                    totalHours={week.totalHours}
+                  />
+                </div>
+              ))}
             </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
-
-export default TeamDashboard;
