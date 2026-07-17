@@ -58,6 +58,9 @@ type Mode = 'team' | 'personal';
 type PeriodType = 'week' | 'month';
 type OfficeLocation = 'hk' | 'sz';
 
+const UNASSIGNED_DEPT = '__UNASSIGNED__';
+const UNASSIGNED_LABEL = '未分組';
+
 // ============================
 // Date / Holiday Helpers
 // ============================
@@ -210,10 +213,13 @@ function CategoryHoursList({
   categories,
   hoursByCategory,
   totalHours,
+  layout = 'row',
 }: {
   categories: CategoryMeta[];
   hoursByCategory: Record<string, number>;
   totalHours: number;
+  /** stack: label above bar — better for narrow 7-day columns */
+  layout?: 'row' | 'stack';
 }) {
   const byId = new Map(categories.map((c) => [c.id, c]));
   const ids = new Set([
@@ -239,7 +245,36 @@ function CategoryHoursList({
 
   if (rows.length === 0) {
     return (
-      <p className="text-[12px] text-muted-foreground text-center py-1">暫無工作類型工時</p>
+      <p className="text-[11px] text-muted-foreground text-center py-1">暫無工時</p>
+    );
+  }
+
+  if (layout === 'stack') {
+    return (
+      <div className="space-y-2">
+        {rows.map(({ cat, hours, percentage }) => (
+          <div key={cat.id} className="space-y-1 min-w-0">
+            <span className={cn(
+              'inline-block text-[10px] px-1.5 py-0.5 rounded font-medium break-words',
+              cat.bg, cat.color,
+            )}>
+              {cat.icon} {cat.label}
+            </span>
+            <div className="flex items-center gap-1 min-w-0">
+              <div className="flex-1 min-w-0 h-1.5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-teal-500 rounded-full transition-all"
+                  style={{ width: `${Math.min(percentage, 100)}%` }}
+                />
+              </div>
+              <span className="text-[10px] font-semibold tabular-nums shrink-0">{hours}h</span>
+              <span className="text-[9px] text-muted-foreground tabular-nums shrink-0">
+                {percentage.toFixed(0)}%
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
     );
   }
 
@@ -426,13 +461,19 @@ export function TeamDashboard() {
       }
 
       // --- Scope staff for data fetch ---
+      // null = no staff_id filter (fetch all, then optionally post-filter)
       let allowedStaffIds: string[] | null = null;
+      let filterUnassignedOnly = false;
+
       if (mode === 'personal') {
         allowedStaffIds = [effectiveStaffId];
       } else if (!isAdmin) {
         allowedStaffIds = ownDepartment
           ? await fetchStaffIdsByDepartment(ownDepartment)
           : [systemUser.bubble_staff_id];
+      } else if (selectedDepartment === UNASSIGNED_DEPT) {
+        filterUnassignedOnly = true;
+        allowedStaffIds = null;
       } else if (selectedDepartment !== '__ALL__') {
         allowedStaffIds = await fetchStaffIdsByDepartment(selectedDepartment);
       }
@@ -452,7 +493,19 @@ export function TeamDashboard() {
         .neq('position', 'Director');
       if (allowedStaffIds !== null) staffQuery = staffQuery.in('bubble_staff_id', allowedStaffIds);
       const { data: rawStaff } = await staffQuery;
-      const staffData = await cleanStaffRows(rawStaff || []);
+      let staffData = await cleanStaffRows(rawStaff || []);
+
+      if (filterUnassignedOnly) {
+        staffData = staffData.filter((s) => !s.department);
+        allowedStaffIds = staffData.map((s) => s.bubble_staff_id);
+        if (allowedStaffIds.length === 0) {
+          setStaff([]);
+          setStaffNameById({});
+          setReports([]);
+          setEntries([]);
+          return;
+        }
+      }
 
       let reportQuery = supabase
         .from('day_reports')
@@ -556,13 +609,22 @@ export function TeamDashboard() {
   const teamGroups = useMemo(() => {
     const groups = new Map<string, StaffMember[]>();
     const sorted = [...staff].sort((a, b) => getStaffName(a.bubble_staff_id).localeCompare(getStaffName(b.bubble_staff_id), 'zh-Hant'));
+    const hideUnassignedInAll = selectedDepartment === '__ALL__';
+
     sorted.forEach((s) => {
-      const dept = s.department || '未分組';
+      const dept = s.department || UNASSIGNED_LABEL;
+      // 「全部門」預設不顯示未分組
+      if (hideUnassignedInAll && dept === UNASSIGNED_LABEL) return;
       if (!groups.has(dept)) groups.set(dept, []);
       groups.get(dept)!.push(s);
     });
-    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b, 'zh-Hant'));
-  }, [staff, getStaffName]);
+
+    return Array.from(groups.entries()).sort(([a], [b]) => {
+      if (a === UNASSIGNED_LABEL) return 1;
+      if (b === UNASSIGNED_LABEL) return -1;
+      return a.localeCompare(b, 'zh-Hant');
+    });
+  }, [staff, getStaffName, selectedDepartment]);
 
   // Personal: daily breakdown
   const personalDaily = useMemo(() => {
@@ -661,7 +723,9 @@ export function TeamDashboard() {
     ? (ownDepartment || '本部門')
     : selectedDepartment === '__ALL__'
       ? '全部門'
-      : selectedDepartment;
+      : selectedDepartment === UNASSIGNED_DEPT
+        ? UNASSIGNED_LABEL
+        : selectedDepartment;
 
   return (
     <div className="space-y-5">
@@ -757,6 +821,7 @@ export function TeamDashboard() {
               {departmentOptions.map((d) => (
                 <option key={d} value={d}>{d}</option>
               ))}
+              <option value={UNASSIGNED_DEPT}>{UNASSIGNED_LABEL}</option>
             </select>
           ) : (
             <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
@@ -827,7 +892,7 @@ export function TeamDashboard() {
                                   {getStaffName(member.bubble_staff_id)}
                                 </p>
                                 <p className="text-[11px] text-muted-foreground truncate">
-                                  {member.department || '未分組'}
+                                  {member.department || UNASSIGNED_LABEL}
                                 </p>
                               </div>
                             </div>
@@ -858,43 +923,36 @@ export function TeamDashboard() {
           </div>
 
           {periodType === 'week' ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            <div className="grid grid-cols-7 gap-2">
               {personalDaily.map((day) => (
                 <div
                   key={day.dateStr}
-                  className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-4 space-y-3"
+                  className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-2.5 space-y-2 min-w-0"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[13px] font-semibold">{day.label}</p>
-                    <div className="flex items-center gap-1.5">
+                  <div className="space-y-1">
+                    <p className="text-[12px] font-semibold leading-tight">{day.label}</p>
+                    <div className="flex flex-wrap items-center gap-1">
                       {day.isLeave && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
+                        <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
                           請假{day.leaveType ? ` · ${day.leaveType}` : ''}
                         </span>
                       )}
                       {day.isOff && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
+                        <span className="text-[9px] px-1 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">
                           放假
                         </span>
                       )}
                       {!day.isLeave && !day.isOff && (
-                        <span className="text-[12px] font-bold text-teal-700 tabular-nums">{day.totalHours}h</span>
+                        <span className="text-[11px] font-bold text-teal-700 tabular-nums">{day.totalHours}h</span>
                       )}
                     </div>
                   </div>
-                  {(day.isLeave || day.isOff) ? (
-                    <CategoryHoursList
-                      categories={categories}
-                      hoursByCategory={Object.fromEntries(categories.map((c) => [c.id, 0]))}
-                      totalHours={0}
-                    />
-                  ) : (
-                    <CategoryHoursList
-                      categories={categories}
-                      hoursByCategory={day.hoursByCategory}
-                      totalHours={day.totalHours}
-                    />
-                  )}
+                  <CategoryHoursList
+                    categories={categories}
+                    hoursByCategory={(day.isLeave || day.isOff) ? {} : day.hoursByCategory}
+                    totalHours={(day.isLeave || day.isOff) ? 0 : day.totalHours}
+                    layout="stack"
+                  />
                 </div>
               ))}
             </div>
