@@ -710,14 +710,7 @@ export function TeamDashboard() {
     });
   }, [mode, periodType, selectedStaffId, monthWeeks, reports, entries, categories, pickerStaff, staff]);
 
-  if (loading && staff.length === 0 && reports.length === 0) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="animate-spin text-teal-600" size={24} />
-        <span className="ml-3 text-[14px] text-muted-foreground">載入分析數據中...</span>
-      </div>
-    );
-  }
+  const showInitialLoading = loading && staff.length === 0 && reports.length === 0;
 
   const activeDeptLabel = !isAdmin
     ? (ownDepartment || '本部門')
@@ -728,136 +721,149 @@ export function TeamDashboard() {
         : selectedDepartment;
 
   return (
-    <div className="space-y-5">
-      {/* Mode tags */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-lg border border-[rgba(13,26,45,0.08)] bg-white p-0.5">
-          {([
-            { id: 'team' as const, label: '團隊', icon: Users },
-            { id: 'personal' as const, label: '個人', icon: User },
-          ]).map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setMode(id)}
-              className={cn(
-                'inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-[13px] font-medium transition-colors',
-                mode === id
-                  ? 'bg-teal-50 text-teal-700 border border-teal-100'
-                  : 'text-muted-foreground hover:text-[#0d1a2d]',
-              )}
-            >
-              <Icon size={14} />
-              {label}
-            </button>
-          ))}
+    <div>
+      {/* Sticky: title + 團隊|個人 + period filters */}
+      <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
+        <div>
+          <h1 className="text-[24px] font-bold tracking-tight">團隊&個人分析</h1>
+          <p className="text-[13px] text-muted-foreground mt-0.5">
+            按週／月統計工作類別工時與占比 — 團隊分部門卡片 · 個人按日／按週分析。
+          </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-teal-700 hover:bg-teal-50 transition-colors"
-        >
-          <RefreshCw size={13} className={cn(refreshing && 'animate-spin')} />
-          重新整理
-        </button>
-      </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="inline-flex rounded-lg border border-[rgba(13,26,45,0.08)] bg-white p-0.5">
+            {([
+              { id: 'team' as const, label: '團隊', icon: Users },
+              { id: 'personal' as const, label: '個人', icon: User },
+            ]).map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setMode(id)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                  mode === id
+                    ? 'bg-teal-50 text-teal-700 border border-teal-100'
+                    : 'text-muted-foreground hover:text-[#0d1a2d]',
+                )}
+              >
+                <Icon size={14} />
+                {label}
+              </button>
+            ))}
+          </div>
 
-      {/* Period + filters */}
-      <div className="flex flex-wrap items-center gap-3 bg-white rounded-lg border border-[rgba(13,26,45,0.08)] px-3 py-2.5">
-        <div className="inline-flex rounded-md border border-[rgba(13,26,45,0.08)] p-0.5">
-          {([
-            { id: 'week' as const, label: '本週' },
-            { id: 'month' as const, label: '本月' },
-          ]).map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setPeriodType(id)}
-              className={cn(
-                'px-3 py-1 rounded text-[12px] font-medium transition-colors',
-                periodType === id
-                  ? 'bg-teal-600 text-white'
-                  : 'text-muted-foreground hover:text-[#0d1a2d]',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="inline-flex items-center gap-1">
           <button
             type="button"
-            onClick={() => shiftPeriod(-1)}
-            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
-            aria-label="上一週期"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-teal-700 hover:bg-teal-50 transition-colors"
           >
-            <ChevronLeft size={16} />
-          </button>
-          <span className="inline-flex items-center gap-1.5 text-[13px] font-medium min-w-[140px] justify-center">
-            <Calendar size={14} className="text-teal-600" />
-            {formatPeriodLabel(periodType, anchorDate)}
-          </span>
-          <button
-            type="button"
-            onClick={() => shiftPeriod(1)}
-            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
-            aria-label="下一週期"
-          >
-            <ChevronRight size={16} />
+            <RefreshCw size={13} className={cn(refreshing && 'animate-spin')} />
+            重新整理
           </button>
         </div>
 
-        {mode === 'team' && (
-          isAdmin ? (
-            <select
-              value={selectedDepartment || '__ALL__'}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
-              className="ml-auto px-2.5 py-1.5 border border-border rounded-md text-[12px] bg-white"
+        <div className="flex flex-wrap items-center gap-3 bg-white rounded-lg border border-[rgba(13,26,45,0.08)] px-3 py-2.5 shadow-sm">
+          <div className="inline-flex rounded-md border border-[rgba(13,26,45,0.08)] p-0.5">
+            {([
+              { id: 'week' as const, label: '本週' },
+              { id: 'month' as const, label: '本月' },
+            ]).map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setPeriodType(id)}
+                className={cn(
+                  'px-3 py-1 rounded text-[12px] font-medium transition-colors',
+                  periodType === id
+                    ? 'bg-teal-600 text-white'
+                    : 'text-muted-foreground hover:text-[#0d1a2d]',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="inline-flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => shiftPeriod(-1)}
+              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
+              aria-label="上一週期"
             >
-              <option value="__ALL__">全部門</option>
-              {departmentOptions.map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-              <option value={UNASSIGNED_DEPT}>{UNASSIGNED_LABEL}</option>
-            </select>
-          ) : (
-            <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
-              <Users size={10} />
-              {activeDeptLabel}
+              <ChevronLeft size={16} />
+            </button>
+            <span className="inline-flex items-center gap-1.5 text-[13px] font-medium min-w-[140px] justify-center">
+              <Calendar size={14} className="text-teal-600" />
+              {formatPeriodLabel(periodType, anchorDate)}
             </span>
-          )
-        )}
-
-        {mode === 'personal' && (
-          pickerStaff.length > 1 ? (
-            <select
-              value={selectedStaffId || ''}
-              onChange={(e) => setSelectedStaffId(e.target.value)}
-              className="ml-auto px-2.5 py-1.5 border border-border rounded-md text-[12px] bg-white max-w-[220px]"
+            <button
+              type="button"
+              onClick={() => shiftPeriod(1)}
+              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
+              aria-label="下一週期"
             >
-              {pickerStaff
-                .slice()
-                .sort((a, b) => getStaffName(a.bubble_staff_id).localeCompare(getStaffName(b.bubble_staff_id), 'zh-Hant'))
-                .map((s) => (
-                  <option key={s.bubble_staff_id} value={s.bubble_staff_id}>
-                    {getStaffName(s.bubble_staff_id)}
-                    {s.department ? ` · ${s.department}` : ''}
-                  </option>
+              <ChevronRight size={16} />
+            </button>
+          </div>
+
+          {mode === 'team' && (
+            isAdmin ? (
+              <select
+                value={selectedDepartment || '__ALL__'}
+                onChange={(e) => setSelectedDepartment(e.target.value)}
+                className="ml-auto px-2.5 py-1.5 border border-border rounded-md text-[12px] bg-white"
+              >
+                <option value="__ALL__">全部門</option>
+                {departmentOptions.map((d) => (
+                  <option key={d} value={d}>{d}</option>
                 ))}
-            </select>
-          ) : (
-            <span className="ml-auto text-[12px] text-muted-foreground">
-              {getStaffName(selectedStaffId || systemUser?.bubble_staff_id || '')}
-            </span>
-          )
-        )}
+                <option value={UNASSIGNED_DEPT}>{UNASSIGNED_LABEL}</option>
+              </select>
+            ) : (
+              <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+                <Users size={10} />
+                {activeDeptLabel}
+              </span>
+            )
+          )}
+
+          {mode === 'personal' && (
+            pickerStaff.length > 1 ? (
+              <select
+                value={selectedStaffId || ''}
+                onChange={(e) => setSelectedStaffId(e.target.value)}
+                className="ml-auto px-2.5 py-1.5 border border-border rounded-md text-[12px] bg-white max-w-[220px]"
+              >
+                {pickerStaff
+                  .slice()
+                  .sort((a, b) => getStaffName(a.bubble_staff_id).localeCompare(getStaffName(b.bubble_staff_id), 'zh-Hant'))
+                  .map((s) => (
+                    <option key={s.bubble_staff_id} value={s.bubble_staff_id}>
+                      {getStaffName(s.bubble_staff_id)}
+                      {s.department ? ` · ${s.department}` : ''}
+                    </option>
+                  ))}
+              </select>
+            ) : (
+              <span className="ml-auto text-[12px] text-muted-foreground">
+                {getStaffName(selectedStaffId || systemUser?.bubble_staff_id || '')}
+              </span>
+            )
+          )}
+        </div>
       </div>
 
       {/* Content */}
-      {mode === 'team' ? (
+      {showInitialLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="animate-spin text-teal-600" size={24} />
+          <span className="ml-3 text-[14px] text-muted-foreground">載入分析數據中...</span>
+        </div>
+      ) : mode === 'team' ? (
         <div className="space-y-6">
           {teamGroups.length === 0 ? (
             <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] p-10 text-center text-[13px] text-muted-foreground">

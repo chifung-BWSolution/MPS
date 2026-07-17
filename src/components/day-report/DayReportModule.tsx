@@ -2772,6 +2772,16 @@ export function DayReportModule({ subModule }: { subModule?: string }) {
     }
   };
 
+  // team-view 自行渲染 sticky 標題列，避免重複
+  if (subModule === 'team-view') {
+    return renderContent();
+  }
+
+  // team-view owns its sticky header (title + filters) inside TeamDashboard
+  if (subModule === 'team-view') {
+    return renderContent();
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
