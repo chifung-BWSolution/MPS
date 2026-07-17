@@ -31,6 +31,9 @@ import { PlatformPublishModal } from '@/components/video/PlatformPublishModal';
 import { fetchWorkLogTotalsByVideoIds } from '@/services/videoOutputWorkLogService';
 import { WorkflowStatusSummaryBar } from '@/components/video/workflow/WorkflowStatusSummaryBar';
 import { CopyStoragePathButton } from '@/components/video/workflow/workflowListLayout';
+import { VideoCoordinationStatusView } from '@/components/video/VideoCoordinationStatusView';
+
+type CoordinationView = 'status' | 'list';
 
 const TABLE_COL_COUNT = 13;
 /** Columns before 拍攝時間: 狀態 / Vchannel / Video Code / 主題 */
@@ -213,6 +216,7 @@ export function VideoManagementModule() {
   const { videos, loading, error, updateVideo } = useVideoOutput();
   const { channels } = useVchannels();
 
+  const [view, setView] = useState<CoordinationView>('status');
   const [vchannelFilter, setVchannelFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [yearFilter, setYearFilter] = useState(getCurrentProductionYear);
@@ -304,24 +308,43 @@ export function VideoManagementModule() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
           <h1 className="text-[32px] font-bold tracking-tight">影片統籌</h1>
-          <p className="text-[14px] text-muted-foreground mt-1">
-            全局影片產出時間軸，查看所有狀態的影片記錄。
-          </p>
+          <div
+            className="flex items-center gap-2 text-[14px]"
+            role="tablist"
+            aria-label="視圖切換"
+          >
+            {(
+              [
+                { id: 'status' as const, label: '狀態視圖' },
+                { id: 'list' as const, label: '列表視圖' },
+              ] as const
+            ).map((tab, index) => (
+              <span key={tab.id} className="contents">
+                {index > 0 && <span className="text-muted-foreground/50 select-none">|</span>}
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={view === tab.id}
+                  onClick={() => setView(tab.id)}
+                  className={cn(
+                    'pb-0.5 font-medium transition-colors',
+                    view === tab.id
+                      ? 'text-teal-700 border-b-2 border-teal-600'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {tab.label}
+                </button>
+              </span>
+            ))}
+          </div>
         </div>
-        <WorkflowStatusSummaryBar
-          filteredCount={filteredVideos.length}
-          contextCount={contextVideos.length}
-          activeFilter={statusFilter}
-          items={COORDINATION_STATUS_ITEMS}
-          counts={statusCounts}
-          onSelectAll={() => setStatusFilter('all')}
-          onSelectItem={id => handleStatusSummaryClick(id as VideoOutputStatus)}
-          ariaLabel="狀態篩選"
-          tintInactive
-        />
+        <p className="text-[14px] text-muted-foreground mt-1">
+          全局影片產出時間軸，查看所有狀態的影片記錄。
+        </p>
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
@@ -379,104 +402,130 @@ export function VideoManagementModule() {
         </div>
       </div>
 
-      <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-x-auto">
-        <table className="w-full text-[14px] min-w-[1180px]">
-          <thead className="bg-muted/30">
-            <tr>
-              <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">狀態</th>
-              <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">Vchannel</th>
-              <th className="text-left px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap w-[1%]">Video Code</th>
-              <th className="text-left px-3 py-2.5 font-medium text-muted-foreground min-w-[180px]">主題</th>
-              <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">拍攝時間</th>
-              <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">計劃發佈時間</th>
-              <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">實際發佈時間</th>
-              <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">拍攝地址</th>
-              <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">文案</th>
-              <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">原片拍攝</th>
-              <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">是否剪輯</th>
-              <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">Demo完成</th>
-              <th className="text-right px-4 py-2.5 font-medium text-muted-foreground whitespace-nowrap min-w-[76px]">總工時</th>
-            </tr>
-          </thead>
-            {filteredVideos.map(video => {
-              const status = deriveVideoOutputStatus(video);
-              const isPublished = status === 'published';
-              const totalHours = workLogTotals.get(video.id);
-              const cellPad = isPublished ? 'pt-2.5 pb-1' : 'py-2.5';
+      <WorkflowStatusSummaryBar
+        filteredCount={filteredVideos.length}
+        contextCount={contextVideos.length}
+        activeFilter={statusFilter}
+        items={COORDINATION_STATUS_ITEMS}
+        counts={statusCounts}
+        onSelectAll={() => setStatusFilter('all')}
+        onSelectItem={id => handleStatusSummaryClick(id as VideoOutputStatus)}
+        ariaLabel="狀態篩選"
+        tintInactive
+      />
 
-              return (
-                <tbody
-                  key={video.id}
-                  className="border-t border-border/50 group"
-                >
-                  <tr className="group-hover:bg-muted/10 transition-colors">
-                    <td className={cn('px-3 align-middle', cellPad)}>
-                      <StatusCell status={status} />
-                    </td>
-                    <td className={cn('px-3 align-middle', cellPad)}>
-                      <span className="font-mono text-[13px] font-bold" title={video.channelPublicName}>
-                        {video.channelCode}
-                      </span>
-                    </td>
-                    <td className={cn('px-2 align-middle font-mono text-[11px] w-[1%] max-w-[96px]', cellPad)}>
-                      <span className="block truncate" title={video.videoCode}>{video.videoCode}</span>
-                    </td>
-                    <td className={cn('px-3 align-middle max-w-[240px]', cellPad)}>
-                      <span className="line-clamp-2 font-bold" title={video.title}>{video.title}</span>
-                    </td>
-                    <td className={cn('px-3 align-middle text-[13px] whitespace-nowrap', cellPad)}>
-                      {video.shootAt ?? '—'}
-                    </td>
-                    <td className={cn('px-3 align-middle text-[13px] whitespace-nowrap text-muted-foreground', cellPad)}>
-                      {video.plannedPublishDate?.trim() || '—'}
-                    </td>
-                    <td className={cn('px-3 align-middle text-[13px] whitespace-nowrap', cellPad)}>
-                      {video.publishedDate?.trim() || '—'}
-                    </td>
-                    <td className={cn('px-3 align-middle whitespace-nowrap text-[13px]', cellPad)}>
-                      {formatShootLocation(video.shootHk, video.shootSz)}
-                    </td>
-                    <td className={cn('px-2 align-middle text-center', cellPad)}>
-                      <CopywritingCell sc={video.copySc} tc={video.copyTc} en={video.copyEn} />
-                    </td>
-                    <td className={cn('px-2 align-middle text-center', cellPad)}>
-                      <CheckCell value={video.rawFootageDone} />
-                    </td>
-                    <td className={cn('px-2 align-middle text-center', cellPad)}>
-                      <CheckCell value={video.needsEditing} />
-                    </td>
-                    <td className={cn('px-2 align-middle text-center', cellPad)}>
-                      {video.storagePath?.trim() ? (
-                        <CopyStoragePathButton path={video.storagePath} />
-                      ) : (
-                        <CheckCell value={video.demoDone} />
-                      )}
-                    </td>
-                    <td className={cn('px-4 align-middle text-right min-w-[76px]', cellPad)}>
-                      <WorkHoursCell hours={totalHours} />
-                    </td>
-                  </tr>
-                  {isPublished && (
+      {view === 'status' ? (
+        filteredVideos.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground text-[13px]">沒有符合條件的影片</div>
+        ) : (
+          <VideoCoordinationStatusView
+            videos={filteredVideos}
+            workLogTotals={workLogTotals}
+            onPublish={setPublishingVideo}
+          />
+        )
+      ) : (
+        <>
+          <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-x-auto">
+            <table className="w-full text-[14px] min-w-[1180px]">
+              <thead className="bg-muted/30">
+                <tr>
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">狀態</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">Vchannel</th>
+                  <th className="text-left px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap w-[1%]">Video Code</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground min-w-[180px]">主題</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">拍攝時間</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">計劃發佈時間</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">實際發佈時間</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">拍攝地址</th>
+                  <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">文案</th>
+                  <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">原片拍攝</th>
+                  <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">是否剪輯</th>
+                  <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">Demo完成</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-muted-foreground whitespace-nowrap min-w-[76px]">總工時</th>
+                </tr>
+              </thead>
+              {filteredVideos.map(video => {
+                const status = deriveVideoOutputStatus(video);
+                const isPublished = status === 'published';
+                const totalHours = workLogTotals.get(video.id);
+                const cellPad = isPublished ? 'pt-2.5 pb-1' : 'py-2.5';
+
+                return (
+                  <tbody
+                    key={video.id}
+                    className="border-t border-border/50 group"
+                  >
                     <tr className="group-hover:bg-muted/10 transition-colors">
-                      {Array.from({ length: PLATFORM_ROW_LEAD_COLS }).map((_, i) => (
-                        <td key={i} className="px-3 pt-0 pb-2.5" />
-                      ))}
-                      <td colSpan={TABLE_COL_COUNT - PLATFORM_ROW_LEAD_COLS} className="px-3 pt-0 pb-2.5">
-                        <PlatformPublishRow
-                          platformPublish={video.platformPublish}
-                          onPublish={() => setPublishingVideo(video)}
-                        />
+                      <td className={cn('px-3 align-middle', cellPad)}>
+                        <StatusCell status={status} />
+                      </td>
+                      <td className={cn('px-3 align-middle', cellPad)}>
+                        <span className="font-mono text-[13px] font-bold" title={video.channelPublicName}>
+                          {video.channelCode}
+                        </span>
+                      </td>
+                      <td className={cn('px-2 align-middle font-mono text-[11px] w-[1%] max-w-[96px]', cellPad)}>
+                        <span className="block truncate" title={video.videoCode}>{video.videoCode}</span>
+                      </td>
+                      <td className={cn('px-3 align-middle max-w-[240px]', cellPad)}>
+                        <span className="line-clamp-2 font-bold" title={video.title}>{video.title}</span>
+                      </td>
+                      <td className={cn('px-3 align-middle text-[13px] whitespace-nowrap', cellPad)}>
+                        {video.shootAt ?? '—'}
+                      </td>
+                      <td className={cn('px-3 align-middle text-[13px] whitespace-nowrap text-muted-foreground', cellPad)}>
+                        {video.plannedPublishDate?.trim() || '—'}
+                      </td>
+                      <td className={cn('px-3 align-middle text-[13px] whitespace-nowrap', cellPad)}>
+                        {video.publishedDate?.trim() || '—'}
+                      </td>
+                      <td className={cn('px-3 align-middle whitespace-nowrap text-[13px]', cellPad)}>
+                        {formatShootLocation(video.shootHk, video.shootSz)}
+                      </td>
+                      <td className={cn('px-2 align-middle text-center', cellPad)}>
+                        <CopywritingCell sc={video.copySc} tc={video.copyTc} en={video.copyEn} />
+                      </td>
+                      <td className={cn('px-2 align-middle text-center', cellPad)}>
+                        <CheckCell value={video.rawFootageDone} />
+                      </td>
+                      <td className={cn('px-2 align-middle text-center', cellPad)}>
+                        <CheckCell value={video.needsEditing} />
+                      </td>
+                      <td className={cn('px-2 align-middle text-center', cellPad)}>
+                        {video.storagePath?.trim() ? (
+                          <CopyStoragePathButton path={video.storagePath} />
+                        ) : (
+                          <CheckCell value={video.demoDone} />
+                        )}
+                      </td>
+                      <td className={cn('px-4 align-middle text-right min-w-[76px]', cellPad)}>
+                        <WorkHoursCell hours={totalHours} />
                       </td>
                     </tr>
-                  )}
-                </tbody>
-              );
-            })}
-        </table>
-      </div>
+                    {isPublished && (
+                      <tr className="group-hover:bg-muted/10 transition-colors">
+                        {Array.from({ length: PLATFORM_ROW_LEAD_COLS }).map((_, i) => (
+                          <td key={i} className="px-3 pt-0 pb-2.5" />
+                        ))}
+                        <td colSpan={TABLE_COL_COUNT - PLATFORM_ROW_LEAD_COLS} className="px-3 pt-0 pb-2.5">
+                          <PlatformPublishRow
+                            platformPublish={video.platformPublish}
+                            onPublish={() => setPublishingVideo(video)}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                );
+              })}
+            </table>
+          </div>
 
-      {filteredVideos.length === 0 && (
-        <div className="text-center py-12 text-muted-foreground text-[13px]">沒有符合條件的影片</div>
+          {filteredVideos.length === 0 && (
+            <div className="text-center py-12 text-muted-foreground text-[13px]">沒有符合條件的影片</div>
+          )}
+        </>
       )}
 
       {publishingVideo && (
