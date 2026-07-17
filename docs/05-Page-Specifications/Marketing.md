@@ -13,6 +13,21 @@
 | `/marketing/seo-upgrade` | SEO 升級 | 升級記錄 |
 | `/marketing/graphic-design` | 平面設計 | 平面設計製作追蹤 |
 | `/marketing/backlink` | 反向連結 | 反向連結購買紀錄 |
+| `/marketing/google-business` | Google Business | Google Business 登記 |
+
+---
+
+## Google Business
+
+> 前端 DataStore；後續再落 Supabase 表。登記已建立的 Google Business 檔案。
+
+### 欄位
+
+| 欄位 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| Google Business 網址 | Text (URL) | ✅ | g.page / maps 連結 |
+| 登記日期 | Date | ✅ | |
+| 登記內容 | Textarea | ✅ | 業務資訊、地址、營業時間等 |
 
 ---
 

@@ -54,6 +54,14 @@ export interface BacklinkPurchase {
   notes?: string;
 }
 
+/** Google Business 登記紀錄 */
+export interface GoogleBusinessRegistration {
+  id: string;
+  url: string;
+  registeredAt: string;
+  content: string;
+}
+
 // ===== Integrity check result =====
 export interface IntegrityCheck {
   canDelete: boolean;
@@ -137,6 +145,12 @@ interface DataStoreContextType {
   updateBacklinkPurchase: (id: string, data: Partial<BacklinkPurchase>) => void;
   deleteBacklinkPurchase: (id: string) => IntegrityCheck;
 
+  // Google Business registrations
+  googleBusinessRegistrations: GoogleBusinessRegistration[];
+  addGoogleBusinessRegistration: (record: Omit<GoogleBusinessRegistration, 'id'>) => GoogleBusinessRegistration;
+  updateGoogleBusinessRegistration: (id: string, data: Partial<GoogleBusinessRegistration>) => void;
+  deleteGoogleBusinessRegistration: (id: string) => IntegrityCheck;
+
   // Sample Data Management
   sampleDataEnabled: boolean;
   setSampleDataEnabled: (enabled: boolean) => void;
@@ -180,6 +194,11 @@ const initialBacklinkPurchases: (BacklinkPurchase & { __sampleData: true })[] = 
   { __sampleData: true, id: 'bl3', webSupplierId: 'wps1', cost: 200, currency: 'USD', purchaseDate: '2025-03-10', quantity: 5 },
 ];
 
+const initialGoogleBusinessRegistrations: (GoogleBusinessRegistration & { __sampleData: true })[] = [
+  { __sampleData: true, id: 'gb1', url: 'https://g.page/bw-wine-hongkong', registeredAt: '2025-01-08', content: 'BW Wine 尖沙咀門市 — 營業時間、地址、品酒活動資訊' },
+  { __sampleData: true, id: 'gb2', url: 'https://maps.app.goo.gl/aci-events', registeredAt: '2025-02-14', content: 'ACI Events 辦公室 — 聯絡電話、服務範圍、最新活動' },
+];
+
 // Initial video channels (模擬數據)
 const initialVideoChannels: (VideoChannel & { __sampleData: true })[] = [
   { __sampleData: true, id: 'vc1', channelNumber: 'CH-001', internalName: 'BW 品牌主頻道', publicName: 'BW Wine Official', importance: 'A1', deviceType: 'both', brand: 'BW', status: 'active', videoCount: 45 },
@@ -218,6 +237,7 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
   const [suppliers, setSuppliers] = useState<SupplierData[]>(initialSuppliers);
   const [webPageSuppliers, setWebPageSuppliers] = useState<WebPageSupplier[]>(initialWebPageSuppliers);
   const [backlinkPurchases, setBacklinkPurchases] = useState<BacklinkPurchase[]>(initialBacklinkPurchases);
+  const [googleBusinessRegistrations, setGoogleBusinessRegistrations] = useState<GoogleBusinessRegistration[]>(initialGoogleBusinessRegistrations);
 
   // Filter helper: applies sample data filter when disabled
   const filterIfNeeded = useCallback(<T,>(data: T[]): T[] => {
@@ -246,6 +266,10 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
   const filteredSuppliers = useMemo(() => filterIfNeeded(suppliers), [suppliers, filterIfNeeded]);
   const filteredWebPageSuppliers = useMemo(() => filterIfNeeded(webPageSuppliers), [webPageSuppliers, filterIfNeeded]);
   const filteredBacklinkPurchases = useMemo(() => filterIfNeeded(backlinkPurchases), [backlinkPurchases, filterIfNeeded]);
+  const filteredGoogleBusinessRegistrations = useMemo(
+    () => filterIfNeeded(googleBusinessRegistrations),
+    [googleBusinessRegistrations, filterIfNeeded],
+  );
 
   // Clear all sample data permanently
   const clearAllSampleData = useCallback(() => {
@@ -255,6 +279,7 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
     setSuppliers(prev => filterOutSampleData(prev));
     setWebPageSuppliers(prev => filterOutSampleData(prev));
     setBacklinkPurchases(prev => filterOutSampleData(prev));
+    setGoogleBusinessRegistrations(prev => filterOutSampleData(prev));
     setVideos(prev => {
       const result: Record<string, Video[]> = {};
       for (const [k, v] of Object.entries(prev)) {
@@ -311,6 +336,7 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
     setSuppliers(initialSuppliers);
     setWebPageSuppliers(initialWebPageSuppliers);
     setBacklinkPurchases(initialBacklinkPurchases);
+    setGoogleBusinessRegistrations(initialGoogleBusinessRegistrations);
     setSampleDataEnabled(true);
   }, [setSampleDataEnabled]);
 
@@ -333,8 +359,9 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
       suppliers,
       webPageSuppliers,
       backlinkPurchases,
+      googleBusinessRegistrations,
     });
-  }, [projects, websites, videos, videoChannels, socialPosts, paidAds, seoKeywords, edmCampaigns, suppliers, webPageSuppliers, backlinkPurchases]);
+  }, [projects, websites, videos, videoChannels, socialPosts, paidAds, seoKeywords, edmCampaigns, suppliers, webPageSuppliers, backlinkPurchases, googleBusinessRegistrations]);
 
   // ===== Helper: get website info for flattening =====
   const getWebsiteInfo = useCallback((wsId: string) => {
@@ -665,6 +692,28 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
     return { canDelete: true, reasons: [] };
   }, []);
 
+  // ===== GOOGLE BUSINESS REGISTRATION CRUD =====
+  const addGoogleBusinessRegistration = useCallback(
+    (data: Omit<GoogleBusinessRegistration, 'id'>): GoogleBusinessRegistration => {
+      const newRecord: GoogleBusinessRegistration = { ...data, id: generateId('gb') };
+      setGoogleBusinessRegistrations(prev => [...prev, newRecord]);
+      return newRecord;
+    },
+    [],
+  );
+
+  const updateGoogleBusinessRegistration = useCallback(
+    (id: string, data: Partial<GoogleBusinessRegistration>) => {
+      setGoogleBusinessRegistrations(prev => prev.map(r => (r.id === id ? { ...r, ...data } : r)));
+    },
+    [],
+  );
+
+  const deleteGoogleBusinessRegistration = useCallback((id: string): IntegrityCheck => {
+    setGoogleBusinessRegistrations(prev => prev.filter(r => r.id !== id));
+    return { canDelete: true, reasons: [] };
+  }, []);
+
   const value: DataStoreContextType = {
     projects: filteredProjects, addProject, updateProject, deleteProject, getProjectById,
     websites: filteredWebsites, addWebsite, addWebsiteWithId, updateWebsite, deleteWebsite, getWebsiteById,
@@ -677,6 +726,10 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
     suppliers: filteredSuppliers, addSupplier, updateSupplier, deleteSupplier,
     webPageSuppliers: filteredWebPageSuppliers, addWebPageSupplier, updateWebPageSupplier, deleteWebPageSupplier, getWebPageSupplierById,
     backlinkPurchases: filteredBacklinkPurchases, addBacklinkPurchase, updateBacklinkPurchase, deleteBacklinkPurchase,
+    googleBusinessRegistrations: filteredGoogleBusinessRegistrations,
+    addGoogleBusinessRegistration,
+    updateGoogleBusinessRegistration,
+    deleteGoogleBusinessRegistration,
     sampleDataEnabled, setSampleDataEnabled, clearAllSampleData, restoreSampleData, sampleDataSummary,
   };
 
