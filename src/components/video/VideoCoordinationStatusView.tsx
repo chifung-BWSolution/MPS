@@ -17,8 +17,7 @@ const STATUS_COLUMNS: VideoOutputStatus[] = [
   'published',
 ];
 
-/** Figure-2 style: top accent + soft header wash */
-const STATUS_BAR_STYLE: Record<VideoOutputStatus, { border: string; bg: string }> = {
+const COLUMN_STYLE: Record<VideoOutputStatus, { border: string; bg: string }> = {
   pending: { border: 'border-slate-400', bg: 'bg-slate-50' },
   in_production: { border: 'border-amber-400', bg: 'bg-amber-50' },
   pending_review: { border: 'border-blue-400', bg: 'bg-blue-50' },
@@ -172,20 +171,6 @@ type Props = {
 export function VideoCoordinationStatusView({ videos, workLogTotals, onPublish }: Props) {
   const currentMonthKey = useMemo(() => getCurrentMonthKey(), []);
 
-  const statusCounts = useMemo(() => {
-    const counts: Record<VideoOutputStatus, number> = {
-      pending: 0,
-      in_production: 0,
-      pending_review: 0,
-      pending_publish: 0,
-      published: 0,
-    };
-    for (const video of videos) {
-      counts[deriveVideoOutputStatus(video)]++;
-    }
-    return counts;
-  }, [videos]);
-
   const videosByStatus = useMemo(() => {
     const map = {} as Record<VideoOutputStatus, VideoOutput[]>;
     for (const status of STATUS_COLUMNS) map[status] = [];
@@ -194,29 +179,6 @@ export function VideoCoordinationStatusView({ videos, workLogTotals, onPublish }
     }
     return map;
   }, [videos]);
-
-  /** Which status sections are expanded; null = default (all with videos) */
-  const [expandedStatuses, setExpandedStatuses] = useState<Set<VideoOutputStatus> | null>(null);
-
-  const defaultExpandedStatuses = useMemo(() => {
-    const keys = new Set<VideoOutputStatus>();
-    for (const status of STATUS_COLUMNS) {
-      if (statusCounts[status] > 0) keys.add(status);
-    }
-    return keys;
-  }, [statusCounts]);
-
-  const activeStatuses = expandedStatuses ?? defaultExpandedStatuses;
-
-  const toggleStatus = (status: VideoOutputStatus) => {
-    setExpandedStatuses(prev => {
-      const base = prev ?? defaultExpandedStatuses;
-      const next = new Set(base);
-      if (next.has(status)) next.delete(status);
-      else next.add(status);
-      return next;
-    });
-  };
 
   /** Expanded months keyed by `${status}:${monthKey}`; null = defaults */
   const [expandedMonths, setExpandedMonths] = useState<Set<string> | null>(null);
@@ -248,119 +210,83 @@ export function VideoCoordinationStatusView({ videos, workLogTotals, onPublish }
   };
 
   return (
-    <div className="space-y-4">
-      {/* Figure-2 status bar — stays above the list */}
-      <div
-        className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2"
-        role="group"
-        aria-label="狀態分組"
-      >
+    <div className="overflow-x-auto -mx-1 px-1">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3 min-w-[900px] xl:min-w-0 items-start">
         {STATUS_COLUMNS.map(status => {
-          const style = STATUS_BAR_STYLE[status];
-          const expanded = activeStatuses.has(status);
-          const count = statusCounts[status];
-          return (
-            <button
-              key={status}
-              type="button"
-              onClick={() => toggleStatus(status)}
-              className={cn(
-                'flex items-center justify-between gap-2 px-3 py-2.5 rounded-md border-t-2 text-left transition-all',
-                style.border,
-                style.bg,
-                expanded
-                  ? 'ring-2 ring-teal-600/25 shadow-sm'
-                  : 'opacity-80 hover:opacity-100',
-              )}
-            >
-              <span className="text-[13px] font-bold text-foreground/90">
-                {VIDEO_OUTPUT_STATUS_LABELS[status]}
-              </span>
-              <span className="text-[11px] bg-white px-1.5 py-0.5 rounded shadow-sm font-medium tabular-nums shrink-0">
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Status → Month groups */}
-      <div className="space-y-3">
-        {STATUS_COLUMNS.map(status => {
-          if (!activeStatuses.has(status)) return null;
-
+          const style = COLUMN_STYLE[status];
           const statusVideos = videosByStatus[status];
           const monthGroups = groupByMonth(statusVideos);
-          const style = STATUS_BAR_STYLE[status];
 
           return (
             <div
               key={status}
               className={cn(
-                'rounded-md border border-[rgba(13,26,45,0.08)] bg-white shadow-card overflow-hidden border-t-2',
+                'rounded-md p-3 border-t-2 min-h-[280px] bg-muted/20',
                 style.border,
               )}
             >
+              {/* Column header = status bar */}
               <div
                 className={cn(
-                  'flex items-center justify-between px-4 py-2.5',
+                  'flex items-center justify-between mb-3 px-2 py-1.5 rounded',
                   style.bg,
                 )}
               >
-                <span className="text-[14px] font-bold">
+                <span className="text-[13px] font-bold">
                   {VIDEO_OUTPUT_STATUS_LABELS[status]}
                 </span>
-                <span className="text-[12px] text-muted-foreground tabular-nums">
-                  {statusVideos.length} 部
+                <span className="text-[11px] bg-white px-1.5 py-0.5 rounded shadow-sm font-medium tabular-nums">
+                  {statusVideos.length}
                 </span>
               </div>
 
               {statusVideos.length === 0 ? (
-                <div className="text-center py-10 text-[12px] text-muted-foreground border-t border-border/50">
-                  暫無影片
-                </div>
+                <div className="text-center py-8 text-[12px] text-muted-foreground">暫無影片</div>
               ) : (
-                <div className="divide-y divide-border/50 border-t border-border/50">
+                <div className="space-y-2">
                   {monthGroups.map(month => {
                     const monthId = `${status}:${month.key}`;
                     const monthExpanded = activeMonths.has(monthId);
                     const isCurrent = month.key === currentMonthKey;
 
                     return (
-                      <div key={month.key}>
+                      <div
+                        key={month.key}
+                        className="rounded-md border border-border/40 bg-white/60 overflow-hidden"
+                      >
                         <button
                           type="button"
                           onClick={() => toggleMonth(status, month.key)}
                           className={cn(
-                            'w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-muted/40 transition-colors',
-                            isCurrent && 'bg-teal-50/40',
+                            'w-full flex items-center gap-1.5 px-2 py-1.5 text-left hover:bg-muted/50 transition-colors',
+                            isCurrent && 'bg-teal-50/60',
                           )}
                         >
                           {monthExpanded ? (
-                            <ChevronDown size={14} className="text-muted-foreground shrink-0" />
+                            <ChevronDown size={12} className="text-muted-foreground shrink-0" />
                           ) : (
-                            <ChevronRight size={14} className="text-muted-foreground shrink-0" />
+                            <ChevronRight size={12} className="text-muted-foreground shrink-0" />
                           )}
                           <span
                             className={cn(
-                              'text-[13px] font-semibold',
+                              'text-[12px] font-semibold truncate',
                               isCurrent ? 'text-teal-700' : 'text-foreground',
                             )}
                           >
                             {formatMonthLabel(month.key)}
                           </span>
                           {isCurrent && (
-                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-teal-600 text-white">
+                            <span className="text-[9px] font-medium px-1 py-0.5 rounded bg-teal-600 text-white shrink-0">
                               本月
                             </span>
                           )}
-                          <span className="ml-auto text-[12px] text-muted-foreground tabular-nums">
-                            {month.videos.length} 部
+                          <span className="ml-auto text-[11px] text-muted-foreground tabular-nums shrink-0">
+                            {month.videos.length}
                           </span>
                         </button>
 
                         {monthExpanded && (
-                          <div className="px-3 pb-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2">
+                          <div className="space-y-2 px-1.5 pb-1.5">
                             {month.videos.map(video => (
                               <StatusVideoCard
                                 key={video.id}
