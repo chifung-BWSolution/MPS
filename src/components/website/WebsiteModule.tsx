@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
-import { Globe, Plus, Search, ExternalLink, FileText, Video, Share2, Mail, TrendingUp, Puzzle, Link2, Calendar, X, Check, Trash2, LayoutGrid, List, ArrowLeft, Megaphone, Star, Sparkles, ChevronDown, Pencil, Monitor, Server } from 'lucide-react';
+import { Globe, Plus, Search, ExternalLink, FileText, Video, Share2, Mail, TrendingUp, Puzzle, Link2, Calendar, X, Check, Trash2, LayoutGrid, List, ArrowLeft, Megaphone, Star, Sparkles, ChevronDown, Pencil, Monitor, Server, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WebsiteProfileFull, Article, WebsiteLevel, ProfileType, SystemType } from '@/types/app';
 import {
@@ -28,7 +28,8 @@ import {
   WebsiteSeoTab,
   WebsiteEdmTab,
   WebsitePluginsTab,
-  WebsiteLinksTab,
+  WebsiteBacklinkTab,
+  WebsiteGoogleBusinessTab,
   WebsiteCalendarTab,
 } from './WebsiteDetailTabs';
 
@@ -589,7 +590,8 @@ function WebsiteDetail({
     { id: 'seo', label: 'SEO 關鍵字', icon: TrendingUp },
     { id: 'edm', label: 'EDM', icon: Mail },
     { id: 'plugins', label: '插件/工具', icon: Puzzle },
-    { id: 'links', label: '外部連結', icon: Link2 },
+    { id: 'backlink', label: '反向連結', icon: Link2 },
+    { id: 'google-business', label: 'Google Business', icon: MapPin },
     { id: 'calendar', label: '內容日曆', icon: Calendar },
   ];
 
@@ -817,7 +819,8 @@ function WebsiteDetail({
         {activeTab === 'seo' && <WebsiteSeoTab site={site} />}
         {activeTab === 'edm' && <WebsiteEdmTab site={site} />}
         {activeTab === 'plugins' && <WebsitePluginsTab site={site} />}
-        {activeTab === 'links' && <WebsiteLinksTab site={site} />}
+        {activeTab === 'backlink' && <WebsiteBacklinkTab site={site} />}
+        {activeTab === 'google-business' && <WebsiteGoogleBusinessTab site={site} />}
         {activeTab === 'calendar' && <WebsiteCalendarTab site={site} />}
       </div>
     </div>

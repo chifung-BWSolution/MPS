@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, X, ExternalLink, Video, Share2, Megaphone, TrendingUp, Mail, Puzzle, Link2, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Loader2, Unlink, Search } from 'lucide-react';
+import { Plus, X, ExternalLink, Video, Share2, Megaphone, TrendingUp, Mail, Puzzle, Link2, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Loader2, Unlink, Search, Edit, Trash2, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WebsiteProfileFull, SocialPost, PaidAd, SeoKeyword, EdmCampaign } from '@/types/app';
 import {
@@ -33,6 +33,10 @@ import {
 } from '@/services/websiteVideoLinkService';
 import { useVchannels } from '@/hooks/useVchannels';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useDataStore, BacklinkPurchase, GoogleBusinessRegistration } from '@/context/DataStore';
+import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 // ============================================================
 // Shared Configs
@@ -1336,6 +1340,438 @@ export function WebsiteCalendarTab({ site }: { site: WebsiteProfileFull }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================
+// BACKLINK TAB (反向連結)
+// ============================================================
+type BacklinkForm = {
+  webSupplierId: string;
+  cost: number;
+  currency: 'USD' | 'HKD';
+  purchaseDate: string;
+  quantity: number;
+  notes: string;
+};
+
+const emptyBacklinkForm: BacklinkForm = {
+  webSupplierId: '',
+  cost: 0,
+  currency: 'USD',
+  purchaseDate: '',
+  quantity: 1,
+  notes: '',
+};
+
+export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
+  const {
+    webPageSuppliers,
+    backlinkPurchases,
+    addBacklinkPurchase,
+    updateBacklinkPurchase,
+    deleteBacklinkPurchase,
+  } = useDataStore();
+
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [form, setForm] = useState<BacklinkForm>(emptyBacklinkForm);
+  const [editing, setEditing] = useState<BacklinkPurchase | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BacklinkPurchase | null>(null);
+
+  const supplierMap = useMemo(
+    () => new Map(webPageSuppliers.map((s) => [s.id, s])),
+    [webPageSuppliers],
+  );
+
+  const records = useMemo(
+    () => backlinkPurchases.filter((p) => p.websiteProfileId === site.id),
+    [backlinkPurchases, site.id],
+  );
+
+  const stats = useMemo(() => {
+    const totalQty = records.reduce((s, p) => s + p.quantity, 0);
+    const usd = records.filter((p) => p.currency === 'USD').reduce((s, p) => s + p.cost, 0);
+    const hkd = records.filter((p) => p.currency === 'HKD').reduce((s, p) => s + p.cost, 0);
+    return { count: records.length, totalQty, usd, hkd };
+  }, [records]);
+
+  const handleAdd = () => {
+    if (!form.webSupplierId || !form.purchaseDate || form.quantity < 1) return;
+    addBacklinkPurchase({
+      websiteProfileId: site.id,
+      webSupplierId: form.webSupplierId,
+      cost: form.cost,
+      currency: form.currency,
+      purchaseDate: form.purchaseDate,
+      quantity: form.quantity,
+      notes: form.notes || undefined,
+    });
+    setForm(emptyBacklinkForm);
+    setShowAddModal(false);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editing || !editing.webSupplierId || !editing.purchaseDate || editing.quantity < 1) return;
+    updateBacklinkPurchase(editing.id, {
+      webSupplierId: editing.webSupplierId,
+      cost: editing.cost,
+      currency: editing.currency,
+      purchaseDate: editing.purchaseDate,
+      quantity: editing.quantity,
+      notes: editing.notes,
+      websiteProfileId: site.id,
+    });
+    setShowEditModal(false);
+    setEditing(null);
+  };
+
+  const renderFields = (
+    data: BacklinkForm | BacklinkPurchase,
+    onChange: (next: BacklinkForm | BacklinkPurchase) => void,
+  ) => {
+    const supplier = data.webSupplierId ? supplierMap.get(data.webSupplierId) : undefined;
+    return (
+      <div className="space-y-4">
+        <div>
+          <label className="text-[12px] font-medium text-muted-foreground block mb-1">網站（供應商網址）*</label>
+          <Select value={data.webSupplierId} onValueChange={(val) => onChange({ ...data, webSupplierId: val })}>
+            <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="從網頁供應商選擇" /></SelectTrigger>
+            <SelectContent>
+              {webPageSuppliers.map((s) => (
+                <SelectItem key={s.id} value={s.id}>{s.url}（{s.name}）</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {webPageSuppliers.length === 0 && (
+            <p className="text-[11px] text-amber-600 mt-1">請先至「供應商 → 網頁供應商」新增名單</p>
+          )}
+        </div>
+        <div>
+          <label className="text-[12px] font-medium text-muted-foreground block mb-1">供應商</label>
+          <Input value={supplier?.name || ''} readOnly className="h-9 text-[13px] bg-muted/40" placeholder="選擇後自動帶出" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">費用 *</label>
+            <Input type="number" value={data.cost} onChange={(e) => onChange({ ...data, cost: parseFloat(e.target.value) || 0 })} className="h-9 text-[13px]" />
+          </div>
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">幣別</label>
+            <Select value={data.currency} onValueChange={(val) => onChange({ ...data, currency: val as 'USD' | 'HKD' })}>
+              <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="USD">USD</SelectItem>
+                <SelectItem value="HKD">HKD</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">購買日期 *</label>
+            <Input type="date" value={data.purchaseDate} onChange={(e) => onChange({ ...data, purchaseDate: e.target.value })} className="h-9 text-[13px]" />
+          </div>
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">反向連結數量 *</label>
+            <Input type="number" min={1} value={data.quantity} onChange={(e) => onChange({ ...data, quantity: parseInt(e.target.value, 10) || 0 })} className="h-9 text-[13px]" />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h4 className="text-[15px] font-bold">反向連結</h4>
+          <p className="text-[12px] text-muted-foreground mt-0.5">此網站購買的反向連結紀錄</p>
+        </div>
+        <button
+          onClick={() => { setForm(emptyBacklinkForm); setShowAddModal(true); }}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-medium hover:bg-teal-700 transition-colors"
+        >
+          <Plus size={13} />新增購買
+        </button>
+      </div>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-3 py-2">
+          <span className="text-[11px] text-muted-foreground">筆數</span>
+          <p className="text-[16px] font-bold">{stats.count}</p>
+        </div>
+        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-3 py-2">
+          <span className="text-[11px] text-muted-foreground">總連結數</span>
+          <p className="text-[16px] font-bold">{stats.totalQty}</p>
+        </div>
+        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-3 py-2">
+          <span className="text-[11px] text-muted-foreground">USD</span>
+          <p className="text-[16px] font-bold">${stats.usd.toLocaleString()}</p>
+        </div>
+        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-3 py-2">
+          <span className="text-[11px] text-muted-foreground">HKD</span>
+          <p className="text-[16px] font-bold">${stats.hkd.toLocaleString()}</p>
+        </div>
+      </div>
+
+      {records.length === 0 ? (
+        <div className="text-center py-12 border border-dashed border-border rounded-md">
+          <Link2 size={32} className="text-muted-foreground mx-auto mb-3" />
+          <p className="text-[14px] font-medium text-muted-foreground">尚未新增反向連結</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-hidden">
+          <table className="w-full text-[13px]">
+            <thead className="bg-muted/30">
+              <tr>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">供應商網址</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">供應商</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">費用</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">購買日期</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">數量</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {records.map((record) => {
+                const supplier = supplierMap.get(record.webSupplierId);
+                return (
+                  <tr key={record.id} className="border-t border-border/50 hover:bg-muted/10">
+                    <td className="px-4 py-3 break-all">{supplier?.url || '—'}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{supplier?.name || '—'}</td>
+                    <td className="px-4 py-3">{record.currency} ${record.cost.toLocaleString()}</td>
+                    <td className="px-4 py-3">{record.purchaseDate}</td>
+                    <td className="px-4 py-3">{record.quantity}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => { setEditing({ ...record }); setShowEditModal(true); }} className="p-1 hover:bg-muted rounded" title="編輯">
+                          <Edit size={12} className="text-teal-600" />
+                        </button>
+                        <button onClick={() => setDeleteTarget(record)} className="p-1 hover:bg-muted rounded" title="刪除">
+                          <Trash2 size={12} className="text-rose-500" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <CrudModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="新增反向連結購買" size="lg">
+        {renderFields(form, (next) => setForm(next as BacklinkForm))}
+        <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
+          <Button variant="secondary" onClick={() => setShowAddModal(false)}>取消</Button>
+          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleAdd}>新增</Button>
+        </div>
+      </CrudModal>
+
+      <CrudModal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="編輯反向連結購買" size="lg">
+        {editing && renderFields(editing, (next) => setEditing(next as BacklinkPurchase))}
+        <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
+          <Button variant="secondary" onClick={() => setShowEditModal(false)}>取消</Button>
+          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSaveEdit}>儲存</Button>
+        </div>
+      </CrudModal>
+
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deleteBacklinkPurchase(deleteTarget.id);
+          setDeleteTarget(null);
+        }}
+        itemName={supplierMap.get(deleteTarget?.webSupplierId || '')?.name || '反向連結紀錄'}
+        canDelete
+        reasons={[]}
+      />
+    </div>
+  );
+}
+
+// ============================================================
+// GOOGLE BUSINESS TAB
+// ============================================================
+type GbForm = Omit<GoogleBusinessRegistration, 'id' | 'websiteProfileId'>;
+
+const emptyGbForm: GbForm = { url: '', registeredAt: '', content: '' };
+
+export function WebsiteGoogleBusinessTab({ site }: { site: WebsiteProfileFull }) {
+  const {
+    googleBusinessRegistrations,
+    addGoogleBusinessRegistration,
+    updateGoogleBusinessRegistration,
+    deleteGoogleBusinessRegistration,
+  } = useDataStore();
+
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [form, setForm] = useState<GbForm>(emptyGbForm);
+  const [editing, setEditing] = useState<GoogleBusinessRegistration | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<GoogleBusinessRegistration | null>(null);
+
+  const records = useMemo(
+    () => googleBusinessRegistrations.filter((r) => r.websiteProfileId === site.id),
+    [googleBusinessRegistrations, site.id],
+  );
+
+  const handleAdd = () => {
+    if (!form.url.trim() || !form.registeredAt || !form.content.trim()) return;
+    addGoogleBusinessRegistration({ ...form, websiteProfileId: site.id });
+    setForm(emptyGbForm);
+    setShowAddModal(false);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editing || !editing.url.trim() || !editing.registeredAt || !editing.content.trim()) return;
+    updateGoogleBusinessRegistration(editing.id, {
+      url: editing.url,
+      registeredAt: editing.registeredAt,
+      content: editing.content,
+      websiteProfileId: site.id,
+    });
+    setShowEditModal(false);
+    setEditing(null);
+  };
+
+  const renderFields = (
+    data: GbForm | GoogleBusinessRegistration,
+    onChange: (next: GbForm | GoogleBusinessRegistration) => void,
+  ) => (
+    <div className="space-y-4">
+      <div>
+        <label className="text-[12px] font-medium text-muted-foreground block mb-1">Google Business 網址 *</label>
+        <Input
+          value={data.url}
+          onChange={(e) => onChange({ ...data, url: e.target.value })}
+          className="h-9 text-[13px]"
+          placeholder="https://g.page/... 或 maps 連結"
+        />
+      </div>
+      <div>
+        <label className="text-[12px] font-medium text-muted-foreground block mb-1">登記日期 *</label>
+        <Input
+          type="date"
+          value={data.registeredAt}
+          onChange={(e) => onChange({ ...data, registeredAt: e.target.value })}
+          className="h-9 text-[13px]"
+        />
+      </div>
+      <div>
+        <label className="text-[12px] font-medium text-muted-foreground block mb-1">登記內容 *</label>
+        <textarea
+          value={data.content}
+          onChange={(e) => onChange({ ...data, content: e.target.value })}
+          className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none"
+          rows={4}
+          placeholder="業務資訊、地址、營業時間等"
+        />
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h4 className="text-[15px] font-bold">Google Business</h4>
+          <p className="text-[12px] text-muted-foreground mt-0.5">此網站已登記的 Google Business 檔案</p>
+        </div>
+        <button
+          onClick={() => { setForm(emptyGbForm); setShowAddModal(true); }}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-medium hover:bg-teal-700 transition-colors"
+        >
+          <Plus size={13} />新增登記
+        </button>
+      </div>
+
+      <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-3 py-2 w-fit">
+        <span className="text-[11px] text-muted-foreground">登記筆數</span>
+        <p className="text-[16px] font-bold">{records.length}</p>
+      </div>
+
+      {records.length === 0 ? (
+        <div className="text-center py-12 border border-dashed border-border rounded-md">
+          <MapPin size={32} className="text-muted-foreground mx-auto mb-3" />
+          <p className="text-[14px] font-medium text-muted-foreground">尚未登記 Google Business</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-hidden">
+          <table className="w-full text-[13px]">
+            <thead className="bg-muted/30">
+              <tr>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Google Business 網址</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">登記日期</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">登記內容</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {records.map((record) => (
+                <tr key={record.id} className="border-t border-border/50 hover:bg-muted/10">
+                  <td className="px-4 py-3">
+                    <a
+                      href={record.url.startsWith('http') ? record.url : `https://${record.url}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-teal-600 hover:underline inline-flex items-center gap-1 break-all"
+                    >
+                      {record.url}
+                      <ExternalLink size={11} className="shrink-0" />
+                    </a>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">{record.registeredAt}</td>
+                  <td className="px-4 py-3 text-muted-foreground max-w-[320px]">
+                    {record.content.length > 80 ? `${record.content.slice(0, 80)}…` : record.content}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => { setEditing({ ...record }); setShowEditModal(true); }} className="p-1 hover:bg-muted rounded" title="編輯">
+                        <Edit size={12} className="text-teal-600" />
+                      </button>
+                      <button onClick={() => setDeleteTarget(record)} className="p-1 hover:bg-muted rounded" title="刪除">
+                        <Trash2 size={12} className="text-rose-500" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <CrudModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="新增 Google Business 登記" size="lg">
+        {renderFields(form, (next) => setForm(next as GbForm))}
+        <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
+          <Button variant="secondary" onClick={() => setShowAddModal(false)}>取消</Button>
+          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleAdd}>新增</Button>
+        </div>
+      </CrudModal>
+
+      <CrudModal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="編輯 Google Business 登記" size="lg">
+        {editing && renderFields(editing, (next) => setEditing(next as GoogleBusinessRegistration))}
+        <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
+          <Button variant="secondary" onClick={() => setShowEditModal(false)}>取消</Button>
+          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSaveEdit}>儲存</Button>
+        </div>
+      </CrudModal>
+
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deleteGoogleBusinessRegistration(deleteTarget.id);
+          setDeleteTarget(null);
+        }}
+        itemName={deleteTarget?.url || ''}
+        canDelete
+        reasons={[]}
+      />
     </div>
   );
 }

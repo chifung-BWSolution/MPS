@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type PurchaseForm = {
+  websiteProfileId: string;
   webSupplierId: string;
   cost: number;
   currency: 'USD' | 'HKD';
@@ -16,6 +17,7 @@ type PurchaseForm = {
 };
 
 const emptyForm: PurchaseForm = {
+  websiteProfileId: '',
   webSupplierId: '',
   cost: 0,
   currency: 'USD',
@@ -28,11 +30,13 @@ function BacklinkDetail({
   record,
   supplierName,
   supplierUrl,
+  siteName,
   onBack,
 }: {
   record: BacklinkPurchase;
   supplierName: string;
   supplierUrl: string;
+  siteName: string;
   onBack: () => void;
 }) {
   return (
@@ -45,9 +49,11 @@ function BacklinkDetail({
       </button>
 
       <div className="bg-slate-50 rounded-md border border-slate-200 p-3 flex items-center gap-4 text-[12px] text-muted-foreground flex-wrap">
+        <span><span className="font-medium text-foreground">所屬網站:</span> {siteName}</span>
+        <span className="mx-1">•</span>
         <span><span className="font-medium text-foreground">供應商:</span> {supplierName}</span>
         <span className="mx-1">•</span>
-        <span><span className="font-medium text-foreground">網站:</span> {supplierUrl}</span>
+        <span><span className="font-medium text-foreground">供應商網址:</span> {supplierUrl}</span>
       </div>
 
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
@@ -65,6 +71,7 @@ function BacklinkDetail({
 
 export function BacklinkModule() {
   const {
+    websites,
     webPageSuppliers,
     backlinkPurchases,
     addBacklinkPurchase,
@@ -87,17 +94,21 @@ export function BacklinkModule() {
     return map;
   }, [webPageSuppliers]);
 
+  const siteMap = useMemo(() => new Map(websites.map((w) => [w.id, w])), [websites]);
+
   const enriched = useMemo(() => {
     return backlinkPurchases.map((p) => {
       const supplier = supplierMap.get(p.webSupplierId) || getWebPageSupplierById(p.webSupplierId);
+      const site = p.websiteProfileId ? siteMap.get(p.websiteProfileId) : undefined;
       return {
         ...p,
         supplierName: supplier?.name || '—',
         supplierUrl: supplier?.url || '—',
         platform: supplier?.platform || '—',
+        siteName: site?.websiteName || '—',
       };
     });
-  }, [backlinkPurchases, supplierMap, getWebPageSupplierById]);
+  }, [backlinkPurchases, supplierMap, getWebPageSupplierById, siteMap]);
 
   const filtered = enriched.filter((r) => {
     if (currencyFilter !== 'all' && r.currency !== currencyFilter) return false;
@@ -106,7 +117,8 @@ export function BacklinkModule() {
       return (
         r.supplierName.toLowerCase().includes(q) ||
         r.supplierUrl.toLowerCase().includes(q) ||
-        r.platform.toLowerCase().includes(q)
+        r.platform.toLowerCase().includes(q) ||
+        r.siteName.toLowerCase().includes(q)
       );
     }
     return true;
@@ -124,8 +136,9 @@ export function BacklinkModule() {
     : undefined;
 
   const handleAdd = () => {
-    if (!form.webSupplierId || !form.purchaseDate || form.quantity < 1) return;
+    if (!form.websiteProfileId || !form.webSupplierId || !form.purchaseDate || form.quantity < 1) return;
     addBacklinkPurchase({
+      websiteProfileId: form.websiteProfileId,
       webSupplierId: form.webSupplierId,
       cost: form.cost,
       currency: form.currency,
@@ -143,8 +156,9 @@ export function BacklinkModule() {
   };
 
   const handleSaveEdit = () => {
-    if (!editing || !editing.webSupplierId || !editing.purchaseDate || editing.quantity < 1) return;
+    if (!editing || !editing.websiteProfileId || !editing.webSupplierId || !editing.purchaseDate || editing.quantity < 1) return;
     updateBacklinkPurchase(editing.id, {
+      websiteProfileId: editing.websiteProfileId,
       webSupplierId: editing.webSupplierId,
       cost: editing.cost,
       currency: editing.currency,
@@ -164,11 +178,15 @@ export function BacklinkModule() {
 
   if (selectedRecord) {
     const supplier = supplierMap.get(selectedRecord.webSupplierId);
+    const site = selectedRecord.websiteProfileId
+      ? siteMap.get(selectedRecord.websiteProfileId)
+      : undefined;
     return (
       <BacklinkDetail
         record={selectedRecord}
         supplierName={supplier?.name || '—'}
         supplierUrl={supplier?.url || '—'}
+        siteName={site?.websiteName || '—'}
         onBack={() => setSelectedRecord(null)}
       />
     );
@@ -182,7 +200,21 @@ export function BacklinkModule() {
     return (
       <div className="space-y-4">
         <div>
-          <label className="text-[12px] font-medium text-muted-foreground block mb-1">網站 *</label>
+          <label className="text-[12px] font-medium text-muted-foreground block mb-1">所屬網站 *</label>
+          <Select
+            value={data.websiteProfileId || ''}
+            onValueChange={(val) => onChange({ ...data, websiteProfileId: val })}
+          >
+            <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="選擇網站" /></SelectTrigger>
+            <SelectContent>
+              {websites.map((w) => (
+                <SelectItem key={w.id} value={w.id}>{w.websiteName}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className="text-[12px] font-medium text-muted-foreground block mb-1">供應商網址 *</label>
           <Select
             value={data.webSupplierId}
             onValueChange={(val) => onChange({ ...data, webSupplierId: val })}
@@ -206,7 +238,7 @@ export function BacklinkModule() {
             value={supplier?.name || ''}
             readOnly
             className="h-9 text-[13px] bg-muted/40"
-            placeholder="選擇網站後自動帶出"
+            placeholder="選擇供應商網址後自動帶出"
           />
         </div>
         <div className="grid grid-cols-2 gap-4">
@@ -293,7 +325,7 @@ export function BacklinkModule() {
           <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜尋供應商／網址..."
+            placeholder="搜尋網站／供應商／網址..."
             className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
           />
         </div>
@@ -318,7 +350,8 @@ export function BacklinkModule() {
         <table className="w-full text-[13px]">
           <thead className="bg-muted/30">
             <tr>
-              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">網站</th>
+              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">所屬網站</th>
+              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">供應商網址</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">供應商</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">費用</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">購買日期</th>
@@ -329,8 +362,9 @@ export function BacklinkModule() {
           <tbody>
             {filtered.map((record) => (
               <tr key={record.id} className="border-t border-border/50 hover:bg-muted/10 transition-colors duration-200">
+                <td className="px-4 py-3 font-medium">{record.siteName}</td>
                 <td className="px-4 py-3">
-                  <span className="font-medium break-all">{record.supplierUrl}</span>
+                  <span className="break-all text-muted-foreground">{record.supplierUrl}</span>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{record.supplierName}</td>
                 <td className="px-4 py-3">{record.currency} ${record.cost.toLocaleString()}</td>

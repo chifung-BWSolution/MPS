@@ -1,13 +1,20 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus, Search, Edit, Trash2, ExternalLink } from 'lucide-react';
 import { useDataStore, GoogleBusinessRegistration } from '@/context/DataStore';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-type FormState = Omit<GoogleBusinessRegistration, 'id'>;
+type FormState = {
+  websiteProfileId: string;
+  url: string;
+  registeredAt: string;
+  content: string;
+};
 
 const emptyForm: FormState = {
+  websiteProfileId: '',
   url: '',
   registeredAt: '',
   content: '',
@@ -20,6 +27,7 @@ function truncate(text: string, max = 80) {
 
 export function GoogleBusinessModule() {
   const {
+    websites,
     googleBusinessRegistrations,
     addGoogleBusinessRegistration,
     updateGoogleBusinessRegistration,
@@ -33,19 +41,38 @@ export function GoogleBusinessModule() {
   const [editing, setEditing] = useState<GoogleBusinessRegistration | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<GoogleBusinessRegistration | null>(null);
 
-  const filtered = googleBusinessRegistrations.filter((r) => {
+  const siteMap = useMemo(() => new Map(websites.map((w) => [w.id, w])), [websites]);
+
+  const enriched = useMemo(
+    () =>
+      googleBusinessRegistrations.map((r) => ({
+        ...r,
+        siteName: r.websiteProfileId
+          ? siteMap.get(r.websiteProfileId)?.websiteName || '—'
+          : '—',
+      })),
+    [googleBusinessRegistrations, siteMap],
+  );
+
+  const filtered = enriched.filter((r) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
       r.url.toLowerCase().includes(q) ||
       r.content.toLowerCase().includes(q) ||
-      r.registeredAt.includes(q)
+      r.registeredAt.includes(q) ||
+      r.siteName.toLowerCase().includes(q)
     );
   });
 
   const handleAdd = () => {
-    if (!form.url.trim() || !form.registeredAt || !form.content.trim()) return;
-    addGoogleBusinessRegistration(form);
+    if (!form.websiteProfileId || !form.url.trim() || !form.registeredAt || !form.content.trim()) return;
+    addGoogleBusinessRegistration({
+      websiteProfileId: form.websiteProfileId,
+      url: form.url,
+      registeredAt: form.registeredAt,
+      content: form.content,
+    });
     setForm(emptyForm);
     setShowAddModal(false);
   };
@@ -56,8 +83,9 @@ export function GoogleBusinessModule() {
   };
 
   const handleSaveEdit = () => {
-    if (!editing || !editing.url.trim() || !editing.registeredAt || !editing.content.trim()) return;
+    if (!editing || !editing.websiteProfileId || !editing.url.trim() || !editing.registeredAt || !editing.content.trim()) return;
     updateGoogleBusinessRegistration(editing.id, {
+      websiteProfileId: editing.websiteProfileId,
       url: editing.url,
       registeredAt: editing.registeredAt,
       content: editing.content,
@@ -77,6 +105,20 @@ export function GoogleBusinessModule() {
     onChange: (next: FormState | GoogleBusinessRegistration) => void,
   ) => (
     <div className="space-y-4">
+      <div>
+        <label className="text-[12px] font-medium text-muted-foreground block mb-1">所屬網站 *</label>
+        <Select
+          value={data.websiteProfileId || ''}
+          onValueChange={(val) => onChange({ ...data, websiteProfileId: val })}
+        >
+          <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="選擇網站" /></SelectTrigger>
+          <SelectContent>
+            {websites.map((w) => (
+              <SelectItem key={w.id} value={w.id}>{w.websiteName}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       <div>
         <label className="text-[12px] font-medium text-muted-foreground block mb-1">Google Business 網址 *</label>
         <Input
@@ -123,7 +165,7 @@ export function GoogleBusinessModule() {
           <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜尋網址、內容、日期..."
+            placeholder="搜尋網站、網址、內容、日期..."
             className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
           />
         </div>
@@ -139,6 +181,7 @@ export function GoogleBusinessModule() {
         <table className="w-full text-[13px]">
           <thead className="bg-muted/30">
             <tr>
+              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">所屬網站</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Google Business 網址</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">登記日期</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">登記內容</th>
@@ -148,6 +191,7 @@ export function GoogleBusinessModule() {
           <tbody>
             {filtered.map((record) => (
               <tr key={record.id} className="border-t border-border/50 hover:bg-muted/10 transition-colors duration-200">
+                <td className="px-4 py-3 font-medium whitespace-nowrap">{record.siteName}</td>
                 <td className="px-4 py-3">
                   <a
                     href={record.url.startsWith('http') ? record.url : `https://${record.url}`}

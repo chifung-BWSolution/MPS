@@ -19,12 +19,13 @@
 
 ## Google Business
 
-> 前端 DataStore；後續再落 Supabase 表。登記已建立的 Google Business 檔案。
+> 前端 DataStore；後續再落 Supabase 表。登記已建立的 Google Business 檔案。亦於「網站+系統 → 網站詳情 → Google Business」Tab 顯示該站紀錄。
 
 ### 欄位
 
 | 欄位 | 類型 | 必填 | 說明 |
 |------|------|------|------|
+| 所屬網站 | Select (網站檔案) | ✅ | `websiteProfileId` |
 | Google Business 網址 | Text (URL) | ✅ | g.page / maps 連結 |
 | 登記日期 | Date | ✅ | |
 | 登記內容 | Textarea | ✅ | 業務資訊、地址、營業時間等 |
@@ -39,7 +40,8 @@
 
 | 欄位 | 類型 | 必填 | 說明 |
 |------|------|------|------|
-| 網站 | Select (網頁供應商) | ✅ | 顯示網址；選中後帶出供應商名稱 |
+| 所屬網站 | Select (網站檔案) | ✅ | `websiteProfileId`；亦於網站詳情「反向連結」Tab 顯示 |
+| 供應商網址 | Select (網頁供應商) | ✅ | 顯示網址；選中後帶出供應商名稱 |
 | 供應商 | 唯讀 | — | 來自所選網頁供應商 |
 | 費用 | Number + 幣別 USD/HKD | ✅ | 本次購買費用；統計按幣別分列 |
 | 購買日期 | Date | ✅ | |

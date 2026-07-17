@@ -46,6 +46,7 @@ export interface WebPageSupplier {
 /** 反向連結購買紀錄 */
 export interface BacklinkPurchase {
   id: string;
+  websiteProfileId?: string;
   webSupplierId: string;
   cost: number;
   currency: 'USD' | 'HKD';
@@ -57,6 +58,7 @@ export interface BacklinkPurchase {
 /** Google Business 登記紀錄 */
 export interface GoogleBusinessRegistration {
   id: string;
+  websiteProfileId?: string;
   url: string;
   registeredAt: string;
   content: string;
@@ -189,14 +191,14 @@ const initialWebPageSuppliers: (WebPageSupplier & { __sampleData: true })[] = [
 ];
 
 const initialBacklinkPurchases: (BacklinkPurchase & { __sampleData: true })[] = [
-  { __sampleData: true, id: 'bl1', webSupplierId: 'wps1', cost: 120, currency: 'USD', purchaseDate: '2025-01-15', quantity: 3, notes: 'BW Wine 首批外鏈' },
-  { __sampleData: true, id: 'bl2', webSupplierId: 'wps2', cost: 1600, currency: 'HKD', purchaseDate: '2025-02-20', quantity: 2 },
-  { __sampleData: true, id: 'bl3', webSupplierId: 'wps1', cost: 200, currency: 'USD', purchaseDate: '2025-03-10', quantity: 5 },
+  { __sampleData: true, id: 'bl1', websiteProfileId: 'ws1', webSupplierId: 'wps1', cost: 120, currency: 'USD', purchaseDate: '2025-01-15', quantity: 3, notes: 'BW Wine 首批外鏈' },
+  { __sampleData: true, id: 'bl2', websiteProfileId: 'ws2', webSupplierId: 'wps2', cost: 1600, currency: 'HKD', purchaseDate: '2025-02-20', quantity: 2 },
+  { __sampleData: true, id: 'bl3', websiteProfileId: 'ws1', webSupplierId: 'wps1', cost: 200, currency: 'USD', purchaseDate: '2025-03-10', quantity: 5 },
 ];
 
 const initialGoogleBusinessRegistrations: (GoogleBusinessRegistration & { __sampleData: true })[] = [
-  { __sampleData: true, id: 'gb1', url: 'https://g.page/bw-wine-hongkong', registeredAt: '2025-01-08', content: 'BW Wine 尖沙咀門市 — 營業時間、地址、品酒活動資訊' },
-  { __sampleData: true, id: 'gb2', url: 'https://maps.app.goo.gl/aci-events', registeredAt: '2025-02-14', content: 'ACI Events 辦公室 — 聯絡電話、服務範圍、最新活動' },
+  { __sampleData: true, id: 'gb1', websiteProfileId: 'ws1', url: 'https://g.page/bw-wine-hongkong', registeredAt: '2025-01-08', content: 'BW Wine 尖沙咀門市 — 營業時間、地址、品酒活動資訊' },
+  { __sampleData: true, id: 'gb2', websiteProfileId: 'ws2', url: 'https://maps.app.goo.gl/aci-events', registeredAt: '2025-02-14', content: 'ACI Events 辦公室 — 聯絡電話、服務範圍、最新活動' },
 ];
 
 // Initial video channels (模擬數據)
