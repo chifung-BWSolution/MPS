@@ -11,6 +11,27 @@
 | `/marketing/paid-ads` | 付費廣告 | Paid Ads 管理 |
 | `/marketing/seo` | SEO 關鍵字 | 全站 SEO 管理 |
 | `/marketing/seo-upgrade` | SEO 升級 | 升級記錄 |
+| `/marketing/graphic-design` | 平面設計 | 平面設計製作追蹤 |
+| `/marketing/backlink` | 反向連結 | 反向連結購買紀錄 |
+
+---
+
+## Backlink (反向連結)
+
+> 前端 DataStore；後續再落 Supabase 表。網站／供應商來自「供應商 → 網頁供應商」。
+
+### 欄位
+
+| 欄位 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| 網站 | Select (網頁供應商) | ✅ | 顯示網址；選中後帶出供應商名稱 |
+| 供應商 | 唯讀 | — | 來自所選網頁供應商 |
+| 費用 | Number + 幣別 USD/HKD | ✅ | 本次購買費用；統計按幣別分列 |
+| 購買日期 | Date | ✅ | |
+| 反向連結數量 | Number | ✅ | |
+
+### 列表統計
+- 購買筆數、總連結數、費用合計 (USD)、費用合計 (HKD)
 
 ---
 

@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { WebPageSupplierModule } from './WebPageSupplierModule';
 
 const contractConfig = {
   active: { label: '活躍', color: 'text-teal-700', bgColor: 'bg-teal-50' },
@@ -127,11 +128,14 @@ export function SupplierModule({ subModule }: { subModule?: string }) {
     switch (subModule) {
       case 'list': return { title: '供應商列表', subtitle: '供應商目錄、合約及基本資料管理。' };
       case 'reviews': return { title: '供應商評價', subtitle: '查看及提交供應商績效評價。' };
+      case 'web-suppliers': return { title: '網頁供應商', subtitle: '管理可購買反向連結的網站／供應商名單。' };
       default: return { title: '供應商列表', subtitle: '供應商目錄、合約及基本資料管理。' };
     }
   };
 
   const { title, subtitle } = getTitle();
+  const isWebSuppliers = subModule === 'web-suppliers';
+  const showAddSupplier = subModule === 'list' || !subModule;
 
   return (
     <div className="space-y-6">
@@ -141,14 +145,20 @@ export function SupplierModule({ subModule }: { subModule?: string }) {
           <h1 className="text-[32px] font-bold tracking-tight">{title}</h1>
           <p className="text-[14px] text-muted-foreground mt-1">{subtitle}</p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-sm font-medium hover:bg-teal-700 transition-colors duration-200 active:scale-[0.97]"
-        >
-          <Plus size={14} />
-          新增供應商
-        </button>
+        {showAddSupplier && (
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-sm font-medium hover:bg-teal-700 transition-colors duration-200 active:scale-[0.97]"
+          >
+            <Plus size={14} />
+            新增供應商
+          </button>
+        )}
       </div>
+
+      {isWebSuppliers && <WebPageSupplierModule />}
+      {!isWebSuppliers && (
+      <>
 
       {/* Search */}
       <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm max-w-[320px]">
@@ -355,6 +365,8 @@ export function SupplierModule({ subModule }: { subModule?: string }) {
         canDelete={true}
         reasons={[]}
       />
+      </>
+      )}
     </div>
   );
 }

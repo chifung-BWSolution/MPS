@@ -31,6 +31,29 @@ export interface SupplierData {
   lastEngagement?: string;
 }
 
+/** 網頁供應商主檔（反向連結可購買網站） */
+export interface WebPageSupplier {
+  id: string;
+  name: string;
+  platform: string;
+  url: string;
+  cost: number;
+  currency: 'USD' | 'HKD';
+  rating: number;
+  createdAt?: string;
+}
+
+/** 反向連結購買紀錄 */
+export interface BacklinkPurchase {
+  id: string;
+  webSupplierId: string;
+  cost: number;
+  currency: 'USD' | 'HKD';
+  purchaseDate: string;
+  quantity: number;
+  notes?: string;
+}
+
 // ===== Integrity check result =====
 export interface IntegrityCheck {
   canDelete: boolean;
@@ -101,6 +124,19 @@ interface DataStoreContextType {
   updateSupplier: (id: string, data: Partial<SupplierData>) => void;
   deleteSupplier: (id: string) => IntegrityCheck;
 
+  // Web Page Suppliers (網頁供應商)
+  webPageSuppliers: WebPageSupplier[];
+  addWebPageSupplier: (supplier: Omit<WebPageSupplier, 'id'>) => WebPageSupplier;
+  updateWebPageSupplier: (id: string, data: Partial<WebPageSupplier>) => void;
+  deleteWebPageSupplier: (id: string) => IntegrityCheck;
+  getWebPageSupplierById: (id: string) => WebPageSupplier | undefined;
+
+  // Backlink Purchases (反向連結)
+  backlinkPurchases: BacklinkPurchase[];
+  addBacklinkPurchase: (purchase: Omit<BacklinkPurchase, 'id'>) => BacklinkPurchase;
+  updateBacklinkPurchase: (id: string, data: Partial<BacklinkPurchase>) => void;
+  deleteBacklinkPurchase: (id: string) => IntegrityCheck;
+
   // Sample Data Management
   sampleDataEnabled: boolean;
   setSampleDataEnabled: (enabled: boolean) => void;
@@ -130,6 +166,18 @@ const initialSuppliers: (SupplierData & { __sampleData: true })[] = [
   { __sampleData: true, id: 'sup4', name: 'PixelPerfect Design', category: 'development', contactPerson: 'Kevin Ho', email: 'hello@pixelperfect.co', phone: '+852 2345 0004', website: 'www.pixelperfect.co', contractStatus: 'active', serviceType: '外包設計', feeRange: '$5,000 - $30,000', averageRating: 4.8, isRecommended: true, totalSpend: 68000, notes: '優質設計師', lastEngagement: '2024-12-14' },
   { __sampleData: true, id: 'sup5', name: 'CloudHost Solutions', category: 'hosting', contactPerson: 'Tommy Ng', email: 'support@cloudhost.io', phone: '+852 2345 0005', website: 'www.cloudhost.io', contractStatus: 'pending', serviceType: '雲端主機', feeRange: '$500 - $3,000/月', averageRating: 4.0, isRecommended: false, totalSpend: 18000, notes: '', lastEngagement: '2024-12-01' },
   { __sampleData: true, id: 'sup6', name: 'SEO Expert HK', category: 'seo', contactPerson: 'Lily Wong', email: 'info@seoexpert.hk', phone: '+852 2345 0006', website: 'www.seoexpert.hk', contractStatus: 'active', serviceType: 'SEO 顧問', feeRange: '$8,000 - $25,000/月', averageRating: 4.3, isRecommended: true, totalSpend: 96000, notes: 'SEO 主要供應商', lastEngagement: '2024-11-28' },
+];
+
+const initialWebPageSuppliers: (WebPageSupplier & { __sampleData: true })[] = [
+  { __sampleData: true, id: 'wps1', name: 'LinkBuilder HK', platform: 'LinkBuilding.com', url: 'https://www.techreview.hk', cost: 120, currency: 'USD', rating: 4, createdAt: '2024-10-01' },
+  { __sampleData: true, id: 'wps2', name: 'Asia PR Net', platform: 'GuestPost.io', url: 'https://www.asianbiz.news', cost: 800, currency: 'HKD', rating: 5, createdAt: '2024-11-05' },
+  { __sampleData: true, id: 'wps3', name: 'Domain Authority Pro', platform: 'SEMrush Marketplace', url: 'https://www.lifestylemag.com', cost: 250, currency: 'USD', rating: 3, createdAt: '2024-12-01' },
+];
+
+const initialBacklinkPurchases: (BacklinkPurchase & { __sampleData: true })[] = [
+  { __sampleData: true, id: 'bl1', webSupplierId: 'wps1', cost: 120, currency: 'USD', purchaseDate: '2025-01-15', quantity: 3, notes: 'BW Wine 首批外鏈' },
+  { __sampleData: true, id: 'bl2', webSupplierId: 'wps2', cost: 1600, currency: 'HKD', purchaseDate: '2025-02-20', quantity: 2 },
+  { __sampleData: true, id: 'bl3', webSupplierId: 'wps1', cost: 200, currency: 'USD', purchaseDate: '2025-03-10', quantity: 5 },
 ];
 
 // Initial video channels (模擬數據)
@@ -168,6 +216,8 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
   const [seoKeywords, setSeoKeywords] = useState<Record<string, SeoKeyword[]>>(initialWebsiteSeoKeywords);
   const [edmCampaigns, setEdmCampaigns] = useState<Record<string, EdmCampaign[]>>(initialWebsiteEdmCampaigns);
   const [suppliers, setSuppliers] = useState<SupplierData[]>(initialSuppliers);
+  const [webPageSuppliers, setWebPageSuppliers] = useState<WebPageSupplier[]>(initialWebPageSuppliers);
+  const [backlinkPurchases, setBacklinkPurchases] = useState<BacklinkPurchase[]>(initialBacklinkPurchases);
 
   // Filter helper: applies sample data filter when disabled
   const filterIfNeeded = useCallback(<T,>(data: T[]): T[] => {
@@ -194,6 +244,8 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
   const filteredSeoKeywords = useMemo(() => filterRecordIfNeeded(seoKeywords), [seoKeywords, filterRecordIfNeeded]);
   const filteredEdmCampaigns = useMemo(() => filterRecordIfNeeded(edmCampaigns), [edmCampaigns, filterRecordIfNeeded]);
   const filteredSuppliers = useMemo(() => filterIfNeeded(suppliers), [suppliers, filterIfNeeded]);
+  const filteredWebPageSuppliers = useMemo(() => filterIfNeeded(webPageSuppliers), [webPageSuppliers, filterIfNeeded]);
+  const filteredBacklinkPurchases = useMemo(() => filterIfNeeded(backlinkPurchases), [backlinkPurchases, filterIfNeeded]);
 
   // Clear all sample data permanently
   const clearAllSampleData = useCallback(() => {
@@ -201,6 +253,8 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
     setWebsites(prev => filterOutSampleData(prev));
     setVideoChannels(prev => filterOutSampleData(prev));
     setSuppliers(prev => filterOutSampleData(prev));
+    setWebPageSuppliers(prev => filterOutSampleData(prev));
+    setBacklinkPurchases(prev => filterOutSampleData(prev));
     setVideos(prev => {
       const result: Record<string, Video[]> = {};
       for (const [k, v] of Object.entries(prev)) {
@@ -255,6 +309,8 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
     setSeoKeywords(initialWebsiteSeoKeywords);
     setEdmCampaigns(initialWebsiteEdmCampaigns);
     setSuppliers(initialSuppliers);
+    setWebPageSuppliers(initialWebPageSuppliers);
+    setBacklinkPurchases(initialBacklinkPurchases);
     setSampleDataEnabled(true);
   }, [setSampleDataEnabled]);
 
@@ -275,8 +331,10 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
       seoKeywords: allKwsFlat,
       edmCampaigns: allEdmFlat,
       suppliers,
+      webPageSuppliers,
+      backlinkPurchases,
     });
-  }, [projects, websites, videos, videoChannels, socialPosts, paidAds, seoKeywords, edmCampaigns, suppliers]);
+  }, [projects, websites, videos, videoChannels, socialPosts, paidAds, seoKeywords, edmCampaigns, suppliers, webPageSuppliers, backlinkPurchases]);
 
   // ===== Helper: get website info for flattening =====
   const getWebsiteInfo = useCallback((wsId: string) => {
@@ -559,6 +617,54 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
     return { canDelete: true, reasons: [] };
   }, []);
 
+  // ===== WEB PAGE SUPPLIER CRUD =====
+  const addWebPageSupplier = useCallback((data: Omit<WebPageSupplier, 'id'>): WebPageSupplier => {
+    const newSupplier: WebPageSupplier = {
+      ...data,
+      id: generateId('wps'),
+      createdAt: data.createdAt || new Date().toISOString().split('T')[0],
+    };
+    setWebPageSuppliers(prev => [...prev, newSupplier]);
+    return newSupplier;
+  }, []);
+
+  const updateWebPageSupplier = useCallback((id: string, data: Partial<WebPageSupplier>) => {
+    setWebPageSuppliers(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
+  }, []);
+
+  const deleteWebPageSupplier = useCallback((id: string): IntegrityCheck => {
+    const refs = backlinkPurchases.filter(p => p.webSupplierId === id);
+    if (refs.length > 0) {
+      return {
+        canDelete: false,
+        reasons: [`此網頁供應商仍有 ${refs.length} 筆反向連結購買紀錄，無法刪除`],
+      };
+    }
+    setWebPageSuppliers(prev => prev.filter(s => s.id !== id));
+    return { canDelete: true, reasons: [] };
+  }, [backlinkPurchases]);
+
+  const getWebPageSupplierById = useCallback(
+    (id: string) => webPageSuppliers.find(s => s.id === id),
+    [webPageSuppliers],
+  );
+
+  // ===== BACKLINK PURCHASE CRUD =====
+  const addBacklinkPurchase = useCallback((data: Omit<BacklinkPurchase, 'id'>): BacklinkPurchase => {
+    const newPurchase: BacklinkPurchase = { ...data, id: generateId('bl') };
+    setBacklinkPurchases(prev => [...prev, newPurchase]);
+    return newPurchase;
+  }, []);
+
+  const updateBacklinkPurchase = useCallback((id: string, data: Partial<BacklinkPurchase>) => {
+    setBacklinkPurchases(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
+  }, []);
+
+  const deleteBacklinkPurchase = useCallback((id: string): IntegrityCheck => {
+    setBacklinkPurchases(prev => prev.filter(p => p.id !== id));
+    return { canDelete: true, reasons: [] };
+  }, []);
+
   const value: DataStoreContextType = {
     projects: filteredProjects, addProject, updateProject, deleteProject, getProjectById,
     websites: filteredWebsites, addWebsite, addWebsiteWithId, updateWebsite, deleteWebsite, getWebsiteById,
@@ -569,6 +675,8 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
     seoKeywords: filteredSeoKeywords, allSeoKeywordsList, addSeoKeyword, updateSeoKeyword, deleteSeoKeyword,
     edmCampaigns: filteredEdmCampaigns, allEdmCampaignsList, addEdmCampaign, updateEdmCampaign, deleteEdmCampaign,
     suppliers: filteredSuppliers, addSupplier, updateSupplier, deleteSupplier,
+    webPageSuppliers: filteredWebPageSuppliers, addWebPageSupplier, updateWebPageSupplier, deleteWebPageSupplier, getWebPageSupplierById,
+    backlinkPurchases: filteredBacklinkPurchases, addBacklinkPurchase, updateBacklinkPurchase, deleteBacklinkPurchase,
     sampleDataEnabled, setSampleDataEnabled, clearAllSampleData, restoreSampleData, sampleDataSummary,
   };
 

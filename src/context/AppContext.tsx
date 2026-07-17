@@ -107,6 +107,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'seo', label: 'SEO 關鍵字' },
       { id: 'seo-upgrade', label: 'SEO 升級' },
       { id: 'graphic-design', label: '平面設計' },
+      { id: 'backlink', label: '反向連結' },
     ],
   },
   {
@@ -137,6 +138,7 @@ export const mainMenuItems: MainMenuItem[] = [
     subMenus: [
       { id: 'list', label: '供應商列表' },
       { id: 'reviews', label: '供應商評價' },
+      { id: 'web-suppliers', label: '網頁供應商' },
     ],
   },
   {
