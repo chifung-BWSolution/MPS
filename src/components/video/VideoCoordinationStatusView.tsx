@@ -1,13 +1,31 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { VideoOutput, VideoOutputStatus } from '@/types/videoOutput';
+import type { PlatformPublishKey, VideoOutput, VideoOutputStatus } from '@/types/videoOutput';
 import {
+  PLATFORM_PUBLISH_LABELS,
   VIDEO_OUTPUT_STATUS_LABELS,
   deriveVideoOutputStatus,
   formatShootLocation,
   getEffectivePublishDate,
+  getPlatformUrl,
+  getPublishedPlatformKeys,
+  isHttpUrl,
 } from '@/lib/videoOutputUtils';
+
+const PLATFORM_TAG_COLORS: Record<PlatformPublishKey, string> = {
+  youtube: 'bg-red-50 text-red-700 border-red-200',
+  instagram: 'bg-pink-50 text-pink-700 border-pink-200',
+  facebook: 'bg-blue-50 text-blue-700 border-blue-200',
+  threads: 'bg-slate-100 text-slate-700 border-slate-300',
+  linkedin: 'bg-sky-50 text-sky-700 border-sky-200',
+  xiaohongshu: 'bg-rose-50 text-rose-700 border-rose-200',
+  douyin: 'bg-cyan-50 text-cyan-800 border-cyan-200',
+  wechat_channels: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  wechat_official: 'bg-green-50 text-green-700 border-green-200',
+  zh_cn: 'bg-amber-50 text-amber-800 border-amber-200',
+  zh_tw: 'bg-orange-50 text-orange-700 border-orange-200',
+};
 
 const STATUS_COLUMNS: VideoOutputStatus[] = [
   'pending',
@@ -89,6 +107,8 @@ function StatusVideoCard({
       : video.plannedPublishDate?.trim() || video.shootAt?.trim();
   const datePrefix = status === 'published' ? '發佈' : video.plannedPublishDate?.trim() ? '計劃' : '拍攝';
   const location = formatShootLocation(video.shootHk, video.shootSz);
+  const publishedKeys =
+    status === 'published' ? getPublishedPlatformKeys(video.platformPublish) : [];
 
   return (
     <div
@@ -127,6 +147,49 @@ function StatusVideoCard({
           <span className="shrink-0 font-medium text-teal-700 tabular-nums">{hours.toFixed(1)}h</span>
         )}
       </div>
+
+      {status === 'published' && (
+        <div
+          className="mt-2 flex flex-wrap items-center gap-1"
+          onClick={e => e.stopPropagation()}
+        >
+          {publishedKeys.length === 0 ? (
+            <span className="text-[10px] text-muted-foreground">尚未發佈平台</span>
+          ) : (
+            publishedKeys.map(key => {
+              const url = getPlatformUrl(video.platformPublish, key);
+              const label = PLATFORM_PUBLISH_LABELS[key];
+              const openable = !!url && isHttpUrl(url);
+              const tagClass = cn(
+                'inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-medium transition-colors',
+                PLATFORM_TAG_COLORS[key],
+                openable && 'hover:opacity-80 cursor-pointer',
+              );
+
+              if (openable) {
+                return (
+                  <a
+                    key={key}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={tagClass}
+                    title={`打開 ${label}`}
+                  >
+                    {label}
+                  </a>
+                );
+              }
+
+              return (
+                <span key={key} className={tagClass} title={url || '尚未填寫連結'}>
+                  {label}
+                </span>
+              );
+            })
+          )}
+        </div>
+      )}
 
       <div className="mt-2 flex items-center gap-2">
         <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
