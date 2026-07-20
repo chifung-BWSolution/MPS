@@ -16,6 +16,7 @@ import {
 import { WorkCategoriesManager, defaultCategoryRelationMap } from '@/components/day-report/WorkCategoriesManager';
 import { HolidaySettings } from '@/components/day-report/HolidaySettings';
 import { TeamDashboard } from '@/components/day-report/TeamDashboard';
+import { ProjectAnalysis } from '@/components/day-report/ProjectAnalysis';
 import { SearchableProjectSelect } from '@/components/day-report/SearchableProjectSelect';
 import { useDataStore } from '@/context/DataStore';
 import { useDayReportTypes } from '@/hooks/useDayReportTypes';
@@ -2680,65 +2681,6 @@ function MonthlyReport() {
 }
 
 // ============================
-// Work Analysis
-// ============================
-function WorkAnalysis() {
-  const categoryLookup = useCategoryLookup();
-  const [selectedMonth, setSelectedMonth] = useState(1);
-  const monthStr = `2025-${String(selectedMonth).padStart(2, '0')}`;
-  const monthReports = dailyReportsV2.filter(r => r.reportDate.startsWith(monthStr) && !r.isLeave);
-  const allEntries = monthReports.flatMap(r => r.entries);
-
-  const catHours: Record<string, number> = {};
-  Object.keys(categoryLookup).forEach(k => { catHours[k] = 0; });
-  allEntries.forEach(e => { catHours[e.category] = (catHours[e.category] || 0) + e.hours; });
-  const totalModuleHours = Object.values(catHours).reduce((s, h) => s + h, 0);
-
-  const staffComparison = staffMembersV2.map(staff => {
-    const staffReports = monthReports.filter(r => r.userId === staff.id);
-    const staffTotalHours = staffReports.reduce((s, r) => s + r.totalHours, 0);
-    const workDays = staffReports.length;
-    const avgHours = workDays > 0 ? staffTotalHours / workDays : 0;
-    const outcomeCount = staffReports.flatMap(r => r.entries).filter(e => e.outcomeUrl || (e.outcomeImages && e.outcomeImages.length > 0) || e.growthExperience).length;
-    const aiRate = staffReports.length > 0 ? (staffReports.filter(r => r.aiUsed).length / staffReports.length) * 100 : 0;
-    const aiHours = staffReports.flatMap(r => r.entries).filter(e => e.isAiAssisted).reduce((s, e) => s + e.hours, 0);
-    return { ...staff, totalHours: staffTotalHours, workDays, avgHours, outcomeCount, aiRate, aiHours };
-  }).sort((a, b) => b.totalHours - a.totalHours);
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-3">
-        <select value={selectedMonth} onChange={(e) => setSelectedMonth(Number(e.target.value))} className="px-3 py-1.5 border border-border rounded-md text-[13px]">
-          {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}月</option>)}
-        </select>
-        <span className="text-[13px] text-muted-foreground">總工時: {totalModuleHours}h · {allEntries.length} 筆</span>
-      </div>
-
-      <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-5">
-        <h4 className="text-[16px] font-bold mb-4">工作類型分佈（13 類）</h4>
-        <div className="space-y-3">
-          {(Object.entries(catHours) as [string, number][]).filter(([_, h]) => h > 0).sort((a, b) => b[1] - a[1]).map(([cat, hours]) => {
-            const config = categoryLookup[cat];
-            if (!config) return null;
-            const pct = totalModuleHours > 0 ? (hours / totalModuleHours) * 100 : 0;
-            return (
-              <div key={cat} className="flex items-center gap-2.5">
-                <span className={cn('text-[11px] px-2 py-0.5 rounded w-[80px] text-center shrink-0 font-medium', config.bg, config.color)}>{config.icon} {config.label}</span>
-                <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden"><div className="h-full bg-teal-500 rounded-full transition-all" style={{ width: `${pct}%` }} /></div>
-                <span className="text-[12px] font-bold w-[50px] text-right">{hours}h</span>
-                <span className="text-[11px] text-muted-foreground w-[40px] text-right">{pct.toFixed(0)}%</span>
-              </div>
-            );
-          })}
-          {totalModuleHours === 0 && <p className="text-[13px] text-muted-foreground text-center py-4">本月暫無數據</p>}
-        </div>
-      </div>
-
-    </div>
-  );
-}
-
-// ============================
 // Main Module Export
 // ============================
 export function DayReportModule({ subModule }: { subModule?: string }) {
@@ -2749,7 +2691,7 @@ export function DayReportModule({ subModule }: { subModule?: string }) {
       case 'calendar': return { title: '工作日曆', subtitle: '以日曆視圖查看歷史工作記錄，13種工作類型顏色標記。' };
       case 'team-view': return { title: '團隊&個人分析', subtitle: '按週／月統計工作類別工時與占比 — 團隊分部門卡片 · 個人按日／按週分析。' };
       case 'monthly': return { title: '月度報告', subtitle: '本月工時排名、AI 使用統計及類別分佈分析。' };
-      case 'analytics': return { title: '項目分析', subtitle: '工作類型分佈、效率對比及 AI 效率深度分析。' };
+      case 'analytics': return { title: '項目分析', subtitle: '按系統／網站項目統計人員投入工時與占比 — 支援按天／週／月篩選。' };
       case 'work-categories': return { title: '工作類型管理', subtitle: '管理匯報工作類別的關聯規則 — 設定哪些類別關聯項目/網站、內部項目或無需關聯。' };
       case 'holiday-settings': return { title: '假期設定', subtitle: '自動載入香港及深圳公眾假期 · Admin 可設定星期六上班人員、公司活動日、免匯報日。' };
       default: return { title: '提交匯報', subtitle: '支援香港/深圳雙辦公室 · 14天匯報總覽 · 常用項目快速填入 · 週六加班匯報 · 多日假期申報 · AI 追蹤 · 8h驗證。' };
@@ -2765,20 +2707,15 @@ export function DayReportModule({ subModule }: { subModule?: string }) {
       case 'calendar': return <WorkCalendar />;
       case 'monthly': return <MonthlyReport />;
       case 'team-view': return <TeamDashboard />;
-      case 'analytics': return <WorkAnalysis />;
+      case 'analytics': return <ProjectAnalysis />;
       case 'work-categories': return <WorkCategoriesManager />;
       case 'holiday-settings': return <HolidaySettings />;
       default: return <SubmitReportPage />;
     }
   };
 
-  // team-view 自行渲染 sticky 標題列，避免重複
-  if (subModule === 'team-view') {
-    return renderContent();
-  }
-
-  // team-view owns its sticky header (title + filters) inside TeamDashboard
-  if (subModule === 'team-view') {
+  // team-view / analytics 自行渲染 sticky 標題列，避免重複
+  if (subModule === 'team-view' || subModule === 'analytics') {
     return renderContent();
   }
 
