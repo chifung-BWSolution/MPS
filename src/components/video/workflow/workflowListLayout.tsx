@@ -11,7 +11,7 @@ export const WORKFLOW_LIST_GRID_REVIEW =
   'grid grid-cols-[minmax(100px,152px)_minmax(112px,148px)_minmax(120px,1.2fr)_92px_repeat(5,52px)_minmax(118px,0.9fr)_108px_88px_88px] gap-x-3 gap-y-2 items-center min-w-[1150px]';
 
 export const WORKFLOW_LIST_GRID_PUBLISH =
-  'grid grid-cols-[minmax(100px,152px)_minmax(112px,148px)_minmax(120px,1.2fr)_92px_repeat(5,52px)_minmax(118px,0.9fr)_108px_96px_56px] gap-x-3 gap-y-2 items-center min-w-[1070px]';
+  'grid grid-cols-[minmax(100px,152px)_minmax(112px,148px)_minmax(120px,1.2fr)_92px_repeat(5,52px)_minmax(118px,0.9fr)_108px_72px] gap-x-3 gap-y-2 items-center min-w-[1020px]';
 
 export const WORKFLOW_LIST_DATE_CELL = 'text-muted-foreground shrink-0 whitespace-nowrap tabular-nums';
 
@@ -85,10 +85,7 @@ export function WorkflowVideoListHeader({ variant, className }: HeaderProps) {
           <span />
         </>
       ) : variant === 'publish' ? (
-        <>
-          <span />
-          <span />
-        </>
+        <span />
       ) : (
         <>
           <span className="text-center whitespace-nowrap">行政審查</span>

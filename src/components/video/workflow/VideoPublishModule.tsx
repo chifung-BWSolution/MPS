@@ -8,7 +8,6 @@ import {
   countWorkflowBinaryStatus,
   filterWorkflowBinaryStatus,
   getPublishScopeVideos,
-  isPublishComplete,
   isWorkflowPendingPublish,
   isWorkflowPublished,
   VIDEO_WORKFLOW_STAGE_COLORS,
@@ -16,7 +15,6 @@ import {
   type WorkflowBinaryStatusFilter,
 } from '@/lib/videoWorkflowUtils';
 import { ProductionProgressMarks } from '@/components/video/workflow/ProductionProgressMarks';
-import { PublishConfirmModal } from '@/components/video/workflow/PublishConfirmModal';
 import { WorkflowListFilters } from '@/components/video/workflow/WorkflowListFilters';
 import { WorkflowStatusSummaryBar } from '@/components/video/workflow/WorkflowStatusSummaryBar';
 import { PlatformPublishModal } from '@/components/video/PlatformPublishModal';
@@ -38,15 +36,12 @@ const PUBLISH_STATUS_ITEMS = [
 
 function PublishListRow({
   video,
-  onOpenPublishRecord,
   onPublish,
 }: {
   video: VideoWorkflowMock;
-  onOpenPublishRecord: () => void;
   onPublish: () => void;
 }) {
   const pending = isWorkflowPendingPublish(video);
-  const canPublish = pending && isPublishComplete(video);
 
   return (
     <div className={cn(WORKFLOW_LIST_GRID_PUBLISH, 'px-3 py-2.5 border-b border-border/50 hover:bg-muted/20 text-[12px]')}>
@@ -72,34 +67,23 @@ function PublishListRow({
       <Button
         type="button"
         size="sm"
-        variant="outline"
-        className="h-7 text-[11px] px-2"
-        onClick={onOpenPublishRecord}
+        className={cn(
+          'h-7 text-[11px] px-2',
+          pending
+            ? 'bg-teal-600 hover:bg-teal-700 text-white'
+            : 'bg-white border border-border text-[#0d1a2d] hover:bg-muted/40',
+        )}
+        onClick={onPublish}
       >
-        平台發佈記錄
+        {pending ? '發佈' : '編輯'}
       </Button>
-      {pending ? (
-        <Button
-          type="button"
-          size="sm"
-          className="h-7 text-[11px] px-2 bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-50"
-          onClick={onPublish}
-          disabled={!canPublish}
-          title={canPublish ? undefined : '請先填寫至少一個平台發佈鏈接'}
-        >
-          發佈
-        </Button>
-      ) : (
-        <span className="text-[11px] text-muted-foreground text-center">—</span>
-      )}
     </div>
   );
 }
 
 export function VideoPublishModule() {
   const { videos, getVideoOutputById, updateVideo, completePublish } = useVideoWorkflow();
-  const [publishRecordTargetId, setPublishRecordTargetId] = useState<string | null>(null);
-  const [publishConfirmTargetId, setPublishConfirmTargetId] = useState<string | null>(null);
+  const [publishTargetId, setPublishTargetId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<WorkflowBinaryStatusFilter>('pending');
 
   const scopeVideos = useMemo(() => getPublishScopeVideos(videos), [videos]);
@@ -129,25 +113,27 @@ export function VideoPublishModule() {
     setStatusFilter(prev => (prev === id ? 'all' : (id as WorkflowBinaryStatusFilter)));
   };
 
-  const publishRecordVideo = publishRecordTargetId ? getVideoOutputById(publishRecordTargetId) ?? null : null;
-  const publishConfirmTarget = publishConfirmTargetId
-    ? videos.find(v => v.id === publishConfirmTargetId)
+  const publishTargetVideo = publishTargetId ? getVideoOutputById(publishTargetId) ?? null : null;
+  const publishTargetWorkflow = publishTargetId
+    ? videos.find(v => v.id === publishTargetId)
     : undefined;
 
   const handleSavePublish = async (input: Partial<VideoOutputInput>) => {
-    if (!publishRecordTargetId) return new Error('未選擇影片');
-    const err = await updateVideo(publishRecordTargetId, {
+    if (!publishTargetId) return new Error('未選擇影片');
+
+    const err = await updateVideo(publishTargetId, {
       platformPublish: input.platformPublish,
       publishedDate: input.publishedDate,
     });
     if (err) return new Error(err);
-    return null;
-  };
 
-  const handleConfirmPublish = async (videoId: string) => {
-    const err = await completePublish(videoId, {});
-    if (err) return;
-    setPublishConfirmTargetId(null);
+    // 待發佈：保存平台資料後一併標記為已發佈
+    if (publishTargetWorkflow && isWorkflowPendingPublish(publishTargetWorkflow)) {
+      const pubErr = await completePublish(publishTargetId, {});
+      if (pubErr) return new Error(pubErr);
+    }
+
+    return null;
   };
 
   const emptyMessage =
@@ -194,27 +180,19 @@ export function VideoPublishModule() {
             <PublishListRow
               key={video.id}
               video={video}
-              onOpenPublishRecord={() => setPublishRecordTargetId(video.id)}
-              onPublish={() => setPublishConfirmTargetId(video.id)}
+              onPublish={() => setPublishTargetId(video.id)}
             />
           ))}
         </div>
       )}
 
-      {publishRecordVideo && (
+      {publishTargetVideo && (
         <PlatformPublishModal
-          video={publishRecordVideo}
-          onClose={() => setPublishRecordTargetId(null)}
+          video={publishTargetVideo}
+          onClose={() => setPublishTargetId(null)}
           onSave={handleSavePublish}
         />
       )}
-
-      <PublishConfirmModal
-        open={!!publishConfirmTarget}
-        video={publishConfirmTarget}
-        onClose={() => setPublishConfirmTargetId(null)}
-        onConfirm={handleConfirmPublish}
-      />
     </div>
   );
 }
