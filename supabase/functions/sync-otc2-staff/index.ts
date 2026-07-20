@@ -70,37 +70,6 @@ function resolveOffice(staff: Otc2Staff): string | null {
   return loc || null;
 }
 
-function hasCjk(value: string | null | undefined): boolean {
-  return !!value && /[\u4e00-\u9fff]/.test(value);
-}
-
-/**
- * Normalize OTC2 name fields into MPS convention:
- * - display_name: English / common name (shown in staff list)
- * - full_name: Chinese / legal name
- *
- * Some OTC2 rows store these reversed (e.g. display_name=宋慧君, full_name=Julie).
- */
-function resolveNames(staff: Otc2Staff): { display_name: string; full_name: string | null } {
-  const display = staff.display_name?.trim() || null;
-  const full = staff.full_name?.trim() || null;
-  const chinese = staff.chinese_name?.trim() || null;
-
-  // OTC2 reversed: Chinese in display_name, Latin in full_name
-  if (hasCjk(display) && full && !hasCjk(full)) {
-    return {
-      display_name: full,
-      full_name: chinese || display,
-    };
-  }
-
-  // Prefer chinese_name as full_name when present
-  return {
-    display_name: display || full || chinese || "",
-    full_name: chinese || full || null,
-  };
-}
-
 async function fetchAllOtc2Staff(otc2: ReturnType<typeof createClient>): Promise<Otc2Staff[]> {
   const pageSize = 1000;
   let from = 0;
@@ -229,12 +198,11 @@ Deno.serve(async (req: Request) => {
       const active = isActiveStaff(staff);
       const office = resolveOffice(staff);
       const entryDate = toDateString(staff.entry_date);
-      const names = resolveNames(staff);
 
       return {
         bubble_staff_id: bubbleStaffId,
-        display_name: names.display_name,
-        full_name: names.full_name,
+        display_name: staff.display_name || staff.full_name || staff.chinese_name || "",
+        full_name: staff.full_name || staff.chinese_name || null,
         position: staff.position || null,
         user_role: staff.o_user_role || null,
         status: active ? "active" : "inactive",
@@ -300,11 +268,10 @@ Deno.serve(async (req: Request) => {
       for (const sysUser of systemUsers) {
         const match = byBubbleId.get(sysUser.bubble_staff_id);
         if (!match) continue;
-        const names = resolveNames(match);
         await supabaseAdmin
           .from("system_users")
           .update({
-            display_name: names.display_name,
+            display_name: match.display_name || match.full_name || "",
             email: match.work_email || match.linked_user_email || "",
             position: match.position || null,
             profile_pic_url: match.profile_pic || null,
@@ -313,19 +280,6 @@ Deno.serve(async (req: Request) => {
           })
           .eq("id", sysUser.id);
       }
-    }
-
-    // Keep user_info.display_name aligned with normalized staff names
-    for (const row of upsertData) {
-      if (!row.bubble_staff_id || !row.display_name) continue;
-      await supabaseAdmin
-        .from("user_info")
-        .update({
-          display_name: row.display_name,
-          email: row.work_email,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("staff_id", row.bubble_staff_id);
     }
 
     return new Response(
