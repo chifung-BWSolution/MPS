@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Users, Calendar, ChevronLeft, ChevronRight, Loader2, RefreshCw, User,
+  Link as LinkIcon, Bot, Sparkles, FileText,
 } from 'lucide-react';
+import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -15,6 +17,9 @@ import {
   fetchStaffIdsByDepartment,
   isValidDepartment,
 } from '@/components/day-report/departmentLookup';
+import { CrudModal } from '@/components/ui/crud-modal';
+import { Calendar as DayPickerCalendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 // ============================
 // Types
@@ -51,6 +56,11 @@ interface DayReportEntry {
   staff_id: string;
   category: string;
   hours: number;
+  title: string | null;
+  related_name: string | null;
+  outcome_url: string | null;
+  growth_experience: string | null;
+  is_ai_assisted: boolean | null;
 }
 
 type CategoryMeta = { id: string; label: string; icon: string; color: string; bg: string; sortOrder: number };
@@ -179,14 +189,41 @@ function formatDayLabel(dateStr: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}（${WEEKDAY_LABELS[d.getDay()]}）`;
 }
 
-function formatPeriodLabel(periodType: PeriodType, anchor: Date): string {
-  if (periodType === 'week') {
-    const { start, end } = getWeekRange(anchor);
-    const s = parseDateStr(start);
-    const e = parseDateStr(end);
+function formatRangeLabel(start: string, end: string): string {
+  const s = parseDateStr(start);
+  const e = parseDateStr(end);
+  if (start === end) {
+    return `${s.getFullYear()}/${s.getMonth() + 1}/${s.getDate()}（${WEEKDAY_LABELS[s.getDay()]}）`;
+  }
+  if (s.getFullYear() === e.getFullYear()) {
     return `${s.getFullYear()}/${s.getMonth() + 1}/${s.getDate()} – ${e.getMonth() + 1}/${e.getDate()}`;
   }
+  return `${s.getFullYear()}/${s.getMonth() + 1}/${s.getDate()} – ${e.getFullYear()}/${e.getMonth() + 1}/${e.getDate()}`;
+}
+
+function formatPeriodLabel(periodType: PeriodType, anchor: Date, rangeStart: string, rangeEnd: string): string {
+  if (periodType === 'week') return formatRangeLabel(rangeStart, rangeEnd);
   return `${anchor.getFullYear()}年${anchor.getMonth() + 1}月`;
+}
+
+function enumerateDates(start: string, end: string): string[] {
+  const dates: string[] = [];
+  let cursor = parseDateStr(start);
+  const endDate = parseDateStr(end);
+  while (cursor <= endDate) {
+    dates.push(toDateStr(cursor));
+    cursor = addDays(cursor, 1);
+  }
+  return dates;
+}
+
+function daySpan(start: string, end: string): number {
+  const ms = parseDateStr(end).getTime() - parseDateStr(start).getTime();
+  return Math.max(1, Math.round(ms / (24 * 60 * 60 * 1000)) + 1);
+}
+
+function roundHours(n: number): number {
+  return Math.round(n * 10) / 10;
 }
 
 function pct(hours: number, total: number): number {
@@ -336,10 +373,16 @@ export function TeamDashboard() {
   const [mode, setMode] = useState<Mode>('team');
   const [periodType, setPeriodType] = useState<PeriodType>('week');
   const [anchorDate, setAnchorDate] = useState(() => new Date());
+  const initialWeek = useMemo(() => getWeekRange(new Date()), []);
+  const [rangeStart, setRangeStart] = useState(initialWeek.start);
+  const [rangeEnd, setRangeEnd] = useState(initialWeek.end);
+  const [rangePickerOpen, setRangePickerOpen] = useState(false);
   const [ownDepartment, setOwnDepartment] = useState<string | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
   const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
+  const [detailStaffId, setDetailStaffId] = useState<string | null>(null);
+  const [detailDateFilter, setDetailDateFilter] = useState<string | null>(null);
 
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [pickerStaff, setPickerStaff] = useState<StaffMember[]>([]);
@@ -350,22 +393,54 @@ export function TeamDashboard() {
   const [refreshing, setRefreshing] = useState(false);
 
   const dateRange = useMemo(() => {
-    if (periodType === 'week') {
-      const { start, end } = getWeekRange(anchorDate);
-      return { start, end };
-    }
+    if (periodType === 'week') return { start: rangeStart, end: rangeEnd };
     return getMonthRange(anchorDate);
-  }, [periodType, anchorDate]);
+  }, [periodType, rangeStart, rangeEnd, anchorDate]);
 
   const weekDates = useMemo(
-    () => (periodType === 'week' ? getWeekRange(anchorDate).dates : []),
-    [periodType, anchorDate],
+    () => (periodType === 'week' ? enumerateDates(rangeStart, rangeEnd) : []),
+    [periodType, rangeStart, rangeEnd],
   );
 
   const monthWeekRows = useMemo(
     () => (periodType === 'month' ? getMonthWeekRows(anchorDate) : []),
     [periodType, anchorDate],
   );
+
+  const rangePickerValue = useMemo((): DateRange | undefined => ({
+    from: parseDateStr(rangeStart),
+    to: parseDateStr(rangeEnd),
+  }), [rangeStart, rangeEnd]);
+
+  const handlePeriodTypeChange = (next: PeriodType) => {
+    if (next === periodType) return;
+    setPeriodType(next);
+    if (next === 'week') {
+      const base = periodType === 'month' ? anchorDate : new Date();
+      const week = getWeekRange(base);
+      setRangeStart(week.start);
+      setRangeEnd(week.end);
+    } else {
+      setAnchorDate(parseDateStr(rangeStart));
+    }
+  };
+
+  const handleRangeSelect = (range: DateRange | undefined) => {
+    if (!range?.from) return;
+    const start = toDateStr(range.from);
+    const end = toDateStr(range.to || range.from);
+    // Cap at 62 days to keep queries manageable
+    if (daySpan(start, end) > 62) {
+      const cappedEnd = toDateStr(addDays(parseDateStr(start), 61));
+      setRangeStart(start);
+      setRangeEnd(cappedEnd);
+      setRangePickerOpen(false);
+      return;
+    }
+    setRangeStart(start);
+    setRangeEnd(end);
+    if (range.to) setRangePickerOpen(false);
+  };
 
   // Resolve own department
   useEffect(() => {
@@ -519,7 +594,7 @@ export function TeamDashboard() {
           const chunk = reportIds.slice(i, i + chunkSize);
           const { data } = await supabase
             .from('day_report_entries')
-            .select('id, day_report_id, staff_id, category, hours')
+            .select('id, day_report_id, staff_id, category, hours, title, related_name, outcome_url, growth_experience, is_ai_assisted')
             .in('day_report_id', chunk);
           if (data) entryData = entryData.concat(data);
         }
@@ -534,10 +609,24 @@ export function TeamDashboard() {
       ];
       const nameMap = await fetchStaffNameMap(nameIds);
 
+      const normalizedReports = ((reportData || []) as DayReport[]).map((r) => ({
+        ...r,
+        report_date: r.report_date ? String(r.report_date).substring(0, 10) : r.report_date,
+        total_hours: Number(r.total_hours) || 0,
+      }));
+
       setStaff(staffData);
       setStaffNameById(nameMap);
-      setReports((reportData || []) as DayReport[]);
-      setEntries(entryData);
+      setReports(normalizedReports);
+      setEntries(entryData.map((e) => ({
+        ...e,
+        hours: Number(e.hours) || 0,
+        title: e.title ?? null,
+        related_name: e.related_name ?? null,
+        outcome_url: e.outcome_url ?? null,
+        growth_experience: e.growth_experience ?? null,
+        is_ai_assisted: !!e.is_ai_assisted,
+      })));
     } catch (err) {
       console.error('[TeamDashboard] Failed to fetch analysis data:', err);
     } finally {
@@ -569,11 +658,59 @@ export function TeamDashboard() {
   };
 
   const shiftPeriod = (dir: -1 | 1) => {
-    setAnchorDate((prev) => {
-      if (periodType === 'week') return addDays(startOfWeekMonday(prev), dir * 7);
-      return new Date(prev.getFullYear(), prev.getMonth() + dir, 1);
-    });
+    if (periodType === 'week') {
+      const span = daySpan(rangeStart, rangeEnd);
+      setRangeStart(toDateStr(addDays(parseDateStr(rangeStart), dir * span)));
+      setRangeEnd(toDateStr(addDays(parseDateStr(rangeEnd), dir * span)));
+      return;
+    }
+    setAnchorDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + dir, 1));
   };
+
+  const openStaffDetail = (staffId: string, dateFilter: string | null = null) => {
+    setDetailStaffId(staffId);
+    setDetailDateFilter(dateFilter);
+  };
+
+  const closeStaffDetail = () => {
+    setDetailStaffId(null);
+    setDetailDateFilter(null);
+  };
+
+  const detailEntriesByDate = useMemo(() => {
+    if (!detailStaffId) return [] as { dateStr: string; label: string; report: DayReport | undefined; items: DayReportEntry[] }[];
+
+    const staffReports = reports
+      .filter((r) => r.staff_id === detailStaffId)
+      .filter((r) => !detailDateFilter || r.report_date === detailDateFilter)
+      .slice()
+      .sort((a, b) => a.report_date.localeCompare(b.report_date));
+
+    // If filtering a specific day with no report, still show empty day shell
+    if (detailDateFilter && staffReports.length === 0) {
+      return [{
+        dateStr: detailDateFilter,
+        label: formatDayLabel(detailDateFilter),
+        report: undefined,
+        items: [],
+      }];
+    }
+
+    return staffReports.map((report) => ({
+      dateStr: report.report_date,
+      label: formatDayLabel(report.report_date),
+      report,
+      items: entries
+        .filter((e) => e.day_report_id === report.id)
+        .slice()
+        .sort((a, b) => (Number(b.hours) || 0) - (Number(a.hours) || 0)),
+    }));
+  }, [detailStaffId, detailDateFilter, reports, entries]);
+
+  const detailTotalHours = useMemo(
+    () => roundHours(detailEntriesByDate.flatMap((d) => d.items).reduce((s, e) => s + (Number(e.hours) || 0), 0)),
+    [detailEntriesByDate],
+  );
 
   const getStaffName = useCallback((staffId: string): string => {
     return staffNameById[staffId]
@@ -673,9 +810,11 @@ export function TeamDashboard() {
   );
 
   const renderPersonalDayCard = (day: PersonalDayData) => (
-    <div
+    <button
+      type="button"
       key={day.dateStr}
-      className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-2.5 space-y-2 min-w-0"
+      onClick={() => openStaffDetail(selectedStaffId || '', day.dateStr)}
+      className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-2.5 space-y-2 min-w-0 text-left w-full hover:border-teal-300 hover:shadow transition-colors cursor-pointer"
     >
       <div className="space-y-1">
         <p className="text-[12px] font-semibold leading-tight">{day.label}</p>
@@ -701,7 +840,7 @@ export function TeamDashboard() {
         totalHours={(day.isLeave || day.isOff) ? 0 : day.totalHours}
         layout="stack"
       />
-    </div>
+    </button>
   );
 
   const showInitialLoading = loading && staff.length === 0 && reports.length === 0;
@@ -721,7 +860,7 @@ export function TeamDashboard() {
         <div>
           <h1 className="text-[24px] font-bold tracking-tight">團隊&個人分析</h1>
           <p className="text-[13px] text-muted-foreground mt-0.5">
-            按週／月統計工作類別工時與占比 — 團隊分部門卡片 · 個人按日／按週分析。
+            按週／月統計工作類別工時與占比 — 週統計可自選日期範圍 · 點擊卡片查看工作內容。
           </p>
         </div>
 
@@ -768,7 +907,7 @@ export function TeamDashboard() {
               <button
                 key={id}
                 type="button"
-                onClick={() => setPeriodType(id)}
+                onClick={() => handlePeriodTypeChange(id)}
                 className={cn(
                   'px-3 py-1 rounded text-[12px] font-medium transition-colors',
                   periodType === id
@@ -790,10 +929,61 @@ export function TeamDashboard() {
             >
               <ChevronLeft size={16} />
             </button>
-            <span className="inline-flex items-center gap-1.5 text-[13px] font-medium min-w-[140px] justify-center">
-              <Calendar size={14} className="text-teal-600" />
-              {formatPeriodLabel(periodType, anchorDate)}
-            </span>
+
+            {periodType === 'week' ? (
+              <Popover open={rangePickerOpen} onOpenChange={setRangePickerOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 text-[13px] font-medium min-w-[160px] justify-center px-2 py-1 rounded-md hover:bg-teal-50 hover:text-teal-800 transition-colors"
+                    title="選擇日期範圍"
+                  >
+                    <Calendar size={14} className="text-teal-600" />
+                    {formatPeriodLabel(periodType, anchorDate, rangeStart, rangeEnd)}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <div className="px-3 pt-3 pb-1">
+                    <p className="text-[12px] font-medium text-[#0d1a2d]">選擇統計日期範圍</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">最長 62 天 · 點擊起訖日期</p>
+                  </div>
+                  <DayPickerCalendar
+                    mode="range"
+                    numberOfMonths={2}
+                    selected={rangePickerValue}
+                    onSelect={handleRangeSelect}
+                    defaultMonth={parseDateStr(rangeStart)}
+                  />
+                  <div className="flex items-center justify-between gap-2 px-3 pb-3">
+                    <button
+                      type="button"
+                      className="text-[12px] text-teal-700 hover:underline"
+                      onClick={() => {
+                        const week = getWeekRange(new Date());
+                        setRangeStart(week.start);
+                        setRangeEnd(week.end);
+                        setRangePickerOpen(false);
+                      }}
+                    >
+                      重設為本週
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[12px] text-muted-foreground hover:text-[#0d1a2d]"
+                      onClick={() => setRangePickerOpen(false)}
+                    >
+                      關閉
+                    </button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-[13px] font-medium min-w-[140px] justify-center">
+                <Calendar size={14} className="text-teal-600" />
+                {formatPeriodLabel(periodType, anchorDate, rangeStart, rangeEnd)}
+              </span>
+            )}
+
             <button
               type="button"
               onClick={() => shiftPeriod(1)}
@@ -875,9 +1065,11 @@ export function TeamDashboard() {
                     const hoursByCategory = staffCategoryHours.get(member.bubble_staff_id) || {};
                     const totalHours = Object.values(hoursByCategory).reduce((s, h) => s + h, 0);
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={member.bubble_staff_id}
-                        className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-4 space-y-3"
+                        onClick={() => openStaffDetail(member.bubble_staff_id)}
+                        className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm p-4 space-y-3 text-left w-full hover:border-teal-300 hover:shadow transition-colors cursor-pointer"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
@@ -907,7 +1099,7 @@ export function TeamDashboard() {
                           hoursByCategory={hoursByCategory}
                           totalHours={totalHours}
                         />
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -918,11 +1110,14 @@ export function TeamDashboard() {
       ) : (
         <div className="space-y-3">
           <div className="text-[13px] text-muted-foreground">
-            {getStaffName(selectedStaffId || '')} · 每日工作類別工時
+            {getStaffName(selectedStaffId || '')} · 每日工作類別工時 · 點擊日期卡片查看詳情
           </div>
 
           {periodType === 'week' ? (
-            <div className="grid grid-cols-7 gap-2">
+            <div className={cn(
+              'grid gap-2',
+              weekDates.length <= 7 ? 'grid-cols-7' : 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-7',
+            )}>
               {personalDaily.map((day) => renderPersonalDayCard(day))}
             </div>
           ) : (
@@ -952,6 +1147,115 @@ export function TeamDashboard() {
           )}
         </div>
       )}
+
+      <CrudModal
+        isOpen={!!detailStaffId}
+        onClose={closeStaffDetail}
+        title={`${getStaffName(detailStaffId || '')} · 工作內容`}
+        size="lg"
+        headerActions={
+          <span className="text-[12px] text-muted-foreground mr-2">
+            {detailDateFilter
+              ? formatDayLabel(detailDateFilter)
+              : formatPeriodLabel(periodType, anchorDate, dateRange.start, dateRange.end)}
+            {' · '}
+            <span className="font-semibold text-teal-700">{detailTotalHours}h</span>
+          </span>
+        }
+      >
+        {detailEntriesByDate.length === 0 || detailEntriesByDate.every((d) => d.items.length === 0 && !d.report) ? (
+          <div className="py-10 text-center text-muted-foreground">
+            <FileText size={22} className="mx-auto mb-2 opacity-40" />
+            <p className="text-[13px]">此期間暫無工作內容</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {detailEntriesByDate.map((day) => (
+              <div key={day.dateStr} className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-[13px] font-bold">{day.label}</h4>
+                  <div className="flex items-center gap-2 text-[11px]">
+                    {day.report?.is_leave && (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
+                        請假{day.report.leave_type ? ` · ${day.report.leave_type}` : ''}
+                      </span>
+                    )}
+                    <span className="font-semibold text-teal-700 tabular-nums">
+                      {roundHours(day.items.reduce((s, e) => s + (Number(e.hours) || 0), 0))}h
+                    </span>
+                  </div>
+                </div>
+
+                {day.report?.is_leave && day.items.length === 0 ? (
+                  <p className="text-[12px] text-muted-foreground px-1">當日請假，無工作項目</p>
+                ) : day.items.length === 0 ? (
+                  <p className="text-[12px] text-muted-foreground px-1">當日無工作項目</p>
+                ) : (
+                  <div className="space-y-2">
+                    {day.items.map((entry) => {
+                      const config = categories.find((c) => c.id === entry.category) || {
+                        id: entry.category,
+                        label: entry.category,
+                        icon: '📋',
+                        color: 'text-gray-600',
+                        bg: 'bg-gray-100',
+                        sortOrder: 999,
+                      };
+                      return (
+                        <div
+                          key={entry.id}
+                          className="rounded-lg border border-[rgba(13,26,45,0.08)] bg-muted/10 px-3 py-2.5 space-y-1.5"
+                        >
+                          <div className="flex items-start gap-2 min-w-0">
+                            <span className={cn(
+                              'text-[11px] px-1.5 py-0.5 rounded shrink-0 font-medium',
+                              config.bg, config.color,
+                            )}>
+                              {config.icon} {config.label}
+                            </span>
+                            {entry.related_name && (
+                              <span className="text-[11px] px-1.5 py-0.5 rounded bg-sky-50 text-sky-600 border border-sky-100 shrink-0 truncate max-w-[140px]">
+                                {entry.related_name}
+                              </span>
+                            )}
+                            <span className="text-[12px] text-muted-foreground flex-1 min-w-0 break-words">
+                              {entry.title || '—'}
+                            </span>
+                            <span className="text-[12px] font-semibold tabular-nums shrink-0">{entry.hours}h</span>
+                            {entry.is_ai_assisted && <Bot size={12} className="text-purple-500 shrink-0 mt-0.5" />}
+                          </div>
+                          {(entry.outcome_url || entry.growth_experience) && (
+                            <div className="space-y-1 pl-0.5">
+                              {entry.outcome_url && (
+                                <a
+                                  href={entry.outcome_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="flex items-center gap-1 text-[11px] text-teal-700 hover:underline break-all"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <LinkIcon size={10} className="shrink-0" />
+                                  {entry.outcome_url}
+                                </a>
+                              )}
+                              {entry.growth_experience && (
+                                <p className="flex items-start gap-1 text-[11px] text-emerald-700">
+                                  <Sparkles size={10} className="shrink-0 mt-0.5" />
+                                  <span>{entry.growth_experience}</span>
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CrudModal>
     </div>
   );
 }
