@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
-import { useBubble } from '@/hooks/use-bubble';
 import { type BubbleStaff, toBubbleCdnUrl } from '@/types/bubble';
 import {
   Search, Plus, Edit, Trash2, Shield, Users, UserPlus, UserCheck,
@@ -262,7 +261,7 @@ export function UserManagement() {
         <div className="text-[12px] text-blue-800">
           <p className="font-medium mb-1">用戶管理說明</p>
           <p className="text-blue-700">
-            從「<span className="font-medium">員工列表</span>」中選擇員工加入系統使用者名單。
+            從「<span className="font-medium">員工列表</span>」（OTC2 同步之在職員工）中選擇員工加入系統使用者名單。
             加入後，該員工可使用 <span className="font-medium">Google 電郵登入</span> 本系統。
             系統會根據所分配的「<span className="font-medium">身份標籤</span>」決定該使用者可存取的功能模組。
           </p>
@@ -490,23 +489,62 @@ function StaffPickerModal({
   onAdd: (staff: BubbleStaff, role: string, googleEmail?: string) => void;
   onClose: () => void;
 }) {
-  const { data: staffList, loading } = useBubble<BubbleStaff>('Staff', {
-    sort_field: 'Created Date',
-    descending: true,
-    limit: 100,
-  });
-
+  const [staffList, setStaffList] = useState<BubbleStaff[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStaff, setSelectedStaff] = useState<BubbleStaff | null>(null);
   const [selectedRole, setSelectedRole] = useState('designer');
   const [googleEmail, setGoogleEmail] = useState('');
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('staff_directory')
+          .select('*')
+          .eq('status', 'active')
+          .order('display_name', { ascending: true });
+
+        if (error) throw error;
+        if (cancelled) return;
+
+        const converted: BubbleStaff[] = (data || []).map((row: any) => ({
+          _id: row.bubble_staff_id,
+          'Display Name': row.display_name || '',
+          'Full Name': row.full_name || undefined,
+          'Position': row.position || '',
+          'O_User Role': row.user_role || '',
+          'O_Status': 'Active',
+          'O_Status_Text': 'Active',
+          'Work Email': row.work_email || '',
+          'Private Email': row.private_email || undefined,
+          'Work Phone': row.work_phone ? Number(row.work_phone) || undefined : undefined,
+          'Private Phone': row.private_phone ? Number(row.private_phone) || undefined : undefined,
+          'O_Base Location': row.base_location || undefined,
+          'N_BU': row.business_unit || undefined,
+          'N_Team': row.team_id || undefined,
+          'Profile Pic': row.profile_pic_url || undefined,
+          'Created By': '',
+          'Created Date': row.created_at || '',
+          'Modified Date': row.updated_at || '',
+        }));
+        setStaffList(converted);
+      } catch (err: any) {
+        console.warn('[UserManagement] staff_directory load failed:', err?.message || err);
+        if (!cancelled) setStaffList([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Filter out already-added staff
   const existingBubbleIds = new Set(existingUsers.map(u => u.bubble_staff_id));
   const availableStaff = staffList.filter(s => {
     if (existingBubbleIds.has(s._id)) return false;
-    // Only show active staff
-    if (s['O_Status'] !== 'Active' && s['O_Status_Text'] !== 'Active') return false;
     // Search
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
@@ -565,7 +603,7 @@ function StaffPickerModal({
                 ) : availableStaff.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
                     <Users size={24} className="mb-2 opacity-50" />
-                    <p className="text-[12px]">{searchTerm ? '沒有符合的員工' : '所有在職員工已加入系統'}</p>
+                    <p className="text-[12px]">{searchTerm ? '沒有符合的員工' : '所有在職員工已加入系統（請先在員工列表從 OTC2 同步）'}</p>
                   </div>
                 ) : (
                   availableStaff.map(staff => (

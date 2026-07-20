@@ -51,7 +51,7 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
       case 'credit-cards': return { title: '信用卡管理', subtitle: '管理公司付款信用卡。' };
       case 'quotation-settings': return { title: '客戶報價設定', subtitle: '管理報價類型、預設服務項目及付款安排。' };
       case 'terms-conditions': return { title: '條款及細則管理', subtitle: '管理各報價類型的條款範本，報價時可選擇或編輯。' };
-      case 'staff-directory': return { title: '員工列表', subtitle: '查看所有員工資料，資料來源：Bubble.io Staff。' };
+      case 'staff-directory': return { title: '員工列表', subtitle: '查看所有員工資料，資料來源：OTC2 Staff（同步至 staff_directory）。' };
       case 'login-logs': return { title: '登入紀錄', subtitle: '查看用戶登入歷史記錄。' };
       case 'data-integrity': return { title: '資料完整性檢查', subtitle: '檢查每一個頁面的資料完整性，確保各模組之間資料一致性。' };
       case 'sample-data': return { title: '模擬數據管理', subtitle: '管理系統中的模擬數據，準備切換至真實數據時使用。' };

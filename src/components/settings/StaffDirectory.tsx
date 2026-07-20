@@ -2,7 +2,6 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { Search, RefreshCw, Users, Phone, Mail, Building2, Briefcase, UserCheck, UserX, Tag, ChevronDown, Shield, Ban, CheckSquare, Square, MinusSquare, CloudDownload, CheckCircle2, AlertCircle, Loader2, ArrowUpDown, Database, Save, Chrome, Edit } from 'lucide-react';
-import { useBubble } from '@/hooks/use-bubble';
 import { type BubbleStaff, toBubbleCdnUrl } from '@/types/bubble';
 import { supabase } from '@/lib/supabase';
 
@@ -29,20 +28,15 @@ interface StaffUserConfig {
 }
 
 export function StaffDirectory() {
-  // Fetch ALL records from Bubble (paginated) for live view
-  const { data: bubbleStaffList, loading: bubbleLoading, error: bubbleError, refetch: refetchBubble } = useBubble<BubbleStaff>('Staff', {
-    sort_field: 'Created Date',
-    descending: true,
-  }, { fetchAll: true });
-
-  // Supabase-backed data (loaded after sync or on mount)
-  const [supabaseStaff, setSupabaseStaff] = useState<BubbleStaff[]>([]);
-  const [supabaseLoading, setSupabaseLoading] = useState(false);
-  const [dataSource, setDataSource] = useState<'bubble' | 'supabase'>('bubble');
+  // Primary data source: MPS staff_directory (synced from OTC2)
+  const [staffList, setStaffList] = useState<BubbleStaff[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch staff from Supabase staff_directory table
   const fetchFromSupabase = useCallback(async () => {
-    setSupabaseLoading(true);
+    setLoading(true);
+    setError(null);
     try {
       const { data, error: fetchErr } = await supabase
         .from('staff_directory')
@@ -51,78 +45,68 @@ export function StaffDirectory() {
 
       if (fetchErr) {
         console.warn('[StaffDirectory] Supabase fetch error:', fetchErr.message);
-        setSupabaseLoading(false);
+        setError(fetchErr.message);
+        setLoading(false);
         return;
       }
 
-      if (data && data.length > 0) {
-        // Convert Supabase records back to BubbleStaff format for rendering
-        const converted: BubbleStaff[] = data.map((row: any) => ({
-          _id: row.bubble_staff_id,
-          'Display Name': row.display_name || '',
-          'Full Name': row.full_name || undefined,
-          'Position': row.position || '',
-          'O_User Role': row.user_role || '',
-          'O_Status': row.status === 'active' ? 'Active' : 'Inactive',
-          'O_Status_Text': row.status === 'active' ? 'Active' : 'Inactive',
-          'Work Email': row.work_email || '',
-          'Private Email': row.private_email || undefined,
-          'Work Phone': row.work_phone ? Number(row.work_phone) || undefined : undefined,
-          'Private Phone': row.private_phone ? Number(row.private_phone) || undefined : undefined,
-          'O_Base Location': row.base_location || undefined,
-          'Birthday': row.birthday || undefined,
-          'Entry Date': row.entry_date || undefined,
-          'Joining Date': row.joining_date || undefined,
-          'Termination Date': row.termination_date || undefined,
-          'O_Probation': row.probation_status || undefined,
-          'AL Quota': row.al_quota || undefined,
-          'N_BU': row.business_unit || undefined,
-          'N_Team': row.team_id || undefined,
-          'N_Team Role': row.team_role || undefined,
-          'Brands': row.brands || undefined,
-          'Profile Pic': row.profile_pic_url || undefined,
-          'Voov ID': row.voov_id ? Number(row.voov_id) || undefined : undefined,
-          'Created By': '',
-          'Created Date': row.bubble_created_date || row.created_at || '',
-          'Modified Date': row.bubble_modified_date || row.updated_at || '',
-        }));
-        setSupabaseStaff(converted);
-        setDataSource('supabase');
+      const rows = data || [];
+      // Convert Supabase records back to BubbleStaff format for rendering
+      const converted: BubbleStaff[] = rows.map((row: any) => ({
+        _id: row.bubble_staff_id,
+        'Display Name': row.display_name || '',
+        'Full Name': row.full_name || undefined,
+        'Position': row.position || '',
+        'O_User Role': row.user_role || '',
+        'O_Status': row.status === 'active' ? 'Active' : 'Inactive',
+        'O_Status_Text': row.status === 'active' ? 'Active' : 'Inactive',
+        'Work Email': row.work_email || '',
+        'Private Email': row.private_email || undefined,
+        'Work Phone': row.work_phone ? Number(row.work_phone) || undefined : undefined,
+        'Private Phone': row.private_phone ? Number(row.private_phone) || undefined : undefined,
+        'O_Base Location': row.base_location || undefined,
+        'Birthday': row.birthday || undefined,
+        'Entry Date': row.entry_date || undefined,
+        'Joining Date': row.joining_date || undefined,
+        'Termination Date': row.termination_date || undefined,
+        'O_Probation': row.probation_status || undefined,
+        'AL Quota': row.al_quota || undefined,
+        'N_BU': row.business_unit || undefined,
+        'N_Team': row.team_id || undefined,
+        'N_Team Role': row.team_role || undefined,
+        'Brands': row.brands || undefined,
+        'Profile Pic': row.profile_pic_url || undefined,
+        'Voov ID': row.voov_id ? Number(row.voov_id) || undefined : undefined,
+        'Created By': '',
+        'Created Date': row.bubble_created_date || row.created_at || '',
+        'Modified Date': row.bubble_modified_date || row.updated_at || '',
+      }));
+      setStaffList(converted);
 
-        // Populate office map from staff_directory (department comes from user_info)
-        const officeData: Record<string, string> = {};
-        data.forEach((row: any) => {
-          if (row.office) officeData[row.bubble_staff_id] = row.office;
-        });
-        setOfficeMap(prev => ({ ...prev, ...officeData }));
-      }
+      // Populate office map from staff_directory (department comes from user_info)
+      const officeData: Record<string, string> = {};
+      rows.forEach((row: any) => {
+        if (row.office) officeData[row.bubble_staff_id] = row.office;
+      });
+      setOfficeMap(prev => ({ ...prev, ...officeData }));
     } catch (err: any) {
       console.warn('[StaffDirectory] Supabase fetch error:', err.message);
+      setError(err.message);
     } finally {
-      setSupabaseLoading(false);
+      setLoading(false);
     }
   }, []);
 
-  // On mount, try loading from Supabase first (if data exists)
   useEffect(() => {
     fetchFromSupabase();
   }, [fetchFromSupabase]);
 
-  // Use Supabase data if available (complete dataset), otherwise fall back to Bubble
-  const staffList = dataSource === 'supabase' && supabaseStaff.length > 0 ? supabaseStaff : bubbleStaffList;
-  const loading = (dataSource === 'supabase' ? supabaseLoading : bubbleLoading) && staffList.length === 0;
-  const error = dataSource === 'supabase' ? null : bubbleError;
-
   const refetch = useCallback(() => {
-    if (dataSource === 'supabase') {
-      fetchFromSupabase();
-    } else {
-      refetchBubble();
-    }
-  }, [dataSource, fetchFromSupabase, refetchBubble]);
+    fetchFromSupabase();
+  }, [fetchFromSupabase]);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('active');
   const [filterTeam, setFilterTeam] = useState('all');
   const [filterClassification, setFilterClassification] = useState<'all' | 'system_user' | 'other_staff' | 'disabled'>('all');
 
@@ -355,7 +339,7 @@ export function StaffDirectory() {
     synced_at?: string;
   } | null>(null);
 
-  const handleSyncFromBubble = async () => {
+  const handleSyncFromOtc2 = async () => {
     setSyncing(true);
     setSyncResult(null);
 
@@ -369,7 +353,7 @@ export function StaffDirectory() {
     }
 
     try {
-      const response = await fetch(`${supabaseUrl}/functions/v1/supabase-functions-sync-bubble-staff`, {
+      const response = await fetch(`${supabaseUrl}/functions/v1/supabase-functions-sync-otc2-staff`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -385,10 +369,7 @@ export function StaffDirectory() {
         setSyncResult({ success: false, message: data.error || `Sync failed (${response.status})` });
       } else {
         setSyncResult(data);
-        // After successful sync, refresh from Supabase to get ALL records
         await fetchFromSupabase();
-        // Also refetch Bubble data for fresh display names, etc.
-        refetchBubble();
       }
     } catch (err: any) {
       setSyncResult({ success: false, message: `Network error: ${err.message}` });
@@ -692,7 +673,7 @@ export function StaffDirectory() {
           刷新
         </button>
         <button
-          onClick={handleSyncFromBubble}
+          onClick={handleSyncFromOtc2}
           disabled={syncing || loading}
           className="flex items-center gap-1.5 px-3 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors disabled:opacity-50 shadow-sm"
         >
@@ -701,7 +682,7 @@ export function StaffDirectory() {
           ) : (
             <CloudDownload size={13} />
           )}
-          {syncing ? '同步中...' : 'Sync with Bubble.io'}
+          {syncing ? '同步中...' : '從 OTC2 同步'}
         </button>
         <button
           onClick={handleSaveUserConfigs}
@@ -1011,14 +992,8 @@ export function StaffDirectory() {
           <div className="px-4 py-2.5 bg-muted/30 rounded-md text-[11px] text-muted-foreground flex items-center justify-between">
             <span>顯示 {filteredStaff.length} / {staffList.length} 位員工 （{systemUserCount} 位系統使用者 · {disabledCount} 位不能使用系統）</span>
             <span className="flex items-center gap-1.5">
-              {dataSource === 'supabase' ? (
-                <>
-                  <Database size={11} className="text-teal-600" />
-                  <span className="text-teal-700 font-medium">資料來源：Supabase staff_directory（完整同步資料）</span>
-                </>
-              ) : (
-                <span>資料來源：Bubble.io Staff（即時 API）</span>
-              )}
+              <Database size={11} className="text-teal-600" />
+              <span className="text-teal-700 font-medium">資料來源：OTC2 → staff_directory</span>
             </span>
           </div>
         </div>
