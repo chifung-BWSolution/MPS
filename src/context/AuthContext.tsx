@@ -45,9 +45,37 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+type StaffDirectoryLite = {
+  bubble_staff_id: string;
+  display_name: string | null;
+  full_name: string | null;
+  status: string | null;
+  position: string | null;
+  work_email: string | null;
+};
+
+function dedupeById<T extends { id?: string }>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const row of rows) {
+    const key = row.id || JSON.stringify(row);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
+function isStaffActive(status: string | null | undefined): boolean {
+  return (status || '').toLowerCase() === 'active';
+}
+
 /**
  * Flexible whitelist lookup: case-insensitive check across google_email and email columns
- * in BOTH system_users and user_info tables. Returns the first active match found.
+ * in BOTH system_users and user_info tables.
+ *
+ * When the same email matches multiple people (shared work mailbox), prefer the row linked
+ * to staff_directory.status = 'active'. Falls back to inactive only if no active match exists.
  *
  * Uses parallel .ilike() queries instead of PostgREST `.or()` because the latter mis-parses
  * email values containing "." and "@" — that caused 4s hangs / 400 errors before.
@@ -75,44 +103,179 @@ async function findSystemUserByEmail(email: string): Promise<{ data: SystemUserP
     }, MASTER_TIMEOUT_MS);
   });
 
-  const lookupInTable = async (table: 'system_users' | 'user_info') => {
-    // Run google_email + email lookups in parallel; return whichever hits first.
+  const lookupAllInTable = async (table: 'system_users' | 'user_info') => {
+    // Fetch ALL matches (shared mailboxes can have multiple rows).
     const [byGoogle, byEmail] = await Promise.all([
-      supabase.from(table).select('*').ilike('google_email', normalizedEmail).limit(1).maybeSingle(),
-      supabase.from(table).select('*').ilike('email', normalizedEmail).limit(1).maybeSingle(),
+      supabase.from(table).select('*').ilike('google_email', normalizedEmail),
+      supabase.from(table).select('*').ilike('email', normalizedEmail),
     ]);
+    const rows = dedupeById([...(byGoogle.data || []), ...(byEmail.data || [])] as any[]);
     return {
-      data: byGoogle.data || byEmail.data || null,
+      data: rows,
       error: byGoogle.error || byEmail.error || null,
     };
   };
 
+  const loadStaffStatusMap = async (staffIds: string[]): Promise<Map<string, StaffDirectoryLite>> => {
+    const map = new Map<string, StaffDirectoryLite>();
+    const uniqueIds = [...new Set(staffIds.filter(Boolean))];
+
+    const queries: PromiseLike<any>[] = [
+      supabase
+        .from('staff_directory')
+        .select('bubble_staff_id, display_name, full_name, status, position, work_email')
+        .ilike('work_email', normalizedEmail),
+    ];
+
+    if (uniqueIds.length > 0) {
+      queries.push(
+        supabase
+          .from('staff_directory')
+          .select('bubble_staff_id, display_name, full_name, status, position, work_email')
+          .in('bubble_staff_id', uniqueIds)
+      );
+    }
+
+    const results = await Promise.all(queries);
+    for (const result of results) {
+      for (const row of (result.data || []) as StaffDirectoryLite[]) {
+        if (row?.bubble_staff_id) map.set(row.bubble_staff_id, row);
+      }
+    }
+    return map;
+  };
+
+  const pickPreferredSystemUser = (
+    rows: any[],
+    staffMap: Map<string, StaffDirectoryLite>
+  ): any | null => {
+    if (rows.length === 0) return null;
+    const scored = rows.map((row) => {
+      const staff = staffMap.get(row.bubble_staff_id);
+      const staffActive = isStaffActive(staff?.status);
+      const accountActive = row.is_active === true || row.is_active === null;
+      // Higher is better
+      let score = 0;
+      if (staffActive) score += 100;
+      if (accountActive) score += 10;
+      return { row, score, staff };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    return scored[0]?.row || null;
+  };
+
+  const pickPreferredUserInfo = (
+    rows: any[],
+    staffMap: Map<string, StaffDirectoryLite>
+  ): { ui: any; staff: StaffDirectoryLite | null } | null => {
+    if (rows.length === 0) return null;
+    const scored = rows.map((row) => {
+      const staff = staffMap.get(row.staff_id) || null;
+      const staffActive = isStaffActive(staff?.status);
+      const systemActive = (row.system_status || '').toLowerCase() === 'active';
+      let score = 0;
+      if (staffActive) score += 100;
+      if (systemActive) score += 10;
+      return { ui: row, staff, score };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    const best = scored[0];
+    return best ? { ui: best.ui, staff: best.staff } : null;
+  };
+
   const lookupLogic = async (): Promise<{ data: SystemUserProfile | null; error: any }> => {
     try {
-      // Attempt 1: system_users
-      const { data: sysMatch, error: err1 } = await lookupInTable('system_users');
-      console.log('[Auth:findSystemUserByEmail] Attempt 1 (system_users):', { found: !!sysMatch, error: err1?.message || null });
-      if (sysMatch) return { data: sysMatch as SystemUserProfile, error: null };
+      // Attempt 1: system_users (all matches)
+      const { data: sysMatches, error: err1 } = await lookupAllInTable('system_users');
+      console.log('[Auth:findSystemUserByEmail] Attempt 1 (system_users):', {
+        count: sysMatches.length,
+        error: err1?.message || null,
+      });
+
+      // Attempt 2: user_info (all matches)
+      const { data: uiMatches, error: err2 } = await lookupAllInTable('user_info');
+      console.log('[Auth:findSystemUserByEmail] Attempt 2 (user_info):', {
+        count: uiMatches.length,
+        staff_ids: uiMatches.map((r: any) => r.staff_id),
+        error: err2?.message || null,
+      });
+
       if (timedOut) return { data: null, error: new Error('Timed out') };
 
-      // Attempt 2: user_info
-      const { data: uiMatch, error: err2 } = await lookupInTable('user_info');
-      console.log('[Auth:findSystemUserByEmail] Attempt 2 (user_info):', { found: !!uiMatch, staff_id: (uiMatch as any)?.staff_id, error: err2?.message || null });
+      const staffIds = [
+        ...sysMatches.map((r: any) => r.bubble_staff_id),
+        ...uiMatches.map((r: any) => r.staff_id),
+      ].filter(Boolean);
 
-      if (uiMatch?.staff_id) {
-        if (timedOut) return { data: null, error: new Error('Timed out') };
-        const { data: sysUserFromUI } = await supabase
-          .from('system_users')
-          .select('*')
-          .eq('bubble_staff_id', uiMatch.staff_id)
-          .limit(1)
-          .maybeSingle();
-        if (sysUserFromUI) return { data: sysUserFromUI as SystemUserProfile, error: null };
-        return { data: bootstrapSystemUserFromUserInfo(uiMatch, normalizedEmail), error: null };
+      const staffMap = await loadStaffStatusMap(staffIds);
+      console.log('[Auth:findSystemUserByEmail] staff_directory status map:', {
+        size: staffMap.size,
+        active: [...staffMap.values()].filter((s) => isStaffActive(s.status)).map((s) => s.display_name),
+      });
+
+      if (timedOut) return { data: null, error: new Error('Timed out') };
+
+      // Prefer active staff_directory among system_users
+      const sysMatch = pickPreferredSystemUser(sysMatches, staffMap);
+      if (sysMatch) {
+        const staff = staffMap.get(sysMatch.bubble_staff_id);
+        console.log('[Auth:findSystemUserByEmail] ✅ Picked system_users:', {
+          display_name: sysMatch.display_name,
+          bubble_staff_id: sysMatch.bubble_staff_id,
+          staff_status: staff?.status || null,
+        });
+        // Prefer staff_directory display name when available (e.g. Julie)
+        if (staff?.display_name || staff?.full_name) {
+          return {
+            data: {
+              ...(sysMatch as SystemUserProfile),
+              display_name: staff.display_name || staff.full_name || sysMatch.display_name,
+              position: staff.position || sysMatch.position,
+            },
+            error: null,
+          };
+        }
+        return { data: sysMatch as SystemUserProfile, error: null };
       }
 
-      if (uiMatch) {
-        return { data: bootstrapSystemUserFromUserInfo(uiMatch, normalizedEmail), error: null };
+      // Prefer active staff_directory among user_info
+      const uiPick = pickPreferredUserInfo(uiMatches, staffMap);
+      if (uiPick?.ui) {
+        const uiMatch = uiPick.ui;
+        console.log('[Auth:findSystemUserByEmail] ✅ Picked user_info:', {
+          display_name: uiMatch.display_name,
+          staff_id: uiMatch.staff_id,
+          staff_status: uiPick.staff?.status || null,
+        });
+
+        if (uiMatch.staff_id) {
+          if (timedOut) return { data: null, error: new Error('Timed out') };
+          const { data: sysUserFromUI } = await supabase
+            .from('system_users')
+            .select('*')
+            .eq('bubble_staff_id', uiMatch.staff_id)
+            .limit(1)
+            .maybeSingle();
+          if (sysUserFromUI) {
+            const staff = uiPick.staff;
+            if (staff?.display_name || staff?.full_name) {
+              return {
+                data: {
+                  ...(sysUserFromUI as SystemUserProfile),
+                  display_name: staff.display_name || staff.full_name || sysUserFromUI.display_name,
+                  position: staff.position || sysUserFromUI.position,
+                },
+                error: null,
+              };
+            }
+            return { data: sysUserFromUI as SystemUserProfile, error: null };
+          }
+        }
+
+        return {
+          data: bootstrapSystemUserFromUserInfo(uiMatch, normalizedEmail, uiPick.staff),
+          error: null,
+        };
       }
 
       console.warn('[Auth:findSystemUserByEmail] ❌ All attempts failed for:', normalizedEmail);
@@ -195,15 +358,23 @@ function mapRoleTagDisplay(roleTag: string | null | undefined, classification?: 
 /**
  * Bootstrap a SystemUserProfile from a user_info record alone.
  * Used when user_info exists but there's no matching system_users row.
+ * Prefer staff_directory display_name/position when provided (active staff preferred upstream).
  */
-function bootstrapSystemUserFromUserInfo(uiRecord: any, email: string): SystemUserProfile {
+function bootstrapSystemUserFromUserInfo(
+  uiRecord: any,
+  email: string,
+  staff?: StaffDirectoryLite | null
+): SystemUserProfile {
   const role = mapRoleToInternal(uiRecord.role_tag, uiRecord.classification);
+  const displayName =
+    staff?.display_name || staff?.full_name || uiRecord.display_name || uiRecord.email || email;
   console.log('[Auth:bootstrap] Creating SystemUserProfile from user_info:', {
     staff_id: uiRecord.staff_id,
-    display_name: uiRecord.display_name,
+    display_name: displayName,
     role_tag: uiRecord.role_tag,
     classification: uiRecord.classification,
     system_status: uiRecord.system_status,
+    staff_status: staff?.status || null,
     mapped_role: role,
   });
 
@@ -211,11 +382,11 @@ function bootstrapSystemUserFromUserInfo(uiRecord: any, email: string): SystemUs
     id: `ui-bootstrap-${uiRecord.id || uiRecord.staff_id}`,
     auth_user_id: null,
     bubble_staff_id: uiRecord.staff_id || `ui_${uiRecord.id}`,
-    display_name: uiRecord.display_name || uiRecord.email || email,
+    display_name: displayName,
     email: uiRecord.email || email,
     role: role,
     department: uiRecord.department || null,
-    position: uiRecord.role_tag || uiRecord.classification || null,
+    position: staff?.position || uiRecord.role_tag || uiRecord.classification || null,
     phone: null,
     profile_pic_url: uiRecord.profile_pic_url || null,
     is_active: true, // If they're in user_info, they're authorized
