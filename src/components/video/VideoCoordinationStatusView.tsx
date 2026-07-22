@@ -11,6 +11,7 @@ import {
   getPlatformUrl,
   getPublishedPlatformKeys,
   isHttpUrl,
+  sortVideoOutputsByPublishDateDesc,
 } from '@/lib/videoOutputUtils';
 
 const PLATFORM_TAG_COLORS: Record<PlatformPublishKey, string> = {
@@ -270,7 +271,8 @@ function groupByMonth(videos: VideoOutput[]): MonthGroup[] {
   }
   return sortMonthKeys([...map.keys()]).map(key => ({
     key,
-    videos: map.get(key)!,
+    // 每月內依發佈日期（無則計劃日期）新→舊排序
+    videos: sortVideoOutputsByPublishDateDesc(map.get(key)!),
   }));
 }
 
