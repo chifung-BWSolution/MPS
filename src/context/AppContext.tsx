@@ -114,11 +114,11 @@ export const mainMenuItems: MainMenuItem[] = [
     id: 'video',
     label: '影片製作',
     subMenus: [
+      { id: 'coordination', label: '影片統籌', section: '管理模組' },
       { id: 'schedule', label: '拍攝排期', section: '製作流程' },
       { id: 'production', label: '影片製作', section: '製作流程' },
       { id: 'review', label: '影片審核', section: '製作流程' },
       { id: 'publish', label: '影片發佈', section: '製作流程' },
-      { id: 'coordination', label: '影片統籌', section: '管理模組' },
       { id: 'channels', label: '頻道設定', section: '設定' },
     ],
   },
