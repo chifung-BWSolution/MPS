@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import {
   Calendar, ChevronLeft, ChevronRight, Loader2, RefreshCw, Globe, Monitor,
+  Users, User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -9,6 +10,7 @@ import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
 // ============================
 // Types
 // ============================
+type Mode = 'team' | 'personal';
 type PeriodType = 'day' | 'week' | 'month';
 type ProfileTypeFilter = 'all' | 'system' | 'website';
 
@@ -35,6 +37,14 @@ interface StaffHourRow {
   percentage: number;
 }
 
+interface ProjectHourRow {
+  projectId: string;
+  name: string;
+  profileType: 'system' | 'website' | 'unknown';
+  hours: number;
+  percentage: number;
+}
+
 interface ProjectStat {
   projectId: string;
   name: string;
@@ -42,6 +52,14 @@ interface ProjectStat {
   domainUrl: string | null;
   totalHours: number;
   staffRows: StaffHourRow[];
+  entryCount: number;
+}
+
+interface PersonalStat {
+  staffId: string;
+  name: string;
+  totalHours: number;
+  projectRows: ProjectHourRow[];
   entryCount: number;
 }
 
@@ -129,10 +147,60 @@ function normalizeProfileType(raw: string | null | undefined): 'system' | 'websi
   return 'unknown';
 }
 
+function ProfileTypeBadge({ profileType }: { profileType: 'system' | 'website' | 'unknown' }) {
+  return (
+    <span className={cn(
+      'inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0',
+      profileType === 'system'
+        ? 'bg-indigo-50 text-indigo-700'
+        : profileType === 'website'
+          ? 'bg-sky-50 text-sky-700'
+          : 'bg-slate-100 text-slate-600',
+    )}>
+      {profileType === 'system' ? <Monitor size={10} /> : <Globe size={10} />}
+      {profileType === 'system' ? '系統' : profileType === 'website' ? '網站' : '其他'}
+    </span>
+  );
+}
+
+function HoursBarRow({
+  label,
+  hours,
+  percentage,
+  badge,
+}: {
+  label: string;
+  hours: number;
+  percentage: number;
+  badge?: ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      {badge}
+      <span className="text-[13px] font-medium min-w-0 flex-1 truncate" title={label}>
+        {label}
+      </span>
+      <div className="w-[72px] sm:w-[96px] h-2 bg-muted rounded-full overflow-hidden shrink-0">
+        <div
+          className="h-full bg-teal-500 rounded-full transition-all"
+          style={{ width: `${Math.min(percentage, 100)}%` }}
+        />
+      </div>
+      <span className="text-[12px] font-semibold w-[44px] text-right tabular-nums shrink-0">
+        {hours}h
+      </span>
+      <span className="text-[11px] text-muted-foreground w-[36px] text-right tabular-nums shrink-0">
+        {percentage.toFixed(0)}%
+      </span>
+    </div>
+  );
+}
+
 // ============================
 // Component
 // ============================
 export function ProjectAnalysis() {
+  const [mode, setMode] = useState<Mode>('team');
   const [periodType, setPeriodType] = useState<PeriodType>('week');
   const [typeFilter, setTypeFilter] = useState<ProfileTypeFilter>('all');
   const [anchorDate, setAnchorDate] = useState(() => new Date());
@@ -207,51 +275,56 @@ export function ProjectAnalysis() {
     return map;
   }, [profiles]);
 
+  const resolveProjectMeta = useCallback((projectId: string, relatedName: string | null | undefined) => {
+    const profile = profileById.get(projectId);
+    const profileType = profile
+      ? normalizeProfileType(profile.profile_type)
+      : 'unknown';
+    return {
+      name: profile?.website_name || relatedName || projectId,
+      profileType,
+      domainUrl: profile?.domain_url ?? null,
+    };
+  }, [profileById]);
+
+  const filteredEntries = useMemo(() => {
+    return entries.filter((e) => {
+      const projectId = e.related_id;
+      if (!projectId) return false;
+      const hours = Number(e.hours) || 0;
+      if (hours <= 0) return false;
+      if (typeFilter === 'all') return true;
+      const profile = profileById.get(projectId);
+      const profileType = profile ? normalizeProfileType(profile.profile_type) : 'unknown';
+      return profileType === typeFilter;
+    });
+  }, [entries, profileById, typeFilter]);
+
   const projectStats = useMemo((): ProjectStat[] => {
-    // Aggregate hours by project → staff
     const projectStaff = new Map<string, Map<string, number>>();
     const projectEntryCount = new Map<string, number>();
     const orphanNames = new Map<string, string>();
 
-    entries.forEach((e) => {
-      const projectId = e.related_id;
-      if (!projectId) return;
+    filteredEntries.forEach((e) => {
+      const projectId = e.related_id!;
       const hours = Number(e.hours) || 0;
-      if (hours <= 0) return;
-
       if (!projectStaff.has(projectId)) projectStaff.set(projectId, new Map());
       const staffMap = projectStaff.get(projectId)!;
       staffMap.set(e.staff_id, (staffMap.get(e.staff_id) || 0) + hours);
       projectEntryCount.set(projectId, (projectEntryCount.get(projectId) || 0) + 1);
-
       if (!profileById.has(projectId) && e.related_name) {
         orphanNames.set(projectId, e.related_name);
       }
     });
 
-    // Include all 系統+網站 profiles; orphans that have hours but no profile row
-    const projectIds = new Set<string>([
-      ...profiles.map((p) => p.id),
-      ...projectStaff.keys(),
-    ]);
-
     const stats: ProjectStat[] = [];
-    projectIds.forEach((projectId) => {
-      const profile = profileById.get(projectId);
-      const staffMap = projectStaff.get(projectId) || new Map<string, number>();
+    projectStaff.forEach((staffMap, projectId) => {
       const totalHours = roundHours(
         Array.from(staffMap.values()).reduce((s, h) => s + h, 0),
       );
-
-      // Hide zero-hour projects in the period to keep the list actionable
       if (totalHours <= 0) return;
 
-      const profileType = profile
-        ? normalizeProfileType(profile.profile_type)
-        : 'unknown';
-
-      if (typeFilter !== 'all' && profileType !== typeFilter) return;
-
+      const meta = resolveProjectMeta(projectId, orphanNames.get(projectId));
       const staffRows: StaffHourRow[] = Array.from(staffMap.entries())
         .map(([staffId, hours]) => {
           const rounded = roundHours(hours);
@@ -266,9 +339,9 @@ export function ProjectAnalysis() {
 
       stats.push({
         projectId,
-        name: profile?.website_name || orphanNames.get(projectId) || projectId,
-        profileType,
-        domainUrl: profile?.domain_url ?? null,
+        name: meta.name,
+        profileType: meta.profileType,
+        domainUrl: meta.domainUrl,
         totalHours,
         staffRows,
         entryCount: projectEntryCount.get(projectId) || 0,
@@ -276,26 +349,117 @@ export function ProjectAnalysis() {
     });
 
     return stats.sort((a, b) => b.totalHours - a.totalHours || a.name.localeCompare(b.name, 'zh-Hant'));
-  }, [entries, profiles, profileById, staffNameById, typeFilter]);
+  }, [filteredEntries, profileById, resolveProjectMeta, staffNameById]);
+
+  const personalStats = useMemo((): PersonalStat[] => {
+    const staffProjects = new Map<string, Map<string, number>>();
+    const staffEntryCount = new Map<string, number>();
+    const orphanNames = new Map<string, string>();
+
+    filteredEntries.forEach((e) => {
+      const projectId = e.related_id!;
+      const hours = Number(e.hours) || 0;
+      if (!staffProjects.has(e.staff_id)) staffProjects.set(e.staff_id, new Map());
+      const projectMap = staffProjects.get(e.staff_id)!;
+      projectMap.set(projectId, (projectMap.get(projectId) || 0) + hours);
+      staffEntryCount.set(e.staff_id, (staffEntryCount.get(e.staff_id) || 0) + 1);
+      if (!profileById.has(projectId) && e.related_name) {
+        orphanNames.set(projectId, e.related_name);
+      }
+    });
+
+    const stats: PersonalStat[] = [];
+    staffProjects.forEach((projectMap, staffId) => {
+      const totalHours = roundHours(
+        Array.from(projectMap.values()).reduce((s, h) => s + h, 0),
+      );
+      if (totalHours <= 0) return;
+
+      const projectRows: ProjectHourRow[] = Array.from(projectMap.entries())
+        .map(([projectId, hours]) => {
+          const rounded = roundHours(hours);
+          const meta = resolveProjectMeta(projectId, orphanNames.get(projectId));
+          return {
+            projectId,
+            name: meta.name,
+            profileType: meta.profileType,
+            hours: rounded,
+            percentage: totalHours > 0 ? (rounded / totalHours) * 100 : 0,
+          };
+        })
+        .sort((a, b) => b.hours - a.hours || a.name.localeCompare(b.name, 'zh-Hant'));
+
+      stats.push({
+        staffId,
+        name: staffNameById[staffId] || staffId,
+        totalHours,
+        projectRows,
+        entryCount: staffEntryCount.get(staffId) || 0,
+      });
+    });
+
+    return stats.sort((a, b) => b.totalHours - a.totalHours || a.name.localeCompare(b.name, 'zh-Hant'));
+  }, [filteredEntries, profileById, resolveProjectMeta, staffNameById]);
 
   const summary = useMemo(() => {
-    const totalHours = roundHours(projectStats.reduce((s, p) => s + p.totalHours, 0));
-    const staffSet = new Set(projectStats.flatMap((p) => p.staffRows.map((r) => r.staffId)));
+    if (mode === 'team') {
+      const totalHours = roundHours(projectStats.reduce((s, p) => s + p.totalHours, 0));
+      const staffSet = new Set(projectStats.flatMap((p) => p.staffRows.map((r) => r.staffId)));
+      return {
+        primaryLabel: '有工時項目',
+        primaryValue: projectStats.length,
+        totalHours,
+        tertiaryLabel: '投入人員',
+        tertiaryValue: staffSet.size,
+      };
+    }
+    const totalHours = roundHours(personalStats.reduce((s, p) => s + p.totalHours, 0));
+    const projectSet = new Set(personalStats.flatMap((p) => p.projectRows.map((r) => r.projectId)));
     return {
-      projectCount: projectStats.length,
+      primaryLabel: '投入人員',
+      primaryValue: personalStats.length,
       totalHours,
-      staffCount: staffSet.size,
+      tertiaryLabel: '參與項目',
+      tertiaryValue: projectSet.size,
     };
-  }, [projectStats]);
+  }, [mode, projectStats, personalStats]);
+
+  const empty = mode === 'team' ? projectStats.length === 0 : personalStats.length === 0;
 
   return (
     <div>
       <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
-        <div>
+        <div className="text-center">
           <h1 className="text-[24px] font-bold tracking-tight">項目分析</h1>
           <p className="text-[13px] text-muted-foreground mt-0.5">
-            按系統／網站項目統計人員投入工時與占比 — 支援按天／週／月篩選。
+            {mode === 'team'
+              ? '按系統／網站項目統計人員投入工時與占比 — 支援按天／週／月篩選。'
+              : '按個人統計參與的系統／網站項目工時與占比 — 支援按天／週／月篩選。'}
           </p>
+        </div>
+
+        <div className="flex justify-center">
+          <div className="inline-flex rounded-lg border border-[rgba(13,26,45,0.08)] bg-white p-0.5">
+            {([
+              { id: 'team' as const, label: '團隊', icon: Users },
+              { id: 'personal' as const, label: '個人', icon: User },
+            ]).map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setMode(id)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                  mode === id
+                    ? 'bg-teal-50 text-teal-700 border border-teal-100'
+                    : 'text-muted-foreground hover:text-[#0d1a2d]',
+                )}
+              >
+                <Icon size={14} />
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -388,19 +552,18 @@ export function ProjectAnalysis() {
         </div>
       </div>
 
-      {/* Summary */}
       <div className="grid grid-cols-3 gap-3 mb-5">
         <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm px-4 py-3">
-          <p className="text-[11px] text-muted-foreground">有工時項目</p>
-          <p className="text-[20px] font-bold tabular-nums mt-0.5">{summary.projectCount}</p>
+          <p className="text-[11px] text-muted-foreground">{summary.primaryLabel}</p>
+          <p className="text-[20px] font-bold tabular-nums mt-0.5">{summary.primaryValue}</p>
         </div>
         <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm px-4 py-3">
           <p className="text-[11px] text-muted-foreground">總工時</p>
           <p className="text-[20px] font-bold text-teal-700 tabular-nums mt-0.5">{summary.totalHours}h</p>
         </div>
         <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm px-4 py-3">
-          <p className="text-[11px] text-muted-foreground">投入人員</p>
-          <p className="text-[20px] font-bold tabular-nums mt-0.5">{summary.staffCount}</p>
+          <p className="text-[11px] text-muted-foreground">{summary.tertiaryLabel}</p>
+          <p className="text-[20px] font-bold tabular-nums mt-0.5">{summary.tertiaryValue}</p>
         </div>
       </div>
 
@@ -409,32 +572,22 @@ export function ProjectAnalysis() {
           <Loader2 size={18} className="animate-spin" />
           <span className="text-[13px]">載入項目工時…</span>
         </div>
-      ) : projectStats.length === 0 ? (
+      ) : empty ? (
         <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm py-16 text-center">
           <p className="text-[14px] text-muted-foreground">此期間暫無關聯系統／網站的工時記錄</p>
           <p className="text-[12px] text-muted-foreground mt-1">請確認匯報項目已選擇關聯對象</p>
         </div>
-      ) : (
-        <div className="space-y-4">
+      ) : mode === 'team' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {projectStats.map((project) => (
             <div
               key={project.projectId}
-              className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm overflow-hidden"
+              className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm overflow-hidden flex flex-col"
             >
               <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 border-b border-[rgba(13,26,45,0.06)] bg-muted/20">
                 <div className="min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className={cn(
-                      'inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium',
-                      project.profileType === 'system'
-                        ? 'bg-indigo-50 text-indigo-700'
-                        : project.profileType === 'website'
-                          ? 'bg-sky-50 text-sky-700'
-                          : 'bg-slate-100 text-slate-600',
-                    )}>
-                      {project.profileType === 'system' ? <Monitor size={10} /> : <Globe size={10} />}
-                      {project.profileType === 'system' ? '系統' : project.profileType === 'website' ? '網站' : '其他'}
-                    </span>
+                    <ProfileTypeBadge profileType={project.profileType} />
                     <h3 className="text-[15px] font-bold truncate">{project.name}</h3>
                   </div>
                   {project.domainUrl && (
@@ -450,25 +603,55 @@ export function ProjectAnalysis() {
                 </div>
               </div>
 
-              <div className="px-4 py-3 space-y-2.5">
+              <div className="px-4 py-3 space-y-2.5 flex-1">
                 {project.staffRows.map((row) => (
-                  <div key={row.staffId} className="flex items-center gap-2.5 min-w-0">
-                    <span className="text-[13px] font-medium w-[96px] shrink-0 truncate" title={row.name}>
-                      {row.name}
-                    </span>
-                    <div className="flex-1 min-w-[48px] h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-teal-500 rounded-full transition-all"
-                        style={{ width: `${Math.min(row.percentage, 100)}%` }}
-                      />
+                  <HoursBarRow
+                    key={row.staffId}
+                    label={row.name}
+                    hours={row.hours}
+                    percentage={row.percentage}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {personalStats.map((person) => (
+            <div
+              key={person.staffId}
+              className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm overflow-hidden flex flex-col"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 border-b border-[rgba(13,26,45,0.06)] bg-muted/20">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-full bg-teal-100 flex items-center justify-center shrink-0">
+                      <span className="text-[11px] font-bold text-teal-700">
+                        {person.name.charAt(0)}
+                      </span>
                     </div>
-                    <span className="text-[12px] font-semibold w-[48px] text-right tabular-nums shrink-0">
-                      {row.hours}h
-                    </span>
-                    <span className="text-[11px] text-muted-foreground w-[40px] text-right tabular-nums shrink-0">
-                      {row.percentage.toFixed(0)}%
-                    </span>
+                    <h3 className="text-[15px] font-bold truncate">{person.name}</h3>
                   </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {person.projectRows.length} 個項目 · {person.entryCount} 筆工作
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-[20px] font-bold text-teal-700 tabular-nums">{person.totalHours}h</p>
+                  <p className="text-[10px] text-muted-foreground">個人總工時</p>
+                </div>
+              </div>
+
+              <div className="px-4 py-3 space-y-2.5 flex-1">
+                {person.projectRows.map((row) => (
+                  <HoursBarRow
+                    key={row.projectId}
+                    label={row.name}
+                    hours={row.hours}
+                    percentage={row.percentage}
+                    badge={<ProfileTypeBadge profileType={row.profileType} />}
+                  />
                 ))}
               </div>
             </div>
