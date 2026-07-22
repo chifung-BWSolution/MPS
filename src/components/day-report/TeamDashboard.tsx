@@ -871,7 +871,7 @@ export function TeamDashboard() {
       {/* Sticky: title + 團隊|個人 + period filters */}
       <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
         <div>
-          <h1 className="text-[24px] font-bold tracking-tight">團隊&個人分析</h1>
+          <h1 className="text-[24px] font-bold tracking-tight">匯報統計</h1>
           <p className="text-[13px] text-muted-foreground mt-0.5">
             按週／月統計工作類別工時與占比 — 週統計可自選日期範圍 · 點擊卡片於右側查看工作內容。
           </p>
