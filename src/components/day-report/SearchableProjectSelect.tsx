@@ -13,6 +13,8 @@ interface SearchableProjectSelectProps {
   onChange: (id: string, name: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  searchPlaceholder?: string;
+  emptyText?: string;
   className?: string;
 }
 
@@ -22,6 +24,8 @@ export function SearchableProjectSelect({
   onChange,
   disabled = false,
   placeholder = '搜尋並選擇項目...',
+  searchPlaceholder = '搜尋項目名稱...',
+  emptyText = '找不到匹配的項目',
   className,
 }: SearchableProjectSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -119,7 +123,7 @@ export function SearchableProjectSelect({
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="搜尋項目名稱..."
+                placeholder={searchPlaceholder}
                 className="w-full pl-8 pr-3 py-1.5 border border-border/60 rounded text-[12px] bg-gray-50/50 focus:bg-white focus:border-teal-300 focus:ring-1 focus:ring-teal-200 outline-none transition-all"
               />
               {searchTerm && (
@@ -137,7 +141,7 @@ export function SearchableProjectSelect({
           <div className="max-h-[288px] overflow-y-auto overscroll-contain">
             {filteredItems.length === 0 ? (
               <div className="px-3 py-4 text-center text-[12px] text-muted-foreground">
-                找不到匹配的項目
+                {emptyText}
               </div>
             ) : (
               filteredItems.map(item => (

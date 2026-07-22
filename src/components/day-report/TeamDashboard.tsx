@@ -19,6 +19,7 @@ import {
 } from '@/components/day-report/departmentLookup';
 import { Calendar as DayPickerCalendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { SearchableProjectSelect } from '@/components/day-report/SearchableProjectSelect';
 
 // ============================
 // Types
@@ -721,6 +722,19 @@ export function TeamDashboard() {
       || staffId;
   }, [staffNameById, staff, pickerStaff]);
 
+  const pickerStaffItems = useMemo(
+    () => pickerStaff
+      .slice()
+      .sort((a, b) => getStaffName(a.bubble_staff_id).localeCompare(getStaffName(b.bubble_staff_id), 'zh-Hant'))
+      .map((s) => ({
+        id: s.bubble_staff_id,
+        name: s.department
+          ? `${getStaffName(s.bubble_staff_id)} · ${s.department}`
+          : getStaffName(s.bubble_staff_id),
+      })),
+    [pickerStaff, getStaffName],
+  );
+
   // Hours by staff → category
   const staffCategoryHours = useMemo(() => {
     const map = new Map<string, Record<string, number>>();
@@ -1033,21 +1047,21 @@ export function TeamDashboard() {
 
           {mode === 'personal' && (
             pickerStaff.length > 1 ? (
-              <select
-                value={selectedStaffId || ''}
-                onChange={(e) => setSelectedStaffId(e.target.value)}
-                className="ml-auto px-2.5 py-1.5 border border-border rounded-md text-[12px] bg-white max-w-[220px]"
-              >
-                {pickerStaff
-                  .slice()
-                  .sort((a, b) => getStaffName(a.bubble_staff_id).localeCompare(getStaffName(b.bubble_staff_id), 'zh-Hant'))
-                  .map((s) => (
-                    <option key={s.bubble_staff_id} value={s.bubble_staff_id}>
-                      {getStaffName(s.bubble_staff_id)}
-                      {s.department ? ` · ${s.department}` : ''}
-                    </option>
-                  ))}
-              </select>
+              <div className="ml-auto w-[240px]">
+                <SearchableProjectSelect
+                  items={pickerStaffItems}
+                  value={selectedStaffId || ''}
+                  onChange={(id) => {
+                    if (!id) return;
+                    setSelectedStaffId(id);
+                    closeStaffDetail();
+                  }}
+                  placeholder="搜尋並選擇人員..."
+                  searchPlaceholder="輸入人名篩選..."
+                  emptyText="找不到匹配的人員"
+                  className="py-1.5 text-[12px]"
+                />
+              </div>
             ) : (
               <span className="ml-auto text-[12px] text-muted-foreground">
                 {getStaffName(selectedStaffId || systemUser?.bubble_staff_id || '')}
