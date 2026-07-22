@@ -2689,7 +2689,7 @@ export function DayReportModule({ subModule }: { subModule?: string }) {
       case 'submit': return { title: '提交匯報', subtitle: '支援香港/深圳雙辦公室 · 14天匯報總覽 · 常用項目快速填入 · 週六加班匯報 · 多日假期申報 · AI 追蹤 · 8h驗證。' };
       case 'today-team': return { title: '今日團隊', subtitle: '查看今日團隊提交狀況及工作匯報詳情。' };
       case 'calendar': return { title: '工作日曆', subtitle: '以日曆視圖查看歷史工作記錄，13種工作類型顏色標記。' };
-      case 'team-view': return { title: '匯報統計', subtitle: '按週／月統計工作類別工時與占比 — 團隊分部門卡片 · 個人按日／按週分析。' };
+      case 'team-view': return { title: '匯報統計', subtitle: '工作檢查查看填寫情況 · 工時分析統計類別工時與占比。' };
       case 'monthly': return { title: '月度報告', subtitle: '本月工時排名、AI 使用統計及類別分佈分析。' };
       case 'analytics': return { title: '項目分析', subtitle: '按系統／網站項目統計人員投入工時與占比 — 支援按天／週／月篩選。' };
       case 'work-categories': return { title: '工作類型管理', subtitle: '管理匯報工作類別的關聯規則 — 設定哪些類別關聯項目/網站、內部項目或無需關聯。' };

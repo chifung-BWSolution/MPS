@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Users, Calendar, ChevronLeft, ChevronRight, Loader2, RefreshCw, User,
-  Link as LinkIcon, Bot, Sparkles, FileText, X,
+  Link as LinkIcon, Bot, Sparkles, FileText, X, ClipboardCheck, BarChart3,
 } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
@@ -20,6 +20,7 @@ import {
 import { Calendar as DayPickerCalendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { SearchableProjectSelect } from '@/components/day-report/SearchableProjectSelect';
+import { WorkInspection } from '@/components/day-report/WorkInspection';
 
 // ============================
 // Types
@@ -64,6 +65,7 @@ interface DayReportEntry {
 }
 
 type CategoryMeta = { id: string; label: string; icon: string; color: string; bg: string; sortOrder: number };
+type ViewTab = 'inspection' | 'analysis';
 type Mode = 'team' | 'personal';
 type PeriodType = 'week' | 'month';
 type OfficeLocation = 'hk' | 'sz';
@@ -370,6 +372,7 @@ export function TeamDashboard() {
     }));
   }, [dynamicTypes]);
 
+  const [viewTab, setViewTab] = useState<ViewTab>('inspection');
   const [mode, setMode] = useState<Mode>('team');
   const [periodType, setPeriodType] = useState<PeriodType>('week');
   const [anchorDate, setAnchorDate] = useState(() => new Date());
@@ -882,15 +885,45 @@ export function TeamDashboard() {
 
   return (
     <div>
-      {/* Sticky: title + 團隊|個人 + period filters */}
+      {/* Sticky: title + 工作檢查|工時分析 */}
       <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
-        <div>
+        <div className="text-center">
           <h1 className="text-[24px] font-bold tracking-tight">匯報統計</h1>
           <p className="text-[13px] text-muted-foreground mt-0.5">
-            按週／月統計工作類別工時與占比 — 週統計可自選日期範圍 · 點擊卡片於右側查看工作內容。
+            {viewTab === 'inspection'
+              ? '按團隊查看每人匯報填寫情況 — 支援周報／月報、人名與部門篩選。'
+              : '按週／月統計工作類別工時與占比 — 週統計可自選日期範圍 · 點擊卡片於右側查看工作內容。'}
           </p>
         </div>
 
+        <div className="flex justify-center">
+          <div className="inline-flex rounded-lg border border-[rgba(13,26,45,0.08)] bg-white p-0.5">
+            {([
+              { id: 'inspection' as const, label: '工作檢查', icon: ClipboardCheck },
+              { id: 'analysis' as const, label: '工時分析', icon: BarChart3 },
+            ]).map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  setViewTab(id);
+                  if (id !== 'analysis') closeStaffDetail();
+                }}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                  viewTab === id
+                    ? 'bg-teal-50 text-teal-700 border border-teal-100'
+                    : 'text-muted-foreground hover:text-[#0d1a2d]',
+                )}
+              >
+                <Icon size={14} />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {viewTab === 'analysis' && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="inline-flex rounded-lg border border-[rgba(13,26,45,0.08)] bg-white p-0.5">
             {([
@@ -927,7 +960,9 @@ export function TeamDashboard() {
             重新整理
           </button>
         </div>
+        )}
 
+        {viewTab === 'analysis' && (
         <div className="flex flex-wrap items-center gap-3 bg-white rounded-lg border border-[rgba(13,26,45,0.08)] px-3 py-2.5 shadow-sm">
           <div className="inline-flex rounded-md border border-[rgba(13,26,45,0.08)] p-0.5">
             {([
@@ -1069,10 +1104,12 @@ export function TeamDashboard() {
             )
           )}
         </div>
+        )}
       </div>
 
-      {/* Content: cards compress when detail sidebar is open */}
-      {showInitialLoading ? (
+      {viewTab === 'inspection' ? (
+        <WorkInspection />
+      ) : showInitialLoading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="animate-spin text-teal-600" size={24} />
           <span className="ml-3 text-[14px] text-muted-foreground">載入分析數據中...</span>
