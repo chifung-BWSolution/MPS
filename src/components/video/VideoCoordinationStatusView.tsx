@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type MouseEvent } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PlatformPublishKey, VideoOutput, VideoOutputStatus } from '@/types/videoOutput';
@@ -89,6 +89,48 @@ function getMilestoneProgress(video: VideoOutput): { done: number; total: number
   return { done, total: milestones.length };
 }
 
+function StoragePathTag({ path }: { path?: string }) {
+  const [copied, setCopied] = useState(false);
+  const trimmed = path?.trim() ?? '';
+
+  if (!trimmed) {
+    return (
+      <span
+        className="inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-medium bg-slate-50 text-slate-400 border-slate-200"
+        title="尚未填寫影片存放地址"
+      >
+        影片地址
+      </span>
+    );
+  }
+
+  const handleCopy = async (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(trimmed);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // ignore clipboard failures
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={copied ? '已複製' : trimmed}
+      className={cn(
+        'inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-medium transition-colors',
+        'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100 cursor-pointer',
+      )}
+    >
+      {copied ? '已複製' : '影片地址'}
+    </button>
+  );
+}
+
 function StatusVideoCard({
   video,
   hours,
@@ -109,6 +151,7 @@ function StatusVideoCard({
   const location = formatShootLocation(video.shootHk, video.shootSz);
   const publishedKeys =
     status === 'published' ? getPublishedPlatformKeys(video.platformPublish) : [];
+  const showStoragePathTag = status === 'pending_review' || status === 'pending_publish';
 
   return (
     <div
@@ -188,6 +231,12 @@ function StatusVideoCard({
               );
             })
           )}
+        </div>
+      )}
+
+      {showStoragePathTag && (
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          <StoragePathTag path={video.storagePath} />
         </div>
       )}
 
