@@ -6,6 +6,9 @@ import {
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
+import { fetchDepartmentMap } from '@/components/day-report/departmentLookup';
+
+const UNASSIGNED_LABEL = '未分組';
 
 // ============================
 // Types
@@ -58,6 +61,7 @@ interface ProjectStat {
 interface PersonalStat {
   staffId: string;
   name: string;
+  department: string;
   totalHours: number;
   projectRows: ProjectHourRow[];
   entryCount: number;
@@ -207,6 +211,7 @@ export function ProjectAnalysis() {
   const [profiles, setProfiles] = useState<WebsiteProfileLite[]>([]);
   const [entries, setEntries] = useState<EntryRow[]>([]);
   const [staffNameById, setStaffNameById] = useState<Record<string, string>>({});
+  const [departmentByStaffId, setDepartmentByStaffId] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -247,10 +252,14 @@ export function ProjectAnalysis() {
       }
 
       const staffIds = [...new Set(entryData.map((e) => e.staff_id).filter(Boolean))];
-      const nameMap = await fetchStaffNameMap(staffIds);
+      const [nameMap, deptMap] = await Promise.all([
+        fetchStaffNameMap(staffIds),
+        fetchDepartmentMap(staffIds),
+      ]);
 
       setEntries(entryData);
       setStaffNameById(nameMap);
+      setDepartmentByStaffId(deptMap);
     } catch (err) {
       console.error('[ProjectAnalysis] Failed to fetch data:', err);
     } finally {
@@ -392,6 +401,7 @@ export function ProjectAnalysis() {
       stats.push({
         staffId,
         name: staffNameById[staffId] || staffId,
+        department: departmentByStaffId[staffId] || UNASSIGNED_LABEL,
         totalHours,
         projectRows,
         entryCount: staffEntryCount.get(staffId) || 0,
@@ -399,7 +409,22 @@ export function ProjectAnalysis() {
     });
 
     return stats.sort((a, b) => b.totalHours - a.totalHours || a.name.localeCompare(b.name, 'zh-Hant'));
-  }, [filteredEntries, profileById, resolveProjectMeta, staffNameById]);
+  }, [filteredEntries, profileById, resolveProjectMeta, staffNameById, departmentByStaffId]);
+
+  const personalGroups = useMemo(() => {
+    const groups = new Map<string, PersonalStat[]>();
+    personalStats.forEach((person) => {
+      const dept = person.department || UNASSIGNED_LABEL;
+      if (!groups.has(dept)) groups.set(dept, []);
+      groups.get(dept)!.push(person);
+    });
+
+    return Array.from(groups.entries()).sort(([a], [b]) => {
+      if (a === UNASSIGNED_LABEL) return 1;
+      if (b === UNASSIGNED_LABEL) return -1;
+      return a.localeCompare(b, 'zh-Hant');
+    });
+  }, [personalStats]);
 
   const summary = useMemo(() => {
     if (mode === 'team') {
@@ -434,7 +459,7 @@ export function ProjectAnalysis() {
           <p className="text-[13px] text-muted-foreground mt-0.5">
             {mode === 'team'
               ? '按系統／網站項目統計人員投入工時與占比 — 支援按天／週／月篩選。'
-              : '按個人統計參與的系統／網站項目工時與占比 — 支援按天／週／月篩選。'}
+              : '按個人統計參與的系統／網站項目工時與占比 — 依部門分組顯示。'}
           </p>
         </div>
 
@@ -617,45 +642,63 @@ export function ProjectAnalysis() {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {personalStats.map((person) => (
-            <div
-              key={person.staffId}
-              className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm overflow-hidden flex flex-col"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 border-b border-[rgba(13,26,45,0.06)] bg-muted/20">
-                <div className="min-w-0 space-y-1">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-7 h-7 rounded-full bg-teal-100 flex items-center justify-center shrink-0">
-                      <span className="text-[11px] font-bold text-teal-700">
-                        {person.name.charAt(0)}
-                      </span>
-                    </div>
-                    <h3 className="text-[15px] font-bold truncate">{person.name}</h3>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    {person.projectRows.length} 個項目 · {person.entryCount} 筆工作
-                  </p>
+        <div className="space-y-6">
+          {personalGroups.map(([dept, members]) => {
+            const deptHours = roundHours(members.reduce((s, p) => s + p.totalHours, 0));
+            return (
+              <section key={dept} className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-[14px] font-bold text-[#0d1a2d]">{dept}</h4>
+                  <span className="text-[11px] text-muted-foreground">
+                    {members.length} 人 · {deptHours}h
+                  </span>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-[20px] font-bold text-teal-700 tabular-nums">{person.totalHours}h</p>
-                  <p className="text-[10px] text-muted-foreground">個人總工時</p>
-                </div>
-              </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {members.map((person) => (
+                    <div
+                      key={person.staffId}
+                      className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm overflow-hidden flex flex-col"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 border-b border-[rgba(13,26,45,0.06)] bg-muted/20">
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-7 h-7 rounded-full bg-teal-100 flex items-center justify-center shrink-0">
+                              <span className="text-[11px] font-bold text-teal-700">
+                                {person.name.charAt(0)}
+                              </span>
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="text-[15px] font-bold truncate">{person.name}</h3>
+                              <p className="text-[11px] text-muted-foreground truncate">{person.department}</p>
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            {person.projectRows.length} 個項目 · {person.entryCount} 筆工作
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-[20px] font-bold text-teal-700 tabular-nums">{person.totalHours}h</p>
+                          <p className="text-[10px] text-muted-foreground">個人總工時</p>
+                        </div>
+                      </div>
 
-              <div className="px-4 py-3 space-y-2.5 flex-1">
-                {person.projectRows.map((row) => (
-                  <HoursBarRow
-                    key={row.projectId}
-                    label={row.name}
-                    hours={row.hours}
-                    percentage={row.percentage}
-                    badge={<ProfileTypeBadge profileType={row.profileType} />}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
+                      <div className="px-4 py-3 space-y-2.5 flex-1">
+                        {person.projectRows.map((row) => (
+                          <HoursBarRow
+                            key={row.projectId}
+                            label={row.name}
+                            hours={row.hours}
+                            percentage={row.percentage}
+                            badge={<ProfileTypeBadge profileType={row.profileType} />}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
         </div>
       )}
     </div>
