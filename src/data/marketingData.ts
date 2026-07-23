@@ -99,7 +99,7 @@ export interface CalendarEvent {
   id: string;
   day: number;
   title: string;
-  type: 'social' | 'edm' | 'article' | 'ads' | 'video' | 'seo';
+  type: 'social' | 'edm' | 'article' | 'ads' | 'video' | 'seo' | 'backlink' | 'google_business';
   platform?: string;
   company: string;
   brand: string;

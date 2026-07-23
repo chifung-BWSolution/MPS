@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, ChevronDown, Plus, X, Calendar, Briefcase, Pencil, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Plus, X, Calendar, Briefcase, Pencil, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getCalendarEventsForMonth, CalendarEvent, parseVideoCalendarTheme } from '@/data/marketingData';
 import { projects as allProjects, statusConfig } from '@/data/mockData';
+import { categoryConfig } from '@/data/dayReportDataV2';
 import {
   useUpcomingEvents,
   UPCOMING_EVENT_STATUS_LABELS,
@@ -11,6 +12,13 @@ import {
 } from '@/hooks/useUpcomingEvents';
 import { useVideoOutput } from '@/hooks/useVideoOutput';
 import { useVchannels } from '@/hooks/useVchannels';
+import { useSocialPosts } from '@/hooks/useSocialPosts';
+import { useBacklinkPurchases } from '@/hooks/useBacklinkPurchases';
+import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
+import { useGoogleBusinessRegistrations } from '@/hooks/useGoogleBusinessRegistrations';
+import { useRecentDayReports } from '@/hooks/useRecentDayReports';
+import { useDataStore } from '@/context/DataStore';
+import { socialPostFinalDate } from '@/types/marketingOps';
 import {
   deriveVideoOutputStatus,
   VIDEO_OUTPUT_STATUS_COLORS,
@@ -20,14 +28,22 @@ import {
 const calendarDays = ['一', '二', '三', '四', '五', '六', '日'];
 
 const typeConfig: Record<string, { bg: string; text: string; label: string; dot: string; border: string }> = {
-  social:   { bg: 'bg-blue-100',    text: 'text-blue-700',    label: '社交媒體', dot: 'bg-blue-500',    border: 'border-blue-200' },
-  edm:      { bg: 'bg-amber-100',   text: 'text-amber-700',   label: 'EDM',      dot: 'bg-amber-500',   border: 'border-amber-200' },
-  article:  { bg: 'bg-teal-100',    text: 'text-teal-700',    label: '文章',     dot: 'bg-teal-500',    border: 'border-teal-200' },
-  ads:      { bg: 'bg-rose-100',    text: 'text-rose-700',    label: '廣告',     dot: 'bg-rose-500',    border: 'border-rose-200' },
-  video:    { bg: 'bg-purple-100',  text: 'text-purple-700',  label: '影片',     dot: 'bg-purple-500',  border: 'border-purple-200' },
-  seo:      { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'SEO',      dot: 'bg-emerald-500', border: 'border-emerald-200' },
-  project:  { bg: 'bg-indigo-100',  text: 'text-indigo-700',  label: '項目',     dot: 'bg-indigo-500',  border: 'border-indigo-200' },
+  social:          { bg: 'bg-blue-100',    text: 'text-blue-700',    label: '社交媒體',   dot: 'bg-blue-500',    border: 'border-blue-200' },
+  edm:             { bg: 'bg-amber-100',   text: 'text-amber-700',   label: 'EDM',        dot: 'bg-amber-500',   border: 'border-amber-200' },
+  article:         { bg: 'bg-teal-100',    text: 'text-teal-700',    label: '文章',       dot: 'bg-teal-500',    border: 'border-teal-200' },
+  ads:             { bg: 'bg-rose-100',    text: 'text-rose-700',    label: '廣告',       dot: 'bg-rose-500',    border: 'border-rose-200' },
+  video:           { bg: 'bg-purple-100',  text: 'text-purple-700',  label: '影片',       dot: 'bg-purple-500',  border: 'border-purple-200' },
+  seo:             { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'SEO',        dot: 'bg-emerald-500', border: 'border-emerald-200' },
+  project:         { bg: 'bg-indigo-100',  text: 'text-indigo-700',  label: '項目',       dot: 'bg-indigo-500',  border: 'border-indigo-200' },
+  backlink:        { bg: 'bg-orange-100',  text: 'text-orange-700',  label: '反向連結',   dot: 'bg-orange-500',  border: 'border-orange-200' },
+  google_business: { bg: 'bg-sky-100',     text: 'text-sky-700',     label: 'Google Biz', dot: 'bg-sky-500',     border: 'border-sky-200' },
 };
+
+function truncateText(text: string, max = 48): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max)}…`;
+}
 
 const accountKindStyle = {
   main: { label: '主號', className: 'text-blue-600' },
@@ -246,6 +262,22 @@ export function MarketingCalendar() {
   } = useUpcomingEvents();
   const { videos } = useVideoOutput();
   const { channels } = useVchannels();
+  const { websites } = useDataStore();
+  const { posts: socialPosts } = useSocialPosts();
+  const { purchases: backlinkPurchases } = useBacklinkPurchases();
+  const { suppliers: webPageSuppliers } = useWebPageSuppliers();
+  const { registrations: googleBusinessRegs } = useGoogleBusinessRegistrations();
+  const {
+    entries: recentReportEntries,
+    loading: recentReportsLoading,
+    range: recentReportRange,
+  } = useRecentDayReports(7);
+
+  const siteMap = useMemo(() => new Map(websites.map(w => [w.id, w])), [websites]);
+  const supplierMap = useMemo(
+    () => new Map(webPageSuppliers.map(s => [s.id, s])),
+    [webPageSuppliers],
+  );
 
   const customEvents = useMemo<CustomEvent[]>(() =>
     upcomingEvents.map(ev => {
@@ -306,7 +338,99 @@ export function MarketingCalendar() {
       });
   }, [videos, channels]);
 
+  /** Live social posts — final date = publishedDate || scheduledDate */
+  const socialEvents = useMemo<CustomEvent[]>(() => {
+    const events: CustomEvent[] = [];
+    for (const post of socialPosts) {
+      const dateStr = socialPostFinalDate(post);
+      if (!dateStr) continue;
+      const d = new Date(dateStr + 'T00:00:00');
+      const site = siteMap.get(post.websiteProfileId);
+      const statusLabel =
+        post.status === 'published' ? '已發佈'
+          : post.status === 'scheduled' ? '已排程'
+            : post.status === 'archived' ? '已歸檔'
+              : '草稿';
+      events.push({
+        id: `sp-${post.id}`,
+        day: d.getDate(),
+        title: truncateText(post.content || post.topic || '社交帖文'),
+        type: 'social',
+        platform: post.platform,
+        company: site?.company || '',
+        brand: site?.brand || '',
+        websiteName: site?.websiteName || '',
+        hours: post.hoursSpent,
+        sourceId: post.id,
+        canManage: false,
+        _fullDate: dateStr,
+        statusText: `社交：${statusLabel}`,
+        statusClassName:
+          post.status === 'published'
+            ? 'bg-teal-100 text-teal-800'
+            : post.status === 'scheduled'
+              ? 'bg-amber-100 text-amber-800'
+              : 'bg-slate-100 text-slate-700',
+      });
+    }
+    return events;
+  }, [socialPosts, siteMap]);
+
+  /** Live backlink purchases by purchase date */
+  const backlinkEvents = useMemo<CustomEvent[]>(() => {
+    return backlinkPurchases
+      .filter(p => !!p.purchaseDate)
+      .map(p => {
+        const dateStr = p.purchaseDate;
+        const d = new Date(dateStr + 'T00:00:00');
+        const site = p.websiteProfileId ? siteMap.get(p.websiteProfileId) : undefined;
+        const supplier = supplierMap.get(p.webSupplierId);
+        const itemLabel = site?.websiteName || supplier?.name || '反向連結';
+        return {
+          id: `bl-${p.id}`,
+          day: d.getDate(),
+          title: `${itemLabel}${supplier?.name && site?.websiteName ? ` · ${supplier.name}` : ''}`,
+          type: 'backlink',
+          company: site?.company || '',
+          brand: site?.brand || '',
+          websiteName: site?.websiteName || '',
+          sourceId: p.id,
+          canManage: false,
+          _fullDate: dateStr,
+          statusText: `反向連結：${p.quantity} 條 · ${p.currency} ${p.cost}`,
+          statusClassName: 'bg-orange-100 text-orange-800',
+        };
+      });
+  }, [backlinkPurchases, siteMap, supplierMap]);
+
+  /** Live Google Business registrations by registered date */
+  const googleBusinessEvents = useMemo<CustomEvent[]>(() => {
+    return googleBusinessRegs
+      .filter(r => !!r.registeredAt)
+      .map(r => {
+        const dateStr = r.registeredAt;
+        const d = new Date(dateStr + 'T00:00:00');
+        const site = r.websiteProfileId ? siteMap.get(r.websiteProfileId) : undefined;
+        return {
+          id: `gb-${r.id}`,
+          day: d.getDate(),
+          title: site?.websiteName || truncateText(r.content || r.url, 40),
+          type: 'google_business',
+          company: site?.company || '',
+          brand: site?.brand || '',
+          websiteName: site?.websiteName || '',
+          notes: r.content,
+          sourceId: r.id,
+          canManage: false,
+          _fullDate: dateStr,
+          statusText: 'Google Business：已登記',
+          statusClassName: 'bg-sky-100 text-sky-800',
+        };
+      });
+  }, [googleBusinessRegs, siteMap]);
+
   const today = new Date();
+  const todayStr = toLocalDateStr(today);
 
   // --- Weekly navigation ---
   const weekStart = useMemo(() => {
@@ -372,16 +496,34 @@ export function MarketingCalendar() {
       });
   }, []);
 
-  // All events combined — live video_output replaces mock video rows
+  // All events combined — live video/social/backlink/GMB replace mock counterparts
   const allBaseEvents = useMemo<CustomEvent[]>(() => {
     const mEvents = marketingEvents
-      .filter(e => e.type !== 'video')
+      .filter(e => e.type !== 'video' && e.type !== 'social')
       .map(e => ({
         ...e,
         _fullDate: `${year}-${String(month + 1).padStart(2, '0')}-${String(e.day).padStart(2, '0')}`,
       }));
-    return [...mEvents, ...projectEvents, ...customEvents, ...videoEvents];
-  }, [marketingEvents, projectEvents, customEvents, videoEvents, year, month]);
+    return [
+      ...mEvents,
+      ...projectEvents,
+      ...customEvents,
+      ...videoEvents,
+      ...socialEvents,
+      ...backlinkEvents,
+      ...googleBusinessEvents,
+    ];
+  }, [
+    marketingEvents,
+    projectEvents,
+    customEvents,
+    videoEvents,
+    socialEvents,
+    backlinkEvents,
+    googleBusinessEvents,
+    year,
+    month,
+  ]);
 
   const companies = useMemo(() => {
     const set = new Set(allBaseEvents.map(e => e.company).filter(Boolean));
@@ -394,6 +536,23 @@ export function MarketingCalendar() {
       if (filterCompany !== 'all' && e.company !== filterCompany) return false;
       return true;
     });
+
+  const todayEvents = useMemo(
+    () => applyFilters(allBaseEvents).filter(e => e._fullDate === todayStr),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyFilters closes over filter state
+    [allBaseEvents, todayStr, filterType, filterCompany],
+  );
+
+  const followUpEvents = useMemo(() => {
+    return applyFilters(allBaseEvents).filter(e => {
+      if (!e._fullDate) return false;
+      if (e.type === 'video' && e.statusText?.includes('待審核')) return true;
+      if (e.type === 'social' && e.statusText?.includes('已排程') && e._fullDate <= todayStr) return true;
+      if ((e.type === 'backlink' || e.type === 'google_business') && e._fullDate === todayStr) return true;
+      return false;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allBaseEvents, todayStr, filterType, filterCompany]);
 
   // Events for a given full date string YYYY-MM-DD
   const eventsForDate = (dateStr: string) => {
@@ -601,6 +760,73 @@ export function MarketingCalendar() {
           </div>
         ))}
       </div>
+
+      {/* Today + follow-up snapshot */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[12px] font-semibold text-foreground">今日事項</p>
+            <span className="text-[11px] text-muted-foreground tabular-nums">{todayEvents.length} 項</span>
+          </div>
+          {todayEvents.length === 0 ? (
+            <p className="text-[12px] text-muted-foreground py-2">今日暫無行銷事項</p>
+          ) : (
+            <ul className="space-y-1.5 max-h-[140px] overflow-y-auto">
+              {todayEvents.slice(0, 8).map(event => {
+                const cfg = typeConfig[event.type] || typeConfig.social;
+                return (
+                  <li key={event.id} className="flex items-start gap-2 text-[12px]">
+                    <span className={cn('mt-1 w-1.5 h-1.5 rounded-full shrink-0', cfg.dot)} />
+                    <div className="min-w-0">
+                      <div className="font-medium text-foreground truncate">
+                        {event.type === 'video' && event.videoCode ? event.videoCode : event.title}
+                      </div>
+                      {event.statusText && (
+                        <div className={cn('inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded', event.statusClassName)}>
+                          {event.statusText}
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[12px] font-semibold text-foreground">需要跟進</p>
+            <span className="text-[11px] text-muted-foreground tabular-nums">{followUpEvents.length} 項</span>
+          </div>
+          {followUpEvents.length === 0 ? (
+            <p className="text-[12px] text-muted-foreground py-2">目前沒有待跟進事項</p>
+          ) : (
+            <ul className="space-y-1.5 max-h-[140px] overflow-y-auto">
+              {followUpEvents.slice(0, 8).map(event => {
+                const cfg = typeConfig[event.type] || typeConfig.social;
+                return (
+                  <li key={`fu-${event.id}`} className="flex items-start gap-2 text-[12px]">
+                    <span className={cn('mt-1 w-1.5 h-1.5 rounded-full shrink-0', cfg.dot)} />
+                    <div className="min-w-0">
+                      <div className="font-medium text-foreground truncate">
+                        {event.type === 'video' && event.videoCode ? event.videoCode : event.title}
+                      </div>
+                      {event.statusText && (
+                        <div className={cn('inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded', event.statusClassName)}>
+                          {event.statusText}
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-col xl:flex-row gap-4 items-start">
+        <div className="flex-1 min-w-0 space-y-4">
 
       {/* === LIST VIEW (月列表) === */}
       {viewMode === 'list' && (
@@ -1085,6 +1311,67 @@ export function MarketingCalendar() {
           )}
         </div>
       )}
+
+        </div>
+
+        {/* Company-wide day reports — last 7 days */}
+        <aside className="w-full xl:w-[340px] shrink-0">
+          <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card xl:sticky xl:top-[56px]">
+            <div className="px-4 py-3 border-b border-border/60 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <Users size={14} className="text-teal-600 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-foreground">近 7 日工作匯報</p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    {recentReportRange.start} — {recentReportRange.end} · 全公司
+                  </p>
+                </div>
+              </div>
+              <a
+                href="#day-report/today-team"
+                className="text-[11px] text-teal-600 hover:underline shrink-0"
+              >
+                查看更多
+              </a>
+            </div>
+            <div className="max-h-[560px] overflow-y-auto divide-y divide-border/50">
+              {recentReportsLoading ? (
+                <p className="px-4 py-8 text-center text-[12px] text-muted-foreground">載入中…</p>
+              ) : recentReportEntries.length === 0 ? (
+                <p className="px-4 py-8 text-center text-[12px] text-muted-foreground">近 7 日尚無匯報紀錄</p>
+              ) : (
+                recentReportEntries.map(entry => {
+                  const cat = categoryConfig[entry.category as keyof typeof categoryConfig];
+                  return (
+                    <div key={entry.id} className="px-4 py-2.5 hover:bg-muted/30 transition-colors">
+                      <div className="flex items-center justify-between gap-2 mb-0.5">
+                        <span className="text-[11px] font-medium text-foreground truncate">{entry.staffName}</span>
+                        <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">{entry.reportDate.slice(5)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                        {cat ? (
+                          <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium', cat.bg, cat.color)}>
+                            {cat.label}
+                          </span>
+                        ) : entry.category ? (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                            {entry.category}
+                          </span>
+                        ) : null}
+                        <span className="text-[10px] text-muted-foreground tabular-nums">{entry.hours}h</span>
+                      </div>
+                      <p className="text-[12px] text-foreground leading-snug line-clamp-2">{entry.title || '—'}</p>
+                      {entry.relatedName && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{entry.relatedName}</p>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </aside>
+      </div>
 
       {/* === ADD / EDIT EVENT MODAL === */}
       {showAddModal && (

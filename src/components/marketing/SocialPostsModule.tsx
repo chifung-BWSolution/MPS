@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
 import { Plus, Search, ExternalLink, Globe, Facebook, Instagram, BookOpen, X, Eye, Clock, Link2, ArrowLeft, Edit, Trash2, Calendar, Tag } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { SocialPost } from '@/types/app';
 import { useDataStore } from '@/context/DataStore';
+import { useSocialPosts } from '@/hooks/useSocialPosts';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -357,9 +359,15 @@ function SocialPostDetail({ post, onBack }: { post: any; onBack: () => void }) {
   );
 }
 
+function toDateOnly(value?: string): string | undefined {
+  if (!value) return undefined;
+  return value.substring(0, 10);
+}
+
 // Main Social Posts Module
 export function SocialPostsModule() {
-  const { allSocialPostsList, websites, addSocialPost, updateSocialPost, deleteSocialPost } = useDataStore();
+  const { websites } = useDataStore();
+  const { posts, addPost, updatePost, deletePost } = useSocialPosts();
   const [filterPlatform, setFilterPlatform] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterTopic, setFilterTopic] = useState<string>('all');
@@ -374,6 +382,22 @@ export function SocialPostsModule() {
   const [newPost, setNewPost] = useState({ websiteProfileId: '', platform: 'facebook' as any, postType: 'image' as any, content: '', topic: '', status: 'draft' as any, hoursSpent: 0, scheduledDate: '', reportDate: '', asanaLink: '', outputLink: '' });
   const [newPostPlatforms, setNewPostPlatforms] = useState<string[]>(['facebook']);
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4>(1);
+
+  const siteMap = useMemo(() => new Map(websites.map(w => [w.id, w])), [websites]);
+
+  const allSocialPostsList = useMemo(
+    () =>
+      posts.map(p => {
+        const site = siteMap.get(p.websiteProfileId);
+        return {
+          ...p,
+          websiteName: site?.websiteName || p.websiteProfileId,
+          company: site?.company || '',
+          brand: site?.brand || '',
+        };
+      }),
+    [posts, siteMap],
+  );
 
   // Gather all unique topics for filter
   const allTopics = useMemo(() => {
@@ -818,17 +842,31 @@ export function SocialPostsModule() {
                 </Button>
               ) : (
                 <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => {
-                  if (newPost.websiteProfileId && newPost.content && newPostPlatforms.length > 0) {
-                    addSocialPost(newPost.websiteProfileId, {
-                      ...newPost,
+                  void (async () => {
+                    if (!(newPost.websiteProfileId && newPost.content && newPostPlatforms.length > 0)) return;
+                    const scheduledDate = toDateOnly(newPost.scheduledDate);
+                    const publishedDate = newPost.status === 'published' ? (scheduledDate || new Date().toISOString().slice(0, 10)) : undefined;
+                    const { error } = await addPost({
+                      websiteProfileId: newPost.websiteProfileId,
                       platform: newPostPlatforms[0] as any,
                       platforms: newPostPlatforms,
-                      id: '',
-                    } as any);
+                      postType: newPost.postType,
+                      content: newPost.content,
+                      topic: newPost.topic || undefined,
+                      status: newPost.status,
+                      hoursSpent: newPost.hoursSpent || undefined,
+                      scheduledDate,
+                      publishedDate,
+                      postUrl: newPost.outputLink || undefined,
+                    });
+                    if (error) {
+                      toast.error(`新增失敗：${error.message}`);
+                      return;
+                    }
                     setNewPost({ websiteProfileId: '', platform: 'facebook', postType: 'image', content: '', topic: '', status: 'draft', hoursSpent: 0, scheduledDate: '', reportDate: '', asanaLink: '', outputLink: '' });
                     setNewPostPlatforms(['facebook']);
                     setShowAddModal(false);
-                  }
+                  })();
                 }}>
                   確認新增
                 </Button>
@@ -937,11 +975,28 @@ export function SocialPostsModule() {
             <div className="flex justify-end gap-3 pt-4 border-t border-border">
               <Button variant="secondary" onClick={() => setShowEditModal(false)}>取消</Button>
               <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => {
-                if (editingPost) {
-                  updateSocialPost(editingPost.websiteProfileId, editingPost.id, editingPost);
+                void (async () => {
+                  if (!editingPost) return;
+                  const error = await updatePost(editingPost.id, {
+                    websiteProfileId: editingPost.websiteProfileId,
+                    platform: editingPost.platform,
+                    platforms: editingPost.platforms,
+                    topic: editingPost.topic,
+                    postType: editingPost.postType,
+                    content: editingPost.content,
+                    status: editingPost.status,
+                    hoursSpent: editingPost.hoursSpent,
+                    postUrl: editingPost.postUrl,
+                    scheduledDate: toDateOnly(editingPost.scheduledDate),
+                    publishedDate: toDateOnly(editingPost.publishedDate),
+                  });
+                  if (error) {
+                    toast.error(`更新失敗：${error.message}`);
+                    return;
+                  }
                   setShowEditModal(false);
                   setEditingPost(null);
-                }
+                })();
               }}>儲存變更</Button>
             </div>
           </div>
@@ -953,11 +1008,17 @@ export function SocialPostsModule() {
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
         onConfirm={() => {
-          if (deleteTarget) {
-            deleteSocialPost(deleteTarget.websiteProfileId, deleteTarget.id);
-          }
-          setShowDeleteModal(false);
-          setDeleteTarget(null);
+          void (async () => {
+            if (deleteTarget) {
+              const error = await deletePost(deleteTarget.id);
+              if (error) {
+                toast.error(`刪除失敗：${error.message}`);
+                return;
+              }
+            }
+            setShowDeleteModal(false);
+            setDeleteTarget(null);
+          })();
         }}
         itemName={deleteTarget?.content?.substring(0, 30) || '帖文'}
         canDelete={true}

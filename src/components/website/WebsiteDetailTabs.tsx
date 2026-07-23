@@ -33,7 +33,11 @@ import {
 } from '@/services/websiteVideoLinkService';
 import { useVchannels } from '@/hooks/useVchannels';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useDataStore, BacklinkPurchase, GoogleBusinessRegistration } from '@/context/DataStore';
+import { toast } from 'sonner';
+import { useBacklinkPurchases } from '@/hooks/useBacklinkPurchases';
+import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
+import { useGoogleBusinessRegistrations } from '@/hooks/useGoogleBusinessRegistrations';
+import type { BacklinkPurchase, GoogleBusinessRegistration } from '@/types/marketingOps';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1366,13 +1370,13 @@ const emptyBacklinkForm: BacklinkForm = {
 };
 
 export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
+  const { suppliers: webPageSuppliers } = useWebPageSuppliers();
   const {
-    webPageSuppliers,
-    backlinkPurchases,
-    addBacklinkPurchase,
-    updateBacklinkPurchase,
-    deleteBacklinkPurchase,
-  } = useDataStore();
+    purchases: backlinkPurchases,
+    addPurchase,
+    updatePurchase,
+    deletePurchase,
+  } = useBacklinkPurchases();
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -1397,9 +1401,9 @@ export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
     return { count: records.length, totalQty, usd, hkd };
   }, [records]);
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!form.webSupplierId || !form.purchaseDate || form.quantity < 1) return;
-    addBacklinkPurchase({
+    const { error } = await addPurchase({
       websiteProfileId: site.id,
       webSupplierId: form.webSupplierId,
       cost: form.cost,
@@ -1408,13 +1412,17 @@ export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
       quantity: form.quantity,
       notes: form.notes || undefined,
     });
+    if (error) {
+      toast.error(`新增失敗：${error.message}`);
+      return;
+    }
     setForm(emptyBacklinkForm);
     setShowAddModal(false);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editing || !editing.webSupplierId || !editing.purchaseDate || editing.quantity < 1) return;
-    updateBacklinkPurchase(editing.id, {
+    const error = await updatePurchase(editing.id, {
       webSupplierId: editing.webSupplierId,
       cost: editing.cost,
       currency: editing.currency,
@@ -1423,6 +1431,10 @@ export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
       notes: editing.notes,
       websiteProfileId: site.id,
     });
+    if (error) {
+      toast.error(`更新失敗：${error.message}`);
+      return;
+    }
     setShowEditModal(false);
     setEditing(null);
   };
@@ -1582,7 +1594,11 @@ export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => {
-          if (deleteTarget) deleteBacklinkPurchase(deleteTarget.id);
+          if (deleteTarget) {
+            void deletePurchase(deleteTarget.id).then((error) => {
+              if (error) toast.error(`刪除失敗：${error.message}`);
+            });
+          }
           setDeleteTarget(null);
         }}
         itemName={supplierMap.get(deleteTarget?.webSupplierId || '')?.name || '反向連結紀錄'}
@@ -1602,11 +1618,11 @@ const emptyGbForm: GbForm = { url: '', registeredAt: '', content: '' };
 
 export function WebsiteGoogleBusinessTab({ site }: { site: WebsiteProfileFull }) {
   const {
-    googleBusinessRegistrations,
-    addGoogleBusinessRegistration,
-    updateGoogleBusinessRegistration,
-    deleteGoogleBusinessRegistration,
-  } = useDataStore();
+    registrations: googleBusinessRegistrations,
+    addRegistration,
+    updateRegistration,
+    deleteRegistration,
+  } = useGoogleBusinessRegistrations();
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -1619,21 +1635,29 @@ export function WebsiteGoogleBusinessTab({ site }: { site: WebsiteProfileFull })
     [googleBusinessRegistrations, site.id],
   );
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!form.url.trim() || !form.registeredAt || !form.content.trim()) return;
-    addGoogleBusinessRegistration({ ...form, websiteProfileId: site.id });
+    const { error } = await addRegistration({ ...form, websiteProfileId: site.id });
+    if (error) {
+      toast.error(`新增失敗：${error.message}`);
+      return;
+    }
     setForm(emptyGbForm);
     setShowAddModal(false);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editing || !editing.url.trim() || !editing.registeredAt || !editing.content.trim()) return;
-    updateGoogleBusinessRegistration(editing.id, {
+    const error = await updateRegistration(editing.id, {
       url: editing.url,
       registeredAt: editing.registeredAt,
       content: editing.content,
       websiteProfileId: site.id,
     });
+    if (error) {
+      toast.error(`更新失敗：${error.message}`);
+      return;
+    }
     setShowEditModal(false);
     setEditing(null);
   };
@@ -1765,7 +1789,11 @@ export function WebsiteGoogleBusinessTab({ site }: { site: WebsiteProfileFull })
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => {
-          if (deleteTarget) deleteGoogleBusinessRegistration(deleteTarget.id);
+          if (deleteTarget) {
+            void deleteRegistration(deleteTarget.id).then((error) => {
+              if (error) toast.error(`刪除失敗：${error.message}`);
+            });
+          }
           setDeleteTarget(null);
         }}
         itemName={deleteTarget?.url || ''}

@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Plus, Search, Edit, Trash2, ExternalLink } from 'lucide-react';
-import { useDataStore, GoogleBusinessRegistration } from '@/context/DataStore';
+import { toast } from 'sonner';
+import { useDataStore } from '@/context/DataStore';
+import { useGoogleBusinessRegistrations } from '@/hooks/useGoogleBusinessRegistrations';
+import type { GoogleBusinessRegistration } from '@/types/marketingOps';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,13 +29,13 @@ function truncate(text: string, max = 80) {
 }
 
 export function GoogleBusinessModule() {
+  const { websites } = useDataStore();
   const {
-    websites,
-    googleBusinessRegistrations,
-    addGoogleBusinessRegistration,
-    updateGoogleBusinessRegistration,
-    deleteGoogleBusinessRegistration,
-  } = useDataStore();
+    registrations: googleBusinessRegistrations,
+    addRegistration,
+    updateRegistration,
+    deleteRegistration,
+  } = useGoogleBusinessRegistrations();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -40,6 +43,7 @@ export function GoogleBusinessModule() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editing, setEditing] = useState<GoogleBusinessRegistration | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<GoogleBusinessRegistration | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const siteMap = useMemo(() => new Map(websites.map((w) => [w.id, w])), [websites]);
 
@@ -65,14 +69,20 @@ export function GoogleBusinessModule() {
     );
   });
 
-  const handleAdd = () => {
-    if (!form.websiteProfileId || !form.url.trim() || !form.registeredAt || !form.content.trim()) return;
-    addGoogleBusinessRegistration({
+  const handleAdd = async () => {
+    if (!form.websiteProfileId || !form.url.trim() || !form.registeredAt || !form.content.trim() || saving) return;
+    setSaving(true);
+    const { error } = await addRegistration({
       websiteProfileId: form.websiteProfileId,
-      url: form.url,
+      url: form.url.trim(),
       registeredAt: form.registeredAt,
-      content: form.content,
+      content: form.content.trim(),
     });
+    setSaving(false);
+    if (error) {
+      toast.error(`新增失敗：${error.message}`);
+      return;
+    }
     setForm(emptyForm);
     setShowAddModal(false);
   };
@@ -82,21 +92,33 @@ export function GoogleBusinessModule() {
     setShowEditModal(true);
   };
 
-  const handleSaveEdit = () => {
-    if (!editing || !editing.websiteProfileId || !editing.url.trim() || !editing.registeredAt || !editing.content.trim()) return;
-    updateGoogleBusinessRegistration(editing.id, {
+  const handleSaveEdit = async () => {
+    if (!editing || !editing.websiteProfileId || !editing.url.trim() || !editing.registeredAt || !editing.content.trim() || saving) return;
+    setSaving(true);
+    const error = await updateRegistration(editing.id, {
       websiteProfileId: editing.websiteProfileId,
-      url: editing.url,
+      url: editing.url.trim(),
       registeredAt: editing.registeredAt,
-      content: editing.content,
+      content: editing.content.trim(),
     });
+    setSaving(false);
+    if (error) {
+      toast.error(`更新失敗：${error.message}`);
+      return;
+    }
     setShowEditModal(false);
     setEditing(null);
   };
 
-  const confirmDelete = () => {
-    if (!deleteTarget) return;
-    deleteGoogleBusinessRegistration(deleteTarget.id);
+  const confirmDelete = async () => {
+    if (!deleteTarget || saving) return;
+    setSaving(true);
+    const error = await deleteRegistration(deleteTarget.id);
+    setSaving(false);
+    if (error) {
+      toast.error(`刪除失敗：${error.message}`);
+      return;
+    }
     setDeleteTarget(null);
   };
 
@@ -225,10 +247,17 @@ export function GoogleBusinessModule() {
       </div>
 
       <CrudModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="新增 Google Business 登記" size="lg">
-        {renderFields(form, setForm)}
+        {renderFields(form, (next) =>
+          setForm({
+            websiteProfileId: next.websiteProfileId || '',
+            url: next.url,
+            registeredAt: next.registeredAt,
+            content: next.content,
+          }),
+        )}
         <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
           <Button variant="secondary" onClick={() => setShowAddModal(false)}>取消</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleAdd}>新增</Button>
+          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => void handleAdd()}>新增</Button>
         </div>
       </CrudModal>
 
@@ -236,7 +265,7 @@ export function GoogleBusinessModule() {
         {editing && renderFields(editing, (next) => setEditing(next as GoogleBusinessRegistration))}
         <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
           <Button variant="secondary" onClick={() => setShowEditModal(false)}>取消</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSaveEdit}>儲存</Button>
+          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => void handleSaveEdit()}>儲存</Button>
         </div>
       </CrudModal>
 

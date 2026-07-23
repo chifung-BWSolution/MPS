@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Plus, Search, ArrowLeft, Eye, Edit, Trash2 } from 'lucide-react';
-import { useDataStore, BacklinkPurchase } from '@/context/DataStore';
+import { toast } from 'sonner';
+import { useDataStore } from '@/context/DataStore';
+import { useBacklinkPurchases } from '@/hooks/useBacklinkPurchases';
+import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
+import type { BacklinkPurchase } from '@/types/marketingOps';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -70,15 +74,14 @@ function BacklinkDetail({
 }
 
 export function BacklinkModule() {
+  const { websites } = useDataStore();
+  const { suppliers: webPageSuppliers } = useWebPageSuppliers();
   const {
-    websites,
-    webPageSuppliers,
-    backlinkPurchases,
-    addBacklinkPurchase,
-    updateBacklinkPurchase,
-    deleteBacklinkPurchase,
-    getWebPageSupplierById,
-  } = useDataStore();
+    purchases: backlinkPurchases,
+    addPurchase,
+    updatePurchase,
+    deletePurchase,
+  } = useBacklinkPurchases();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [currencyFilter, setCurrencyFilter] = useState<'all' | 'USD' | 'HKD'>('all');
@@ -88,6 +91,7 @@ export function BacklinkModule() {
   const [form, setForm] = useState<PurchaseForm>(emptyForm);
   const [editing, setEditing] = useState<(BacklinkPurchase & { notes?: string }) | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BacklinkPurchase | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const supplierMap = useMemo(() => {
     const map = new Map(webPageSuppliers.map((s) => [s.id, s]));
@@ -98,7 +102,7 @@ export function BacklinkModule() {
 
   const enriched = useMemo(() => {
     return backlinkPurchases.map((p) => {
-      const supplier = supplierMap.get(p.webSupplierId) || getWebPageSupplierById(p.webSupplierId);
+      const supplier = supplierMap.get(p.webSupplierId);
       const site = p.websiteProfileId ? siteMap.get(p.websiteProfileId) : undefined;
       return {
         ...p,
@@ -108,7 +112,7 @@ export function BacklinkModule() {
         siteName: site?.websiteName || '—',
       };
     });
-  }, [backlinkPurchases, supplierMap, getWebPageSupplierById, siteMap]);
+  }, [backlinkPurchases, supplierMap, siteMap]);
 
   const filtered = enriched.filter((r) => {
     if (currencyFilter !== 'all' && r.currency !== currencyFilter) return false;
@@ -135,9 +139,10 @@ export function BacklinkModule() {
     ? supplierMap.get(form.webSupplierId)
     : undefined;
 
-  const handleAdd = () => {
-    if (!form.websiteProfileId || !form.webSupplierId || !form.purchaseDate || form.quantity < 1) return;
-    addBacklinkPurchase({
+  const handleAdd = async () => {
+    if (!form.websiteProfileId || !form.webSupplierId || !form.purchaseDate || form.quantity < 1 || saving) return;
+    setSaving(true);
+    const { error } = await addPurchase({
       websiteProfileId: form.websiteProfileId,
       webSupplierId: form.webSupplierId,
       cost: form.cost,
@@ -146,6 +151,11 @@ export function BacklinkModule() {
       quantity: form.quantity,
       notes: form.notes || undefined,
     });
+    setSaving(false);
+    if (error) {
+      toast.error(`新增失敗：${error.message}`);
+      return;
+    }
     setForm(emptyForm);
     setShowAddModal(false);
   };
@@ -155,9 +165,10 @@ export function BacklinkModule() {
     setShowEditModal(true);
   };
 
-  const handleSaveEdit = () => {
-    if (!editing || !editing.websiteProfileId || !editing.webSupplierId || !editing.purchaseDate || editing.quantity < 1) return;
-    updateBacklinkPurchase(editing.id, {
+  const handleSaveEdit = async () => {
+    if (!editing || !editing.websiteProfileId || !editing.webSupplierId || !editing.purchaseDate || editing.quantity < 1 || saving) return;
+    setSaving(true);
+    const error = await updatePurchase(editing.id, {
       websiteProfileId: editing.websiteProfileId,
       webSupplierId: editing.webSupplierId,
       cost: editing.cost,
@@ -166,13 +177,24 @@ export function BacklinkModule() {
       quantity: editing.quantity,
       notes: editing.notes,
     });
+    setSaving(false);
+    if (error) {
+      toast.error(`更新失敗：${error.message}`);
+      return;
+    }
     setShowEditModal(false);
     setEditing(null);
   };
 
-  const confirmDelete = () => {
-    if (!deleteTarget) return;
-    deleteBacklinkPurchase(deleteTarget.id);
+  const confirmDelete = async () => {
+    if (!deleteTarget || saving) return;
+    setSaving(true);
+    const error = await deletePurchase(deleteTarget.id);
+    setSaving(false);
+    if (error) {
+      toast.error(`刪除失敗：${error.message}`);
+      return;
+    }
     setDeleteTarget(null);
   };
 

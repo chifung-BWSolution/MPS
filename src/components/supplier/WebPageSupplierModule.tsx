@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { Search, Star, Plus, Edit, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useDataStore, WebPageSupplier } from '@/context/DataStore';
+import { toast } from 'sonner';
+import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
+import { useBacklinkPurchases } from '@/hooks/useBacklinkPurchases';
+import type { WebPageSupplier } from '@/types/marketingOps';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -60,12 +63,12 @@ const emptyForm: Omit<WebPageSupplier, 'id'> = {
 
 export function WebPageSupplierModule() {
   const {
-    webPageSuppliers,
-    backlinkPurchases,
-    addWebPageSupplier,
-    updateWebPageSupplier,
-    deleteWebPageSupplier,
-  } = useDataStore();
+    suppliers: webPageSuppliers,
+    addSupplier,
+    updateSupplier,
+    deleteSupplier,
+  } = useWebPageSuppliers();
+  const { purchases: backlinkPurchases } = useBacklinkPurchases();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -77,6 +80,7 @@ export function WebPageSupplierModule() {
     canDelete: true,
     reasons: [],
   });
+  const [saving, setSaving] = useState(false);
 
   const filtered = webPageSuppliers.filter((s) => {
     if (!searchQuery) return true;
@@ -88,9 +92,15 @@ export function WebPageSupplierModule() {
     );
   });
 
-  const handleAdd = () => {
-    if (!form.name.trim() || !form.url.trim()) return;
-    addWebPageSupplier(form);
+  const handleAdd = async () => {
+    if (!form.name.trim() || !form.url.trim() || saving) return;
+    setSaving(true);
+    const { error } = await addSupplier(form);
+    setSaving(false);
+    if (error) {
+      toast.error(`新增失敗：${error.message}`);
+      return;
+    }
     setForm(emptyForm);
     setShowAddModal(false);
   };
@@ -100,9 +110,15 @@ export function WebPageSupplierModule() {
     setShowEditModal(true);
   };
 
-  const handleSaveEdit = () => {
-    if (!editing || !editing.name.trim() || !editing.url.trim()) return;
-    updateWebPageSupplier(editing.id, editing);
+  const handleSaveEdit = async () => {
+    if (!editing || !editing.name.trim() || !editing.url.trim() || saving) return;
+    setSaving(true);
+    const error = await updateSupplier(editing.id, editing);
+    setSaving(false);
+    if (error) {
+      toast.error(`更新失敗：${error.message}`);
+      return;
+    }
     setShowEditModal(false);
     setEditing(null);
   };
@@ -120,9 +136,15 @@ export function WebPageSupplierModule() {
     setDeleteTarget(supplier);
   };
 
-  const confirmDelete = () => {
-    if (!deleteTarget || !deleteCheck.canDelete) return;
-    deleteWebPageSupplier(deleteTarget.id);
+  const confirmDelete = async () => {
+    if (!deleteTarget || !deleteCheck.canDelete || saving) return;
+    setSaving(true);
+    const error = await deleteSupplier(deleteTarget.id);
+    setSaving(false);
+    if (error) {
+      toast.error(`刪除失敗：${error.message}`);
+      return;
+    }
     setDeleteTarget(null);
   };
 
