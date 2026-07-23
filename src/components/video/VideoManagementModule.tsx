@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, Copy, Loader2, Plus, Search } from 'lucide-react';
+import { Check, Copy, Loader2, Pencil, Plus, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVideoOutput } from '@/hooks/useVideoOutput';
 import { useVchannels } from '@/hooks/useVchannels';
@@ -27,7 +27,9 @@ import {
   sortVideoOutputsByPublishDateDesc,
 } from '@/lib/videoOutputUtils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 import { PlatformPublishModal } from '@/components/video/PlatformPublishModal';
+import { CoordinationRecordModal } from '@/components/video/CoordinationRecordModal';
 import { fetchWorkLogTotalsByVideoIds } from '@/services/videoOutputWorkLogService';
 import { WorkflowStatusSummaryBar } from '@/components/video/workflow/WorkflowStatusSummaryBar';
 import { CopyStoragePathButton } from '@/components/video/workflow/workflowListLayout';
@@ -35,9 +37,9 @@ import { VideoCoordinationStatusView } from '@/components/video/VideoCoordinatio
 
 type CoordinationView = 'status' | 'list';
 
-const TABLE_COL_COUNT = 13;
-/** Columns before 拍攝時間: 狀態 / Vchannel / Video Code / 主題 */
-const PLATFORM_ROW_LEAD_COLS = 4;
+const TABLE_COL_COUNT = 14;
+/** Columns before 拍攝時間: 選擇 / 狀態 / Vchannel / Video Code / 主題 */
+const PLATFORM_ROW_LEAD_COLS = 5;
 
 const PLATFORM_TAG_COLORS: Record<PlatformPublishKey, string> = {
   youtube: 'bg-red-50 text-red-700 border-red-200',
@@ -223,6 +225,8 @@ export function VideoManagementModule() {
   const [categoryFilter, setCategoryFilter] = useState<'all' | VideoProjectCategory>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | VideoOutputStatus>('all');
   const [publishingVideo, setPublishingVideo] = useState<VideoOutput | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
   const [workLogTotals, setWorkLogTotals] = useState<Map<string, number>>(new Map());
 
   const refreshWorkLogTotals = useCallback(async (videoIds: string[]) => {
@@ -277,6 +281,26 @@ export function VideoManagementModule() {
     setStatusFilter(prev => (prev === status ? 'all' : status));
   };
 
+  const handleSelect = useCallback((videoId: string) => {
+    setSelectedId(prev => (prev === videoId ? null : videoId));
+    setEditOpen(false);
+  }, []);
+
+  const selectedVideo = useMemo(
+    () => (selectedId ? videos.find(v => v.id === selectedId) ?? null : null),
+    [videos, selectedId],
+  );
+
+  // 篩選變更後若所選影片不在可見列表中，清除選擇
+  useEffect(() => {
+    if (!selectedId) return;
+    const visible = view === 'status' ? contextVideos : filteredVideos;
+    if (!visible.some(v => v.id === selectedId)) {
+      setSelectedId(null);
+      setEditOpen(false);
+    }
+  }, [selectedId, view, contextVideos, filteredVideos]);
+
   const handleSavePublish = async (input: Partial<VideoOutputInput>) => {
     if (!publishingVideo) return new Error('未選擇影片');
     const err = await updateVideo(publishingVideo.id, input);
@@ -287,6 +311,13 @@ export function VideoManagementModule() {
   const handleClosePublishModal = () => {
     setPublishingVideo(null);
     void refreshWorkLogTotals(videos.map(v => v.id));
+  };
+
+  const handleSaveRecord = async (input: Partial<VideoOutputInput>) => {
+    if (!selectedVideo) return new Error('未選擇影片');
+    const err = await updateVideo(selectedVideo.id, input);
+    if (err) return err instanceof Error ? err : new Error('更新失敗');
+    return null;
   };
 
   if (loading) {
@@ -307,113 +338,128 @@ export function VideoManagementModule() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
-          <h1 className="text-[32px] font-bold tracking-tight">影片統籌</h1>
-          <div
-            className="flex items-center gap-2 text-[14px]"
-            role="tablist"
-            aria-label="視圖切換"
-          >
-            {(
-              [
-                { id: 'status' as const, label: '狀態視圖' },
-                { id: 'list' as const, label: '列表視圖' },
-              ] as const
-            ).map((tab, index) => (
-              <span key={tab.id} className="contents">
-                {index > 0 && <span className="text-muted-foreground/50 select-none">|</span>}
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={view === tab.id}
-                  onClick={() => setView(tab.id)}
-                  className={cn(
-                    'pb-0.5 font-medium transition-colors',
-                    view === tab.id
-                      ? 'text-teal-700 border-b-2 border-teal-600'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  {tab.label}
-                </button>
-              </span>
+    <div>
+      <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-4 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
+            <h1 className="text-[32px] font-bold tracking-tight">影片統籌</h1>
+            <div
+              className="flex items-center gap-2 text-[14px]"
+              role="tablist"
+              aria-label="視圖切換"
+            >
+              {(
+                [
+                  { id: 'status' as const, label: '狀態視圖' },
+                  { id: 'list' as const, label: '列表視圖' },
+                ] as const
+              ).map((tab, index) => (
+                <span key={tab.id} className="contents">
+                  {index > 0 && <span className="text-muted-foreground/50 select-none">|</span>}
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={view === tab.id}
+                    onClick={() => setView(tab.id)}
+                    className={cn(
+                      'pb-0.5 font-medium transition-colors',
+                      view === tab.id
+                        ? 'text-teal-700 border-b-2 border-teal-600'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+          <p className="text-[14px] text-muted-foreground mt-1">
+            全局影片產出時間軸，查看所有狀態的影片記錄。
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          <Select value={String(yearFilter)} onValueChange={value => setYearFilter(Number(value))}>
+            <SelectTrigger className="w-[100px] h-9 text-[12px]">
+              <SelectValue placeholder="年份" />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map(year => (
+                <SelectItem key={year} value={String(year)}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={vchannelFilter} onValueChange={setVchannelFilter}>
+            <SelectTrigger className="w-[220px] h-9 text-[12px]">
+              <SelectValue placeholder="Vchannel" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部 Vchannel</SelectItem>
+              {channels.map(ch => (
+                <SelectItem key={ch.id} value={ch.id}>
+                  {ch.channelCode} — {ch.publicName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="relative flex-1 min-w-[200px] max-w-[280px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="搜尋主題或 Video Code..."
+              className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            {(['all', 'internal', 'client'] as const).map(cat => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setCategoryFilter(cat)}
+                className={cn(
+                  'px-3 py-1.5 rounded text-[12px] font-medium transition-colors duration-200',
+                  categoryFilter === cat ? 'bg-teal-600 text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80',
+                )}
+              >
+                {cat === 'all' ? '全部' : cat === 'internal' ? '內部項目' : '客戶項目'}
+              </button>
             ))}
           </div>
-        </div>
-        <p className="text-[14px] text-muted-foreground mt-1">
-          全局影片產出時間軸，查看所有狀態的影片記錄。
-        </p>
-      </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
-        <Select value={String(yearFilter)} onValueChange={value => setYearFilter(Number(value))}>
-          <SelectTrigger className="w-[100px] h-9 text-[12px]">
-            <SelectValue placeholder="年份" />
-          </SelectTrigger>
-          <SelectContent>
-            {yearOptions.map(year => (
-              <SelectItem key={year} value={String(year)}>
-                {year}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={vchannelFilter} onValueChange={setVchannelFilter}>
-          <SelectTrigger className="w-[220px] h-9 text-[12px]">
-            <SelectValue placeholder="Vchannel" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">全部 Vchannel</SelectItem>
-            {channels.map(ch => (
-              <SelectItem key={ch.id} value={ch.id}>
-                {ch.channelCode} — {ch.publicName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <div className="relative flex-1 min-w-[200px] max-w-[280px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="搜尋主題或 Video Code..."
-            className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
-          />
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          {(['all', 'internal', 'client'] as const).map(cat => (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => setCategoryFilter(cat)}
-              className={cn(
-                'px-3 py-1.5 rounded text-[12px] font-medium transition-colors duration-200',
-                categoryFilter === cat ? 'bg-teal-600 text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80',
-              )}
-            >
-              {cat === 'all' ? '全部' : cat === 'internal' ? '內部項目' : '客戶項目'}
-            </button>
-          ))}
+          <Button
+            type="button"
+            size="sm"
+            className="ml-auto h-9 px-3 bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-50"
+            disabled={!selectedVideo}
+            onClick={() => setEditOpen(true)}
+          >
+            <Pencil size={14} className="mr-1.5" />
+            編輯
+          </Button>
         </div>
       </div>
 
       {view === 'list' && (
-        <WorkflowStatusSummaryBar
-          filteredCount={filteredVideos.length}
-          contextCount={contextVideos.length}
-          activeFilter={statusFilter}
-          items={COORDINATION_STATUS_ITEMS}
-          counts={statusCounts}
-          onSelectAll={() => setStatusFilter('all')}
-          onSelectItem={id => handleStatusSummaryClick(id as VideoOutputStatus)}
-          ariaLabel="狀態篩選"
-          tintInactive
-        />
+        <div className="mb-4">
+          <WorkflowStatusSummaryBar
+            filteredCount={filteredVideos.length}
+            contextCount={contextVideos.length}
+            activeFilter={statusFilter}
+            items={COORDINATION_STATUS_ITEMS}
+            counts={statusCounts}
+            onSelectAll={() => setStatusFilter('all')}
+            onSelectItem={id => handleStatusSummaryClick(id as VideoOutputStatus)}
+            ariaLabel="狀態篩選"
+            tintInactive
+          />
+        </div>
       )}
 
       {view === 'status' ? (
@@ -423,7 +469,8 @@ export function VideoManagementModule() {
           <VideoCoordinationStatusView
             videos={contextVideos}
             workLogTotals={workLogTotals}
-            onPublish={setPublishingVideo}
+            selectedId={selectedId}
+            onSelect={handleSelect}
           />
         )
       ) : (
@@ -432,6 +479,7 @@ export function VideoManagementModule() {
             <table className="w-full text-[14px] min-w-[1180px]">
               <thead className="bg-muted/30">
                 <tr>
+                  <th className="text-center px-2 py-2.5 font-medium text-muted-foreground w-10" />
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">狀態</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">Vchannel</th>
                   <th className="text-left px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap w-[1%]">Video Code</th>
@@ -450,15 +498,32 @@ export function VideoManagementModule() {
               {filteredVideos.map(video => {
                 const status = deriveVideoOutputStatus(video);
                 const isPublished = status === 'published';
+                const isSelected = selectedId === video.id;
                 const totalHours = workLogTotals.get(video.id);
                 const cellPad = isPublished ? 'pt-2.5 pb-1' : 'py-2.5';
 
                 return (
                   <tbody
                     key={video.id}
-                    className="border-t border-border/50 group"
+                    className={cn(
+                      'border-t border-border/50 group cursor-pointer',
+                      isSelected && 'bg-teal-50/50',
+                    )}
+                    onClick={() => handleSelect(video.id)}
                   >
-                    <tr className="group-hover:bg-muted/10 transition-colors">
+                    <tr className={cn('transition-colors', !isSelected && 'group-hover:bg-muted/10')}>
+                      <td className={cn('px-2 align-middle text-center', cellPad)}>
+                        <span
+                          className={cn(
+                            'inline-flex items-center justify-center w-4 h-4 rounded border',
+                            isSelected
+                              ? 'bg-teal-600 border-teal-600 text-white'
+                              : 'bg-white border-border',
+                          )}
+                        >
+                          {isSelected && <Check size={10} strokeWidth={3} />}
+                        </span>
+                      </td>
                       <td className={cn('px-3 align-middle', cellPad)}>
                         <StatusCell status={status} />
                       </td>
@@ -506,11 +571,15 @@ export function VideoManagementModule() {
                       </td>
                     </tr>
                     {isPublished && (
-                      <tr className="group-hover:bg-muted/10 transition-colors">
+                      <tr className={cn('transition-colors', !isSelected && 'group-hover:bg-muted/10')}>
                         {Array.from({ length: PLATFORM_ROW_LEAD_COLS }).map((_, i) => (
                           <td key={i} className="px-3 pt-0 pb-2.5" />
                         ))}
-                        <td colSpan={TABLE_COL_COUNT - PLATFORM_ROW_LEAD_COLS} className="px-3 pt-0 pb-2.5">
+                        <td
+                          colSpan={TABLE_COL_COUNT - PLATFORM_ROW_LEAD_COLS}
+                          className="px-3 pt-0 pb-2.5"
+                          onClick={e => e.stopPropagation()}
+                        >
                           <PlatformPublishRow
                             platformPublish={video.platformPublish}
                             onPublish={() => setPublishingVideo(video)}
@@ -535,6 +604,14 @@ export function VideoManagementModule() {
           video={publishingVideo}
           onClose={handleClosePublishModal}
           onSave={handleSavePublish}
+        />
+      )}
+
+      {editOpen && selectedVideo && (
+        <CoordinationRecordModal
+          video={selectedVideo}
+          onClose={() => setEditOpen(false)}
+          onSave={handleSaveRecord}
         />
       )}
     </div>

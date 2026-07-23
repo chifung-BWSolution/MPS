@@ -1,5 +1,5 @@
 import { useMemo, useState, type MouseEvent } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PlatformPublishKey, VideoOutput, VideoOutputStatus } from '@/types/videoOutput';
 import {
@@ -135,11 +135,13 @@ function StoragePathTag({ path }: { path?: string }) {
 function StatusVideoCard({
   video,
   hours,
-  onPublish,
+  selected,
+  onSelect,
 }: {
   video: VideoOutput;
   hours?: number;
-  onPublish?: (video: VideoOutput) => void;
+  selected?: boolean;
+  onSelect?: (videoId: string) => void;
 }) {
   const status = deriveVideoOutputStatus(video);
   const { done, total } = getMilestoneProgress(video);
@@ -157,13 +159,31 @@ function StatusVideoCard({
   return (
     <div
       className={cn(
-        'bg-white rounded border border-border/50 p-3 transition-shadow hover:shadow-md',
-        status === 'published' && onPublish && 'cursor-pointer',
+        'relative bg-white rounded border p-3 pt-4 transition-shadow hover:shadow-md cursor-pointer',
+        selected ? 'border-teal-500 ring-1 ring-teal-500/40 shadow-sm' : 'border-border/50',
       )}
-      onClick={status === 'published' && onPublish ? () => onPublish(video) : undefined}
-      role={status === 'published' && onPublish ? 'button' : undefined}
+      onClick={() => onSelect?.(video.id)}
+      role="button"
+      aria-pressed={selected}
     >
-      <div className="flex items-start justify-between gap-2 mb-1.5">
+      <button
+        type="button"
+        aria-label={selected ? '取消選擇' : '選擇影片'}
+        onClick={e => {
+          e.stopPropagation();
+          onSelect?.(video.id);
+        }}
+        className={cn(
+          'absolute top-1.5 left-1.5 w-4 h-4 rounded border flex items-center justify-center transition-colors',
+          selected
+            ? 'bg-teal-600 border-teal-600 text-white'
+            : 'bg-white border-border hover:border-teal-400',
+        )}
+      >
+        {selected && <Check size={10} strokeWidth={3} />}
+      </button>
+
+      <div className="flex items-start justify-between gap-2 mb-1.5 pl-4">
         <span className="text-[13px] font-medium line-clamp-2" title={video.title}>
           {video.title}
         </span>
@@ -279,10 +299,11 @@ function groupByMonth(videos: VideoOutput[]): MonthGroup[] {
 type Props = {
   videos: VideoOutput[];
   workLogTotals: Map<string, number>;
-  onPublish?: (video: VideoOutput) => void;
+  selectedId?: string | null;
+  onSelect?: (videoId: string) => void;
 };
 
-export function VideoCoordinationStatusView({ videos, workLogTotals, onPublish }: Props) {
+export function VideoCoordinationStatusView({ videos, workLogTotals, selectedId, onSelect }: Props) {
   const currentMonthKey = useMemo(() => getCurrentMonthKey(), []);
 
   const videosByStatus = useMemo(() => {
@@ -406,7 +427,8 @@ export function VideoCoordinationStatusView({ videos, workLogTotals, onPublish }
                                 key={video.id}
                                 video={video}
                                 hours={workLogTotals.get(video.id)}
-                                onPublish={onPublish}
+                                selected={selectedId === video.id}
+                                onSelect={onSelect}
                               />
                             ))}
                           </div>
