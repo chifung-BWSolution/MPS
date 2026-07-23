@@ -1,7 +1,7 @@
 import type { PlatformPublishMap } from '@/types/videoOutput';
 import type { VideoOutputWorkflowFields } from '@/types/videoOutputWorkflow';
 
-export type VideoWorkflowStage = 'prep' | 'production' | 'review' | 'publish' | 'published';
+export type VideoWorkflowStage = 'prep' | 'production' | 'review' | 'publish' | 'published' | 'delisted';
 
 export type StaffAssignment = {
   userId: string;

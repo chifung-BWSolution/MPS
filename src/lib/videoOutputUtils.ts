@@ -117,6 +117,7 @@ export const VIDEO_OUTPUT_STATUS_LABELS: Record<VideoOutputStatus, string> = {
   pending_review: '待審核',
   pending_publish: '待發佈',
   published: '已發佈',
+  delisted: '已下架',
 };
 
 export const VIDEO_OUTPUT_STATUS_COLORS: Record<VideoOutputStatus, string> = {
@@ -125,6 +126,7 @@ export const VIDEO_OUTPUT_STATUS_COLORS: Record<VideoOutputStatus, string> = {
   pending_review: 'bg-blue-100 text-blue-800',
   pending_publish: 'bg-purple-100 text-purple-800',
   published: 'bg-teal-100 text-teal-800',
+  delisted: 'bg-rose-100 text-rose-800',
 };
 
 export function formatShootLocation(shootHk: boolean, shootSz: boolean): string {
@@ -150,6 +152,11 @@ export function deriveVideoOutputStatus(row: Pick<
   | 'publishedDate'
   | 'platformPublish'
 >): VideoOutputStatus {
+  // 已下架優先：即使仍有發佈日期／平台鏈接，也維持下架狀態
+  if (row.workflowStage === 'delisted') {
+    return 'delisted';
+  }
+
   // Prefer concrete publish evidence over a stale workflow_stage
   if (row.publishedDate?.trim() || hasAnyMediaPlatformPublished(row.platformPublish)) {
     return 'published';
@@ -167,6 +174,8 @@ export function deriveVideoOutputStatus(row: Pick<
         return 'in_production';
       case 'prep':
         return 'pending';
+      case 'delisted':
+        return 'delisted';
     }
   }
 

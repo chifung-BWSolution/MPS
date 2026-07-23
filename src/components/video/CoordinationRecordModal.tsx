@@ -21,6 +21,7 @@ const STATUS_OPTIONS: VideoOutputStatus[] = [
   'pending_review',
   'pending_publish',
   'published',
+  'delisted',
 ];
 
 function statusToWorkflowStage(status: VideoOutputStatus): VideoWorkflowStage {
@@ -35,6 +36,8 @@ function statusToWorkflowStage(status: VideoOutputStatus): VideoWorkflowStage {
       return 'publish';
     case 'published':
       return 'published';
+    case 'delisted':
+      return 'delisted';
   }
 }
 
@@ -67,8 +70,10 @@ export function CoordinationRecordModal({ video, onClose, onSave }: Props) {
         if (!video.publishedDate?.trim()) {
           patch.publishedDate = localDateString();
         }
+      } else if (status === 'delisted') {
+        // 保留發佈日期／平台鏈接，僅以 workflow_stage 標記下架
       } else {
-        // 離開已發佈時清除會讓 derive 固定為 published 的欄位
+        // 回到流程中狀態時，清除會讓 derive 固定為 published 的欄位
         patch.publishedDate = '';
         if (hasAnyMediaPlatformPublished(video.platformPublish)) {
           patch.platformPublish = {};
@@ -88,8 +93,15 @@ export function CoordinationRecordModal({ video, onClose, onSave }: Props) {
     }
   };
 
-  const leavingPublished =
-    currentStatus === 'published' && status !== 'published';
+  const clearsPublishEvidence =
+    status !== 'published'
+    && status !== 'delisted'
+    && (
+      currentStatus === 'published'
+      || currentStatus === 'delisted'
+      || hasAnyMediaPlatformPublished(video.platformPublish)
+      || !!video.publishedDate?.trim()
+    );
 
   return (
     <CrudModal isOpen onClose={onClose} title={`編輯記錄 — ${video.videoCode}`} size="md">
@@ -140,11 +152,11 @@ export function CoordinationRecordModal({ video, onClose, onSave }: Props) {
               ))}
             </SelectContent>
           </Select>
-          {leavingPublished && (
+          {clearsPublishEvidence && (
             <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">
-              改為非「已發佈」時，將清除實際發佈日期
+              改為流程中狀態時，將清除實際發佈日期
               {hasAnyMediaPlatformPublished(video.platformPublish) ? '與平台發佈鏈接' : ''}
-              ，以便狀態生效。
+              ，以便狀態生效。選「已下架」則保留發佈資料。
             </p>
           )}
         </div>

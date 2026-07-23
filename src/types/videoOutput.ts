@@ -7,7 +7,8 @@ export type VideoOutputStatus =
   | 'in_production'
   | 'pending_review'
   | 'pending_publish'
-  | 'published';
+  | 'published'
+  | 'delisted';
 
 export type PlatformPublishKey =
   | 'youtube'

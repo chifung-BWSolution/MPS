@@ -61,6 +61,7 @@ const STATUS_SUMMARY_KEYS: VideoOutputStatus[] = [
   'pending_review',
   'pending_publish',
   'published',
+  'delisted',
 ];
 
 const COORDINATION_STATUS_ITEMS = STATUS_SUMMARY_KEYS.map(status => ({
@@ -76,6 +77,7 @@ function countVideosByStatus(videos: VideoOutput[]): Record<VideoOutputStatus, n
     pending_review: 0,
     pending_publish: 0,
     published: 0,
+    delisted: 0,
   };
   for (const video of videos) {
     counts[deriveVideoOutputStatus(video)]++;

@@ -34,6 +34,7 @@ const STATUS_COLUMNS: VideoOutputStatus[] = [
   'pending_review',
   'pending_publish',
   'published',
+  'delisted',
 ];
 
 const COLUMN_STYLE: Record<VideoOutputStatus, { border: string; bg: string }> = {
@@ -42,6 +43,7 @@ const COLUMN_STYLE: Record<VideoOutputStatus, { border: string; bg: string }> = 
   pending_review: { border: 'border-blue-400', bg: 'bg-blue-50' },
   pending_publish: { border: 'border-purple-400', bg: 'bg-purple-50' },
   published: { border: 'border-teal-400', bg: 'bg-teal-50' },
+  delisted: { border: 'border-rose-400', bg: 'bg-rose-50' },
 };
 
 const CATEGORY_COLORS = {
@@ -147,13 +149,20 @@ function StatusVideoCard({
   const { done, total } = getMilestoneProgress(video);
   const progressPct = total > 0 ? Math.round((done / total) * 100) : 0;
   const dateLabel =
-    status === 'published'
+    status === 'published' || status === 'delisted'
       ? video.publishedDate?.trim() || video.plannedPublishDate?.trim()
       : video.plannedPublishDate?.trim() || video.shootAt?.trim();
-  const datePrefix = status === 'published' ? '發佈' : video.plannedPublishDate?.trim() ? '計劃' : '拍攝';
+  const datePrefix =
+    status === 'published' || status === 'delisted'
+      ? '發佈'
+      : video.plannedPublishDate?.trim()
+        ? '計劃'
+        : '拍攝';
   const location = formatShootLocation(video.shootHk, video.shootSz);
   const publishedKeys =
-    status === 'published' ? getPublishedPlatformKeys(video.platformPublish) : [];
+    status === 'published' || status === 'delisted'
+      ? getPublishedPlatformKeys(video.platformPublish)
+      : [];
   const showStoragePathTag = status === 'pending_review' || status === 'pending_publish';
 
   return (
@@ -212,13 +221,15 @@ function StatusVideoCard({
         )}
       </div>
 
-      {status === 'published' && (
+      {(status === 'published' || status === 'delisted') && (
         <div
           className="mt-2 flex flex-wrap items-center gap-1"
           onClick={e => e.stopPropagation()}
         >
           {publishedKeys.length === 0 ? (
-            <span className="text-[10px] text-muted-foreground">尚未發佈平台</span>
+            <span className="text-[10px] text-muted-foreground">
+              {status === 'delisted' ? '無平台記錄' : '尚未發佈平台'}
+            </span>
           ) : (
             publishedKeys.map(key => {
               const url = getPlatformUrl(video.platformPublish, key);
@@ -346,7 +357,7 @@ export function VideoCoordinationStatusView({ videos, workLogTotals, selectedId,
 
   return (
     <div className="overflow-x-auto -mx-1 px-1">
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3 min-w-[900px] xl:min-w-0 items-start">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3 min-w-[1080px] xl:min-w-0 items-start">
         {STATUS_COLUMNS.map(status => {
           const style = COLUMN_STYLE[status];
           const statusVideos = videosByStatus[status];

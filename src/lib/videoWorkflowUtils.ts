@@ -145,6 +145,7 @@ export const VIDEO_WORKFLOW_STAGE_LABELS: Record<VideoWorkflowStage, string> = {
   review: '待審核',
   publish: '待發佈',
   published: '已發佈',
+  delisted: '已下架',
 };
 
 export const VIDEO_WORKFLOW_STAGE_COLORS: Record<VideoWorkflowStage, string> = {
@@ -153,6 +154,7 @@ export const VIDEO_WORKFLOW_STAGE_COLORS: Record<VideoWorkflowStage, string> = {
   review: 'bg-blue-100 text-blue-800',
   publish: 'bg-purple-100 text-purple-800',
   published: 'bg-teal-100 text-teal-800',
+  delisted: 'bg-rose-100 text-rose-800',
 };
 
 /** 製作中被審核拒絕後回到製作，顯示為「待修正」 */
