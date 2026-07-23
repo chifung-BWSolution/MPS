@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 
+export type UpcomingEventStatus = 'pending_publish' | 'published';
+
 export type UpcomingEvent = {
   id: string;
   title: string;
@@ -12,6 +14,12 @@ export type UpcomingEvent = {
   platform?: string;
   hours?: number;
   notes?: string;
+  status: UpcomingEventStatus;
+};
+
+export const UPCOMING_EVENT_STATUS_LABELS: Record<UpcomingEventStatus, string> = {
+  pending_publish: '待發佈',
+  published: '已發佈',
 };
 
 type DbRow = {
@@ -24,7 +32,12 @@ type DbRow = {
   platform: string | null;
   hours: number | null;
   notes: string | null;
+  status: string | null;
 };
+
+function normalizeStatus(value: string | null | undefined): UpcomingEventStatus {
+  return value === 'published' ? 'published' : 'pending_publish';
+}
 
 const mapRow = (row: DbRow): UpcomingEvent => ({
   id: row.id,
@@ -36,6 +49,7 @@ const mapRow = (row: DbRow): UpcomingEvent => ({
   platform: row.platform ?? undefined,
   hours: row.hours ?? undefined,
   notes: row.notes ?? undefined,
+  status: normalizeStatus(row.status),
 });
 
 export function useUpcomingEvents() {
@@ -72,15 +86,17 @@ export function useUpcomingEvents() {
       platform: event.platform ?? null,
       hours: event.hours ?? null,
       notes: event.notes ?? null,
+      status: normalizeStatus(event.status),
     };
     const { error } = await supabase.from('upcoming_event').insert(row);
     if (!error) {
-      setEvents(prev => [...prev, event]);
+      setEvents(prev => [...prev, { ...event, status: normalizeStatus(event.status) }]);
     }
     return error;
   }, []);
 
   const updateEvent = useCallback(async (id: string, updates: Omit<UpcomingEvent, 'id'>) => {
+    const status = normalizeStatus(updates.status);
     const row = {
       title: updates.title,
       type: updates.type,
@@ -90,12 +106,13 @@ export function useUpcomingEvents() {
       platform: updates.platform ?? null,
       hours: updates.hours ?? null,
       notes: updates.notes ?? null,
+      status,
       updated_at: new Date().toISOString(),
     };
     const { error } = await supabase.from('upcoming_event').update(row).eq('id', id);
     if (!error) {
       setEvents(prev =>
-        prev.map(e => (e.id === id ? { id, ...updates } : e)),
+        prev.map(e => (e.id === id ? { id, ...updates, status } : e)),
       );
     }
     return error;

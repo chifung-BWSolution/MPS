@@ -4,9 +4,18 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getCalendarEventsForMonth, CalendarEvent, parseVideoCalendarTheme } from '@/data/marketingData';
 import { projects as allProjects, statusConfig } from '@/data/mockData';
-import { useUpcomingEvents } from '@/hooks/useUpcomingEvents';
+import {
+  useUpcomingEvents,
+  UPCOMING_EVENT_STATUS_LABELS,
+  type UpcomingEventStatus,
+} from '@/hooks/useUpcomingEvents';
 import { useVideoOutput } from '@/hooks/useVideoOutput';
 import { useVchannels } from '@/hooks/useVchannels';
+import {
+  deriveVideoOutputStatus,
+  VIDEO_OUTPUT_STATUS_COLORS,
+  VIDEO_OUTPUT_STATUS_LABELS,
+} from '@/lib/videoOutputUtils';
 
 const calendarDays = ['一', '二', '三', '四', '五', '六', '日'];
 
@@ -25,7 +34,13 @@ const accountKindStyle = {
   secondary: { label: '小號', className: 'text-rose-500' },
 } as const;
 
-type CustomEvent = CalendarEvent & {
+const EVENT_STATUS_COLORS: Record<UpcomingEventStatus, string> = {
+  pending_publish: 'bg-purple-100 text-purple-800',
+  published: 'bg-teal-100 text-teal-800',
+};
+
+type CustomEvent = Omit<CalendarEvent, 'type'> & {
+  type: CalendarEvent['type'] | 'project';
   isProject?: boolean;
   projectCategory?: string;
   projectStatus?: string;
@@ -33,6 +48,9 @@ type CustomEvent = CalendarEvent & {
   /** Manual upcoming_event rows — editable/deletable (not video / mock / project) */
   canManage?: boolean;
   notes?: string;
+  /** Display text e.g. 影片：待審核 */
+  statusText?: string;
+  statusClassName?: string;
 };
 
 function toLocalDateStr(d: Date): string {
@@ -108,26 +126,39 @@ function MonthListEventCard({
               <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">{event.hours}h</span>
             )}
           </div>
-          {event.canManage && !isVideo ? (
-            <div className="flex items-center shrink-0">
-              <button
-                type="button"
-                title="編輯"
-                onClick={() => onEdit(event)}
-                className="p-1 rounded text-muted-foreground hover:text-teal-700 hover:bg-teal-50 transition-colors"
+          <div className="flex items-center gap-0.5 shrink-0">
+            {event.statusText ? (
+              <span
+                className={cn(
+                  'text-[10px] font-medium px-1.5 py-0.5 rounded max-w-[110px] truncate',
+                  event.statusClassName || 'bg-muted text-muted-foreground',
+                )}
+                title={event.statusText}
               >
-                <Pencil size={12} />
-              </button>
-              <button
-                type="button"
-                title="刪除"
-                onClick={() => onDelete(event)}
-                className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 transition-colors"
-              >
-                <Trash2 size={12} />
-              </button>
-            </div>
-          ) : null}
+                {event.statusText}
+              </span>
+            ) : null}
+            {event.canManage && !isVideo ? (
+              <>
+                <button
+                  type="button"
+                  title="編輯"
+                  onClick={() => onEdit(event)}
+                  className="p-1 rounded text-muted-foreground hover:text-teal-700 hover:bg-teal-50 transition-colors"
+                >
+                  <Pencil size={12} />
+                </button>
+                <button
+                  type="button"
+                  title="刪除"
+                  onClick={() => onDelete(event)}
+                  className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </>
+            ) : null}
+          </div>
         </div>
 
         {isVideo && event.videoCode ? (
@@ -177,6 +208,7 @@ type NewEventForm = {
   platform: string;
   hours: string;
   notes: string;
+  status: UpcomingEventStatus;
 };
 
 const emptyForm = (): NewEventForm => ({
@@ -188,6 +220,7 @@ const emptyForm = (): NewEventForm => ({
   platform: '',
   hours: '',
   notes: '',
+  status: 'pending_publish',
 });
 
 type CalendarViewMode = 'list' | 'weekly' | 'monthly';
@@ -217,6 +250,8 @@ export function MarketingCalendar() {
   const customEvents = useMemo<CustomEvent[]>(() =>
     upcomingEvents.map(ev => {
       const d = new Date(ev.date + 'T00:00:00');
+      const typeLabel = typeConfig[ev.type]?.label || '活動';
+      const statusLabel = UPCOMING_EVENT_STATUS_LABELS[ev.status];
       return {
         id: ev.id,
         day: d.getDate(),
@@ -230,6 +265,8 @@ export function MarketingCalendar() {
         notes: ev.notes,
         canManage: true,
         _fullDate: ev.date,
+        statusText: `${typeLabel}：${statusLabel}`,
+        statusClassName: EVENT_STATUS_COLORS[ev.status],
       };
     }),
   [upcomingEvents]);
@@ -247,6 +284,7 @@ export function MarketingCalendar() {
           videoCode: v.videoCode,
           title: v.title,
         });
+        const videoStatus = deriveVideoOutputStatus(v);
         return {
           id: `vo-${v.id}`,
           day: d.getDate(),
@@ -262,6 +300,8 @@ export function MarketingCalendar() {
           sourceId: v.id,
           canManage: false,
           _fullDate: dateStr,
+          statusText: `影片：${VIDEO_OUTPUT_STATUS_LABELS[videoStatus]}`,
+          statusClassName: VIDEO_OUTPUT_STATUS_COLORS[videoStatus],
         };
       });
   }, [videos, channels]);
@@ -311,6 +351,7 @@ export function MarketingCalendar() {
       .filter(p => p.startDate)
       .map(p => {
         const date = new Date(p.startDate! + 'T00:00:00');
+        const statusLabel = statusConfig[p.status]?.label;
         return {
           id: `proj-${p.id}`,
           day: date.getDate(),
@@ -323,6 +364,10 @@ export function MarketingCalendar() {
           projectCategory: p.projectCategory,
           projectStatus: p.status,
           _fullDate: p.startDate,
+          statusText: statusLabel ? `項目：${statusLabel}` : undefined,
+          statusClassName: statusConfig[p.status]
+            ? `${statusConfig[p.status].bgColor} ${statusConfig[p.status].textColor}`
+            : undefined,
         };
       });
   }, []);
@@ -422,16 +467,18 @@ export function MarketingCalendar() {
 
   function openEditModal(event: CustomEvent) {
     if (!event.canManage || event.type === 'video') return;
+    const source = upcomingEvents.find(e => e.id === event.id);
     setEditingEventId(event.id);
     setAddForm({
       title: event.title,
-      type: event.type === 'video' || event.type === 'project' ? 'social' : event.type,
+      type: event.type === 'project' ? 'social' : event.type,
       date: event._fullDate || toLocalDateStr(new Date()),
       company: event.company || '',
       brand: event.brand || '',
       platform: event.platform || '',
       hours: event.hours != null ? String(event.hours) : '',
       notes: event.notes || '',
+      status: source?.status ?? 'pending_publish',
     });
     setShowAddModal(true);
   }
@@ -452,6 +499,7 @@ export function MarketingCalendar() {
       platform: addForm.platform || undefined,
       hours: addForm.hours ? Number(addForm.hours) : undefined,
       notes: addForm.notes || undefined,
+      status: addForm.status,
     };
     const err = editingEventId
       ? await updateUpcomingEvent(editingEventId, payload)
@@ -976,7 +1024,19 @@ export function MarketingCalendar() {
                       if (event.type === 'video' && event.videoCode) {
                         return (
                           <div key={event.id} className="border border-border/50 rounded-md p-2.5 hover:border-teal-200 transition-colors space-y-1.5">
-                            <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded', cfg.bg, cfg.text)}>{cfg.label}</span>
+                            <div className="flex items-start justify-between gap-1">
+                              <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded', cfg.bg, cfg.text)}>{cfg.label}</span>
+                              {event.statusText ? (
+                                <span
+                                  className={cn(
+                                    'text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0',
+                                    event.statusClassName || 'bg-muted text-muted-foreground',
+                                  )}
+                                >
+                                  {event.statusText}
+                                </span>
+                              ) : null}
+                            </div>
                             <VideoCalendarChip event={event} />
                             {event.channelName && (
                               <p className="text-[10px] text-muted-foreground">{event.channelName}</p>
@@ -986,9 +1046,21 @@ export function MarketingCalendar() {
                       }
                       return (
                         <div key={event.id} className="border border-border/50 rounded-md p-2.5 hover:border-teal-200 transition-colors">
-                          <div className="flex items-start justify-between mb-1">
+                          <div className="flex items-start justify-between mb-1 gap-1">
                             <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded', cfg.bg, cfg.text)}>{cfg.label}</span>
-                            {event.hours && <span className="text-[10px] text-muted-foreground">{event.hours}h</span>}
+                            <div className="flex items-center gap-1 shrink-0">
+                              {event.statusText ? (
+                                <span
+                                  className={cn(
+                                    'text-[10px] font-medium px-1.5 py-0.5 rounded',
+                                    event.statusClassName || 'bg-muted text-muted-foreground',
+                                  )}
+                                >
+                                  {event.statusText}
+                                </span>
+                              ) : null}
+                              {event.hours ? <span className="text-[10px] text-muted-foreground">{event.hours}h</span> : null}
+                            </div>
                           </div>
                           <p className="text-[12px] font-medium">{proj?.name || event.title}</p>
                           {event.platform && <p className="text-[10px] text-muted-foreground mt-0.5">{event.platform}</p>}
@@ -1063,6 +1135,21 @@ export function MarketingCalendar() {
                     className="w-full px-3 py-2 border border-border rounded text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-[12px] font-medium mb-1">狀態</label>
+                <select
+                  value={addForm.status}
+                  onChange={e => setAddForm(f => ({ ...f, status: e.target.value as UpcomingEventStatus }))}
+                  className="w-full px-3 py-2 border border-border rounded text-[13px] bg-white focus:outline-none focus:ring-1 focus:ring-teal-600"
+                >
+                  {(Object.entries(UPCOMING_EVENT_STATUS_LABELS) as [UpcomingEventStatus, string][]).map(
+                    ([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ),
+                  )}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
