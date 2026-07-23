@@ -1,0 +1,37 @@
+---
+description: 頁面頂部標題與選擇欄必須凍結（sticky），不隨列表滾動
+globs: src/components/**/*.tsx
+alwaysApply: false
+---
+
+# 頁面頂部凍結（Sticky Header Toolbar）
+
+所有列表／內容頁開發時：**頁面標題、副標、視圖切換、日期導覽、篩選／選擇欄**必須固定在主內容區上方，僅下方列表／表格／卡片區滾動。
+
+## 範圍（要凍結）
+
+- 頁面標題 `h1` + 副標說明
+- 視圖切換（如月列表／週視圖）
+- 日期／期間導覽、「今天」等
+- 公司／類型等篩選、圖例、主要操作按鈕（如「新增」）
+- 與上述同一視覺區塊的摘要列（如「本月共 N 項」）
+
+## 不凍結
+
+- 日期分組列表、活動卡片、表格列、看板內容等主體資料
+
+## 實作要求
+
+1. 標題與選擇欄放在**同一個** sticky 容器內（含 Module 層標題時一併包入，勿拆成兩個各自滾動的區塊）。
+2. 使用既有版面偏移：`sticky top-[48px]`（對齊 `AppLayout` 的 `pt-[48px]` / TopNav）。
+3. Sticky 容器需有不透明／半透明底與邊線，避免列表內容穿透：
+
+```tsx
+<div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
+  {/* 標題 + 副標 + 視圖／篩選／操作列 */}
+</div>
+{/* 可滾動的列表／表格本體 */}
+```
+
+4. 參考：`TeamDashboard.tsx`、`ProjectAnalysis.tsx`。
+5. 新頁或改版列表頁時預設套用；勿只做標題 sticky 而讓篩選列跟著列表滑走。
