@@ -83,10 +83,11 @@ function VideoModuleContent({ subModule }: { subModule?: string }) {
 
   const { title, subtitle } = getTitle();
   const resolvedTab = activeTab === 'management' ? 'coordination' : activeTab;
-  const ownsHeader = resolvedTab === 'coordination';
+  // coordination / schedule 自行管理標題與視窗高度佈局
+  const ownsHeader = resolvedTab === 'coordination' || resolvedTab === 'schedule';
 
   return (
-    <div className="space-y-6">
+    <div className={ownsHeader ? '' : 'space-y-6'}>
       {!ownsHeader && (
         <div className="flex items-center justify-between">
           <div>

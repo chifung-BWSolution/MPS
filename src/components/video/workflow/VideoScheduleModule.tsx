@@ -177,6 +177,8 @@ export function VideoScheduleModule() {
     return deleteVideo(videoId);
   };
 
+  const weekRowCount = Math.max(1, Math.ceil(calendarDays.length / 7));
+
   if (loading || workflowLoading) {
     return (
       <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
@@ -186,101 +188,120 @@ export function VideoScheduleModule() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Select value={vchannelFilter} onValueChange={setVchannelFilter}>
-          <SelectTrigger className="h-9 w-[180px] text-[12px]">
-            <SelectValue placeholder="Vchannel" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">全部 Vchannel</SelectItem>
-            {channels.map(ch => (
-              <SelectItem key={ch.id} value={ch.id}>{ch.channelCode} — {ch.publicName}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <div className="relative flex-1 min-w-[180px] max-w-[280px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="搜尋主題或 Video Code…"
-            className="h-9 pl-9 text-[12px]"
-          />
+    // 頂欄 48px + AppLayout p-6（上下各 24px）
+    <div className="flex flex-col h-[calc(100vh-48px-3rem)] overflow-hidden gap-3">
+      <div className="shrink-0 space-y-3">
+        <div>
+          <h1 className="text-[32px] font-bold tracking-tight">拍攝排期</h1>
+          <p className="text-[14px] text-muted-foreground mt-1">
+            日曆與準備工作清單：文案、腳本、Model、場地、攝影師與到場人員。
+          </p>
         </div>
-        <Select value={String(yearFilter)} onValueChange={value => setYearFilter(Number(value))}>
-          <SelectTrigger className="h-9 w-[100px] text-[12px] shrink-0">
-            <SelectValue placeholder="年份" />
-          </SelectTrigger>
-          <SelectContent>
-            {yearOptions.map(year => (
-              <SelectItem key={year} value={String(year)}>
-                {year}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button type="button" className="h-9 bg-teal-600 hover:bg-teal-700 text-white text-[12px] gap-1.5 shrink-0" onClick={openNew}>
-          <Plus size={14} /> 新建影片
-        </Button>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={vchannelFilter} onValueChange={setVchannelFilter}>
+            <SelectTrigger className="h-9 w-[180px] text-[12px]">
+              <SelectValue placeholder="Vchannel" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部 Vchannel</SelectItem>
+              {channels.map(ch => (
+                <SelectItem key={ch.id} value={ch.id}>{ch.channelCode} — {ch.publicName}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="relative flex-1 min-w-[160px] max-w-[240px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="搜尋主題或 Video Code…"
+              className="h-9 pl-9 text-[12px]"
+            />
+          </div>
+          <Select value={String(yearFilter)} onValueChange={value => setYearFilter(Number(value))}>
+            <SelectTrigger className="h-9 w-[100px] text-[12px] shrink-0">
+              <SelectValue placeholder="年份" />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map(year => (
+                <SelectItem key={year} value={String(year)}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button type="button" className="h-9 bg-teal-600 hover:bg-teal-700 text-white text-[12px] gap-1.5 shrink-0" onClick={openNew}>
+            <Plus size={14} /> 新建影片
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <div className="space-y-2 min-h-[320px]">
-          <p className="text-[12px] text-muted-foreground">
+      <div className="flex-1 min-h-0 flex flex-col xl:flex-row gap-3">
+        {/* 左側窄列表：唯一可滾動區域 */}
+        <div className="w-full xl:w-[320px] xl:shrink-0 flex flex-col min-h-0 max-h-[40vh] xl:max-h-none">
+          <p className="text-[12px] text-muted-foreground shrink-0 mb-2">
             未審核前 {filteredVideos.length} 部（準備中 + 製作中）
           </p>
-          {filteredVideos.length === 0 ? (
-            <div className="text-center py-12 text-[13px] text-muted-foreground bg-white rounded-md border">
-              沒有符合條件的影片
-            </div>
-          ) : (
-            filteredVideos.map(video => (
-              <div
-                key={video.id}
-                className={cn(
-                  'bg-white rounded-md border p-3 transition-all',
-                  highlightId === video.id ? 'border-teal-500 shadow-card' : 'border-[rgba(13,26,45,0.08)] hover:shadow-card',
-                )}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                      <p className="text-[11px] font-mono text-muted-foreground">{video.videoCode}</p>
-                      <span className={cn('text-[10px] px-1.5 py-0.5 rounded', VIDEO_WORKFLOW_STAGE_COLORS[video.stage])}>
-                        {VIDEO_WORKFLOW_STAGE_LABELS[video.stage]}
-                      </span>
-                    </div>
-                    <p className="text-[14px] font-bold truncate">{video.title}</p>
-                    <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[11px] text-muted-foreground">
-                      <span>{video.vchannelCode}</span>
-                      {video.shootAt ? (
-                        <span className="flex items-center gap-1"><Calendar size={10} />{video.shootAt}</span>
-                      ) : (
-                        <span className="text-amber-600">待排期</span>
-                      )}
-                      <span className="flex items-center gap-1"><MapPin size={10} />{formatLocation(video.location)}</span>
-                    </div>
-                    {video.stage === 'prep' && (
-                      <p className="text-[11px] mt-1 text-muted-foreground">
-                        {isPrepComplete(video)
-                          ? '可進製作'
-                          : `進入製作前需填寫：${getPrepMissingItems(video).join('、')}`}
-                      </p>
-                    )}
-                  </div>
-                  <Button type="button" variant="outline" size="sm" className="h-8 text-[11px] gap-1 shrink-0"
-                    onClick={() => openEdit(video.id)}>
-                    <Edit2 size={12} /> 編輯
-                  </Button>
-                </div>
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-0.5">
+            {filteredVideos.length === 0 ? (
+              <div className="text-center py-10 text-[13px] text-muted-foreground bg-white rounded-md border">
+                沒有符合條件的影片
               </div>
-            ))
-          )}
+            ) : (
+              filteredVideos.map(video => (
+                <div
+                  key={video.id}
+                  className={cn(
+                    'bg-white rounded-md border px-2.5 py-2 transition-all',
+                    highlightId === video.id ? 'border-teal-500 shadow-card' : 'border-[rgba(13,26,45,0.08)] hover:shadow-card',
+                  )}
+                >
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                        <p className="text-[10px] font-mono text-muted-foreground">{video.videoCode}</p>
+                        <span className={cn('text-[9px] px-1 py-0.5 rounded', VIDEO_WORKFLOW_STAGE_COLORS[video.stage])}>
+                          {VIDEO_WORKFLOW_STAGE_LABELS[video.stage]}
+                        </span>
+                      </div>
+                      <p className="text-[13px] font-bold leading-snug line-clamp-2">{video.title}</p>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[10px] text-muted-foreground">
+                        <span>{video.vchannelCode}</span>
+                        {video.shootAt ? (
+                          <span className="inline-flex items-center gap-0.5"><Calendar size={9} />{video.shootAt}</span>
+                        ) : (
+                          <span className="text-amber-600">待排期</span>
+                        )}
+                        <span className="inline-flex items-center gap-0.5"><MapPin size={9} />{formatLocation(video.location)}</span>
+                      </div>
+                      {video.stage === 'prep' && (
+                        <p className="text-[10px] mt-1 text-muted-foreground line-clamp-2">
+                          {isPrepComplete(video)
+                            ? '可進製作'
+                            : `進入製作前需填寫：${getPrepMissingItems(video).join('、')}`}
+                        </p>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-[10px] gap-1 shrink-0"
+                      onClick={() => openEdit(video.id)}
+                    >
+                      <Edit2 size={11} /> 編輯
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-4 h-fit xl:sticky xl:top-20">
-          <div className="flex items-center justify-between mb-4">
+        {/* 右側日曆：固定、撐滿剩餘寬高 */}
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-3 sm:p-4">
+          <div className="flex items-center justify-between mb-3 shrink-0">
             <button type="button" onClick={() => setCurrentMonth(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="p-1 rounded hover:bg-muted">
               <ChevronLeft size={16} />
             </button>
@@ -289,22 +310,25 @@ export function VideoScheduleModule() {
               <ChevronRight size={16} />
             </button>
           </div>
-          <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-muted-foreground mb-1">
+          <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-muted-foreground mb-1 shrink-0">
             {['日', '一', '二', '三', '四', '五', '六'].map(d => <div key={d}>{d}</div>)}
           </div>
-          <div className="grid grid-cols-7 gap-1">
+          <div
+            className="flex-1 min-h-0 grid grid-cols-7 gap-1"
+            style={{ gridTemplateRows: `repeat(${weekRowCount}, minmax(0, 1fr))` }}
+          >
             {calendarDays.map((cell, idx) => (
               <div
                 key={idx}
                 className={cn(
-                  'min-h-[64px] border border-border/40 rounded p-1 text-left',
+                  'min-h-0 h-full border border-border/40 rounded p-1 text-left overflow-hidden flex flex-col',
                   cell.date ? 'bg-white' : 'bg-muted/20',
                 )}
               >
                 {cell.date && (
                   <>
-                    <span className="text-[10px] text-muted-foreground">{Number(cell.date.slice(8))}</span>
-                    <div className="space-y-0.5 mt-0.5">
+                    <span className="text-[10px] text-muted-foreground shrink-0">{Number(cell.date.slice(8))}</span>
+                    <div className="space-y-0.5 mt-0.5 min-h-0 overflow-y-auto">
                       {cell.items.map(item => (
                         <button
                           key={item.id}
@@ -314,6 +338,7 @@ export function VideoScheduleModule() {
                             'w-full text-left text-[9px] px-1 py-0.5 rounded truncate',
                             highlightId === item.id ? 'bg-teal-600 text-white' : 'bg-teal-50 text-teal-800 hover:bg-teal-100',
                           )}
+                          title={item.title}
                         >
                           {item.title}
                         </button>
