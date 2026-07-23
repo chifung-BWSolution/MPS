@@ -190,57 +190,56 @@ export function VideoScheduleModule() {
   return (
     // 頂欄 48px + AppLayout p-6（上下各 24px）
     <div className="flex flex-col h-[calc(100vh-48px-3rem)] overflow-hidden gap-3">
-      <div className="shrink-0 space-y-3">
-        <div>
+      <div className="shrink-0 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-[32px] font-bold tracking-tight">拍攝排期</h1>
           <p className="text-[14px] text-muted-foreground mt-1">
             日曆與準備工作清單：文案、腳本、Model、場地、攝影師與到場人員。
           </p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={vchannelFilter} onValueChange={setVchannelFilter}>
-            <SelectTrigger className="h-9 w-[180px] text-[12px]">
-              <SelectValue placeholder="Vchannel" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部 Vchannel</SelectItem>
-              {channels.map(ch => (
-                <SelectItem key={ch.id} value={ch.id}>{ch.channelCode} — {ch.publicName}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="relative flex-1 min-w-[160px] max-w-[240px]">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="搜尋主題或 Video Code…"
-              className="h-9 pl-9 text-[12px]"
-            />
-          </div>
-          <Select value={String(yearFilter)} onValueChange={value => setYearFilter(Number(value))}>
-            <SelectTrigger className="h-9 w-[100px] text-[12px] shrink-0">
-              <SelectValue placeholder="年份" />
-            </SelectTrigger>
-            <SelectContent>
-              {yearOptions.map(year => (
-                <SelectItem key={year} value={String(year)}>
-                  {year}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button type="button" className="h-9 bg-teal-600 hover:bg-teal-700 text-white text-[12px] gap-1.5 shrink-0" onClick={openNew}>
-            <Plus size={14} /> 新建影片
-          </Button>
-        </div>
+        <Button type="button" className="h-9 bg-teal-600 hover:bg-teal-700 text-white text-[12px] gap-1.5 shrink-0" onClick={openNew}>
+          <Plus size={14} /> 新建影片
+        </Button>
       </div>
 
       <div className="flex-1 min-h-0 flex flex-col xl:flex-row gap-3">
-        {/* 左側窄列表：唯一可滾動區域 */}
-        <div className="w-full xl:w-[320px] xl:shrink-0 flex flex-col min-h-0 max-h-[40vh] xl:max-h-none">
-          <p className="text-[12px] text-muted-foreground shrink-0 mb-2">
+        {/* 左側：篩選與列表同寬，列表右緣與年份下拉右緣對齊 */}
+        <div className="w-full xl:w-[380px] xl:shrink-0 flex flex-col min-h-0 max-h-[40vh] xl:max-h-none gap-2">
+          <div className="flex items-center gap-2 shrink-0 w-full">
+            <Select value={vchannelFilter} onValueChange={setVchannelFilter}>
+              <SelectTrigger className="h-9 w-[120px] text-[12px] shrink-0">
+                <SelectValue placeholder="Vchannel" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部 Vchannel</SelectItem>
+                {channels.map(ch => (
+                  <SelectItem key={ch.id} value={ch.id}>{ch.channelCode} — {ch.publicName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="relative flex-1 min-w-0">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="搜尋主題或 Code…"
+                className="h-9 pl-8 text-[12px]"
+              />
+            </div>
+            <Select value={String(yearFilter)} onValueChange={value => setYearFilter(Number(value))}>
+              <SelectTrigger className="h-9 w-[88px] text-[12px] shrink-0">
+                <SelectValue placeholder="年份" />
+              </SelectTrigger>
+              <SelectContent>
+                {yearOptions.map(year => (
+                  <SelectItem key={year} value={String(year)}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-[12px] text-muted-foreground shrink-0">
             未審核前 {filteredVideos.length} 部（準備中 + 製作中）
           </p>
           <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-0.5">
