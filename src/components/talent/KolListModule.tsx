@@ -367,94 +367,93 @@ function KolCard({ row, onClick }: { row: KolProfile; onClick: () => void }) {
       onClick={onClick}
       className="group text-left rounded-xl border border-[rgba(13,26,45,0.08)] bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow w-full"
     >
-      {/* 照片置頂滿寬，避免右側留白 */}
-      <div className="relative aspect-[4/3] bg-slate-100">
-        {showPhoto ? (
-          <img
-            src={row.photo_url!}
-            alt={row.name || 'KOL'}
-            className="absolute inset-0 w-full h-full object-cover"
-            loading="lazy"
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-slate-400">
-            <Camera size={22} strokeWidth={1.5} />
-            <span className="text-[11px]">未有相片</span>
-          </div>
-        )}
-        <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-[#f4a261] text-white text-[10px] font-medium shadow-sm">
-          {tag}
-        </span>
-      </div>
-
-      <div className="p-2.5 space-y-1.5 text-[11px]">
-        <div className="space-y-0.5 min-w-0">
+      {/* 左圖 + 右基礎信息（緊湊，避免右側大片留白） */}
+      <div className="flex gap-2 p-2">
+        <div className="relative w-[72px] sm:w-[84px] shrink-0 aspect-square rounded-md overflow-hidden bg-slate-100">
+          {showPhoto ? (
+            <img
+              src={row.photo_url!}
+              alt={row.name || 'KOL'}
+              className="absolute inset-0 w-full h-full object-cover"
+              loading="lazy"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 text-slate-400">
+              <Camera size={18} strokeWidth={1.5} />
+              <span className="text-[9px]">未有相片</span>
+            </div>
+          )}
+          <span className="absolute top-1 left-1 px-1 py-0.5 rounded bg-[#f4a261] text-white text-[9px] font-medium leading-none">
+            {tag}
+          </span>
+        </div>
+        <div className="min-w-0 flex-1 space-y-0.5 py-0.5">
+          <p className="text-[10px] font-medium text-slate-400 leading-none">基礎信息</p>
           <p className="text-[13px] font-semibold text-slate-900 truncate leading-tight">
             {row.name || '（未填姓名）'}
           </p>
-          <p className="text-slate-600 truncate">
+          <p className="text-[11px] text-slate-600 truncate">
             {genderLabel(row.salutation)}
             <span className="text-slate-300 mx-1">·</span>
             {row.age_group || '—'}
-            <span className="text-slate-300 mx-1">·</span>
-            {row.phone || '—'}
           </p>
+          <p className="text-[11px] text-slate-600 truncate">電話 {row.phone || '—'}</p>
+        </div>
+      </div>
+
+      <div className="px-2 pb-2 space-y-1 border-t border-slate-100 pt-1.5 text-[11px]">
+        <div className="flex items-center gap-1 min-w-0">
+          {ig ? (
+            <a
+              href={igUrl(row.instagram_account!)}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-0.5 text-teal-600 hover:underline min-w-0"
+            >
+              <Instagram size={11} className="shrink-0" />
+              <span className="truncate">{ig}</span>
+            </a>
+          ) : (
+            <span className="text-slate-400 inline-flex items-center gap-0.5">
+              <Instagram size={11} />
+              無 IG
+            </span>
+          )}
+          <span className="text-slate-400 shrink-0">·</span>
+          <span className="text-slate-600 truncate shrink-0">{formatCount(row.instagram_followers)}</span>
         </div>
 
-        <div className="space-y-1 border-t border-slate-100 pt-1.5">
-          <div className="flex items-center gap-1 min-w-0">
-            {ig ? (
-              <a
-                href={igUrl(row.instagram_account!)}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-0.5 text-teal-600 hover:underline shrink-0"
-              >
-                <Instagram size={11} />
-                <span className="truncate max-w-[6.5rem]">{ig}</span>
-              </a>
-            ) : (
-              <span className="text-slate-400 inline-flex items-center gap-0.5">
-                <Instagram size={11} />
-                無 IG
-              </span>
-            )}
-            <span className="text-slate-400">·</span>
-            <span className="text-slate-600 truncate">{formatCount(row.instagram_followers)}</span>
-          </div>
+        <p className="text-slate-600 leading-snug line-clamp-2">
+          <span className="text-slate-400">試食</span> {row.tasting_experience || '—'}
+          <span className="text-slate-300 mx-1">|</span>
+          <span className="text-slate-400">OR</span> {row.openrice_level || '—'}
+        </p>
 
-          <p className="text-slate-600 leading-snug line-clamp-2">
-            {row.tasting_experience || '—'}
-            <span className="text-slate-300 mx-1">|</span>
-            {row.openrice_level || '—'}
-          </p>
-
-          <div className="flex items-center gap-1 min-w-0">
-            {fb ? (
-              <a
-                href={fb}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-0.5 text-[#1877F2] hover:underline shrink-0"
-              >
-                <Facebook size={11} />
-                FB
-              </a>
-            ) : (
-              <span className="text-slate-400 inline-flex items-center gap-0.5">
-                <Facebook size={11} />
-                無 FB
-              </span>
-            )}
-            <span className="text-slate-400">·</span>
-            <span className="text-slate-600 truncate">{formatCount(row.facebook_likes)}</span>
-          </div>
-
-          <p className="text-slate-500">{formatEntryDate(row)}</p>
+        <div className="flex items-center gap-1 min-w-0">
+          {fb ? (
+            <a
+              href={fb}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-0.5 text-[#1877F2] hover:underline shrink-0"
+            >
+              <Facebook size={11} />
+              FB
+            </a>
+          ) : (
+            <span className="text-slate-400 inline-flex items-center gap-0.5">
+              <Facebook size={11} />
+              無 FB
+            </span>
+          )}
+          <span className="text-slate-400">·</span>
+          <span className="text-slate-600 truncate">{formatCount(row.facebook_likes)}</span>
         </div>
+
+        <p className="text-slate-500">收錄 {formatEntryDate(row)}</p>
       </div>
     </button>
   );
