@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Search, Plus, Star, Link2, Copy, Check, X, Calendar,
   Tag, Users, Camera, FileText, Loader2, ExternalLink, Pencil,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -16,13 +17,40 @@ import {
   updatePendingReportHours,
 } from '@/services/reportLinkService';
 import { VolunteerRecruitmentModule } from '@/components/marketing/VolunteerRecruitmentModule';
-import { KolListModule } from '@/components/talent/KolListModule';
+import { KolListModule, type KolProfile } from '@/components/talent/KolListModule';
 
 // =====================================================================
 // Types
 // =====================================================================
 type Region = 'HK' | 'SZ' | 'OTHER';
 type CooperationStage = 'stage1' | 'stage2' | 'stage3' | 'stage4' | 'stage5';
+
+const TALENT_LIST_PAGE_SIZE = 20;
+
+const hasModelExperience = (value: string | null | undefined): boolean =>
+  !!value && /^有/.test(value.trim());
+
+const kolSalutationToGender = (salutation: string | null | undefined): string | undefined => {
+  const s = (salutation || '').trim();
+  if (!s) return undefined;
+  if (/小姐|女士|Ms|Miss|Mrs/i.test(s)) return '女';
+  if (/先生|Mr/i.test(s)) return '男';
+  return s;
+};
+
+const kolResidenceToRegion = (area: string | null | undefined): Region => {
+  if (!area) return 'HK';
+  if (/深圳|SZ/i.test(area)) return 'SZ';
+  return 'HK';
+};
+
+const parseKolAge = (ageGroup: string | null | undefined): number | undefined => {
+  if (!ageGroup?.trim()) return undefined;
+  const n = Number(ageGroup);
+  if (!Number.isNaN(n) && n > 0) return n;
+  const m = ageGroup.match(/(\d+)/);
+  return m ? Number(m[1]) : undefined;
+};
 
 const TALENT_CATEGORIES = [
   { id: 'photo_model', label: '平面拍攝模特兒' },
@@ -832,16 +860,60 @@ const confirmedRowToTalent = (c: ConfirmedArtistRow): Talent & { _confirmed: tru
   inviteToken: c.invite_token || undefined,
 });
 
+/** KOL with Model experience → artist row (always stage3). */
+const kolRowToTalent = (k: KolProfile): Talent & { _kol: true } => ({
+  id: `kol_${k.id}`,
+  name: k.name?.trim() || '（未填姓名）',
+  stageName: undefined,
+  age: parseKolAge(k.age_group),
+  gender: kolSalutationToGender(k.salutation),
+  height: undefined,
+  instagramAccount: k.instagram_account?.trim() || undefined,
+  measurements: undefined,
+  region: kolResidenceToRegion(k.residence_area),
+  categories: ['photo_model'],
+  hasLiveExperience: false,
+  aspirations: k.model_experience || undefined,
+  cooperationStage: 'stage3',
+  recentVideoCount: 0,
+  hasInterviewed: false,
+  galleryUrls: [],
+  collaborations: [],
+  photoUrl: k.photo_url?.trim() || k.work_photo_url?.trim() || undefined,
+  _kol: true,
+});
+
+async function fetchModelExperienceKols(): Promise<KolProfile[]> {
+  const pageSize = 1000;
+  const all: KolProfile[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from('kol_profile')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const chunk = (data as KolProfile[]) || [];
+    all.push(...chunk);
+    if (chunk.length < pageSize) break;
+  }
+  return all.filter((k) => hasModelExperience(k.model_experience));
+}
+
 function TalentList() {
   const { talents, add, update, remove } = useTalents();
   const [confirmed, setConfirmed] = useState<ConfirmedArtistRow[]>([]);
   const [confirmedLoading, setConfirmedLoading] = useState(true);
   const [confirmedError, setConfirmedError] = useState<string | null>(null);
+  const [kolModel, setKolModel] = useState<KolProfile[]>([]);
+  const [kolLoading, setKolLoading] = useState(true);
+  const [kolError, setKolError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [regionFilter, setRegionFilter] = useState<'all' | Region>('all');
   const [skillFilters, setSkillFilters] = useState<Set<TalentCategoryId>>(new Set());
   const [statusFilter, setStatusFilter] = useState<'all' | CooperationStage>('all');
   const [liveOnly, setLiveOnly] = useState(false);
+  const [page, setPage] = useState(1);
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<Talent | null>(null);
   // Multi-select for the 不錄用 (bulk-reject) action. Keys are display-row ids
@@ -888,6 +960,17 @@ function TalentList() {
           return;
         }
         setConfirmed(prev => prev.map(c => c.id === supabaseId ? { ...c, photo_url: dataUrl } : c));
+      } else if (rowId.startsWith('kol_')) {
+        const kolId = rowId.slice(4);
+        const { error } = await supabase
+          .from('kol_profile')
+          .update({ photo_url: dataUrl })
+          .eq('id', kolId);
+        if (error) {
+          setPhotoUploadError(`更新失敗：${error.message}`);
+          return;
+        }
+        setKolModel(prev => prev.map(k => k.id === kolId ? { ...k, photo_url: dataUrl } : k));
       } else {
         update(rowId, { photoUrl: dataUrl });
       }
@@ -951,6 +1034,28 @@ function TalentList() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      setKolLoading(true);
+      try {
+        const data = await fetchModelExperienceKols();
+        if (cancelled) return;
+        setKolModel(data);
+        setKolError(null);
+      } catch (err) {
+        if (cancelled) return;
+        setKolError(err instanceof Error ? err.message : '無法載入 KOL');
+        setKolModel([]);
+      } finally {
+        if (!cancelled) setKolLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
       const { data, error } = await supabase
         .from('artist_apply')
         .select('id, invite_token, raw_payload, submitted_at')
@@ -978,19 +1083,52 @@ function TalentList() {
     });
   };
 
-  const merged: (Talent & { _confirmed?: true })[] = [
-    ...confirmed.map(confirmedRowToTalent),
-    ...talents,
-  ];
+  const merged: (Talent & { _confirmed?: true; _kol?: true })[] = useMemo(() => {
+    const confirmedTalents = confirmed.map(confirmedRowToTalent);
+    const existingPhones = new Set(
+      [
+        ...confirmed.map(c => c.phone?.trim()).filter(Boolean) as string[],
+        ...talents.map(t => (t as Talent & { phone?: string }).phone?.trim()).filter(Boolean) as string[],
+      ],
+    );
+    const importedKolIds = new Set(
+      confirmed
+        .map(c => c.payload?.kol_profile_id)
+        .filter((id): id is string => typeof id === 'string' && !!id),
+    );
+    const kolTalents = kolModel
+      .filter(k => {
+        if (importedKolIds.has(k.id)) return false;
+        const phone = k.phone?.trim();
+        if (phone && existingPhones.has(phone)) return false;
+        return true;
+      })
+      .map(kolRowToTalent);
 
-  const filtered = merged.filter(t => {
+    return [...confirmedTalents, ...kolTalents, ...talents];
+  }, [confirmed, kolModel, talents]);
+
+  const filtered = useMemo(() => merged.filter(t => {
     if (search && !`${t.name} ${t.stageName || ''}`.toLowerCase().includes(search.toLowerCase())) return false;
     if (regionFilter !== 'all' && t.region !== regionFilter) return false;
     if (skillFilters.size > 0 && !t.categories.some(c => skillFilters.has(c))) return false;
     if (statusFilter !== 'all' && t.cooperationStage !== statusFilter) return false;
     if (liveOnly && !t.hasLiveExperience) return false;
     return true;
-  });
+  }), [merged, search, regionFilter, skillFilters, statusFilter, liveOnly]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / TALENT_LIST_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = useMemo(() => {
+    const start = (safePage - 1) * TALENT_LIST_PAGE_SIZE;
+    return filtered.slice(start, start + TALENT_LIST_PAGE_SIZE);
+  }, [filtered, safePage]);
+  const pageFrom = filtered.length === 0 ? 0 : (safePage - 1) * TALENT_LIST_PAGE_SIZE + 1;
+  const pageTo = Math.min(safePage * TALENT_LIST_PAGE_SIZE, filtered.length);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, regionFilter, skillFilters, statusFilter, liveOnly]);
 
   // Drop selections that are no longer visible (e.g. filter changes hid them).
   useEffect(() => {
@@ -1022,7 +1160,8 @@ function TalentList() {
     try {
       const targets = filtered.filter(t => selected.has(t.id));
       const confirmedTargets = targets.filter(t => (t as any)._confirmed);
-      const localTargets = targets.filter(t => !(t as any)._confirmed);
+      const kolTargets = targets.filter(t => (t as any)._kol);
+      const localTargets = targets.filter(t => !(t as any)._confirmed && !(t as any)._kol);
 
       // 1) Insert a snapshot into rejected_artist for the confirmed_artist rows
       //    so audit history survives even after we delete the original record.
@@ -1062,7 +1201,13 @@ function TalentList() {
       //    they were never persisted, so there's no row to mirror in supabase.
       localTargets.forEach(t => remove(t.id));
 
-      // 3) Refresh list from supabase so the UI reflects the deletion.
+      // 3) KOL-sourced rows: hide from artist list only (keep kol_profile intact).
+      if (kolTargets.length > 0) {
+        const hideIds = new Set(kolTargets.map(t => t.id.replace(/^kol_/, '')));
+        setKolModel(prev => prev.filter(k => !hideIds.has(k.id)));
+      }
+
+      // 4) Refresh list from supabase so the UI reflects the deletion.
       setConfirmed(prev =>
         prev.filter(c => !confirmedTargets.some(t => t.id === `ca_${c.id}`))
       );
@@ -1088,6 +1233,37 @@ function TalentList() {
         setConfirmed(prev => prev.map(c =>
           c.id === supabaseId ? { ...c, cooperation_stage: stage } : c,
         ));
+      } else if (talent.id.startsWith('kol_')) {
+        // Promote KOL overlay into confirmed_artist so stage changes persist.
+        const kolId = talent.id.slice(4);
+        const kol = kolModel.find(k => k.id === kolId);
+        if (!kol) throw new Error('找不到對應 KOL 資料');
+        const { data, error } = await supabase
+          .from('confirmed_artist')
+          .insert({
+            name_zh: kol.name,
+            gender: kolSalutationToGender(kol.salutation) ?? null,
+            age: kol.age_group,
+            phone: kol.phone,
+            region: kolResidenceToRegion(kol.residence_area),
+            photo_url: kol.photo_url || kol.work_photo_url || null,
+            categories: ['photo_model'],
+            payload: {
+              source: 'kol_profile',
+              kol_profile_id: kol.id,
+              instagramAccount: kol.instagram_account,
+              model_experience: kol.model_experience,
+              email: kol.email,
+              residence_area: kol.residence_area,
+            },
+            source: 'direct',
+            cooperation_stage: stage,
+          })
+          .select('*')
+          .single();
+        if (error) throw error;
+        setConfirmed(prev => [data as ConfirmedArtistRow, ...prev]);
+        setKolModel(prev => prev.filter(k => k.id !== kolId));
       } else {
         update(talent.id, { cooperationStage: stage });
       }
@@ -1175,8 +1351,10 @@ function TalentList() {
         </div>
         <div className="text-[12px] text-muted-foreground">
           顯示 {filtered.length} 位藝人
-          {confirmedLoading && '（讀取中…）'}
+          {filtered.length > 0 && `（第 ${pageFrom}–${pageTo} 筆）`}
+          {(confirmedLoading || kolLoading) && '（讀取中…）'}
           {confirmedError && <span className="text-rose-600 ml-2">已取錄載入失敗：{confirmedError}</span>}
+          {kolError && <span className="text-rose-600 ml-2">KOL 載入失敗：{kolError}</span>}
           {photoUploadError && <span className="text-rose-600 ml-2">{photoUploadError}</span>}
         </div>
       </div>
@@ -1184,6 +1362,7 @@ function TalentList() {
       {filtered.length === 0 ? (
         <EmptyState icon={Users} title="暫無藝人資料" hint="點擊右上「新增藝人」直接加入，或前往「新增藝人」頁面產生自助填表連結。" />
       ) : (
+        <>
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] overflow-hidden">
           <table className="w-full">
             <thead>
@@ -1198,7 +1377,7 @@ function TalentList() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(t => (
+              {pageRows.map(t => (
                 <tr key={t.id} className="border-b border-border last:border-b-0 hover:bg-muted/30">
                   <td className="px-3 py-3 align-middle">
                     <input
@@ -1334,6 +1513,62 @@ function TalentList() {
             </tbody>
           </table>
         </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <p className="text-[12px] text-muted-foreground">
+            每頁 {TALENT_LIST_PAGE_SIZE} 筆 · 第 {safePage} / {totalPages} 頁
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={safePage <= 1}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md border border-border text-[12px] font-medium hover:bg-muted disabled:opacity-40 disabled:pointer-events-none"
+            >
+              <ChevronLeft size={14} />
+              上一頁
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => p === 1 || p === totalPages || Math.abs(p - safePage) <= 2)
+              .reduce<(number | '…')[]>((acc, p, idx, arr) => {
+                if (idx > 0) {
+                  const prev = arr[idx - 1];
+                  if (typeof prev === 'number' && p - prev > 1) acc.push('…');
+                }
+                acc.push(p);
+                return acc;
+              }, [])
+              .map((p, idx) =>
+                p === '…' ? (
+                  <span key={`e-${idx}`} className="px-1 text-muted-foreground text-[12px]">…</span>
+                ) : (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPage(p)}
+                    className={cn(
+                      'h-8 w-8 rounded-md border text-[12px] font-medium',
+                      p === safePage
+                        ? 'bg-teal-600 text-white border-teal-600'
+                        : 'border-border hover:bg-muted',
+                    )}
+                  >
+                    {p}
+                  </button>
+                ),
+              )}
+            <button
+              type="button"
+              disabled={safePage >= totalPages}
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md border border-border text-[12px] font-medium hover:bg-muted disabled:opacity-40 disabled:pointer-events-none"
+            >
+              下一頁
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+        </>
       )}
 
       {/* Add modal */}
