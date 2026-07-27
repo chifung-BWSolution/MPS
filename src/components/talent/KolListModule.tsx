@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Camera,
+  ChevronLeft,
+  ChevronRight,
+  Facebook,
   Instagram,
   Loader2,
   Plus,
   Search,
-  SlidersHorizontal,
   Upload,
   UserRound,
   X,
@@ -93,6 +95,8 @@ interface AdvancedFilters {
   cooperationIntent: string;
 }
 
+const PAGE_SIZE = 100;
+
 const emptyFilters = (): AdvancedFilters => ({
   ageGroup: '',
   birthMonth: '',
@@ -132,6 +136,7 @@ type FormState = {
   cooperation_intent: string;
   photo_url: string;
   facebook_url: string;
+  facebook_likes: string;
   xiaohongshu_url: string;
   youtube_url: string;
   openrice_url: string;
@@ -160,6 +165,7 @@ const emptyForm = (): FormState => ({
   cooperation_intent: '',
   photo_url: '',
   facebook_url: '',
+  facebook_likes: '',
   xiaohongshu_url: '',
   youtube_url: '',
   openrice_url: '',
@@ -170,7 +176,7 @@ const emptyForm = (): FormState => ({
 // Helpers
 // =====================================================================
 
-function themeLabel(row: KolProfile): string {
+function themeLabel(row: Pick<KolProfile, 'blog_themes' | 'raw_payload'>): string {
   const fromPayload = row.raw_payload?.themeLabel;
   if (typeof fromPayload === 'string' && fromPayload.trim()) return fromPayload.trim();
   const themes = row.blog_themes || [];
@@ -180,6 +186,14 @@ function themeLabel(row: KolProfile): string {
   if (/旅行|travel/i.test(first)) return '旅行';
   if (/生活|life/i.test(first)) return '生活';
   return first.split(/\s+/)[0].slice(0, 8) || '未分類';
+}
+
+function genderLabel(salutation: string | null | undefined): string {
+  const s = (salutation || '').trim();
+  if (!s) return '—';
+  if (/小姐|女士|Ms|Miss|Mrs/i.test(s)) return '女';
+  if (/先生|Mr/i.test(s)) return '男';
+  return s;
 }
 
 function formatIg(account: string | null | undefined): string | null {
@@ -192,6 +206,45 @@ function igUrl(account: string): string {
   return `https://instagram.com/${encodeURIComponent(account.replace(/^@/, '').trim())}`;
 }
 
+function facebookHref(url: string | null | undefined): string | null {
+  const s = (url || '').trim();
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s)) return s;
+  return `https://${s}`;
+}
+
+function formatCount(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return '—';
+  return n.toLocaleString('en-US');
+}
+
+/** Prefer source Excel date, fall back to DB created_at. */
+function entryDateRaw(row: KolProfile): string | null {
+  return row.source_created_at || row.created_at || null;
+}
+
+function entryDateSortKey(row: KolProfile): number {
+  const raw = entryDateRaw(row);
+  if (!raw) return 0;
+  const t = Date.parse(raw);
+  return Number.isNaN(t) ? 0 : t;
+}
+
+function formatEntryDate(row: KolProfile): string {
+  const raw = entryDateRaw(row);
+  if (!raw) return '—';
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) {
+    // keep Excel-style "Jul 04, 2026 ..." shortened
+    return raw.replace(/\s+\d{1,2}:\d{2}(:\d{2})?\s*(AM|PM)?$/i, '').trim() || raw;
+  }
+  return d.toLocaleDateString('zh-HK', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+}
+
 function uniqueSorted(values: (string | null | undefined)[]): string[] {
   const set = new Set<string>();
   for (const v of values) {
@@ -199,10 +252,6 @@ function uniqueSorted(values: (string | null | undefined)[]): string[] {
     if (s) set.add(s);
   }
   return [...set].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
-}
-
-function countActiveFilters(f: AdvancedFilters): number {
-  return Object.values(f).filter((v) => String(v).trim() !== '').length;
 }
 
 function rowToForm(row: KolProfile): FormState {
@@ -228,6 +277,7 @@ function rowToForm(row: KolProfile): FormState {
     cooperation_intent: row.cooperation_intent || '',
     photo_url: row.photo_url || '',
     facebook_url: row.facebook_url || '',
+    facebook_likes: row.facebook_likes != null ? String(row.facebook_likes) : '',
     xiaohongshu_url: row.xiaohongshu_url || '',
     youtube_url: row.youtube_url || '',
     openrice_url: row.openrice_url || '',
@@ -242,6 +292,9 @@ function formToPayload(form: FormState): Partial<KolProfile> {
     .filter(Boolean);
   const followers = form.instagram_followers.trim()
     ? parseInt(form.instagram_followers.replace(/,/g, ''), 10)
+    : null;
+  const fbLikes = form.facebook_likes.trim()
+    ? parseInt(form.facebook_likes.replace(/,/g, ''), 10)
     : null;
   return {
     name: form.name.trim() || null,
@@ -265,6 +318,7 @@ function formToPayload(form: FormState): Partial<KolProfile> {
     cooperation_intent: form.cooperation_intent.trim() || null,
     photo_url: form.photo_url.trim() || null,
     facebook_url: form.facebook_url.trim() || null,
+    facebook_likes: Number.isFinite(fbLikes as number) ? fbLikes : null,
     xiaohongshu_url: form.xiaohongshu_url.trim() || null,
     youtube_url: form.youtube_url.trim() || null,
     openrice_url: form.openrice_url.trim() || null,
@@ -273,19 +327,32 @@ function formToPayload(form: FormState): Partial<KolProfile> {
   };
 }
 
+async function fetchAllKolProfiles(): Promise<KolProfile[]> {
+  const pageSize = 1000;
+  const all: KolProfile[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const to = from + pageSize - 1;
+    const { data, error } = await supabase
+      .from('kol_profile')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+    const chunk = (data as KolProfile[]) || [];
+    all.push(...chunk);
+    if (chunk.length < pageSize) break;
+  }
+  return all;
+}
+
 // =====================================================================
 // Subcomponents
 // =====================================================================
 
-function KolCard({
-  row,
-  onClick,
-}: {
-  row: KolProfile;
-  onClick: () => void;
-}) {
+function KolCard({ row, onClick }: { row: KolProfile; onClick: () => void }) {
   const ig = formatIg(row.instagram_account);
   const tag = themeLabel(row);
+  const fb = facebookHref(row.facebook_url);
   const [imgError, setImgError] = useState(false);
   const showPhoto = Boolean(row.photo_url) && !imgError;
 
@@ -293,50 +360,100 @@ function KolCard({
     <button
       type="button"
       onClick={onClick}
-      className="group text-left rounded-xl border border-[rgba(13,26,45,0.08)] bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+      className="group text-left rounded-xl border border-[rgba(13,26,45,0.08)] bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow w-full"
     >
-      <div className="relative aspect-[3/4] bg-slate-100">
-        {showPhoto ? (
-          <img
-            src={row.photo_url!}
-            alt={row.name || 'KOL'}
-            className="absolute inset-0 w-full h-full object-cover"
-            loading="lazy"
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-400">
-            <Camera size={28} strokeWidth={1.5} />
-            <span className="text-[12px]">未有相片</span>
-          </div>
-        )}
-        <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-[#f4a261] text-white text-[11px] font-medium shadow-sm">
-          {tag}
-        </span>
-      </div>
-      <div className="p-3 space-y-1">
-        <div className="flex items-baseline gap-2 min-w-0">
-          <span className="text-[14px] font-semibold text-slate-900 truncate">
-            {row.name || '（未填姓名）'}
-          </span>
-          {row.age_group && (
-            <span className="text-[12px] text-slate-500 shrink-0">{row.age_group}</span>
+      <div className="flex gap-3 p-3">
+        <div className="relative w-[42%] shrink-0 aspect-square rounded-lg overflow-hidden bg-slate-100">
+          {showPhoto ? (
+            <img
+              src={row.photo_url!}
+              alt={row.name || 'KOL'}
+              className="absolute inset-0 w-full h-full object-cover"
+              loading="lazy"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-slate-400">
+              <Camera size={22} strokeWidth={1.5} />
+              <span className="text-[11px]">未有相片</span>
+            </div>
           )}
+          <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-[#f4a261] text-white text-[10px] font-medium shadow-sm">
+            {tag}
+          </span>
         </div>
-        {ig ? (
-          <a
-            href={igUrl(row.instagram_account!)}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1 text-[12px] text-teal-600 hover:underline"
-          >
-            <Instagram size={12} />
-            {ig}
-          </a>
-        ) : (
-          <span className="text-[12px] text-slate-400">無 IG</span>
-        )}
+        <div className="min-w-0 flex-1 space-y-1.5 py-0.5">
+          <p className="text-[11px] font-medium text-slate-400">基礎信息</p>
+          <p className="text-[14px] font-semibold text-slate-900 truncate leading-tight">
+            {row.name || '（未填姓名）'}
+          </p>
+          <p className="text-[12px] text-slate-600">
+            {genderLabel(row.salutation)}
+            <span className="text-slate-300 mx-1">·</span>
+            {row.age_group || '—'}
+          </p>
+          <p className="text-[12px] text-slate-600 truncate">
+            電話 {row.phone || '—'}
+          </p>
+        </div>
+      </div>
+
+      <div className="px-3 pb-3 space-y-1.5 border-t border-slate-100 pt-2.5 text-[12px]">
+        <div className="flex items-center gap-1.5 min-w-0">
+          {ig ? (
+            <a
+              href={igUrl(row.instagram_account!)}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 text-teal-600 hover:underline shrink-0"
+            >
+              <Instagram size={12} />
+              {ig}
+            </a>
+          ) : (
+            <span className="text-slate-400 inline-flex items-center gap-1">
+              <Instagram size={12} />
+              無 IG
+            </span>
+          )}
+          <span className="text-slate-400">·</span>
+          <span className="text-slate-600 truncate">粉絲 {formatCount(row.instagram_followers)}</span>
+        </div>
+
+        <p className="text-slate-600 leading-snug line-clamp-2">
+          <span className="text-slate-400">試食經驗</span>{' '}
+          {row.tasting_experience || '—'}
+          <span className="text-slate-300 mx-1">|</span>
+          <span className="text-slate-400">Openrice</span>{' '}
+          {row.openrice_level || '—'}
+        </p>
+
+        <div className="flex items-center gap-1.5 min-w-0">
+          {fb ? (
+            <a
+              href={fb}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 text-[#1877F2] hover:underline shrink-0"
+            >
+              <Facebook size={12} />
+              Facebook
+            </a>
+          ) : (
+            <span className="text-slate-400 inline-flex items-center gap-1">
+              <Facebook size={12} />
+              無 FB
+            </span>
+          )}
+          <span className="text-slate-400">·</span>
+          <span className="text-slate-600 truncate">讚好 {formatCount(row.facebook_likes)}</span>
+        </div>
+
+        <p className="text-slate-500">
+          收錄日期 {formatEntryDate(row)}
+        </p>
       </div>
     </button>
   );
@@ -375,18 +492,30 @@ function FilterSelect({
   );
 }
 
-function FormField({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+function FormField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-1">
       <Label className="text-[12px] text-slate-600">{label}</Label>
       {children}
     </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[110px_1fr] gap-2 text-[13px] py-1.5 border-b border-slate-50 last:border-0">
+      <dt className="text-slate-400 shrink-0">{label}</dt>
+      <dd className="text-slate-800 break-words min-w-0">{value || '—'}</dd>
+    </div>
+  );
+}
+
+function LinkValue({ href, children }: { href: string | null; children: ReactNode }) {
+  if (!href) return <span className="text-slate-400">—</span>;
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline break-all">
+      {children}
+    </a>
   );
 }
 
@@ -400,10 +529,12 @@ export function KolListModule() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<AdvancedFilters>(emptyFilters);
-  const [showFilters, setShowFilters] = useState(false);
   const [view, setView] = useState<ViewMode>('gallery');
-  const [editing, setEditing] = useState<KolProfile | null>(null);
+  const [page, setPage] = useState(1);
+
+  const [detail, setDetail] = useState<KolProfile | null>(null);
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [showImportHint, setShowImportHint] = useState(false);
@@ -411,17 +542,15 @@ export function KolListModule() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const { data, error: err } = await supabase
-      .from('kol_profile')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (err) {
-      setError(err.message);
+    try {
+      const data = await fetchAllKolProfiles();
+      setRows(data);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
       setRows([]);
-    } else {
-      setRows((data as KolProfile[]) || []);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -453,7 +582,7 @@ export function KolListModule() {
     const igMin = filters.igMin.trim() ? parseInt(filters.igMin, 10) : null;
     const igMax = filters.igMax.trim() ? parseInt(filters.igMax, 10) : null;
 
-    return rows.filter((r) => {
+    const list = rows.filter((r) => {
       if (q) {
         const hay = [r.name, r.instagram_account, r.phone, r.email]
           .map((x) => (x || '').toLowerCase())
@@ -481,12 +610,8 @@ export function KolListModule() {
         const s = (r.specialty || '').toLowerCase();
         if (!s.includes(filters.specialty.trim().toLowerCase())) return false;
       }
-      if (igMin != null && !Number.isNaN(igMin)) {
-        if ((r.instagram_followers ?? 0) < igMin) return false;
-      }
-      if (igMax != null && !Number.isNaN(igMax)) {
-        if ((r.instagram_followers ?? 0) > igMax) return false;
-      }
+      if (igMin != null && !Number.isNaN(igMin) && (r.instagram_followers ?? 0) < igMin) return false;
+      if (igMax != null && !Number.isNaN(igMax) && (r.instagram_followers ?? 0) > igMax) return false;
       if (filters.openriceLevel && r.openrice_level !== filters.openriceLevel) return false;
       if (filters.publishPlatforms) {
         const p = (r.publish_platforms || '').toLowerCase();
@@ -502,26 +627,51 @@ export function KolListModule() {
       }
       return true;
     });
+
+    return list.sort((a, b) => entryDateSortKey(b) - entryDateSortKey(a));
   }, [rows, search, filters]);
 
-  const activeFilterCount = countActiveFilters(filters);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, filters]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const pageRows = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, safePage]);
 
   const openCreate = () => {
     setCreating(true);
-    setEditing(null);
+    setEditing(true);
+    setDetail(null);
     setForm(emptyForm());
   };
 
-  const openEdit = (row: KolProfile) => {
-    setEditing(row);
+  const openDetail = (row: KolProfile) => {
+    setDetail(row);
     setCreating(false);
+    setEditing(false);
     setForm(rowToForm(row));
   };
 
-  const closeEditor = () => {
-    setEditing(null);
+  const closeDrawer = () => {
+    setDetail(null);
     setCreating(false);
+    setEditing(false);
     setForm(emptyForm());
+  };
+
+  const startEditFromDetail = () => {
+    if (!detail) return;
+    setForm(rowToForm(detail));
+    setEditing(true);
   };
 
   const handleSave = async () => {
@@ -533,21 +683,36 @@ export function KolListModule() {
     setSaving(true);
     try {
       if (creating) {
-        const { error: err } = await supabase.from('kol_profile').insert({
-          ...payload,
-          raw_payload: { themeLabel: themeLabel({ blog_themes: payload.blog_themes || [], raw_payload: null } as KolProfile) },
-        });
+        const { data, error: err } = await supabase
+          .from('kol_profile')
+          .insert({
+            ...payload,
+            raw_payload: {
+              themeLabel: themeLabel({
+                blog_themes: payload.blog_themes || [],
+                raw_payload: null,
+              }),
+            },
+          })
+          .select('*')
+          .single();
         if (err) throw err;
         toast.success('已新增 KOL');
-      } else if (editing) {
-        const { error: err } = await supabase
+        setCreating(false);
+        setEditing(false);
+        setDetail(data as KolProfile);
+      } else if (detail) {
+        const { data, error: err } = await supabase
           .from('kol_profile')
           .update(payload)
-          .eq('id', editing.id);
+          .eq('id', detail.id)
+          .select('*')
+          .single();
         if (err) throw err;
         toast.success('已儲存');
+        setEditing(false);
+        setDetail(data as KolProfile);
       }
-      closeEditor();
       await load();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -561,7 +726,9 @@ export function KolListModule() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const editorOpen = creating || Boolean(editing);
+  const drawerOpen = Boolean(detail) || creating;
+  const pageFrom = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const pageTo = Math.min(safePage * PAGE_SIZE, filtered.length);
 
   return (
     <div className="space-y-0">
@@ -571,6 +738,12 @@ export function KolListModule() {
             <h1 className="text-[32px] font-bold tracking-tight">KOL列表</h1>
             <p className="text-[14px] text-muted-foreground mt-1">
               共 {rows.length} 位博客 · 符合條件 {filtered.length} 位
+              {filtered.length > 0 && (
+                <span className="text-slate-400">
+                  {' '}
+                  · 顯示 {pageFrom}–{pageTo}
+                </span>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -583,7 +756,11 @@ export function KolListModule() {
               <Upload size={16} />
               匯入
             </Button>
-            <Button type="button" className="h-10 bg-emerald-600 hover:bg-emerald-700" onClick={openCreate}>
+            <Button
+              type="button"
+              className="h-10 bg-emerald-600 hover:bg-emerald-700"
+              onClick={openCreate}
+            >
               <Plus size={16} />
               新增KOL
             </Button>
@@ -600,18 +777,6 @@ export function KolListModule() {
               className="pl-9 h-10 bg-white"
             />
           </div>
-          <Button
-            type="button"
-            variant={showFilters || activeFilterCount > 0 ? 'default' : 'outline'}
-            className={cn(
-              'h-10',
-              (showFilters || activeFilterCount > 0) && 'bg-teal-600 hover:bg-teal-700'
-            )}
-            onClick={() => setShowFilters((v) => !v)}
-          >
-            <SlidersHorizontal size={15} />
-            進階搜尋{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-          </Button>
           <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
             <button
               type="button"
@@ -636,130 +801,124 @@ export function KolListModule() {
           </div>
         </div>
 
-        {showFilters && (
-          <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              <FilterSelect
-                label="年齡層"
-                value={filters.ageGroup}
-                onChange={(v) => setFilters((f) => ({ ...f, ageGroup: v }))}
-                options={filterOptions.ageGroup}
+        {/* Always-visible filters (圖1 框住區域) */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <FilterSelect
+              label="年齡層"
+              value={filters.ageGroup}
+              onChange={(v) => setFilters((f) => ({ ...f, ageGroup: v }))}
+              options={filterOptions.ageGroup}
+            />
+            <FilterSelect
+              label="出生月份"
+              value={filters.birthMonth}
+              onChange={(v) => setFilters((f) => ({ ...f, birthMonth: v }))}
+              options={filterOptions.birthMonth}
+            />
+            <div className="space-y-1">
+              <Label className="text-[12px] text-slate-600">地區（居住/工作）</Label>
+              <Input
+                value={filters.area}
+                onChange={(e) => setFilters((f) => ({ ...f, area: e.target.value }))}
+                placeholder="如：油麻地、中環"
+                className="h-9 text-[13px]"
               />
-              <FilterSelect
-                label="出生月份"
-                value={filters.birthMonth}
-                onChange={(v) => setFilters((f) => ({ ...f, birthMonth: v }))}
-                options={filterOptions.birthMonth}
-              />
-              <div className="space-y-1">
-                <Label className="text-[12px] text-slate-600">地區（居住/工作）</Label>
-                <Input
-                  value={filters.area}
-                  onChange={(e) => setFilters((f) => ({ ...f, area: e.target.value }))}
-                  placeholder="如：油麻地、中環"
-                  className="h-9 text-[13px]"
-                />
-              </div>
-              <FilterSelect
-                label="主題範疇"
-                value={filters.theme}
-                onChange={(v) => setFilters((f) => ({ ...f, theme: v }))}
-                options={filterOptions.theme}
-                allLabel="全部範疇"
-              />
-              <div className="space-y-1">
-                <Label className="text-[12px] text-slate-600">IG 粉絲下限</Label>
-                <Input
-                  value={filters.igMin}
-                  onChange={(e) => setFilters((f) => ({ ...f, igMin: e.target.value }))}
-                  placeholder="如：1000"
-                  className="h-9 text-[13px]"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[12px] text-slate-600">IG 粉絲上限</Label>
-                <Input
-                  value={filters.igMax}
-                  onChange={(e) => setFilters((f) => ({ ...f, igMax: e.target.value }))}
-                  placeholder="如：50000"
-                  className="h-9 text-[13px]"
-                />
-              </div>
-              <FilterSelect
-                label="Openrice 評級"
-                value={filters.openriceLevel}
-                onChange={(v) => setFilters((f) => ({ ...f, openriceLevel: v }))}
-                options={filterOptions.openriceLevel}
-                allLabel="不限"
-              />
-              <div className="space-y-1">
-                <Label className="text-[12px] text-slate-600">發佈平台</Label>
-                <Input
-                  value={filters.publishPlatforms}
-                  onChange={(e) => setFilters((f) => ({ ...f, publishPlatforms: e.target.value }))}
-                  placeholder="如：Openrice、Instagram"
-                  className="h-9 text-[13px]"
-                />
-              </div>
-              <FilterSelect
-                label="試食頻率"
-                value={filters.tastingFrequency}
-                onChange={(v) => setFilters((f) => ({ ...f, tastingFrequency: v }))}
-                options={filterOptions.tastingFrequency}
-                allLabel="不限"
-              />
-              <FilterSelect
-                label="試食經驗"
-                value={filters.tastingExperience}
-                onChange={(v) => setFilters((f) => ({ ...f, tastingExperience: v }))}
-                options={filterOptions.tastingExperience}
-                allLabel="不限"
-              />
-              <FilterSelect
-                label="Model經驗"
-                value={filters.modelExperience}
-                onChange={(v) => setFilters((f) => ({ ...f, modelExperience: v }))}
-                options={filterOptions.modelExperience}
-                allLabel="不限"
-              />
-              <FilterSelect
-                label="Wine Club"
-                value={filters.wineClub}
-                onChange={(v) => setFilters((f) => ({ ...f, wineClub: v }))}
-                options={filterOptions.wineClub}
-                allLabel="不限"
-              />
-              <div className="space-y-1">
-                <Label className="text-[12px] text-slate-600">專長 / 主題分類</Label>
-                <Input
-                  value={filters.specialty}
-                  onChange={(e) => setFilters((f) => ({ ...f, specialty: e.target.value }))}
-                  placeholder="關鍵字"
-                  className="h-9 text-[13px]"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[12px] text-slate-600">合作意向</Label>
-                <Input
-                  value={filters.cooperationIntent}
-                  onChange={(e) => setFilters((f) => ({ ...f, cooperationIntent: e.target.value }))}
-                  placeholder="關鍵字"
-                  className="h-9 text-[13px]"
-                />
-              </div>
             </div>
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setFilters(emptyFilters())}
-              >
-                清除篩選
-              </Button>
+            <FilterSelect
+              label="主題範疇"
+              value={filters.theme}
+              onChange={(v) => setFilters((f) => ({ ...f, theme: v }))}
+              options={filterOptions.theme}
+              allLabel="全部範疇"
+            />
+            <div className="space-y-1">
+              <Label className="text-[12px] text-slate-600">IG 粉絲下限</Label>
+              <Input
+                value={filters.igMin}
+                onChange={(e) => setFilters((f) => ({ ...f, igMin: e.target.value }))}
+                placeholder="如：1000"
+                className="h-9 text-[13px]"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[12px] text-slate-600">IG 粉絲上限</Label>
+              <Input
+                value={filters.igMax}
+                onChange={(e) => setFilters((f) => ({ ...f, igMax: e.target.value }))}
+                placeholder="如：50000"
+                className="h-9 text-[13px]"
+              />
+            </div>
+            <FilterSelect
+              label="Openrice 評級"
+              value={filters.openriceLevel}
+              onChange={(v) => setFilters((f) => ({ ...f, openriceLevel: v }))}
+              options={filterOptions.openriceLevel}
+              allLabel="不限"
+            />
+            <div className="space-y-1">
+              <Label className="text-[12px] text-slate-600">發佈平台</Label>
+              <Input
+                value={filters.publishPlatforms}
+                onChange={(e) => setFilters((f) => ({ ...f, publishPlatforms: e.target.value }))}
+                placeholder="如：Openrice、Instagram"
+                className="h-9 text-[13px]"
+              />
+            </div>
+            <FilterSelect
+              label="試食頻率"
+              value={filters.tastingFrequency}
+              onChange={(v) => setFilters((f) => ({ ...f, tastingFrequency: v }))}
+              options={filterOptions.tastingFrequency}
+              allLabel="不限"
+            />
+            <FilterSelect
+              label="試食經驗"
+              value={filters.tastingExperience}
+              onChange={(v) => setFilters((f) => ({ ...f, tastingExperience: v }))}
+              options={filterOptions.tastingExperience}
+              allLabel="不限"
+            />
+            <FilterSelect
+              label="Model經驗"
+              value={filters.modelExperience}
+              onChange={(v) => setFilters((f) => ({ ...f, modelExperience: v }))}
+              options={filterOptions.modelExperience}
+              allLabel="不限"
+            />
+            <FilterSelect
+              label="Wine Club"
+              value={filters.wineClub}
+              onChange={(v) => setFilters((f) => ({ ...f, wineClub: v }))}
+              options={filterOptions.wineClub}
+              allLabel="不限"
+            />
+            <div className="space-y-1">
+              <Label className="text-[12px] text-slate-600">專長 / 主題分類</Label>
+              <Input
+                value={filters.specialty}
+                onChange={(e) => setFilters((f) => ({ ...f, specialty: e.target.value }))}
+                placeholder="關鍵字"
+                className="h-9 text-[13px]"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[12px] text-slate-600">合作意向</Label>
+              <Input
+                value={filters.cooperationIntent}
+                onChange={(e) => setFilters((f) => ({ ...f, cooperationIntent: e.target.value }))}
+                placeholder="關鍵字"
+                className="h-9 text-[13px]"
+              />
             </div>
           </div>
-        )}
+          <div className="flex justify-end">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setFilters(emptyFilters())}>
+              清除篩選
+            </Button>
+          </div>
+        </div>
       </div>
 
       {loading ? (
@@ -776,49 +935,110 @@ export function KolListModule() {
           <UserRound size={28} className="opacity-50" />
           <p className="text-[14px]">沒有符合條件的 KOL</p>
         </div>
-      ) : view === 'gallery' ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-          {filtered.map((row) => (
-            <KolCard key={row.id} row={row} onClick={() => openEdit(row)} />
-          ))}
-        </div>
       ) : (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-          <table className="w-full text-[13px]">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="text-left font-medium px-3 py-2">姓名</th>
-                <th className="text-left font-medium px-3 py-2">年齡層</th>
-                <th className="text-left font-medium px-3 py-2">IG</th>
-                <th className="text-left font-medium px-3 py-2">粉絲</th>
-                <th className="text-left font-medium px-3 py-2">地區</th>
-                <th className="text-left font-medium px-3 py-2">主題</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((row) => (
-                <tr
-                  key={row.id}
-                  className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
-                  onClick={() => openEdit(row)}
-                >
-                  <td className="px-3 py-2 font-medium">{row.name || '—'}</td>
-                  <td className="px-3 py-2 text-slate-600">{row.age_group || '—'}</td>
-                  <td className="px-3 py-2 text-teal-700">{formatIg(row.instagram_account) || '—'}</td>
-                  <td className="px-3 py-2 text-slate-600">
-                    {row.instagram_followers != null ? row.instagram_followers.toLocaleString() : '—'}
-                  </td>
-                  <td className="px-3 py-2 text-slate-600">{row.residence_area || '—'}</td>
-                  <td className="px-3 py-2">
-                    <span className="inline-flex px-2 py-0.5 rounded bg-orange-50 text-orange-700 text-[11px]">
-                      {themeLabel(row)}
-                    </span>
-                  </td>
-                </tr>
+        <>
+          {view === 'gallery' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {pageRows.map((row) => (
+                <KolCard key={row.id} row={row} onClick={() => openDetail(row)} />
               ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+              <table className="w-full text-[13px]">
+                <thead className="bg-slate-50 text-slate-600">
+                  <tr>
+                    <th className="text-left font-medium px-3 py-2">姓名</th>
+                    <th className="text-left font-medium px-3 py-2">性別</th>
+                    <th className="text-left font-medium px-3 py-2">年齡層</th>
+                    <th className="text-left font-medium px-3 py-2">電話</th>
+                    <th className="text-left font-medium px-3 py-2">IG</th>
+                    <th className="text-left font-medium px-3 py-2">粉絲</th>
+                    <th className="text-left font-medium px-3 py-2">Openrice</th>
+                    <th className="text-left font-medium px-3 py-2">收錄日期</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((row) => (
+                    <tr
+                      key={row.id}
+                      className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
+                      onClick={() => openDetail(row)}
+                    >
+                      <td className="px-3 py-2 font-medium">{row.name || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600">{genderLabel(row.salutation)}</td>
+                      <td className="px-3 py-2 text-slate-600">{row.age_group || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600">{row.phone || '—'}</td>
+                      <td className="px-3 py-2 text-teal-700">{formatIg(row.instagram_account) || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600">{formatCount(row.instagram_followers)}</td>
+                      <td className="px-3 py-2 text-slate-600">{row.openrice_level || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600">{formatEntryDate(row)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pb-2">
+            <p className="text-[12px] text-slate-500">
+              每頁 {PAGE_SIZE} 筆 · 第 {safePage} / {totalPages} 頁
+            </p>
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={safePage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft size={14} />
+                上一頁
+              </Button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === totalPages || Math.abs(p - safePage) <= 2)
+                .reduce<(number | '…')[]>((acc, p, idx, arr) => {
+                  if (idx > 0) {
+                    const prev = arr[idx - 1];
+                    if (typeof prev === 'number' && p - prev > 1) acc.push('…');
+                  }
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((p, idx) =>
+                  p === '…' ? (
+                    <span key={`e-${idx}`} className="px-1 text-slate-400 text-[12px]">
+                      …
+                    </span>
+                  ) : (
+                    <Button
+                      key={p}
+                      type="button"
+                      variant={p === safePage ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      onClick={() => setPage(p)}
+                    >
+                      {p}
+                    </Button>
+                  )
+                )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                下一頁
+                <ChevronRight size={14} />
+              </Button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Import hint */}
@@ -827,7 +1047,11 @@ export function KolListModule() {
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 space-y-3">
             <div className="flex items-start justify-between">
               <h2 className="text-[16px] font-semibold">匯入說明</h2>
-              <button type="button" onClick={() => setShowImportHint(false)} className="text-slate-400 hover:text-slate-700">
+              <button
+                type="button"
+                onClick={() => setShowImportHint(false)}
+                className="text-slate-400 hover:text-slate-700"
+              >
                 <X size={18} />
               </button>
             </div>
@@ -840,123 +1064,334 @@ export function KolListModule() {
 node scripts/push_kol_batches.mjs`}
             </pre>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => { setShowImportHint(false); void load(); }}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowImportHint(false);
+                  void load();
+                }}
+              >
                 重新載入
               </Button>
-              <Button type="button" onClick={() => setShowImportHint(false)}>知道了</Button>
+              <Button type="button" onClick={() => setShowImportHint(false)}>
+                知道了
+              </Button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Editor modal */}
-      {editorOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
-          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full max-w-2xl max-h-[92vh] flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b">
-              <h2 className="text-[16px] font-semibold">
-                {creating ? '新增KOL' : `編輯 · ${editing?.name || 'KOL'}`}
-              </h2>
-              <button type="button" onClick={closeEditor} className="text-slate-400 hover:text-slate-700">
+      {/* Right detail drawer */}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/35"
+            aria-label="關閉"
+            onClick={closeDrawer}
+          />
+          <aside className="relative w-full max-w-md sm:max-w-lg h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
+            <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
+              <div className="min-w-0">
+                <h2 className="text-[16px] font-semibold truncate">
+                  {creating ? '新增KOL' : detail?.name || 'KOL 詳情'}
+                </h2>
+                {!creating && detail && (
+                  <p className="text-[12px] text-slate-500 mt-0.5">
+                    {themeLabel(detail)} · 收錄 {formatEntryDate(detail)}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={closeDrawer}
+                className="text-slate-400 hover:text-slate-700 shrink-0"
+              >
                 <X size={18} />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <FormField label="姓名">
-                  <Input value={form.name} onChange={(e) => setFormField('name', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="稱謂">
-                  <Input value={form.salutation} onChange={(e) => setFormField('salutation', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="電郵">
-                  <Input value={form.email} onChange={(e) => setFormField('email', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="電話">
-                  <Input value={form.phone} onChange={(e) => setFormField('phone', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="年齡層">
-                  <Input value={form.age_group} onChange={(e) => setFormField('age_group', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="出生月份">
-                  <Input value={form.birth_month} onChange={(e) => setFormField('birth_month', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="居住地區">
-                  <Input value={form.residence_area} onChange={(e) => setFormField('residence_area', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="工作地區">
-                  <Input value={form.work_area} onChange={(e) => setFormField('work_area', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="Instagram">
-                  <Input value={form.instagram_account} onChange={(e) => setFormField('instagram_account', e.target.value)} className="h-9" placeholder="@handle" />
-                </FormField>
-                <FormField label="IG 粉絲數">
-                  <Input value={form.instagram_followers} onChange={(e) => setFormField('instagram_followers', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="Openrice 評級">
-                  <Input value={form.openrice_level} onChange={(e) => setFormField('openrice_level', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="試食頻率">
-                  <Input value={form.tasting_frequency} onChange={(e) => setFormField('tasting_frequency', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="試食經驗">
-                  <Input value={form.tasting_experience} onChange={(e) => setFormField('tasting_experience', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="Model 經驗">
-                  <Input value={form.model_experience} onChange={(e) => setFormField('model_experience', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="Wine Club">
-                  <Input value={form.wine_club} onChange={(e) => setFormField('wine_club', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="相片 URL">
-                  <Input value={form.photo_url} onChange={(e) => setFormField('photo_url', e.target.value)} className="h-9" />
-                </FormField>
-              </div>
-              <FormField label="Blog 主題（逗號分隔）">
-                <Input value={form.blog_themes} onChange={(e) => setFormField('blog_themes', e.target.value)} className="h-9" />
-              </FormField>
-              <FormField label="專長 / 主題分類">
-                <Input value={form.specialty} onChange={(e) => setFormField('specialty', e.target.value)} className="h-9" />
-              </FormField>
-              <FormField label="發佈平台">
-                <Input value={form.publish_platforms} onChange={(e) => setFormField('publish_platforms', e.target.value)} className="h-9" />
-              </FormField>
-              <FormField label="合作意向">
-                <Textarea
-                  value={form.cooperation_intent}
-                  onChange={(e) => setFormField('cooperation_intent', e.target.value)}
-                  rows={2}
-                  className="text-[13px]"
-                />
-              </FormField>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <FormField label="Facebook">
-                  <Input value={form.facebook_url} onChange={(e) => setFormField('facebook_url', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="小紅書">
-                  <Input value={form.xiaohongshu_url} onChange={(e) => setFormField('xiaohongshu_url', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="YouTube">
-                  <Input value={form.youtube_url} onChange={(e) => setFormField('youtube_url', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="Openrice 連結">
-                  <Input value={form.openrice_url} onChange={(e) => setFormField('openrice_url', e.target.value)} className="h-9" />
-                </FormField>
-                <FormField label="Blog">
-                  <Input value={form.blog_url} onChange={(e) => setFormField('blog_url', e.target.value)} className="h-9" />
-                </FormField>
-              </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {editing || creating ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <FormField label="姓名">
+                      <Input value={form.name} onChange={(e) => setFormField('name', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="稱謂">
+                      <Input value={form.salutation} onChange={(e) => setFormField('salutation', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="電郵">
+                      <Input value={form.email} onChange={(e) => setFormField('email', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="電話">
+                      <Input value={form.phone} onChange={(e) => setFormField('phone', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="年齡層">
+                      <Input value={form.age_group} onChange={(e) => setFormField('age_group', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="出生月份">
+                      <Input value={form.birth_month} onChange={(e) => setFormField('birth_month', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="居住地區">
+                      <Input value={form.residence_area} onChange={(e) => setFormField('residence_area', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="工作地區">
+                      <Input value={form.work_area} onChange={(e) => setFormField('work_area', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="Instagram">
+                      <Input value={form.instagram_account} onChange={(e) => setFormField('instagram_account', e.target.value)} className="h-9" placeholder="@handle" />
+                    </FormField>
+                    <FormField label="IG 粉絲數">
+                      <Input value={form.instagram_followers} onChange={(e) => setFormField('instagram_followers', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="Facebook">
+                      <Input value={form.facebook_url} onChange={(e) => setFormField('facebook_url', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="FB 讚好數">
+                      <Input value={form.facebook_likes} onChange={(e) => setFormField('facebook_likes', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="Openrice 評級">
+                      <Input value={form.openrice_level} onChange={(e) => setFormField('openrice_level', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="試食經驗">
+                      <Input value={form.tasting_experience} onChange={(e) => setFormField('tasting_experience', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="試食頻率">
+                      <Input value={form.tasting_frequency} onChange={(e) => setFormField('tasting_frequency', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="Model 經驗">
+                      <Input value={form.model_experience} onChange={(e) => setFormField('model_experience', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="Wine Club">
+                      <Input value={form.wine_club} onChange={(e) => setFormField('wine_club', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="相片 URL">
+                      <Input value={form.photo_url} onChange={(e) => setFormField('photo_url', e.target.value)} className="h-9" />
+                    </FormField>
+                  </div>
+                  <FormField label="Blog 主題（逗號分隔）">
+                    <Input value={form.blog_themes} onChange={(e) => setFormField('blog_themes', e.target.value)} className="h-9" />
+                  </FormField>
+                  <FormField label="專長 / 主題分類">
+                    <Input value={form.specialty} onChange={(e) => setFormField('specialty', e.target.value)} className="h-9" />
+                  </FormField>
+                  <FormField label="發佈平台">
+                    <Input value={form.publish_platforms} onChange={(e) => setFormField('publish_platforms', e.target.value)} className="h-9" />
+                  </FormField>
+                  <FormField label="合作意向">
+                    <Textarea
+                      value={form.cooperation_intent}
+                      onChange={(e) => setFormField('cooperation_intent', e.target.value)}
+                      rows={2}
+                      className="text-[13px]"
+                    />
+                  </FormField>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <FormField label="小紅書">
+                      <Input value={form.xiaohongshu_url} onChange={(e) => setFormField('xiaohongshu_url', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="YouTube">
+                      <Input value={form.youtube_url} onChange={(e) => setFormField('youtube_url', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="Openrice 連結">
+                      <Input value={form.openrice_url} onChange={(e) => setFormField('openrice_url', e.target.value)} className="h-9" />
+                    </FormField>
+                    <FormField label="Blog">
+                      <Input value={form.blog_url} onChange={(e) => setFormField('blog_url', e.target.value)} className="h-9" />
+                    </FormField>
+                  </div>
+                </div>
+              ) : detail ? (
+                <div className="space-y-4">
+                  <div className="flex gap-3">
+                    <div className="relative w-28 h-28 rounded-lg overflow-hidden bg-slate-100 shrink-0">
+                      {detail.photo_url ? (
+                        <img
+                          src={detail.photo_url}
+                          alt=""
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 gap-1">
+                          <Camera size={20} />
+                          <span className="text-[10px]">未有相片</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <p className="text-[18px] font-semibold">{detail.name || '（未填姓名）'}</p>
+                      <p className="text-[13px] text-slate-600">
+                        {genderLabel(detail.salutation)} · {detail.age_group || '—'}
+                      </p>
+                      <span className="inline-flex px-2 py-0.5 rounded-md bg-[#f4a261] text-white text-[11px]">
+                        {themeLabel(detail)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <section>
+                    <h3 className="text-[12px] font-semibold text-slate-400 uppercase tracking-wide mb-1">
+                      基礎信息
+                    </h3>
+                    <dl>
+                      <DetailRow label="姓名" value={detail.name} />
+                      <DetailRow label="性別" value={genderLabel(detail.salutation)} />
+                      <DetailRow label="稱謂" value={detail.salutation} />
+                      <DetailRow label="年齡層" value={detail.age_group} />
+                      <DetailRow label="出生月份" value={detail.birth_month} />
+                      <DetailRow label="電話" value={detail.phone} />
+                      <DetailRow label="電郵" value={detail.email} />
+                      <DetailRow label="居住地區" value={detail.residence_area} />
+                      <DetailRow label="工作地區" value={detail.work_area} />
+                    </dl>
+                  </section>
+
+                  <section>
+                    <h3 className="text-[12px] font-semibold text-slate-400 uppercase tracking-wide mb-1">
+                      社媒信息
+                    </h3>
+                    <dl>
+                      <DetailRow
+                        label="Instagram"
+                        value={
+                          detail.instagram_account ? (
+                            <span>
+                              <LinkValue href={igUrl(detail.instagram_account)}>
+                                {formatIg(detail.instagram_account)}
+                              </LinkValue>
+                              <span className="text-slate-500"> · 粉絲 {formatCount(detail.instagram_followers)}</span>
+                            </span>
+                          ) : (
+                            '—'
+                          )
+                        }
+                      />
+                      <DetailRow label="試食經驗" value={detail.tasting_experience} />
+                      <DetailRow label="試食頻率" value={detail.tasting_frequency} />
+                      <DetailRow
+                        label="Openrice"
+                        value={
+                          <span>
+                            {detail.openrice_level || '—'}
+                            {detail.openrice_url && (
+                              <>
+                                {' · '}
+                                <LinkValue href={detail.openrice_url}>連結</LinkValue>
+                              </>
+                            )}
+                          </span>
+                        }
+                      />
+                      <DetailRow
+                        label="Facebook"
+                        value={
+                          detail.facebook_url ? (
+                            <span>
+                              <LinkValue href={facebookHref(detail.facebook_url)}>
+                                {detail.facebook_url}
+                              </LinkValue>
+                              <span className="text-slate-500"> · 讚好 {formatCount(detail.facebook_likes)}</span>
+                            </span>
+                          ) : (
+                            `讚好 ${formatCount(detail.facebook_likes)}`
+                          )
+                        }
+                      />
+                      <DetailRow
+                        label="小紅書"
+                        value={
+                          detail.xiaohongshu_url ? (
+                            <span>
+                              <LinkValue href={detail.xiaohongshu_url}>{detail.xiaohongshu_url}</LinkValue>
+                              <span className="text-slate-500">
+                                {' '}
+                                · 粉絲 {formatCount(detail.xiaohongshu_followers)}
+                              </span>
+                            </span>
+                          ) : (
+                            '—'
+                          )
+                        }
+                      />
+                      <DetailRow
+                        label="YouTube"
+                        value={
+                          detail.youtube_url ? (
+                            <span>
+                              <LinkValue href={detail.youtube_url}>{detail.youtube_url}</LinkValue>
+                              <span className="text-slate-500">
+                                {' '}
+                                · 訂閱 {formatCount(detail.youtube_subscribers)}
+                              </span>
+                            </span>
+                          ) : (
+                            '—'
+                          )
+                        }
+                      />
+                      <DetailRow label="Blog" value={<LinkValue href={detail.blog_url}>{detail.blog_url}</LinkValue>} />
+                      <DetailRow label="發佈平台" value={detail.publish_platforms} />
+                      <DetailRow label="收錄日期" value={formatEntryDate(detail)} />
+                    </dl>
+                  </section>
+
+                  <section>
+                    <h3 className="text-[12px] font-semibold text-slate-400 uppercase tracking-wide mb-1">
+                      其他
+                    </h3>
+                    <dl>
+                      <DetailRow label="主題" value={(detail.blog_themes || []).join('、') || detail.specialty} />
+                      <DetailRow label="專長" value={detail.specialty} />
+                      <DetailRow label="Model 經驗" value={detail.model_experience} />
+                      <DetailRow label="上鏡經驗" value={detail.on_camera_experience} />
+                      <DetailRow label="Wine Club" value={detail.wine_club} />
+                      <DetailRow label="可試食時間" value={detail.available_times} />
+                      <DetailRow label="合作意向" value={detail.cooperation_intent} />
+                      <DetailRow label="Entry #" value={detail.entry_number} />
+                      <DetailRow label="來源狀態" value={detail.source_status} />
+                      <DetailRow label="Referrer" value={detail.referrer_url} />
+                    </dl>
+                  </section>
+                </div>
+              ) : null}
             </div>
-            <div className="flex justify-end gap-2 px-5 py-4 border-t">
-              <Button type="button" variant="outline" onClick={closeEditor} disabled={saving}>
-                取消
-              </Button>
-              <Button type="button" onClick={() => void handleSave()} disabled={saving}>
-                {saving && <Loader2 size={14} className="animate-spin" />}
-                儲存
-              </Button>
+
+            <div className="flex justify-end gap-2 px-5 py-4 border-t shrink-0 bg-white">
+              {editing || creating ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      if (creating) closeDrawer();
+                      else {
+                        setEditing(false);
+                        if (detail) setForm(rowToForm(detail));
+                      }
+                    }}
+                    disabled={saving}
+                  >
+                    取消
+                  </Button>
+                  <Button type="button" onClick={() => void handleSave()} disabled={saving}>
+                    {saving && <Loader2 size={14} className="animate-spin" />}
+                    儲存
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button type="button" variant="outline" onClick={closeDrawer}>
+                    關閉
+                  </Button>
+                  <Button type="button" onClick={startEditFromDetail}>
+                    編輯
+                  </Button>
+                </>
+              )}
             </div>
-          </div>
+          </aside>
         </div>
       )}
     </div>
