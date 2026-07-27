@@ -367,21 +367,24 @@ function KolCard({ row, onClick }: { row: KolProfile; onClick: () => void }) {
       onClick={onClick}
       className="group text-left rounded-xl border border-[rgba(13,26,45,0.08)] bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow w-full"
     >
-      {/* 左圖 + 右基礎信息（緊湊，避免右側大片留白） */}
-      <div className="flex gap-2 p-2">
-        <div className="relative w-[94px] sm:w-[109px] shrink-0 aspect-square rounded-md overflow-hidden bg-slate-100">
+      {/* 左圖 + 右基礎信息；照片固定 120px（約 +30% 相對先前 94px，並用明確寬高避免不生效） */}
+      <div className="flex gap-2.5 p-2.5">
+        <div
+          className="relative shrink-0 rounded-md overflow-hidden bg-slate-100"
+          style={{ width: 120, height: 120 }}
+        >
           {showPhoto ? (
             <img
               src={row.photo_url!}
               alt={row.name || 'KOL'}
-              className="absolute inset-0 w-full h-full object-cover"
+              className="block w-full h-full object-cover"
               loading="lazy"
               onError={() => setImgError(true)}
             />
           ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 text-slate-400">
-              <Camera size={18} strokeWidth={1.5} />
-              <span className="text-[9px]">未有相片</span>
+            <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 text-slate-400">
+              <Camera size={22} strokeWidth={1.5} />
+              <span className="text-[10px]">未有相片</span>
             </div>
           )}
           <span className="absolute top-1 left-1 px-1 py-0.5 rounded bg-[#f4a261] text-white text-[9px] font-medium leading-none">
@@ -451,6 +454,7 @@ function KolCard({ row, onClick }: { row: KolProfile; onClick: () => void }) {
               無 FB
             </span>
           )}
+          <span className="text-slate-300 shrink-0">·</span>
           <span className="text-slate-600 truncate">
             FB粉絲：{formatCount(row.facebook_likes)}
           </span>
