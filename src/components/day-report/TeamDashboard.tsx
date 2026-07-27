@@ -761,6 +761,7 @@ export function TeamDashboard() {
     const groups = new Map<string, StaffMember[]>();
     const sorted = [...staff].sort((a, b) => getStaffName(a.bubble_staff_id).localeCompare(getStaffName(b.bubble_staff_id), 'zh-Hant'));
     const hideUnassignedInAll = selectedDepartment === '__ALL__';
+    const staffWithReports = new Set(reports.map((r) => r.staff_id));
 
     sorted.forEach((s) => {
       const dept = s.department || UNASSIGNED_LABEL;
@@ -770,12 +771,15 @@ export function TeamDashboard() {
       groups.get(dept)!.push(s);
     });
 
-    return Array.from(groups.entries()).sort(([a], [b]) => {
+    return Array.from(groups.entries()).sort(([a, aMembers], [b, bMembers]) => {
       if (a === UNASSIGNED_LABEL) return 1;
       if (b === UNASSIGNED_LABEL) return -1;
+      const aCount = aMembers.reduce((n, m) => n + (staffWithReports.has(m.bubble_staff_id) ? 1 : 0), 0);
+      const bCount = bMembers.reduce((n, m) => n + (staffWithReports.has(m.bubble_staff_id) ? 1 : 0), 0);
+      if (bCount !== aCount) return bCount - aCount;
       return a.localeCompare(b, 'zh-Hant');
     });
-  }, [staff, getStaffName, selectedDepartment]);
+  }, [staff, getStaffName, selectedDepartment, reports]);
 
   // Personal: daily breakdown (week = 7 days; month = all days in month)
   const personalDayByDate = useMemo(() => {

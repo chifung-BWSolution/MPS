@@ -442,14 +442,31 @@ export function WorkInspection() {
       || staffId;
   }, [staffNameById, staff]);
 
+  const staffWithReports = useMemo(
+    () => new Set(reports.map((r) => r.staff_id)),
+    [reports],
+  );
+
+  const countReportedMembers = useCallback((members: StaffMember[]) => (
+    members.reduce((n, m) => n + (staffWithReports.has(m.bubble_staff_id) ? 1 : 0), 0)
+  ), [staffWithReports]);
+
   const teamOptions = useMemo(() => {
-    const set = new Set<string>();
+    const groups = new Map<string, StaffMember[]>();
     staff.forEach((s) => {
       const t = (s.team_id || '').trim();
-      if (t) set.add(t);
+      if (!t) return;
+      if (!groups.has(t)) groups.set(t, []);
+      groups.get(t)!.push(s);
     });
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
-  }, [staff]);
+    return Array.from(groups.entries())
+      .sort(([a, aMembers], [b, bMembers]) => {
+        const diff = countReportedMembers(bMembers) - countReportedMembers(aMembers);
+        if (diff !== 0) return diff;
+        return a.localeCompare(b, 'zh-Hant');
+      })
+      .map(([name]) => name);
+  }, [staff, countReportedMembers]);
 
   const reportByStaffDate = useMemo(() => {
     const map = new Map<string, DayReportLite>();
@@ -497,12 +514,14 @@ export function WorkInspection() {
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(s);
     });
-    return Array.from(groups.entries()).sort(([a], [b]) => {
+    return Array.from(groups.entries()).sort(([a, aMembers], [b, bMembers]) => {
       if (a === UNASSIGNED_LABEL) return 1;
       if (b === UNASSIGNED_LABEL) return -1;
+      const diff = countReportedMembers(bMembers) - countReportedMembers(aMembers);
+      if (diff !== 0) return diff;
       return a.localeCompare(b, 'zh-Hant');
     });
-  }, [filteredStaff]);
+  }, [filteredStaff, countReportedMembers]);
 
   const renderPersonCard = (member: StaffMember) => {
     const office = resolveOffice(member.base_location);
