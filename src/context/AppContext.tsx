@@ -42,7 +42,6 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'submit', label: '提交匯報', section: '每日必做' },
       { id: 'today-team', label: '今日團隊', section: '每日必做' },
       { id: 'team-view', label: '匯報統計', section: '管理分析' },
-      { id: 'monthly', label: '月度報告', section: '管理分析' },
       { id: 'analytics', label: '項目分析', section: '管理分析' },
       { id: 'work-categories', label: '工作類型', section: '設置' },
       { id: 'holiday-settings', label: '假期設定', section: '設置' },
