@@ -369,7 +369,7 @@ function KolCard({ row, onClick }: { row: KolProfile; onClick: () => void }) {
     >
       {/* 左圖 + 右基礎信息（緊湊，避免右側大片留白） */}
       <div className="flex gap-2 p-2">
-        <div className="relative w-[72px] sm:w-[84px] shrink-0 aspect-square rounded-md overflow-hidden bg-slate-100">
+        <div className="relative w-[94px] sm:w-[109px] shrink-0 aspect-square rounded-md overflow-hidden bg-slate-100">
           {showPhoto ? (
             <img
               src={row.photo_url!}
@@ -421,8 +421,10 @@ function KolCard({ row, onClick }: { row: KolProfile; onClick: () => void }) {
               無 IG
             </span>
           )}
-          <span className="text-slate-400 shrink-0">·</span>
-          <span className="text-slate-600 truncate shrink-0">{formatCount(row.instagram_followers)}</span>
+          <span className="text-slate-300 shrink-0">·</span>
+          <span className="text-slate-600 truncate shrink-0">
+            ig粉絲：{formatCount(row.instagram_followers)}
+          </span>
         </div>
 
         <p className="text-slate-600 leading-snug line-clamp-2">
@@ -449,8 +451,9 @@ function KolCard({ row, onClick }: { row: KolProfile; onClick: () => void }) {
               無 FB
             </span>
           )}
-          <span className="text-slate-400">·</span>
-          <span className="text-slate-600 truncate">{formatCount(row.facebook_likes)}</span>
+          <span className="text-slate-600 truncate">
+            FB粉絲：{formatCount(row.facebook_likes)}
+          </span>
         </div>
 
         <p className="text-slate-500">收錄 {formatEntryDate(row)}</p>
