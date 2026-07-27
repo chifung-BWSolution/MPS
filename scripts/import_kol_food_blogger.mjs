@@ -322,13 +322,14 @@ function main() {
       skippedStatus++;
       continue;
     }
-    const phoneKey = rec.phone ? rec.phone.toLowerCase() : null;
-    const emailKey = rec.email ? rec.email.toLowerCase() : null;
+    const phoneKey = rec.phone ? rec.phone.toLowerCase().trim() : null;
+    const emailKey = rec.email ? rec.email.toLowerCase().trim() : null;
+    // Phone first, then email — skip if either key already seen
     if (phoneKey && seenPhone.has(phoneKey)) {
       skippedDup++;
       continue;
     }
-    if (!phoneKey && emailKey && seenEmail.has(emailKey)) {
+    if (emailKey && seenEmail.has(emailKey)) {
       skippedDup++;
       continue;
     }
