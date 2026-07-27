@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -349,12 +350,16 @@ async function fetchAllKolProfiles(): Promise<KolProfile[]> {
 // Subcomponents
 // =====================================================================
 
+function hasPhotoUrl(row: KolProfile): boolean {
+  return Boolean(row.photo_url?.trim());
+}
+
 function KolCard({ row, onClick }: { row: KolProfile; onClick: () => void }) {
   const ig = formatIg(row.instagram_account);
   const tag = themeLabel(row);
   const fb = facebookHref(row.facebook_url);
   const [imgError, setImgError] = useState(false);
-  const showPhoto = Boolean(row.photo_url) && !imgError;
+  const showPhoto = hasPhotoUrl(row) && !imgError;
 
   return (
     <button
@@ -362,98 +367,94 @@ function KolCard({ row, onClick }: { row: KolProfile; onClick: () => void }) {
       onClick={onClick}
       className="group text-left rounded-xl border border-[rgba(13,26,45,0.08)] bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow w-full"
     >
-      <div className="flex gap-3 p-3">
-        <div className="relative w-[42%] shrink-0 aspect-square rounded-lg overflow-hidden bg-slate-100">
-          {showPhoto ? (
-            <img
-              src={row.photo_url!}
-              alt={row.name || 'KOL'}
-              className="absolute inset-0 w-full h-full object-cover"
-              loading="lazy"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-slate-400">
-              <Camera size={22} strokeWidth={1.5} />
-              <span className="text-[11px]">未有相片</span>
-            </div>
-          )}
-          <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-[#f4a261] text-white text-[10px] font-medium shadow-sm">
-            {tag}
-          </span>
-        </div>
-        <div className="min-w-0 flex-1 space-y-1.5 py-0.5">
-          <p className="text-[11px] font-medium text-slate-400">基礎信息</p>
-          <p className="text-[14px] font-semibold text-slate-900 truncate leading-tight">
+      {/* 照片置頂滿寬，避免右側留白 */}
+      <div className="relative aspect-[4/3] bg-slate-100">
+        {showPhoto ? (
+          <img
+            src={row.photo_url!}
+            alt={row.name || 'KOL'}
+            className="absolute inset-0 w-full h-full object-cover"
+            loading="lazy"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-slate-400">
+            <Camera size={22} strokeWidth={1.5} />
+            <span className="text-[11px]">未有相片</span>
+          </div>
+        )}
+        <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-[#f4a261] text-white text-[10px] font-medium shadow-sm">
+          {tag}
+        </span>
+      </div>
+
+      <div className="p-2.5 space-y-1.5 text-[11px]">
+        <div className="space-y-0.5 min-w-0">
+          <p className="text-[13px] font-semibold text-slate-900 truncate leading-tight">
             {row.name || '（未填姓名）'}
           </p>
-          <p className="text-[12px] text-slate-600">
+          <p className="text-slate-600 truncate">
             {genderLabel(row.salutation)}
             <span className="text-slate-300 mx-1">·</span>
             {row.age_group || '—'}
+            <span className="text-slate-300 mx-1">·</span>
+            {row.phone || '—'}
           </p>
-          <p className="text-[12px] text-slate-600 truncate">
-            電話 {row.phone || '—'}
+        </div>
+
+        <div className="space-y-1 border-t border-slate-100 pt-1.5">
+          <div className="flex items-center gap-1 min-w-0">
+            {ig ? (
+              <a
+                href={igUrl(row.instagram_account!)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-0.5 text-teal-600 hover:underline shrink-0"
+              >
+                <Instagram size={11} />
+                <span className="truncate max-w-[6.5rem]">{ig}</span>
+              </a>
+            ) : (
+              <span className="text-slate-400 inline-flex items-center gap-0.5">
+                <Instagram size={11} />
+                無 IG
+              </span>
+            )}
+            <span className="text-slate-400">·</span>
+            <span className="text-slate-600 truncate">{formatCount(row.instagram_followers)}</span>
+          </div>
+
+          <p className="text-slate-600 leading-snug line-clamp-2">
+            {row.tasting_experience || '—'}
+            <span className="text-slate-300 mx-1">|</span>
+            {row.openrice_level || '—'}
           </p>
+
+          <div className="flex items-center gap-1 min-w-0">
+            {fb ? (
+              <a
+                href={fb}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-0.5 text-[#1877F2] hover:underline shrink-0"
+              >
+                <Facebook size={11} />
+                FB
+              </a>
+            ) : (
+              <span className="text-slate-400 inline-flex items-center gap-0.5">
+                <Facebook size={11} />
+                無 FB
+              </span>
+            )}
+            <span className="text-slate-400">·</span>
+            <span className="text-slate-600 truncate">{formatCount(row.facebook_likes)}</span>
+          </div>
+
+          <p className="text-slate-500">{formatEntryDate(row)}</p>
         </div>
-      </div>
-
-      <div className="px-3 pb-3 space-y-1.5 border-t border-slate-100 pt-2.5 text-[12px]">
-        <div className="flex items-center gap-1.5 min-w-0">
-          {ig ? (
-            <a
-              href={igUrl(row.instagram_account!)}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1 text-teal-600 hover:underline shrink-0"
-            >
-              <Instagram size={12} />
-              {ig}
-            </a>
-          ) : (
-            <span className="text-slate-400 inline-flex items-center gap-1">
-              <Instagram size={12} />
-              無 IG
-            </span>
-          )}
-          <span className="text-slate-400">·</span>
-          <span className="text-slate-600 truncate">粉絲 {formatCount(row.instagram_followers)}</span>
-        </div>
-
-        <p className="text-slate-600 leading-snug line-clamp-2">
-          <span className="text-slate-400">試食經驗</span>{' '}
-          {row.tasting_experience || '—'}
-          <span className="text-slate-300 mx-1">|</span>
-          <span className="text-slate-400">Openrice</span>{' '}
-          {row.openrice_level || '—'}
-        </p>
-
-        <div className="flex items-center gap-1.5 min-w-0">
-          {fb ? (
-            <a
-              href={fb}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1 text-[#1877F2] hover:underline shrink-0"
-            >
-              <Facebook size={12} />
-              Facebook
-            </a>
-          ) : (
-            <span className="text-slate-400 inline-flex items-center gap-1">
-              <Facebook size={12} />
-              無 FB
-            </span>
-          )}
-          <span className="text-slate-400">·</span>
-          <span className="text-slate-600 truncate">讚好 {formatCount(row.facebook_likes)}</span>
-        </div>
-
-        <p className="text-slate-500">
-          收錄日期 {formatEntryDate(row)}
-        </p>
       </div>
     </button>
   );
@@ -566,6 +567,7 @@ export function KolListModule() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<AdvancedFilters>(emptyFilters);
+  const [hasPhotoOnly, setHasPhotoOnly] = useState(true);
   const [view, setView] = useState<ViewMode>('gallery');
   const [page, setPage] = useState(1);
 
@@ -620,6 +622,7 @@ export function KolListModule() {
     const igMax = filters.igMax.trim() ? parseInt(filters.igMax, 10) : null;
 
     const list = rows.filter((r) => {
+      if (hasPhotoOnly && !hasPhotoUrl(r)) return false;
       if (q) {
         const hay = [r.name, r.instagram_account, r.phone, r.email]
           .map((x) => (x || '').toLowerCase())
@@ -666,14 +669,14 @@ export function KolListModule() {
     });
 
     return list.sort((a, b) => entryDateSortKey(b) - entryDateSortKey(a));
-  }, [rows, search, filters]);
+  }, [rows, search, filters, hasPhotoOnly]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
 
   useEffect(() => {
     setPage(1);
-  }, [search, filters]);
+  }, [search, filters, hasPhotoOnly]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -877,7 +880,7 @@ export function KolListModule() {
             </div>
           </div>
 
-          <div className="grid grid-cols-[repeat(8,minmax(0,1fr))_auto] gap-1.5 items-center">
+          <div className="grid grid-cols-[repeat(8,minmax(0,1fr))_auto_auto] gap-1.5 items-center">
             <FilterSelect
               label="Openrice"
               value={filters.openriceLevel}
@@ -931,6 +934,14 @@ export function KolListModule() {
               onChange={(v) => setFilters((f) => ({ ...f, cooperationIntent: v }))}
               placeholder="合作意向"
             />
+            <label className="inline-flex items-center gap-1.5 h-8 px-1.5 shrink-0 cursor-pointer select-none">
+              <Checkbox
+                checked={hasPhotoOnly}
+                onCheckedChange={(v) => setHasPhotoOnly(v === true)}
+                id="kol-has-photo"
+              />
+              <span className="text-[11px] text-slate-600 whitespace-nowrap">有照片</span>
+            </label>
             <Button
               type="button"
               variant="ghost"
@@ -939,6 +950,7 @@ export function KolListModule() {
               onClick={() => {
                 setSearch('');
                 setFilters(emptyFilters());
+                setHasPhotoOnly(true);
               }}
             >
               清除
@@ -964,7 +976,7 @@ export function KolListModule() {
       ) : (
         <>
           {view === 'gallery' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
               {pageRows.map((row) => (
                 <KolCard key={row.id} row={row} onClick={() => openDetail(row)} />
               ))}
