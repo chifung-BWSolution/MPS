@@ -459,36 +459,73 @@ function KolCard({ row, onClick }: { row: KolProfile; onClick: () => void }) {
   );
 }
 
+/** Compact select: label shown via placeholder, fixed narrow width for 2-row toolbar. */
 function FilterSelect({
   label,
   value,
   onChange,
   options,
   allLabel = '全部',
+  className,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: string[];
   allLabel?: string;
+  className?: string;
 }) {
   return (
-    <div className="space-y-1">
-      <Label className="text-[12px] text-slate-600">{label}</Label>
-      <Select value={value || '__all__'} onValueChange={(v) => onChange(v === '__all__' ? '' : v)}>
-        <SelectTrigger className="h-9 text-[13px] bg-white">
-          <SelectValue placeholder={allLabel} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="__all__">{allLabel}</SelectItem>
-          {options.map((opt) => (
-            <SelectItem key={opt} value={opt}>
-              {opt}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <Select value={value || '__all__'} onValueChange={(v) => onChange(v === '__all__' ? '' : v)}>
+      <SelectTrigger
+        className={cn(
+          'h-8 w-full min-w-0 text-[11px] bg-white px-1.5 [&>span]:truncate',
+          value && 'border-teal-400 text-teal-800',
+          className
+        )}
+        title={value ? `${label}：${value}` : label}
+      >
+        <SelectValue placeholder={`${label}·${allLabel}`} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="__all__">
+          {label}·{allLabel}
+        </SelectItem>
+        {options.map((opt) => (
+          <SelectItem key={opt} value={opt}>
+            {opt}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function FilterInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  className,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  return (
+    <Input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder || label}
+      title={label}
+      className={cn(
+        'h-8 w-full min-w-0 text-[11px] bg-white px-1.5',
+        value && 'border-teal-400',
+        className
+      )}
+    />
   );
 }
 
@@ -767,43 +804,18 @@ export function KolListModule() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜尋名稱、IG、電話、電郵..."
-              className="pl-9 h-10 bg-white"
-            />
-          </div>
-          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
-            <button
-              type="button"
-              onClick={() => setView('list')}
-              className={cn(
-                'px-3 py-1.5 text-[12px] rounded-md',
-                view === 'list' ? 'bg-slate-900 text-white' : 'text-slate-600'
-              )}
-            >
-              列表
-            </button>
-            <button
-              type="button"
-              onClick={() => setView('gallery')}
-              className={cn(
-                'px-3 py-1.5 text-[12px] rounded-md',
-                view === 'gallery' ? 'bg-slate-900 text-white' : 'text-slate-600'
-              )}
-            >
-              相片牆
-            </button>
-          </div>
-        </div>
-
-        {/* Always-visible filters (圖1 框住區域) */}
-        <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        {/* 固定兩行：每欄均分寬度，不 wrap 到第三行 */}
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-[minmax(0,1.4fr)_repeat(6,minmax(0,1fr))_auto] gap-1.5 items-center">
+            <div className="relative min-w-0">
+              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="名稱/IG/電話"
+                className="pl-6 h-8 text-[11px] bg-white"
+              />
+            </div>
             <FilterSelect
               label="年齡層"
               value={filters.ageGroup}
@@ -811,61 +823,74 @@ export function KolListModule() {
               options={filterOptions.ageGroup}
             />
             <FilterSelect
-              label="出生月份"
+              label="出生月"
               value={filters.birthMonth}
               onChange={(v) => setFilters((f) => ({ ...f, birthMonth: v }))}
               options={filterOptions.birthMonth}
             />
-            <div className="space-y-1">
-              <Label className="text-[12px] text-slate-600">地區（居住/工作）</Label>
-              <Input
-                value={filters.area}
-                onChange={(e) => setFilters((f) => ({ ...f, area: e.target.value }))}
-                placeholder="如：油麻地、中環"
-                className="h-9 text-[13px]"
-              />
-            </div>
+            <FilterInput
+              label="地區"
+              value={filters.area}
+              onChange={(v) => setFilters((f) => ({ ...f, area: v }))}
+              placeholder="地區"
+            />
             <FilterSelect
-              label="主題範疇"
+              label="主題"
               value={filters.theme}
               onChange={(v) => setFilters((f) => ({ ...f, theme: v }))}
               options={filterOptions.theme}
-              allLabel="全部範疇"
+              allLabel="全部"
             />
-            <div className="space-y-1">
-              <Label className="text-[12px] text-slate-600">IG 粉絲下限</Label>
-              <Input
-                value={filters.igMin}
-                onChange={(e) => setFilters((f) => ({ ...f, igMin: e.target.value }))}
-                placeholder="如：1000"
-                className="h-9 text-[13px]"
-              />
+            <FilterInput
+              label="IG下限"
+              value={filters.igMin}
+              onChange={(v) => setFilters((f) => ({ ...f, igMin: v }))}
+              placeholder="IG↓"
+            />
+            <FilterInput
+              label="IG上限"
+              value={filters.igMax}
+              onChange={(v) => setFilters((f) => ({ ...f, igMax: v }))}
+              placeholder="IG↑"
+            />
+            <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setView('list')}
+                className={cn(
+                  'px-2 py-1 text-[11px] rounded',
+                  view === 'list' ? 'bg-slate-900 text-white' : 'text-slate-600'
+                )}
+              >
+                列表
+              </button>
+              <button
+                type="button"
+                onClick={() => setView('gallery')}
+                className={cn(
+                  'px-2 py-1 text-[11px] rounded',
+                  view === 'gallery' ? 'bg-slate-900 text-white' : 'text-slate-600'
+                )}
+              >
+                相片牆
+              </button>
             </div>
-            <div className="space-y-1">
-              <Label className="text-[12px] text-slate-600">IG 粉絲上限</Label>
-              <Input
-                value={filters.igMax}
-                onChange={(e) => setFilters((f) => ({ ...f, igMax: e.target.value }))}
-                placeholder="如：50000"
-                className="h-9 text-[13px]"
-              />
-            </div>
+          </div>
+
+          <div className="grid grid-cols-[repeat(8,minmax(0,1fr))_auto] gap-1.5 items-center">
             <FilterSelect
-              label="Openrice 評級"
+              label="Openrice"
               value={filters.openriceLevel}
               onChange={(v) => setFilters((f) => ({ ...f, openriceLevel: v }))}
               options={filterOptions.openriceLevel}
               allLabel="不限"
             />
-            <div className="space-y-1">
-              <Label className="text-[12px] text-slate-600">發佈平台</Label>
-              <Input
-                value={filters.publishPlatforms}
-                onChange={(e) => setFilters((f) => ({ ...f, publishPlatforms: e.target.value }))}
-                placeholder="如：Openrice、Instagram"
-                className="h-9 text-[13px]"
-              />
-            </div>
+            <FilterInput
+              label="發佈平台"
+              value={filters.publishPlatforms}
+              onChange={(v) => setFilters((f) => ({ ...f, publishPlatforms: v }))}
+              placeholder="發佈平台"
+            />
             <FilterSelect
               label="試食頻率"
               value={filters.tastingFrequency}
@@ -881,41 +906,42 @@ export function KolListModule() {
               allLabel="不限"
             />
             <FilterSelect
-              label="Model經驗"
+              label="Model"
               value={filters.modelExperience}
               onChange={(v) => setFilters((f) => ({ ...f, modelExperience: v }))}
               options={filterOptions.modelExperience}
               allLabel="不限"
             />
             <FilterSelect
-              label="Wine Club"
+              label="Wine"
               value={filters.wineClub}
               onChange={(v) => setFilters((f) => ({ ...f, wineClub: v }))}
               options={filterOptions.wineClub}
               allLabel="不限"
             />
-            <div className="space-y-1">
-              <Label className="text-[12px] text-slate-600">專長 / 主題分類</Label>
-              <Input
-                value={filters.specialty}
-                onChange={(e) => setFilters((f) => ({ ...f, specialty: e.target.value }))}
-                placeholder="關鍵字"
-                className="h-9 text-[13px]"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[12px] text-slate-600">合作意向</Label>
-              <Input
-                value={filters.cooperationIntent}
-                onChange={(e) => setFilters((f) => ({ ...f, cooperationIntent: e.target.value }))}
-                placeholder="關鍵字"
-                className="h-9 text-[13px]"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <Button type="button" variant="ghost" size="sm" onClick={() => setFilters(emptyFilters())}>
-              清除篩選
+            <FilterInput
+              label="專長"
+              value={filters.specialty}
+              onChange={(v) => setFilters((f) => ({ ...f, specialty: v }))}
+              placeholder="專長"
+            />
+            <FilterInput
+              label="合作意向"
+              value={filters.cooperationIntent}
+              onChange={(v) => setFilters((f) => ({ ...f, cooperationIntent: v }))}
+              placeholder="合作意向"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-[11px] text-slate-500 shrink-0"
+              onClick={() => {
+                setSearch('');
+                setFilters(emptyFilters());
+              }}
+            >
+              清除
             </Button>
           </div>
         </div>
