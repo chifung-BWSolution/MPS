@@ -126,11 +126,11 @@ export const mainMenuItems: MainMenuItem[] = [
     id: 'talent',
     label: '藝人管理',
     subMenus: [
-      { id: 'list', label: '藝人列表' },
-      { id: 'invite', label: '新增藝人' },
-      { id: 'interviews', label: '面試安排' },
-      { id: 'kol-list', label: 'KOL列表' },
-      { id: 'kol-campaigns', label: 'KOL活動' },
+      { id: 'list', label: '藝人列表', section: '藝人' },
+      { id: 'invite', label: '新增藝人', section: '藝人' },
+      { id: 'interviews', label: '面試安排', section: '藝人' },
+      { id: 'kol-list', label: 'KOL列表', section: 'KOL' },
+      { id: 'kol-campaigns', label: 'KOL活動', section: 'KOL' },
     ],
   },
   {
