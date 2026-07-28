@@ -129,6 +129,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'invite', label: '新增藝人', section: '藝人' },
       { id: 'interviews', label: '面試安排', section: '藝人' },
       { id: 'kol-list', label: 'KOL列表', section: 'KOL' },
+      { id: 'kol-apply', label: 'KOL申請管理', section: 'KOL' },
       { id: 'kol-campaigns', label: 'KOL活動', section: 'KOL' },
     ],
   },
