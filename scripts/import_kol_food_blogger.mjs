@@ -213,10 +213,12 @@ function rowToRecord(row) {
     blog_themes: themes,
     specialty: themes.length ? themes.join(', ') : null,
     cooperation_intent: get(27) || null,
+    video_blog_promo: get(28) || null,
     available_times: get(29) || null,
     wine_club: get(30) || null,
     model_experience: get(31) || null,
     on_camera_experience: get(32) || null,
+    facebook_live_interest: get(33) || null,
     photo_url: get(34) || null,
     work_photo_url: get(35) || null,
     source_created_at: get(36) || null,
@@ -269,6 +271,8 @@ function toInsertSql(rec) {
     ${sqlStr(rec.on_camera_experience)},
     ${sqlStr(rec.wine_club)},
     ${sqlStr(rec.cooperation_intent)},
+    ${sqlStr(rec.video_blog_promo)},
+    ${sqlStr(rec.facebook_live_interest)},
     ${sqlStr(rec.available_times)},
     ${sqlStr(rec.photo_url)},
     ${sqlStr(rec.work_photo_url)},
@@ -285,8 +289,8 @@ const INSERT_COLS = `name, salutation, email, phone, age_group, birth_month, res
   xiaohongshu_url, xiaohongshu_followers, youtube_url, youtube_subscribers, openrice_url, openrice_level,
   blog_url, blog_subscribers, other_channels, other_followers, publish_platforms,
   tasting_frequency, tasting_experience, model_experience, on_camera_experience, wine_club,
-  cooperation_intent, available_times, photo_url, work_photo_url, entry_number, source_status,
-  source_created_at, referrer_url, raw_payload`;
+  cooperation_intent, video_blog_promo, facebook_live_interest, available_times, photo_url, work_photo_url,
+  entry_number, source_status, source_created_at, referrer_url, raw_payload`;
 
 function main() {
   if (!fs.existsSync(path.join(root, 'xl/worksheets/sheet1.xml'))) {

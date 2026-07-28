@@ -66,6 +66,8 @@ export interface KolProfile {
   wine_club: string | null;
   cooperation_intent: string | null;
   available_times: string | null;
+  video_blog_promo: string | null;
+  facebook_live_interest: string | null;
   photo_url: string | null;
   work_photo_url: string | null;
   entry_number: string | null;
@@ -135,6 +137,8 @@ type FormState = {
   model_experience: string;
   wine_club: string;
   cooperation_intent: string;
+  video_blog_promo: string;
+  facebook_live_interest: string;
   photo_url: string;
   facebook_url: string;
   facebook_likes: string;
@@ -164,6 +168,8 @@ const emptyForm = (): FormState => ({
   model_experience: '',
   wine_club: '',
   cooperation_intent: '',
+  video_blog_promo: '',
+  facebook_live_interest: '',
   photo_url: '',
   facebook_url: '',
   facebook_likes: '',
@@ -276,6 +282,8 @@ function rowToForm(row: KolProfile): FormState {
     model_experience: row.model_experience || '',
     wine_club: row.wine_club || '',
     cooperation_intent: row.cooperation_intent || '',
+    video_blog_promo: row.video_blog_promo || '',
+    facebook_live_interest: row.facebook_live_interest || '',
     photo_url: row.photo_url || '',
     facebook_url: row.facebook_url || '',
     facebook_likes: row.facebook_likes != null ? String(row.facebook_likes) : '',
@@ -317,6 +325,8 @@ function formToPayload(form: FormState): Partial<KolProfile> {
     model_experience: form.model_experience.trim() || null,
     wine_club: form.wine_club.trim() || null,
     cooperation_intent: form.cooperation_intent.trim() || null,
+    video_blog_promo: form.video_blog_promo.trim() || null,
+    facebook_live_interest: form.facebook_live_interest.trim() || null,
     photo_url: form.photo_url.trim() || null,
     facebook_url: form.facebook_url.trim() || null,
     facebook_likes: Number.isFinite(fbLikes as number) ? fbLikes : null,
@@ -1224,6 +1234,20 @@ node scripts/push_kol_batches.mjs`}
                   <FormField label="發佈平台">
                     <Input value={form.publish_platforms} onChange={(e) => setFormField('publish_platforms', e.target.value)} className="h-9" />
                   </FormField>
+                  <FormField label="影片Blog內容推廣">
+                    <Input
+                      value={form.video_blog_promo}
+                      onChange={(e) => setFormField('video_blog_promo', e.target.value)}
+                      className="h-9"
+                    />
+                  </FormField>
+                  <FormField label="Facebook Live 主播意願">
+                    <Input
+                      value={form.facebook_live_interest}
+                      onChange={(e) => setFormField('facebook_live_interest', e.target.value)}
+                      className="h-9"
+                    />
+                  </FormField>
                   <FormField label="合作意向">
                     <Textarea
                       value={form.cooperation_intent}
@@ -1392,6 +1416,8 @@ node scripts/push_kol_batches.mjs`}
                       <DetailRow label="上鏡經驗" value={detail.on_camera_experience} />
                       <DetailRow label="Wine Club" value={detail.wine_club} />
                       <DetailRow label="可試食時間" value={detail.available_times} />
+                      <DetailRow label="影片Blog推廣" value={detail.video_blog_promo} />
+                      <DetailRow label="FB Live 主播" value={detail.facebook_live_interest} />
                       <DetailRow label="合作意向" value={detail.cooperation_intent} />
                       <DetailRow label="Entry #" value={detail.entry_number} />
                       <DetailRow label="來源狀態" value={detail.source_status} />

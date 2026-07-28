@@ -69,6 +69,8 @@ export interface KolApply {
   wine_club: string | null;
   cooperation_intent: string | null;
   available_times: string | null;
+  video_blog_promo: string | null;
+  facebook_live_interest: string | null;
   photo_url: string | null;
   work_photo_url: string | null;
   raw_payload: Record<string, unknown> | null;
@@ -143,6 +145,8 @@ type FormState = {
   model_experience: string;
   wine_club: string;
   cooperation_intent: string;
+  video_blog_promo: string;
+  facebook_live_interest: string;
   photo_url: string;
   source: string;
   login_code: string;
@@ -171,6 +175,8 @@ const emptyForm = (): FormState => ({
   model_experience: '',
   wine_club: '',
   cooperation_intent: '',
+  video_blog_promo: '',
+  facebook_live_interest: '',
   photo_url: '',
   source: '手動新增',
   login_code: '',
@@ -255,6 +261,8 @@ function rowToForm(row: KolApplyRow): FormState {
     model_experience: row.model_experience || '',
     wine_club: row.wine_club || '',
     cooperation_intent: row.cooperation_intent || '',
+    video_blog_promo: row.video_blog_promo || '',
+    facebook_live_interest: row.facebook_live_interest || '',
     photo_url: row.photo_url || '',
     source: row.source || '',
     login_code: row.login_code || '',
@@ -295,6 +303,8 @@ function formToPayload(form: FormState) {
     model_experience: form.model_experience.trim() || null,
     wine_club: form.wine_club.trim() || null,
     cooperation_intent: form.cooperation_intent.trim() || null,
+    video_blog_promo: form.video_blog_promo.trim() || null,
+    facebook_live_interest: form.facebook_live_interest.trim() || null,
     photo_url: form.photo_url.trim() || null,
     source: form.source.trim() || null,
     login_code: form.login_code.trim() || null,
@@ -541,6 +551,8 @@ export function KolApplyModule() {
         wine_club: row.wine_club,
         cooperation_intent: row.cooperation_intent,
         available_times: row.available_times,
+        video_blog_promo: row.video_blog_promo,
+        facebook_live_interest: row.facebook_live_interest,
         photo_url: row.photo_url,
         work_photo_url: row.work_photo_url,
         raw_payload: {
@@ -903,6 +915,20 @@ export function KolApplyModule() {
               </FormField>
               <FormField label="相片 URL">
                 <Input value={form.photo_url} onChange={(e) => setFormField('photo_url', e.target.value)} className="h-9" />
+              </FormField>
+              <FormField label="影片Blog內容推廣">
+                <Input
+                  value={form.video_blog_promo}
+                  onChange={(e) => setFormField('video_blog_promo', e.target.value)}
+                  className="h-9"
+                />
+              </FormField>
+              <FormField label="Facebook Live 主播意願">
+                <Input
+                  value={form.facebook_live_interest}
+                  onChange={(e) => setFormField('facebook_live_interest', e.target.value)}
+                  className="h-9"
+                />
               </FormField>
               <FormField label="合作意向">
                 <Textarea
