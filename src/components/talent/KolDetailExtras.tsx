@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2, Plus, Star, X } from 'lucide-react';
+import { Loader2, Star, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,10 +15,11 @@ import {
   KOL_PRESET_TAGS,
   RATING_DIMENSIONS,
   refreshKolRatingCache,
-  type KolCooperationRow,
   type KolRatingRow,
   type RatingDraft,
 } from '@/components/talent/kolRating';
+import { KolCooperationForm, CooperationRecordList } from '@/components/talent/KolCooperationForm';
+import type { KolCooperationRow } from '@/components/talent/kolCooperation';
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -296,11 +297,11 @@ export function KolRatingSection({
 }
 
 export function KolCooperationSection({
-  kolId,
-  canAdd,
+  detail,
+  onSaved,
 }: {
-  kolId: string;
-  canAdd: boolean;
+  detail: KolProfile;
+  onSaved: () => void;
 }) {
   const { systemUser, userInfo, user } = useAuth();
   const createdBy =
@@ -308,21 +309,14 @@ export function KolCooperationSection({
 
   const [rows, setRows] = useState<KolCooperationRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    project_name: '',
-    project_type: '',
-    fee: '',
-    evaluation: '',
-  });
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('kol_cooperation')
-        .select('*')
-        .eq('kol_profile_id', kolId)
+        .select('*, kol_profile(name, instagram_account, phone)')
+        .eq('kol_profile_id', detail.id)
         .order('cooperated_at', { ascending: false });
       if (error) throw error;
       setRows((data as KolCooperationRow[]) || []);
@@ -332,98 +326,32 @@ export function KolCooperationSection({
     } finally {
       setLoading(false);
     }
-  }, [kolId]);
+  }, [detail.id]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const addRecord = async () => {
-    if (!form.project_name.trim() && !form.evaluation.trim()) {
-      toast.error('請至少填寫項目名稱或評價');
-      return;
-    }
-    setSaving(true);
-    try {
-      const { error } = await supabase.from('kol_cooperation').insert({
-        kol_profile_id: kolId,
-        project_name: form.project_name.trim() || null,
-        project_type: form.project_type.trim() || null,
-        fee: form.fee.trim() || null,
-        evaluation: form.evaluation.trim() || null,
-        created_by: createdBy,
-      });
-      if (error) throw error;
-      toast.success('已新增合作記錄');
-      setForm({ project_name: '', project_type: '', fee: '', evaluation: '' });
-      await load();
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <section>
       <SectionTitle>合作記錄</SectionTitle>
-      {canAdd && (
-        <div className="space-y-2 mb-3 p-3 rounded-lg border border-slate-200 bg-slate-50/50">
-          <div className="grid grid-cols-2 gap-2">
-            <Input
-              value={form.project_name}
-              onChange={(e) => setForm((f) => ({ ...f, project_name: e.target.value }))}
-              placeholder="項目名稱"
-              className="h-8 text-[12px]"
-            />
-            <Input
-              value={form.project_type}
-              onChange={(e) => setForm((f) => ({ ...f, project_type: e.target.value }))}
-              placeholder="項目類型"
-              className="h-8 text-[12px]"
-            />
-            <Input
-              value={form.fee}
-              onChange={(e) => setForm((f) => ({ ...f, fee: e.target.value }))}
-              placeholder="收費"
-              className="h-8 text-[12px]"
-            />
-          </div>
-          <Textarea
-            value={form.evaluation}
-            onChange={(e) => setForm((f) => ({ ...f, evaluation: e.target.value }))}
-            placeholder="評價 / 備註"
-            rows={2}
-            className="text-[12px]"
-          />
-          <Button type="button" size="sm" disabled={saving} onClick={() => void addRecord()}>
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-            新增合作記錄
-          </Button>
-        </div>
-      )}
-      {loading ? (
-        <p className="text-[12px] text-slate-400">載入中…</p>
-      ) : rows.length === 0 ? (
-        <p className="text-[12px] text-slate-400">尚無合作記錄</p>
-      ) : (
-        <ul className="space-y-2">
-          {rows.map((r) => (
-            <li key={r.id} className="text-[12px] border border-slate-100 rounded-lg p-2.5">
-              <p className="font-medium text-slate-800">{r.project_name || '（未命名項目）'}</p>
-              <p className="text-slate-600 mt-0.5">
-                {[r.project_type, r.fee ? `收費 ${r.fee}` : null].filter(Boolean).join(' · ') ||
-                  '—'}
-              </p>
-              {r.evaluation && <p className="text-slate-500 mt-1">{r.evaluation}</p>}
-              <p className="text-slate-400 mt-1">
-                {new Date(r.cooperated_at).toLocaleDateString('zh-HK')}
-                {r.created_by ? ` · ${r.created_by}` : ''}
-              </p>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="mb-4 p-3 rounded-lg border border-slate-200 bg-slate-50/50">
+        <KolCooperationForm
+          createdBy={createdBy}
+          fixedKol={{
+            id: detail.id,
+            name: detail.name,
+            instagram_account: detail.instagram_account,
+            phone: detail.phone,
+          }}
+          submitLabel="新增合作記錄"
+          onSuccess={() => {
+            void load();
+            onSaved();
+          }}
+        />
+      </div>
+      <CooperationRecordList rows={rows} loading={loading} />
     </section>
   );
 }
@@ -455,7 +383,9 @@ export function KolDetailExtras({
           onRated={onProfileRefresh}
         />
       )}
-      {showCoop && <KolCooperationSection kolId={detail.id} canAdd />}
+      {showCoop && (
+        <KolCooperationSection detail={detail} onSaved={() => void onProfileRefresh()} />
+      )}
     </div>
   );
 }

@@ -69,7 +69,7 @@ export const VIEW_META: Record<
   },
   cooperated: {
     title: '已合作 KOL',
-    description: '曾經或正在合作的 KOL 記錄。',
+    description: '記錄與 KOL 的合作項目、內容、平台與日期。',
   },
   star: {
     title: '星級藝人',

@@ -32,18 +32,6 @@ export interface KolRatingRow {
   created_at: string;
 }
 
-export interface KolCooperationRow {
-  id: string;
-  kol_profile_id: string;
-  project_name: string | null;
-  project_type: string | null;
-  fee: string | null;
-  evaluation: string | null;
-  cooperated_at: string;
-  created_by: string | null;
-  created_at: string;
-}
-
 export type RatingDraft = Record<RatingDimensionKey, number>;
 
 export const emptyRatingDraft = (): RatingDraft => ({

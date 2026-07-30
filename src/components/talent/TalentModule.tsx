@@ -18,6 +18,7 @@ import {
 } from '@/services/reportLinkService';
 import { VolunteerRecruitmentModule } from '@/components/marketing/VolunteerRecruitmentModule';
 import { KolListModule, type KolProfile } from '@/components/talent/KolListModule';
+import { KolCooperatedModule } from '@/components/talent/KolCooperatedModule';
 import { KolApplyModule } from '@/components/talent/KolApplyModule';
 
 // =====================================================================
@@ -3146,7 +3147,7 @@ export function TalentModule({ subModule }: { subModule?: string }) {
     case 'kol-meeting':
       return <KolListModule workflowView="meeting" />;
     case 'kol-cooperated':
-      return <KolListModule workflowView="cooperated" />;
+      return <KolCooperatedModule />;
     case 'kol-star':
       return <KolListModule workflowView="star" />;
     case 'kol-list':
