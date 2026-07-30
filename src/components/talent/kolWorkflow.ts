@@ -29,6 +29,20 @@ export const CATEGORY_LABELS: Record<KolPrimaryCategory, string> = {
   other: '其他',
 };
 
+/** Card/detail badge: use DB category, contextual label when both food+beauty. */
+export function categoryBadgeLabel(
+  primaryCategory: string | null | undefined,
+  workflowView?: KolWorkflowView
+): string {
+  const cat = (primaryCategory || 'other') as KolPrimaryCategory;
+  if (cat === 'both') {
+    if (workflowView === 'beauty') return '美容';
+    if (workflowView === 'food') return '美食';
+    return CATEGORY_LABELS.both;
+  }
+  return CATEGORY_LABELS[cat] ?? CATEGORY_LABELS.other;
+}
+
 export const VIEW_META: Record<
   KolWorkflowView,
   { title: string; description: string }

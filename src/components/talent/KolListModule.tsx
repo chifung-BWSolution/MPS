@@ -31,6 +31,7 @@ import {
   availableWorkflowActions,
   buildLifecyclePatch,
   CATEGORY_LABELS,
+  categoryBadgeLabel,
   LIFECYCLE_LABELS,
   matchesWorkflowView,
   VIEW_META,
@@ -399,18 +400,20 @@ function hasPhotoUrl(row: KolProfile): boolean {
 function KolCard({
   row,
   onClick,
+  workflowView = 'all',
   showWorkflowBadge = false,
   selected = false,
   onToggleSelect,
 }: {
   row: KolProfile;
   onClick: () => void;
+  workflowView?: KolWorkflowView;
   showWorkflowBadge?: boolean;
   selected?: boolean;
   onToggleSelect?: () => void;
 }) {
   const ig = formatIg(row.instagram_account);
-  const tag = themeLabel(row);
+  const tag = categoryBadgeLabel(row.primary_category, workflowView);
   const status = row.lifecycle_status || 'unprocessed';
   const statusLabel =
     LIFECYCLE_LABELS[status as keyof typeof LIFECYCLE_LABELS] || status;
@@ -1266,6 +1269,7 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
                 <KolCard
                   key={row.id}
                   row={row}
+                  workflowView={workflowView}
                   showWorkflowBadge={workflowView === 'all'}
                   selected={selectedIds.has(row.id)}
                   onToggleSelect={() => {
@@ -1577,7 +1581,7 @@ node scripts/push_kol_batches.mjs`}
                         {genderLabel(detail.salutation)} · {detail.age_group || '—'}
                       </p>
                       <span className="inline-flex px-2 py-0.5 rounded-md bg-[#f4a261] text-white text-[11px]">
-                        {themeLabel(detail)}
+                        {categoryBadgeLabel(detail.primary_category, workflowView)}
                       </span>
                     </div>
                   </div>
