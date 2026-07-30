@@ -3138,19 +3138,19 @@ export function TalentModule({ subModule }: { subModule?: string }) {
     case 'interviews': return <TalentInterviews />;
     case 'collaborated': return <TalentCollaborated />;
     case 'kol-food':
-      return <KolListModule view="food" />;
+      return <KolListModule workflowView="food" />;
     case 'kol-beauty':
-      return <KolListModule view="beauty" />;
+      return <KolListModule workflowView="beauty" />;
     case 'kol-shortlist':
-      return <KolListModule view="shortlist" />;
+      return <KolListModule workflowView="shortlist" />;
     case 'kol-meeting':
-      return <KolListModule view="meeting" />;
+      return <KolListModule workflowView="meeting" />;
     case 'kol-cooperated':
-      return <KolListModule view="cooperated" />;
+      return <KolListModule workflowView="cooperated" />;
     case 'kol-star':
-      return <KolListModule view="star" />;
+      return <KolListModule workflowView="star" />;
     case 'kol-list':
-      return <KolListModule view="all" />;
+      return <KolListModule workflowView="all" />;
     case 'kol-apply':
       return <KolApplyModule />;
     case 'kol-campaigns':

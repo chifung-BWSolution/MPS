@@ -37,6 +37,9 @@ import {
   WORKFLOW_ACTION_LABELS,
   type KolWorkflowView,
 } from '@/components/talent/kolWorkflow';
+import { KolDetailExtras } from '@/components/talent/KolDetailExtras';
+import { starUpgradeWarning } from '@/components/talent/kolRating';
+import { useAuth } from '@/context/AuthContext';
 
 // =====================================================================
 // Types
@@ -100,6 +103,10 @@ export interface KolProfile {
   meeting_notes?: string | null;
   meeting_status?: string | null;
   cooperated_at?: string | null;
+  rating_avg?: number | null;
+  rating_count?: number | null;
+  last_rated_at?: string | null;
+  meeting_owner?: string | null;
 }
 
 type ViewMode = 'gallery' | 'list';
@@ -110,6 +117,7 @@ interface AdvancedFilters {
   area: string;
   theme: string;
   specialty: string;
+  tag: string;
   igMin: string;
   igMax: string;
   openriceLevel: string;
@@ -129,6 +137,7 @@ const emptyFilters = (): AdvancedFilters => ({
   area: '',
   theme: '',
   specialty: '',
+  tag: '',
   igMin: '',
   igMax: '',
   openriceLevel: '',
@@ -391,10 +400,14 @@ function KolCard({
   row,
   onClick,
   showWorkflowBadge = false,
+  selected = false,
+  onToggleSelect,
 }: {
   row: KolProfile;
   onClick: () => void;
   showWorkflowBadge?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }) {
   const ig = formatIg(row.instagram_account);
   const tag = themeLabel(row);
@@ -406,10 +419,22 @@ function KolCard({
   const showPhoto = hasPhotoUrl(row) && !imgError;
 
   return (
+    <div className="relative group/card">
+      {onToggleSelect && (
+        <div
+          className="absolute top-2 right-2 z-10"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Checkbox checked={selected} onCheckedChange={() => onToggleSelect()} />
+        </div>
+      )}
     <button
       type="button"
       onClick={onClick}
-      className="group text-left rounded-xl border border-[rgba(13,26,45,0.08)] bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow w-full"
+      className={cn(
+        'group text-left rounded-xl border bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow w-full',
+        selected ? 'border-teal-500 ring-1 ring-teal-200' : 'border-[rgba(13,26,45,0.08)]'
+      )}
     >
       {/* 左圖 + 右基礎信息；照片固定 120px（約 +30% 相對先前 94px，並用明確寬高避免不生效） */}
       <div className="flex gap-2.5 p-2.5">
@@ -512,6 +537,7 @@ function KolCard({
         <p className="text-slate-500">收錄 {formatEntryDate(row)}</p>
       </div>
     </button>
+    </div>
   );
 }
 
@@ -616,15 +642,18 @@ function LinkValue({ href, children }: { href: string | null; children: ReactNod
 // Main module
 // =====================================================================
 
-export function KolListModule({ view = 'all' }: { view?: KolWorkflowView }) {
-  const viewMeta = VIEW_META[view];
+export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWorkflowView }) {
+  const viewMeta = VIEW_META[workflowView];
+  const { systemUser, userInfo, user } = useAuth();
+  const actorName =
+    systemUser?.display_name || userInfo?.display_name || user?.email || '同事';
   const [rows, setRows] = useState<KolProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<AdvancedFilters>(emptyFilters);
   const [hasPhotoOnly, setHasPhotoOnly] = useState(true);
-  const [view, setView] = useState<ViewMode>('gallery');
+  const [layoutView, setLayoutView] = useState<ViewMode>('gallery');
   const [page, setPage] = useState(1);
 
   const [detail, setDetail] = useState<KolProfile | null>(null);
@@ -639,7 +668,10 @@ export function KolListModule({ view = 'all' }: { view?: KolWorkflowView }) {
     meeting_location: '',
     meeting_notes: '',
     meeting_status: 'pending',
+    meeting_owner: '',
   });
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -661,9 +693,13 @@ export function KolListModule({ view = 'all' }: { view?: KolWorkflowView }) {
 
   const filterOptions = useMemo(() => {
     const themes = new Set<string>();
+    const tagSet = new Set<string>();
     for (const r of rows) {
       for (const t of r.blog_themes || []) {
         if (t.trim()) themes.add(t.trim());
+      }
+      for (const t of r.tags || []) {
+        if (t.trim()) tagSet.add(t.trim());
       }
       themes.add(themeLabel(r));
     }
@@ -671,6 +707,7 @@ export function KolListModule({ view = 'all' }: { view?: KolWorkflowView }) {
       ageGroup: uniqueSorted(rows.map((r) => r.age_group)),
       birthMonth: uniqueSorted(rows.map((r) => r.birth_month)),
       theme: [...themes].sort((a, b) => a.localeCompare(b, 'zh-Hant')),
+      tag: [...tagSet].sort((a, b) => a.localeCompare(b, 'zh-Hant')),
       openriceLevel: uniqueSorted(rows.map((r) => r.openrice_level)),
       tastingFrequency: uniqueSorted(rows.map((r) => r.tasting_frequency)),
       tastingExperience: uniqueSorted(rows.map((r) => r.tasting_experience)),
@@ -685,7 +722,7 @@ export function KolListModule({ view = 'all' }: { view?: KolWorkflowView }) {
     const igMax = filters.igMax.trim() ? parseInt(filters.igMax, 10) : null;
 
     const list = rows.filter((r) => {
-      if (!matchesWorkflowView(r, view)) return false;
+      if (!matchesWorkflowView(r, workflowView)) return false;
       if (hasPhotoOnly && !hasPhotoUrl(r)) return false;
       if (q) {
         const hay = [r.name, r.instagram_account, r.phone, r.email]
@@ -714,6 +751,10 @@ export function KolListModule({ view = 'all' }: { view?: KolWorkflowView }) {
         const s = (r.specialty || '').toLowerCase();
         if (!s.includes(filters.specialty.trim().toLowerCase())) return false;
       }
+      if (filters.tag) {
+        const tags = r.tags || [];
+        if (!tags.some((t) => t === filters.tag || t.includes(filters.tag))) return false;
+      }
       if (igMin != null && !Number.isNaN(igMin) && (r.instagram_followers ?? 0) < igMin) return false;
       if (igMax != null && !Number.isNaN(igMax) && (r.instagram_followers ?? 0) > igMax) return false;
       if (filters.openriceLevel && r.openrice_level !== filters.openriceLevel) return false;
@@ -733,14 +774,14 @@ export function KolListModule({ view = 'all' }: { view?: KolWorkflowView }) {
     });
 
     return list.sort((a, b) => entryDateSortKey(b) - entryDateSortKey(a));
-  }, [rows, search, filters, hasPhotoOnly, view]);
+  }, [rows, search, filters, hasPhotoOnly, workflowView]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
 
   useEffect(() => {
     setPage(1);
-  }, [search, filters, hasPhotoOnly, view]);
+  }, [search, filters, hasPhotoOnly, workflowView]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -768,6 +809,7 @@ export function KolListModule({ view = 'all' }: { view?: KolWorkflowView }) {
       meeting_location: row.meeting_location || '',
       meeting_notes: row.meeting_notes || '',
       meeting_status: row.meeting_status || 'pending',
+      meeting_owner: row.meeting_owner || actorName,
     });
   };
 
@@ -840,9 +882,11 @@ export function KolListModule({ view = 'all' }: { view?: KolWorkflowView }) {
     if (!detail) return;
     let extras: { fee_standard?: string; recognized_by?: string } | undefined;
     if (action === 'star') {
+      const warn = starUpgradeWarning(detail.rating_avg);
+      if (warn && !window.confirm(warn)) return;
       const fee = window.prompt('請輸入星級藝人收費標準（可留空稍後補）', detail.fee_standard || '');
       if (fee === null) return;
-      extras = { fee_standard: fee.trim() || undefined };
+      extras = { fee_standard: fee.trim() || undefined, recognized_by: actorName };
     }
     setWorkflowBusy(true);
     try {
@@ -878,6 +922,7 @@ export function KolListModule({ view = 'all' }: { view?: KolWorkflowView }) {
         meeting_location: meetingDraft.meeting_location.trim() || null,
         meeting_notes: meetingDraft.meeting_notes.trim() || null,
         meeting_status: meetingDraft.meeting_status || null,
+        meeting_owner: meetingDraft.meeting_owner.trim() || null,
         updated_at: new Date().toISOString(),
       };
       const { data, error: err } = await supabase
@@ -906,6 +951,59 @@ export function KolListModule({ view = 'all' }: { view?: KolWorkflowView }) {
     CATEGORY_LABELS[(row.primary_category || 'other') as keyof typeof CATEGORY_LABELS] ||
     row.primary_category ||
     '—';
+
+  const handleSaveTags = async (tags: string[]) => {
+    if (!detail) return;
+    const { data, error: err } = await supabase
+      .from('kol_profile')
+      .update({ tags, updated_at: new Date().toISOString() })
+      .eq('id', detail.id)
+      .select('*')
+      .single();
+    if (err) throw err;
+    setDetail(data as KolProfile);
+    await load();
+  };
+
+  const toggleSelectAllPage = () => {
+    const pageIds = pageRows.map((r) => r.id);
+    const allSelected = pageIds.every((id) => selectedIds.has(id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) pageIds.forEach((id) => next.delete(id));
+      else pageIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const handleBulkShortlist = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkBusy(true);
+    try {
+      const now = new Date().toISOString();
+      const ids = [...selectedIds];
+      const { error: err } = await supabase
+        .from('kol_profile')
+        .update({
+          lifecycle_status: 'shortlist',
+          shortlist_at: now,
+          updated_at: now,
+        })
+        .in('id', ids)
+        .eq('lifecycle_status', 'unprocessed');
+      if (err) throw err;
+      toast.success(`已批量加入候選（${ids.length} 位）`);
+      setSelectedIds(new Set());
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const pageAllSelected =
+    pageRows.length > 0 && pageRows.every((r) => selectedIds.has(r.id));
 
   const drawerOpen = Boolean(detail) || creating;
   const pageFrom = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
@@ -1002,20 +1100,20 @@ export function KolListModule({ view = 'all' }: { view?: KolWorkflowView }) {
             <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 shrink-0">
               <button
                 type="button"
-                onClick={() => setView('list')}
+                onClick={() => setLayoutView('list')}
                 className={cn(
                   'px-2 py-1 text-[11px] rounded',
-                  view === 'list' ? 'bg-slate-900 text-white' : 'text-slate-600'
+                  layoutView === 'list' ? 'bg-slate-900 text-white' : 'text-slate-600'
                 )}
               >
                 列表
               </button>
               <button
                 type="button"
-                onClick={() => setView('gallery')}
+                onClick={() => setLayoutView('gallery')}
                 className={cn(
                   'px-2 py-1 text-[11px] rounded',
-                  view === 'gallery' ? 'bg-slate-900 text-white' : 'text-slate-600'
+                  layoutView === 'gallery' ? 'bg-slate-900 text-white' : 'text-slate-600'
                 )}
               >
                 相片牆
@@ -1071,6 +1169,13 @@ export function KolListModule({ view = 'all' }: { view?: KolWorkflowView }) {
               onChange={(v) => setFilters((f) => ({ ...f, specialty: v }))}
               placeholder="專長"
             />
+            <FilterSelect
+              label="標籤"
+              value={filters.tag}
+              onChange={(v) => setFilters((f) => ({ ...f, tag: v }))}
+              options={filterOptions.tag}
+              allLabel="全部"
+            />
             <FilterInput
               label="合作意向"
               value={filters.cooperationIntent}
@@ -1102,6 +1207,43 @@ export function KolListModule({ view = 'all' }: { view?: KolWorkflowView }) {
         </div>
       </div>
 
+      {(selectedIds.size > 0 || pageRows.length > 0) && (
+        <div className="flex flex-wrap items-center gap-2 mb-3 px-1">
+          <Checkbox
+            checked={pageAllSelected}
+            onCheckedChange={() => toggleSelectAllPage()}
+            id="kol-select-page"
+          />
+          <label htmlFor="kol-select-page" className="text-[12px] text-slate-600 cursor-pointer">
+            全選本頁
+          </label>
+          {selectedIds.size > 0 && (
+            <>
+              <span className="text-[12px] text-slate-500">已選 {selectedIds.size} 位</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8"
+                disabled={bulkBusy}
+                onClick={() => void handleBulkShortlist()}
+              >
+                批量加入候選
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-8 text-slate-500"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                清除選取
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center py-20 text-slate-500 gap-2">
           <Loader2 className="animate-spin" size={18} />
@@ -1118,13 +1260,22 @@ export function KolListModule({ view = 'all' }: { view?: KolWorkflowView }) {
         </div>
       ) : (
         <>
-          {view === 'gallery' ? (
+          {layoutView === 'gallery' ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
               {pageRows.map((row) => (
                 <KolCard
                   key={row.id}
                   row={row}
-                  showWorkflowBadge={view === 'all'}
+                  showWorkflowBadge={workflowView === 'all'}
+                  selected={selectedIds.has(row.id)}
+                  onToggleSelect={() => {
+                    setSelectedIds((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(row.id)) next.delete(row.id);
+                      else next.add(row.id);
+                      return next;
+                    });
+                  }}
                   onClick={() => openDetail(row)}
                 />
               ))}
@@ -1544,6 +1695,12 @@ node scripts/push_kol_batches.mjs`}
                     <dl>
                       <DetailRow label="分類" value={categoryLabel(detail)} />
                       <DetailRow label="狀態" value={lifecycleLabel(detail)} />
+                      {detail.rating_avg != null && (
+                        <DetailRow
+                          label="評分平均"
+                          value={`${Number(detail.rating_avg).toFixed(1)} / 5（${detail.rating_count ?? 0} 次）`}
+                        />
+                      )}
                       {detail.shortlist_at && (
                         <DetailRow
                           label="加入候選"
@@ -1608,6 +1765,15 @@ node scripts/push_kol_batches.mjs`}
                             className="text-[13px]"
                           />
                         </FormField>
+                        <FormField label="負責人">
+                          <Input
+                            value={meetingDraft.meeting_owner}
+                            onChange={(e) =>
+                              setMeetingDraft((d) => ({ ...d, meeting_owner: e.target.value }))
+                            }
+                            className="h-9"
+                          />
+                        </FormField>
                         <FormField label="約見狀態">
                           <Select
                             value={meetingDraft.meeting_status}
@@ -1639,6 +1805,22 @@ node scripts/push_kol_batches.mjs`}
                       </div>
                     </section>
                   )}
+
+                  <KolDetailExtras
+                    detail={detail}
+                    onTagsSave={handleSaveTags}
+                    onProfileRefresh={async () => {
+                      if (!detail) return;
+                      const { data, error: err } = await supabase
+                        .from('kol_profile')
+                        .select('*')
+                        .eq('id', detail.id)
+                        .single();
+                      if (err) throw err;
+                      if (data) setDetail(data as KolProfile);
+                      await load();
+                    }}
+                  />
 
                   <section>
                     <h3 className="text-[12px] font-semibold text-slate-400 uppercase tracking-wide mb-1">
