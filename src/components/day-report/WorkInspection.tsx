@@ -19,7 +19,7 @@ import {
 // ============================
 type PeriodType = 'week' | 'month';
 type OfficeLocation = 'hk' | 'sz';
-type DayStatus = 'filled' | 'leave' | 'rest' | 'holiday' | 'missing' | 'future' | 'empty';
+type DayStatus = 'filled' | 'draft' | 'leave' | 'rest' | 'holiday' | 'missing' | 'future' | 'empty';
 
 interface StaffMember {
   bubble_staff_id: string;
@@ -39,6 +39,7 @@ interface DayReportLite {
   is_holiday: boolean;
   is_weekend: boolean;
   office_location: string | null;
+  status: string | null;
 }
 
 const UNASSIGNED_DEPT = '__UNASSIGNED__';
@@ -193,7 +194,9 @@ function resolveDayStatus(
   if (!dateStr) return 'empty';
   if (dateStr > todayStr) return 'future';
   if (report?.is_leave) return 'leave';
-  if (report && !report.is_leave) return 'filled';
+  if (report && !report.is_leave) {
+    return report.status === 'draft' ? 'draft' : 'filled';
+  }
   if (report?.is_weekend || isWeekend(dateStr)) return 'rest';
   if (report?.is_holiday || isPublicHoliday(dateStr, office)) return 'holiday';
   return 'missing';
@@ -220,6 +223,7 @@ function StatusCell({
       status === 'missing' && 'border-rose-100 bg-rose-50/40',
       status === 'future' && 'border-transparent bg-slate-50/60',
       status === 'filled' && 'border-emerald-100 bg-emerald-50/50',
+      status === 'draft' && 'border-amber-100 bg-amber-50/50',
       status === 'leave' && 'border-amber-100 bg-amber-50/50',
       status === 'rest' && 'border-violet-100 bg-violet-50/40',
       status === 'holiday' && 'border-slate-100 bg-slate-50',
@@ -228,6 +232,11 @@ function StatusCell({
       {status === 'filled' && (
         <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center">
           <Check size={9} strokeWidth={3} />
+        </span>
+      )}
+      {status === 'draft' && (
+        <span className="w-3.5 h-3.5 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
+          暫
         </span>
       )}
       {status === 'leave' && (
@@ -380,7 +389,7 @@ export function WorkInspection() {
           const chunk = staffIds.slice(i, i + chunkSize);
           const { data } = await supabase
             .from('day_reports')
-            .select('id, staff_id, report_date, is_leave, leave_type, is_holiday, is_weekend, office_location')
+            .select('id, staff_id, report_date, is_leave, leave_type, is_holiday, is_weekend, office_location, status')
             .in('staff_id', chunk)
             .gte('report_date', dateRange.start)
             .lte('report_date', dateRange.end);
@@ -392,6 +401,7 @@ export function WorkInspection() {
                 is_leave: !!r.is_leave,
                 is_holiday: !!r.is_holiday,
                 is_weekend: !!r.is_weekend,
+                status: r.status || 'submitted',
               })),
             );
           }
@@ -502,7 +512,8 @@ export function WorkInspection() {
       if (dateStr > todayStr) return;
       const report = reportByStaffDate.get(`${member.bubble_staff_id}__${dateStr}`);
       const status = resolveDayStatus(dateStr, report, office, todayStr);
-      if (status === 'missing') missing += 1;
+      // Draft is incomplete — still count toward missing for inspection
+      if (status === 'missing' || status === 'draft') missing += 1;
     });
     return missing;
   }, [periodType, weekDates, monthWeekRows, reportByStaffDate, todayStr]);
@@ -705,6 +716,10 @@ export function WorkInspection() {
             <Check size={9} strokeWidth={3} />
           </span>
           已填
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-3.5 h-3.5 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center">暫</span>
+          暫存
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="w-3.5 h-3.5 rounded-full bg-amber-600 text-white text-[8px] font-bold flex items-center justify-center">假</span>

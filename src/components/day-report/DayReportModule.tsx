@@ -248,15 +248,19 @@ function SubmitReportPage() {
   const [underHoursReason, setUnderHoursReason] = useState('');
   const [isPulling, setIsPulling] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [tempSaved, setTempSaved] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isTempSaving, setIsTempSaving] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [existingReportId, setExistingReportId] = useState<string | null>(null);
+  const [existingReportStatus, setExistingReportStatus] = useState<string | null>(null);
   // Start as `true` so the draft-hydrated gate stays closed until
   // loadExistingReport has actually finished (its setIsLoadingExisting(true)
   // happens inside an async function and would otherwise miss the first
   // commit, letting the persist effect wipe localStorage before restore).
   const [isLoadingExisting, setIsLoadingExisting] = useState(true);
   const isUpdateMode = !!existingReportId;
+  const isDraftReport = existingReportStatus === 'draft';
 
   // Reactive helper: get related items for a work category from DataStore (live data)
   const getRelatedItemsLive = useCallback((category: WorkCategory): { id: string; name: string }[] => {
@@ -452,6 +456,7 @@ function SubmitReportPage() {
     async function loadExistingReport() {
       if (!currentStaffId) {
         setExistingReportId(null);
+        setExistingReportStatus(null);
         if (!staffIdResolved) return;
         setIsLoadingExisting(false);
         return;
@@ -463,7 +468,7 @@ function SubmitReportPage() {
         // Check if a report exists for this date
         const { data: reportData, error: reportError } = await supabase
           .from('day_reports')
-          .select('id, total_hours, target_hours, office_location, under_hours_reason')
+          .select('id, total_hours, target_hours, office_location, under_hours_reason, status')
           .eq('staff_id', currentStaffId)
           .eq('report_date', selectedDate)
           .maybeSingle();
@@ -475,8 +480,9 @@ function SubmitReportPage() {
         }
 
         if (reportData) {
-          console.log('[SubmitReport] Found existing report:', reportData.id, 'hours:', reportData.total_hours);
+          console.log('[SubmitReport] Found existing report:', reportData.id, 'hours:', reportData.total_hours, 'status:', reportData.status);
           setExistingReportId(reportData.id);
+          setExistingReportStatus(reportData.status || 'submitted');
           if (reportData.target_hours) setTargetHours(Number(reportData.target_hours));
           if (reportData.office_location) setOffice(reportData.office_location as OfficeLocation);
           if (reportData.under_hours_reason) {
@@ -528,6 +534,7 @@ function SubmitReportPage() {
           // and would otherwise overwrite a freshly-restored draft.
           console.log('[SubmitReport] No existing report for date:', selectedDate);
           setExistingReportId(null);
+          setExistingReportStatus(null);
           const draftKey = `mps:day-report-draft:${currentStaffId}:${selectedDate}`;
           let draftRestored = false;
           let restoredEntries: ReportFormEntry[] | null = null;
@@ -566,6 +573,7 @@ function SubmitReportPage() {
         console.error('[SubmitReport] Error loading existing report:', err);
         if (!cancelled) {
           setExistingReportId(null);
+          setExistingReportStatus(null);
         }
       } finally {
         if (!cancelled) {
@@ -690,6 +698,12 @@ function SubmitReportPage() {
   ) && totalHours > 0;
   
   const canSubmit = canSubmitWork;
+  const hasTempSaveContent = entries.some(e => e.category && e.hours > 0);
+  // After formal submit, use「更新匯報」; 暫存 is for incomplete drafts only
+  const canTempSave = hasTempSaveContent
+    && !isSubmitting
+    && !isTempSaving
+    && existingReportStatus !== 'submitted';
   
   const aiUsedInEntries = entries.some(e => e.isAiAssisted || e.aiToolsV2.copywriting.length > 0 || e.aiToolsV2.image.length > 0 || e.aiToolsV2.video.length > 0 || !!e.aiToolsV2.copywritingOther || !!e.aiToolsV2.imageOther || !!e.aiToolsV2.videoOther);
 
@@ -862,9 +876,17 @@ function SubmitReportPage() {
     return urls;
   };
 
-  const handleSubmit = async () => {
+  const saveReport = async (saveMode: 'draft' | 'submitted') => {
     if (!currentStaffId) {
       setSubmitError('無法識別當前用戶，請確認員工資料已同步。');
+      return;
+    }
+    if (saveMode === 'submitted' && !canSubmit) {
+      setSubmitError('請先滿足提交條件（工時達標或填寫未達標原因）。');
+      return;
+    }
+    if (saveMode === 'draft' && !hasTempSaveContent) {
+      setSubmitError('暫存前請至少填寫一個有工時的工作項目。');
       return;
     }
     const asanaEntry = entries.find(e => e.outcomeType === 'url' && /app\.asana\.com/i.test(e.outcomeUrl));
@@ -872,32 +894,34 @@ function SubmitReportPage() {
       setSubmitError('成果連結不允許使用 Asana 連結，請移除後再提交。');
       return;
     }
-    setIsSubmitting(true);
+
+    if (saveMode === 'draft') setIsTempSaving(true);
+    else setIsSubmitting(true);
     setSubmitError(null);
+    setTempSaved(false);
+    setSubmitted(false);
 
     try {
       let reportId: string;
-
-      // Collect related_ids that may need hours recalculation
       const affectedWebsiteIds = new Set<string>();
+      const reportPayload = {
+        total_hours: totalHours,
+        target_hours: targetHours,
+        ot_hours: otHours,
+        is_leave: false,
+        is_half_day: false,
+        office_location: office,
+        is_holiday: selectedDateIsHoliday,
+        is_weekend: selectedDateIsSat || selectedDateIsSun,
+        under_hours_reason: isUnderHours ? (underHoursReason || null) : null,
+        status: saveMode,
+        submitted_at: saveMode === 'submitted' ? new Date().toISOString() : null,
+      };
 
       if (existingReportId) {
-        // UPDATE existing report
         const { error: updateError } = await supabase
           .from('day_reports')
-          .update({
-            total_hours: totalHours,
-            target_hours: targetHours,
-            ot_hours: otHours,
-            is_leave: false,
-            is_half_day: false,
-            office_location: office,
-            is_holiday: selectedDateIsHoliday,
-            is_weekend: selectedDateIsSat || selectedDateIsSun,
-            under_hours_reason: isUnderHours ? underHoursReason : null,
-            status: 'submitted',
-            submitted_at: new Date().toISOString(),
-          })
+          .update(reportPayload)
           .eq('id', existingReportId);
 
         if (updateError) {
@@ -905,7 +929,6 @@ function SubmitReportPage() {
         }
         reportId = existingReportId;
 
-        // Capture old related_ids before deleting so we can recalculate them too
         const { data: oldEntries } = await supabase
           .from('day_report_entries')
           .select('related_id')
@@ -913,7 +936,6 @@ function SubmitReportPage() {
           .not('related_id', 'is', null);
         oldEntries?.forEach(e => e.related_id && affectedWebsiteIds.add(e.related_id));
 
-        // Delete old entries before re-inserting updated ones
         const { error: deleteError } = await supabase
           .from('day_report_entries')
           .delete()
@@ -923,23 +945,12 @@ function SubmitReportPage() {
           throw new Error(deleteError.message);
         }
       } else {
-        // INSERT new report
         const { data: reportData, error: reportError } = await supabase
           .from('day_reports')
           .insert({
             staff_id: currentStaffId,
             report_date: selectedDate,
-            total_hours: totalHours,
-            target_hours: targetHours,
-            ot_hours: otHours,
-            is_leave: false,
-            is_half_day: false,
-            office_location: office,
-            is_holiday: selectedDateIsHoliday,
-            is_weekend: selectedDateIsSat || selectedDateIsSun,
-            under_hours_reason: isUnderHours ? underHoursReason : null,
-            status: 'submitted',
-            submitted_at: new Date().toISOString(),
+            ...reportPayload,
           })
           .select('id')
           .single();
@@ -950,7 +961,6 @@ function SubmitReportPage() {
         reportId = reportData.id;
       }
 
-      // Upload any pending image files and collect public URLs per entry
       const filteredEntries = entries.filter(e => e.category && e.hours > 0);
       const uploadedUrlsPerEntry = await Promise.all(
         filteredEntries.map((_, i) => {
@@ -959,7 +969,6 @@ function SubmitReportPage() {
         })
       );
 
-      // Insert all entry records (fresh for both create and update)
       const entryRecords = filteredEntries
         .map((e, idx) => {
           const allImages = [...e.outcomeImages, ...uploadedUrlsPerEntry[idx]];
@@ -992,18 +1001,19 @@ function SubmitReportPage() {
         }
       }
 
-      const consumedIds = entries
-        .filter(e => e.pendingReportItemId && e.category && e.hours > 0)
-        .map(e => e.pendingReportItemId!);
-      if (consumedIds.length > 0) {
-        await consumePendingItems(consumedIds);
+      // Only consume pending items on final submit
+      if (saveMode === 'submitted') {
+        const consumedIds = entries
+          .filter(e => e.pendingReportItemId && e.category && e.hours > 0)
+          .map(e => e.pendingReportItemId!);
+        if (consumedIds.length > 0) {
+          await consumePendingItems(consumedIds);
+        }
+        await refreshPendingCount();
       }
-      await refreshPendingCount();
 
-      // Collect new related_ids from the just-inserted entries
       entryRecords.forEach(e => e.related_id && affectedWebsiteIds.add(e.related_id));
 
-      // Recalculate total_hours for each affected website/system
       if (affectedWebsiteIds.size > 0) {
         await Promise.all(
           Array.from(affectedWebsiteIds).map(async (websiteId) => {
@@ -1020,21 +1030,30 @@ function SubmitReportPage() {
         );
       }
 
-      // Success — clear the local draft for this date
       if (draftStorageKey) {
         try { localStorage.removeItem(draftStorageKey); } catch {}
       }
-      setSubmitted(true);
       setExistingReportId(reportId);
-      // Refresh the 14-day view
+      setExistingReportStatus(saveMode);
       loadDbReports();
-      setTimeout(() => setSubmitted(false), 4000);
+
+      if (saveMode === 'draft') {
+        setTempSaved(true);
+        setTimeout(() => setTempSaved(false), 4000);
+      } else {
+        setSubmitted(true);
+        setTimeout(() => setSubmitted(false), 4000);
+      }
     } catch (err: any) {
-      setSubmitError(err.message || '提交失敗，請重試。');
+      setSubmitError(err.message || (saveMode === 'draft' ? '暫存失敗，請重試。' : '提交失敗，請重試。'));
     } finally {
       setIsSubmitting(false);
+      setIsTempSaving(false);
     }
   };
+
+  const handleTempSave = () => saveReport('draft');
+  const handleSubmit = () => saveReport('submitted');
 
   const quickTemplates = [
     { category: 'website_design' as WorkCategory, title: '網站設計及更新', hours: 2, relatedName: '' },
@@ -1201,6 +1220,8 @@ function SubmitReportPage() {
                       'px-1.5 py-2 rounded-lg border text-[13px] font-medium transition-all relative flex flex-col items-center gap-1',
                       selectedDate === d.date 
                         ? 'bg-teal-50 border-teal-400 text-teal-800 shadow-sm ring-2 ring-teal-200' 
+                        : d.reported && d.reportStatus === 'draft'
+                          ? 'bg-amber-50/50 border-amber-200 text-amber-700'
                         : d.reported
                           ? 'bg-teal-50/50 border-teal-200 text-teal-700'
                           : d.isHoliday
@@ -1227,11 +1248,19 @@ function SubmitReportPage() {
                     {/* Hours / Status indicator */}
                     {d.reported ? (
                       <div className="flex flex-col items-center gap-0.5">
-                        <span className="text-[15px] font-bold text-teal-600">
+                        <span className={cn(
+                          'text-[15px] font-bold',
+                          d.reportStatus === 'draft' ? 'text-amber-600' : 'text-teal-600',
+                        )}>
                           {d.reportedHours}h
                         </span>
-                        <span className="text-[12px] px-1.5 py-0 rounded-full font-medium bg-teal-100 text-teal-700">
-                          ✓ 已匯報
+                        <span className={cn(
+                          'text-[12px] px-1.5 py-0 rounded-full font-medium',
+                          d.reportStatus === 'draft'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-teal-100 text-teal-700',
+                        )}>
+                          {d.reportStatus === 'draft' ? '暫存' : '✓ 已匯報'}
                         </span>
                       </div>
                     ) : (d.isHoliday || d.isSun) ? (
@@ -1250,9 +1279,10 @@ function SubmitReportPage() {
             
             {/* 14-day summary stats */}
             {(() => {
-              const reportedDays = availableDates.filter(d => d.reported);
+              const reportedDays = availableDates.filter(d => d.reported && d.reportStatus !== 'draft');
+              const draftDays = availableDates.filter(d => d.reported && d.reportStatus === 'draft');
               const workdays = availableDates.filter(d => !d.isHoliday && !d.isSun && !d.isSat);
-              const missingDays = workdays.filter(d => !d.reported);
+              const missingDays = workdays.filter(d => !d.reported || d.reportStatus === 'draft');
               const totalReportedHours = reportedDays.reduce((s, d) => s + d.reportedHours, 0);
               return (
                 <div className="flex items-center gap-4 mt-2 pt-2 border-t border-border/30 text-[13px]">
@@ -1265,6 +1295,11 @@ function SubmitReportPage() {
                   <span className="text-muted-foreground">
                     已匯報：<strong className="text-teal-700">{reportedDays.length}</strong>
                   </span>
+                  {draftDays.length > 0 && (
+                    <span className="text-amber-600 font-medium">
+                      暫存：{draftDays.length}
+                    </span>
+                  )}
                   {missingDays.length > 0 && (
                     <span className="text-rose-500 font-medium">
                       ⚠️ {missingDays.length} 天未匯報
@@ -1764,6 +1799,17 @@ function SubmitReportPage() {
             {submitError}
           </div>
         )}
+        {tempSaved && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[14px] font-medium">
+            <Check size={12} />
+            已暫存！可稍後繼續填寫並正式提交。
+          </div>
+        )}
+        {isDraftReport && !tempSaved && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50/80 border border-amber-200 text-amber-800 text-[13px]">
+            目前為暫存狀態 — 工時未達標亦可暫存；達標後請點「提交匯報」完成正式提交。
+          </div>
+        )}
         {currentStaffId && (
           <div className="text-[13px] text-muted-foreground">
             提交者：<span className="font-medium text-teal-700">{currentStaffName || currentStaffId}</span>
@@ -1776,7 +1822,7 @@ function SubmitReportPage() {
         <div className="flex items-center gap-3">
           {!canSubmit && totalHours > 0 && !hoursMatch && (
             <span className="text-[14px] text-rose-500 font-medium bg-rose-50 px-3 py-1.5 rounded-md border border-rose-200">
-              ⚠️ 所有工作項目的工時總和必須等於目標工時（{targetHours}h），目前為 {totalHours}h
+              ⚠️ 正式提交需工時 = {targetHours}h（目前 {totalHours}h）；可先暫存
             </span>
           )}
           {!canSubmit && totalHours === 0 && (
@@ -1785,12 +1831,27 @@ function SubmitReportPage() {
             </span>
           )}
           <button
+            type="button"
+            onClick={handleTempSave}
+            disabled={!canTempSave}
+            className={cn(
+              'px-5 py-2.5 rounded-md text-[16px] font-medium active:scale-[0.97] transition-all shadow-sm flex items-center gap-2 border',
+              canTempSave
+                ? 'bg-white text-amber-700 border-amber-300 hover:bg-amber-50'
+                : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed',
+            )}
+          >
+            {isTempSaving && <Loader2 size={14} className="animate-spin" />}
+            {isTempSaving ? '暫存中...' : '暫存'}
+          </button>
+          <button
+            type="button"
             onClick={handleSubmit}
-            disabled={!canSubmit || isSubmitting}
-            className={cn('px-6 py-2.5 rounded-md text-[16px] font-medium text-white active:scale-[0.97] transition-all shadow-sm flex items-center gap-2', canSubmit && !isSubmitting ? 'bg-teal-600 hover:bg-teal-700' : 'bg-gray-300 cursor-not-allowed')}
+            disabled={!canSubmit || isSubmitting || isTempSaving}
+            className={cn('px-6 py-2.5 rounded-md text-[16px] font-medium text-white active:scale-[0.97] transition-all shadow-sm flex items-center gap-2', canSubmit && !isSubmitting && !isTempSaving ? 'bg-teal-600 hover:bg-teal-700' : 'bg-gray-300 cursor-not-allowed')}
           >
             {isSubmitting && <Loader2 size={14} className="animate-spin" />}
-            {isSubmitting ? '提交中...' : isUpdateMode ? '更新匯報' : '提交匯報'}
+            {isSubmitting ? '提交中...' : (isUpdateMode && !isDraftReport) ? '更新匯報' : '提交匯報'}
           </button>
         </div>
         </div>
@@ -1944,23 +2005,27 @@ function TodayTeamReports() {
     return staffNameById[staffId] || staffId;
   }, [staffNameById]);
 
-  const submittedCount = todayReports.length;
+  const formalReports = useMemo(
+    () => todayReports.filter(r => r.status !== 'draft'),
+    [todayReports],
+  );
+  const submittedCount = formalReports.length;
   const totalStaff = filteredStaff.length;
-  const totalHoursToday = todayReports.reduce((s, r) => s + Number(r.total_hours || 0), 0);
-  const otCount = todayReports.filter(r => Number(r.ot_hours) > 0).length;
+  const totalHoursToday = formalReports.reduce((s, r) => s + Number(r.total_hours || 0), 0);
+  const otCount = formalReports.filter(r => Number(r.ot_hours) > 0).length;
   const aiUsedCount = useMemo(() => {
     // Count reports that have at least one AI-assisted entry
-    return todayReports.filter(r => {
+    return formalReports.filter(r => {
       const entries = entriesByReport.get(r.id) || [];
       return entries.some(e => e.is_ai_assisted);
     }).length;
-  }, [todayReports, entriesByReport]);
+  }, [formalReports, entriesByReport]);
   
-  // Staff who haven't submitted today
+  // Staff who haven't formally submitted today (draft-only still counts as not submitted)
   const notSubmittedStaff = useMemo(() => {
-    const submittedStaffIds = new Set(todayReports.map(r => r.staff_id));
+    const submittedStaffIds = new Set(formalReports.map(r => r.staff_id));
     return filteredStaff.filter(s => !submittedStaffIds.has(s.bubble_staff_id));
-  }, [filteredStaff, todayReports]);
+  }, [filteredStaff, formalReports]);
 
   return (
     <div className="space-y-4">
@@ -2047,6 +2112,7 @@ function TodayTeamReports() {
                       <div className="w-9 h-9 rounded-full bg-gradient-to-br from-teal-100 to-teal-200 flex items-center justify-center text-[13px] font-bold text-teal-700">{staffName.slice(0, 1)}</div>
                       <div className="flex items-center gap-2">
                         <span className="text-[14px] font-bold">{staffName}</span>
+                        {report.status === 'draft' && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">暫存</span>}
                         {report.is_leave && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">{report.leave_type || '請假'}</span>}
                         {hasAi && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 flex items-center gap-0.5"><Bot size={9} />AI</span>}
                       </div>
