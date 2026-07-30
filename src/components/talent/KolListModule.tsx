@@ -38,7 +38,8 @@ import {
   WORKFLOW_ACTION_LABELS,
   type KolWorkflowView,
 } from '@/components/talent/kolWorkflow';
-import { KolDetailExtras } from '@/components/talent/KolDetailExtras';
+import { KolDetailExtras, KolCooperationHistory } from '@/components/talent/KolDetailExtras';
+import { KolCooperationForm } from '@/components/talent/KolCooperationForm';
 import { starUpgradeWarning } from '@/components/talent/kolRating';
 import { useAuth } from '@/context/AuthContext';
 
@@ -675,6 +676,8 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
   });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [showCoopModal, setShowCoopModal] = useState(false);
+  const [coopRefreshKey, setCoopRefreshKey] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -821,6 +824,7 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
     setCreating(false);
     setEditing(false);
     setForm(emptyForm());
+    setShowCoopModal(false);
   };
 
   const startEditFromDetail = () => {
@@ -1432,9 +1436,9 @@ node scripts/push_kol_batches.mjs`}
             aria-label="關閉"
             onClick={closeDrawer}
           />
-          <aside className="relative w-full max-w-md sm:max-w-lg h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
-            <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
-              <div className="min-w-0">
+          <aside className="relative w-full max-w-xl sm:max-w-2xl h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
+            <div className="flex items-center justify-between gap-3 px-5 py-4 border-b shrink-0">
+              <div className="min-w-0 flex-1">
                 <h2 className="text-[16px] font-semibold truncate">
                   {creating ? '新增KOL' : detail?.name || 'KOL 詳情'}
                 </h2>
@@ -1444,13 +1448,27 @@ node scripts/push_kol_batches.mjs`}
                   </p>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={closeDrawer}
-                className="text-slate-400 hover:text-slate-700 shrink-0"
-              >
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {!creating && detail && !editing && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 bg-emerald-600 hover:bg-emerald-700 text-[12px]"
+                    onClick={() => setShowCoopModal(true)}
+                  >
+                    <Plus size={14} />
+                    添加合作記錄
+                  </Button>
+                )}
+                <button
+                  type="button"
+                  onClick={closeDrawer}
+                  className="text-slate-400 hover:text-slate-700 p-1"
+                  aria-label="關閉"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-4">
@@ -1845,6 +1863,8 @@ node scripts/push_kol_batches.mjs`}
                       <DetailRow label="Referrer" value={detail.referrer_url} />
                     </dl>
                   </section>
+
+                  <KolCooperationHistory kolId={detail.id} refreshKey={coopRefreshKey} />
                 </div>
               ) : null}
             </div>
@@ -1901,6 +1921,51 @@ node scripts/push_kol_batches.mjs`}
               )}
             </div>
           </aside>
+
+          {/* 添加合作記錄彈窗 */}
+          {showCoopModal && detail && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between px-5 py-4 border-b sticky top-0 bg-white z-10">
+                  <div>
+                    <h2 className="text-[16px] font-semibold">添加合作記錄</h2>
+                    <p className="text-[12px] text-slate-500 mt-0.5">{detail.name || 'KOL'}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCoopModal(false)}
+                    className="text-slate-400 hover:text-slate-700"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className="px-5 py-4">
+                  <KolCooperationForm
+                    createdBy={actorName}
+                    fixedKol={{
+                      id: detail.id,
+                      name: detail.name,
+                      instagram_account: detail.instagram_account,
+                      phone: detail.phone,
+                    }}
+                    submitLabel="儲存合作記錄"
+                    onCancel={() => setShowCoopModal(false)}
+                    onSuccess={async () => {
+                      setShowCoopModal(false);
+                      setCoopRefreshKey((k) => k + 1);
+                      const { data, error: err } = await supabase
+                        .from('kol_profile')
+                        .select('*')
+                        .eq('id', detail.id)
+                        .single();
+                      if (!err && data) setDetail(data as KolProfile);
+                      await load();
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -18,7 +18,6 @@ import {
   type KolRatingRow,
   type RatingDraft,
 } from '@/components/talent/kolRating';
-import { KolCooperationForm, CooperationRecordList } from '@/components/talent/KolCooperationForm';
 import type { KolCooperationRow } from '@/components/talent/kolCooperation';
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -296,17 +295,13 @@ export function KolRatingSection({
   );
 }
 
-export function KolCooperationSection({
-  detail,
-  onSaved,
+export function KolCooperationHistory({
+  kolId,
+  refreshKey = 0,
 }: {
-  detail: KolProfile;
-  onSaved: () => void;
+  kolId: string;
+  refreshKey?: number;
 }) {
-  const { systemUser, userInfo, user } = useAuth();
-  const createdBy =
-    systemUser?.display_name || userInfo?.display_name || user?.email || '同事';
-
   const [rows, setRows] = useState<KolCooperationRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -315,8 +310,8 @@ export function KolCooperationSection({
     try {
       const { data, error } = await supabase
         .from('kol_cooperation')
-        .select('*, kol_profile(name, instagram_account, phone)')
-        .eq('kol_profile_id', detail.id)
+        .select('*')
+        .eq('kol_profile_id', kolId)
         .order('cooperated_at', { ascending: false });
       if (error) throw error;
       setRows((data as KolCooperationRow[]) || []);
@@ -326,32 +321,56 @@ export function KolCooperationSection({
     } finally {
       setLoading(false);
     }
-  }, [detail.id]);
+  }, [kolId]);
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   return (
-    <section>
-      <SectionTitle>合作記錄</SectionTitle>
-      <div className="mb-4 p-3 rounded-lg border border-slate-200 bg-slate-50/50">
-        <KolCooperationForm
-          createdBy={createdBy}
-          fixedKol={{
-            id: detail.id,
-            name: detail.name,
-            instagram_account: detail.instagram_account,
-            phone: detail.phone,
-          }}
-          submitLabel="新增合作記錄"
-          onSuccess={() => {
-            void load();
-            onSaved();
-          }}
-        />
-      </div>
-      <CooperationRecordList rows={rows} loading={loading} />
+    <section className="border-t border-slate-200 pt-4 mt-2">
+      <SectionTitle>過往合作記錄</SectionTitle>
+      {loading ? (
+        <p className="text-[12px] text-slate-400 flex items-center gap-1 py-2">
+          <Loader2 size={12} className="animate-spin" /> 載入中…
+        </p>
+      ) : rows.length === 0 ? (
+        <p className="text-[12px] text-slate-400 py-2">尚無合作記錄</p>
+      ) : (
+        <ul className="space-y-2.5">
+          {rows.map((r) => (
+            <li
+              key={r.id}
+              className="rounded-lg border border-slate-100 bg-slate-50/60 p-3 text-[13px]"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <p className="font-medium text-slate-800">{r.project_name || '（未命名項目）'}</p>
+                <span className="text-[11px] text-slate-400 shrink-0">
+                  {new Date(r.cooperated_at).toLocaleDateString('zh-HK')}
+                </span>
+              </div>
+              {(r.platforms || []).length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {(r.platforms || []).map((p) => (
+                    <span
+                      key={p}
+                      className="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-[10px] text-slate-600"
+                    >
+                      {p}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <p className="text-slate-600 mt-1.5 leading-relaxed whitespace-pre-wrap">
+                {r.cooperation_content || r.evaluation || '—'}
+              </p>
+              {r.created_by && (
+                <p className="text-[11px] text-slate-400 mt-1">記錄人：{r.created_by}</p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
@@ -367,7 +386,6 @@ export function KolDetailExtras({
 }) {
   const status = detail.lifecycle_status || 'unprocessed';
   const showRating = ['shortlist', 'meeting', 'cooperated', 'star'].includes(status);
-  const showCoop = ['cooperated', 'star'].includes(status);
 
   return (
     <div className="space-y-5">
@@ -382,9 +400,6 @@ export function KolDetailExtras({
           ratingCount={detail.rating_count}
           onRated={onProfileRefresh}
         />
-      )}
-      {showCoop && (
-        <KolCooperationSection detail={detail} onSaved={() => void onProfileRefresh()} />
       )}
     </div>
   );
