@@ -3137,8 +3137,20 @@ export function TalentModule({ subModule }: { subModule?: string }) {
     case 'categories': return <TalentCategoriesView />;
     case 'interviews': return <TalentInterviews />;
     case 'collaborated': return <TalentCollaborated />;
+    case 'kol-food':
+      return <KolListModule view="food" />;
+    case 'kol-beauty':
+      return <KolListModule view="beauty" />;
+    case 'kol-shortlist':
+      return <KolListModule view="shortlist" />;
+    case 'kol-meeting':
+      return <KolListModule view="meeting" />;
+    case 'kol-cooperated':
+      return <KolListModule view="cooperated" />;
+    case 'kol-star':
+      return <KolListModule view="star" />;
     case 'kol-list':
-      return <KolListModule />;
+      return <KolListModule view="all" />;
     case 'kol-apply':
       return <KolApplyModule />;
     case 'kol-campaigns':

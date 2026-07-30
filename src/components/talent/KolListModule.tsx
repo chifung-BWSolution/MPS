@@ -27,6 +27,16 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import {
+  availableWorkflowActions,
+  buildLifecyclePatch,
+  CATEGORY_LABELS,
+  LIFECYCLE_LABELS,
+  matchesWorkflowView,
+  VIEW_META,
+  WORKFLOW_ACTION_LABELS,
+  type KolWorkflowView,
+} from '@/components/talent/kolWorkflow';
 
 // =====================================================================
 // Types
@@ -77,6 +87,19 @@ export interface KolProfile {
   raw_payload: Record<string, unknown> | null;
   created_at?: string;
   updated_at?: string;
+  primary_category?: string | null;
+  source_system?: string | null;
+  lifecycle_status?: string | null;
+  tags?: string[] | null;
+  fee_standard?: string | null;
+  recognized_at?: string | null;
+  recognized_by?: string | null;
+  shortlist_at?: string | null;
+  meeting_at?: string | null;
+  meeting_location?: string | null;
+  meeting_notes?: string | null;
+  meeting_status?: string | null;
+  cooperated_at?: string | null;
 }
 
 type ViewMode = 'gallery' | 'list';
@@ -364,9 +387,20 @@ function hasPhotoUrl(row: KolProfile): boolean {
   return Boolean(row.photo_url?.trim());
 }
 
-function KolCard({ row, onClick }: { row: KolProfile; onClick: () => void }) {
+function KolCard({
+  row,
+  onClick,
+  showWorkflowBadge = false,
+}: {
+  row: KolProfile;
+  onClick: () => void;
+  showWorkflowBadge?: boolean;
+}) {
   const ig = formatIg(row.instagram_account);
   const tag = themeLabel(row);
+  const status = row.lifecycle_status || 'unprocessed';
+  const statusLabel =
+    LIFECYCLE_LABELS[status as keyof typeof LIFECYCLE_LABELS] || status;
   const fb = facebookHref(row.facebook_url);
   const [imgError, setImgError] = useState(false);
   const showPhoto = hasPhotoUrl(row) && !imgError;
@@ -400,6 +434,11 @@ function KolCard({ row, onClick }: { row: KolProfile; onClick: () => void }) {
           <span className="absolute top-1 left-1 px-1 py-0.5 rounded bg-[#f4a261] text-white text-[9px] font-medium leading-none">
             {tag}
           </span>
+          {showWorkflowBadge && status !== 'unprocessed' && (
+            <span className="absolute bottom-1 left-1 px-1 py-0.5 rounded bg-slate-900/75 text-white text-[9px] leading-none">
+              {statusLabel}
+            </span>
+          )}
         </div>
         <div className="min-w-0 flex-1 space-y-0.5 py-0.5">
           <p className="text-[10px] font-medium text-slate-400 leading-none">基礎信息</p>
@@ -577,7 +616,8 @@ function LinkValue({ href, children }: { href: string | null; children: ReactNod
 // Main module
 // =====================================================================
 
-export function KolListModule() {
+export function KolListModule({ view = 'all' }: { view?: KolWorkflowView }) {
+  const viewMeta = VIEW_META[view];
   const [rows, setRows] = useState<KolProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -593,6 +633,13 @@ export function KolListModule() {
   const [form, setForm] = useState<FormState>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [showImportHint, setShowImportHint] = useState(false);
+  const [workflowBusy, setWorkflowBusy] = useState(false);
+  const [meetingDraft, setMeetingDraft] = useState({
+    meeting_at: '',
+    meeting_location: '',
+    meeting_notes: '',
+    meeting_status: 'pending',
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -638,6 +685,7 @@ export function KolListModule() {
     const igMax = filters.igMax.trim() ? parseInt(filters.igMax, 10) : null;
 
     const list = rows.filter((r) => {
+      if (!matchesWorkflowView(r, view)) return false;
       if (hasPhotoOnly && !hasPhotoUrl(r)) return false;
       if (q) {
         const hay = [r.name, r.instagram_account, r.phone, r.email]
@@ -685,14 +733,14 @@ export function KolListModule() {
     });
 
     return list.sort((a, b) => entryDateSortKey(b) - entryDateSortKey(a));
-  }, [rows, search, filters, hasPhotoOnly]);
+  }, [rows, search, filters, hasPhotoOnly, view]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
 
   useEffect(() => {
     setPage(1);
-  }, [search, filters, hasPhotoOnly]);
+  }, [search, filters, hasPhotoOnly, view]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -715,6 +763,12 @@ export function KolListModule() {
     setCreating(false);
     setEditing(false);
     setForm(rowToForm(row));
+    setMeetingDraft({
+      meeting_at: row.meeting_at ? row.meeting_at.slice(0, 16) : '',
+      meeting_location: row.meeting_location || '',
+      meeting_notes: row.meeting_notes || '',
+      meeting_status: row.meeting_status || 'pending',
+    });
   };
 
   const closeDrawer = () => {
@@ -782,6 +836,77 @@ export function KolListModule() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleWorkflowAction = async (action: ReturnType<typeof availableWorkflowActions>[number]['kind']) => {
+    if (!detail) return;
+    let extras: { fee_standard?: string; recognized_by?: string } | undefined;
+    if (action === 'star') {
+      const fee = window.prompt('請輸入星級藝人收費標準（可留空稍後補）', detail.fee_standard || '');
+      if (fee === null) return;
+      extras = { fee_standard: fee.trim() || undefined };
+    }
+    setWorkflowBusy(true);
+    try {
+      const patch = {
+        ...buildLifecyclePatch(action, extras),
+        updated_at: new Date().toISOString(),
+      };
+      const { data, error: err } = await supabase
+        .from('kol_profile')
+        .update(patch)
+        .eq('id', detail.id)
+        .select('*')
+        .single();
+      if (err) throw err;
+      toast.success(WORKFLOW_ACTION_LABELS[action]);
+      setDetail(data as KolProfile);
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
+
+  const handleSaveMeeting = async () => {
+    if (!detail) return;
+    setWorkflowBusy(true);
+    try {
+      const patch = {
+        meeting_at: meetingDraft.meeting_at
+          ? new Date(meetingDraft.meeting_at).toISOString()
+          : null,
+        meeting_location: meetingDraft.meeting_location.trim() || null,
+        meeting_notes: meetingDraft.meeting_notes.trim() || null,
+        meeting_status: meetingDraft.meeting_status || null,
+        updated_at: new Date().toISOString(),
+      };
+      const { data, error: err } = await supabase
+        .from('kol_profile')
+        .update(patch)
+        .eq('id', detail.id)
+        .select('*')
+        .single();
+      if (err) throw err;
+      toast.success('已儲存約見資料');
+      setDetail(data as KolProfile);
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
+
+  const lifecycleLabel = (row: KolProfile) =>
+    LIFECYCLE_LABELS[(row.lifecycle_status || 'unprocessed') as keyof typeof LIFECYCLE_LABELS] ||
+    row.lifecycle_status ||
+    '—';
+
+  const categoryLabel = (row: KolProfile) =>
+    CATEGORY_LABELS[(row.primary_category || 'other') as keyof typeof CATEGORY_LABELS] ||
+    row.primary_category ||
+    '—';
+
   const drawerOpen = Boolean(detail) || creating;
   const pageFrom = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const pageTo = Math.min(safePage * PAGE_SIZE, filtered.length);
@@ -791,9 +916,11 @@ export function KolListModule() {
       <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-[32px] font-bold tracking-tight">KOL列表</h1>
+            <h1 className="text-[32px] font-bold tracking-tight">{viewMeta.title}</h1>
             <p className="text-[14px] text-muted-foreground mt-1">
-              共 {rows.length} 位博客 · 符合條件 {filtered.length} 位
+              {viewMeta.description}
+              {' · '}
+              共 {rows.length} 位 · 本頁符合 {filtered.length} 位
               {filtered.length > 0 && (
                 <span className="text-slate-400">
                   {' '}
@@ -994,7 +1121,12 @@ export function KolListModule() {
           {view === 'gallery' ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
               {pageRows.map((row) => (
-                <KolCard key={row.id} row={row} onClick={() => openDetail(row)} />
+                <KolCard
+                  key={row.id}
+                  row={row}
+                  showWorkflowBadge={view === 'all'}
+                  onClick={() => openDetail(row)}
+                />
               ))}
             </div>
           ) : (
@@ -1153,7 +1285,7 @@ node scripts/push_kol_batches.mjs`}
                 </h2>
                 {!creating && detail && (
                   <p className="text-[12px] text-slate-500 mt-0.5">
-                    {themeLabel(detail)} · 收錄 {formatEntryDate(detail)}
+                    {categoryLabel(detail)} · {lifecycleLabel(detail)} · 收錄 {formatEntryDate(detail)}
                   </p>
                 )}
               </div>
@@ -1407,6 +1539,109 @@ node scripts/push_kol_batches.mjs`}
 
                   <section>
                     <h3 className="text-[12px] font-semibold text-slate-400 uppercase tracking-wide mb-1">
+                      工作流
+                    </h3>
+                    <dl>
+                      <DetailRow label="分類" value={categoryLabel(detail)} />
+                      <DetailRow label="狀態" value={lifecycleLabel(detail)} />
+                      {detail.shortlist_at && (
+                        <DetailRow
+                          label="加入候選"
+                          value={new Date(detail.shortlist_at).toLocaleString('zh-HK')}
+                        />
+                      )}
+                      {detail.cooperated_at && (
+                        <DetailRow
+                          label="合作時間"
+                          value={new Date(detail.cooperated_at).toLocaleString('zh-HK')}
+                        />
+                      )}
+                      {detail.lifecycle_status === 'star' && (
+                        <>
+                          <DetailRow label="收費標準" value={detail.fee_standard} />
+                          <DetailRow
+                            label="認可時間"
+                            value={
+                              detail.recognized_at
+                                ? new Date(detail.recognized_at).toLocaleString('zh-HK')
+                                : '—'
+                            }
+                          />
+                          <DetailRow label="認可人" value={detail.recognized_by} />
+                        </>
+                      )}
+                    </dl>
+                  </section>
+
+                  {detail.lifecycle_status === 'meeting' && (
+                    <section>
+                      <h3 className="text-[12px] font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                        約見安排
+                      </h3>
+                      <div className="space-y-3">
+                        <FormField label="約見時間">
+                          <Input
+                            type="datetime-local"
+                            value={meetingDraft.meeting_at}
+                            onChange={(e) =>
+                              setMeetingDraft((d) => ({ ...d, meeting_at: e.target.value }))
+                            }
+                            className="h-9"
+                          />
+                        </FormField>
+                        <FormField label="地點">
+                          <Input
+                            value={meetingDraft.meeting_location}
+                            onChange={(e) =>
+                              setMeetingDraft((d) => ({ ...d, meeting_location: e.target.value }))
+                            }
+                            className="h-9"
+                          />
+                        </FormField>
+                        <FormField label="備註">
+                          <Textarea
+                            value={meetingDraft.meeting_notes}
+                            onChange={(e) =>
+                              setMeetingDraft((d) => ({ ...d, meeting_notes: e.target.value }))
+                            }
+                            rows={2}
+                            className="text-[13px]"
+                          />
+                        </FormField>
+                        <FormField label="約見狀態">
+                          <Select
+                            value={meetingDraft.meeting_status}
+                            onValueChange={(v) =>
+                              setMeetingDraft((d) => ({ ...d, meeting_status: v }))
+                            }
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">待約</SelectItem>
+                              <SelectItem value="scheduled">已約</SelectItem>
+                              <SelectItem value="completed">已完成</SelectItem>
+                              <SelectItem value="cancelled">取消</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormField>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={workflowBusy}
+                          onClick={() => void handleSaveMeeting()}
+                        >
+                          {workflowBusy && <Loader2 size={14} className="animate-spin" />}
+                          儲存約見資料
+                        </Button>
+                      </div>
+                    </section>
+                  )}
+
+                  <section>
+                    <h3 className="text-[12px] font-semibold text-slate-400 uppercase tracking-wide mb-1">
                       其他
                     </h3>
                     <dl>
@@ -1428,9 +1663,9 @@ node scripts/push_kol_batches.mjs`}
               ) : null}
             </div>
 
-            <div className="flex justify-end gap-2 px-5 py-4 border-t shrink-0 bg-white">
+            <div className="flex flex-wrap justify-between gap-2 px-5 py-4 border-t shrink-0 bg-white">
               {editing || creating ? (
-                <>
+                <div className="flex justify-end gap-2 w-full">
                   <Button
                     type="button"
                     variant="outline"
@@ -1449,15 +1684,33 @@ node scripts/push_kol_batches.mjs`}
                     {saving && <Loader2 size={14} className="animate-spin" />}
                     儲存
                   </Button>
-                </>
+                </div>
               ) : (
                 <>
-                  <Button type="button" variant="outline" onClick={closeDrawer}>
-                    關閉
-                  </Button>
-                  <Button type="button" onClick={startEditFromDetail}>
-                    編輯
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    {detail &&
+                      availableWorkflowActions(detail).map((action) => (
+                        <Button
+                          key={action.kind}
+                          type="button"
+                          size="sm"
+                          variant={action.kind === 'star' ? 'default' : 'outline'}
+                          className={action.kind === 'star' ? 'bg-amber-600 hover:bg-amber-700' : ''}
+                          disabled={workflowBusy}
+                          onClick={() => void handleWorkflowAction(action.kind)}
+                        >
+                          {WORKFLOW_ACTION_LABELS[action.kind]}
+                        </Button>
+                      ))}
+                  </div>
+                  <div className="flex gap-2 ml-auto">
+                    <Button type="button" variant="outline" onClick={closeDrawer}>
+                      關閉
+                    </Button>
+                    <Button type="button" onClick={startEditFromDetail}>
+                      編輯
+                    </Button>
+                  </div>
                 </>
               )}
             </div>
