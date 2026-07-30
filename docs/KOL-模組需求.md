@@ -14,7 +14,7 @@
 | 候選／約見／已合作／星級 | ❌ 未建 |
 | 資料表 `kol_profile` | ✅ 約 1620 筆（Food Blogger Excel 匯入） |
 | 資料表 `kol_apply` | ✅ 已建表，目前 0 筆 |
-| 來源區分 Beauty 18 / Foodies | ❌ 無專用 `source` 枚舉；僅 `kol_apply.source` 文字欄 |
+| 來源區分 Beauty 100 / Foodies | ❌ 無專用 `source` 枚舉；僅 `kol_apply.source` 文字欄 |
 | 美食／美容標籤 | ⚠️ 僅 `blog_themes[]`（表單「Blog 的主題」），**無**獨立 `kol_category` |
 | 生命週期狀態 | ❌ 無「候選／約見／已合作／星級」欄位 |
 | 評分／認可／收費 | ❌ KOL 表無；藝人 `confirmed_artist` 有面試評分，但不共用 |
@@ -33,11 +33,11 @@
 | 僅美容／美麗 | 1 |
 | 兩者皆無 | 8 |
 
-**結論：**
+**結論（已定案）：**
 
-- **美食 KOL**：可暫以 `blog_themes` 含「美食／Food」篩選。
-- **美容 KOL**：表單無「美容」字樣，最接近為 **「美麗事件 Beauty」**；語意不完全等同「美容」，且幾乎與美食重疊。
-- 若要穩定分頁與來源（Foodies / Beauty 18），建議新增 **`primary_category`** 或 **`kol_category text[]`**，並在匯入時寫入，而非長期依賴 `blog_themes` 字串匹配。
+- **美食 KOL**：`blog_themes` 含「美食／Food」→ `primary_category = food`（可含 `both`）。
+- **美容 KOL**：**等同「美麗事件 Beauty」** → `primary_category = beauty`（可含 `both`）。
+- 匯入／回填時依 `blog_themes` 寫入 `primary_category`，分頁查詢以該欄為準，不再長期依賴字串即時匹配。
 
 ### 0.2 建議目標分頁（導航）
 
@@ -50,7 +50,7 @@
     ├── 預約見面          ← 新建
     ├── 已合作 KOL        ← 新建
     ├── 星級藝人          ← 新建
-    ├── KOL列表           ← 既有（可保留為全量庫／舊入口）
+    ├── KOL列表           ← 保留（全量庫入口；6 頁為工作流視圖）
     ├── KOL申請管理       ← 既有（kol_apply）
     └── KOL活動           ← 既有（volunteer_*）
 ```
@@ -62,7 +62,7 @@
 | 分頁 | 主要用途 | 核心功能需求 | 錄音對應重點 |
 |------|----------|--------------|--------------|
 | **美食 KOL** | 管理來自 Foodies 的美食類 KOL | - 從 Foodies 來源匯入／同步資料<br>- 列表展示（基本資料、近期內容、合作狀態）<br>- 支援篩選、搜尋、標籤過濾<br>- 可直接加入「候選名單」或標記為「已合作」 | 美食 KOL 會從 Foodies 取回 |
-| **美容 KOL** | 管理來自 Beauty 18 的美容類 KOL | - 從 Beauty 18 來源匯入／同步資料<br>- 功能與「美食 KOL」對稱（列表、篩選、標籤） | 美容 KOL 從 Beauty 18 取回 |
+| **美容 KOL** | 管理來自 Beauty 100 的美容類 KOL | - 從 Beauty 100 來源匯入／同步資料<br>- 功能與「美食 KOL」對稱（列表、篩選、標籤） | 美容 KOL 從 Beauty 100 取回 |
 | **候選名單** | 待篩選的潛在合作對象 | - 從美食／美容分頁批量或單筆加入<br>- 支援持續篩選（一邊看一邊 screen）<br>- 可快速操作：移至「預約見面」、加入標籤、直接評分<br>- 顯示來源、初步評分、加入時間 | 「keep 住有啲候選名單，一路 screen 嘅時間一路睇」 |
 | **預約見面** | 正在安排或已安排見面的 KOL | - 從候選名單「kick 返去」進入此狀態<br>- 記錄約見時間、地點、負責人、備註<br>- 約見完成後可觸發「做翻啲評分」流程<br>- 支援狀態：待約、已約、已完成、取消 | 「方便咁再可以 kick 返去正在約見，跟住再做翻啲評分」 |
 | **已合作 KOL** | 曾經或正在合作的 KOL 記錄 | - 記錄合作歷史、收費、項目類型、評價<br>- 可從任何分頁標記為「已合作」<br>- 支援回顧過去合作表現，方便再次使用 | 錄音提到「方便其他同事喺其他團隊都可以用得到佢」 |
@@ -74,7 +74,7 @@
 
 ### 2.1 來源匯入
 
-- 美食 KOL 從 **Foodies**、美容 KOL 從 **Beauty 18** 定期或手動同步。
+- 美食 KOL 從 **Foodies**、美容 KOL 從 **Beauty 100** 定期或手動同步。
 - 匯入後預設進入對應分頁，狀態為「**未處理**」。
 
 ### 2.2 候選篩選
@@ -106,7 +106,7 @@
 flowchart LR
   subgraph sources [來源]
     Foodies[Foodies]
-    Beauty18[Beauty_18]
+    Beauty100[Beauty_100]
     EmailForm[EmailMeForm_申請]
   end
   subgraph pages [分頁]
@@ -118,7 +118,7 @@ flowchart LR
     Star[星級藝人]
   end
   Foodies --> Food
-  Beauty18 --> Beauty
+  Beauty100 --> Beauty
   EmailForm --> Apply[KOL申請管理]
   Apply -->|批核| Profile[kol_profile]
   Food --> Shortlist
@@ -138,7 +138,7 @@ flowchart LR
 
 | 類別 | 欄位 |
 |------|------|
-| 基本 | 姓名／藝名、平台帳號、粉絲數、來源（Beauty 18 / Foodies / 手動 / 表單）、聯絡方式 |
+| 基本 | 姓名／藝名、平台帳號、粉絲數、來源（Beauty 100 / Foodies / 手動 / 表單）、聯絡方式 |
 | 狀態 | 候選、約見中、已合作、星級藝人（建議 `lifecycle_status` 或獨立狀態表） |
 | 評分 | 多位同事可評、平均分、最近評分時間 |
 | 標籤 | 多選＋自定義（建議 `kol_tags text[]` 或 tag 關聯表） |
@@ -152,7 +152,7 @@ flowchart LR
 - 已有：身份、平台、試食、相片、`blog_themes`、`applied_at` 類來源欄等。
 - 建議新增：
   - `primary_category` — `food` \| `beauty` \| `both` \| `other`
-  - `source_system` — `foodies` \| `beauty18` \| `emailmeform` \| `manual`
+  - `source_system` — `foodies` \| `Beauty100` \| `emailmeform` \| `manual`
   - `lifecycle_status` — `unprocessed` \| `shortlist` \| `meeting` \| `cooperated` \| `star`
   - `tags text[]` — MC、Model、內容創作者等（與 `blog_themes` 分離）
   - `fee_standard` — 星級藝人收費
@@ -220,12 +220,19 @@ flowchart LR
 
 ---
 
-## 6. 待產品確認
+## 6. 產品決策
 
-1. **美容** 是否等同表單選項「**美麗事件 Beauty**」，還需獨立「美容」分類？
-2. **星級藝人** 與 **藝人列表**（`confirmed_artist`）是否合併、還是 KOL 專用升級軌道？
-3. Foodies / Beauty 18 匯入為 **API 同步** 還是延續 **Excel／表單** 批次？
-4. 六個新分頁是否 **取代** 現有「KOL列表」，還是並存（全量庫 vs 分類視圖）？
+### 已定案（2026-07-30）
+
+| # | 議題 | 決定 |
+|---|------|------|
+| 1 | **KOL列表** 是否保留 | ✅ **保留** — 作為全量庫；6 個新分頁為工作流視圖（同一 `kol_profile`，不同篩選） |
+| 2 | **美容** 分類定義 | ✅ **等同「美麗事件 Beauty」** — 回填規則：`blog_themes` 含 Beauty → `primary_category = beauty`（與 Food 並存則 `both`） |
+
+### 待確認
+
+1. **星級藝人** 與 **藝人列表**（`confirmed_artist`）是否合併、還是 KOL 專用升級軌道？
+2. Foodies / Beauty 100 匯入為 **API 同步** 還是延續 **Excel／表單** 批次？
 
 ---
 
