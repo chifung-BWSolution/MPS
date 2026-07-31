@@ -6,6 +6,7 @@ import {
   Search,
   Trash2,
   Upload,
+  UserRound,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -232,6 +233,58 @@ function themeLabel(row: Pick<KolApplyRow, 'blog_themes' | 'specialty'>): string
     return first.split(/\s+/)[0].slice(0, 8);
   }
   return row.specialty?.split(/[,，]/)[0]?.trim() || '—';
+}
+
+function applyPhotoUrl(row: Pick<KolApplyRow, 'photo_url' | 'work_photo_url'>): string | null {
+  const url = row.photo_url?.trim() || row.work_photo_url?.trim();
+  return url || null;
+}
+
+/** 100×100，與藝人列表一致 */
+function ApplyPhotoCell({
+  row,
+  onClick,
+}: {
+  row: KolApplyRow;
+  onClick?: () => void;
+}) {
+  const url = applyPhotoUrl(row);
+  const [imgError, setImgError] = useState(false);
+  const showImg = Boolean(url) && !imgError;
+  const initial = (row.name || '?').trim().slice(0, 1) || '?';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'relative w-[100px] h-[100px] rounded-lg overflow-hidden shrink-0 border border-slate-200 bg-slate-100',
+        onClick && 'cursor-pointer hover:ring-2 hover:ring-teal-300/80 transition-shadow'
+      )}
+      title={onClick ? '查看詳情' : undefined}
+    >
+      {showImg ? (
+        <img
+          src={url!}
+          alt={row.name || 'KOL'}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-1 text-slate-400">
+          {initial !== '?' ? (
+            <span className="text-[28px] font-bold text-slate-300">{initial}</span>
+          ) : (
+            <>
+              <UserRound size={28} strokeWidth={1.5} />
+              <span className="text-[10px]">未有相片</span>
+            </>
+          )}
+        </div>
+      )}
+    </button>
+  );
 }
 
 function randomLoginCode(): string {
@@ -721,6 +774,7 @@ export function KolApplyModule() {
                     onCheckedChange={(v) => toggleAll(v === true)}
                   />
                 </th>
+                <th className="text-left font-medium px-3 py-2 w-[116px]">照片</th>
                 <th className="text-left font-medium px-3 py-2">姓名</th>
                 <th className="text-left font-medium px-3 py-2">IG 帳號</th>
                 <th className="text-left font-medium px-3 py-2">粉絲數</th>
@@ -734,7 +788,7 @@ export function KolApplyModule() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-16 text-center text-slate-400">
+                  <td colSpan={10} className="px-3 py-16 text-center text-slate-400">
                     沒有符合條件的申請
                   </td>
                 </tr>
@@ -746,13 +800,16 @@ export function KolApplyModule() {
                       key={row.id}
                       className="border-t border-slate-100 hover:bg-slate-50/80"
                     >
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-2.5 align-top">
                         <Checkbox
                           checked={selected.has(row.id)}
                           onCheckedChange={(v) => toggleOne(row.id, v === true)}
                         />
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-2.5 align-top">
+                        <ApplyPhotoCell row={row} onClick={() => openEdit(row)} />
+                      </td>
+                      <td className="px-3 py-2.5 align-top">
                         <button
                           type="button"
                           className="text-left"
