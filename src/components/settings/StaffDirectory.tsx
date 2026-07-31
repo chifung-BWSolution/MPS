@@ -537,11 +537,64 @@ export function StaffDirectory() {
     });
   };
 
+  type StatFilterKey = 'all' | 'active' | 'system_user' | 'disabled';
+
+  const activeStatFilter = useMemo((): StatFilterKey | null => {
+    if (filterTeam !== 'all') return null;
+    if (filterClassification === 'system_user') return 'system_user';
+    if (filterClassification === 'disabled') return 'disabled';
+    if (filterClassification === 'other_staff') return null;
+    if (filterStatus === 'all') return 'all';
+    if (filterStatus === 'active') return 'active';
+    return null;
+  }, [filterStatus, filterClassification, filterTeam]);
+
+  const handleStatFilterClick = useCallback((key: StatFilterKey) => {
+    if (activeStatFilter === key) {
+      setFilterStatus('active');
+      setFilterClassification('all');
+      setFilterTeam('all');
+      return;
+    }
+    setFilterTeam('all');
+    switch (key) {
+      case 'all':
+        setFilterStatus('all');
+        setFilterClassification('all');
+        break;
+      case 'active':
+        setFilterStatus('active');
+        setFilterClassification('all');
+        break;
+      case 'system_user':
+        setFilterStatus('all');
+        setFilterClassification('system_user');
+        break;
+      case 'disabled':
+        setFilterStatus('all');
+        setFilterClassification('disabled');
+        break;
+    }
+  }, [activeStatFilter]);
+
+  const statCardClass = (key: StatFilterKey) =>
+    cn(
+      'bg-white border rounded-md p-4 flex items-center gap-3 text-left transition-colors',
+      activeStatFilter === key
+        ? 'border-teal-400 bg-teal-50/60 ring-1 ring-teal-400/40'
+        : 'border-border/50 hover:border-teal-300 hover:bg-teal-50/30 cursor-pointer',
+    );
+
   return (
     <div className="space-y-5">
-      {/* Header / Stats */}
+      {/* Header / Stats — click to filter */}
       <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
-        <div className="bg-white border border-border/50 rounded-md p-4 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => handleStatFilterClick('all')}
+          className={statCardClass('all')}
+          title="點擊篩選全部員工"
+        >
           <div className="w-10 h-10 rounded-md bg-teal-50 flex items-center justify-center">
             <Users size={18} className="text-teal-600" />
           </div>
@@ -549,8 +602,13 @@ export function StaffDirectory() {
             <p className="text-[11px] text-muted-foreground">總員工數</p>
             <p className="text-[20px] font-bold">{staffList.length}</p>
           </div>
-        </div>
-        <div className="bg-white border border-border/50 rounded-md p-4 flex items-center gap-3">
+        </button>
+        <button
+          type="button"
+          onClick={() => handleStatFilterClick('active')}
+          className={statCardClass('active')}
+          title="點擊篩選在職員工"
+        >
           <div className="w-10 h-10 rounded-md bg-green-50 flex items-center justify-center">
             <Briefcase size={18} className="text-green-600" />
           </div>
@@ -558,8 +616,13 @@ export function StaffDirectory() {
             <p className="text-[11px] text-muted-foreground">在職員工</p>
             <p className="text-[20px] font-bold">{activeCount}</p>
           </div>
-        </div>
-        <div className="bg-white border border-border/50 rounded-md p-4 flex items-center gap-3">
+        </button>
+        <button
+          type="button"
+          onClick={() => handleStatFilterClick('system_user')}
+          className={statCardClass('system_user')}
+          title="點擊篩選系統使用者"
+        >
           <div className="w-10 h-10 rounded-md bg-purple-50 flex items-center justify-center">
             <UserCheck size={18} className="text-purple-600" />
           </div>
@@ -567,8 +630,16 @@ export function StaffDirectory() {
             <p className="text-[11px] text-muted-foreground">系統使用者</p>
             <p className="text-[20px] font-bold">{systemUserCount}</p>
           </div>
-        </div>
-        <div className="bg-white border border-border/50 rounded-md p-4 flex items-center gap-3">
+        </button>
+        <div
+          className={cn(
+            'bg-white border rounded-md p-4 flex items-center gap-3',
+            filterTeam !== 'all'
+              ? 'border-blue-400 bg-blue-50/60 ring-1 ring-blue-400/40'
+              : 'border-border/50',
+          )}
+          title={filterTeam !== 'all' ? `已篩選團隊：${filterTeam}（請用下方下拉選單切換）` : '團隊數量統計'}
+        >
           <div className="w-10 h-10 rounded-md bg-blue-50 flex items-center justify-center">
             <Building2 size={18} className="text-blue-600" />
           </div>
@@ -577,7 +648,12 @@ export function StaffDirectory() {
             <p className="text-[20px] font-bold">{teams.length}</p>
           </div>
         </div>
-        <div className="bg-white border border-border/50 rounded-md p-4 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => handleStatFilterClick('disabled')}
+          className={statCardClass('disabled')}
+          title="點擊篩選不能使用系統名單"
+        >
           <div className="w-10 h-10 rounded-md bg-rose-50 flex items-center justify-center">
             <Ban size={18} className="text-rose-500" />
           </div>
@@ -585,7 +661,7 @@ export function StaffDirectory() {
             <p className="text-[11px] text-muted-foreground">不能使用系統</p>
             <p className="text-[20px] font-bold">{disabledCount}</p>
           </div>
-        </div>
+        </button>
       </div>
 
       {/* Info Banner */}
