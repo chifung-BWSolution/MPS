@@ -176,7 +176,7 @@ export const mainMenuItems: MainMenuItem[] = [
     label: '系統設定',
     subMenus: [
       { id: 'profile', label: '個人設定' },
-      { id: 'users', label: '用戶管理' },
+      { id: 'staff-directory', label: '員工列表' },
       { id: 'companies', label: '公司管理' },
       { id: 'brands', label: '品牌管理' },
       { id: 'talent-form', label: '藝人表格' },
@@ -186,7 +186,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'credit-cards', label: '信用卡管理' },
       { id: 'quotation-settings', label: '客戶報價設定' },
       { id: 'terms-conditions', label: '條款及細則管理' },
-      { id: 'staff-directory', label: '員工列表' },
+      { id: 'users', label: '用戶管理' },
       { id: 'login-logs', label: '登入紀錄' },
       { id: 'data-integrity', label: '資料完整性檢查' },
       { id: 'sample-data', label: '模擬數據管理' },
