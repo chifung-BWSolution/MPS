@@ -1,7 +1,6 @@
-import { useState, useMemo, Fragment } from 'react';
+import { useState, Fragment } from 'react';
 import { Plus, Search, Mail, MessageSquare, FileText, Copy, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getAllEdmCampaigns } from '@/data/marketingData';
 
 interface EdmCampaign {
   id: string;
@@ -27,21 +26,9 @@ interface EdmTemplate {
   company?: string;
 }
 
-const mockCampaigns: EdmCampaign[] = [
-  { id: '1', type: 'email', subject: '聖誕節優惠 - BW Wine', recipients: 2500, recipientType: '客戶名單', sendDate: '2024-12-20', openRate: 32.5, clickRate: 8.2, status: 'sent', company: 'BWDesign', brand: 'BW Wine', hours: 3 },
-  { id: '2', type: 'email', subject: '年末感恩回饋', recipients: 1800, recipientType: '會員名單', sendDate: '2024-12-25', openRate: 0, clickRate: 0, status: 'scheduled', company: 'BWDesign', brand: 'BW Wine', hours: 2 },
-  { id: '3', type: 'sms', subject: '限時7折優惠', recipients: 500, recipientType: 'VIP 客戶', sendDate: '2024-12-18', openRate: 85, clickRate: 15.3, status: 'sent', company: '志豐企業', brand: 'ACI', hours: 1 },
-  { id: '4', type: 'email', subject: 'Q1 2025 新產品預告', recipients: 3200, recipientType: '訂閱者', sendDate: '2025-01-05', openRate: 0, clickRate: 0, status: 'draft', company: 'BWDesign', brand: 'BW Wine', hours: 4 },
-  { id: '5', type: 'sms', subject: '活動提醒 - 新年酒會', recipients: 350, recipientType: 'VIP 客戶', sendDate: '2024-12-30', openRate: 0, clickRate: 0, status: 'scheduled', company: '志豐企業', brand: 'ACI', hours: 0.5 },
-];
+const mockCampaigns: EdmCampaign[] = [];
 
-const mockTemplates: EdmTemplate[] = [
-  { id: '1', name: '節慶優惠模板', type: 'email', subject: '【{品牌}】{節日}限時優惠', usageCount: 8, company: 'BWDesign' },
-  { id: '2', name: '月度通訊模板', type: 'email', subject: '{月份} 月度通訊', usageCount: 12 },
-  { id: '3', name: '活動邀請模板', type: 'email', subject: '誠邀出席 {活動名稱}', usageCount: 5, company: '志豐企業' },
-  { id: '4', name: 'SMS 提醒模板', type: 'sms', subject: '【{品牌}】{內容}', usageCount: 15 },
-  { id: '5', name: '新品上架模板', type: 'email', subject: '全新登場 | {產品名稱}', usageCount: 3 },
-];
+const mockTemplates: EdmTemplate[] = [];
 
 const statusConfig = {
   draft: { label: '草稿', color: 'text-slate-700', bg: 'bg-slate-100' },
@@ -67,7 +54,10 @@ export function EdmModule() {
 
   const sentCount = mockCampaigns.filter(c => c.status === 'sent').length;
   const scheduledCount = mockCampaigns.filter(c => c.status === 'scheduled').length;
-  const avgOpenRate = mockCampaigns.filter(c => c.openRate > 0).reduce((s, c) => s + c.openRate, 0) / mockCampaigns.filter(c => c.openRate > 0).length;
+  const withOpenRate = mockCampaigns.filter(c => c.openRate > 0);
+  const avgOpenRate = withOpenRate.length > 0
+    ? withOpenRate.reduce((s, c) => s + c.openRate, 0) / withOpenRate.length
+    : 0;
   const totalRecipients = mockCampaigns.reduce((s, c) => s + c.recipients, 0);
 
   return (
@@ -319,7 +309,12 @@ export function EdmModule() {
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {mockTemplates.map((template) => (
+            {mockTemplates.length === 0 ? (
+              <div className="col-span-full py-12 text-center text-muted-foreground text-[13px]">
+                <FileText size={32} className="mx-auto mb-3 opacity-30" />
+                <p>暫無範本</p>
+              </div>
+            ) : mockTemplates.map((template) => (
               <div key={template.id} className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-4 hover:shadow-card-hover transition-all duration-200">
                 <div className="flex items-start justify-between mb-2">
                   <div>

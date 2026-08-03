@@ -1,10 +1,13 @@
 import { useState, useMemo } from 'react';
 import { Plus, Search, Image, Copy, Trash2, CheckSquare, Edit, Clock, X, FolderOpen } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { websiteProfiles } from '@/data/websiteData';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useGraphicDesigns, type GraphicDesignRecord } from '@/hooks/useGraphicDesigns';
+import { useDataStore } from '@/context/DataStore';
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
   draft: { label: '草稿', color: 'text-slate-700', bg: 'bg-slate-100' },
@@ -24,37 +27,9 @@ const designTypeLabels: Record<string, string> = {
   other: '其他',
 };
 
-type Design = {
-  id: string;
-  title: string;
-  websiteName: string;
-  company: string;
-  brand: string;
-  designType: string;
-  status: string;
-  designer: string;
-  createdDate: string;
-  dimensions: string;
-  platform: string;
-  manHours: number;
-  projectType: string;
-  projectName: string;
-  notes: string;
-  reportDate: string;
-  asanaLink: string;
-  outputLink: string;
-};
-
-const mockDesigns: Design[] = [
-  { id: '1', title: 'BW Wine 春季促銷橫幅', websiteName: 'BW Wine', company: '志豐企業', brand: 'BW Wine', designType: 'banner', status: 'published', designer: '李美玲', createdDate: '2024-11-01', dimensions: '1200x628', platform: 'Facebook', manHours: 3.5, projectType: 'client', projectName: 'BW Wine Q1 Campaign', notes: '', reportDate: '2024-11-01', asanaLink: '', outputLink: '' },
-  { id: '2', title: 'ACI Events 年度活動海報', websiteName: 'ACI Events', company: '志豐企業', brand: 'ACI', designType: 'poster', status: 'approved', designer: '王小明', createdDate: '2024-11-05', dimensions: 'A3', platform: '印刷', manHours: 6, projectType: 'client', projectName: 'ACI Annual Event 2024', notes: '需要繁體中文版本', reportDate: '2024-11-05', asanaLink: '', outputLink: '' },
-  { id: '3', title: 'BWDesign 服務介紹圖', websiteName: 'BWDesign', company: '志豐企業', brand: 'BWDesign', designType: 'infographic', status: 'in_progress', designer: '陳志強', createdDate: '2024-11-10', dimensions: '1080x1920', platform: 'Instagram', manHours: 4, projectType: 'internal', projectName: '品牌形象更新', notes: '', reportDate: '2024-11-10', asanaLink: '', outputLink: '' },
-  { id: '4', title: 'FCC 公司 Logo 重新設計', websiteName: 'FCC Corp', company: 'FCC', brand: 'FCC', designType: 'logo', status: 'review', designer: '李美玲', createdDate: '2024-11-12', dimensions: 'SVG', platform: '多平台', manHours: 12, projectType: 'client', projectName: 'FCC Rebranding', notes: '第三版修改中', reportDate: '2024-11-12', asanaLink: '', outputLink: '' },
-  { id: '5', title: 'BW Wine IG Story 範本', websiteName: 'BW Wine', company: '志豐企業', brand: 'BW Wine', designType: 'social_graphic', status: 'draft', designer: '王小明', createdDate: '2024-11-15', dimensions: '1080x1920', platform: 'Instagram', manHours: 2, projectType: 'none', projectName: '', notes: '', reportDate: '2024-11-15', asanaLink: '', outputLink: '' },
-];
-
 const emptyForm = () => ({
   title: '',
+  websiteProfileId: '',
   websiteName: '',
   company: '',
   brand: '',
@@ -73,15 +48,17 @@ const emptyForm = () => ({
 });
 
 export function GraphicDesignModule() {
+  const { websites } = useDataStore();
+  const { designs, addDesign, updateDesign, deleteDesign, deleteDesigns } = useGraphicDesigns();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [batchMode, setBatchMode] = useState(false);
-  const [designs, setDesigns] = useState<Design[]>(mockDesigns);
   const [showModal, setShowModal] = useState(false);
-  const [editingDesign, setEditingDesign] = useState<Design | null>(null);
+  const [editingDesign, setEditingDesign] = useState<GraphicDesignRecord | null>(null);
   const [form, setForm] = useState(emptyForm());
 
+  const siteOptions = websites.length > 0 ? websites : websiteProfiles;
   const totalHours = useMemo(() => designs.reduce((sum, d) => sum + (d.manHours || 0), 0), [designs]);
 
   const filtered = designs.filter(d => {
@@ -103,8 +80,14 @@ export function GraphicDesignModule() {
   };
 
   const handleBatchDelete = () => {
-    setDesigns(prev => prev.filter(d => !selectedIds.includes(d.id)));
-    setSelectedIds([]);
+    void (async () => {
+      const error = await deleteDesigns(selectedIds);
+      if (error) {
+        toast.error(`刪除失敗：${error.message}`);
+        return;
+      }
+      setSelectedIds([]);
+    })();
   };
 
   function openAdd() {
@@ -113,10 +96,11 @@ export function GraphicDesignModule() {
     setShowModal(true);
   }
 
-  function openEdit(design: Design) {
+  function openEdit(design: GraphicDesignRecord) {
     setEditingDesign(design);
     setForm({
       title: design.title,
+      websiteProfileId: design.websiteProfileId || '',
       websiteName: design.websiteName,
       company: design.company,
       brand: design.brand,
@@ -138,20 +122,68 @@ export function GraphicDesignModule() {
 
   function saveDesign() {
     if (!form.title) return;
-    if (editingDesign) {
-      setDesigns(prev => prev.map(d => d.id === editingDesign.id ? { ...editingDesign, ...form } : d));
-    } else {
-      setDesigns(prev => [...prev, {
-        id: `design_${Date.now()}`,
-        createdDate: new Date().toISOString().split('T')[0],
-        ...form,
-      }]);
-    }
-    setShowModal(false);
+    void (async () => {
+      if (editingDesign) {
+        const error = await updateDesign(editingDesign.id, {
+          title: form.title,
+          websiteProfileId: form.websiteProfileId || undefined,
+          websiteName: form.websiteName,
+          company: form.company,
+          brand: form.brand,
+          designType: form.designType,
+          status: form.status,
+          designer: form.designer,
+          dimensions: form.dimensions,
+          platform: form.platform,
+          manHours: form.manHours,
+          projectType: form.projectType,
+          projectName: form.projectName,
+          notes: form.notes,
+          reportDate: form.reportDate,
+          asanaLink: form.asanaLink,
+          outputLink: form.outputLink,
+        });
+        if (error) {
+          toast.error(`更新失敗：${error.message}`);
+          return;
+        }
+      } else {
+        const { error } = await addDesign({
+          title: form.title,
+          websiteProfileId: form.websiteProfileId || undefined,
+          websiteName: form.websiteName,
+          company: form.company,
+          brand: form.brand,
+          designType: form.designType,
+          status: form.status,
+          designer: form.designer,
+          createdDate: new Date().toISOString().split('T')[0],
+          dimensions: form.dimensions,
+          platform: form.platform,
+          manHours: form.manHours,
+          projectType: form.projectType,
+          projectName: form.projectName,
+          notes: form.notes,
+          reportDate: form.reportDate,
+          asanaLink: form.asanaLink,
+          outputLink: form.outputLink,
+        });
+        if (error) {
+          toast.error(`新增失敗：${error.message}`);
+          return;
+        }
+      }
+      setShowModal(false);
+    })();
   }
 
-  function deleteDesign(id: string) {
-    setDesigns(prev => prev.filter(d => d.id !== id));
+  function handleDelete(id: string) {
+    void (async () => {
+      const error = await deleteDesign(id);
+      if (error) {
+        toast.error(`刪除失敗：${error.message}`);
+      }
+    })();
   }
 
   return (
@@ -307,7 +339,7 @@ export function GraphicDesignModule() {
                         <Edit size={13} />
                       </button>
                       <button
-                        onClick={() => deleteDesign(design.id)}
+                        onClick={() => handleDelete(design.id)}
                         className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-500 transition-colors duration-150"
                         title="刪除"
                       >
@@ -346,18 +378,24 @@ export function GraphicDesignModule() {
               {/* Website */}
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">所屬網站</label>
-                <Select value={form.websiteName || '__none'} onValueChange={(val) => {
+                <Select value={form.websiteProfileId || '__none'} onValueChange={(val) => {
                   if (val === '__none') {
-                    setForm(f => ({ ...f, websiteName: '', company: '', brand: '' }));
+                    setForm(f => ({ ...f, websiteProfileId: '', websiteName: '', company: '', brand: '' }));
                   } else {
-                    const ws = websiteProfiles.find(w => w.websiteName === val);
-                    setForm(f => ({ ...f, websiteName: val, company: ws?.company || '', brand: ws?.brand || '' }));
+                    const ws = siteOptions.find(w => w.id === val);
+                    setForm(f => ({
+                      ...f,
+                      websiteProfileId: val,
+                      websiteName: ws?.websiteName || '',
+                      company: ws?.company || '',
+                      brand: ws?.brand || '',
+                    }));
                   }
                 }}>
                   <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="選擇網站 (選填)" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none">— 不關聯網站 —</SelectItem>
-                    {websiteProfiles.map(w => <SelectItem key={w.id} value={w.websiteName}>{w.websiteName} ({w.company}/{w.brand})</SelectItem>)}
+                    {siteOptions.map(w => <SelectItem key={w.id} value={w.id}>{w.websiteName} ({w.company}/{w.brand})</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, Search, ArrowLeft, Eye, TrendingUp } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { websiteProfiles } from '@/data/websiteData';
 import { projects as allProjectsData } from '@/data/mockData';
@@ -8,6 +9,8 @@ import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useSeoUpgrades } from '@/hooks/useSeoUpgrades';
+import { useDataStore } from '@/context/DataStore';
 
 function getSeoUpgradeProjectCategory(websiteName: string) {
   const ws = websiteProfiles.find(w => w.websiteName === websiteName);
@@ -30,14 +33,6 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
   completed: { label: '已完成', color: 'text-teal-700', bg: 'bg-teal-100' },
   cancelled: { label: '已取消', color: 'text-red-700', bg: 'bg-red-100' },
 };
-
-const mockUpgrades = [
-  { id: '1', websiteName: 'BW Wine', company: '志豐企業', brand: 'BW Wine', upgradeType: 'backlink', supplier: 'SEO Pro HK', cost: 8000, currency: 'HKD', startDate: '2024-10-01', endDate: '2024-12-31', staff: '陳志強', rankBefore: { main: 12 }, rankAfter: { main: 5 }, status: 'completed', hoursSpent: 20 },
-  { id: '2', websiteName: 'ACI Events', company: '志豐企業', brand: 'ACI', upgradeType: 'technical', supplier: 'Tech Boost', cost: 15000, currency: 'HKD', startDate: '2024-09-15', endDate: '2024-11-30', staff: '王小明', rankBefore: { main: 18 }, rankAfter: { main: 9 }, status: 'completed', hoursSpent: 35 },
-  { id: '3', websiteName: 'BW Wine', company: '志豐企業', brand: 'BW Wine', upgradeType: 'content', supplier: '—', cost: 5000, currency: 'HKD', startDate: '2024-11-01', endDate: null, staff: '李美玲', rankBefore: { main: 8 }, rankAfter: null, status: 'active', hoursSpent: 12 },
-  { id: '4', websiteName: 'BWDesign', company: '志豐企業', brand: 'BWDesign', upgradeType: 'google_business', supplier: 'Local SEO Ltd', cost: 6000, currency: 'HKD', startDate: '2024-08-01', endDate: '2024-10-31', staff: '陳志強', rankBefore: { main: 15 }, rankAfter: { main: 7 }, status: 'completed', hoursSpent: 15 },
-  { id: '5', websiteName: 'FCC Corp', company: 'FCC', brand: 'FCC', upgradeType: 'comprehensive', supplier: 'SEO Master', cost: 25000, currency: 'HKD', startDate: '2024-11-15', endDate: null, staff: '王小明', rankBefore: { main: 25 }, rankAfter: null, status: 'active', hoursSpent: 8 },
-];
 
 function SeoUpgradeDetail({ record, onBack }: { record: any; onBack: () => void }) {
   const sConfig = statusConfig[record.status] || statusConfig.active;
@@ -87,7 +82,9 @@ function SeoUpgradeDetail({ record, onBack }: { record: any; onBack: () => void 
               <div className="flex items-center gap-2">
                 <TrendingUp size={20} className="text-teal-600" />
                 <span className="text-[14px] font-bold text-teal-600">
-                  {record.rankAfter ? `↑ ${record.rankBefore.main - record.rankAfter.main} 位` : '進行中...'}
+                  {record.rankAfter?.main != null && record.rankBefore?.main != null
+                    ? `↑ ${record.rankBefore.main - record.rankAfter.main} 位`
+                    : '進行中...'}
                 </span>
               </div>
               <div className="text-center">
@@ -125,13 +122,15 @@ function SeoUpgradeDetail({ record, onBack }: { record: any; onBack: () => void 
 }
 
 export function SeoUpgradeModule() {
+  const { websites } = useDataStore();
+  const { upgrades, addUpgrade } = useSeoUpgrades();
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'internal' | 'client'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [upgrades, setUpgrades] = useState(mockUpgrades);
   const [newRecord, setNewRecord] = useState({
+    websiteProfileId: '',
     websiteName: '',
     company: '',
     brand: '',
@@ -143,7 +142,7 @@ export function SeoUpgradeModule() {
     endDate: '',
     staff: '',
     rankBefore: 0,
-    status: 'active',
+    status: 'active' as const,
     hoursSpent: 0,
   });
 
@@ -224,9 +223,9 @@ export function SeoUpgradeModule() {
                   <td className="px-4 py-3">{record.currency} ${record.cost?.toLocaleString()}</td>
                   <td className="px-4 py-3">{record.staff}</td>
                   <td className="px-4 py-3">
-                    <span className="text-muted-foreground">#{record.rankBefore.main}</span>
+                    <span className="text-muted-foreground">#{record.rankBefore?.main ?? '—'}</span>
                     <span className="mx-1">→</span>
-                    <span className="text-teal-600 font-medium">{record.rankAfter ? `#${record.rankAfter.main}` : '進行中'}</span>
+                    <span className="text-teal-600 font-medium">{record.rankAfter?.main != null ? `#${record.rankAfter.main}` : '進行中'}</span>
                   </td>
                   <td className="px-4 py-3">
                     <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded', sConfig.bg, sConfig.color)}>{sConfig.label}</span>
@@ -252,12 +251,18 @@ export function SeoUpgradeModule() {
         <div className="space-y-4">
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1">網站 *</label>
-            <Select value={newRecord.websiteName} onValueChange={(val) => {
-              const ws = websiteProfiles.find(w => w.websiteName === val);
-              setNewRecord({ ...newRecord, websiteName: val, company: ws?.company || '', brand: ws?.brand || '' });
+            <Select value={newRecord.websiteProfileId} onValueChange={(val) => {
+              const ws = websites.find(w => w.id === val) || websiteProfiles.find(w => w.id === val);
+              setNewRecord({
+                ...newRecord,
+                websiteProfileId: val,
+                websiteName: ws?.websiteName || '',
+                company: ws?.company || '',
+                brand: ws?.brand || '',
+              });
             }}>
               <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="選擇網站" /></SelectTrigger>
-              <SelectContent>{websiteProfiles.map(w => <SelectItem key={w.id} value={w.websiteName}>{w.websiteName} ({w.company}/{w.brand})</SelectItem>)}</SelectContent>
+              <SelectContent>{(websites.length > 0 ? websites : websiteProfiles).map(w => <SelectItem key={w.id} value={w.id}>{w.websiteName} ({w.company}/{w.brand})</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -306,10 +311,10 @@ export function SeoUpgradeModule() {
           <div className="flex justify-end gap-3 pt-4 border-t border-border">
             <Button variant="secondary" onClick={() => setShowAddModal(false)}>取消</Button>
             <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => {
-              if (newRecord.websiteName && newRecord.supplier) {
-                const newId = `seo_upgrade_${Date.now()}`;
-                setUpgrades(prev => [...prev, {
-                  id: newId,
+              void (async () => {
+                if (!(newRecord.websiteName && newRecord.supplier)) return;
+                const { error } = await addUpgrade({
+                  websiteProfileId: newRecord.websiteProfileId || undefined,
                   websiteName: newRecord.websiteName,
                   company: newRecord.company,
                   brand: newRecord.brand,
@@ -320,14 +325,18 @@ export function SeoUpgradeModule() {
                   startDate: newRecord.startDate,
                   endDate: newRecord.endDate || null,
                   staff: newRecord.staff,
-                  rankBefore: { main: newRecord.rankBefore },
+                  rankBefore: newRecord.rankBefore ? { main: newRecord.rankBefore } : null,
                   rankAfter: null,
                   status: 'active',
                   hoursSpent: newRecord.hoursSpent,
-                }]);
-                setNewRecord({ websiteName: '', company: '', brand: '', upgradeType: 'backlink', supplier: '', cost: 0, currency: 'HKD', startDate: '', endDate: '', staff: '', rankBefore: 0, status: 'active', hoursSpent: 0 });
+                });
+                if (error) {
+                  toast.error(`新增失敗：${error.message}`);
+                  return;
+                }
+                setNewRecord({ websiteProfileId: '', websiteName: '', company: '', brand: '', upgradeType: 'backlink', supplier: '', cost: 0, currency: 'HKD', startDate: '', endDate: '', staff: '', rankBefore: 0, status: 'active', hoursSpent: 0 });
                 setShowAddModal(false);
-              }
+              })();
             }}>新增</Button>
           </div>
         </div>

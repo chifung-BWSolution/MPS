@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { Plus, Search, Sparkles, Target, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { SeoKeyword } from '@/types/app';
-import { getAllSeoKeywords } from '@/data/marketingData';
+import { useDataStore } from '@/context/DataStore';
+import { useSeoKeywords } from '@/hooks/useSeoKeywords';
 
 const levelConfig = {
   level_1: { label: 'S1', description: '核心品牌詞', color: 'text-rose-700', bg: 'bg-rose-100' },
@@ -18,12 +18,22 @@ const statusConfig = {
 };
 
 export function SeoKeywordsList() {
+  const { websites } = useDataStore();
+  const { keywords } = useSeoKeywords();
   const [filterLevel, setFilterLevel] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAiGenerator, setShowAiGenerator] = useState(false);
 
-  // Use unified data from websiteDetailData
-  const allKeywords = useMemo(() => getAllSeoKeywords(), []);
+  const siteMap = useMemo(() => new Map(websites.map(w => [w.id, w])), [websites]);
+  const allKeywords = useMemo(() => keywords.map(kw => {
+    const site = siteMap.get(kw.websiteProfileId);
+    return {
+      ...kw,
+      websiteName: site?.websiteName || kw.websiteProfileId,
+      company: site?.company || '',
+      brand: site?.brand || '',
+    };
+  }), [keywords, siteMap]);
 
   const filteredKeywords = allKeywords.filter((kw) => {
     if (filterLevel !== 'all' && kw.level !== filterLevel) return false;

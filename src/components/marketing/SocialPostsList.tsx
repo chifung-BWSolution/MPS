@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { Plus, Search, ExternalLink, Globe, Facebook, Instagram, BookOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { SocialPost } from '@/types/app';
-import { getAllSocialPosts } from '@/data/marketingData';
+import { useDataStore } from '@/context/DataStore';
+import { useSocialPosts } from '@/hooks/useSocialPosts';
 
 const platformConfig = {
   facebook: { label: 'Facebook', icon: Facebook, color: 'text-blue-600', bg: 'bg-blue-50' },
@@ -30,13 +30,23 @@ const postTypeLabels: Record<string, string> = {
 };
 
 export function SocialPostsList() {
+  const { websites } = useDataStore();
+  const { posts } = useSocialPosts();
   const [filterPlatform, setFilterPlatform] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewForm, setShowNewForm] = useState(false);
 
-  // Use unified data source from websiteDetailData
-  const allPosts = useMemo(() => getAllSocialPosts(), []);
+  const siteMap = useMemo(() => new Map(websites.map(w => [w.id, w])), [websites]);
+  const allPosts = useMemo(() => posts.map(p => {
+    const site = siteMap.get(p.websiteProfileId);
+    return {
+      ...p,
+      websiteName: site?.websiteName || p.websiteProfileId,
+      company: site?.company || '',
+      brand: site?.brand || '',
+    };
+  }), [posts, siteMap]);
 
   const filteredPosts = allPosts.filter((post) => {
     if (filterPlatform !== 'all' && post.platform !== filterPlatform) return false;

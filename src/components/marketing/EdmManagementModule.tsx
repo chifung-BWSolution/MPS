@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Plus, Search, X, ArrowLeft, Eye, Link2, Mail, MessageSquare, Edit, Trash2, Globe, Send } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { websiteProfiles } from '@/data/websiteData';
 import { projects as allProjectsData } from '@/data/mockData';
 import { getProjectCategory } from '@/components/ui/project-category-badge';
 import { Button } from '@/components/ui/button';
 import { useDataStore } from '@/context/DataStore';
+import { useEdmCampaigns } from '@/hooks/useEdmCampaigns';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -37,12 +39,7 @@ function EdmDetail({ campaign, onBack }: { campaign: any; onBack: () => void }) 
     { id: 'history', label: '發送記錄' },
   ] as const;
 
-  // Mock send history
-  const sendHistory = [
-    { id: '1', date: campaign.sendDate || '2024-12-01', recipients: campaign.recipientCount || 0, openRate: campaign.openRate, clickRate: campaign.clickRate, status: 'sent' },
-    { id: '2', date: '2024-11-15', recipients: Math.round((campaign.recipientCount || 500) * 0.8), openRate: 22.1, clickRate: 4.5, status: 'sent' },
-    { id: '3', date: '2024-11-01', recipients: Math.round((campaign.recipientCount || 500) * 0.6), openRate: 19.8, clickRate: 3.2, status: 'sent' },
-  ];
+  const hasSendRecord = campaign.status === 'sent' || !!campaign.sendDate;
 
   return (
     <div className="space-y-5">
@@ -175,32 +172,34 @@ function EdmDetail({ campaign, onBack }: { campaign: any; onBack: () => void }) 
       {activeTab === 'history' && (
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
           <h3 className="text-[16px] font-bold mb-4">發送記錄歷史</h3>
-          <div className="space-y-3">
-            {sendHistory.map(record => (
-              <div key={record.id} className="flex items-center justify-between p-4 border border-border rounded-md hover:bg-muted/10 transition-colors">
+          {!hasSendRecord ? (
+            <div className="text-center py-8 text-muted-foreground text-[13px]">暫無發送記錄</div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-4 border border-border rounded-md hover:bg-muted/10 transition-colors">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-teal-50 flex items-center justify-center">
                     <Send size={14} className="text-teal-600" />
                   </div>
                   <div>
-                    <p className="text-[13px] font-medium">{record.date}</p>
-                    <p className="text-[11px] text-muted-foreground">{record.recipients.toLocaleString()} 名收件人</p>
+                    <p className="text-[13px] font-medium">{campaign.sendDate || '—'}</p>
+                    <p className="text-[11px] text-muted-foreground">{(campaign.recipientCount || 0).toLocaleString()} 名收件人</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-6 text-[12px]">
                   <div className="text-center">
-                    <p className="font-bold text-teal-600">{record.openRate || 0}%</p>
+                    <p className="font-bold text-teal-600">{campaign.openRate || 0}%</p>
                     <span className="text-[10px] text-muted-foreground">開啟率</span>
                   </div>
                   <div className="text-center">
-                    <p className="font-bold text-blue-600">{record.clickRate || 0}%</p>
+                    <p className="font-bold text-blue-600">{campaign.clickRate || 0}%</p>
                     <span className="text-[10px] text-muted-foreground">點擊率</span>
                   </div>
                   <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-teal-100 text-teal-700">已發送</span>
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -254,7 +253,8 @@ function EdmDetail({ campaign, onBack }: { campaign: any; onBack: () => void }) 
 }
 
 export function EdmManagementModule() {
-  const { allEdmCampaignsList, websites, addEdmCampaign, deleteEdmCampaign } = useDataStore();
+  const { websites } = useDataStore();
+  const { campaigns, addCampaign, deleteCampaign } = useEdmCampaigns();
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'internal' | 'client'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -275,7 +275,16 @@ export function EdmManagementModule() {
     outputLink: '',
   });
 
-  const allCampaigns = allEdmCampaignsList;
+  const siteMap = useMemo(() => new Map(websites.map(w => [w.id, w])), [websites]);
+  const allCampaigns = useMemo(() => campaigns.map(c => {
+    const site = siteMap.get(c.websiteProfileId);
+    return {
+      ...c,
+      websiteName: site?.websiteName || c.websiteProfileId,
+      company: site?.company || '',
+      brand: site?.brand || '',
+    };
+  }), [campaigns, siteMap]);
 
   const filteredCampaigns = allCampaigns.filter(c => {
     if (filterStatus !== 'all' && c.status !== filterStatus) return false;
@@ -469,11 +478,27 @@ export function EdmManagementModule() {
           <div className="flex justify-end gap-3 pt-4 border-t border-border">
             <Button variant="secondary" onClick={() => setShowAddModal(false)}>取消</Button>
             <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => {
-              if (newCampaign.websiteProfileId && newCampaign.subject) {
-                addEdmCampaign(newCampaign.websiteProfileId, { ...newCampaign, id: '' } as any);
+              void (async () => {
+                if (!(newCampaign.websiteProfileId && newCampaign.subject)) return;
+                const { error } = await addCampaign({
+                  websiteProfileId: newCampaign.websiteProfileId,
+                  campaignType: newCampaign.campaignType,
+                  subject: newCampaign.subject,
+                  status: newCampaign.status,
+                  recipientCount: newCampaign.recipientCount || undefined,
+                  sendDate: newCampaign.sendDate || undefined,
+                  reportDate: newCampaign.reportDate || undefined,
+                  hoursSpent: newCampaign.hoursSpent || undefined,
+                  asanaLink: newCampaign.asanaLink || undefined,
+                  outputLink: newCampaign.outputLink || undefined,
+                });
+                if (error) {
+                  toast.error(`新增失敗：${error.message}`);
+                  return;
+                }
                 setNewCampaign({ websiteProfileId: '', campaignType: 'email', subject: '', status: 'draft', recipientCount: 0, sendDate: '', reportDate: '', hoursSpent: 0, asanaLink: '', outputLink: '' });
                 setShowAddModal(false);
-              }
+              })();
             }}>新增</Button>
           </div>
         </div>
@@ -484,11 +509,17 @@ export function EdmManagementModule() {
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
         onConfirm={() => {
-          if (deleteTarget) {
-            deleteEdmCampaign(deleteTarget.websiteProfileId, deleteTarget.id);
-          }
-          setShowDeleteModal(false);
-          setDeleteTarget(null);
+          void (async () => {
+            if (deleteTarget) {
+              const error = await deleteCampaign(deleteTarget.id);
+              if (error) {
+                toast.error(`刪除失敗：${error.message}`);
+                return;
+              }
+            }
+            setShowDeleteModal(false);
+            setDeleteTarget(null);
+          })();
         }}
         itemName={deleteTarget?.subject || 'EDM 活動'}
         canDelete={true}

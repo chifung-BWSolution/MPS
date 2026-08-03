@@ -1,11 +1,13 @@
 import { useState, useMemo } from 'react';
 import { Plus, Search, X, ArrowLeft, Eye, Link2, CreditCard, Edit, Trash2, Globe } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { websiteProfiles } from '@/data/websiteData';
 import { projects as allProjectsData } from '@/data/mockData';
 import { getProjectCategory } from '@/components/ui/project-category-badge';
 import { Button } from '@/components/ui/button';
 import { useDataStore } from '@/context/DataStore';
+import { usePaidAds } from '@/hooks/usePaidAds';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -273,7 +275,8 @@ function PaidAdDetail({ ad, onBack }: { ad: any; onBack: () => void }) {
 }
 
 export function PaidAdsModule() {
-  const { allPaidAdsList, websites, addPaidAd, deletePaidAd } = useDataStore();
+  const { websites } = useDataStore();
+  const { ads, addAd, deleteAd } = usePaidAds();
   const [filterPlatform, setFilterPlatform] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'internal' | 'client'>('all');
@@ -288,7 +291,7 @@ export function PaidAdsModule() {
     platform: 'google_ads' as any,
     status: 'planning' as any,
     budget: 0,
-    currency: 'HKD',
+    currency: 'HKD' as const,
     startDate: '',
     endDate: '',
     reportDate: '',
@@ -297,7 +300,16 @@ export function PaidAdsModule() {
     outputLink: '',
   });
 
-  const allAds = allPaidAdsList;
+  const siteMap = useMemo(() => new Map(websites.map(w => [w.id, w])), [websites]);
+  const allAds = useMemo(() => ads.map(a => {
+    const site = a.websiteProfileId ? siteMap.get(a.websiteProfileId) : undefined;
+    return {
+      ...a,
+      websiteName: site?.websiteName || a.websiteProfileId || '',
+      company: site?.company || '',
+      brand: site?.brand || '',
+    };
+  }), [ads, siteMap]);
 
   const filteredAds = allAds.filter(ad => {
     if (filterPlatform !== 'all' && ad.platform !== filterPlatform) return false;
@@ -496,11 +508,31 @@ export function PaidAdsModule() {
           <div className="flex justify-end gap-3 pt-4 border-t border-border">
             <Button variant="secondary" onClick={() => setShowAddModal(false)}>取消</Button>
             <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => {
-              if (newAd.websiteProfileId && newAd.campaignName) {
-                addPaidAd(newAd.websiteProfileId, { ...newAd, id: '' } as any);
+              void (async () => {
+                if (!(newAd.websiteProfileId && newAd.campaignName)) return;
+                const { error } = await addAd({
+                  websiteProfileId: newAd.websiteProfileId,
+                  campaignName: newAd.campaignName,
+                  platform: newAd.platform,
+                  adType: 'search',
+                  budget: newAd.budget,
+                  actualSpend: 0,
+                  currency: newAd.currency,
+                  startDate: newAd.startDate || '',
+                  endDate: newAd.endDate || undefined,
+                  status: newAd.status,
+                  reportDate: newAd.reportDate || undefined,
+                  manHours: newAd.manHours || undefined,
+                  asanaLink: newAd.asanaLink || undefined,
+                  outputLink: newAd.outputLink || undefined,
+                });
+                if (error) {
+                  toast.error(`新增失敗：${error.message}`);
+                  return;
+                }
                 setNewAd({ websiteProfileId: '', campaignName: '', platform: 'google_ads', status: 'planning', budget: 0, currency: 'HKD', startDate: '', endDate: '', reportDate: '', manHours: 0, asanaLink: '', outputLink: '' });
                 setShowAddModal(false);
-              }
+              })();
             }}>新增</Button>
           </div>
         </div>
@@ -511,11 +543,17 @@ export function PaidAdsModule() {
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
         onConfirm={() => {
-          if (deleteTarget) {
-            deletePaidAd(deleteTarget.websiteProfileId, deleteTarget.id);
-          }
-          setShowDeleteModal(false);
-          setDeleteTarget(null);
+          void (async () => {
+            if (deleteTarget) {
+              const error = await deleteAd(deleteTarget.id);
+              if (error) {
+                toast.error(`刪除失敗：${error.message}`);
+                return;
+              }
+            }
+            setShowDeleteModal(false);
+            setDeleteTarget(null);
+          })();
         }}
         itemName={deleteTarget?.campaignName || '廣告活動'}
         canDelete={true}

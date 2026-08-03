@@ -1,11 +1,13 @@
 import { useState, useMemo } from 'react';
 import { Plus, Search, X, ArrowLeft, Eye, Link2, Sparkles, TrendingUp, TrendingDown, Edit, Trash2, Globe } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { websiteProfiles } from '@/data/websiteData';
 import { projects as allProjectsData } from '@/data/mockData';
 import { getProjectCategory } from '@/components/ui/project-category-badge';
 import { Button } from '@/components/ui/button';
 import { useDataStore } from '@/context/DataStore';
+import { useSeoKeywords } from '@/hooks/useSeoKeywords';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -299,7 +301,8 @@ function SeoKeywordDetail({ keyword, onBack }: { keyword: any; onBack: () => voi
 }
 
 export function SeoKeywordsModule() {
-  const { allSeoKeywordsList, websites, addSeoKeyword, deleteSeoKeyword } = useDataStore();
+  const { websites } = useDataStore();
+  const { keywords, addKeyword, deleteKeyword } = useSeoKeywords();
   const [filterLevel, setFilterLevel] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'internal' | 'client'>('all');
@@ -319,7 +322,16 @@ export function SeoKeywordsModule() {
     difficultyScore: 0,
   });
 
-  const allKeywords = allSeoKeywordsList;
+  const siteMap = useMemo(() => new Map(websites.map(w => [w.id, w])), [websites]);
+  const allKeywords = useMemo(() => keywords.map(kw => {
+    const site = siteMap.get(kw.websiteProfileId);
+    return {
+      ...kw,
+      websiteName: site?.websiteName || kw.websiteProfileId,
+      company: site?.company || '',
+      brand: site?.brand || '',
+    };
+  }), [keywords, siteMap]);
 
   const filteredKeywords = allKeywords.filter(kw => {
     if (filterLevel !== 'all' && kw.level !== filterLevel) return false;
@@ -506,11 +518,26 @@ export function SeoKeywordsModule() {
           <div className="flex justify-end gap-3 pt-4 border-t border-border">
             <Button variant="secondary" onClick={() => setShowAddModal(false)}>取消</Button>
             <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={() => {
-              if (newKeyword.websiteProfileId && newKeyword.keyword) {
-                addSeoKeyword(newKeyword.websiteProfileId, { ...newKeyword, id: '' } as any);
+              void (async () => {
+                if (!(newKeyword.websiteProfileId && newKeyword.keyword)) return;
+                const { error } = await addKeyword({
+                  websiteProfileId: newKeyword.websiteProfileId,
+                  keyword: newKeyword.keyword,
+                  level: newKeyword.level,
+                  status: newKeyword.status,
+                  searchVolume: newKeyword.searchVolume || undefined,
+                  currentRanking: newKeyword.currentRanking || undefined,
+                  targetRanking: newKeyword.targetRanking || undefined,
+                  difficultyScore: newKeyword.difficultyScore || undefined,
+                  aiGenerated: false,
+                });
+                if (error) {
+                  toast.error(`新增失敗：${error.message}`);
+                  return;
+                }
                 setNewKeyword({ websiteProfileId: '', keyword: '', level: 'level_1', status: 'monitoring', searchVolume: 0, currentRanking: 0, targetRanking: 0, difficultyScore: 0 });
                 setShowAddModal(false);
-              }
+              })();
             }}>新增</Button>
           </div>
         </div>
@@ -521,11 +548,17 @@ export function SeoKeywordsModule() {
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
         onConfirm={() => {
-          if (deleteTarget) {
-            deleteSeoKeyword(deleteTarget.websiteProfileId, deleteTarget.id);
-          }
-          setShowDeleteModal(false);
-          setDeleteTarget(null);
+          void (async () => {
+            if (deleteTarget) {
+              const error = await deleteKeyword(deleteTarget.id);
+              if (error) {
+                toast.error(`刪除失敗：${error.message}`);
+                return;
+              }
+            }
+            setShowDeleteModal(false);
+            setDeleteTarget(null);
+          })();
         }}
         itemName={deleteTarget?.keyword || '關鍵字'}
         canDelete={true}

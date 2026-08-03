@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { Plus, Search, TrendingUp, DollarSign, MousePointerClick, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { PaidAd } from '@/types/app';
-import { getAllPaidAds } from '@/data/marketingData';
+import { useDataStore } from '@/context/DataStore';
+import { usePaidAds } from '@/hooks/usePaidAds';
 
 const platformLabels: Record<string, string> = {
   google_ads: 'Google Ads',
@@ -20,11 +20,21 @@ const statusConfig = {
 };
 
 export function PaidAdsList() {
+  const { websites } = useDataStore();
+  const { ads } = usePaidAds();
   const [filterPlatform, setFilterPlatform] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Use unified data from websiteDetailData
-  const allAds = useMemo(() => getAllPaidAds(), []);
+  const siteMap = useMemo(() => new Map(websites.map(w => [w.id, w])), [websites]);
+  const allAds = useMemo(() => ads.map(a => {
+    const site = a.websiteProfileId ? siteMap.get(a.websiteProfileId) : undefined;
+    return {
+      ...a,
+      websiteName: site?.websiteName || a.websiteProfileId || '',
+      company: site?.company || '',
+      brand: site?.brand || '',
+    };
+  }), [ads, siteMap]);
 
   const filteredAds = allAds.filter((ad) => {
     if (filterPlatform !== 'all' && ad.platform !== filterPlatform) return false;
