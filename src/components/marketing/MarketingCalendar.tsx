@@ -1,9 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, ChevronDown, Plus, X, Calendar, Briefcase, Pencil, Trash2, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Plus, X, Calendar, Pencil, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { getCalendarEventsForMonth, CalendarEvent, parseVideoCalendarTheme } from '@/data/marketingData';
-import { projects as allProjects, statusConfig } from '@/data/mockData';
+import { CalendarEvent, parseVideoCalendarTheme } from '@/data/marketingData';
 import { categoryConfig } from '@/data/dayReportDataV2';
 import {
   useUpcomingEvents,
@@ -17,6 +16,8 @@ import { useBacklinkPurchases } from '@/hooks/useBacklinkPurchases';
 import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
 import { useGoogleBusinessRegistrations } from '@/hooks/useGoogleBusinessRegistrations';
 import { useRecentDayReports } from '@/hooks/useRecentDayReports';
+import { useEdmCampaigns } from '@/hooks/useEdmCampaigns';
+import { usePaidAds } from '@/hooks/usePaidAds';
 import { useDataStore } from '@/context/DataStore';
 import { socialPostFinalDate } from '@/types/marketingOps';
 import {
@@ -267,6 +268,8 @@ export function MarketingCalendar() {
   const { purchases: backlinkPurchases } = useBacklinkPurchases();
   const { suppliers: webPageSuppliers } = useWebPageSuppliers();
   const { registrations: googleBusinessRegs } = useGoogleBusinessRegistrations();
+  const { campaigns: edmCampaigns } = useEdmCampaigns();
+  const { ads: paidAds } = usePaidAds();
   const {
     entries: recentReportEntries,
     loading: recentReportsLoading,
@@ -429,6 +432,78 @@ export function MarketingCalendar() {
       });
   }, [googleBusinessRegs, siteMap]);
 
+  /** Live EDM campaigns by send date */
+  const edmEvents = useMemo<CustomEvent[]>(() => {
+    return edmCampaigns
+      .filter(c => !!c.sendDate)
+      .map(c => {
+        const dateStr = c.sendDate!;
+        const d = new Date(dateStr + 'T00:00:00');
+        const site = siteMap.get(c.websiteProfileId);
+        const statusLabel =
+          c.status === 'sent' ? '已發送'
+            : c.status === 'scheduled' ? '已排程'
+              : c.status === 'cancelled' ? '已取消'
+                : '草稿';
+        return {
+          id: `edm-${c.id}`,
+          day: d.getDate(),
+          title: truncateText(c.subject || 'EDM'),
+          type: 'edm' as const,
+          company: site?.company || '',
+          brand: site?.brand || '',
+          websiteName: site?.websiteName || '',
+          hours: c.hoursSpent,
+          sourceId: c.id,
+          canManage: false,
+          _fullDate: dateStr,
+          statusText: `EDM：${statusLabel}`,
+          statusClassName:
+            c.status === 'sent'
+              ? 'bg-teal-100 text-teal-800'
+              : c.status === 'scheduled'
+                ? 'bg-amber-100 text-amber-800'
+                : 'bg-slate-100 text-slate-700',
+        };
+      });
+  }, [edmCampaigns, siteMap]);
+
+  /** Live paid ads by start date */
+  const paidAdEvents = useMemo<CustomEvent[]>(() => {
+    return paidAds
+      .filter(a => !!a.startDate)
+      .map(a => {
+        const dateStr = a.startDate;
+        const d = new Date(dateStr + 'T00:00:00');
+        const site = a.websiteProfileId ? siteMap.get(a.websiteProfileId) : undefined;
+        const statusLabel =
+          a.status === 'active' ? '進行中'
+            : a.status === 'paused' ? '暫停'
+              : a.status === 'completed' ? '已完成'
+                : '規劃中';
+        return {
+          id: `ad-${a.id}`,
+          day: d.getDate(),
+          title: truncateText(a.campaignName || '廣告'),
+          type: 'ads' as const,
+          platform: a.platform,
+          company: site?.company || '',
+          brand: site?.brand || '',
+          websiteName: site?.websiteName || '',
+          sourceId: a.id,
+          canManage: false,
+          _fullDate: dateStr,
+          statusText: `廣告：${statusLabel}`,
+          statusClassName:
+            a.status === 'active'
+              ? 'bg-rose-100 text-rose-800'
+              : a.status === 'completed'
+                ? 'bg-teal-100 text-teal-800'
+                : 'bg-slate-100 text-slate-700',
+        };
+      });
+  }, [paidAds, siteMap]);
+
   const today = new Date();
   const todayStr = toLocalDateStr(today);
 
@@ -466,63 +541,25 @@ export function MarketingCalendar() {
   const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
 
-  // --- Events ---
-  const marketingEvents = useMemo(() => getCalendarEventsForMonth(year, month), [year, month]);
-
-  // Build project events (show on start date)
-  const projectEvents = useMemo<CustomEvent[]>(() => {
-    return allProjects
-      .filter(p => p.startDate)
-      .map(p => {
-        const date = new Date(p.startDate! + 'T00:00:00');
-        const statusLabel = statusConfig[p.status]?.label;
-        return {
-          id: `proj-${p.id}`,
-          day: date.getDate(),
-          title: `📋 ${p.name}`,
-          type: 'project' as const,
-          company: p.company || '',
-          brand: p.brand || '',
-          websiteName: '',
-          isProject: true,
-          projectCategory: p.projectCategory,
-          projectStatus: p.status,
-          _fullDate: p.startDate,
-          statusText: statusLabel ? `項目：${statusLabel}` : undefined,
-          statusClassName: statusConfig[p.status]
-            ? `${statusConfig[p.status].bgColor} ${statusConfig[p.status].textColor}`
-            : undefined,
-        };
-      });
-  }, []);
-
-  // All events combined — live video/social/backlink/GMB replace mock counterparts
+  // All events — live Supabase sources only (no sample/mock calendar data)
   const allBaseEvents = useMemo<CustomEvent[]>(() => {
-    const mEvents = marketingEvents
-      .filter(e => e.type !== 'video' && e.type !== 'social')
-      .map(e => ({
-        ...e,
-        _fullDate: `${year}-${String(month + 1).padStart(2, '0')}-${String(e.day).padStart(2, '0')}`,
-      }));
     return [
-      ...mEvents,
-      ...projectEvents,
       ...customEvents,
       ...videoEvents,
       ...socialEvents,
       ...backlinkEvents,
       ...googleBusinessEvents,
+      ...edmEvents,
+      ...paidAdEvents,
     ];
   }, [
-    marketingEvents,
-    projectEvents,
     customEvents,
     videoEvents,
     socialEvents,
     backlinkEvents,
     googleBusinessEvents,
-    year,
-    month,
+    edmEvents,
+    paidAdEvents,
   ]);
 
   const companies = useMemo(() => {
@@ -1056,42 +1093,6 @@ export function MarketingCalendar() {
               </div>
             </div>
 
-            {/* Project List for the week */}
-            {weekEvents.filter(e => e.type === 'project').length > 0 && (
-              <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Briefcase size={14} className="text-indigo-600" />
-                  <span className="text-[13px] font-semibold">本週項目</span>
-                </div>
-                <div className="space-y-2">
-                  {weekEvents.filter(e => e.type === 'project').map(e => {
-                    const proj = allProjects.find(p => `proj-${p.id}` === e.id);
-                    const sc = proj ? (statusConfig[proj.status] || statusConfig.active) : null;
-                    return (
-                      <div key={e.id} className="flex items-center gap-3 py-2 border-b border-border/30 last:border-0">
-                        <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', sc ? sc.color : 'bg-indigo-400')} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[12px] font-medium truncate">{proj?.name || e.title}</p>
-                          <p className="text-[10px] text-muted-foreground">{proj?.company} / {proj?.brand}</p>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {proj?.projectCategory && (
-                            <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium', proj.projectCategory === 'internal' ? 'bg-slate-100 text-slate-600' : 'bg-blue-50 text-blue-600')}>
-                              {proj.projectCategory === 'internal' ? '內部' : '客戶'}
-                            </span>
-                          )}
-                          {sc && (
-                            <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium', sc.bgColor, sc.textColor)}>
-                              {sc.label}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Selected Day Detail Panel */}
@@ -1124,7 +1125,6 @@ export function MarketingCalendar() {
                     <p className="text-[11px] text-muted-foreground">{selectedDayEvents.length} 個活動</p>
                     {selectedDayEvents.map(event => {
                       const cfg = typeConfig[event.type] || typeConfig.social;
-                      const proj = event.type === 'project' ? allProjects.find(p => `proj-${p.id}` === event.id) : null;
                       if (event.type === 'video' && event.videoCode) {
                         return (
                           <div key={event.id} className="border border-border/50 rounded-md p-2.5 hover:border-teal-200 transition-colors space-y-1.5">
@@ -1142,15 +1142,15 @@ export function MarketingCalendar() {
                             <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded', cfg.bg, cfg.text)}>{cfg.label}</span>
                             {event.hours && <span className="text-[10px] text-muted-foreground">{event.hours}h</span>}
                           </div>
-                          <p className="text-[12px] font-medium leading-snug">{proj?.name || event.title}</p>
+                          <p className="text-[12px] font-medium leading-snug">{event.title}</p>
                           {event.platform && <p className="text-[11px] text-muted-foreground mt-0.5">{event.platform}</p>}
                           {event.websiteName && <p className="text-[10px] text-teal-600 mt-0.5">🌐 {event.websiteName}</p>}
                           <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                             {event.company && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">{event.company}</span>}
                             {event.brand && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">{event.brand}</span>}
-                            {proj?.projectCategory && (
-                              <span className={cn('text-[10px] px-1.5 py-0.5 rounded', proj.projectCategory === 'internal' ? 'bg-slate-100 text-slate-600' : 'bg-blue-50 text-blue-600')}>
-                                {proj.projectCategory === 'internal' ? '內部' : '客戶'}
+                            {event.projectCategory && (
+                              <span className={cn('text-[10px] px-1.5 py-0.5 rounded', event.projectCategory === 'internal' ? 'bg-slate-100 text-slate-600' : 'bg-blue-50 text-blue-600')}>
+                                {event.projectCategory === 'internal' ? '內部' : '客戶'}
                               </span>
                             )}
                           </div>
@@ -1246,7 +1246,6 @@ export function MarketingCalendar() {
                     <p className="text-[11px] text-muted-foreground">{selectedDayEvents.length} 個活動</p>
                     {selectedDayEvents.map(event => {
                       const cfg = typeConfig[event.type] || typeConfig.social;
-                      const proj = event.type === 'project' ? allProjects.find(p => `proj-${p.id}` === event.id) : null;
                       if (event.type === 'video' && event.videoCode) {
                         return (
                           <div key={event.id} className="border border-border/50 rounded-md p-2.5 hover:border-teal-200 transition-colors space-y-1.5">
@@ -1288,13 +1287,13 @@ export function MarketingCalendar() {
                               {event.hours ? <span className="text-[10px] text-muted-foreground">{event.hours}h</span> : null}
                             </div>
                           </div>
-                          <p className="text-[12px] font-medium">{proj?.name || event.title}</p>
+                          <p className="text-[12px] font-medium">{event.title}</p>
                           {event.platform && <p className="text-[10px] text-muted-foreground mt-0.5">{event.platform}</p>}
                           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                             {event.company && <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">{event.company}</span>}
-                            {proj?.projectCategory && (
-                              <span className={cn('text-[10px] px-1.5 py-0.5 rounded', proj.projectCategory === 'internal' ? 'bg-slate-100 text-slate-600' : 'bg-blue-50 text-blue-600')}>
-                                {proj.projectCategory === 'internal' ? '內部' : '客戶'}
+                            {event.projectCategory && (
+                              <span className={cn('text-[10px] px-1.5 py-0.5 rounded', event.projectCategory === 'internal' ? 'bg-slate-100 text-slate-600' : 'bg-blue-50 text-blue-600')}>
+                                {event.projectCategory === 'internal' ? '內部' : '客戶'}
                               </span>
                             )}
                           </div>

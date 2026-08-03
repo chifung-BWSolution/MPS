@@ -48,23 +48,8 @@ function PaidAdDetail({ ad, onBack }: { ad: any; onBack: () => void }) {
     { id: 'trends', label: '每日數據趨勢' },
   ] as const;
 
-  // Mock daily trend data
-  const trendData = useMemo(() => {
-    const data = [];
-    const baseImpressions = (ad.impressions || 5000) / 14;
-    const baseClicks = (ad.clicks || 200) / 14;
-    for (let i = 0; i < 14; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() - (13 - i));
-      data.push({
-        date: `${date.getMonth() + 1}/${date.getDate()}`,
-        impressions: Math.round(baseImpressions * (0.7 + Math.random() * 0.6)),
-        clicks: Math.round(baseClicks * (0.5 + Math.random() * 1.0)),
-        conversions: Math.round((ad.conversions || 10) / 14 * (0.3 + Math.random() * 1.4)),
-      });
-    }
-    return data;
-  }, [ad]);
+  // Daily trends require a dedicated time-series table — not fabricated
+  const trendData: { date: string; impressions: number; clicks: number; conversions: number }[] = [];
 
   return (
     <div className="space-y-5">
@@ -208,20 +193,26 @@ function PaidAdDetail({ ad, onBack }: { ad: any; onBack: () => void }) {
       {activeTab === 'trends' && (
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
           <h3 className="text-[16px] font-bold mb-4">每日數據趨勢（過去 14 天）</h3>
-          <div className="h-[320px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip contentStyle={{ fontSize: 12 }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="impressions" stroke="#0d9488" strokeWidth={2} name="曝光量" dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="clicks" stroke="#3b82f6" strokeWidth={2} name="點擊數" dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="conversions" stroke="#8b5cf6" strokeWidth={2} name="轉換數" dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          {trendData.length === 0 ? (
+            <div className="h-[200px] flex items-center justify-center text-[13px] text-muted-foreground">
+              暫無每日趨勢數據（需接入廣告平台或時間序列表）
+            </div>
+          ) : (
+            <div className="h-[320px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trendData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip contentStyle={{ fontSize: 12 }} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Line type="monotone" dataKey="impressions" stroke="#0d9488" strokeWidth={2} name="曝光量" dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="clicks" stroke="#3b82f6" strokeWidth={2} name="點擊數" dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="conversions" stroke="#8b5cf6" strokeWidth={2} name="轉換數" dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
       )}
 

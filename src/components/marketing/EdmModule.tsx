@@ -26,9 +26,9 @@ interface EdmTemplate {
   company?: string;
 }
 
-const mockCampaigns: EdmCampaign[] = [];
+const campaigns: EdmCampaign[] = [];
 
-const mockTemplates: EdmTemplate[] = [];
+const templates: EdmTemplate[] = [];
 
 const statusConfig = {
   draft: { label: '草稿', color: 'text-slate-700', bg: 'bg-slate-100' },
@@ -45,20 +45,20 @@ export function EdmModule() {
   const [showNewForm, setShowNewForm] = useState(false);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
-  const filtered = mockCampaigns.filter((c) => {
+  const filtered = campaigns.filter((c) => {
     if (filterType !== 'all' && c.type !== filterType) return false;
     if (filterStatus !== 'all' && c.status !== filterStatus) return false;
     if (searchQuery && !c.subject.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
-  const sentCount = mockCampaigns.filter(c => c.status === 'sent').length;
-  const scheduledCount = mockCampaigns.filter(c => c.status === 'scheduled').length;
-  const withOpenRate = mockCampaigns.filter(c => c.openRate > 0);
+  const sentCount = campaigns.filter(c => c.status === 'sent').length;
+  const scheduledCount = campaigns.filter(c => c.status === 'scheduled').length;
+  const withOpenRate = campaigns.filter(c => c.openRate > 0);
   const avgOpenRate = withOpenRate.length > 0
     ? withOpenRate.reduce((s, c) => s + c.openRate, 0) / withOpenRate.length
     : 0;
-  const totalRecipients = mockCampaigns.reduce((s, c) => s + c.recipients, 0);
+  const totalRecipients = campaigns.reduce((s, c) => s + c.recipients, 0);
 
   return (
     <div className="space-y-5">
@@ -69,8 +69,8 @@ export function EdmModule() {
             <Mail size={14} className="text-teal-600" />
             <span className="text-[11px] text-muted-foreground">EDM 總數</span>
           </div>
-          <p className="text-[22px] font-bold">{mockCampaigns.length}</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">電郵 {mockCampaigns.filter(c => c.type === 'email').length} / 短訊 {mockCampaigns.filter(c => c.type === 'sms').length}</p>
+          <p className="text-[22px] font-bold">{campaigns.length}</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">電郵 {campaigns.filter(c => c.type === 'email').length} / 短訊 {campaigns.filter(c => c.type === 'sms').length}</p>
         </div>
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-4">
           <div className="flex items-center gap-2 mb-1">
@@ -309,12 +309,12 @@ export function EdmModule() {
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {mockTemplates.length === 0 ? (
+            {templates.length === 0 ? (
               <div className="col-span-full py-12 text-center text-muted-foreground text-[13px]">
                 <FileText size={32} className="mx-auto mb-3 opacity-30" />
                 <p>暫無範本</p>
               </div>
-            ) : mockTemplates.map((template) => (
+            ) : templates.map((template) => (
               <div key={template.id} className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-4 hover:shadow-card-hover transition-all duration-200">
                 <div className="flex items-start justify-between mb-2">
                   <div>

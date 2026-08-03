@@ -47,21 +47,8 @@ function SeoKeywordDetail({ keyword, onBack }: { keyword: any; onBack: () => voi
     { id: 'history', label: '歷史排名變化' },
   ] as const;
 
-  // Mock ranking history data
-  const rankingHistory = useMemo(() => {
-    const data = [];
-    const baseRanking = keyword.currentRanking || 25;
-    for (let i = 0; i < 12; i++) {
-      const month = new Date();
-      month.setMonth(month.getMonth() - (11 - i));
-      const variance = Math.round((Math.random() - 0.3) * 8);
-      data.push({
-        month: `${month.getMonth() + 1}月`,
-        ranking: Math.max(1, baseRanking + 15 - i * 1.2 + variance),
-      });
-    }
-    return data;
-  }, [keyword]);
+  // Ranking history requires `seo_ranking_history` (not yet populated) — do not fabricate
+  const rankingHistory: { month: string; ranking: number }[] = [];
 
   return (
     <div className="space-y-5">
@@ -231,17 +218,23 @@ function SeoKeywordDetail({ keyword, onBack }: { keyword: any; onBack: () => voi
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
           <h3 className="text-[16px] font-bold mb-4">歷史排名變化（過去 12 個月）</h3>
           <p className="text-[12px] text-muted-foreground mb-4">排名越低（數字越小）代表越好的搜尋表現</p>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={rankingHistory} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis reversed tick={{ fontSize: 11 }} domain={['auto', 'auto']} label={{ value: '排名', angle: -90, position: 'insideLeft', style: { fontSize: 11 } }} />
-                <Tooltip contentStyle={{ fontSize: 12 }} formatter={(value: any) => [`#${Math.round(value)}`, '排名']} />
-                <Line type="monotone" dataKey="ranking" stroke="#0d9488" strokeWidth={2} dot={{ r: 4 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          {rankingHistory.length === 0 ? (
+            <div className="h-[200px] flex items-center justify-center text-[13px] text-muted-foreground">
+              暫無歷史排名數據（需建立 `seo_ranking_history` 並寫入）
+            </div>
+          ) : (
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={rankingHistory} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                  <YAxis reversed tick={{ fontSize: 11 }} domain={['auto', 'auto']} label={{ value: '排名', angle: -90, position: 'insideLeft', style: { fontSize: 11 } }} />
+                  <Tooltip contentStyle={{ fontSize: 12 }} formatter={(value: any) => [`#${Math.round(value)}`, '排名']} />
+                  <Line type="monotone" dataKey="ranking" stroke="#0d9488" strokeWidth={2} dot={{ r: 4 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
           {keyword.targetRanking && (
             <div className="mt-4 pt-3 border-t border-border/50 flex items-center gap-2">
               <div className="w-3 h-0.5 bg-teal-600" />
