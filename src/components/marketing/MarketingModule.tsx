@@ -1,6 +1,7 @@
 import { SocialPostsModule } from './SocialPostsModule';
 import { EdmManagementModule } from './EdmManagementModule';
 import { PaidAdsModule } from './PaidAdsModule';
+import { GoogleAdsModule } from './GoogleAdsModule';
 import { SeoKeywordsModule } from './SeoKeywordsModule';
 import { SeoUpgradeModule } from './SeoUpgradeModule';
 import { GraphicDesignModule } from './GraphicDesignModule';
@@ -17,6 +18,7 @@ export function MarketingModule({ subModule }: { subModule?: string }) {
       case 'social': return { title: '社交媒體', subtitle: '管理各平台社交媒體帖文及排期。' };
       case 'edm': return { title: 'EDM 管理', subtitle: '電郵及短訊營銷活動管理。' };
       case 'paid-ads': return { title: '付費廣告', subtitle: '管理付費廣告投放及成效數據。' };
+      case 'google-ads': return { title: 'Google Ads', subtitle: '同步 MCC 帳戶與 Campaign 成效（近 30 日）。' };
       case 'seo': return { title: 'SEO 關鍵字', subtitle: '三級關鍵字管理及排名追蹤。' };
       case 'seo-upgrade': return { title: 'SEO 升級', subtitle: '記錄 SEO 升級動作及費用。' };
       case 'graphic-design': return { title: '平面設計', subtitle: '管理各平台平面設計製作及成果追蹤。' };
@@ -41,6 +43,7 @@ export function MarketingModule({ subModule }: { subModule?: string }) {
       {activeTab === 'social' && <SocialPostsModule />}
       {activeTab === 'edm' && <EdmManagementModule />}
       {activeTab === 'paid-ads' && <PaidAdsModule />}
+      {activeTab === 'google-ads' && <GoogleAdsModule />}
       {activeTab === 'seo' && <SeoKeywordsModule />}
       {activeTab === 'seo-upgrade' && <SeoUpgradeModule />}
       {activeTab === 'graphic-design' && <GraphicDesignModule />}
