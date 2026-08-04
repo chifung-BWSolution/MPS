@@ -4,6 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "env:mps": "node scripts/sync-mps-env.mjs",
+    "predev": "node scripts/sync-mps-env.mjs",
+    "prebuild": "node scripts/sync-mps-env.mjs",
     "dev": "vite",
     "build": "tsc ; vite build",
     "build-no-errors": "tsc ; vite build",
