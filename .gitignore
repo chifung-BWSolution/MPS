@@ -27,6 +27,7 @@ core
 .github/
 .env
 .env.*
+!.env.example
 **/tempobook/**
 supabase/.temp/
 tempo/.tempo/

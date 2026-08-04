@@ -383,12 +383,20 @@ Developer → Git Push → Vite Build → Static Hosting (Vercel / Netlify)
 
 ## 9. 環境變數 (Environment Variables)
 
+**MPS Supabase project only:** `https://kwcevjcmdjadhrygjyfp.supabase.co`  
+Do not point this app at Furniture / PMS / Master Supabase projects.
+
 | Variable | Description |
 |----------|-------------|
-| `VITE_SUPABASE_URL` | Supabase project API URL |
-| `VITE_SUPABASE_ANON_KEY` | Supabase publishable anon key |
-| `SUPABASE_SERVICE_KEY` | Server-side service role key (Edge Functions only) |
+| `MPS_URL` | Preferred Cloud Agent secret → MPS project URL |
+| `MPS_ANON` | Preferred Cloud Agent secret → MPS anon/public key |
+| `MPS_SERVICE` | Optional agent/server service role (never `VITE_*`) |
+| `VITE_SUPABASE_URL` | App client URL (must be MPS; synced from `MPS_URL`) |
+| `VITE_SUPABASE_ANON_KEY` | App client anon key (synced from `MPS_ANON`) |
+| `SUPABASE_ACCESS_TOKEN` | Optional Supabase Management API token (multi-project admin) |
 | `OPENAI_API_KEY` | For AI keyword/title generation (Edge Functions only) |
+
+`scripts/sync-mps-env.mjs` + `vite.config.ts` prefer `MPS_*` over shared injected `VITE_*` from other apps.
 
 ---
 
