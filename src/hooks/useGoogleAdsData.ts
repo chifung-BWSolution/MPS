@@ -156,31 +156,21 @@ export function useGoogleAdsData() {
       const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token || supabaseAnonKey;
-      const endpoints = [
-        `${supabaseUrl}/functions/v1/supabase-functions-sync-google-ads`,
-        `${supabaseUrl}/functions/v1/sync-google-ads`,
-      ];
-
-      let lastErr = 'Sync failed';
-      let ok = false;
-      for (const url of endpoints) {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            apikey: supabaseAnonKey,
-            'Content-Type': 'application/json',
-          },
-          body: '{}',
-        });
-        const json = await res.json().catch(() => ({}));
-        if (res.ok && !json.error) {
-          ok = true;
-          break;
-        }
-        lastErr = json.error || `${res.status} ${res.statusText}`;
+      // Matches deployed slug convention used by other MPS edge functions.
+      const url = `${supabaseUrl}/functions/v1/supabase-functions-sync-google-ads`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          apikey: supabaseAnonKey,
+          'Content-Type': 'application/json',
+        },
+        body: '{}',
+      });
+      const json = await res.json().catch(() => ({} as { error?: string }));
+      if (!res.ok || json.error) {
+        throw new Error(String(json.error || `${res.status} ${res.statusText}`));
       }
-      if (!ok) throw new Error(String(lastErr));
       await refresh();
       return { ok: true as const };
     } catch (e) {

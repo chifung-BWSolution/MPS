@@ -21,8 +21,8 @@ const LOGIN_CUSTOMER_ID = (
   Deno.env.get("GOOGLE_ADS_LOGIN_CUSTOMER_ID") || "5641404438"
 ).replace(/-/g, "");
 
-/** Google Ads REST API version */
-const ADS_API_VERSION = "v19";
+/** Google Ads REST API version (must match a currently served version) */
+const ADS_API_VERSION = "v25";
 
 type GaqlRow = Record<string, unknown>;
 
@@ -219,11 +219,9 @@ Deno.serve(async (req) => {
         );
         if (rows.length === 0) continue;
 
+        const asInt = (v: unknown) => Math.round(Number(v ?? 0)) || 0;
         const campaigns = rows.map((row) => {
           const campaignId = String(nestGet(row, "campaign.id") ?? "");
-          const costMicros = Number(nestGet(row, "metrics.costMicros") ?? 0);
-          const clicks = Number(nestGet(row, "metrics.clicks") ?? 0);
-          const impressions = Number(nestGet(row, "metrics.impressions") ?? 0);
           return {
             id: `${account.customer_id}:${campaignId}`,
             customer_id: account.customer_id,
@@ -233,14 +231,13 @@ Deno.serve(async (req) => {
             advertising_channel_type: String(
               nestGet(row, "campaign.advertisingChannelType") ?? "",
             ) || null,
-            impressions,
-            clicks,
-            cost_micros: costMicros,
-            conversions: Number(nestGet(row, "metrics.conversions") ?? 0),
-            ctr: Number(nestGet(row, "metrics.ctr") ?? 0),
-            average_cpc_micros: Number(
-              nestGet(row, "metrics.averageCpc") ?? 0,
-            ),
+            impressions: asInt(nestGet(row, "metrics.impressions")),
+            clicks: asInt(nestGet(row, "metrics.clicks")),
+            cost_micros: asInt(nestGet(row, "metrics.costMicros")),
+            conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
+            ctr: Number(nestGet(row, "metrics.ctr") ?? 0) || 0,
+            // REST may return micros as float strings; column is bigint.
+            average_cpc_micros: asInt(nestGet(row, "metrics.averageCpc")),
             metrics_start_date: metricsStart,
             metrics_end_date: metricsEnd,
             last_synced_at: now,
