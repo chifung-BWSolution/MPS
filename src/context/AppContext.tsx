@@ -101,7 +101,6 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'calendar', label: '行銷日曆' },
       { id: 'social', label: '社交媒體' },
       { id: 'edm', label: 'EDM 管理' },
-      { id: 'paid-ads', label: '付費廣告' },
       { id: 'google-ads', label: 'Google Ads' },
       { id: 'seo', label: 'SEO 關鍵字' },
       { id: 'seo-upgrade', label: 'SEO 升級' },
