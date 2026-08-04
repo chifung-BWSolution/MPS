@@ -167,12 +167,19 @@ export function useGoogleAdsData() {
         },
         body: '{}',
       });
-      const json = await res.json().catch(() => ({} as { error?: string }));
+      const json = await res.json().catch(
+        () => ({} as { error?: string; duration_ms?: number; campaigns_synced?: number }),
+      );
       if (!res.ok || json.error) {
         throw new Error(String(json.error || `${res.status} ${res.statusText}`));
       }
       await refresh();
-      return { ok: true as const };
+      return {
+        ok: true as const,
+        durationMs: typeof json.duration_ms === 'number' ? json.duration_ms : undefined,
+        campaignsSynced:
+          typeof json.campaigns_synced === 'number' ? json.campaigns_synced : undefined,
+      };
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       setError(message);

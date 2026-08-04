@@ -78,8 +78,17 @@ export function GoogleAdsModule() {
 
   const onSync = async () => {
     const result = await triggerSync();
-    if (result.ok) toast.success('Google Ads 同步完成');
-    else toast.error(result.error || '同步失敗');
+    if (result.ok) {
+      const secs =
+        typeof result.durationMs === 'number'
+          ? `（${(result.durationMs / 1000).toFixed(1)}s）`
+          : '';
+      const camps =
+        typeof result.campaignsSynced === 'number'
+          ? ` · ${result.campaignsSynced} campaigns`
+          : '';
+      toast.success(`Google Ads 同步完成${secs}${camps}`);
+    } else toast.error(result.error || '同步失敗');
   };
 
   return (

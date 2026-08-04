@@ -24,7 +24,29 @@ const LOGIN_CUSTOMER_ID = (
 /** Google Ads REST API version (must match a currently served version) */
 const ADS_API_VERSION = "v25";
 
+/** Parallel account metric fetches (rate-limit safe for Basic Access). */
+const ACCOUNT_CONCURRENCY = 12;
+
 type GaqlRow = Record<string, unknown>;
+
+type CampaignRow = {
+  id: string;
+  customer_id: string;
+  campaign_id: string;
+  campaign_name: string;
+  status: string;
+  advertising_channel_type: string | null;
+  impressions: number;
+  clicks: number;
+  cost_micros: number;
+  conversions: number;
+  ctr: number;
+  average_cpc_micros: number;
+  metrics_start_date: string;
+  metrics_end_date: string;
+  last_synced_at: string;
+  updated_at: string;
+};
 
 async function getAccessToken(): Promise<string> {
   const body = new URLSearchParams({
@@ -46,38 +68,62 @@ async function getAccessToken(): Promise<string> {
   return json.access_token as string;
 }
 
-async function gaqlSearch(
+function adsHeaders(accessToken: string): HeadersInit {
+  return {
+    Authorization: `Bearer ${accessToken}`,
+    "developer-token": DEVELOPER_TOKEN,
+    "login-customer-id": LOGIN_CUSTOMER_ID,
+    "Content-Type": "application/json",
+  };
+}
+
+/** Prefer searchStream (one HTTP round-trip). Fall back to paged search. */
+async function gaqlQuery(
   accessToken: string,
   customerId: string,
   query: string,
 ): Promise<GaqlRow[]> {
-  const url =
+  const streamUrl =
+    `https://googleads.googleapis.com/${ADS_API_VERSION}/customers/${customerId}/googleAds:searchStream`;
+  const streamRes = await fetch(streamUrl, {
+    method: "POST",
+    headers: adsHeaders(accessToken),
+    body: JSON.stringify({ query }),
+  });
+
+  if (streamRes.ok) {
+    const payload = await streamRes.json();
+    const rows: GaqlRow[] = [];
+    // searchStream returns an array of chunk objects, each with results[]
+    if (Array.isArray(payload)) {
+      for (const chunk of payload) {
+        for (const r of chunk?.results ?? []) rows.push(r);
+      }
+    } else {
+      for (const r of payload?.results ?? []) rows.push(r);
+    }
+    return rows;
+  }
+
+  // Fallback: classic search with page tokens
+  const searchUrl =
     `https://googleads.googleapis.com/${ADS_API_VERSION}/customers/${customerId}/googleAds:search`;
   const rows: GaqlRow[] = [];
   let pageToken: string | undefined;
-
   do {
-    const payload: Record<string, unknown> = { query };
-    if (pageToken) payload.pageToken = pageToken;
-
-    const res = await fetch(url, {
+    const body: Record<string, unknown> = { query };
+    if (pageToken) body.pageToken = pageToken;
+    const res = await fetch(searchUrl, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "developer-token": DEVELOPER_TOKEN,
-        "login-customer-id": LOGIN_CUSTOMER_ID,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
+      headers: adsHeaders(accessToken),
+      body: JSON.stringify(body),
     });
-
     if (!res.ok) {
       const text = await res.text();
       throw new Error(
-        `GAQL failed for ${customerId} (${res.status}): ${text.slice(0, 800)}`,
+        `GAQL failed for ${customerId} (${res.status}): ${text.slice(0, 400)}`,
       );
     }
-
     const json = await res.json();
     for (const r of json.results ?? []) rows.push(r);
     pageToken = json.nextPageToken;
@@ -95,12 +141,37 @@ function nestGet(obj: GaqlRow, path: string): unknown {
   }, obj);
 }
 
+const asInt = (v: unknown) => Math.round(Number(v ?? 0)) || 0;
+
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  async function run() {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      results[i] = await worker(items[i], i);
+    }
+  }
+  const runners = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    () => run(),
+  );
+  await Promise.all(runners);
+  return results;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   const runId = `gads_${Date.now()}`;
+  const startedMs = Date.now();
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   try {
@@ -122,8 +193,7 @@ Deno.serve(async (req) => {
     const accessToken = await getAccessToken();
     const now = new Date().toISOString();
 
-    // Hierarchy under MCC
-    const clientRows = await gaqlSearch(
+    const clientRows = await gaqlQuery(
       accessToken,
       LOGIN_CUSTOMER_ID,
       `
@@ -160,7 +230,6 @@ Deno.serve(async (req) => {
       };
     });
 
-    // Ensure MCC itself is present
     if (!accounts.some((a) => a.customer_id === LOGIN_CUSTOMER_ID)) {
       accounts.unshift({
         customer_id: LOGIN_CUSTOMER_ID,
@@ -181,14 +250,13 @@ Deno.serve(async (req) => {
       .upsert(accounts, { onConflict: "customer_id" });
     if (accErr) throw new Error(`Account upsert failed: ${accErr.message}`);
 
-    const leafAccounts = accounts.filter((a) => !a.is_manager);
-    let campaignsSynced = 0;
-    const campaignErrors: string[] = [];
+    // Only query metrics for ENABLED non-manager accounts (skip cancelled/closed → fewer 403s + faster).
+    const leafAccounts = accounts.filter(
+      (a) => !a.is_manager && a.status.toUpperCase() === "ENABLED",
+    );
 
-    // Last 30 days rollup per campaign
     const metricsQuery = `
       SELECT
-        customer.id,
         campaign.id,
         campaign.name,
         campaign.status,
@@ -203,26 +271,26 @@ Deno.serve(async (req) => {
       WHERE segments.date DURING LAST_30_DAYS
     `;
 
-    // End date for labeling
     const end = new Date();
     const start = new Date();
     start.setDate(end.getDate() - 30);
     const metricsStart = start.toISOString().slice(0, 10);
     const metricsEnd = end.toISOString().slice(0, 10);
 
-    for (const account of leafAccounts) {
+    const campaignErrors: string[] = [];
+    const allCampaigns: CampaignRow[] = [];
+
+    await mapPool(leafAccounts, ACCOUNT_CONCURRENCY, async (account) => {
       try {
-        const rows = await gaqlSearch(
+        const rows = await gaqlQuery(
           accessToken,
           account.customer_id,
           metricsQuery,
         );
-        if (rows.length === 0) continue;
-
-        const asInt = (v: unknown) => Math.round(Number(v ?? 0)) || 0;
-        const campaigns = rows.map((row) => {
+        for (const row of rows) {
           const campaignId = String(nestGet(row, "campaign.id") ?? "");
-          return {
+          if (!campaignId) continue;
+          allCampaigns.push({
             id: `${account.customer_id}:${campaignId}`,
             customer_id: account.customer_id,
             campaign_id: campaignId,
@@ -236,48 +304,49 @@ Deno.serve(async (req) => {
             cost_micros: asInt(nestGet(row, "metrics.costMicros")),
             conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
             ctr: Number(nestGet(row, "metrics.ctr") ?? 0) || 0,
-            // REST may return micros as float strings; column is bigint.
             average_cpc_micros: asInt(nestGet(row, "metrics.averageCpc")),
             metrics_start_date: metricsStart,
             metrics_end_date: metricsEnd,
             last_synced_at: now,
             updated_at: now,
-          };
-        });
-
-        // Upsert in chunks
-        for (let i = 0; i < campaigns.length; i += 200) {
-          const chunk = campaigns.slice(i, i + 200);
-          const { error } = await supabase
-            .from("google_ads_campaigns")
-            .upsert(chunk, { onConflict: "id" });
-          if (error) {
-            throw new Error(error.message);
-          }
+          });
         }
-        campaignsSynced += campaigns.length;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        campaignErrors.push(`${account.customer_id}: ${msg.slice(0, 200)}`);
+        // Permission / deactivated accounts — expected noise; keep short.
+        campaignErrors.push(`${account.customer_id}: ${msg.slice(0, 120)}`);
       }
+    });
+
+    // Bulk upsert campaigns in larger chunks
+    const UPSERT_CHUNK = 500;
+    for (let i = 0; i < allCampaigns.length; i += UPSERT_CHUNK) {
+      const chunk = allCampaigns.slice(i, i + UPSERT_CHUNK);
+      const { error } = await supabase
+        .from("google_ads_campaigns")
+        .upsert(chunk, { onConflict: "id" });
+      if (error) throw new Error(`Campaign upsert failed: ${error.message}`);
     }
 
+    const durationMs = Date.now() - startedMs;
     await supabase
       .from("google_ads_sync_runs")
       .update({
-        status: campaignErrors.length && campaignsSynced === 0
+        status: campaignErrors.length && allCampaigns.length === 0
           ? "error"
           : "success",
         finished_at: new Date().toISOString(),
         accounts_synced: accounts.length,
-        campaigns_synced: campaignsSynced,
+        campaigns_synced: allCampaigns.length,
         error_message: campaignErrors.length
           ? campaignErrors.slice(0, 10).join(" | ")
           : null,
         meta: {
           login_customer_id: LOGIN_CUSTOMER_ID,
-          leaf_accounts: leafAccounts.length,
+          leaf_accounts_queried: leafAccounts.length,
+          concurrency: ACCOUNT_CONCURRENCY,
           error_count: campaignErrors.length,
+          duration_ms: durationMs,
         },
       })
       .eq("id", runId);
@@ -288,7 +357,8 @@ Deno.serve(async (req) => {
         run_id: runId,
         accounts_synced: accounts.length,
         leaf_accounts: leafAccounts.length,
-        campaigns_synced: campaignsSynced,
+        campaigns_synced: allCampaigns.length,
+        duration_ms: durationMs,
         errors: campaignErrors.slice(0, 20),
         synced_at: now,
       }),
@@ -307,6 +377,7 @@ Deno.serve(async (req) => {
           status: "error",
           finished_at: new Date().toISOString(),
           error_message: message,
+          meta: { duration_ms: Date.now() - startedMs },
         })
         .eq("id", runId);
     } catch {
