@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { useGoogleAdsData } from '@/hooks/useGoogleAdsData';
+import { resolveDateRange, useGoogleAdsData } from '@/hooks/useGoogleAdsData';
+import type { DateRangePreset } from '@/types/googleAds';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -28,17 +29,40 @@ function statusBadge(status: string) {
   );
 }
 
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function daysAgoIso(n: number) {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - (n - 1));
+  return d.toISOString().slice(0, 10);
+}
+
 export function GoogleAdsModule() {
+  const [preset, setPreset] = useState<DateRangePreset>('30d');
+  const [customFrom, setCustomFrom] = useState(daysAgoIso(30));
+  const [customTo, setCustomTo] = useState(todayIso());
+  const [range, setRange] = useState(() =>
+    resolveDateRange('30d', daysAgoIso(30), todayIso()),
+  );
+
   const {
     accounts,
     campaigns,
     lastSync,
+    dataMinDate,
+    dataMaxDate,
     loading,
     syncing,
     error,
     refresh,
     triggerSync,
-  } = useGoogleAdsData();
+  } = useGoogleAdsData(range.from, range.to);
+
+  useEffect(() => {
+    setRange(resolveDateRange(preset, customFrom, customTo, dataMinDate, dataMaxDate));
+  }, [preset, customFrom, customTo, dataMinDate, dataMaxDate]);
 
   const [search, setSearch] = useState('');
   const [accountFilter, setAccountFilter] = useState('all');
@@ -83,11 +107,9 @@ export function GoogleAdsModule() {
         typeof result.durationMs === 'number'
           ? `（${(result.durationMs / 1000).toFixed(1)}s）`
           : '';
-      const camps =
-        typeof result.campaignsSynced === 'number'
-          ? ` · ${result.campaignsSynced} campaigns`
-          : '';
-      toast.success(`Google Ads 同步完成${secs}${camps}`);
+      const rows =
+        typeof result.dailyRows === 'number' ? ` · ${result.dailyRows} daily rows` : '';
+      toast.success(`最近 7 日資料已更新${secs}${rows}`);
     } else toast.error(result.error || '同步失敗');
   };
 
@@ -105,13 +127,14 @@ export function GoogleAdsModule() {
               <div className="text-[18px] font-bold">{filtered.length}</div>
             </div>
             <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md px-3 py-2">
-              <div className="text-[11px] text-muted-foreground">Spend (30d)</div>
+              <div className="text-[11px] text-muted-foreground">Spend</div>
               <div className="text-[18px] font-bold">{formatMoneyFromMicros(totals.costMicros)}</div>
             </div>
             <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md px-3 py-2">
               <div className="text-[11px] text-muted-foreground">Clicks / Conv</div>
               <div className="text-[18px] font-bold">
-                {totals.clicks.toLocaleString()} / {totals.conversions.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                {totals.clicks.toLocaleString()} /{' '}
+                {totals.conversions.toLocaleString(undefined, { maximumFractionDigits: 1 })}
               </div>
             </div>
           </div>
@@ -121,13 +144,48 @@ export function GoogleAdsModule() {
             </Button>
             <Button size="sm" onClick={() => void onSync()} disabled={syncing}>
               <RefreshCw size={14} className={`mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? '同步中…' : '同步 Google Ads'}
+              {syncing ? '更新中…' : 'Refresh recent (7d)'}
             </Button>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Select value={preset} onValueChange={(v) => setPreset(v as DateRangePreset)}>
+            <SelectTrigger className="w-[140px] h-9 text-[13px]">
+              <SelectValue placeholder="期間" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7d">近 7 日</SelectItem>
+              <SelectItem value="14d">近 14 日</SelectItem>
+              <SelectItem value="30d">近 30 日</SelectItem>
+              <SelectItem value="90d">近 90 日</SelectItem>
+              <SelectItem value="ytd">今年至今</SelectItem>
+              <SelectItem value="all">全部已同步</SelectItem>
+              <SelectItem value="custom">自訂</SelectItem>
+            </SelectContent>
+          </Select>
+          {preset === 'custom' ? (
+            <>
+              <Input
+                type="date"
+                className="w-[150px] h-9 text-[13px]"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+              />
+              <span className="text-[12px] text-muted-foreground">至</span>
+              <Input
+                type="date"
+                className="w-[150px] h-9 text-[13px]"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+              />
+            </>
+          ) : (
+            <span className="text-[12px] text-muted-foreground tabular-nums">
+              {range.from} → {range.to}
+            </span>
+          )}
+          <div className="relative flex-1 min-w-[180px] max-w-sm">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
@@ -137,7 +195,7 @@ export function GoogleAdsModule() {
             />
           </div>
           <Select value={accountFilter} onValueChange={setAccountFilter}>
-            <SelectTrigger className="w-[220px] h-9 text-[13px]">
+            <SelectTrigger className="w-[200px] h-9 text-[13px]">
               <SelectValue placeholder="帳戶" />
             </SelectTrigger>
             <SelectContent>
@@ -150,7 +208,7 @@ export function GoogleAdsModule() {
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[140px] h-9 text-[13px]">
+            <SelectTrigger className="w-[130px] h-9 text-[13px]">
               <SelectValue placeholder="狀態" />
             </SelectTrigger>
             <SelectContent>
@@ -163,10 +221,13 @@ export function GoogleAdsModule() {
         </div>
 
         <div className="text-[12px] text-muted-foreground">
-          MCC 564-140-4438 · 指標為近 30 日彙總
+          MCC 564-140-4438 · 報表由每日指標彙總
+          {dataMinDate && dataMaxDate
+            ? ` · 已同步資料 ${dataMinDate} ~ ${dataMaxDate}`
+            : ' · 尚無每日指標（請至「Google Ads 同步」執行歷史回填）'}
           {lastSync?.finishedAt
-            ? ` · 上次同步 ${new Date(lastSync.finishedAt).toLocaleString()} (${lastSync.status})`
-            : ' · 尚未同步'}
+            ? ` · 最近增量 ${new Date(lastSync.finishedAt).toLocaleString()} (${lastSync.status})`
+            : ''}
           {error ? <span className="text-red-600 ml-2">{error}</span> : null}
         </div>
       </div>
@@ -197,7 +258,7 @@ export function GoogleAdsModule() {
               {!loading && filtered.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
-                    尚無資料。請先部署 Edge Function 並設定 Google Ads secrets，再按「同步 Google Ads」。
+                    此日期區間尚無資料。請先到「Google Ads 同步」執行完整歷史回填，或按 Refresh recent。
                   </td>
                 </tr>
               )}

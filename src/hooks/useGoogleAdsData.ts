@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import type { GoogleAdsAccount, GoogleAdsCampaign, GoogleAdsSyncRun } from '@/types/googleAds';
+import { invokeGoogleAdsIncrementalSync } from '@/lib/googleAdsApi';
+import type {
+  DateRangePreset,
+  GoogleAdsAccount,
+  GoogleAdsCampaign,
+  GoogleAdsSyncRun,
+} from '@/types/googleAds';
 
 type AccountRow = {
   customer_id: string;
@@ -15,21 +21,13 @@ type AccountRow = {
   last_synced_at: string | null;
 };
 
-type CampaignRow = {
+type CampaignMetaRow = {
   id: string;
   customer_id: string;
   campaign_id: string;
   campaign_name: string;
   status: string;
   advertising_channel_type: string | null;
-  impressions: number | string;
-  clicks: number | string;
-  cost_micros: number | string;
-  conversions: number | string;
-  ctr: number | string | null;
-  average_cpc_micros: number | string | null;
-  metrics_start_date: string | null;
-  metrics_end_date: string | null;
   last_synced_at: string | null;
 };
 
@@ -41,6 +39,15 @@ type SyncRow = {
   accounts_synced: number;
   campaigns_synced: number;
   error_message: string | null;
+};
+
+type AggRow = {
+  customer_id: string;
+  campaign_id: string;
+  impressions: number | string;
+  clicks: number | string;
+  cost_micros: number | string;
+  conversions: number | string;
 };
 
 function mapAccount(row: AccountRow): GoogleAdsAccount {
@@ -57,74 +64,137 @@ function mapAccount(row: AccountRow): GoogleAdsAccount {
   };
 }
 
-function mapCampaign(row: CampaignRow, accountName?: string): GoogleAdsCampaign {
-  return {
-    id: row.id,
-    customerId: row.customer_id,
-    campaignId: row.campaign_id,
-    campaignName: row.campaign_name,
-    status: row.status,
-    advertisingChannelType: row.advertising_channel_type ?? undefined,
-    impressions: Number(row.impressions) || 0,
-    clicks: Number(row.clicks) || 0,
-    costMicros: Number(row.cost_micros) || 0,
-    conversions: Number(row.conversions) || 0,
-    ctr: row.ctr == null ? undefined : Number(row.ctr),
-    averageCpcMicros: row.average_cpc_micros == null
-      ? undefined
-      : Number(row.average_cpc_micros),
-    metricsStartDate: row.metrics_start_date ?? undefined,
-    metricsEndDate: row.metrics_end_date ?? undefined,
-    lastSyncedAt: row.last_synced_at ?? undefined,
-    accountName,
-  };
+function toIso(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }
 
-export function useGoogleAdsData() {
+export function resolveDateRange(
+  preset: DateRangePreset,
+  customFrom: string,
+  customTo: string,
+  dataMin?: string | null,
+  dataMax?: string | null,
+): { from: string; to: string } {
+  const today = new Date();
+  const to = toIso(today);
+  if (preset === 'custom') {
+    return {
+      from: customFrom || to,
+      to: customTo || to,
+    };
+  }
+  if (preset === 'all') {
+    return {
+      from: dataMin || '2019-01-01',
+      to: dataMax || to,
+    };
+  }
+  if (preset === 'ytd') {
+    return { from: `${today.getUTCFullYear()}-01-01`, to };
+  }
+  const days = preset === '7d' ? 7 : preset === '14d' ? 14 : preset === '90d' ? 90 : 30;
+  const from = new Date(today);
+  from.setUTCDate(from.getUTCDate() - (days - 1));
+  return { from: toIso(from), to };
+}
+
+export function useGoogleAdsData(
+  dateFrom: string,
+  dateTo: string,
+) {
   const { session } = useAuth();
   const [accounts, setAccounts] = useState<GoogleAdsAccount[]>([]);
   const [campaigns, setCampaigns] = useState<GoogleAdsCampaign[]>([]);
   const [lastSync, setLastSync] = useState<GoogleAdsSyncRun | null>(null);
+  const [dataMinDate, setDataMinDate] = useState<string | null>(null);
+  const [dataMaxDate, setDataMaxDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const [accRes, campRes, syncRes] = await Promise.all([
+    const [accRes, campRes, syncRes, minRes, maxRes, aggRes] = await Promise.all([
       supabase
         .from('google_ads_accounts')
         .select('*')
         .order('descriptive_name', { ascending: true }),
-      supabase
-        .from('google_ads_campaigns')
-        .select('*')
-        .order('cost_micros', { ascending: false }),
+      supabase.from('google_ads_campaigns').select(
+        'id,customer_id,campaign_id,campaign_name,status,advertising_channel_type,last_synced_at',
+      ),
       supabase
         .from('google_ads_sync_runs')
         .select('*')
         .order('started_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase
+        .from('google_ads_campaign_daily_metrics')
+        .select('metric_date')
+        .order('metric_date', { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('google_ads_campaign_daily_metrics')
+        .select('metric_date')
+        .order('metric_date', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase.rpc('google_ads_campaign_metrics_range', {
+        p_from: dateFrom,
+        p_to: dateTo,
+      }),
     ]);
 
-    if (accRes.error || campRes.error) {
-      setError(accRes.error?.message || campRes.error?.message || 'Load failed');
+    if (accRes.error || campRes.error || aggRes.error) {
+      setError(
+        accRes.error?.message ||
+          campRes.error?.message ||
+          aggRes.error?.message ||
+          'Load failed',
+      );
       setAccounts([]);
       setCampaigns([]);
-    } else {
-      setError(null);
-      const mappedAccounts = (accRes.data as AccountRow[] | null)?.map(mapAccount) ?? [];
-      setAccounts(mappedAccounts);
-      const nameById = new Map(
-        mappedAccounts.map((a) => [a.customerId, a.descriptiveName]),
-      );
-      setCampaigns(
-        (campRes.data as CampaignRow[] | null)?.map((row) =>
-          mapCampaign(row, nameById.get(row.customer_id)),
-        ) ?? [],
-      );
+      setLoading(false);
+      return;
     }
+
+    setError(null);
+    const mappedAccounts = (accRes.data as AccountRow[] | null)?.map(mapAccount) ?? [];
+    setAccounts(mappedAccounts);
+    const nameById = new Map(mappedAccounts.map((a) => [a.customerId, a.descriptiveName]));
+
+    const metaByKey = new Map(
+      ((campRes.data as CampaignMetaRow[] | null) ?? []).map((c) => [c.id, c]),
+    );
+    const agg = (aggRes.data as AggRow[] | null) ?? [];
+    const mappedCampaigns: GoogleAdsCampaign[] = agg
+      .map((row) => {
+        const id = `${row.customer_id}:${row.campaign_id}`;
+        const meta = metaByKey.get(id);
+        const impressions = Number(row.impressions) || 0;
+        const clicks = Number(row.clicks) || 0;
+        return {
+          id,
+          customerId: row.customer_id,
+          campaignId: row.campaign_id,
+          campaignName: meta?.campaign_name || row.campaign_id,
+          status: meta?.status || 'UNKNOWN',
+          advertisingChannelType: meta?.advertising_channel_type ?? undefined,
+          impressions,
+          clicks,
+          costMicros: Number(row.cost_micros) || 0,
+          conversions: Number(row.conversions) || 0,
+          ctr: impressions > 0 ? clicks / impressions : 0,
+          lastSyncedAt: meta?.last_synced_at ?? undefined,
+          accountName: nameById.get(row.customer_id),
+        };
+      })
+      .sort((a, b) => b.costMicros - a.costMicros);
+
+    setCampaigns(mappedCampaigns);
+    setDataMinDate((minRes.data as { metric_date?: string } | null)?.metric_date ?? null);
+    setDataMaxDate((maxRes.data as { metric_date?: string } | null)?.metric_date ?? null);
 
     if (syncRes.data) {
       const s = syncRes.data as SyncRow;
@@ -142,7 +212,7 @@ export function useGoogleAdsData() {
     }
 
     setLoading(false);
-  }, []);
+  }, [dateFrom, dateTo]);
 
   useEffect(() => {
     void refresh();
@@ -152,33 +222,13 @@ export function useGoogleAdsData() {
     setSyncing(true);
     setError(null);
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token || supabaseAnonKey;
-      // Matches deployed slug convention used by other MPS edge functions.
-      const url = `${supabaseUrl}/functions/v1/supabase-functions-sync-google-ads`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          apikey: supabaseAnonKey,
-          'Content-Type': 'application/json',
-        },
-        body: '{}',
-      });
-      const json = await res.json().catch(
-        () => ({} as { error?: string; duration_ms?: number; campaigns_synced?: number }),
-      );
-      if (!res.ok || json.error) {
-        throw new Error(String(json.error || `${res.status} ${res.statusText}`));
-      }
+      const json = await invokeGoogleAdsIncrementalSync();
       await refresh();
       return {
         ok: true as const,
-        durationMs: typeof json.duration_ms === 'number' ? json.duration_ms : undefined,
-        campaignsSynced:
-          typeof json.campaigns_synced === 'number' ? json.campaigns_synced : undefined,
+        durationMs: json.duration_ms,
+        campaignsSynced: json.campaigns_synced,
+        dailyRows: json.daily_rows,
       };
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -193,6 +243,8 @@ export function useGoogleAdsData() {
     accounts,
     campaigns,
     lastSync,
+    dataMinDate,
+    dataMaxDate,
     loading,
     syncing,
     error,

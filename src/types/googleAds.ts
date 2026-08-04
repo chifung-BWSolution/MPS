@@ -23,10 +23,7 @@ export type GoogleAdsCampaign = {
   conversions: number;
   ctr?: number;
   averageCpcMicros?: number;
-  metricsStartDate?: string;
-  metricsEndDate?: string;
   lastSyncedAt?: string;
-  /** Joined from accounts when available */
   accountName?: string;
 };
 
@@ -39,3 +36,28 @@ export type GoogleAdsSyncRun = {
   campaignsSynced: number;
   errorMessage?: string;
 };
+
+export type GoogleAdsBackfillJob = {
+  id: string;
+  status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+  historyStartDate: string;
+  historyEndDate: string;
+  cursorMonth: string;
+  totalMonths: number;
+  completedMonths: number;
+  rowsUpserted: number;
+  accountsTargeted: number;
+  errorCount: number;
+  lastError?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  updatedAt: string;
+  meta?: {
+    last_month?: string;
+    last_month_rows?: number;
+    recent_errors?: string[];
+    enabled_customer_ids?: string[];
+  };
+};
+
+export type DateRangePreset = '7d' | '14d' | '30d' | '90d' | 'ytd' | 'all' | 'custom';

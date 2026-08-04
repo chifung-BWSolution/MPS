@@ -102,6 +102,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'social', label: '社交媒體' },
       { id: 'edm', label: 'EDM 管理' },
       { id: 'google-ads', label: 'Google Ads' },
+      { id: 'google-ads-sync', label: 'Google Ads 同步' },
       { id: 'seo', label: 'SEO 關鍵字' },
       { id: 'seo-upgrade', label: 'SEO 升級' },
       { id: 'graphic-design', label: '平面設計' },
