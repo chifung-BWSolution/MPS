@@ -48,6 +48,25 @@ Deno.serve(async (req) => {
       .upsert(accounts, { onConflict: "ad_account_id" });
     if (accErr) throw new Error(`Account upsert failed: ${accErr.message}`);
 
+    // Drop accounts no longer returned by current META_CREDENTIALS_JSON
+    const liveIds = accounts.map((a) => a.ad_account_id);
+    let prunedAccounts = 0;
+    const { data: existingAccs, error: listErr } = await supabase
+      .from("facebook_ads_accounts")
+      .select("ad_account_id");
+    if (listErr) throw new Error(`Account list failed: ${listErr.message}`);
+    const staleIds = ((existingAccs as { ad_account_id: string }[] | null) ?? [])
+      .map((r) => r.ad_account_id)
+      .filter((id) => !liveIds.includes(id));
+    if (staleIds.length) {
+      const { error: delErr, count } = await supabase
+        .from("facebook_ads_accounts")
+        .delete({ count: "exact" })
+        .in("ad_account_id", staleIds);
+      if (delErr) throw new Error(`Account prune failed: ${delErr.message}`);
+      prunedAccounts = count ?? staleIds.length;
+    }
+
     const { daily, campaigns, errors } = await fetchDailyMetricsForRange(
       credentials,
       accounts,
@@ -88,12 +107,15 @@ Deno.serve(async (req) => {
         campaigns_synced: campaigns.length,
         error_message: errors.length ? errors.slice(0, 10).join(" | ") : null,
         meta: {
+          credentials_count: credentials.length,
           businesses: credentials.map((c) => c.name),
+          business_keys: credentials.map((c) => c.id),
           date_from: start,
           date_to: end,
           daily_rows: daily.length,
           duration_ms: durationMs,
           error_count: errors.length,
+          pruned_accounts: prunedAccounts,
           mode: "incremental_7d",
         },
       })
@@ -103,10 +125,13 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         run_id: runId,
+        credentials_count: credentials.length,
         accounts_synced: accounts.length,
         businesses: credentials.map((c) => c.name),
+        business_keys: credentials.map((c) => c.id),
         campaigns_synced: campaigns.length,
         daily_rows: daily.length,
+        pruned_accounts: prunedAccounts,
         date_from: start,
         date_to: end,
         duration_ms: durationMs,

@@ -162,7 +162,11 @@ export function FacebookAdsSyncModule() {
           </div>
           <p className="text-[12px] text-muted-foreground leading-relaxed">
             Meta Insights 約僅保留近 37 個月資料。完整歷史以「每月一個步驟」推進，避免 Edge Function 逾時。
-            執行中請保持此分頁開啟以自動推進；關閉後可按「繼續」從資料庫游標恢復。涵蓋 Branding Works、Food and Wine、Attitude Beauty 等已設定憑證的廣告帳戶。
+            執行中請保持此分頁開啟以自動推進；關閉後可按「繼續」從資料庫游標恢復。
+            會同步 <code className="text-[11px]">META_CREDENTIALS_JSON</code> 內全部 Business 憑證下的廣告帳戶（增刪憑證後按增量同步會自動更新帳戶清單）。
+            {job?.meta?.businesses?.length
+              ? ` 目前任務涵蓋：${job.meta.businesses.join('、')}。`
+              : ''}
           </p>
         </div>
 

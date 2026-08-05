@@ -125,7 +125,13 @@ export function FacebookAdsModule() {
           : '';
       const rows =
         typeof result.dailyRows === 'number' ? ` · ${result.dailyRows} daily rows` : '';
-      toast.success(`最近 7 日資料已更新${secs}${rows}`);
+      const biz =
+        typeof result.credentialsCount === 'number'
+          ? ` · ${result.credentialsCount} Business`
+          : result.businesses?.length
+            ? ` · ${result.businesses.length} Business`
+            : '';
+      toast.success(`最近 7 日資料已更新${secs}${rows}${biz}`);
     } else toast.error(result.error || '同步失敗');
   };
 
@@ -133,7 +139,11 @@ export function FacebookAdsModule() {
     <div className="space-y-0">
       <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1 min-w-[280px]">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 flex-1 min-w-[280px]">
+            <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md px-3 py-2">
+              <div className="text-[11px] text-muted-foreground">Business</div>
+              <div className="text-[18px] font-bold">{businesses.length}</div>
+            </div>
             <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md px-3 py-2">
               <div className="text-[11px] text-muted-foreground">帳戶</div>
               <div className="text-[18px] font-bold">{filteredAccounts.length}</div>
@@ -250,7 +260,11 @@ export function FacebookAdsModule() {
         </div>
 
         <div className="text-[12px] text-muted-foreground">
-          Meta Marketing API · 多 Business 憑證 · 報表由每日指標彙總
+          Meta Marketing API · {businesses.length || lastSync?.credentialsCount || '—'} Business 憑證
+          {businesses.length
+            ? `（${businesses.map((b) => b.name).join('、')}）`
+            : ''}
+          {' · '}報表由每日指標彙總
           {dataMinDate && dataMaxDate
             ? ` · 已同步資料 ${dataMinDate} ~ ${dataMaxDate}`
             : ' · 尚無每日指標（請至「Facebook Ads 同步」執行歷史回填）'}
