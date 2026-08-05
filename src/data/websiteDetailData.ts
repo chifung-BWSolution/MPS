@@ -68,31 +68,8 @@ export const websitePaidAds: Record<string, (PaidAd & { __sampleData: true })[]>
   ],
 };
 
-// === SEO Keywords per website (模擬數據) ===
-export const websiteSeoKeywords: Record<string, (SeoKeyword & { __sampleData: true })[]> = {
-  ws1: [
-    { __sampleData: true, id: 'sk1', websiteProfileId: 'ws1', keyword: '網頁設計', level: 'level_1', searchVolume: 8100, currentRanking: 5, targetRanking: 3, targetPage: '/services/web-design', difficultyScore: 72, status: 'optimizing', aiGenerated: false },
-    { __sampleData: true, id: 'sk2', websiteProfileId: 'ws1', keyword: '香港網頁設計公司', level: 'level_1', searchVolume: 3600, currentRanking: 3, targetRanking: 1, targetPage: '/', difficultyScore: 65, status: 'optimizing', aiGenerated: false },
-    { __sampleData: true, id: 'sk3', websiteProfileId: 'ws1', keyword: '響應式設計', level: 'level_2', searchVolume: 2400, currentRanking: 8, targetRanking: 5, targetPage: '/blog/responsive-design-2024', difficultyScore: 58, status: 'monitoring', aiGenerated: false },
-    { __sampleData: true, id: 'sk4', websiteProfileId: 'ws1', keyword: 'WordPress 開發', level: 'level_2', searchVolume: 1800, currentRanking: 12, targetRanking: 5, targetPage: '/services/wordpress', difficultyScore: 45, status: 'optimizing', aiGenerated: true },
-    { __sampleData: true, id: 'sk5', websiteProfileId: 'ws1', keyword: 'SEO 優化服務', level: 'level_2', searchVolume: 4200, currentRanking: 15, targetRanking: 10, targetPage: '/services/seo', difficultyScore: 78, status: 'monitoring', aiGenerated: false },
-    { __sampleData: true, id: 'sk6', websiteProfileId: 'ws1', keyword: '電商網站設計', level: 'level_3', searchVolume: 1200, currentRanking: 20, targetRanking: 10, targetPage: '/services/ecommerce', difficultyScore: 52, status: 'monitoring', aiGenerated: true },
-    { __sampleData: true, id: 'sk7', websiteProfileId: 'ws1', keyword: 'UI/UX 設計', level: 'level_3', searchVolume: 900, currentRanking: undefined, targetRanking: 15, targetPage: '/services/design', difficultyScore: 40, status: 'paused', aiGenerated: true },
-  ],
-  ws2: [
-    { __sampleData: true, id: 'sk8', websiteProfileId: 'ws2', keyword: '商務諮詢', level: 'level_1', searchVolume: 5400, currentRanking: 7, targetRanking: 3, targetPage: '/', difficultyScore: 68, status: 'optimizing', aiGenerated: false },
-    { __sampleData: true, id: 'sk9', websiteProfileId: 'ws2', keyword: '企業數碼轉型', level: 'level_2', searchVolume: 2200, currentRanking: 10, targetRanking: 5, targetPage: '/services/digital-transformation', difficultyScore: 55, status: 'optimizing', aiGenerated: false },
-    { __sampleData: true, id: 'sk10', websiteProfileId: 'ws2', keyword: '品牌策略', level: 'level_2', searchVolume: 1600, currentRanking: 18, targetRanking: 8, targetPage: '/services/branding', difficultyScore: 48, status: 'monitoring', aiGenerated: true },
-  ],
-  ws3: [
-    { __sampleData: true, id: 'sk11', websiteProfileId: 'ws3', keyword: '紅酒推薦', level: 'level_1', searchVolume: 6800, currentRanking: 4, targetRanking: 1, targetPage: '/recommendations', difficultyScore: 62, status: 'achieved', aiGenerated: false },
-    { __sampleData: true, id: 'sk12', websiteProfileId: 'ws3', keyword: '品酒教學', level: 'level_2', searchVolume: 3200, currentRanking: 6, targetRanking: 3, targetPage: '/blog/wine-tasting-guide', difficultyScore: 42, status: 'optimizing', aiGenerated: false },
-  ],
-  ws5: [
-    { __sampleData: true, id: 'sk13', websiteProfileId: 'ws5', keyword: '紅酒網購', level: 'level_1', searchVolume: 4500, currentRanking: 8, targetRanking: 3, targetPage: '/', difficultyScore: 58, status: 'optimizing', aiGenerated: false },
-    { __sampleData: true, id: 'sk14', websiteProfileId: 'ws5', keyword: '法國紅酒', level: 'level_2', searchVolume: 7200, currentRanking: 12, targetRanking: 5, targetPage: '/collections/france', difficultyScore: 72, status: 'monitoring', aiGenerated: false },
-  ],
-};
+// === SEO Keywords per website (real data via Supabase / GSC — no sample seeds) ===
+export const websiteSeoKeywords: Record<string, (SeoKeyword & { __sampleData: true })[]> = {};
 
 // === EDM Campaigns per website (模擬數據) ===
 export const websiteEdmCampaigns: Record<string, (EdmCampaign & { __sampleData: true })[]> = {
