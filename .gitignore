@@ -38,3 +38,4 @@ docs/development_plan/2026-06-29/PRD-工作匯報自動關聯-v2.0.html
 
 # Agent 讀取 xlsx 時產生的暫存目錄
 vchannel-xlsx-*/
+scripts/_backlink_unmatched.json

@@ -1,12 +1,11 @@
 # Backlink Excel Import Data
 
-Place the workbook here:
+Source workbook: `SEO backlink order record + keywords update schedule.xlsx`
 
-`SEO backlink order record + keywords update schedule.xlsx`
+Import to Supabase:
 
-Then either:
+```bash
+node scripts/import_backlink_excel.mjs --push
+```
 
-1. **UI import** — Marketing → 反向連結 →「匯入 Excel」
-2. **CLI script** — `node scripts/import_backlink_excel.mjs --stats`
-
-The parser reads **all worksheet tabs** in the workbook.
+Unmatched Google Ads domains are listed in `backlink_unmatched_domains.json`.

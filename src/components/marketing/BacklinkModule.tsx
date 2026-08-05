@@ -1,19 +1,15 @@
-import { useMemo, useRef, useState } from 'react';
-import { Plus, Search, ArrowLeft, Eye, Edit, Trash2, Upload, AlertTriangle } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Plus, Search, ArrowLeft, Eye, Edit, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDataStore } from '@/context/DataStore';
 import { useBacklinkPurchases } from '@/hooks/useBacklinkPurchases';
 import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
 import { useGoogleAdsAccounts } from '@/hooks/useGoogleAdsAccounts';
-import { enrichBacklinkImports, parseBacklinkExcelBuffer } from '@/lib/backlinkExcelImport';
-import type { BacklinkImportResult } from '@/lib/backlinkExcelImport';
 import type { BacklinkPurchase } from '@/types/marketingOps';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-
-const EXCEL_IMPORT_SUPPLIER_ID = 'wps_excel_import';
 
 type PurchaseForm = {
   websiteProfileId: string;
@@ -121,11 +117,8 @@ export function BacklinkModule() {
     addPurchase,
     updatePurchase,
     deletePurchase,
-    bulkImport,
-    refresh,
   } = useBacklinkPurchases();
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [currencyFilter, setCurrencyFilter] = useState<'all' | 'USD' | 'HKD'>('all');
   const [accountFilter, setAccountFilter] = useState('all');
@@ -135,13 +128,10 @@ export function BacklinkModule() {
   const [selectedRecord, setSelectedRecord] = useState<BacklinkPurchase | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [importPreview, setImportPreview] = useState<BacklinkImportResult | null>(null);
   const [form, setForm] = useState<PurchaseForm>(emptyForm);
   const [editing, setEditing] = useState<(BacklinkPurchase & { notes?: string }) | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BacklinkPurchase | null>(null);
   const [saving, setSaving] = useState(false);
-  const [importing, setImporting] = useState(false);
 
   const supplierMap = useMemo(() => new Map(webPageSuppliers.map((s) => [s.id, s])), [webPageSuppliers]);
   const siteMap = useMemo(() => new Map(websites.map((w) => [w.id, w])), [websites]);
@@ -283,72 +273,6 @@ export function BacklinkModule() {
       return;
     }
     setDeleteTarget(null);
-  };
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const buffer = await file.arrayBuffer();
-      const parsed = parseBacklinkExcelBuffer(buffer);
-      if (!parsed.length) {
-        toast.error('未能從 Excel 解析到任何購買紀錄，請確認檔案格式。');
-        return;
-      }
-      const result = enrichBacklinkImports(
-        parsed,
-        googleAdsAccounts.map((a) => ({ customerId: a.customerId, descriptiveName: a.descriptiveName })),
-        websites.map((w) => ({ id: w.id, domainUrl: w.domainUrl })),
-      );
-      setImportPreview(result);
-      setShowImportModal(true);
-    } catch (err) {
-      toast.error(`解析 Excel 失敗：${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const confirmImport = async () => {
-    if (!importPreview || importing) return;
-    const supplierId =
-      webPageSuppliers.find((s) => s.id === EXCEL_IMPORT_SUPPLIER_ID)?.id ||
-      webPageSuppliers[0]?.id;
-    if (!supplierId) {
-      toast.error('請先至「供應商 → 網頁供應商」新增名單，或執行資料庫 migration。');
-      return;
-    }
-
-    setImporting(true);
-    const items = importPreview.records.map((r) => ({
-      webSupplierId: supplierId,
-      websiteProfileId: r.websiteProfileId,
-      cost: r.cost,
-      currency: r.currency,
-      purchaseDate: r.purchaseDate,
-      quantity: r.quantity,
-      notes: r.actionText,
-      googleAdsCustomerId: r.googleAdsCustomerId,
-      googleAdsAccountName: r.googleAdsAccountName,
-      sourceDomain: r.sourceDomain,
-      excelSheet: r.sheetName,
-    }));
-
-    const { inserted, error } = await bulkImport(items);
-    setImporting(false);
-    if (error) {
-      toast.error(`匯入失敗：${error.message}`);
-      return;
-    }
-    setShowImportModal(false);
-    setImportPreview(null);
-    await refresh();
-    toast.success(
-      `已匯入 ${inserted} 筆紀錄（${importPreview.stats.sheetsProcessed.length} 個工作表）` +
-        (importPreview.unmatchedDomains.length
-          ? `，${importPreview.unmatchedDomains.length} 個 Domain 未能匹配 Google Ads 帳戶`
-          : ''),
-    );
   };
 
   if (selectedRecord) {
@@ -559,22 +483,6 @@ export function BacklinkModule() {
             <option value="USD">USD</option>
             <option value="HKD">HKD</option>
           </select>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            className="hidden"
-            onChange={handleFileSelect}
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Upload size={14} className="mr-1.5" />
-            匯入 Excel
-          </Button>
           <button
             onClick={() => { setForm(emptyForm); setShowAddModal(true); }}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700 transition-colors duration-200 h-9"
@@ -676,59 +584,6 @@ export function BacklinkModule() {
           <Button variant="secondary" onClick={() => setShowEditModal(false)}>取消</Button>
           <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSaveEdit}>儲存</Button>
         </div>
-      </CrudModal>
-
-      <CrudModal
-        isOpen={showImportModal}
-        onClose={() => { setShowImportModal(false); setImportPreview(null); }}
-        title="匯入 Excel 預覽"
-        size="lg"
-      >
-        {importPreview && (
-          <div className="space-y-4 text-[13px]">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded border p-3">
-                <div className="text-muted-foreground text-[11px]">解析紀錄</div>
-                <div className="text-[18px] font-bold">{importPreview.stats.totalParsed}</div>
-              </div>
-              <div className="rounded border p-3">
-                <div className="text-muted-foreground text-[11px]">已匹配 Google Ads 帳戶</div>
-                <div className="text-[18px] font-bold text-emerald-700">{importPreview.stats.matched}</div>
-              </div>
-            </div>
-            <p className="text-[12px] text-muted-foreground">
-              工作表：{importPreview.stats.sheetsProcessed.join('、')}
-            </p>
-            {importPreview.unmatchedDomains.length > 0 && (
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
-                <div className="font-medium text-amber-800 mb-2 flex items-center gap-1.5">
-                  <AlertTriangle size={14} />
-                  未能匹配的 Domain（{importPreview.unmatchedDomains.length}）
-                </div>
-                <ul className="space-y-1 max-h-40 overflow-y-auto text-[12px]">
-                  {importPreview.unmatchedDomains.map((u) => (
-                    <li key={`${u.sheetName}-${u.domain}`} className="text-amber-900">
-                      <span className="font-medium">{u.domain}</span>
-                      <span className="text-amber-700 ml-2">· {u.sheetName} · {u.brand}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            <div className="flex justify-end gap-3 pt-2">
-              <Button variant="secondary" onClick={() => { setShowImportModal(false); setImportPreview(null); }}>
-                取消
-              </Button>
-              <Button
-                className="bg-teal-600 hover:bg-teal-700 text-white"
-                disabled={importing}
-                onClick={() => void confirmImport()}
-              >
-                {importing ? '匯入中…' : `確認匯入 ${importPreview.stats.totalParsed} 筆`}
-              </Button>
-            </div>
-          </div>
-        )}
       </CrudModal>
 
       <DeleteConfirmModal

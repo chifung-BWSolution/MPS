@@ -8,11 +8,13 @@
  *   node scripts/import_backlink_excel.mjs --stats
  *   node scripts/import_backlink_excel.mjs --sql
  *   node scripts/import_backlink_excel.mjs --unmatched
+ *   node scripts/import_backlink_excel.mjs --push
  */
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import XLSX from 'xlsx';
+import { createClient } from '@supabase/supabase-js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const xlsxPath = path.join(
@@ -196,7 +198,95 @@ function sqlStr(v) {
   return `'${String(v).replace(/'/g, "''")}'`;
 }
 
-function main() {
+function matchWebsite(sourceDomain, websites) {
+  const needle = normalizeDomain(sourceDomain);
+  if (!needle) return null;
+  for (const site of websites) {
+    const d = normalizeDomain(site.domain_url);
+    if (!d) continue;
+    if (d === needle || d.endsWith(needle) || needle.endsWith(d)) return site;
+  }
+  return null;
+}
+
+function buildEnrichedRows(rows, accounts, websites) {
+  const unmatched = new Map();
+  const enriched = rows.map((row, i) => {
+    const ads = matchDomain(row.sourceDomain, accounts);
+    const site = matchWebsite(row.sourceDomain, websites);
+    if (!ads) {
+      const key = `${row.sheetName}::${normalizeDomain(row.sourceDomain)}`;
+      if (!unmatched.has(key)) {
+        unmatched.set(key, {
+          domain: row.sourceDomain,
+          sheet: row.sheetName,
+          brand: row.brand,
+          websiteLabel: row.websiteLabel,
+        });
+      }
+    }
+    return {
+      id: `bl_xlsx_${String(i + 1).padStart(4, '0')}`,
+      web_supplier_id: DEFAULT_SUPPLIER_ID,
+      website_profile_id: site?.id ?? null,
+      cost: row.cost,
+      currency: row.currency,
+      purchase_date: row.purchaseDate,
+      quantity: row.quantity,
+      notes: row.actionText,
+      source_domain: row.sourceDomain,
+      excel_sheet: row.sheetName,
+      google_ads_customer_id: ads?.customerId ?? null,
+      google_ads_account_name: ads?.descriptiveName ?? null,
+    };
+  });
+  return { enriched, unmatched };
+}
+
+async function loadSupabaseContext() {
+  const url = process.env.MPS_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.MPS_SERVICE || process.env.MPS_ANON || process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !key) throw new Error('Missing MPS_URL / MPS_SERVICE environment variables');
+
+  const sb = createClient(url, key);
+  const [accRes, siteRes] = await Promise.all([
+    sb.from('google_ads_accounts').select('customer_id, descriptive_name, is_manager').eq('is_manager', false),
+    sb.from('webandsystem_list').select('id, domain_url').not('domain_url', 'is', null),
+  ]);
+  if (accRes.error) throw accRes.error;
+  if (siteRes.error) throw siteRes.error;
+
+  const accounts = (accRes.data ?? []).map((a) => ({
+    customerId: a.customer_id,
+    descriptiveName: a.descriptive_name,
+  }));
+  return { sb, accounts, websites: siteRes.data ?? [] };
+}
+
+async function pushToSupabase(sb, enriched) {
+
+  await sb.from('web_page_suppliers').upsert({
+    id: DEFAULT_SUPPLIER_ID,
+    name: 'Excel 匯入（未指定供應商）',
+    platform: 'import',
+    url: 'https://import.local/backlink',
+    cost: 0,
+    currency: 'HKD',
+    rating: 3,
+  }, { onConflict: 'id' });
+
+  const { error: delErr } = await sb.from('backlink_purchases').delete().like('id', 'bl_xlsx_%');
+  if (delErr) throw delErr;
+
+  const batchSize = 50;
+  for (let i = 0; i < enriched.length; i += batchSize) {
+    const batch = enriched.slice(i, i + batchSize);
+    const { error } = await sb.from('backlink_purchases').insert(batch);
+    if (error) throw error;
+  }
+}
+
+async function main() {
   if (!fs.existsSync(xlsxPath)) {
     console.error(`Missing workbook: ${xlsxPath}`);
     console.error('Place "SEO backlink order record + keywords update schedule.xlsx" in the data/ folder.');
@@ -207,23 +297,14 @@ function main() {
   const wb = XLSX.read(buf, { type: 'buffer', cellDates: false });
   const rows = parseWorkbook(wb);
 
-  // Placeholder accounts for CLI stats — real matching happens at import time with Supabase data
-  const accounts = [];
-  const unmatched = new Map();
-
-  for (const row of rows) {
-    const match = matchDomain(row.sourceDomain, accounts);
-    if (!match) {
-      const key = `${row.sheetName}::${normalizeDomain(row.sourceDomain)}`;
-      if (!unmatched.has(key)) {
-        unmatched.set(key, { domain: row.sourceDomain, sheet: row.sheetName, brand: row.brand });
-      }
-    }
-  }
+  const { sb, accounts, websites } = await loadSupabaseContext();
+  const { enriched, unmatched } = buildEnrichedRows(rows, accounts, websites);
 
   const stats = {
     sheets: wb.SheetNames,
     totalRecords: rows.length,
+    matchedAccounts: enriched.filter((r) => r.google_ads_customer_id).length,
+    matchedWebsites: enriched.filter((r) => r.website_profile_id).length,
     unmatchedDomains: unmatched.size,
   };
 
@@ -238,6 +319,18 @@ function main() {
     return;
   }
 
+  if (process.argv.includes('--push')) {
+    await pushToSupabase(sb, enriched);
+    fs.writeFileSync(
+      path.join(__dirname, '_backlink_unmatched.json'),
+      JSON.stringify([...unmatched.values()], null, 2),
+    );
+    console.log(JSON.stringify(stats, null, 2));
+    console.log(`Pushed ${enriched.length} records to backlink_purchases.`);
+    console.log(`Unmatched domains written to scripts/_backlink_unmatched.json (${unmatched.size}).`);
+    return;
+  }
+
   const lines = [
     '-- Generated by scripts/import_backlink_excel.mjs',
     `-- Records: ${rows.length}`,
@@ -248,18 +341,20 @@ function main() {
     '',
   ];
 
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    const id = `bl_xlsx_${i + 1}`;
+  for (let i = 0; i < enriched.length; i++) {
+    const r = enriched[i];
     lines.push(
-      `INSERT INTO public.backlink_purchases (id, web_supplier_id, cost, currency, purchase_date, quantity, notes, source_domain, excel_sheet) VALUES (` +
-        `${sqlStr(id)}, '${DEFAULT_SUPPLIER_ID}', ${r.cost}, '${r.currency}', ${sqlStr(r.purchaseDate)}, ${r.quantity}, ${sqlStr(r.actionText)}, ${sqlStr(r.sourceDomain)}, ${sqlStr(r.sheetName)}` +
+      `INSERT INTO public.backlink_purchases (id, web_supplier_id, website_profile_id, cost, currency, purchase_date, quantity, notes, source_domain, excel_sheet, google_ads_customer_id, google_ads_account_name) VALUES (` +
+        `${sqlStr(r.id)}, '${DEFAULT_SUPPLIER_ID}', ${r.website_profile_id ? sqlStr(r.website_profile_id) : 'NULL'}, ${r.cost}, '${r.currency}', ${sqlStr(r.purchase_date)}, ${r.quantity}, ${sqlStr(r.notes)}, ${sqlStr(r.source_domain)}, ${sqlStr(r.excel_sheet)}, ${r.google_ads_customer_id ? sqlStr(r.google_ads_customer_id) : 'NULL'}, ${r.google_ads_account_name ? sqlStr(r.google_ads_account_name) : 'NULL'}` +
         ') ON CONFLICT (id) DO NOTHING;',
     );
   }
 
   fs.writeFileSync(outSql, lines.join('\n'));
-  console.log(`Wrote ${outSql} (${rows.length} INSERTs)`);
+  console.log(`Wrote ${outSql} (${enriched.length} INSERTs)`);
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
