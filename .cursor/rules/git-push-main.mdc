@@ -1,0 +1,24 @@
+---
+description: Commit and push directly to main; do not create feature branches or PRs
+alwaysApply: true
+---
+
+# Git handoff — push to main
+
+For this repository, finish work by committing and pushing **directly to `main`**.
+
+## Required
+
+- Work on `main` (checkout/pull `main` first if needed).
+- Commit changes with a clear message.
+- Push to `origin/main` (`git push origin main` or `git push -u origin main`).
+
+## Do not
+
+- Do **not** create feature branches (`cursor/...` or otherwise), unless the user explicitly asks for a branch.
+- Do **not** open or update pull requests, unless the user explicitly asks for a PR.
+- Do **not** ask the user to merge a branch you created for routine work.
+
+## Exceptions
+
+Only create a branch and/or PR when the user explicitly requests it (e.g. “open a PR”, “use a feature branch”).
