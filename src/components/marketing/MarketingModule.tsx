@@ -2,6 +2,8 @@ import { SocialPostsModule } from './SocialPostsModule';
 import { EdmManagementModule } from './EdmManagementModule';
 import { GoogleAdsModule } from './GoogleAdsModule';
 import { GoogleAdsSyncModule } from './GoogleAdsSyncModule';
+import { FacebookAdsModule } from './FacebookAdsModule';
+import { FacebookAdsSyncModule } from './FacebookAdsSyncModule';
 import { SeoKeywordsModule } from './SeoKeywordsModule';
 import { SeoUpgradeModule } from './SeoUpgradeModule';
 import { GraphicDesignModule } from './GraphicDesignModule';
@@ -19,6 +21,8 @@ export function MarketingModule({ subModule }: { subModule?: string }) {
       case 'edm': return { title: 'EDM 管理', subtitle: '電郵及短訊營銷活動管理。' };
       case 'google-ads': return { title: 'Google Ads', subtitle: '依日期區間檢視 MCC Campaign 成效（每日指標彙總）。' };
       case 'google-ads-sync': return { title: 'Google Ads 同步', subtitle: '觸發並監控完整歷史回填，以及日常增量同步狀態。' };
+      case 'facebook-ads': return { title: 'Facebook Ads', subtitle: '依日期區間檢視 Meta Campaign 成效（多 Business · 每日指標彙總）。' };
+      case 'facebook-ads-sync': return { title: 'Facebook Ads 同步', subtitle: '觸發並監控完整歷史回填（約 37 個月），以及日常增量同步狀態。' };
       case 'seo': return { title: 'SEO 關鍵字', subtitle: 'GSC 平均排名追蹤 · 可同步 Search Console · 之後會合併 Google Ads 關鍵字。' };
       case 'seo-upgrade': return { title: 'SEO 升級', subtitle: '記錄 SEO 升級動作及費用，排名對比來自 GSC 歷史。' };
       case 'graphic-design': return { title: '平面設計', subtitle: '管理各平台平面設計製作及成果追蹤。' };
@@ -44,6 +48,8 @@ export function MarketingModule({ subModule }: { subModule?: string }) {
       {activeTab === 'edm' && <EdmManagementModule />}
       {activeTab === 'google-ads' && <GoogleAdsModule />}
       {activeTab === 'google-ads-sync' && <GoogleAdsSyncModule />}
+      {activeTab === 'facebook-ads' && <FacebookAdsModule />}
+      {activeTab === 'facebook-ads-sync' && <FacebookAdsSyncModule />}
       {activeTab === 'seo' && <SeoKeywordsModule />}
       {activeTab === 'seo-upgrade' && <SeoUpgradeModule />}
       {activeTab === 'graphic-design' && <GraphicDesignModule />}
