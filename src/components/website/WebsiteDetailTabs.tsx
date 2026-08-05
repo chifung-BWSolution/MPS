@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, X, ExternalLink, Video, Share2, Megaphone, TrendingUp, Mail, Puzzle, Link2, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Loader2, Unlink, Search, Edit, Trash2, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { WebsiteProfileFull, SocialPost, PaidAd, SeoKeyword, EdmCampaign } from '@/types/app';
+import { WebsiteProfileFull, SocialPost, PaidAd, EdmCampaign } from '@/types/app';
 import {
   getVideosForWebsite,
   getSocialPostsForWebsite,
   getPaidAdsForWebsite,
-  getSeoKeywordsForWebsite,
   getEdmCampaignsForWebsite,
   getPluginsForWebsite,
   getExternalLinksForWebsite,
   Plugin,
   ExternalLink as ExternalLinkType,
 } from '@/data/websiteDetailData';
+import { useSeoKeywords } from '@/hooks/useSeoKeywords';
 import type { VideoOutput } from '@/types/videoOutput';
 import {
   VIDEO_OUTPUT_STATUS_COLORS,
@@ -748,7 +748,11 @@ export function WebsiteAdsTab({ site }: { site: WebsiteProfileFull }) {
 // SEO KEYWORDS TAB
 // ============================================================
 export function WebsiteSeoTab({ site }: { site: WebsiteProfileFull }) {
-  const [keywords] = useState<SeoKeyword[]>(() => getSeoKeywordsForWebsite(site.id));
+  const { keywords: allKeywords, loading, addKeyword } = useSeoKeywords();
+  const keywords = useMemo(
+    () => allKeywords.filter((k) => k.website_profile_id === site.id),
+    [allKeywords, site.id],
+  );
   const [showModal, setShowModal] = useState(false);
   const [newKeyword, setNewKeyword] = useState({ keyword: '', level: 'level_2', targetPage: '', targetRanking: '' });
 
@@ -768,10 +772,15 @@ export function WebsiteSeoTab({ site }: { site: WebsiteProfileFull }) {
         </button>
       </div>
 
-      {keywords.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-12 text-muted-foreground text-[13px] flex items-center justify-center gap-2">
+          <Loader2 size={14} className="animate-spin" /> 載入中…
+        </div>
+      ) : keywords.length === 0 ? (
         <div className="text-center py-12 border border-dashed border-border rounded-md">
           <TrendingUp size={32} className="text-muted-foreground mx-auto mb-3" />
           <p className="text-[14px] font-medium text-muted-foreground">尚未設定 SEO 關鍵字</p>
+          <p className="text-[12px] text-muted-foreground mt-1">可手動新增，或於行銷 SEO 頁同步 GSC（見 docs/gsc-setup.md）</p>
         </div>
       ) : (
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] overflow-hidden">
@@ -781,7 +790,7 @@ export function WebsiteSeoTab({ site }: { site: WebsiteProfileFull }) {
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">關鍵字</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">等級</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">搜尋量</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">目前排名</th>
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">GSC 平均排名</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">目標排名</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">目標頁面</th>
                 <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">難度</th>
@@ -792,32 +801,36 @@ export function WebsiteSeoTab({ site }: { site: WebsiteProfileFull }) {
               {keywords.map(kw => {
                 const levelCfg = seoLevelConfig[kw.level];
                 const statusCfg = seoStatusConfig[kw.status];
-                const rankDiff = kw.currentRanking && kw.targetRanking ? kw.currentRanking - kw.targetRanking : null;
+                const currentRanking = kw.current_ranking;
+                const targetRanking = kw.target_ranking;
+                const searchVolume = kw.search_volume;
+                const targetPage = kw.target_page;
+                const difficultyScore = kw.difficulty_score;
                 return (
                   <tr key={kw.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <span className="text-[13px] font-medium">{kw.keyword}</span>
-                        {kw.aiGenerated && <Sparkles size={11} className="text-teal-600" />}
+                        {kw.ai_generated && <Sparkles size={11} className="text-teal-600" />}
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-sm border', levelCfg.bgColor, levelCfg.color, levelCfg.borderColor)}>{levelCfg.label}</span>
                     </td>
-                    <td className="px-4 py-3 text-[13px]">{kw.searchVolume?.toLocaleString() || '—'}</td>
+                    <td className="px-4 py-3 text-[13px]">{searchVolume?.toLocaleString() || '—'}</td>
                     <td className="px-4 py-3">
-                      <span className={cn('text-[13px] font-bold', kw.currentRanking && kw.currentRanking <= 5 ? 'text-teal-700' : kw.currentRanking && kw.currentRanking <= 10 ? 'text-amber-700' : 'text-slate-600')}>
-                        {kw.currentRanking ? `#${kw.currentRanking}` : '—'}
+                      <span className={cn('text-[13px] font-bold', currentRanking && currentRanking <= 5 ? 'text-teal-700' : currentRanking && currentRanking <= 10 ? 'text-amber-700' : 'text-slate-600')}>
+                        {currentRanking != null ? `#${currentRanking}` : '—'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-[13px]">#{kw.targetRanking}</td>
-                    <td className="px-4 py-3 text-[11px] text-teal-600 font-mono">{kw.targetPage || '—'}</td>
+                    <td className="px-4 py-3 text-[13px]">{targetRanking != null ? `#${targetRanking}` : '—'}</td>
+                    <td className="px-4 py-3 text-[11px] text-teal-600 font-mono">{targetPage || '—'}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div className={cn('h-full rounded-full', (kw.difficultyScore || 0) >= 70 ? 'bg-rose-500' : (kw.difficultyScore || 0) >= 50 ? 'bg-amber-500' : 'bg-teal-500')} style={{ width: `${kw.difficultyScore || 0}%` }} />
+                          <div className={cn('h-full rounded-full', (difficultyScore || 0) >= 70 ? 'bg-rose-500' : (difficultyScore || 0) >= 50 ? 'bg-amber-500' : 'bg-teal-500')} style={{ width: `${difficultyScore || 0}%` }} />
                         </div>
-                        <span className="text-[11px] text-muted-foreground">{kw.difficultyScore}</span>
+                        <span className="text-[11px] text-muted-foreground">{difficultyScore ?? '—'}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3"><span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', statusCfg.bgColor, statusCfg.color)}>{statusCfg.label}</span></td>
@@ -863,7 +876,28 @@ export function WebsiteSeoTab({ site }: { site: WebsiteProfileFull }) {
             </div>
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted rounded-md">取消</button>
-              <button onClick={() => setShowModal(false)} disabled={!newKeyword.keyword} className="px-4 py-2 text-[13px] font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed">新增關鍵字</button>
+              <button
+                onClick={async () => {
+                  const { error } = await addKeyword({
+                    website_profile_id: site.id,
+                    keyword: newKeyword.keyword,
+                    level: newKeyword.level as 'level_1' | 'level_2' | 'level_3',
+                    target_page: newKeyword.targetPage || null,
+                    target_ranking: newKeyword.targetRanking ? parseInt(newKeyword.targetRanking, 10) : null,
+                  });
+                  if (error) {
+                    toast.error(error.message || '新增失敗');
+                    return;
+                  }
+                  toast.success('已新增關鍵字');
+                  setNewKeyword({ keyword: '', level: 'level_2', targetPage: '', targetRanking: '' });
+                  setShowModal(false);
+                }}
+                disabled={!newKeyword.keyword}
+                className="px-4 py-2 text-[13px] font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                新增關鍵字
+              </button>
             </div>
           </div>
         </div>
