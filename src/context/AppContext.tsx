@@ -105,7 +105,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'seo', label: 'SEO 關鍵字' },
       { id: 'seo-upgrade', label: 'SEO 升級' },
       { id: 'graphic-design', label: '平面設計' },
-      { id: 'backlink', label: '反向連結' },
+      { id: 'backlink', label: '反向連結 Backlinks' },
       { id: 'google-business', label: 'Google Business' },
     ],
   },

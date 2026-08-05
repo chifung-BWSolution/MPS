@@ -15,7 +15,7 @@ CREATE INDEX IF NOT EXISTS backlink_purchases_source_domain_idx
 INSERT INTO public.web_page_suppliers (id, name, platform, url, cost, currency, rating)
 VALUES (
   'wps_excel_import',
-  'Excel 匯入（未指定供應商）',
+  'Fiverr',
   'import',
   '',
   0,

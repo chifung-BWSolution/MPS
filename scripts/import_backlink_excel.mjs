@@ -300,7 +300,7 @@ async function pushToSupabase(sb, enriched) {
 
   await sb.from('web_page_suppliers').upsert({
     id: DEFAULT_SUPPLIER_ID,
-    name: 'Excel 匯入（未指定供應商）',
+    name: 'Fiverr',
     platform: 'import',
     url: '',
     cost: 0,
@@ -372,7 +372,7 @@ async function main() {
     `-- Records: ${rows.length}`,
     '',
     "INSERT INTO public.web_page_suppliers (id, name, platform, url, cost, currency, rating)",
-    `VALUES ('${DEFAULT_SUPPLIER_ID}', 'Excel 匯入（未指定供應商）', 'import', 'https://import.local/backlink', 0, 'HKD', 3)`,
+    `VALUES ('${DEFAULT_SUPPLIER_ID}', 'Fiverr', 'Fiverr', '', 0, 'HKD', 3)`,
     'ON CONFLICT (id) DO NOTHING;',
     '',
   ];
