@@ -105,6 +105,10 @@ function findDomainCol(headerRow) {
   return 3;
 }
 
+function headerLabel(headerRow, col) {
+  return cellStr(headerRow, col).toLowerCase();
+}
+
 function parseMonthBlocks(headerRow) {
   const blocks = [];
   let currentYear = null;
@@ -112,7 +116,17 @@ function parseMonthBlocks(headerRow) {
     const val = cellStr(headerRow, col);
     if (/^\d{4}$/.test(val)) currentYear = parseInt(val, 10);
     const month = MONTH_MAP[val.slice(0, 3).toLowerCase()];
-    if (month && currentYear) {
+    if (!month || !currentYear) continue;
+
+    const next1 = headerLabel(headerRow, col + 1);
+    const next2 = headerLabel(headerRow, col + 2);
+    const next3 = headerLabel(headerRow, col + 3);
+
+    if (next1.includes('existing dr') && next2 === 'price' && next3 === 'action') {
+      blocks.push({ year: currentYear, month, dateCol: col, priceCol: col + 2, actionCol: col + 3 });
+    } else if (next1 === 'price' && next2 === 'action') {
+      blocks.push({ year: currentYear, month, dateCol: col, priceCol: col + 1, actionCol: col + 2 });
+    } else if (next1 === 'action') {
       blocks.push({ year: currentYear, month, dateCol: col, actionCol: col + 1 });
     }
   }
@@ -156,6 +170,21 @@ function parsePurchaseDate(dateRaw, year, month) {
   return parseDdMm(dateRaw, year, month) ?? parseExcelSerialDate(dateRaw);
 }
 
+function parsePriceCell(raw) {
+  const s = String(raw).trim();
+  if (!s) return { cost: 0, currency: 'HKD' };
+  if (/usd/i.test(s)) {
+    const m = s.match(/([\d,]+(?:\.\d+)?)/);
+    return { cost: m ? parseFloat(m[1].replace(/,/g, '')) : 0, currency: 'USD' };
+  }
+  if (/hkd/i.test(s)) {
+    const m = s.match(/([\d,]+(?:\.\d+)?)/);
+    return { cost: m ? parseFloat(m[1].replace(/,/g, '')) : 0, currency: 'HKD' };
+  }
+  const n = parseFloat(s.replace(/,/g, ''));
+  return { cost: Number.isFinite(n) ? n : 0, currency: 'HKD' };
+}
+
 function parseCostAndCurrency(action) {
   for (const re of [/US\$\s*([\d,]+(?:\.\d+)?)/i, /\$\s*([\d,]+(?:\.\d+)?)\s*(?:usd|USD)\b/i, /\b([\d,]+(?:\.\d+)?)\s*(?:usd|USD)\b/i]) {
     const m = action.match(re);
@@ -194,9 +223,38 @@ function parseSheetRows(sheetName, rows) {
     for (const block of blocks) {
       const dateRaw = cellStr(row, block.dateCol);
       const actionRaw = cellStr(row, block.actionCol);
-      if (!actionRaw) continue;
+      const priceRaw = block.priceCol != null ? cellStr(row, block.priceCol) : '';
+      const hasStructuredPrice = block.priceCol != null;
+
+      if (!actionRaw && !priceRaw && !dateRaw) continue;
+      if (hasStructuredPrice && !priceRaw && !actionRaw) continue;
 
       let purchaseDate = dateRaw ? parsePurchaseDate(dateRaw, block.year, block.month) : null;
+
+      if (hasStructuredPrice) {
+        const actionText = actionRaw.replace(/^\d{1,2}\/\d{1,2}\s*/, '').trim();
+        if (!purchaseDate && actionText) {
+          const inline = actionText.match(/^(\d{1,2}\/\d{1,2})/);
+          if (inline) purchaseDate = parseDdMm(inline[1], block.year, block.month);
+        }
+        const { cost, currency } = parsePriceCell(priceRaw);
+        parsed.push({
+          sheetName,
+          brand: cellStr(row, 0),
+          websiteLabel: cellStr(row, 2),
+          sourceDomain,
+          purchaseDate: purchaseDate ?? `${block.year}-${String(block.month).padStart(2, '0')}-01`,
+          year: block.year,
+          actionText: actionText || priceRaw,
+          cost,
+          currency,
+          quantity: parseQuantity(actionText),
+        });
+        continue;
+      }
+
+      if (!actionRaw) continue;
+
       const actions = splitActions(actionRaw.replace(/^\d{1,2}\/\d{1,2}\s*/, ''));
 
       for (const actionText of actions) {

@@ -52,6 +52,8 @@ type MonthBlock = {
   year: number;
   month: number;
   dateCol: number;
+  /** When set, cost is read from this column (HKD) instead of action text. */
+  priceCol?: number;
   actionCol: number;
 };
 
@@ -76,6 +78,10 @@ function findDomainCol(headerRow: unknown[]): number {
   return 3;
 }
 
+function headerLabel(headerRow: unknown[], col: number): string {
+  return cellStr(headerRow, col).toLowerCase();
+}
+
 function parseMonthBlocks(headerRow: unknown[]): MonthBlock[] {
   const blocks: MonthBlock[] = [];
   let currentYear: number | null = null;
@@ -88,7 +94,29 @@ function parseMonthBlocks(headerRow: unknown[]): MonthBlock[] {
     }
     const monthKey = val.slice(0, 3).toLowerCase();
     const month = MONTH_MAP[monthKey];
-    if (month && currentYear) {
+    if (!month || !currentYear) continue;
+
+    const next1 = headerLabel(headerRow, col + 1);
+    const next2 = headerLabel(headerRow, col + 2);
+    const next3 = headerLabel(headerRow, col + 3);
+
+    if (next1.includes('existing dr') && next2 === 'price' && next3 === 'action') {
+      blocks.push({
+        year: currentYear,
+        month,
+        dateCol: col,
+        priceCol: col + 2,
+        actionCol: col + 3,
+      });
+    } else if (next1 === 'price' && next2 === 'action') {
+      blocks.push({
+        year: currentYear,
+        month,
+        dateCol: col,
+        priceCol: col + 1,
+        actionCol: col + 2,
+      });
+    } else if (next1 === 'action') {
       blocks.push({
         year: currentYear,
         month,
@@ -157,6 +185,23 @@ function parsePurchaseDate(dateRaw: string, year: number, month: number): string
   return parseDdMm(dateRaw, year, month) ?? parseExcelSerialDate(dateRaw);
 }
 
+function parsePriceCell(raw: string): { cost: number; currency: 'USD' | 'HKD' } {
+  const s = raw.trim();
+  if (!s) return { cost: 0, currency: 'HKD' };
+
+  if (/usd/i.test(s)) {
+    const m = s.match(/([\d,]+(?:\.\d+)?)/);
+    return { cost: m ? parseFloat(m[1]!.replace(/,/g, '')) : 0, currency: 'USD' };
+  }
+  if (/hkd/i.test(s)) {
+    const m = s.match(/([\d,]+(?:\.\d+)?)/);
+    return { cost: m ? parseFloat(m[1]!.replace(/,/g, '')) : 0, currency: 'HKD' };
+  }
+
+  const n = parseFloat(s.replace(/,/g, ''));
+  return { cost: Number.isFinite(n) ? n : 0, currency: 'HKD' };
+}
+
 function parseCostAndCurrency(action: string): { cost: number; currency: 'USD' | 'HKD' } {
   const usdPatterns = [
     /US\$\s*([\d,]+(?:\.\d+)?)/i,
@@ -222,9 +267,42 @@ function parseSheetRows(sheetName: string, rows: unknown[][]): ParsedBacklinkRow
     for (const block of blocks) {
       const dateRaw = cellStr(row, block.dateCol);
       const actionRaw = cellStr(row, block.actionCol);
-      if (!actionRaw) continue;
+      const priceRaw = block.priceCol != null ? cellStr(row, block.priceCol) : '';
+      const hasStructuredPrice = block.priceCol != null;
+
+      if (!actionRaw && !priceRaw && !dateRaw) continue;
+      if (hasStructuredPrice && !priceRaw && !actionRaw) continue;
 
       let purchaseDate = dateRaw ? parsePurchaseDate(dateRaw, block.year, block.month) : null;
+
+      if (hasStructuredPrice) {
+        const actionText = stripLeadingDateFromAction(actionRaw);
+        if (!purchaseDate && actionText) {
+          const inlineDate = actionText.match(/^(\d{1,2}\/\d{1,2})/);
+          if (inlineDate) {
+            purchaseDate = parseDdMm(inlineDate[1]!, block.year, block.month);
+          }
+        }
+
+        const { cost, currency } = parsePriceCell(priceRaw);
+        parsed.push({
+          sheetName,
+          brand,
+          websiteLabel,
+          sourceDomain,
+          purchaseDate: purchaseDate ?? `${block.year}-${String(block.month).padStart(2, '0')}-01`,
+          year: block.year,
+          month: block.month,
+          actionText: actionText || priceRaw,
+          cost,
+          currency,
+          quantity: parseQuantity(actionText),
+        });
+        continue;
+      }
+
+      if (!actionRaw) continue;
+
       const actions = splitActions(stripLeadingDateFromAction(actionRaw));
 
       for (const actionText of actions) {
