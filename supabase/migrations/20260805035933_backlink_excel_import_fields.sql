@@ -17,7 +17,7 @@ VALUES (
   'wps_excel_import',
   'Excel 匯入（未指定供應商）',
   'import',
-  'https://import.local/backlink',
+  '',
   0,
   'HKD',
   3

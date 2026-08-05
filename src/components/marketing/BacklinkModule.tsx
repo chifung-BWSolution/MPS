@@ -80,7 +80,10 @@ function BacklinkDetail({
   );
 }
 
-function SiteCell({
+function formatSupplierUrl(url: string | undefined): string {
+  if (!url || url.includes('import.local')) return '';
+  return url;
+}
   record,
   siteName,
 }: {
@@ -97,7 +100,7 @@ function SiteCell({
       </div>
     );
   }
-  if (record.sourceDomain && !record.googleAdsCustomerId) {
+  if (record.sourceDomain && !record.googleAdsAccountName) {
     return (
       <div>
         <div className="font-medium text-amber-700">{record.sourceDomain}</div>
@@ -157,7 +160,7 @@ export function BacklinkModule() {
       return {
         ...p,
         supplierName: supplier?.name || '—',
-        supplierUrl: supplier?.url || '—',
+        supplierUrl: formatSupplierUrl(supplier?.url),
         platform: supplier?.platform || '—',
         siteName: site?.websiteName || '—',
         siteLabel,
@@ -170,7 +173,7 @@ export function BacklinkModule() {
       .filter((r) => {
         if (currencyFilter !== 'all' && r.currency !== currencyFilter) return false;
         if (accountFilter !== 'all') {
-          if (accountFilter === 'unmatched') return !r.googleAdsCustomerId && !!r.sourceDomain;
+          if (accountFilter === 'unmatched') return !r.googleAdsAccountName && !!r.sourceDomain;
           if (r.googleAdsCustomerId !== accountFilter) return false;
         }
         if (yearFilter !== 'all') {
@@ -205,7 +208,7 @@ export function BacklinkModule() {
   const unmatchedDomains = useMemo(() => {
     const map = new Map<string, { domain: string; sheetName?: string; count: number }>();
     for (const p of backlinkPurchases) {
-      if (p.googleAdsCustomerId || !p.sourceDomain) continue;
+      if (p.googleAdsAccountName || !p.sourceDomain) continue;
       const key = p.sourceDomain.toLowerCase();
       const existing = map.get(key);
       if (existing) existing.count += 1;
@@ -287,7 +290,7 @@ export function BacklinkModule() {
       <BacklinkDetail
         record={selectedRecord}
         supplierName={supplier?.name || '—'}
-        supplierUrl={supplier?.url || '—'}
+        supplierUrl={formatSupplierUrl(supplier?.url) || '—'}
         siteLabel={siteLabel}
         onBack={() => setSelectedRecord(null)}
       />
@@ -533,7 +536,9 @@ export function BacklinkModule() {
                   <SiteCell record={record} siteName={record.siteName} />
                 </td>
                 <td className="px-4 py-3">
-                  <span className="break-all text-muted-foreground">{record.supplierUrl}</span>
+                  {record.supplierUrl ? (
+                    <span className="break-all text-muted-foreground">{record.supplierUrl}</span>
+                  ) : null}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{record.supplierName}</td>
                 <td className="px-4 py-3">{record.currency} ${record.cost.toLocaleString()}</td>

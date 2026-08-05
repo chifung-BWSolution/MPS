@@ -231,12 +231,23 @@ function matchWebsite(sourceDomain, websites) {
   return null;
 }
 
+const MANUAL_DISPLAY_NAMES = {
+  'bwmaterial.com': 'BW bwmaterial.com',
+  'brandingworks-hotel.com': 'BW brandingworks-hotel.com',
+};
+
+function getManualDisplayName(excelDomain) {
+  return MANUAL_DISPLAY_NAMES[normalizeDomain(excelDomain)] ?? null;
+}
+
 function buildEnrichedRows(rows, accounts, websites) {
+  const paidRows = rows.filter((row) => row.cost > 0);
   const unmatched = new Map();
-  const enriched = rows.map((row, i) => {
+  const enriched = paidRows.map((row, i) => {
     const ads = matchDomain(row.sourceDomain, accounts);
+    const manualName = ads ? null : getManualDisplayName(row.sourceDomain);
     const site = matchWebsite(row.sourceDomain, websites);
-    if (!ads) {
+    if (!ads && !manualName) {
       const key = `${row.sheetName}::${normalizeDomain(row.sourceDomain)}`;
       if (!unmatched.has(key)) {
         unmatched.set(key, {
@@ -259,7 +270,7 @@ function buildEnrichedRows(rows, accounts, websites) {
       source_domain: resolveCurrentDomainUrl(row.sourceDomain),
       excel_sheet: row.sheetName,
       google_ads_customer_id: ads?.customerId ?? null,
-      google_ads_account_name: ads?.descriptiveName ?? null,
+      google_ads_account_name: ads?.descriptiveName ?? manualName ?? null,
     };
   });
   return { enriched, unmatched };
@@ -291,7 +302,7 @@ async function pushToSupabase(sb, enriched) {
     id: DEFAULT_SUPPLIER_ID,
     name: 'Excel 匯入（未指定供應商）',
     platform: 'import',
-    url: 'https://import.local/backlink',
+    url: '',
     cost: 0,
     currency: 'HKD',
     rating: 3,
@@ -324,8 +335,11 @@ async function main() {
 
   const stats = {
     sheets: wb.SheetNames,
-    totalRecords: rows.length,
+    totalParsed: rows.length,
+    totalRecords: enriched.length,
+    skippedZeroCost: rows.length - enriched.length,
     matchedAccounts: enriched.filter((r) => r.google_ads_customer_id).length,
+    manualSiteNames: enriched.filter((r) => !r.google_ads_customer_id && r.google_ads_account_name).length,
     matchedWebsites: enriched.filter((r) => r.website_profile_id).length,
     unmatchedDomains: unmatched.size,
   };

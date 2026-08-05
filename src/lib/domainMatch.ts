@@ -38,6 +38,17 @@ const MANUAL_ACCOUNT_HINTS: Record<string, string> = {
   'attitude-beauty.com': 'Attitude-Beauty.com',
 };
 
+/** Domains without Google Ads account — use manual 所屬網站 label. */
+export const MANUAL_DISPLAY_NAMES: Record<string, string> = {
+  'bwmaterial.com': 'BW bwmaterial.com',
+  'brandingworks-hotel.com': 'BW brandingworks-hotel.com',
+};
+
+export function getManualDisplayName(excelDomain: string): string | null {
+  const key = normalizeDomain(excelDomain);
+  return MANUAL_DISPLAY_NAMES[key] ?? null;
+}
+
 /** Legacy Excel domain -> current live URL (when site rebranded / moved). */
 export const DOMAIN_CURRENT_URL: Record<string, string> = {
   'victoria-beauty.com': 'https://www.attitude-beauty.com/',
