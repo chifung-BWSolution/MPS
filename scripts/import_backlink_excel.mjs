@@ -47,9 +47,31 @@ function extractDomainsFromAccountName(name) {
   return [...domains];
 }
 
+const MANUAL_ACCOUNT_HINTS = {
+  'brandingworks-fashion.com': 'brandingworks-fasions.com',
+  'victoria-beauty.com': 'Attitude-Beauty.com',
+  'attitude-beauty.com': 'Attitude-Beauty.com',
+};
+
+const DOMAIN_CURRENT_URL = {
+  'victoria-beauty.com': 'https://www.attitude-beauty.com/',
+};
+
+function resolveCurrentDomainUrl(excelDomain) {
+  const key = normalizeDomain(excelDomain);
+  return DOMAIN_CURRENT_URL[key] ?? excelDomain;
+}
+
 function matchDomain(excelDomain, accounts) {
   const needle = normalizeDomain(excelDomain);
   if (!needle) return null;
+
+  const manualHint = MANUAL_ACCOUNT_HINTS[needle];
+  if (manualHint) {
+    const account = accounts.find((a) => a.descriptiveName.toLowerCase().includes(manualHint.toLowerCase()));
+    if (account) return account;
+  }
+
   for (const account of accounts) {
     const tokens = extractDomainsFromAccountName(account.descriptiveName);
     if (tokens.some((t) => t === needle || needle.endsWith(t) || t.endsWith(needle))) {
@@ -234,7 +256,7 @@ function buildEnrichedRows(rows, accounts, websites) {
       purchase_date: row.purchaseDate,
       quantity: row.quantity,
       notes: row.actionText,
-      source_domain: row.sourceDomain,
+      source_domain: resolveCurrentDomainUrl(row.sourceDomain),
       excel_sheet: row.sheetName,
       google_ads_customer_id: ads?.customerId ?? null,
       google_ads_account_name: ads?.descriptiveName ?? null,
