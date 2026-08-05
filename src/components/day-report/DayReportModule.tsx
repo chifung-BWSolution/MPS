@@ -251,6 +251,7 @@ function SubmitReportPage() {
   const [tempSaved, setTempSaved] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTempSaving, setIsTempSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [existingReportId, setExistingReportId] = useState<string | null>(null);
   const [existingReportStatus, setExistingReportStatus] = useState<string | null>(null);
@@ -1164,6 +1165,74 @@ function SubmitReportPage() {
   const handleTempSave = () => saveReport('draft');
   const handleSubmit = () => saveReport('submitted');
 
+  const handleDeleteReport = async () => {
+    if (!existingReportId || !currentStaffId) return;
+    const dateLabel = formatDateFull(selectedDate);
+    if (!confirm(`確定要刪除 ${dateLabel} 的整份匯報嗎？\n此操作無法復原，所有工作項目將一併移除。`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setSubmitError(null);
+    try {
+      const { data: oldEntries } = await supabase
+        .from('day_report_entries')
+        .select('related_id')
+        .eq('day_report_id', existingReportId)
+        .not('related_id', 'is', null);
+
+      const affectedWebsiteIds = new Set<string>();
+      oldEntries?.forEach(e => e.related_id && affectedWebsiteIds.add(e.related_id));
+
+      // Entries cascade via ON DELETE CASCADE on day_report_id
+      const { error: deleteError } = await supabase
+        .from('day_reports')
+        .delete()
+        .eq('id', existingReportId)
+        .eq('staff_id', currentStaffId);
+
+      if (deleteError) {
+        throw new Error(deleteError.message);
+      }
+
+      if (affectedWebsiteIds.size > 0) {
+        await Promise.all(
+          Array.from(affectedWebsiteIds).map(async (websiteId) => {
+            const { data: hoursData } = await supabase
+              .from('day_report_entries')
+              .select('hours')
+              .eq('related_id', websiteId);
+            const total = (hoursData ?? []).reduce((sum, row) => sum + (Number(row.hours) || 0), 0);
+            await supabase
+              .from('webandsystem_list')
+              .update({ total_hours: total })
+              .eq('id', websiteId);
+          })
+        );
+      }
+
+      if (draftStorageKey) {
+        try { localStorage.removeItem(draftStorageKey); } catch {}
+      }
+
+      setExistingReportId(null);
+      setExistingReportStatus(null);
+      setUnderHoursReason('');
+      setTargetHours(8);
+      setSubmitted(false);
+      setTempSaved(false);
+      const mergedEntries = await applyPendingMerge([createBlankReportEntry()]);
+      setEntries(mergedEntries);
+      await loadDbReports();
+      void loadRecentFrequentItems();
+      await refreshPendingCount();
+    } catch (err: any) {
+      setSubmitError(err.message || '刪除匯報失敗，請重試。');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const quickTemplates = [
     { category: 'website_design' as WorkCategory, title: '網站設計及更新', hours: 2, relatedName: '' },
     { category: 'social_media' as WorkCategory, title: '社媒內容製作', hours: 1.5, relatedName: '' },
@@ -1638,6 +1707,25 @@ function SubmitReportPage() {
               )}
               {aiUsedInEntries && (<span className="flex items-center gap-1 text-[13px] px-2 py-1 rounded-full bg-purple-50 text-purple-700 font-medium"><Bot size={11} /> AI 輔助</span>)}
               </div>
+
+              {/* Delete entire report — shown only when a saved report exists for this date */}
+              {isUpdateMode && (
+                <button
+                  type="button"
+                  onClick={handleDeleteReport}
+                  disabled={isDeleting || isSubmitting || isTempSaving}
+                  title="刪除整份匯報"
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-2 rounded-lg border text-[14px] font-medium transition-all',
+                    isDeleting || isSubmitting || isTempSaving
+                      ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
+                      : 'bg-white text-rose-600 border-rose-300 hover:bg-rose-50 hover:border-rose-400',
+                  )}
+                >
+                  {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                  {isDeleting ? '刪除中...' : '刪除匯報'}
+                </button>
+              )}
             </div>
           </div>
 
