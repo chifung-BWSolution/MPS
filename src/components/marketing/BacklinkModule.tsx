@@ -5,6 +5,7 @@ import { useDataStore } from '@/context/DataStore';
 import { useBacklinkPurchases } from '@/hooks/useBacklinkPurchases';
 import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
 import { useGoogleAdsAccounts } from '@/hooks/useGoogleAdsAccounts';
+import { getManualDisplayName } from '@/lib/domainMatch';
 import type { BacklinkPurchase } from '@/types/marketingOps';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
@@ -84,23 +85,29 @@ function formatSupplierUrl(url: string | undefined): string {
   if (!url || url.includes('import.local')) return '';
   return url;
 }
+
+function SiteCell({
   record,
   siteName,
 }: {
   record: BacklinkPurchase & { siteLabel: string };
   siteName: string;
 }) {
-  if (record.googleAdsAccountName) {
+  const displayName =
+    record.googleAdsAccountName ||
+    (record.sourceDomain ? getManualDisplayName(record.sourceDomain) : null);
+
+  if (displayName) {
     return (
       <div>
-        <div className="font-medium">{record.googleAdsAccountName}</div>
+        <div className="font-medium">{displayName}</div>
         {record.googleAdsCustomerId && (
           <div className="text-[11px] text-muted-foreground">{record.googleAdsCustomerId}</div>
         )}
       </div>
     );
   }
-  if (record.sourceDomain && !record.googleAdsAccountName) {
+  if (record.sourceDomain) {
     return (
       <div>
         <div className="font-medium text-amber-700">{record.sourceDomain}</div>
@@ -152,8 +159,10 @@ export function BacklinkModule() {
     return backlinkPurchases.map((p) => {
       const supplier = supplierMap.get(p.webSupplierId);
       const site = p.websiteProfileId ? siteMap.get(p.websiteProfileId) : undefined;
+      const manualSiteName = p.sourceDomain ? getManualDisplayName(p.sourceDomain) : null;
+      const resolvedSiteName = p.googleAdsAccountName || manualSiteName;
       const siteLabel =
-        p.googleAdsAccountName ||
+        resolvedSiteName ||
         site?.websiteName ||
         p.sourceDomain ||
         '—';
@@ -164,6 +173,7 @@ export function BacklinkModule() {
         platform: supplier?.platform || '—',
         siteName: site?.websiteName || '—',
         siteLabel,
+        resolvedSiteName,
       };
     });
   }, [backlinkPurchases, supplierMap, siteMap]);
@@ -173,7 +183,7 @@ export function BacklinkModule() {
       .filter((r) => {
         if (currencyFilter !== 'all' && r.currency !== currencyFilter) return false;
         if (accountFilter !== 'all') {
-          if (accountFilter === 'unmatched') return !r.googleAdsAccountName && !!r.sourceDomain;
+          if (accountFilter === 'unmatched') return !r.resolvedSiteName && !!r.sourceDomain;
           if (r.googleAdsCustomerId !== accountFilter) return false;
         }
         if (yearFilter !== 'all') {
@@ -188,7 +198,7 @@ export function BacklinkModule() {
             r.supplierUrl.toLowerCase().includes(q) ||
             r.platform.toLowerCase().includes(q) ||
             r.siteName.toLowerCase().includes(q) ||
-            (r.googleAdsAccountName || '').toLowerCase().includes(q) ||
+            (r.resolvedSiteName || r.googleAdsAccountName || '').toLowerCase().includes(q) ||
             (r.sourceDomain || '').toLowerCase().includes(q) ||
             (r.notes || '').toLowerCase().includes(q)
           );
@@ -208,7 +218,8 @@ export function BacklinkModule() {
   const unmatchedDomains = useMemo(() => {
     const map = new Map<string, { domain: string; sheetName?: string; count: number }>();
     for (const p of backlinkPurchases) {
-      if (p.googleAdsAccountName || !p.sourceDomain) continue;
+      const resolved = p.googleAdsAccountName || (p.sourceDomain ? getManualDisplayName(p.sourceDomain) : null);
+      if (resolved || !p.sourceDomain) continue;
       const key = p.sourceDomain.toLowerCase();
       const existing = map.get(key);
       if (existing) existing.count += 1;
@@ -283,6 +294,7 @@ export function BacklinkModule() {
     const site = selectedRecord.websiteProfileId ? siteMap.get(selectedRecord.websiteProfileId) : undefined;
     const siteLabel =
       selectedRecord.googleAdsAccountName ||
+      (selectedRecord.sourceDomain ? getManualDisplayName(selectedRecord.sourceDomain) : null) ||
       site?.websiteName ||
       selectedRecord.sourceDomain ||
       '—';
