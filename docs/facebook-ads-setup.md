@@ -60,11 +60,69 @@ npx supabase secrets set --project-ref kwcevjcmdjadhrygjyfp META_CREDENTIALS_JSO
 
 改完 secrets **不必重佈署 function**（執行時讀 env）；若改了程式碼才需 `functions deploy`。
 
+## Daily cron
+
+Production `pg_cron` job (same pattern as Google Ads):
+
+| | |
+|--|--|
+| **jobname** | `facebook-ads-incremental-daily` |
+| **schedule** | `15 22 * * *` (22:15 UTC daily; Google Ads is `0 22 * * *`) |
+| **action** | `net.http_post` → `supabase-functions-sync-facebook-ads` |
+
+Google Ads: `google-ads-incremental-daily` @ `0 22 * * *`.
+
+To recreate (SQL editor / `supabase db query`), clone the Bearer from the Google job — **do not commit the service role key**:
+
+```sql
+DO $$
+DECLARE
+  google_cmd text;
+  bearer text;
+BEGIN
+  SELECT command INTO google_cmd
+  FROM cron.job
+  WHERE jobname = 'google-ads-incremental-daily'
+  LIMIT 1;
+
+  bearer := substring(google_cmd from '''Authorization'', ''Bearer ([^'']+)''');
+  IF bearer IS NULL THEN
+    RAISE EXCEPTION 'Could not extract bearer from google-ads cron';
+  END IF;
+
+  PERFORM cron.unschedule(jobid)
+  FROM cron.job
+  WHERE jobname = 'facebook-ads-incremental-daily';
+
+  PERFORM cron.schedule(
+    'facebook-ads-incremental-daily',
+    '15 22 * * *',
+    format(
+      $cron$SELECT net.http_post(
+    url := 'https://kwcevjcmdjadhrygjyfp.supabase.co/functions/v1/supabase-functions-sync-facebook-ads',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer %s'),
+    body := '{}'::jsonb
+  ) AS request_id;$cron$,
+      bearer
+    )
+  );
+END
+$$;
+```
+
+Check jobs (redacted):
+
+```sql
+select jobname, schedule, active
+from cron.job
+where jobname like '%ads-incremental%';
+```
+
 ## Edge Functions
 
 | Slug | 用途 |
 |------|------|
-| `supabase-functions-sync-facebook-ads` | 最近 7 日增量 + 帳戶 prune |
+| `supabase-functions-sync-facebook-ads` | 最近 7 日增量 + 帳戶 prune（手動 + 每日 cron） |
 | `supabase-functions-facebook-ads-backfill-step` | 歷史回填（`start` / `pause` / `resume` / `cancel` / `step`） |
 
 部署：
