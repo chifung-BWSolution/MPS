@@ -142,13 +142,31 @@ function splitActions(text) {
   return items.filter(Boolean);
 }
 
+function parseExcelSerialDate(raw) {
+  const n = Number(String(raw).trim());
+  if (!Number.isFinite(n) || n < 20000 || n > 80000) return null;
+  const ms = (n - 25569) * 86400 * 1000;
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+function parsePurchaseDate(dateRaw, year, month) {
+  if (!String(dateRaw).trim()) return null;
+  return parseDdMm(dateRaw, year, month) ?? parseExcelSerialDate(dateRaw);
+}
+
 function parseCostAndCurrency(action) {
-  for (const re of [/US\$\s*([\d,]+(?:\.\d+)?)/i, /\$\s*([\d,]+(?:\.\d+)?)\s*(?:usd|USD)\b/i]) {
+  for (const re of [/US\$\s*([\d,]+(?:\.\d+)?)/i, /\$\s*([\d,]+(?:\.\d+)?)\s*(?:usd|USD)\b/i, /\b([\d,]+(?:\.\d+)?)\s*(?:usd|USD)\b/i]) {
     const m = action.match(re);
     if (m) return { cost: parseFloat(m[1].replace(/,/g, '')) || 0, currency: 'USD' };
   }
+  const hkdSuffix = action.match(/([\d,]+(?:\.\d+)?)\s*hkd\b/i);
+  if (hkdSuffix) return { cost: parseFloat(hkdSuffix[1].replace(/,/g, '')) || 0, currency: 'HKD' };
   const hkd = action.match(/\$\s*([\d,]+(?:\.\d+)?)/);
   if (hkd) return { cost: parseFloat(hkd[1].replace(/,/g, '')) || 0, currency: 'HKD' };
+  const plain = action.trim().match(/^([\d,]+(?:\.\d+)?)$/);
+  if (plain) return { cost: parseFloat(plain[1].replace(/,/g, '')) || 0, currency: 'HKD' };
   return { cost: 0, currency: 'HKD' };
 }
 
@@ -178,7 +196,7 @@ function parseSheetRows(sheetName, rows) {
       const actionRaw = cellStr(row, block.actionCol);
       if (!actionRaw) continue;
 
-      let purchaseDate = dateRaw ? parseDdMm(dateRaw, block.year, block.month) : null;
+      let purchaseDate = dateRaw ? parsePurchaseDate(dateRaw, block.year, block.month) : null;
       const actions = splitActions(actionRaw.replace(/^\d{1,2}\/\d{1,2}\s*/, ''));
 
       for (const actionText of actions) {

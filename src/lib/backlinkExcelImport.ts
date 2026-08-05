@@ -143,6 +143,20 @@ function splitActions(text: string): string[] {
   return items.filter(Boolean);
 }
 
+function parseExcelSerialDate(raw: string): string | null {
+  const n = Number(String(raw).trim());
+  if (!Number.isFinite(n) || n < 20000 || n > 80000) return null;
+  const ms = (n - 25569) * 86400 * 1000;
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+function parsePurchaseDate(dateRaw: string, year: number, month: number): string | null {
+  if (!dateRaw.trim()) return null;
+  return parseDdMm(dateRaw, year, month) ?? parseExcelSerialDate(dateRaw);
+}
+
 function parseCostAndCurrency(action: string): { cost: number; currency: 'USD' | 'HKD' } {
   const usdPatterns = [
     /US\$\s*([\d,]+(?:\.\d+)?)/i,
@@ -156,9 +170,19 @@ function parseCostAndCurrency(action: string): { cost: number; currency: 'USD' |
     }
   }
 
+  const hkdSuffix = action.match(/([\d,]+(?:\.\d+)?)\s*hkd\b/i);
+  if (hkdSuffix) {
+    return { cost: parseFloat(hkdSuffix[1]!.replace(/,/g, '')) || 0, currency: 'HKD' };
+  }
+
   const hkdMatch = action.match(/\$\s*([\d,]+(?:\.\d+)?)/);
   if (hkdMatch) {
     return { cost: parseFloat(hkdMatch[1]!.replace(/,/g, '')) || 0, currency: 'HKD' };
+  }
+
+  const plainNumber = action.trim().match(/^([\d,]+(?:\.\d+)?)$/);
+  if (plainNumber) {
+    return { cost: parseFloat(plainNumber[1]!.replace(/,/g, '')) || 0, currency: 'HKD' };
   }
 
   return { cost: 0, currency: 'HKD' };
@@ -200,7 +224,7 @@ function parseSheetRows(sheetName: string, rows: unknown[][]): ParsedBacklinkRow
       const actionRaw = cellStr(row, block.actionCol);
       if (!actionRaw) continue;
 
-      let purchaseDate = dateRaw ? parseDdMm(dateRaw, block.year, block.month) : null;
+      let purchaseDate = dateRaw ? parsePurchaseDate(dateRaw, block.year, block.month) : null;
       const actions = splitActions(stripLeadingDateFromAction(actionRaw));
 
       for (const actionText of actions) {
