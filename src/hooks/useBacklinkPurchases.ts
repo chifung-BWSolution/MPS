@@ -12,6 +12,10 @@ type DbRow = {
   purchase_date: string;
   quantity: number;
   notes: string | null;
+  google_ads_customer_id: string | null;
+  google_ads_account_name: string | null;
+  source_domain: string | null;
+  excel_sheet: string | null;
 };
 
 function mapRow(row: DbRow): BacklinkPurchase {
@@ -24,6 +28,10 @@ function mapRow(row: DbRow): BacklinkPurchase {
     purchaseDate: String(row.purchase_date).substring(0, 10),
     quantity: Number(row.quantity) || 1,
     notes: row.notes ?? undefined,
+    googleAdsCustomerId: row.google_ads_customer_id ?? undefined,
+    googleAdsAccountName: row.google_ads_account_name ?? undefined,
+    sourceDomain: row.source_domain ?? undefined,
+    excelSheet: row.excel_sheet ?? undefined,
   };
 }
 
@@ -64,6 +72,10 @@ export function useBacklinkPurchases() {
       purchase_date: data.purchaseDate,
       quantity: data.quantity,
       notes: data.notes ?? null,
+      google_ads_customer_id: data.googleAdsCustomerId ?? null,
+      google_ads_account_name: data.googleAdsAccountName ?? null,
+      source_domain: data.sourceDomain ?? null,
+      excel_sheet: data.excelSheet ?? null,
     };
     const { error: err } = await supabase.from('backlink_purchases').insert(row);
     const record = { ...data, id };
@@ -80,6 +92,10 @@ export function useBacklinkPurchases() {
     if (data.purchaseDate !== undefined) patch.purchase_date = data.purchaseDate;
     if (data.quantity !== undefined) patch.quantity = data.quantity;
     if (data.notes !== undefined) patch.notes = data.notes ?? null;
+    if (data.googleAdsCustomerId !== undefined) patch.google_ads_customer_id = data.googleAdsCustomerId || null;
+    if (data.googleAdsAccountName !== undefined) patch.google_ads_account_name = data.googleAdsAccountName || null;
+    if (data.sourceDomain !== undefined) patch.source_domain = data.sourceDomain || null;
+    if (data.excelSheet !== undefined) patch.excel_sheet = data.excelSheet || null;
     const { error: err } = await supabase.from('backlink_purchases').update(patch).eq('id', id);
     if (!err) {
       setPurchases(prev => prev.map(p => (p.id === id ? { ...p, ...data } : p)));
@@ -93,5 +109,42 @@ export function useBacklinkPurchases() {
     return err;
   }, []);
 
-  return { purchases, loading, error, refresh, addPurchase, updatePurchase, deletePurchase };
+  const bulkImport = useCallback(async (items: Omit<BacklinkPurchase, 'id'>[]) => {
+    if (!items.length) return { inserted: 0, error: null as { message: string } | null };
+    const rows = items.map((data, i) => ({
+      id: `bl_imp_${Date.now()}_${i}`,
+      website_profile_id: data.websiteProfileId ?? null,
+      web_supplier_id: data.webSupplierId,
+      cost: data.cost,
+      currency: data.currency,
+      purchase_date: data.purchaseDate,
+      quantity: data.quantity,
+      notes: data.notes ?? null,
+      google_ads_customer_id: data.googleAdsCustomerId ?? null,
+      google_ads_account_name: data.googleAdsAccountName ?? null,
+      source_domain: data.sourceDomain ?? null,
+      excel_sheet: data.excelSheet ?? null,
+    }));
+    const { error: err } = await supabase.from('backlink_purchases').insert(rows);
+    if (!err) {
+      const records = rows.map((row, i) => ({
+        id: row.id,
+        websiteProfileId: items[i]!.websiteProfileId,
+        webSupplierId: items[i]!.webSupplierId,
+        cost: items[i]!.cost,
+        currency: items[i]!.currency,
+        purchaseDate: items[i]!.purchaseDate,
+        quantity: items[i]!.quantity,
+        notes: items[i]!.notes,
+        googleAdsCustomerId: items[i]!.googleAdsCustomerId,
+        googleAdsAccountName: items[i]!.googleAdsAccountName,
+        sourceDomain: items[i]!.sourceDomain,
+        excelSheet: items[i]!.excelSheet,
+      }));
+      setPurchases(prev => [...records, ...prev]);
+    }
+    return { inserted: err ? 0 : rows.length, error: err };
+  }, []);
+
+  return { purchases, loading, error, refresh, addPurchase, updatePurchase, deletePurchase, bulkImport };
 }

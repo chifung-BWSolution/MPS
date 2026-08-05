@@ -20,6 +20,10 @@ export interface BacklinkPurchase {
   purchaseDate: string;
   quantity: number;
   notes?: string;
+  googleAdsCustomerId?: string;
+  googleAdsAccountName?: string;
+  sourceDomain?: string;
+  excelSheet?: string;
 }
 
 export interface GoogleBusinessRegistration {

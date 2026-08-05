@@ -1,14 +1,19 @@
-import { useMemo, useState } from 'react';
-import { Plus, Search, ArrowLeft, Eye, Edit, Trash2 } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { Plus, Search, ArrowLeft, Eye, Edit, Trash2, Upload, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDataStore } from '@/context/DataStore';
 import { useBacklinkPurchases } from '@/hooks/useBacklinkPurchases';
 import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
+import { useGoogleAdsAccounts } from '@/hooks/useGoogleAdsAccounts';
+import { enrichBacklinkImports, parseBacklinkExcelBuffer } from '@/lib/backlinkExcelImport';
+import type { BacklinkImportResult } from '@/lib/backlinkExcelImport';
 import type { BacklinkPurchase } from '@/types/marketingOps';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+const EXCEL_IMPORT_SUPPLIER_ID = 'wps_excel_import';
 
 type PurchaseForm = {
   websiteProfileId: string;
@@ -34,13 +39,13 @@ function BacklinkDetail({
   record,
   supplierName,
   supplierUrl,
-  siteName,
+  siteLabel,
   onBack,
 }: {
   record: BacklinkPurchase;
   supplierName: string;
   supplierUrl: string;
-  siteName: string;
+  siteLabel: string;
   onBack: () => void;
 }) {
   return (
@@ -53,7 +58,7 @@ function BacklinkDetail({
       </button>
 
       <div className="bg-slate-50 rounded-md border border-slate-200 p-3 flex items-center gap-4 text-[12px] text-muted-foreground flex-wrap">
-        <span><span className="font-medium text-foreground">所屬網站:</span> {siteName}</span>
+        <span><span className="font-medium text-foreground">所屬網站:</span> {siteLabel}</span>
         <span className="mx-1">•</span>
         <span><span className="font-medium text-foreground">供應商:</span> {supplierName}</span>
         <span className="mx-1">•</span>
@@ -67,77 +72,159 @@ function BacklinkDetail({
           <div><span className="text-muted-foreground">購買日期:</span> <span className="font-medium">{record.purchaseDate}</span></div>
           <div><span className="text-muted-foreground">反向連結數量:</span> <span className="font-medium">{record.quantity}</span></div>
           <div><span className="text-muted-foreground">備註:</span> <span className="font-medium">{record.notes || '—'}</span></div>
+          {record.sourceDomain && (
+            <div><span className="text-muted-foreground">Excel Domain:</span> <span className="font-medium">{record.sourceDomain}</span></div>
+          )}
+          {record.excelSheet && (
+            <div><span className="text-muted-foreground">工作表:</span> <span className="font-medium">{record.excelSheet}</span></div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
+function SiteCell({
+  record,
+  siteName,
+}: {
+  record: BacklinkPurchase & { siteLabel: string };
+  siteName: string;
+}) {
+  if (record.googleAdsAccountName) {
+    return (
+      <div>
+        <div className="font-medium">{record.googleAdsAccountName}</div>
+        {record.googleAdsCustomerId && (
+          <div className="text-[11px] text-muted-foreground">{record.googleAdsCustomerId}</div>
+        )}
+      </div>
+    );
+  }
+  if (record.sourceDomain && !record.googleAdsCustomerId) {
+    return (
+      <div>
+        <div className="font-medium text-amber-700">{record.sourceDomain}</div>
+        <div className="text-[11px] text-amber-600">未匹配 Google Ads 帳戶</div>
+      </div>
+    );
+  }
+  return <span className="font-medium">{siteName}</span>;
+}
+
 export function BacklinkModule() {
   const { websites } = useDataStore();
   const { suppliers: webPageSuppliers } = useWebPageSuppliers();
+  const { clientAccounts: googleAdsAccounts } = useGoogleAdsAccounts();
   const {
     purchases: backlinkPurchases,
     addPurchase,
     updatePurchase,
     deletePurchase,
+    bulkImport,
+    refresh,
   } = useBacklinkPurchases();
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [currencyFilter, setCurrencyFilter] = useState<'all' | 'USD' | 'HKD'>('all');
+  const [accountFilter, setAccountFilter] = useState('all');
+  const [yearFilter, setYearFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [selectedRecord, setSelectedRecord] = useState<BacklinkPurchase | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importPreview, setImportPreview] = useState<BacklinkImportResult | null>(null);
   const [form, setForm] = useState<PurchaseForm>(emptyForm);
   const [editing, setEditing] = useState<(BacklinkPurchase & { notes?: string }) | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BacklinkPurchase | null>(null);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
 
-  const supplierMap = useMemo(() => {
-    const map = new Map(webPageSuppliers.map((s) => [s.id, s]));
-    return map;
-  }, [webPageSuppliers]);
-
+  const supplierMap = useMemo(() => new Map(webPageSuppliers.map((s) => [s.id, s])), [webPageSuppliers]);
   const siteMap = useMemo(() => new Map(websites.map((w) => [w.id, w])), [websites]);
+
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+    for (const p of backlinkPurchases) {
+      const y = parseInt(p.purchaseDate.slice(0, 4), 10);
+      if (Number.isFinite(y)) years.add(y);
+    }
+    return [...years].sort((a, b) => b - a);
+  }, [backlinkPurchases]);
 
   const enriched = useMemo(() => {
     return backlinkPurchases.map((p) => {
       const supplier = supplierMap.get(p.webSupplierId);
       const site = p.websiteProfileId ? siteMap.get(p.websiteProfileId) : undefined;
+      const siteLabel =
+        p.googleAdsAccountName ||
+        site?.websiteName ||
+        p.sourceDomain ||
+        '—';
       return {
         ...p,
         supplierName: supplier?.name || '—',
         supplierUrl: supplier?.url || '—',
         platform: supplier?.platform || '—',
         siteName: site?.websiteName || '—',
+        siteLabel,
       };
     });
   }, [backlinkPurchases, supplierMap, siteMap]);
 
-  const filtered = enriched.filter((r) => {
-    if (currencyFilter !== 'all' && r.currency !== currencyFilter) return false;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return (
-        r.supplierName.toLowerCase().includes(q) ||
-        r.supplierUrl.toLowerCase().includes(q) ||
-        r.platform.toLowerCase().includes(q) ||
-        r.siteName.toLowerCase().includes(q)
-      );
-    }
-    return true;
-  });
+  const filtered = useMemo(() => {
+    return enriched
+      .filter((r) => {
+        if (currencyFilter !== 'all' && r.currency !== currencyFilter) return false;
+        if (accountFilter !== 'all') {
+          if (accountFilter === 'unmatched') return !r.googleAdsCustomerId && !!r.sourceDomain;
+          if (r.googleAdsCustomerId !== accountFilter) return false;
+        }
+        if (yearFilter !== 'all') {
+          if (!r.purchaseDate.startsWith(`${yearFilter}-`)) return false;
+        }
+        if (dateFrom && r.purchaseDate < dateFrom) return false;
+        if (dateTo && r.purchaseDate > dateTo) return false;
+        if (searchQuery) {
+          const q = searchQuery.toLowerCase();
+          return (
+            r.supplierName.toLowerCase().includes(q) ||
+            r.supplierUrl.toLowerCase().includes(q) ||
+            r.platform.toLowerCase().includes(q) ||
+            r.siteName.toLowerCase().includes(q) ||
+            (r.googleAdsAccountName || '').toLowerCase().includes(q) ||
+            (r.sourceDomain || '').toLowerCase().includes(q) ||
+            (r.notes || '').toLowerCase().includes(q)
+          );
+        }
+        return true;
+      })
+      .sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate));
+  }, [enriched, currencyFilter, accountFilter, yearFilter, dateFrom, dateTo, searchQuery]);
 
   const stats = useMemo(() => {
-    const totalQty = backlinkPurchases.reduce((s, p) => s + p.quantity, 0);
-    const usd = backlinkPurchases.filter((p) => p.currency === 'USD').reduce((s, p) => s + p.cost, 0);
-    const hkd = backlinkPurchases.filter((p) => p.currency === 'HKD').reduce((s, p) => s + p.cost, 0);
-    return { count: backlinkPurchases.length, totalQty, usd, hkd };
+    const totalQty = filtered.reduce((s, p) => s + p.quantity, 0);
+    const usd = filtered.filter((p) => p.currency === 'USD').reduce((s, p) => s + p.cost, 0);
+    const hkd = filtered.filter((p) => p.currency === 'HKD').reduce((s, p) => s + p.cost, 0);
+    return { count: filtered.length, totalQty, usd, hkd };
+  }, [filtered]);
+
+  const unmatchedDomains = useMemo(() => {
+    const map = new Map<string, { domain: string; sheetName?: string; count: number }>();
+    for (const p of backlinkPurchases) {
+      if (p.googleAdsCustomerId || !p.sourceDomain) continue;
+      const key = p.sourceDomain.toLowerCase();
+      const existing = map.get(key);
+      if (existing) existing.count += 1;
+      else map.set(key, { domain: p.sourceDomain, sheetName: p.excelSheet, count: 1 });
+    }
+    return [...map.values()].sort((a, b) => a.domain.localeCompare(b.domain));
   }, [backlinkPurchases]);
 
-  const selectedSupplier = form.webSupplierId
-    ? supplierMap.get(form.webSupplierId)
-    : undefined;
+  const selectedSupplier = form.webSupplierId ? supplierMap.get(form.webSupplierId) : undefined;
 
   const handleAdd = async () => {
     if (!form.websiteProfileId || !form.webSupplierId || !form.purchaseDate || form.quantity < 1 || saving) return;
@@ -198,17 +285,86 @@ export function BacklinkModule() {
     setDeleteTarget(null);
   };
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const buffer = await file.arrayBuffer();
+      const parsed = parseBacklinkExcelBuffer(buffer);
+      if (!parsed.length) {
+        toast.error('未能從 Excel 解析到任何購買紀錄，請確認檔案格式。');
+        return;
+      }
+      const result = enrichBacklinkImports(
+        parsed,
+        googleAdsAccounts.map((a) => ({ customerId: a.customerId, descriptiveName: a.descriptiveName })),
+        websites.map((w) => ({ id: w.id, domainUrl: w.domainUrl })),
+      );
+      setImportPreview(result);
+      setShowImportModal(true);
+    } catch (err) {
+      toast.error(`解析 Excel 失敗：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const confirmImport = async () => {
+    if (!importPreview || importing) return;
+    const supplierId =
+      webPageSuppliers.find((s) => s.id === EXCEL_IMPORT_SUPPLIER_ID)?.id ||
+      webPageSuppliers[0]?.id;
+    if (!supplierId) {
+      toast.error('請先至「供應商 → 網頁供應商」新增名單，或執行資料庫 migration。');
+      return;
+    }
+
+    setImporting(true);
+    const items = importPreview.records.map((r) => ({
+      webSupplierId: supplierId,
+      websiteProfileId: r.websiteProfileId,
+      cost: r.cost,
+      currency: r.currency,
+      purchaseDate: r.purchaseDate,
+      quantity: r.quantity,
+      notes: r.actionText,
+      googleAdsCustomerId: r.googleAdsCustomerId,
+      googleAdsAccountName: r.googleAdsAccountName,
+      sourceDomain: r.sourceDomain,
+      excelSheet: r.sheetName,
+    }));
+
+    const { inserted, error } = await bulkImport(items);
+    setImporting(false);
+    if (error) {
+      toast.error(`匯入失敗：${error.message}`);
+      return;
+    }
+    setShowImportModal(false);
+    setImportPreview(null);
+    await refresh();
+    toast.success(
+      `已匯入 ${inserted} 筆紀錄（${importPreview.stats.sheetsProcessed.length} 個工作表）` +
+        (importPreview.unmatchedDomains.length
+          ? `，${importPreview.unmatchedDomains.length} 個 Domain 未能匹配 Google Ads 帳戶`
+          : ''),
+    );
+  };
+
   if (selectedRecord) {
     const supplier = supplierMap.get(selectedRecord.webSupplierId);
-    const site = selectedRecord.websiteProfileId
-      ? siteMap.get(selectedRecord.websiteProfileId)
-      : undefined;
+    const site = selectedRecord.websiteProfileId ? siteMap.get(selectedRecord.websiteProfileId) : undefined;
+    const siteLabel =
+      selectedRecord.googleAdsAccountName ||
+      site?.websiteName ||
+      selectedRecord.sourceDomain ||
+      '—';
     return (
       <BacklinkDetail
         record={selectedRecord}
         supplierName={supplier?.name || '—'}
         supplierUrl={supplier?.url || '—'}
-        siteName={site?.websiteName || '—'}
+        siteLabel={siteLabel}
         onBack={() => setSelectedRecord(null)}
       />
     );
@@ -321,51 +477,132 @@ export function BacklinkModule() {
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center gap-4 flex-wrap">
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
-          <span className="text-[11px] text-muted-foreground">購買筆數</span>
-          <p className="text-[18px] font-bold">{stats.count}</p>
+    <div className="space-y-0">
+      <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1 min-w-[280px]">
+            <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md px-3 py-2">
+              <span className="text-[11px] text-muted-foreground">購買筆數</span>
+              <p className="text-[18px] font-bold">{stats.count}</p>
+            </div>
+            <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md px-3 py-2">
+              <span className="text-[11px] text-muted-foreground">總連結數</span>
+              <p className="text-[18px] font-bold">{stats.totalQty}</p>
+            </div>
+            <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md px-3 py-2">
+              <span className="text-[11px] text-muted-foreground">費用合計 (USD)</span>
+              <p className="text-[18px] font-bold">USD ${stats.usd.toLocaleString()}</p>
+            </div>
+            <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md px-3 py-2">
+              <span className="text-[11px] text-muted-foreground">費用合計 (HKD)</span>
+              <p className="text-[18px] font-bold">HKD ${stats.hkd.toLocaleString()}</p>
+            </div>
+          </div>
         </div>
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
-          <span className="text-[11px] text-muted-foreground">總連結數</span>
-          <p className="text-[18px] font-bold">{stats.totalQty}</p>
-        </div>
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
-          <span className="text-[11px] text-muted-foreground">費用合計 (USD)</span>
-          <p className="text-[18px] font-bold">USD ${stats.usd.toLocaleString()}</p>
-        </div>
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
-          <span className="text-[11px] text-muted-foreground">費用合計 (HKD)</span>
-          <p className="text-[18px] font-bold">HKD ${stats.hkd.toLocaleString()}</p>
-        </div>
-      </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 max-w-[220px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜尋網站／供應商／網址..."
-            className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={yearFilter} onValueChange={setYearFilter}>
+            <SelectTrigger className="w-[110px] h-9 text-[13px]">
+              <SelectValue placeholder="年份" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部年份</SelectItem>
+              {availableYears.map((y) => (
+                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            type="date"
+            className="w-[140px] h-9 text-[13px]"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            placeholder="開始日期"
           />
+          <span className="text-[12px] text-muted-foreground">至</span>
+          <Input
+            type="date"
+            className="w-[140px] h-9 text-[13px]"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            placeholder="結束日期"
+          />
+          <div className="relative flex-1 min-w-[180px] max-w-sm">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="搜尋網站／供應商／網址..."
+              className="pl-8 h-9 text-[13px]"
+            />
+          </div>
+          <Select value={accountFilter} onValueChange={setAccountFilter}>
+            <SelectTrigger className="w-[200px] h-9 text-[13px]">
+              <SelectValue placeholder="帳戶" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部帳戶</SelectItem>
+              <SelectItem value="unmatched">未匹配 Domain</SelectItem>
+              {googleAdsAccounts.map((a) => (
+                <SelectItem key={a.customerId} value={a.customerId}>
+                  {a.descriptiveName || a.customerId}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <select
+            value={currencyFilter}
+            onChange={(e) => setCurrencyFilter(e.target.value as 'all' | 'USD' | 'HKD')}
+            className="px-2.5 py-1.5 border border-border rounded text-[12px] bg-white focus:outline-none focus:ring-1 focus:ring-teal-600 h-9"
+          >
+            <option value="all">全部幣別</option>
+            <option value="USD">USD</option>
+            <option value="HKD">HKD</option>
+          </select>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload size={14} className="mr-1.5" />
+            匯入 Excel
+          </Button>
+          <button
+            onClick={() => { setForm(emptyForm); setShowAddModal(true); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700 transition-colors duration-200 h-9"
+          >
+            <Plus size={12} /> 新增購買
+          </button>
         </div>
-        <select
-          value={currencyFilter}
-          onChange={(e) => setCurrencyFilter(e.target.value as 'all' | 'USD' | 'HKD')}
-          className="px-2.5 py-1.5 border border-border rounded text-[12px] bg-white focus:outline-none focus:ring-1 focus:ring-teal-600"
-        >
-          <option value="all">全部幣別</option>
-          <option value="USD">USD</option>
-          <option value="HKD">HKD</option>
-        </select>
-        <button
-          onClick={() => { setForm(emptyForm); setShowAddModal(true); }}
-          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700 transition-colors duration-200"
-        >
-          <Plus size={12} /> 新增購買
-        </button>
+
+        {unmatchedDomains.length > 0 && (
+          <div className="rounded-md border border-amber-200 bg-amber-50/80 px-3 py-2.5">
+            <div className="flex items-center gap-2 text-[12px] font-medium text-amber-800 mb-2">
+              <AlertTriangle size={14} />
+              未能匹配 Google Ads 帳戶的 Domain（{unmatchedDomains.length} 個）
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {unmatchedDomains.map((u) => (
+                <span
+                  key={u.domain}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-amber-200 bg-white text-[11px] text-amber-900"
+                  title={u.sheetName ? `工作表：${u.sheetName} · ${u.count} 筆` : `${u.count} 筆`}
+                >
+                  {u.domain}
+                  <span className="text-amber-600">({u.count})</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-hidden">
@@ -384,13 +621,15 @@ export function BacklinkModule() {
           <tbody>
             {filtered.map((record) => (
               <tr key={record.id} className="border-t border-border/50 hover:bg-muted/10 transition-colors duration-200">
-                <td className="px-4 py-3 font-medium">{record.siteName}</td>
+                <td className="px-4 py-3">
+                  <SiteCell record={record} siteName={record.siteName} />
+                </td>
                 <td className="px-4 py-3">
                   <span className="break-all text-muted-foreground">{record.supplierUrl}</span>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{record.supplierName}</td>
                 <td className="px-4 py-3">{record.currency} ${record.cost.toLocaleString()}</td>
-                <td className="px-4 py-3">{record.purchaseDate}</td>
+                <td className="px-4 py-3 tabular-nums">{record.purchaseDate}</td>
                 <td className="px-4 py-3">{record.quantity}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
@@ -437,6 +676,59 @@ export function BacklinkModule() {
           <Button variant="secondary" onClick={() => setShowEditModal(false)}>取消</Button>
           <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSaveEdit}>儲存</Button>
         </div>
+      </CrudModal>
+
+      <CrudModal
+        isOpen={showImportModal}
+        onClose={() => { setShowImportModal(false); setImportPreview(null); }}
+        title="匯入 Excel 預覽"
+        size="lg"
+      >
+        {importPreview && (
+          <div className="space-y-4 text-[13px]">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded border p-3">
+                <div className="text-muted-foreground text-[11px]">解析紀錄</div>
+                <div className="text-[18px] font-bold">{importPreview.stats.totalParsed}</div>
+              </div>
+              <div className="rounded border p-3">
+                <div className="text-muted-foreground text-[11px]">已匹配 Google Ads 帳戶</div>
+                <div className="text-[18px] font-bold text-emerald-700">{importPreview.stats.matched}</div>
+              </div>
+            </div>
+            <p className="text-[12px] text-muted-foreground">
+              工作表：{importPreview.stats.sheetsProcessed.join('、')}
+            </p>
+            {importPreview.unmatchedDomains.length > 0 && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+                <div className="font-medium text-amber-800 mb-2 flex items-center gap-1.5">
+                  <AlertTriangle size={14} />
+                  未能匹配的 Domain（{importPreview.unmatchedDomains.length}）
+                </div>
+                <ul className="space-y-1 max-h-40 overflow-y-auto text-[12px]">
+                  {importPreview.unmatchedDomains.map((u) => (
+                    <li key={`${u.sheetName}-${u.domain}`} className="text-amber-900">
+                      <span className="font-medium">{u.domain}</span>
+                      <span className="text-amber-700 ml-2">· {u.sheetName} · {u.brand}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="secondary" onClick={() => { setShowImportModal(false); setImportPreview(null); }}>
+                取消
+              </Button>
+              <Button
+                className="bg-teal-600 hover:bg-teal-700 text-white"
+                disabled={importing}
+                onClick={() => void confirmImport()}
+              >
+                {importing ? '匯入中…' : `確認匯入 ${importPreview.stats.totalParsed} 筆`}
+              </Button>
+            </div>
+          </div>
+        )}
       </CrudModal>
 
       <DeleteConfirmModal
