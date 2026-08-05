@@ -658,27 +658,134 @@ function SubmitReportPage() {
     return dates;
   }, [office, dbReports]);
 
-  // Recent frequent items from the user's past reports (for quick selection)
-  const recentFrequentItems = useMemo(() => {
-    const currentUserId = 'u1'; // mock current user
-    const userReports = dailyReportsV2.filter(r => r.userId === currentUserId && !r.isLeave);
-    const allEntries = userReports.flatMap(r => r.entries);
-    
-    // Count frequency of each relatedName + category combo
-    const itemMap: Record<string, { relatedId: string; relatedName: string; category: WorkCategory; count: number; lastUsed: string; totalHours: number }> = {};
-    allEntries.forEach(entry => {
-      if (!entry.relatedName) return;
-      const key = `${entry.relatedName}__${entry.category}`;
-      if (!itemMap[key]) {
-        itemMap[key] = { relatedId: entry.relatedId || '', relatedName: entry.relatedName, category: entry.category, count: 0, lastUsed: entry.createdAt, totalHours: 0 };
+  // Recent frequent items from the user's real past reports (for quick selection).
+  // Aggregates day_report_entries by relatedName + category over the last ~90 days.
+  type FrequentItem = {
+    relatedId: string;
+    relatedName: string;
+    category: WorkCategory;
+    count: number;
+    lastUsed: string;
+    totalHours: number;
+  };
+  const [recentFrequentItems, setRecentFrequentItems] = useState<FrequentItem[]>([]);
+
+  const loadRecentFrequentItems = useCallback(async () => {
+    if (!currentStaffId) {
+      setRecentFrequentItems([]);
+      return;
+    }
+    try {
+      const today = new Date();
+      const start = new Date(today);
+      start.setDate(start.getDate() - 89);
+      const toLocalDateStr = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+      // Prefer non-leave reports in the lookback window so leave days don't
+      // dilute recommendations. Fall back to entries-by-staff if the join path fails.
+      const { data: reports, error: reportErr } = await supabase
+        .from('day_reports')
+        .select('id')
+        .eq('staff_id', currentStaffId)
+        .eq('is_leave', false)
+        .gte('report_date', toLocalDateStr(start))
+        .lte('report_date', toLocalDateStr(today));
+
+      if (reportErr) {
+        console.warn('[SubmitReport] load frequent reports failed:', reportErr.message);
       }
-      itemMap[key].count += 1;
-      itemMap[key].totalHours += entry.hours;
-      if (entry.createdAt > itemMap[key].lastUsed) itemMap[key].lastUsed = entry.createdAt;
-    });
-    
-    return Object.values(itemMap).sort((a, b) => b.count - a.count).slice(0, 8);
-  }, []);
+
+      type EntryRow = {
+        related_id: string | null;
+        related_name: string | null;
+        category: string;
+        hours: number | null;
+        created_at: string | null;
+      };
+      let entryRows: EntryRow[] = [];
+
+      if (reports && reports.length > 0) {
+        const reportIds = reports.map(r => r.id);
+        const chunkSize = 200;
+        for (let i = 0; i < reportIds.length; i += chunkSize) {
+          const chunk = reportIds.slice(i, i + chunkSize);
+          const { data, error } = await supabase
+            .from('day_report_entries')
+            .select('related_id, related_name, category, hours, created_at')
+            .in('day_report_id', chunk);
+          if (error) {
+            console.warn('[SubmitReport] load frequent entries failed:', error.message);
+            continue;
+          }
+          if (data) entryRows = entryRows.concat(data as EntryRow[]);
+        }
+      } else if (!reportErr) {
+        // No reports in window — keep empty recommendations.
+        entryRows = [];
+      } else {
+        // Report query failed; fall back to recent entries by staff_id.
+        const { data, error } = await supabase
+          .from('day_report_entries')
+          .select('related_id, related_name, category, hours, created_at')
+          .eq('staff_id', currentStaffId)
+          .order('created_at', { ascending: false })
+          .limit(300);
+        if (error) {
+          console.warn('[SubmitReport] frequent entries fallback failed:', error.message);
+          setRecentFrequentItems([]);
+          return;
+        }
+        entryRows = (data || []) as EntryRow[];
+      }
+
+      const itemMap: Record<string, FrequentItem> = {};
+      entryRows.forEach(entry => {
+        const relatedName = (entry.related_name || '').trim();
+        const category = (entry.category || '') as WorkCategory;
+        if (!relatedName || !category) return;
+        const key = `${relatedName}__${category}`;
+        const hours = Number(entry.hours) || 0;
+        const createdAt = entry.created_at || '';
+        if (!itemMap[key]) {
+          itemMap[key] = {
+            relatedId: entry.related_id || '',
+            relatedName,
+            category,
+            count: 0,
+            lastUsed: createdAt,
+            totalHours: 0,
+          };
+        }
+        itemMap[key].count += 1;
+        itemMap[key].totalHours += hours;
+        if (createdAt && createdAt > itemMap[key].lastUsed) {
+          itemMap[key].lastUsed = createdAt;
+          if (entry.related_id) itemMap[key].relatedId = entry.related_id;
+        }
+      });
+
+      const ranked = Object.values(itemMap)
+        .map(item => ({
+          ...item,
+          totalHours: Math.round(item.totalHours * 10) / 10,
+        }))
+        .sort((a, b) => {
+          if (b.count !== a.count) return b.count - a.count;
+          return (b.lastUsed || '').localeCompare(a.lastUsed || '');
+        })
+        .slice(0, 8);
+
+      setRecentFrequentItems(ranked);
+    } catch (err) {
+      console.error('[SubmitReport] Exception loading frequent items:', err);
+      setRecentFrequentItems([]);
+    }
+  }, [currentStaffId]);
+
+  useEffect(() => {
+    loadRecentFrequentItems();
+  }, [loadRecentFrequentItems]);
 
   const totalHours = entries.reduce((sum, e) => sum + (e.hours || 0), 0);
   const otHours = Math.max(0, totalHours - 8);
@@ -1036,6 +1143,8 @@ function SubmitReportPage() {
       setExistingReportId(reportId);
       setExistingReportStatus(saveMode);
       loadDbReports();
+      // Refresh quick-add recommendations so the just-saved items appear.
+      void loadRecentFrequentItems();
 
       if (saveMode === 'draft') {
         setTempSaved(true);
@@ -1391,11 +1500,17 @@ function SubmitReportPage() {
               )}
               {recentFrequentItems.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {recentFrequentItems.map((item, idx) => {
-                  const config = categoryLookup[item.category];
+                {recentFrequentItems.map((item) => {
+                  const config = categoryLookup[item.category] || {
+                    bg: 'bg-gray-50',
+                    color: 'text-gray-600',
+                    icon: '📋',
+                    label: item.category,
+                  };
                   return (
                     <button
-                      key={idx}
+                      key={`${item.relatedName}__${item.category}`}
+                      type="button"
                       onClick={() => {
                         // Auto-fill: use applyQuickTemplate style — fill empty or add new
                         const firstEmpty = entries.findIndex(e => !e.category && !e.title && e.hours === 0);
