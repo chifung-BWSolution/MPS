@@ -1,16 +1,17 @@
 import { useMemo, useState } from 'react';
 import { Plus, Search, ArrowLeft, Eye, Edit, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { useDataStore } from '@/context/DataStore';
 import { useBacklinkPurchases } from '@/hooks/useBacklinkPurchases';
 import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
 import { useGoogleAdsAccounts } from '@/hooks/useGoogleAdsAccounts';
+import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
 import { getManualDisplayName } from '@/lib/domainMatch';
 import type { BacklinkPurchase } from '@/types/marketingOps';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 
 type PurchaseForm = {
   websiteProfileId: string;
@@ -20,6 +21,8 @@ type PurchaseForm = {
   purchaseDate: string;
   quantity: number;
   notes: string;
+  googleAdsCustomerId?: string;
+  googleAdsAccountName?: string;
 };
 
 const emptyForm: PurchaseForm = {
@@ -31,6 +34,66 @@ const emptyForm: PurchaseForm = {
   quantity: 1,
   notes: '',
 };
+
+function siteSelectValue(data: {
+  websiteProfileId?: string;
+  googleAdsCustomerId?: string;
+  googleAdsAccountName?: string;
+}): string {
+  if (data.googleAdsCustomerId) return `gads:${data.googleAdsCustomerId}`;
+  if (data.websiteProfileId) return `site:${data.websiteProfileId}`;
+  if (data.googleAdsAccountName) return `name:${data.googleAdsAccountName}`;
+  return '';
+}
+
+function applySiteSelection(
+  data: PurchaseForm | BacklinkPurchase,
+  selected: string,
+): PurchaseForm | BacklinkPurchase {
+  if (!selected) {
+    return {
+      ...data,
+      websiteProfileId: '',
+      googleAdsCustomerId: undefined,
+      googleAdsAccountName: undefined,
+    };
+  }
+  if (selected.startsWith('gads:')) {
+    const customerId = selected.slice(5);
+    return {
+      ...data,
+      websiteProfileId: '',
+      googleAdsCustomerId: customerId,
+      googleAdsAccountName: undefined,
+    };
+  }
+  if (selected.startsWith('name:')) {
+    return {
+      ...data,
+      websiteProfileId: '',
+      googleAdsCustomerId: undefined,
+      googleAdsAccountName: selected.slice(5),
+    };
+  }
+  if (selected.startsWith('site:')) {
+    return {
+      ...data,
+      websiteProfileId: selected.slice(5),
+      googleAdsCustomerId: undefined,
+      googleAdsAccountName: undefined,
+    };
+  }
+  return { ...data, websiteProfileId: selected };
+}
+
+function hasSiteSelection(data: {
+  websiteProfileId?: string;
+  googleAdsCustomerId?: string;
+  googleAdsAccountName?: string;
+  sourceDomain?: string;
+}): boolean {
+  return !!(data.websiteProfileId || data.googleAdsCustomerId || data.googleAdsAccountName || data.sourceDomain);
+}
 
 function BacklinkDetail({
   record,
@@ -119,7 +182,7 @@ function SiteCell({
 }
 
 export function BacklinkModule() {
-  const { websites } = useDataStore();
+  const { profiles: websites } = useWebsiteProfiles();
   const { suppliers: webPageSuppliers } = useWebPageSuppliers();
   const { clientAccounts: googleAdsAccounts } = useGoogleAdsAccounts();
   const {
@@ -145,6 +208,39 @@ export function BacklinkModule() {
 
   const supplierMap = useMemo(() => new Map(webPageSuppliers.map((s) => [s.id, s])), [webPageSuppliers]);
   const siteMap = useMemo(() => new Map(websites.map((w) => [w.id, w])), [websites]);
+
+  const siteOptions = useMemo((): SearchableSelectOption[] => {
+    const gadsOptions: SearchableSelectOption[] = googleAdsAccounts.map((a) => ({
+      value: `gads:${a.customerId}`,
+      label: a.descriptiveName || a.customerId,
+      keywords: a.customerId,
+    }));
+    const manualNames = new Set<string>();
+    for (const p of backlinkPurchases) {
+      if (p.googleAdsAccountName && !p.googleAdsCustomerId) {
+        manualNames.add(p.googleAdsAccountName);
+      }
+    }
+    const manualOptions: SearchableSelectOption[] = [...manualNames].map((name) => ({
+      value: `name:${name}`,
+      label: name,
+      keywords: name,
+    }));
+    const profileOptions: SearchableSelectOption[] = websites.map((w) => ({
+      value: `site:${w.id}`,
+      label: w.websiteName,
+      keywords: [w.domainUrl, w.brand, w.company, w.id].filter(Boolean).join(' '),
+    }));
+    return [...gadsOptions, ...manualOptions, ...profileOptions];
+  }, [googleAdsAccounts, websites, backlinkPurchases]);
+
+  const supplierOptions = useMemo((): SearchableSelectOption[] => {
+    return webPageSuppliers.map((s) => ({
+      value: s.id,
+      label: s.url ? `${s.url}（${s.name}）` : s.name,
+      keywords: [s.name, s.platform, s.url].filter(Boolean).join(' '),
+    }));
+  }, [webPageSuppliers]);
 
   const availableYears = useMemo(() => {
     const years = new Set<number>();
@@ -231,16 +327,22 @@ export function BacklinkModule() {
   const selectedSupplier = form.webSupplierId ? supplierMap.get(form.webSupplierId) : undefined;
 
   const handleAdd = async () => {
-    if (!form.websiteProfileId || !form.webSupplierId || !form.purchaseDate || form.quantity < 1 || saving) return;
+    if (!hasSiteSelection(form) || !form.webSupplierId || !form.purchaseDate || form.quantity < 1 || saving) return;
     setSaving(true);
+    const accountName =
+      form.googleAdsCustomerId
+        ? googleAdsAccounts.find((a) => a.customerId === form.googleAdsCustomerId)?.descriptiveName
+        : undefined;
     const { error } = await addPurchase({
-      websiteProfileId: form.websiteProfileId,
+      websiteProfileId: form.websiteProfileId || undefined,
       webSupplierId: form.webSupplierId,
       cost: form.cost,
       currency: form.currency,
       purchaseDate: form.purchaseDate,
       quantity: form.quantity,
       notes: form.notes || undefined,
+      googleAdsCustomerId: form.googleAdsCustomerId,
+      googleAdsAccountName: accountName ?? form.googleAdsAccountName,
     });
     setSaving(false);
     if (error) {
@@ -257,16 +359,22 @@ export function BacklinkModule() {
   };
 
   const handleSaveEdit = async () => {
-    if (!editing || !editing.websiteProfileId || !editing.webSupplierId || !editing.purchaseDate || editing.quantity < 1 || saving) return;
+    if (!editing || !hasSiteSelection(editing) || !editing.webSupplierId || !editing.purchaseDate || editing.quantity < 1 || saving) return;
     setSaving(true);
+    const accountName =
+      editing.googleAdsCustomerId && !editing.googleAdsAccountName
+        ? googleAdsAccounts.find((a) => a.customerId === editing.googleAdsCustomerId)?.descriptiveName
+        : editing.googleAdsAccountName;
     const error = await updatePurchase(editing.id, {
-      websiteProfileId: editing.websiteProfileId,
+      websiteProfileId: editing.websiteProfileId || undefined,
       webSupplierId: editing.webSupplierId,
       cost: editing.cost,
       currency: editing.currency,
       purchaseDate: editing.purchaseDate,
       quantity: editing.quantity,
       notes: editing.notes,
+      googleAdsCustomerId: editing.googleAdsCustomerId,
+      googleAdsAccountName: accountName,
     });
     setSaving(false);
     if (error) {
@@ -318,33 +426,37 @@ export function BacklinkModule() {
       <div className="space-y-4">
         <div>
           <label className="text-[12px] font-medium text-muted-foreground block mb-1">所屬網站 *</label>
-          <Select
-            value={data.websiteProfileId || ''}
-            onValueChange={(val) => onChange({ ...data, websiteProfileId: val })}
-          >
-            <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="選擇網站" /></SelectTrigger>
-            <SelectContent>
-              {websites.map((w) => (
-                <SelectItem key={w.id} value={w.id}>{w.websiteName}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            value={siteSelectValue(data)}
+            onValueChange={(val) => {
+              let next = applySiteSelection(data, val);
+              if (val.startsWith('gads:')) {
+                const customerId = val.slice(5);
+                const account = googleAdsAccounts.find((a) => a.customerId === customerId);
+                next = {
+                  ...next,
+                  googleAdsCustomerId: customerId,
+                  googleAdsAccountName: account?.descriptiveName,
+                };
+              }
+              onChange(next);
+            }}
+            options={siteOptions}
+            placeholder="選擇網站或 Google Ads 帳戶"
+            searchPlaceholder="搜尋網站名稱、網域、Google Ads 帳戶…"
+            emptyText="找不到符合的網站或帳戶"
+          />
         </div>
         <div>
           <label className="text-[12px] font-medium text-muted-foreground block mb-1">供應商網址 *</label>
-          <Select
+          <SearchableSelect
             value={data.webSupplierId}
             onValueChange={(val) => onChange({ ...data, webSupplierId: val })}
-          >
-            <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="從網頁供應商選擇" /></SelectTrigger>
-            <SelectContent>
-              {webPageSuppliers.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.url}（{s.name}）
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            options={supplierOptions}
+            placeholder="從網頁供應商選擇"
+            searchPlaceholder="搜尋供應商名稱、網址…"
+            emptyText="找不到符合的供應商"
+          />
           {webPageSuppliers.length === 0 && (
             <p className="text-[11px] text-amber-600 mt-1">請先至「供應商 → 網頁供應商」新增名單</p>
           )}
