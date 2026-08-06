@@ -33,7 +33,7 @@ import {
   PITCHING_PROJECT_TYPE_OPTIONS,
 } from '@/data/pitchingData';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
-import { generateQuotationServices, QUOTATION_AI_MODEL_OPTIONS, type QuotationAiCatalogItem, type QuotationAiProvider } from '@/lib/quotationAiApi';
+import { generateQuotationServices, getQuotationAiModelId, QUOTATION_AI_MODEL_OPTIONS, type QuotationAiCatalogItem, type QuotationAiProvider } from '@/lib/quotationAiApi';
 
 // Supplier options for cost structure
 const supplierOptions = [
@@ -199,6 +199,11 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
   const [requirementsText, setRequirementsText] = useState('');
   const [aiProvider, setAiProvider] = useState<QuotationAiProvider>('grok');
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [generationMeta, setGenerationMeta] = useState<{
+    provider: string;
+    model: string;
+    fallback: boolean;
+  } | null>(null);
   const [quotationDate, setQuotationDate] = useState('');
   const [manHoursEstimate, setManHoursEstimate] = useState<number>(0);
   const [asanaLink, setAsanaLink] = useState('');
@@ -308,6 +313,15 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
       });
 
       setServices(mappedServices);
+      setGenerationMeta({
+        provider: result.provider,
+        model: result.model || getQuotationAiModelId(aiProvider),
+        fallback: result.fallback,
+      });
+
+      if (result.fallback) {
+        toast.error(result.error || 'AI 生成失敗，已改用本地規則生成服務項目');
+      }
 
       setStep(3);
     } catch (err) {
@@ -585,18 +599,21 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
                       placeholder="描述客戶需求、範圍、預算期望等，AI 將據此生成服務項目…"
                       className="flex-1 px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-y min-h-[96px]"
                     />
-                    <div className="shrink-0 flex flex-col gap-2 w-[112px]">
-                      <select
-                        value={aiProvider}
-                        onChange={(e) => setAiProvider(e.target.value as QuotationAiProvider)}
-                        disabled={aiGenerating}
-                        className="h-9 px-2 border border-border rounded-md text-[13px] bg-white focus:outline-none focus:ring-1 focus:ring-teal-600 disabled:opacity-60"
-                        aria-label="AI 模型"
-                      >
-                        {QUOTATION_AI_MODEL_OPTIONS.map((opt) => (
-                          <option key={opt.id} value={opt.id}>{opt.label}</option>
-                        ))}
-                      </select>
+                    <div className="shrink-0 flex flex-col gap-2 w-[148px]">
+                      <div>
+                        <label className="text-[11px] text-muted-foreground block mb-1">AI 模型</label>
+                        <select
+                          value={aiProvider}
+                          onChange={(e) => setAiProvider(e.target.value as QuotationAiProvider)}
+                          disabled={aiGenerating}
+                          className="w-full h-9 px-2 border border-border rounded-md text-[13px] bg-white focus:outline-none focus:ring-1 focus:ring-teal-600 disabled:opacity-60"
+                          aria-label="AI 模型"
+                        >
+                          {QUOTATION_AI_MODEL_OPTIONS.map((opt) => (
+                            <option key={opt.id} value={opt.id}>{opt.label} · {opt.modelId}</option>
+                          ))}
+                        </select>
+                      </div>
                       <button
                         type="button"
                         onClick={() => void handleGenerateServices()}
@@ -623,7 +640,7 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
                     </div>
                   </div>
                   <p className="text-[11px] text-muted-foreground mt-1.5">
-                    選擇 AI 模型後按「生成」，將自動填寫下一步的服務項目；若所選模型不可用，將使用本地規則生成。
+                    目前選擇：<span className="font-medium text-foreground">{QUOTATION_AI_MODEL_OPTIONS.find((opt) => opt.id === aiProvider)?.label} · {getQuotationAiModelId(aiProvider)}</span>
                   </p>
                 </div>
               )}
@@ -636,7 +653,7 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
 
         {step === 3 && (
           <div className="space-y-6">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <p className="text-[14px] text-muted-foreground">
                 {isComprehensive ? (
                   <>報價模式：<span className="font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">綜合方案</span> | 包含 <span className="font-medium text-foreground">{selectedTypes.length}</span> 個類型</>
@@ -645,6 +662,16 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
                 )}
                 {' '}| 客戶：<span className="font-medium text-foreground">{selectedPitching?.displayName || clientName}</span>
               </p>
+              {generationMeta && (
+                <span className={cn(
+                  'inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border',
+                  generationMeta.fallback
+                    ? 'border-amber-200 bg-amber-50 text-amber-800'
+                    : 'border-teal-200 bg-teal-50 text-teal-800',
+                )}>
+                  {generationMeta.fallback ? '本地規則' : 'AI 生成'} · {generationMeta.provider === 'grok' ? 'Grok' : generationMeta.provider === 'gemini' ? 'Gemini' : generationMeta.provider} · {generationMeta.model}
+                </span>
+              )}
             </div>
 
             {/* Comprehensive: Add items from other types */}

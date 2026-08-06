@@ -5,6 +5,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const DEFAULT_GROK_MODEL = "grok-4.5";
+const DEFAULT_GEMINI_MODEL = "gemini-2.0-flash";
+
 type CatalogItem = {
   id: string;
   name: string;
@@ -81,18 +84,21 @@ ${catalogLines}
 
 function parseAiJson(text: string): AiService[] {
   const trimmed = text.trim();
-  const jsonMatch = trimmed.match(/\{[\s\S]*\}/);
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced?.[1]?.trim() || trimmed;
+  const jsonMatch = candidate.match(/\{[\s\S]*\}/);
   if (!jsonMatch) return [];
   const parsed = JSON.parse(jsonMatch[0]) as { services?: AiService[] };
   if (!Array.isArray(parsed.services)) return [];
   return parsed.services.filter((s) => s?.name?.trim());
 }
 
-async function callGemini(prompt: string): Promise<AiService[]> {
+async function callGemini(prompt: string, model: string): Promise<AiService[]> {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
-  if (!apiKey) return [];
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY 未設定");
+  }
 
-  const model = Deno.env.get("GEMINI_MODEL") || "gemini-2.0-flash";
   const url =
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const res = await fetch(url, {
@@ -105,18 +111,23 @@ async function callGemini(prompt: string): Promise<AiService[]> {
   });
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Gemini error: ${err}`);
+    throw new Error(`Gemini (${model}) error: ${err}`);
   }
   const data = await res.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-  return parseAiJson(text);
+  const services = parseAiJson(text);
+  if (!services.length) {
+    throw new Error(`Gemini (${model}) 回傳格式無法解析`);
+  }
+  return services;
 }
 
-async function callGrok(prompt: string): Promise<AiService[]> {
+async function callGrok(prompt: string, model: string): Promise<AiService[]> {
   const apiKey = Deno.env.get("XAI_API_KEY") || Deno.env.get("GROK_API_KEY");
-  if (!apiKey) return [];
+  if (!apiKey) {
+    throw new Error("XAI_API_KEY 未設定");
+  }
 
-  const model = Deno.env.get("GROK_MODEL") || "grok-2-latest";
   const res = await fetch("https://api.x.ai/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -127,18 +138,22 @@ async function callGrok(prompt: string): Promise<AiService[]> {
       model,
       temperature: 0.3,
       messages: [
-        { role: "system", content: "You are a quotation assistant. Reply with JSON only." },
+        { role: "system", content: "You are a quotation assistant. Reply with JSON only, no markdown." },
         { role: "user", content: prompt },
       ],
     }),
   });
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Grok error: ${err}`);
+    throw new Error(`Grok (${model}) error: ${err}`);
   }
   const data = await res.json();
   const text = data?.choices?.[0]?.message?.content ?? "";
-  return parseAiJson(text);
+  const services = parseAiJson(text);
+  if (!services.length) {
+    throw new Error(`Grok (${model}) 回傳格式無法解析: ${text.slice(0, 200)}`);
+  }
+  return services;
 }
 
 function fallbackServices(catalog: CatalogItem[]): AiService[] {
@@ -171,42 +186,50 @@ Deno.serve(async (req: Request) => {
     }
 
     const provider = String(body.provider ?? "grok");
+    const model = String(
+      body.model ??
+        (provider === "gemini"
+          ? Deno.env.get("GEMINI_MODEL") || DEFAULT_GEMINI_MODEL
+          : Deno.env.get("GROK_MODEL") || DEFAULT_GROK_MODEL),
+    );
     const prompt = buildPrompt(body);
     let services: AiService[] = [];
-    let usedProvider = "fallback";
+    let lastError = "";
 
-    const tryProvider = async (name: "gemini" | "grok") => {
-      if (name === "gemini") return callGemini(prompt);
-      return callGrok(prompt);
-    };
-
-    if (provider === "gemini" || provider === "grok") {
+    if (provider === "gemini") {
       try {
-        services = await tryProvider(provider);
-        if (services.length) usedProvider = provider;
+        services = await callGemini(prompt, model);
       } catch (err) {
-        console.warn(`${provider} failed:`, err);
+        lastError = String(err);
       }
-    } else {
-      for (const name of ["gemini", "grok"] as const) {
-        try {
-          services = await tryProvider(name);
-          if (services.length) {
-            usedProvider = name;
-            break;
-          }
-        } catch (err) {
-          console.warn(`${name} failed:`, err);
-        }
+    } else if (provider === "grok") {
+      try {
+        services = await callGrok(prompt, model);
+      } catch (err) {
+        lastError = String(err);
       }
     }
 
     if (!services.length) {
       services = fallbackServices(catalog);
-      usedProvider = "fallback";
+      return new Response(JSON.stringify({
+        services,
+        provider: "fallback",
+        model,
+        fallback: true,
+        error: lastError || "AI 未能返回有效服務項目",
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
     }
 
-    return new Response(JSON.stringify({ services, provider: usedProvider }), {
+    return new Response(JSON.stringify({
+      services,
+      provider,
+      model,
+      fallback: false,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });

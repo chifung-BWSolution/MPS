@@ -2,21 +2,20 @@ import { supabase } from '@/lib/supabase';
 import type { PitchingRecord } from '@/data/pitchingData';
 import type { QuotationServiceItem } from '@/data/quotationData';
 
-export type QuotationAiCatalogItem = {
-  id: string;
-  name: string;
-  defaultPrice: number;
-  defaultCost: number;
-  supplierName: string;
-  category: string;
-};
-
 export type QuotationAiProvider = 'grok' | 'gemini';
 
-export const QUOTATION_AI_MODEL_OPTIONS: { id: QuotationAiProvider; label: string }[] = [
-  { id: 'grok', label: 'Grok' },
-  { id: 'gemini', label: 'Gemini' },
+export const QUOTATION_AI_MODEL_OPTIONS: {
+  id: QuotationAiProvider;
+  label: string;
+  modelId: string;
+}[] = [
+  { id: 'grok', label: 'Grok', modelId: 'grok-4.5' },
+  { id: 'gemini', label: 'Gemini', modelId: 'gemini-2.0-flash' },
 ];
+
+export function getQuotationAiModelId(provider: QuotationAiProvider): string {
+  return QUOTATION_AI_MODEL_OPTIONS.find((opt) => opt.id === provider)?.modelId ?? provider;
+}
 
 export type GenerateQuotationServicesInput = {
   provider: QuotationAiProvider;
@@ -28,33 +27,30 @@ export type GenerateQuotationServicesInput = {
   catalogItems: QuotationAiCatalogItem[];
 };
 
-export type GenerateQuotationServicesResult = {
-  services: QuotationServiceItem[];
-  provider?: string;
-  fallback?: boolean;
+export type QuotationAiCatalogItem = {
+  id: string;
+  name: string;
+  defaultPrice: number;
+  defaultCost: number;
+  supplierName: string;
+  category: string;
 };
 
-async function invokeFunction<T>(slug: string, body: Record<string, unknown>): Promise<T> {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData.session?.access_token || supabaseAnonKey;
-  const url = `${supabaseUrl}/functions/v1/${slug}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      apikey: supabaseAnonKey,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-  const json = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok || json.error) {
-    throw new Error(String(json.error || `${res.status} ${res.statusText}`));
-  }
-  return json;
-}
+export type GenerateQuotationServicesResult = {
+  services: QuotationServiceItem[];
+  provider: QuotationAiProvider | 'fallback';
+  model?: string;
+  fallback: boolean;
+  error?: string;
+};
+
+type EdgeFunctionResponse = {
+  services?: Array<Record<string, unknown>>;
+  provider?: string;
+  model?: string;
+  fallback?: boolean;
+  error?: string;
+};
 
 function toServiceItems(
   raw: Array<{
@@ -97,6 +93,7 @@ function toServiceItems(
 /** Local fallback when edge function / AI keys are unavailable. */
 export function generateQuotationServicesFallback(
   input: GenerateQuotationServicesInput,
+  error?: string,
 ): GenerateQuotationServicesResult {
   const text = [
     input.requirements,
@@ -117,6 +114,9 @@ export function generateQuotationServicesFallback(
     if (text.includes('seo') && item.name.toLowerCase().includes('seo')) score += 3;
     if (text.includes('cms') && item.name.toLowerCase().includes('cms')) score += 3;
     if (text.includes('api') && item.name.toLowerCase().includes('api')) score += 3;
+    if (text.includes('website') && item.category === 'qt1') score += 2;
+    if (text.includes('logo') && item.category === 'qt3') score += 2;
+    if (text.includes('packaging') && item.category === 'qt3') score += 2;
     if (text.includes('影片') && item.category === 'qt5') score += 2;
     if (text.includes('活動') && item.category === 'qt8') score += 2;
     return { item, score };
@@ -141,47 +141,67 @@ export function generateQuotationServicesFallback(
     isSelected: true,
   }));
 
-  return { services, provider: 'fallback', fallback: true };
+  return {
+    services,
+    provider: 'fallback',
+    model: getQuotationAiModelId(input.provider),
+    fallback: true,
+    error,
+  };
 }
 
 export async function generateQuotationServices(
   input: GenerateQuotationServicesInput,
 ): Promise<GenerateQuotationServicesResult> {
-  try {
-    const response = await invokeFunction<{
-      services?: Array<Record<string, unknown>>;
-      provider?: string;
-    }>('generate-quotation-services', {
-      provider: input.provider,
-      quotationTypeName: input.quotationTypeName,
-      isComprehensive: input.isComprehensive,
-      selectedTypeNames: input.selectedTypeNames,
-      pitchingRecord: input.pitchingRecord,
-      requirements: input.requirements,
-      catalogItems: input.catalogItems,
-    });
+  const requestedModel = getQuotationAiModelId(input.provider);
 
-    const services = toServiceItems(
-      (response.services ?? []) as Array<{
-        name?: string;
-        price?: number;
-        cost?: number;
-        supplierName?: string;
-        quantity?: number;
-        discount?: number;
-        isSelected?: boolean;
-        isVisible?: boolean;
-        catalogId?: string;
-      }>,
-      input.catalogItems,
-    );
+  const { data, error } = await supabase.functions.invoke<EdgeFunctionResponse>(
+    'generate-quotation-services',
+    {
+      body: {
+        provider: input.provider,
+        model: requestedModel,
+        quotationTypeName: input.quotationTypeName,
+        isComprehensive: input.isComprehensive,
+        selectedTypeNames: input.selectedTypeNames,
+        pitchingRecord: input.pitchingRecord,
+        requirements: input.requirements,
+        catalogItems: input.catalogItems,
+      },
+    },
+  );
 
-    if (!services.length) {
-      return generateQuotationServicesFallback(input);
-    }
-
-    return { services, provider: response.provider, fallback: false };
-  } catch {
-    return generateQuotationServicesFallback(input);
+  if (error) {
+    throw new Error(error.message || 'AI 服務呼叫失敗');
   }
+
+  const response = data ?? {};
+  const services = toServiceItems(
+    (response.services ?? []) as Array<{
+      name?: string;
+      price?: number;
+      cost?: number;
+      supplierName?: string;
+      quantity?: number;
+      discount?: number;
+      isSelected?: boolean;
+      isVisible?: boolean;
+      catalogId?: string;
+    }>,
+    input.catalogItems,
+  );
+
+  if (response.fallback || response.provider === 'fallback' || !services.length) {
+    return generateQuotationServicesFallback(
+      input,
+      response.error || 'AI 未能返回有效服務項目，已改用本地規則生成',
+    );
+  }
+
+  return {
+    services,
+    provider: (response.provider as QuotationAiProvider) || input.provider,
+    model: response.model || requestedModel,
+    fallback: false,
+  };
 }
