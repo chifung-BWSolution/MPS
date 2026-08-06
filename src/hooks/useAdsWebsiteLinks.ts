@@ -42,26 +42,19 @@ export function useAdsWebsiteLinks() {
   const [error, setError] = useState<string | null>(null);
 
   const refreshStatus = useCallback(async () => {
-    const [gRes, fRes] = await Promise.all([
-      supabase.from('google_ads_campaign_websites').select('website_profile_id'),
-      supabase.from('facebook_ads_account_websites').select('website_profile_id'),
-    ]);
+    const gRes = await supabase
+      .from('google_ads_campaign_websites')
+      .select('website_profile_id');
     const googleIds = new Set(
       ((gRes.data as { website_profile_id: string }[] | null) ?? []).map((r) => r.website_profile_id),
     );
-    const facebookIds = new Set(
-      ((fRes.data as { website_profile_id: string }[] | null) ?? []).map((r) => r.website_profile_id),
-    );
-    const allIds = new Set([...googleIds, ...facebookIds]);
     const map: WebsiteAdsStatusMap = {};
-    for (const id of allIds) {
-      const g = googleIds.has(id);
-      const f = facebookIds.has(id);
-      map[id] = g && f ? 'both' : g ? 'google' : f ? 'facebook' : 'none';
+    for (const id of googleIds) {
+      map[id] = 'google';
     }
     setStatusByWebsiteId(map);
-    if (gRes.error || fRes.error) {
-      setError(gRes.error?.message || fRes.error?.message || null);
+    if (gRes.error) {
+      setError(gRes.error.message);
     }
   }, []);
 
@@ -168,12 +161,8 @@ export function useAdsWebsiteLinks() {
 
 export function adsStatusLabel(status: AdsAppliedStatus | undefined): string {
   switch (status) {
-    case 'both':
-      return 'Google+Facebook';
     case 'google':
       return 'Google';
-    case 'facebook':
-      return 'Facebook';
     default:
       return '—';
   }

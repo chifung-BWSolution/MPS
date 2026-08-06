@@ -8,6 +8,7 @@ export type AdsSourceRef = {
   accountName: string;
   campaignId?: string | null;
   campaignName?: string | null;
+  /** Legacy Facebook page refs may still exist in ads_discovered_domains */
   pageId?: string | null;
   pageName?: string | null;
 };
@@ -23,23 +24,20 @@ export type AdsDiscoveredDomain = {
   sourceRefs?: AdsSourceRef[];
 };
 
-export type AdsAppliedStatus = 'none' | 'google' | 'facebook' | 'both';
+/** Website ads status is Google-only after Facebook pivoted to vchannel_accounts */
+export type AdsAppliedStatus = 'none' | 'google';
 
 export type AdsWebsiteLinkSummary = {
   websitesLinked: number;
   domainsDiscovered: number;
   domainsUnmatched: number;
   campaignsWithLinks?: number;
-  accountsWithLinks?: number;
-  pagesScanned?: number;
-  pagesWithWebsite?: number;
   linkErrors: string[];
 };
 
 export type AdsWebsiteSyncResult = {
   success?: boolean;
   google?: AdsWebsiteLinkSummary;
-  facebook?: AdsWebsiteLinkSummary;
   unmatched: AdsDiscoveredDomain[];
   linkErrors?: string[];
   error?: string;

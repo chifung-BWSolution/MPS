@@ -29,6 +29,7 @@ type DbAccountRow = {
   login_method: string | null;
   operator_code: string | null;
   feedhive_managed: boolean;
+  facebook_ads_ad_account_id?: string | null;
   notes: string | null;
   sort_order: number;
   created_at: string;
@@ -66,6 +67,7 @@ export function mapAccountRow(row: DbAccountRow): VchannelAccount {
     loginMethod: row.login_method ?? undefined,
     operatorCode: row.operator_code ?? undefined,
     feedhiveManaged: row.feedhive_managed,
+    facebookAdsAdAccountId: row.facebook_ads_ad_account_id ?? undefined,
     notes: row.notes ?? undefined,
     sortOrder: row.sort_order,
     createdAt: row.created_at,
@@ -101,6 +103,7 @@ export function accountToDbRow(input: Partial<VchannelAccount> & Pick<VchannelAc
     login_method: input.loginMethod ?? null,
     operator_code: input.operatorCode ?? null,
     feedhive_managed: input.feedhiveManaged ?? false,
+    facebook_ads_ad_account_id: input.facebookAdsAdAccountId ?? null,
     notes: input.notes ?? null,
     sort_order: input.sortOrder ?? 0,
     updated_at: new Date().toISOString(),

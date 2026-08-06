@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Edit, Trash2, KeyRound, Loader2 } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, KeyRound, Loader2, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { Vchannel, VchannelDeviceType, VchannelImportance, VchannelStatus } from '@/types/vchannel';
 import { formatChannelCodes, parseChannelCodes } from '@/types/vchannel';
@@ -21,6 +22,7 @@ import {
   platformStatusSummary,
 } from '@/lib/vchannelPlatformStatus';
 import { fetchWorkLogTotalsByVchannelIds } from '@/services/videoOutputWorkLogService';
+import { invokeFacebookAdsVchannelLink } from '@/lib/facebookAdsApi';
 
 function ChannelWorkHoursCell({ hours }: { hours?: number }) {
   if (hours == null || hours <= 0) {
@@ -67,6 +69,7 @@ const emptyAccount = {
   loginMethod: '',
   operatorCode: '',
   feedhiveManaged: false,
+  facebookAdsAdAccountId: '',
   notes: '',
   sortOrder: 0,
 };
@@ -200,9 +203,18 @@ function ChannelForm({
 
 export function VideoChannelsList() {
   const { channels, loading, error, addChannel, updateChannel, deleteChannel } = useVchannels();
-  const { accounts, loading: accountsLoading, addAccount, updateAccount, deleteAccount, accountsForChannel } = useVchannelAccounts();
+  const {
+    accounts,
+    loading: accountsLoading,
+    fetchAccounts,
+    addAccount,
+    updateAccount,
+    deleteAccount,
+    accountsForChannel,
+  } = useVchannelAccounts();
 
   const [activeTab, setActiveTab] = useState<'channels' | 'accounts'>('channels');
+  const [syncingFbAds, setSyncingFbAds] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [importanceFilter, setImportanceFilter] = useState<string>('all');
   const [brandFilter, setBrandFilter] = useState<string>('all');
@@ -360,15 +372,37 @@ export function VideoChannelsList() {
       loginMethod: account.loginMethod ?? '',
       operatorCode: account.operatorCode ?? '',
       feedhiveManaged: account.feedhiveManaged,
+      facebookAdsAdAccountId: account.facebookAdsAdAccountId ?? '',
       notes: account.notes ?? '',
       sortOrder: account.sortOrder,
     });
     setShowAccountModal(true);
   };
 
+  const handleSyncFacebookAdsAccounts = async () => {
+    setSyncingFbAds(true);
+    try {
+      const res = await invokeFacebookAdsVchannelLink(true);
+      await fetchAccounts();
+      const links = res.vchannel_links;
+      toast.success(
+        `Facebook Ads ↔ Vchannel 同步完成（連結 ${links?.vchannels_linked ?? 0}、新建 ${links?.vchannels_created ?? 0}）`,
+      );
+      if (links?.link_errors?.length) {
+        toast.error('部分同步錯誤', { description: links.link_errors.slice(0, 2).join(' ') });
+      }
+    } catch (e) {
+      toast.error('同步失敗', { description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setSyncingFbAds(false);
+    }
+  };
+
   const saveAccount = async () => {
     const codes = parseChannelCodes(accountForm.vchannelCodesRaw || accountForm.vchannelCodes.join('/'));
-    if (!codes.length || !accountForm.platform.trim()) return;
+    // Facebook Ads auto-created rows may have empty vchannel_codes until assigned
+    if (!accountForm.platform.trim()) return;
+    if (!editingAccountId && !codes.length && !accountForm.facebookAdsAdAccountId.trim()) return;
     setSaving(true);
     const payload = {
       vchannelCodes: codes,
@@ -380,6 +414,7 @@ export function VideoChannelsList() {
       loginMethod: accountForm.loginMethod || undefined,
       operatorCode: accountForm.operatorCode || undefined,
       feedhiveManaged: accountForm.feedhiveManaged,
+      facebookAdsAdAccountId: accountForm.facebookAdsAdAccountId || undefined,
       notes: accountForm.notes || undefined,
       sortOrder: accountForm.sortOrder,
     };
@@ -615,22 +650,39 @@ export function VideoChannelsList() {
 
       {activeTab === 'accounts' && (
         <>
-          <div className="flex items-center justify-between">
-            <p className="text-[13px] text-muted-foreground">共 {accounts.length} 條平台帳號（支援 V12/V14 等多頻道共用）</p>
-            <button onClick={() => openAddAccount()} className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700">
-              <Plus size={12} /> 新增帳號
-            </button>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-[13px] text-muted-foreground">
+              共 {accounts.length} 條平台帳號（支援 V12/V14 等多頻道共用）
+              {accounts.filter(a => a.facebookAdsAdAccountId).length > 0
+                ? ` · 已連結 Facebook Ads ${accounts.filter(a => a.facebookAdsAdAccountId).length}`
+                : ''}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={syncingFbAds}
+                onClick={() => void handleSyncFacebookAdsAccounts()}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded text-[12px] font-medium hover:bg-muted disabled:opacity-50"
+              >
+                {syncingFbAds ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                同步 Facebook Ads
+              </button>
+              <button onClick={() => openAddAccount()} className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700">
+                <Plus size={12} /> 新增帳號
+              </button>
+            </div>
           </div>
           {accountsLoading ? (
             <div className="flex items-center gap-2 py-8 text-muted-foreground justify-center"><Loader2 className="animate-spin" size={16} /> 載入中...</div>
           ) : (
             <div className="bg-white rounded-md border shadow-card overflow-x-auto">
-              <table className="w-full text-[12px] min-w-[800px]">
+              <table className="w-full text-[12px] min-w-[900px]">
                 <thead className="bg-muted/30">
                   <tr>
                     <th className="text-left px-3 py-2">Vchannel</th>
                     <th className="text-left px-3 py-2">名稱</th>
                     <th className="text-left px-3 py-2">平台</th>
+                    <th className="text-left px-3 py-2">Facebook Ads</th>
                     <th className="text-left px-3 py-2">賬號ID</th>
                     <th className="text-left px-3 py-2">密碼</th>
                     <th className="text-left px-3 py-2">登入方式</th>
@@ -642,9 +694,16 @@ export function VideoChannelsList() {
                 <tbody>
                   {accounts.map(acc => (
                     <tr key={acc.id} className="border-t border-border/50 hover:bg-muted/10">
-                      <td className="px-3 py-2 font-mono font-bold">{formatChannelCodes(acc.vchannelCodes)}</td>
+                      <td className="px-3 py-2 font-mono font-bold">{formatChannelCodes(acc.vchannelCodes) || '—'}</td>
                       <td className="px-3 py-2">{acc.accountLabel}</td>
                       <td className="px-3 py-2">{acc.platform}</td>
+                      <td className="px-3 py-2 font-mono text-[11px] max-w-[160px] truncate" title={acc.facebookAdsAdAccountId}>
+                        {acc.facebookAdsAdAccountId ? (
+                          <span className="text-blue-700">{acc.facebookAdsAdAccountId}</span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2 font-mono text-[11px] max-w-[140px] truncate" title={acc.accountId}>{acc.accountId || '—'}</td>
                       <td className="px-3 py-2 font-mono text-muted-foreground">{acc.accountPassword ? '••••••••' : '—'}</td>
                       <td className="px-3 py-2 max-w-[120px] truncate" title={acc.loginMethod}>{acc.loginMethod || '—'}</td>
@@ -705,6 +764,15 @@ export function VideoChannelsList() {
               <label className="text-[12px] font-medium text-muted-foreground block mb-1">平台 *</label>
               <Input value={accountForm.platform} onChange={e => setAccountForm({ ...accountForm, platform: e.target.value })} className="h-9 text-[13px]" placeholder="Instagram" />
             </div>
+          </div>
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">Facebook Ads 帳戶 ID</label>
+            <Input
+              value={accountForm.facebookAdsAdAccountId}
+              onChange={e => setAccountForm({ ...accountForm, facebookAdsAdAccountId: e.target.value })}
+              className="h-9 text-[13px] font-mono"
+              placeholder="act_1234567890（可由同步自動填入）"
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

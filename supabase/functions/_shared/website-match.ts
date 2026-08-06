@@ -5,7 +5,6 @@ export type WebsiteRow = {
   domain_url: string | null;
   website_name: string | null;
   google_ads_customer_id?: string | null;
-  facebook_ads_ad_account_id?: string | null;
 };
 
 export type DomainMatch = {
@@ -97,24 +96,11 @@ export type GoogleCampaignWebsiteRow = {
   updated_at: string;
 };
 
-export type FacebookAccountWebsiteRow = {
-  ad_account_id: string;
-  website_profile_id: string;
-  matched_domain: string;
-  sample_final_url: string | null;
-  match_source: "page_website" | "name";
-  last_seen_at: string;
-  updated_at: string;
-};
-
 export type AdsLinkSummary = {
   websites_linked: number;
   domains_discovered: number;
   domains_unmatched: number;
   campaigns_with_links?: number;
-  accounts_with_links?: number;
-  pages_scanned?: number;
-  pages_with_website?: number;
   link_errors: string[];
 };
 
@@ -362,42 +348,6 @@ export async function replaceGoogleCampaignWebsiteLinks(
       .from("google_ads_campaign_websites")
       .upsert(chunk, { onConflict: "customer_id,campaign_id,website_profile_id" });
     if (error) throw new Error(`Google campaign website upsert failed: ${error.message}`);
-  }
-  return rows.length;
-}
-
-/** Replace junction rows for the given ad accounts with the new set. */
-export async function replaceFacebookAccountWebsiteLinks(
-  supabase: {
-    from: (t: string) => {
-      delete: () => {
-        in: (col: string, vals: string[]) => PromiseLike<{ error: { message: string } | null }>;
-      };
-      upsert: (
-        rows: unknown,
-        opts?: { onConflict?: string },
-      ) => PromiseLike<{ error: { message: string } | null }>;
-    };
-  },
-  adAccountIds: string[],
-  rows: FacebookAccountWebsiteRow[],
-): Promise<number> {
-  for (let i = 0; i < adAccountIds.length; i += 200) {
-    const chunk = adAccountIds.slice(i, i + 200);
-    if (!chunk.length) continue;
-    const { error } = await supabase
-      .from("facebook_ads_account_websites")
-      .delete()
-      .in("ad_account_id", chunk);
-    if (error) throw new Error(`Facebook account website delete failed: ${error.message}`);
-  }
-  for (let i = 0; i < rows.length; i += 500) {
-    const chunk = rows.slice(i, i + 500);
-    if (!chunk.length) continue;
-    const { error } = await supabase
-      .from("facebook_ads_account_websites")
-      .upsert(chunk, { onConflict: "ad_account_id,website_profile_id" });
-    if (error) throw new Error(`Facebook account website upsert failed: ${error.message}`);
   }
   return rows.length;
 }

@@ -122,9 +122,9 @@ where jobname like '%ads-incremental%';
 
 | Slug | 用途 |
 |------|------|
-| `supabase-functions-sync-facebook-ads` | 最近 7 日增量 + 帳戶 prune（手動 + 每日 cron）+ 帳戶↔網站連結 |
-| `supabase-functions-facebook-ads-backfill-step` | 歷史回填（`start` / `pause` / `resume` / `cancel` / `step`）；`start` 時同步網站連結 |
-| `supabase-functions-sync-ads-website-links` | 網站列表「同步廣告網域」：Google+Facebook 目的地 URL 發現與連結 |
+| `supabase-functions-sync-facebook-ads` | 最近 7 日增量 + 帳戶 prune（手動 + 每日 cron）+ 帳戶↔`vchannel_accounts` 連結；亦支援 `action: link_vchannels` |
+| `supabase-functions-facebook-ads-backfill-step` | 歷史回填（`start` / `pause` / `resume` / `cancel` / `step`）；`start` 時同步 Vchannel 連結 |
+| `supabase-functions-sync-ads-website-links` | 網站列表「同步廣告網域」：**僅 Google** 目的地 URL 發現與連結 |
 
 部署：
 
@@ -136,12 +136,18 @@ npx supabase functions deploy supabase-functions-sync-google-ads --project-ref k
 npx supabase functions deploy supabase-functions-google-ads-backfill-step --project-ref kwcevjcmdjadhrygjyfp
 ```
 
-Also apply migration `20260806200000_ads_website_junctions.sql`（`google_ads_campaign_websites`、`facebook_ads_account_websites`、`ads_discovered_domains`）。
+Also apply:
+- `20260806200000_ads_website_junctions.sql`（`google_ads_campaign_websites`、`ads_discovered_domains`）
+- `20260806220000_facebook_ads_account_vchannels.sql`（drop FB↔website；`facebook_ads_account_vchannels` + `vchannel_accounts.facebook_ads_ad_account_id`）
 
-## 網站自動連結
+## Facebook ↔ Vchannel 自動連結
 
-- Facebook：**帳戶 ↔ 多網站**（`facebook_ads_account_websites`），來源為 **Ad Account → 粉絲專頁 → Page.`website`**（先 `promote_pages`，若無權限則從 ads 取 `page_id`/`actor_id` 再讀 Page.website；帳戶名稱僅在完全沒有 Page website 時 fallback；**不刮** Creative/CTA 目的地）
-- Meta token 需具備 `pages_show_list` + `pages_read_engagement`（或 Page Public Metadata Access），否則找得到 Page ID 但讀不到 `website` 欄位
+- Facebook：**Ad Account ↔ `vchannel_accounts`**（`facebook_ads_account_vchannels`），僅 `platform = 'Facebook'`
+- 匹配順序：`facebook_ads_ad_account_id` 明確對應 → 帳戶名稱對 `account_label` → **自動建立** Vchannel 帳號（空 `vchannel_codes`，可稍後補頻道）
+- 增量同步 / 回填 `start` / 影音頻道「同步 Facebook Ads」皆會觸發
+
+## 網站自動連結（Google only）
+
 - Google：**Campaign ↔ 網站**（`google_ads_campaign_websites`），來源為 Final URL / landing page
 - 未對應網域寫入 `ads_discovered_domains`；在 `/#website/list` 按「同步廣告網域」可提示建立網站後自動重連
 
@@ -151,7 +157,8 @@ Also apply migration `20260806200000_ads_website_junctions.sql`（`google_ads_ca
 |------|------|
 | `/#marketing/facebook-ads` | Campaign 報表（日期區間、Business/帳戶篩選） |
 | `/#marketing/facebook-ads-sync` | 完整歷史回填控制台 |
-| `/#website/list` | 網站列表：廣告狀態欄、同步廣告網域、未連結網域建立提示 |
+| `/#website/list` | 網站列表：Google 廣告狀態欄、同步廣告網域、未連結網域建立提示 |
+| `/#video/channels`（帳號分頁） | Vchannel 平台帳號：Facebook Ads 欄、同步 Facebook Ads |
 
 Business 篩選與 KPI 由 warehouse 動態產生，**不需改前端**即可支援新增憑證。
 

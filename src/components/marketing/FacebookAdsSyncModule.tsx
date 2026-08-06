@@ -160,20 +160,20 @@ export function FacebookAdsSyncModule() {
               <div className="font-medium">{job?.errorCount ?? 0}</div>
             </div>
             <div>
-              <div className="text-muted-foreground text-[11px]">網站連結數</div>
-              <div className="font-medium">{job?.meta?.website_links?.websites_linked ?? '—'}</div>
+              <div className="text-muted-foreground text-[11px]">Vchannel 連結</div>
+              <div className="font-medium">{job?.meta?.vchannel_links?.vchannels_linked ?? '—'}</div>
             </div>
             <div>
-              <div className="text-muted-foreground text-[11px]">未對應網域</div>
-              <div className="font-medium">{job?.meta?.website_links?.domains_unmatched ?? '—'}</div>
+              <div className="text-muted-foreground text-[11px]">新建 Vchannel</div>
+              <div className="font-medium">{job?.meta?.vchannel_links?.vchannels_created ?? '—'}</div>
             </div>
             <div>
-              <div className="text-muted-foreground text-[11px]">有連結的帳戶</div>
-              <div className="font-medium">{job?.meta?.website_links?.accounts_with_links ?? '—'}</div>
+              <div className="text-muted-foreground text-[11px]">有連結的廣告帳戶</div>
+              <div className="font-medium">{job?.meta?.vchannel_links?.accounts_linked ?? '—'}</div>
             </div>
             <div>
-              <div className="text-muted-foreground text-[11px]">發現網域數</div>
-              <div className="font-medium">{job?.meta?.website_links?.domains_discovered ?? '—'}</div>
+              <div className="text-muted-foreground text-[11px]">名稱匹配</div>
+              <div className="font-medium">{job?.meta?.vchannel_links?.matched_name ?? '—'}</div>
             </div>
           </div>
           <p className="text-[12px] text-muted-foreground leading-relaxed">
@@ -183,7 +183,7 @@ export function FacebookAdsSyncModule() {
             {job?.meta?.businesses?.length
               ? ` 目前任務涵蓋：${job.meta.businesses.join('、')}。`
               : ''}
-            {' '}啟動時會依 Creative 目的地 URL 自動對應網站；未對應網域可到「網站列表」用「同步廣告網域」建立。
+            {' '}啟動時會將 Facebook 廣告帳戶對應到 <code className="text-[11px]">vchannel_accounts</code>（platform = Facebook），找不到則自動建立。
           </p>
         </div>
 

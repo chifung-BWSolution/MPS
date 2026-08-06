@@ -6,7 +6,7 @@ import {
   countMonthsInclusive,
   fetchAllAccounts,
   fetchDailyMetricsForRange,
-  linkFacebookAccountWebsites,
+  linkFacebookAccountVchannels,
   loadCredentials,
   metaHistoryStartDate,
   monthEnd,
@@ -85,9 +85,8 @@ Deno.serve(async (req) => {
       }
 
       const nowIso = now.toISOString();
-      const websiteLinks = await linkFacebookAccountWebsites(
+      const vchannelLinks = await linkFacebookAccountVchannels(
         supabase,
-        credentials,
         accounts,
         nowIso,
       );
@@ -117,7 +116,7 @@ Deno.serve(async (req) => {
           account_business: Object.fromEntries(
             enabled.map((a) => [a.ad_account_id, a.business_key]),
           ),
-          website_links: websiteLinks,
+          vchannel_links: vchannelLinks,
         },
       };
       const { error } = await supabase.from("facebook_ads_backfill_jobs").insert(job);

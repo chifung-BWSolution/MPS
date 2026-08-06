@@ -18,26 +18,6 @@ export type WebsiteGoogleAdCampaign = {
   conversions: number;
 };
 
-export type WebsiteFacebookAdAccount = {
-  platform: 'facebook';
-  key: string;
-  adAccountId: string;
-  accountName: string;
-  status: string;
-  businessName?: string;
-  currencyCode?: string;
-  matchedDomain: string;
-  sampleFinalUrl: string | null;
-  matchSource: string;
-  lastSeenAt: string;
-  campaignCount: number;
-  impressions: number;
-  clicks: number;
-  spendMicros: number;
-  conversions: number;
-};
-
 export type WebsitePaidAdsData = {
   googleCampaigns: WebsiteGoogleAdCampaign[];
-  facebookAccounts: WebsiteFacebookAdAccount[];
 };

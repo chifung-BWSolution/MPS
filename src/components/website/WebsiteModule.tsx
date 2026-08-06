@@ -871,14 +871,8 @@ function AdsAppliedBadge({ status }: { status?: AdsAppliedStatus }) {
   if (!status || status === 'none') {
     return <span className="text-[11px] text-muted-foreground">—</span>;
   }
-  const cls =
-    status === 'both'
-      ? 'bg-teal-50 text-teal-800 border-teal-200'
-      : status === 'google'
-        ? 'bg-amber-50 text-amber-800 border-amber-200'
-        : 'bg-blue-50 text-blue-800 border-blue-200';
   return (
-    <span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded border', cls)}>
+    <span className="text-[11px] font-medium px-1.5 py-0.5 rounded border bg-amber-50 text-amber-800 border-amber-200">
       {label}
     </span>
   );
@@ -904,7 +898,7 @@ function UnmatchedAdsDomainsModal({
           <div>
             <h3 className="text-[16px] font-bold">未連結的廣告網域</h3>
             <p className="text-[12px] text-muted-foreground mt-0.5">
-              從 Google / Facebook Ads 偵測到的目的地網域，尚未對應到網站列表。請建立網站或略過。
+              從 Google Ads 偵測到的目的地網域，尚未對應到網站列表。請建立網站或略過。
             </p>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-muted rounded" disabled={syncing}>
@@ -963,21 +957,7 @@ function UnmatchedAdsDomainsModal({
                               </span>
                               <span className="text-muted-foreground truncate">({ref.accountId})</span>
                             </div>
-                            {ref.platform === 'facebook' ? (
-                              ref.pageId || ref.pageName ? (
-                                <div className="mt-0.5 text-muted-foreground">
-                                  粉絲專頁：
-                                  <span className="text-foreground font-medium ml-1">
-                                    {ref.pageName || ref.pageId}
-                                  </span>
-                                  {ref.pageId && ref.pageName ? (
-                                    <span className="ml-1">({ref.pageId})</span>
-                                  ) : null}
-                                </div>
-                              ) : (
-                                <div className="mt-0.5 text-muted-foreground">粉絲專頁：—</div>
-                              )
-                            ) : ref.campaignId || ref.campaignName ? (
+                            {ref.campaignId || ref.campaignName ? (
                               <div className="mt-0.5 text-muted-foreground">
                                 Campaign：
                                 <span className="text-foreground font-medium ml-1">
@@ -1445,28 +1425,19 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
     }
     const unmatchedCount = r.result.unmatched?.length ?? 0;
     const g = r.result.google?.websitesLinked ?? 0;
-    const f = r.result.facebook?.websitesLinked ?? 0;
-    const pagesScanned = r.result.facebook?.pagesScanned ?? 0;
-    const pagesWithWebsite = r.result.facebook?.pagesWithWebsite ?? 0;
     const errors = [
       ...(r.result.linkErrors || []),
       ...(r.result.google?.linkErrors || []),
-      ...(r.result.facebook?.linkErrors || []),
     ];
-    toast.success(
-      `廣告網域同步完成（Google 連結 ${g}、Facebook 連結 ${f}；粉絲專頁 ${pagesWithWebsite}/${pagesScanned} 有 website）`,
-    );
+    toast.success(`廣告網域同步完成（Google 連結 ${g}）`);
     if (errors.length) {
-      const permissionHint = errors.some((e) => e.includes('pages_read'))
-        ? 'Meta token 缺少 pages_read_engagement / pages_show_list，無法讀取粉絲專頁 website。'
-        : '';
       toast.error('部分同步錯誤', {
-        description: [permissionHint, ...errors.slice(0, 2)].filter(Boolean).join(' '),
+        description: errors.slice(0, 2).join(' '),
       });
     }
     if (unmatchedCount > 0) setShowUnmatchedModal(true);
-    else if (!errors.length && g + f > 0) toast.message('所有偵測到的網域皆已對應或略過');
-    else if (!errors.length && g + f === 0) {
+    else if (!errors.length && g > 0) toast.message('所有偵測到的網域皆已對應或略過');
+    else if (!errors.length && g === 0) {
       toast.message('未發現可連結的廣告目的地網域（請確認 Ads API 權限與廣告 Final URL）');
     }
   };

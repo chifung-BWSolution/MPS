@@ -63,11 +63,13 @@ export type FacebookAdsBackfillJob = {
     account_business?: Record<string, string>;
     businesses?: string[];
     credentials_count?: number;
-    website_links?: {
-      websites_linked?: number;
-      domains_discovered?: number;
-      domains_unmatched?: number;
-      accounts_with_links?: number;
+    vchannel_links?: {
+      accounts_processed?: number;
+      accounts_linked?: number;
+      vchannels_linked?: number;
+      vchannels_created?: number;
+      matched_explicit?: number;
+      matched_name?: number;
       link_errors?: string[];
     };
   };

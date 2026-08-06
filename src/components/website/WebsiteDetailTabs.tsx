@@ -620,26 +620,17 @@ export function WebsiteAdsTab({ site }: { site: WebsiteProfileFull }) {
   const [preset, setPreset] = useState<DateRangePreset>('30d');
   const {
     googleCampaigns,
-    facebookAccounts,
     loading,
     error,
     dateFrom,
     dateTo,
   } = useWebsitePaidAds(site.id, preset);
 
-  const totalItems = googleCampaigns.length + facebookAccounts.length;
-  const totalSpendMicros =
-    googleCampaigns.reduce((sum, c) => sum + c.spendMicros, 0) +
-    facebookAccounts.reduce((sum, a) => sum + a.spendMicros, 0);
-  const totalImpressions =
-    googleCampaigns.reduce((sum, c) => sum + c.impressions, 0) +
-    facebookAccounts.reduce((sum, a) => sum + a.impressions, 0);
-  const totalClicks =
-    googleCampaigns.reduce((sum, c) => sum + c.clicks, 0) +
-    facebookAccounts.reduce((sum, a) => sum + a.clicks, 0);
-  const totalConversions =
-    googleCampaigns.reduce((sum, c) => sum + c.conversions, 0) +
-    facebookAccounts.reduce((sum, a) => sum + a.conversions, 0);
+  const totalItems = googleCampaigns.length;
+  const totalSpendMicros = googleCampaigns.reduce((sum, c) => sum + c.spendMicros, 0);
+  const totalImpressions = googleCampaigns.reduce((sum, c) => sum + c.impressions, 0);
+  const totalClicks = googleCampaigns.reduce((sum, c) => sum + c.clicks, 0);
+  const totalConversions = googleCampaigns.reduce((sum, c) => sum + c.conversions, 0);
 
   return (
     <div className="space-y-4">
@@ -647,11 +638,11 @@ export function WebsiteAdsTab({ site }: { site: WebsiteProfileFull }) {
         <div>
           <h4 className="text-[15px] font-bold">付費廣告</h4>
           <p className="text-[12px] text-muted-foreground mt-0.5">
-            Google 廣告活動 {googleCampaigns.length} · Facebook 廣告帳戶 {facebookAccounts.length}
+            Google 廣告活動 {googleCampaigns.length}
             <span className="ml-2">· 指標區間 {dateFrom} → {dateTo}</span>
           </p>
           <p className="text-[11px] text-muted-foreground mt-1">
-            資料由 Google / Facebook Ads API 同步自動關聯，無法手動新增或編輯。
+            資料由 Google Ads API 同步自動關聯（Facebook Ads 改對應 Vchannel 帳號），無法手動新增或編輯。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -689,7 +680,7 @@ export function WebsiteAdsTab({ site }: { site: WebsiteProfileFull }) {
           <Megaphone size={32} className="text-muted-foreground mx-auto mb-3" />
           <p className="text-[14px] font-medium text-muted-foreground">尚未關聯任何付費廣告</p>
           <p className="text-[12px] text-muted-foreground mt-1">
-            請先於網站列表執行「同步廣告網域」，或完成 Google / Facebook Ads 同步後自動匹配。
+            請先於網站列表執行「同步廣告網域」，或完成 Google Ads 同步後自動匹配。
           </p>
         </div>
       ) : (
@@ -784,65 +775,6 @@ export function WebsiteAdsTab({ site }: { site: WebsiteProfileFull }) {
             </div>
           )}
 
-          {facebookAccounts.length > 0 && (
-            <div className="space-y-2">
-              <h5 className="text-[13px] font-semibold">Facebook Ads 帳戶</h5>
-              <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[880px]">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/30">
-                        <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">帳戶名稱</th>
-                        <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Business</th>
-                        <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">匹配網域</th>
-                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">活動數</th>
-                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">曝光</th>
-                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">點擊</th>
-                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">花費</th>
-                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">轉換</th>
-                        <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {facebookAccounts.map((a) => (
-                        <tr key={a.key} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                          <td className="px-4 py-3">
-                            <div className="text-[13px] font-medium">{a.accountName}</div>
-                            <div className="text-[11px] text-muted-foreground font-mono">{a.adAccountId}</div>
-                          </td>
-                          <td className="px-4 py-3 text-[12px] text-muted-foreground whitespace-nowrap">
-                            {a.businessName || '—'}
-                          </td>
-                          <td className="px-4 py-3 text-[12px]">
-                            <div>{a.matchedDomain || '—'}</div>
-                            {a.sampleFinalUrl && (
-                              <a
-                                href={a.sampleFinalUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-[11px] text-teal-700 hover:underline inline-flex items-center gap-0.5 max-w-[200px] truncate"
-                              >
-                                {a.sampleFinalUrl}
-                                <ExternalLink size={10} />
-                              </a>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-[12px] text-right tabular-nums">{a.campaignCount}</td>
-                          <td className="px-4 py-3 text-[12px] text-right tabular-nums">{a.impressions.toLocaleString()}</td>
-                          <td className="px-4 py-3 text-[12px] text-right tabular-nums">{a.clicks.toLocaleString()}</td>
-                          <td className="px-4 py-3 text-[13px] text-right tabular-nums font-medium">{formatMoneyFromMicros(a.spendMicros)}</td>
-                          <td className="px-4 py-3 text-[12px] text-right tabular-nums">
-                            {a.conversions.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                          </td>
-                          <td className="px-4 py-3">{adsApiStatusBadge(a.status)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
         </>
       )}
     </div>

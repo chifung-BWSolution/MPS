@@ -15,7 +15,7 @@ function daysAgoIso(n: number) {
   return d.toISOString().slice(0, 10);
 }
 
-const EMPTY: WebsitePaidAdsData = { googleCampaigns: [], facebookAccounts: [] };
+const EMPTY: WebsitePaidAdsData = { googleCampaigns: [] };
 
 export function useWebsitePaidAds(
   websiteProfileId: string,
@@ -53,7 +53,6 @@ export function useWebsitePaidAds(
 
   return {
     googleCampaigns: data.googleCampaigns,
-    facebookAccounts: data.facebookAccounts,
     loading,
     error,
     dateFrom: range.from,
