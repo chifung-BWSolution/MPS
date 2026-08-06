@@ -6,7 +6,21 @@ export const corsHeaders = {
 
 const ASANA_API = "https://app.asana.com/api/1.0";
 
+/** BWT Active 1 開始緊密跟進中 (not BWA Video V12) */
+export const DEFAULT_PITCHING_PROJECT_GID = "1208704092427502";
+export const DEFAULT_SYNC_YEAR = 2026;
+export const DEFAULT_STATUS_FIELD_NAME = "狀態";
+
 export type PitchingStatus = "initial" | "following_up" | "confirmed" | "closed";
+
+export type AsanaCustomField = {
+  gid?: string;
+  name?: string;
+  type?: string;
+  display_value?: string | null;
+  text_value?: string | null;
+  enum_value?: { gid?: string; name?: string; color?: string } | null;
+};
 
 export type AsanaTask = {
   gid: string;
@@ -18,15 +32,19 @@ export type AsanaTask = {
   completed?: boolean;
   permalink_url?: string;
   assignee?: { gid?: string; name?: string } | null;
+  custom_fields?: AsanaCustomField[];
   memberships?: Array<{
     project?: { gid?: string; name?: string };
     section?: { gid?: string; name?: string };
   }>;
 };
 
-export type AsanaProject = {
-  gid: string;
-  name: string;
+export type SyncProjectConfig = {
+  project_gid: string;
+  project_name: string;
+  project_types: string[];
+  sync_year?: number | null;
+  status_field_name?: string | null;
 };
 
 function getToken(): string {
@@ -58,25 +76,6 @@ async function asanaFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return json as T;
 }
 
-export async function listWorkspaceProjects(workspaceGid: string): Promise<AsanaProject[]> {
-  const out: AsanaProject[] = [];
-  let offset: string | undefined;
-  do {
-    const qs = new URLSearchParams({
-      limit: "100",
-      opt_fields: "name,gid",
-      ...(offset ? { offset } : {}),
-    });
-    const data = await asanaFetch<{
-      data: AsanaProject[];
-      next_page?: { offset?: string } | null;
-    }>(`/workspaces/${workspaceGid}/projects?${qs}`);
-    out.push(...(data.data || []));
-    offset = data.next_page?.offset;
-  } while (offset);
-  return out;
-}
-
 export async function listProjectTasks(projectGid: string): Promise<AsanaTask[]> {
   const optFields = [
     "name",
@@ -89,6 +88,12 @@ export async function listProjectTasks(projectGid: string): Promise<AsanaTask[]>
     "assignee.name",
     "memberships.project.name",
     "memberships.section.name",
+    "custom_fields",
+    "custom_fields.name",
+    "custom_fields.display_value",
+    "custom_fields.text_value",
+    "custom_fields.enum_value",
+    "custom_fields.enum_value.name",
   ].join(",");
   const out: AsanaTask[] = [];
   let offset: string | undefined;
@@ -143,41 +148,72 @@ export function inferProjectTypes(
 
   if (/bwl|活動|event|catering|fcc/.test(name)) types.add("bwl_event");
   if (/system|系統|ngo|platform|app/.test(name)) types.add("bwt_system");
-  if (/web|網頁|website|shopify|site|platform/.test(name)) types.add("bwt_web");
+  if (/web|網頁|website|shopify|site/.test(name)) types.add("bwt_web");
 
   if (types.size === 0 && projectTypes.length) {
     projectTypes.forEach((t) => types.add(t));
   }
-  if (types.size === 0) {
-    if (/^bwt/i.test(taskName)) types.add("bwt_web");
-    else if (/^bwl/i.test(taskName)) types.add("bwl_event");
-  }
+  if (types.size === 0 && /^bwt/i.test(taskName)) types.add("bwt_web");
 
   return [...types];
 }
 
-export function mapAsanaStatus(
-  task: AsanaTask,
-  sectionName: string,
-  projectName: string,
-): PitchingStatus {
-  const blob = `${sectionName} ${projectName} ${task.name}`.toLowerCase();
-  if (task.completed || /done|已成交|已結案|closed|完成/.test(blob)) {
-    return "closed";
-  }
-  if (/確認|confirmed|quote ready|準備報價/.test(blob)) {
-    return "confirmed";
-  }
-  if (/跟進|active|follow|進行|pitching/.test(blob)) {
-    return "following_up";
-  }
-  return "initial";
-}
-
+/** Enquiry date = Task created_at (date part only). */
 export function taskInquiryDate(task: AsanaTask): string {
-  if (task.due_on) return task.due_on;
   if (task.created_at) return task.created_at.slice(0, 10);
   return new Date().toISOString().slice(0, 10);
+}
+
+export function taskCreatedYear(task: AsanaTask): number | null {
+  if (!task.created_at) return null;
+  const y = parseInt(task.created_at.slice(0, 4), 10);
+  return Number.isFinite(y) ? y : null;
+}
+
+export function isTaskInSyncYear(task: AsanaTask, syncYear: number): boolean {
+  return taskCreatedYear(task) === syncYear;
+}
+
+export function customFieldDisplayValue(field: AsanaCustomField): string {
+  if (field.display_value?.trim()) return field.display_value.trim();
+  if (field.enum_value?.name?.trim()) return field.enum_value.name.trim();
+  if (field.text_value?.trim()) return field.text_value.trim();
+  return "";
+}
+
+export function findStatusCustomField(
+  task: AsanaTask,
+  preferredFieldName: string,
+): AsanaCustomField | undefined {
+  const fields = task.custom_fields || [];
+  if (!fields.length) return undefined;
+
+  const preferred = preferredFieldName.trim().toLowerCase();
+  const exact = fields.find((f) => (f.name || "").trim().toLowerCase() === preferred);
+  if (exact) return exact;
+
+  return fields.find((f) => /狀態|status|pitching/i.test(f.name || ""));
+}
+
+export function extractStatusLabel(task: AsanaTask, statusFieldName: string): string {
+  const field = findStatusCustomField(task, statusFieldName);
+  if (!field) return "";
+  return customFieldDisplayValue(field);
+}
+
+export function mapCustomFieldStatus(label: string, task: AsanaTask): PitchingStatus {
+  const raw = label.trim();
+  if (!raw) {
+    if (task.completed) return "closed";
+    return "initial";
+  }
+
+  if (/已結案|结案|closed|done|完成/.test(raw)) return "closed";
+  if (/確認項目|确认项目|確認|confirmed/.test(raw)) return "confirmed";
+  if (/跟進中|跟进中|following|follow/.test(raw)) return "following_up";
+  if (/初步提案|初步|initial|proposal/.test(raw)) return "initial";
+
+  return "initial";
 }
 
 export function taskSectionName(task: AsanaTask, projectGid: string): string {
@@ -187,22 +223,30 @@ export function taskSectionName(task: AsanaTask, projectGid: string): string {
 
 export function asanaTaskToRecord(
   task: AsanaTask,
-  projectGid: string,
-  projectName: string,
-  defaultProjectTypes: string[],
+  project: SyncProjectConfig,
   syncedAt: string,
 ) {
-  const sectionName = taskSectionName(task, projectGid);
+  const statusFieldName =
+    project.status_field_name?.trim() ||
+    Deno.env.get("ASANA_STATUS_FIELD_NAME") ||
+    DEFAULT_STATUS_FIELD_NAME;
+  const statusLabel = extractStatusLabel(task, statusFieldName);
+  const sectionName = taskSectionName(task, project.project_gid);
   const description = taskDescription(task);
   const clientName = parseClientNameFromTaskName(task.name);
-  const projectTypes = inferProjectTypes(task.name, defaultProjectTypes, projectName);
+  const projectTypes = inferProjectTypes(
+    task.name,
+    project.project_types || [],
+    project.project_name,
+  );
 
   return {
     id: `asana_${task.gid}`,
     asana_task_gid: task.gid,
-    asana_project_gid: projectGid,
-    asana_project_name: projectName,
+    asana_project_gid: project.project_gid,
+    asana_project_name: project.project_name,
     asana_section_name: sectionName || null,
+    asana_status_label: statusLabel || null,
     pitching_code: `ASANA-${task.gid.slice(-8)}`,
     client_name: clientName || null,
     display_name: task.name.trim(),
@@ -211,16 +255,16 @@ export function asanaTaskToRecord(
     project_types: projectTypes,
     assigned_pm: task.assignee?.gid || null,
     assigned_pm_name: task.assignee?.name || "",
-    status: mapAsanaStatus(task, sectionName, projectName),
+    status: mapCustomFieldStatus(statusLabel, task),
     asana_link: task.permalink_url || `https://app.asana.com/0/0/${task.gid}`,
     synced_at: syncedAt,
     updated_at: syncedAt,
   };
 }
 
-export async function discoverPitchingProjects(workspaceGid: string): Promise<AsanaProject[]> {
-  const all = await listWorkspaceProjects(workspaceGid);
-  return all.filter((p) =>
-    /active|pitching|報價|quote|bwt|bwl|bwa/i.test(p.name),
-  );
+export function resolveSyncYear(project: SyncProjectConfig): number {
+  if (project.sync_year && project.sync_year > 2000) return project.sync_year;
+  const envYear = parseInt(Deno.env.get("ASANA_SYNC_YEAR") || "", 10);
+  if (Number.isFinite(envYear) && envYear > 2000) return envYear;
+  return DEFAULT_SYNC_YEAR;
 }

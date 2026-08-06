@@ -39,7 +39,8 @@ supabase secrets set ASANA_WORKSPACE_GID=6649488167653
 
 Migration 已預設 seed 以下 project GID（可在 `asana_pitching_projects` 表調整）：
 
-- `1209549009281325` — BWT Active 1 開始緊密跟進中  
+- `1208704092427502` — BWT Active 1 開始緊密跟進中（正確 GID）
+- ~~`1209549009281325`~~ — 舊 seed 錯誤（實為 BWA Video V12，已停用）
 - `1201898424971757` — BWL Active 1 準備報價單  
 - 其他 BWT / BWL Active 專案  
 
