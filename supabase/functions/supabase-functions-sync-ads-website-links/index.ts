@@ -50,6 +50,10 @@ function mapSourceRefs(raw: unknown) {
         campaignName: r.campaignName != null && String(r.campaignName)
           ? String(r.campaignName)
           : null,
+        pageId: r.pageId != null && String(r.pageId) ? String(r.pageId) : null,
+        pageName: r.pageName != null && String(r.pageName)
+          ? String(r.pageName)
+          : null,
       };
     })
     .filter((x): x is NonNullable<typeof x> => !!x);
@@ -93,6 +97,8 @@ async function runLinkPass(supabase: ReturnType<typeof createClient>) {
     domains_discovered: 0,
     domains_unmatched: 0,
     accounts_with_links: 0,
+    pages_scanned: 0,
+    pages_with_website: 0,
     link_errors: [] as string[],
   };
 
@@ -150,6 +156,8 @@ async function runLinkPass(supabase: ReturnType<typeof createClient>) {
       domainsDiscovered: facebookSummary.domains_discovered,
       domainsUnmatched: facebookSummary.domains_unmatched,
       accountsWithLinks: facebookSummary.accounts_with_links,
+      pagesScanned: facebookSummary.pages_scanned,
+      pagesWithWebsite: facebookSummary.pages_with_website,
       linkErrors: facebookSummary.link_errors,
     },
     unmatched,

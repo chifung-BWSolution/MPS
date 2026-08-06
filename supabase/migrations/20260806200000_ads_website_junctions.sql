@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS public.facebook_ads_account_websites (
   website_profile_id  text NOT NULL REFERENCES public.webandsystem_list(id) ON DELETE CASCADE,
   matched_domain      text NOT NULL DEFAULT '',
   sample_final_url    text,
-  match_source        text NOT NULL DEFAULT 'creative_link', -- creative_link | name
+  match_source        text NOT NULL DEFAULT 'page_website', -- page_website | name
   last_seen_at        timestamptz NOT NULL DEFAULT now(),
   created_at          timestamptz NOT NULL DEFAULT now(),
   updated_at          timestamptz NOT NULL DEFAULT now(),

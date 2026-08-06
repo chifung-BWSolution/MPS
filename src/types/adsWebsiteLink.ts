@@ -8,6 +8,8 @@ export type AdsSourceRef = {
   accountName: string;
   campaignId?: string | null;
   campaignName?: string | null;
+  pageId?: string | null;
+  pageName?: string | null;
 };
 
 export type AdsDiscoveredDomain = {
@@ -29,6 +31,8 @@ export type AdsWebsiteLinkSummary = {
   domainsUnmatched: number;
   campaignsWithLinks?: number;
   accountsWithLinks?: number;
+  pagesScanned?: number;
+  pagesWithWebsite?: number;
   linkErrors: string[];
 };
 

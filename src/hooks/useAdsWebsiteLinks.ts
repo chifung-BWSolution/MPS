@@ -18,6 +18,8 @@ function mapSourceRefs(raw: unknown): AdsSourceRef[] {
         accountName: String(r.accountName || accountId),
         campaignId: r.campaignId != null && String(r.campaignId) ? String(r.campaignId) : null,
         campaignName: r.campaignName != null && String(r.campaignName) ? String(r.campaignName) : null,
+        pageId: r.pageId != null && String(r.pageId) ? String(r.pageId) : null,
+        pageName: r.pageName != null && String(r.pageName) ? String(r.pageName) : null,
       } satisfies AdsSourceRef;
     })
     .filter((x): x is AdsSourceRef => !!x);

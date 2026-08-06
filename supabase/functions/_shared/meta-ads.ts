@@ -528,28 +528,160 @@ export function metaHistoryStartDate(now = new Date()): string {
   return toIsoDate(addMonths(d, -(META_INSIGHTS_MAX_MONTHS - 1)));
 }
 
-/** Recursively collect http(s) URL strings from nested creative JSON. */
-function collectHttpUrls(value: unknown, out: Set<string>, depth = 0): void {
-  if (value == null || depth > 24) return;
-  if (typeof value === "string") {
-    const s = value.trim();
-    if (/^https?:\/\//i.test(s)) out.add(s);
-    return;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) collectHttpUrls(item, out, depth + 1);
-    return;
-  }
-  if (typeof value === "object") {
-    for (const v of Object.values(value as Record<string, unknown>)) {
-      collectHttpUrls(v, out, depth + 1);
+/** Split Page.website (sometimes comma/newline separated) into URL candidates. */
+function parsePageWebsiteField(raw: unknown): string[] {
+  if (raw == null) return [];
+  const text = String(raw).trim();
+  if (!text) return [];
+  return text
+    .split(/[\s,;|]+/)
+    .map((s) => s.trim())
+    .filter((s) => /^https?:\/\//i.test(s) || /^[a-z0-9][a-z0-9.-]+\.[a-z]{2,}/i.test(s))
+    .map((s) => (/^https?:\/\//i.test(s) ? s : `https://${s}`));
+}
+
+function isFacebookHostedDomain(domain: string): boolean {
+  const d = domain.toLowerCase();
+  return (
+    d === "facebook.com" ||
+    d.endsWith(".facebook.com") ||
+    d === "fb.com" ||
+    d.endsWith(".fb.com") ||
+    d === "fb.me" ||
+    d.endsWith(".fb.me") ||
+    d === "instagram.com" ||
+    d.endsWith(".instagram.com") ||
+    d === "meta.com" ||
+    d.endsWith(".meta.com")
+  );
+}
+
+/** Collect unique fan-page IDs used by ads under an ad account (not CTA URLs). */
+async function collectPageIdsFromAds(
+  cred: MetaCredential,
+  adAccountId: string,
+): Promise<string[]> {
+  const ads = await graphGetAll(
+    cred,
+    `/${adAccountId}/ads`,
+    {
+      // Only identity fields — do NOT scrape creative destination/CTA links
+      fields: "creative{object_story_spec{page_id},actor_id,object_id}",
+      limit: "100",
+    },
+    15,
+  );
+  const ids = new Set<string>();
+  for (const ad of ads) {
+    const creative = (ad.creative && typeof ad.creative === "object")
+      ? (ad.creative as Record<string, unknown>)
+      : null;
+    if (!creative) continue;
+    const spec = (creative.object_story_spec &&
+        typeof creative.object_story_spec === "object")
+      ? (creative.object_story_spec as Record<string, unknown>)
+      : null;
+    for (const raw of [spec?.page_id, creative.actor_id, creative.object_id]) {
+      const id = String(raw || "").trim();
+      // Page IDs are numeric strings; skip creative story ids that look like "pageId_postId"
+      if (/^\d{5,}$/.test(id)) ids.add(id);
     }
   }
+  return [...ids];
+}
+
+type PageWebsiteLookup = {
+  id: string;
+  name: string;
+  website: string | null;
+  access_token?: string;
+};
+
+/** Pages manageable by this token, often includes website + page access_token. */
+async function loadManagedPages(
+  cred: MetaCredential,
+): Promise<Map<string, PageWebsiteLookup>> {
+  const map = new Map<string, PageWebsiteLookup>();
+  try {
+    const rows = await graphGetAll(
+      cred,
+      "/me/accounts",
+      { fields: "id,name,website,link,access_token", limit: "100" },
+      10,
+    );
+    for (const row of rows) {
+      const id = String(row.id || "").trim();
+      if (!id) continue;
+      map.set(id, {
+        id,
+        name: String(row.name || id),
+        website: row.website != null ? String(row.website) : null,
+        access_token: row.access_token != null
+          ? String(row.access_token)
+          : undefined,
+      });
+    }
+  } catch {
+    // token may be system-user without /me/accounts
+  }
+  return map;
+}
+
+async function fetchPagesByIds(
+  cred: MetaCredential,
+  pageIds: string[],
+  managed?: Map<string, PageWebsiteLookup>,
+): Promise<Record<string, unknown>[]> {
+  const unique = [...new Set(pageIds.filter(Boolean))];
+  if (!unique.length) return [];
+  const pages = await mapPool(unique, 4, async (pageId) => {
+    const managedHit = managed?.get(pageId);
+    if (managedHit && parsePageWebsiteField(managedHit.website).length) {
+      return {
+        id: managedHit.id,
+        name: managedHit.name,
+        website: managedHit.website,
+      };
+    }
+    // Prefer page access token when available (can read Page.website)
+    if (managedHit?.access_token) {
+      try {
+        const pageCred: MetaCredential = {
+          ...cred,
+          access_token: managedHit.access_token,
+        };
+        const detail = await graphGet(pageCred, `/${pageId}`, {
+          fields: "id,name,website,link",
+        });
+        return detail;
+      } catch {
+        // fall through to app token
+      }
+    }
+    try {
+      return await graphGet(cred, `/${pageId}`, {
+        fields: "id,name,website,link",
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return {
+        id: pageId,
+        name: managedHit?.name || pageId,
+        website: managedHit?.website ?? null,
+        _error: msg.slice(0, 120),
+      };
+    }
+  });
+  return pages.filter((p) => p && p.id);
 }
 
 /**
- * Discover landing domains from ENABLED ad creatives and link accounts to
- * webandsystem_list. Clears/replaces junction rows for processed accounts.
+ * Discover company websites from ENABLED ad accounts via:
+ *   Ad Account → fan pages → Page.website
+ * Page discovery order:
+ *   1) act_{id}/promote_pages
+ *   2) fallback: page ids referenced by ads (object_story_spec.page_id / actor_id)
+ * Never scrapes creative/CTA destination URLs (avoids wa.link / fbcdn noise).
  */
 export async function linkFacebookAccountWebsites(
   supabase: {
@@ -572,6 +704,15 @@ export async function linkFacebookAccountWebsites(
   const discovered: DiscoveredDomainInput[] = [];
   const accountsWithLinks = new Set<string>();
   const websitesLinked = new Set<string>();
+  const pageDomainsThisRun = new Set<string>();
+  let pagesScanned = 0;
+  let pagesWithWebsite = 0;
+
+  // Cache /me/accounts per credential (page tokens + website)
+  const managedByCred = new Map<string, Map<string, PageWebsiteLookup>>();
+  await mapPool(credentials, 2, async (cred) => {
+    managedByCred.set(cred.id, await loadManagedPages(cred));
+  });
 
   await mapPool(targets, ACCOUNT_CONCURRENCY, async (account) => {
     const cred = credByKey.get(account.business_key);
@@ -582,74 +723,96 @@ export async function linkFacebookAccountWebsites(
       return;
     }
     try {
-      const ads = await graphGetAll(
+      const managed = managedByCred.get(cred.id) || new Map();
+      let pageSource = "promote_pages";
+      let pages = await graphGetAll(
         cred,
-        `/${account.ad_account_id}/ads`,
+        `/${account.ad_account_id}/promote_pages`,
         {
-          fields:
-            "id,name,campaign_id,campaign{id,name},creative{object_story_spec,call_to_action,asset_feed_spec,link_url}",
+          fields: "id,name,website,link",
           limit: "100",
         },
-        20,
+        10,
       );
 
-      // domain -> urls + campaign refs seen for this account
-      const domainMeta = new Map<
-        string,
-        { urls: string[]; campaigns: Map<string, string> }
-      >();
-      const rememberUrl = (
-        url: string,
-        campaignId: string | null,
-        campaignName: string | null,
-      ) => {
-        const domains = extractDomainsFromUrls([url]);
-        for (const domain of domains) {
-          let meta = domainMeta.get(domain);
-          if (!meta) {
-            meta = { urls: [], campaigns: new Map() };
-            domainMeta.set(domain, meta);
-          }
-          if (!meta.urls.includes(url)) meta.urls.push(url);
-          if (campaignId) {
-            meta.campaigns.set(
-              campaignId,
-              campaignName || meta.campaigns.get(campaignId) || campaignId,
-            );
-          }
-        }
-      };
-
-      for (const ad of ads) {
-        const campaignObj = (ad.campaign && typeof ad.campaign === "object")
-          ? (ad.campaign as Record<string, unknown>)
-          : null;
-        const campaignId = String(
-          campaignObj?.id || ad.campaign_id || "",
-        ) || null;
-        const campaignName = campaignObj?.name != null
-          ? String(campaignObj.name)
-          : null;
-        const urlSet = new Set<string>();
-        collectHttpUrls(ad.creative ?? ad, urlSet);
-        for (const url of urlSet) rememberUrl(url, campaignId, campaignName);
+      // Token often lacks promote_pages access — fall back to pages used by ads
+      if (pages.length === 0) {
+        pageSource = "ads_page_ids";
+        const pageIds = await collectPageIdsFromAds(cred, account.ad_account_id);
+        pages = await fetchPagesByIds(cred, pageIds, managed);
+      } else {
+        // Enrich missing website via managed page token / Page node read
+        pages = await fetchPagesByIds(
+          cred,
+          pages.map((p) => String(p.id || "")),
+          managed,
+        );
       }
 
-      const creativeDomains = [...domainMeta.keys()];
+      pagesScanned += pages.length;
+
+      // domain -> sample urls + page refs
+      const domainMeta = new Map<
+        string,
+        { urls: string[]; pages: Map<string, string> }
+      >();
+
+      for (const page of pages) {
+        const pageId = String(page.id || "").trim();
+        const pageName = String(page.name || pageId || "").trim();
+        const websiteUrls = parsePageWebsiteField(page.website);
+        if (websiteUrls.length) pagesWithWebsite += 1;
+        for (const url of websiteUrls) {
+          for (const domain of extractDomainsFromUrls([url])) {
+            if (!domain || isFacebookHostedDomain(domain)) continue;
+            pageDomainsThisRun.add(domain);
+            let meta = domainMeta.get(domain);
+            if (!meta) {
+              meta = { urls: [], pages: new Map() };
+              domainMeta.set(domain, meta);
+            }
+            if (!meta.urls.includes(url)) meta.urls.push(url);
+            if (pageId) meta.pages.set(pageId, pageName || pageId);
+          }
+        }
+      }
+
+      if (pages.length === 0) {
+        linkErrors.push(
+          `${account.ad_account_id}: no fan pages via promote_pages or ads (managed_pages=${managed.size})`,
+        );
+      } else if ([...domainMeta.keys()].length === 0) {
+        const sample = pages.slice(0, 3).map((p) => {
+          const id = String(p.id || "");
+          const name = String(p.name || "");
+          const website = p.website == null ? "null" : JSON.stringify(p.website);
+          const err = p._error != null ? ` err=${String(p._error).slice(0, 80)}` : "";
+          return `${name || id}:website=${website}${err}`;
+        });
+        linkErrors.push(
+          `${account.ad_account_id}: ${pages.length} pages (${pageSource}, managed=${managed.size}) but none have website URL set | ${sample.join(" ; ")}`,
+        );
+      }
+
+      const pageDomains = [...domainMeta.keys()];
       const allUrls = [...domainMeta.values()].flatMap((m) => m.urls);
 
-      let matches = matchDomainsToWebsites(creativeDomains, websites);
-      let matchSource: "creative_link" | "name" = "creative_link";
-      let domainsForDiscovery = creativeDomains;
+      let matches = matchDomainsToWebsites(pageDomains, websites);
+      let matchSource: "page_website" | "name" = "page_website";
+      let domainsForDiscovery = pageDomains;
 
-      if (matches.length === 0) {
-        const nameDomains = extractDomainsFromName(account.account_name);
+      // Name fallback only when no Page.website domains were found
+      if (pageDomains.length === 0) {
+        const nameDomains = extractDomainsFromName(account.account_name).filter(
+          (d) => !isFacebookHostedDomain(d),
+        );
         matches = matchDomainsToWebsites(nameDomains, websites);
         if (matches.length) matchSource = "name";
-        domainsForDiscovery = [...new Set([...creativeDomains, ...nameDomains])];
+        domainsForDiscovery = nameDomains;
         for (const d of nameDomains) {
+          pageDomainsThisRun.add(d);
           if (!domainMeta.has(d)) {
-            domainMeta.set(d, { urls: [], campaigns: new Map() });
+            domainMeta.set(d, { urls: [], pages: new Map() });
           }
         }
       }
@@ -658,8 +821,8 @@ export async function linkFacebookAccountWebsites(
         const domainMatches = matchDomainsToWebsites([domain], websites);
         const meta = domainMeta.get(domain);
         const urls = meta?.urls?.length ? meta.urls : allUrls;
-        const campaigns = [...(meta?.campaigns?.entries() ?? [])];
-        if (campaigns.length === 0) {
+        const pageEntries = [...(meta?.pages?.entries() ?? [])];
+        if (pageEntries.length === 0) {
           discovered.push({
             normalized_domain: domain,
             sample_url: pickSampleUrlForDomain(domain, urls),
@@ -671,10 +834,12 @@ export async function linkFacebookAccountWebsites(
               accountName: account.account_name || account.ad_account_id,
               campaignId: null,
               campaignName: null,
+              pageId: null,
+              pageName: null,
             },
           });
         } else {
-          for (const [campaignId, campaignName] of campaigns) {
+          for (const [pageId, pageName] of pageEntries) {
             discovered.push({
               normalized_domain: domain,
               sample_url: pickSampleUrlForDomain(domain, urls),
@@ -684,8 +849,10 @@ export async function linkFacebookAccountWebsites(
                 platform: "facebook",
                 accountId: account.ad_account_id,
                 accountName: account.account_name || account.ad_account_id,
-                campaignId,
-                campaignName,
+                campaignId: null,
+                campaignName: null,
+                pageId,
+                pageName,
               },
             });
           }
@@ -705,7 +872,6 @@ export async function linkFacebookAccountWebsites(
         accountsWithLinks.add(account.ad_account_id);
         websitesLinked.add(m.website_profile_id);
       }
-      // Only clear/replace junctions for accounts that fetched successfully
       successfulAccountIds.push(account.ad_account_id);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -722,11 +888,59 @@ export async function linkFacebookAccountWebsites(
       nowIso,
     );
 
+  // Drop stale Facebook-only unmatched rows left over from creative/CTA scraping
+  // (wa.link, fbcdn, etc.) that are not Page.website domains from this run.
+  try {
+    // deno-lint-ignore no-explicit-any
+    const client = supabase as any;
+    const { data: unmatchedRows, error: listErr } = await client
+      .from("ads_discovered_domains")
+      .select("normalized_domain, sources, source_refs")
+      .eq("status", "unmatched");
+    if (!listErr && Array.isArray(unmatchedRows)) {
+      const toDelete: string[] = [];
+      for (const row of unmatchedRows as Array<{
+        normalized_domain: string;
+        sources: string[] | null;
+        source_refs?: unknown;
+      }>) {
+        const domain = String(row.normalized_domain || "");
+        if (!domain || pageDomainsThisRun.has(domain)) continue;
+        const sources = Array.isArray(row.sources) ? row.sources : [];
+        const onlyFacebook =
+          sources.length > 0 && sources.every((s) => s === "facebook");
+        if (!onlyFacebook) continue;
+        const refs = Array.isArray(row.source_refs) ? row.source_refs : [];
+        const hasPageRef = refs.some(
+          (r) =>
+            r &&
+            typeof r === "object" &&
+            (r as Record<string, unknown>).platform === "facebook" &&
+            String((r as Record<string, unknown>).pageId || ""),
+        );
+        if (hasPageRef) continue;
+        toDelete.push(domain);
+      }
+      for (let i = 0; i < toDelete.length; i += 200) {
+        const chunk = toDelete.slice(i, i + 200);
+        if (!chunk.length) continue;
+        await client
+          .from("ads_discovered_domains")
+          .delete()
+          .in("normalized_domain", chunk);
+      }
+    }
+  } catch {
+    // cleanup is best-effort
+  }
+
   return {
     accounts_with_links: accountsWithLinks.size,
     websites_linked: websitesLinked.size,
     domains_discovered: domainsDiscovered,
     domains_unmatched: domainsUnmatched,
+    pages_scanned: pagesScanned,
+    pages_with_website: pagesWithWebsite,
     link_errors: linkErrors,
   };
 }

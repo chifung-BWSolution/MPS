@@ -943,7 +943,7 @@ function UnmatchedAdsDomainsModal({
                       <div className="mt-2 space-y-1.5">
                         {shown.map((ref, idx) => (
                           <div
-                            key={`${ref.platform}-${ref.accountId}-${ref.campaignId || ''}-${idx}`}
+                            key={`${ref.platform}-${ref.accountId}-${ref.campaignId || ''}-${ref.pageId || ''}-${idx}`}
                             className="text-[11px] leading-snug rounded border border-slate-100 bg-slate-50 px-2 py-1.5"
                           >
                             <div className="flex items-center gap-1.5 flex-wrap">
@@ -963,7 +963,21 @@ function UnmatchedAdsDomainsModal({
                               </span>
                               <span className="text-muted-foreground truncate">({ref.accountId})</span>
                             </div>
-                            {ref.campaignId || ref.campaignName ? (
+                            {ref.platform === 'facebook' ? (
+                              ref.pageId || ref.pageName ? (
+                                <div className="mt-0.5 text-muted-foreground">
+                                  粉絲專頁：
+                                  <span className="text-foreground font-medium ml-1">
+                                    {ref.pageName || ref.pageId}
+                                  </span>
+                                  {ref.pageId && ref.pageName ? (
+                                    <span className="ml-1">({ref.pageId})</span>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <div className="mt-0.5 text-muted-foreground">粉絲專頁：—</div>
+                              )
+                            ) : ref.campaignId || ref.campaignName ? (
                               <div className="mt-0.5 text-muted-foreground">
                                 Campaign：
                                 <span className="text-foreground font-medium ml-1">
@@ -974,7 +988,7 @@ function UnmatchedAdsDomainsModal({
                                 ) : null}
                               </div>
                             ) : (
-                              <div className="mt-0.5 text-muted-foreground">Campaign：—（帳戶層級）</div>
+                              <div className="mt-0.5 text-muted-foreground">Campaign：—</div>
                             )}
                           </div>
                         ))}
@@ -1432,14 +1446,23 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
     const unmatchedCount = r.result.unmatched?.length ?? 0;
     const g = r.result.google?.websitesLinked ?? 0;
     const f = r.result.facebook?.websitesLinked ?? 0;
+    const pagesScanned = r.result.facebook?.pagesScanned ?? 0;
+    const pagesWithWebsite = r.result.facebook?.pagesWithWebsite ?? 0;
     const errors = [
       ...(r.result.linkErrors || []),
       ...(r.result.google?.linkErrors || []),
       ...(r.result.facebook?.linkErrors || []),
     ];
-    toast.success(`廣告網域同步完成（Google 連結 ${g}、Facebook 連結 ${f}）`);
+    toast.success(
+      `廣告網域同步完成（Google 連結 ${g}、Facebook 連結 ${f}；粉絲專頁 ${pagesWithWebsite}/${pagesScanned} 有 website）`,
+    );
     if (errors.length) {
-      toast.error('部分同步錯誤', { description: errors.slice(0, 3).join(' | ') });
+      const permissionHint = errors.some((e) => e.includes('pages_read'))
+        ? 'Meta token 缺少 pages_read_engagement / pages_show_list，無法讀取粉絲專頁 website。'
+        : '';
+      toast.error('部分同步錯誤', {
+        description: [permissionHint, ...errors.slice(0, 2)].filter(Boolean).join(' '),
+      });
     }
     if (unmatchedCount > 0) setShowUnmatchedModal(true);
     else if (!errors.length && g + f > 0) toast.message('所有偵測到的網域皆已對應或略過');

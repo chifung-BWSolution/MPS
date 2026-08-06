@@ -19,6 +19,9 @@ export type AdsSourceRef = {
   accountName: string;
   campaignId?: string | null;
   campaignName?: string | null;
+  /** Facebook Page (fan page) that owns the website URL */
+  pageId?: string | null;
+  pageName?: string | null;
 };
 
 export type DiscoveredDomainInput = {
@@ -34,6 +37,7 @@ function sourceRefKey(ref: AdsSourceRef): string {
     ref.platform,
     ref.accountId || "",
     ref.campaignId || "",
+    ref.pageId || "",
   ].join("|");
 }
 
@@ -58,6 +62,8 @@ export function mergeSourceRefs(
       campaignName: r.campaignName != null && String(r.campaignName)
         ? String(r.campaignName)
         : null,
+      pageId: r.pageId != null && String(r.pageId) ? String(r.pageId) : null,
+      pageName: r.pageName != null && String(r.pageName) ? String(r.pageName) : null,
     };
     const key = sourceRefKey(ref);
     const prev = map.get(key);
@@ -69,6 +75,7 @@ export function mergeSourceRefs(
       ...prev,
       accountName: prev.accountName || ref.accountName,
       campaignName: prev.campaignName || ref.campaignName,
+      pageName: prev.pageName || ref.pageName,
     });
   };
   if (Array.isArray(existing)) {
@@ -95,7 +102,7 @@ export type FacebookAccountWebsiteRow = {
   website_profile_id: string;
   matched_domain: string;
   sample_final_url: string | null;
-  match_source: "creative_link" | "name";
+  match_source: "page_website" | "name";
   last_seen_at: string;
   updated_at: string;
 };
@@ -106,6 +113,8 @@ export type AdsLinkSummary = {
   domains_unmatched: number;
   campaigns_with_links?: number;
   accounts_with_links?: number;
+  pages_scanned?: number;
+  pages_with_website?: number;
   link_errors: string[];
 };
 

@@ -140,7 +140,8 @@ Also apply migration `20260806200000_ads_website_junctions.sql`（`google_ads_ca
 
 ## 網站自動連結
 
-- Facebook：**帳戶 ↔ 多網站**（`facebook_ads_account_websites`），來源為 Creative / CTA 目的地 URL（名稱僅 fallback）
+- Facebook：**帳戶 ↔ 多網站**（`facebook_ads_account_websites`），來源為 **Ad Account → 粉絲專頁 → Page.`website`**（先 `promote_pages`，若無權限則從 ads 取 `page_id`/`actor_id` 再讀 Page.website；帳戶名稱僅在完全沒有 Page website 時 fallback；**不刮** Creative/CTA 目的地）
+- Meta token 需具備 `pages_show_list` + `pages_read_engagement`（或 Page Public Metadata Access），否則找得到 Page ID 但讀不到 `website` 欄位
 - Google：**Campaign ↔ 網站**（`google_ads_campaign_websites`），來源為 Final URL / landing page
 - 未對應網域寫入 `ads_discovered_domains`；在 `/#website/list` 按「同步廣告網域」可提示建立網站後自動重連
 
