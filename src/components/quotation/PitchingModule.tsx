@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { Search, Plus, ChevronRight, User, FileText, MessageSquare, ArrowLeft, Clock, Target, Save, X } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Search, Plus, ChevronRight, User, FileText, MessageSquare, ArrowLeft, Link2, Save, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
@@ -25,7 +25,9 @@ type NewPitchingForm = {
   clientName: string;
   displayName: string;
   inquiryDate: string;
+  description: string;
   projectTypes: PitchingProjectType[];
+  asanaLink: string;
 };
 
 const todayIso = () => new Date().toISOString().split('T')[0]!;
@@ -35,8 +37,18 @@ const emptyForm = (): NewPitchingForm => ({
   clientName: '',
   displayName: '',
   inquiryDate: todayIso(),
+  description: '',
   projectTypes: [],
+  asanaLink: '',
 });
+
+function formatEnquiryDateLabel(iso: string): string {
+  if (!iso) return '';
+  const parts = iso.split('-');
+  if (parts.length !== 3) return iso;
+  const [y, m, d] = parts;
+  return `${y}年${parseInt(m!, 10)}月${parseInt(d!, 10)}日`;
+}
 
 function RemainingDaysCell({ inquiryDate, status }: { inquiryDate: string; status: PitchingStatus }) {
   const days = calcRemainingDays(inquiryDate, status);
@@ -97,6 +109,10 @@ function NewPitchingModal({
 }) {
   const [form, setForm] = useState<NewPitchingForm>(emptyForm);
 
+  useEffect(() => {
+    if (isOpen) setForm(emptyForm());
+  }, [isOpen]);
+
   const clientOptions = useMemo(
     () =>
       pitchingClientOptions.map((c) => ({
@@ -143,9 +159,11 @@ function NewPitchingModal({
     setForm(emptyForm());
   };
 
+  const currentYear = new Date().getFullYear();
+
   return (
-    <CrudModal isOpen={isOpen} onClose={handleClose} title="新增提案 New Pitching" size="lg">
-      <div className="space-y-6">
+    <CrudModal isOpen={isOpen} onClose={handleClose} title="新增提案 New Pitching" size="xl">
+      <div className="space-y-6 pb-2">
         <section className="space-y-3">
           <h3 className="text-[14px] font-semibold flex items-center gap-2">
             <User size={15} className="text-teal-600" />
@@ -188,9 +206,16 @@ function NewPitchingModal({
             <Input
               type="date"
               value={form.inquiryDate}
+              min={`${currentYear}-01-01`}
+              max={`${currentYear + 1}-12-31`}
               onChange={(e) => setForm((prev) => ({ ...prev, inquiryDate: e.target.value }))}
-              className="h-9 text-[13px] w-full max-w-[220px]"
+              className="h-9 text-[13px] w-full max-w-[260px]"
             />
+            {form.inquiryDate && (
+              <p className="text-[11px] text-muted-foreground mt-1">
+                已選：{formatEnquiryDateLabel(form.inquiryDate)}（預設為新增當日）
+              </p>
+            )}
           </div>
 
           <div>
@@ -198,6 +223,35 @@ function NewPitchingModal({
             <ProjectTypeMultiSelect
               value={form.projectTypes}
               onChange={(projectTypes) => setForm((prev) => ({ ...prev, projectTypes }))}
+            />
+          </div>
+
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">提案描述 Description</label>
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+              placeholder="提案描述..."
+              rows={6}
+              className="w-full text-[13px] border border-border rounded-md px-3 py-2.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500 resize-none overflow-y-auto leading-[1.5]"
+              style={{ height: '9.75rem', minHeight: '9.75rem', maxHeight: '9.75rem' }}
+            />
+          </div>
+        </section>
+
+        <section className="space-y-3 border-t border-border pt-5">
+          <h3 className="text-[14px] font-semibold flex items-center gap-2">
+            <Link2 size={15} className="text-teal-600" />
+            連結 Links
+          </h3>
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">Asana 連結</label>
+            <Input
+              type="url"
+              value={form.asanaLink}
+              onChange={(e) => setForm((prev) => ({ ...prev, asanaLink: e.target.value }))}
+              placeholder="https://app.asana.com/..."
+              className="h-9 text-[13px]"
             />
           </div>
         </section>
@@ -445,11 +499,28 @@ function PitchingDetail({
                 <span className="text-[14px]">{record.assignedPmName || '—'}</span>
               </div>
               <div>
-                <span className="text-[12px] text-muted-foreground block">備註</span>
-                <span className="text-[14px]">{record.notes || '—'}</span>
+                <span className="text-[12px] text-muted-foreground block">Asana 連結</span>
+                {record.asanaLink ? (
+                  <a
+                    href={record.asanaLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[14px] text-teal-600 hover:underline break-all"
+                  >
+                    {record.asanaLink}
+                  </a>
+                ) : (
+                  <span className="text-[14px]">—</span>
+                )}
               </div>
             </div>
           </div>
+          {record.description && (
+            <div className="border-t border-border pt-4">
+              <span className="text-[12px] text-muted-foreground block mb-1">提案描述</span>
+              <p className="text-[14px] leading-relaxed text-foreground/80 whitespace-pre-wrap">{record.description}</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -524,7 +595,9 @@ export function PitchingModule() {
       clientName: form.clientName,
       displayName: form.displayName.trim(),
       inquiryDate: form.inquiryDate,
+      description: form.description.trim() || undefined,
       projectTypes: form.projectTypes,
+      asanaLink: form.asanaLink.trim() || undefined,
       assignedPm: systemUser?.id ?? '',
       assignedPmName: pmName,
       status: 'initial',

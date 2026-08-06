@@ -27,7 +27,9 @@ export interface PitchingRecord {
   clientId?: string;
   displayName: string;
   inquiryDate: string;
+  description?: string;
   projectTypes: PitchingProjectType[];
+  asanaLink?: string;
   assignedPm: string;
   assignedPmName: string;
   status: PitchingStatus;
