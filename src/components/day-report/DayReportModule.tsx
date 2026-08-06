@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Plus, Check, X, AlertTriangle, ChevronLeft, ChevronRight, Link, Sparkles, Clock, Users, BarChart3, Calendar, FileText, Zap, Bot, Trash2, RefreshCw, Eye, MapPin, CalendarDays, Loader2, Shield, Star, Upload, Image as ImageIcon } from 'lucide-react';
+import { Plus, Check, X, AlertTriangle, ChevronLeft, ChevronRight, Link, Sparkles, Clock, Users, BarChart3, Calendar, FileText, Zap, Bot, Trash2, RefreshCw, Eye, MapPin, CalendarDays, Loader2, Shield, Upload, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -838,40 +838,6 @@ function SubmitReportPage() {
     const newEntries = [...entries];
     (newEntries[idx] as any)[field] = value;
     setEntries(newEntries);
-  };
-
-  // Snapshot the current row into 常用匯報項目. Skip if the row is essentially
-  // empty so users can't accidentally save a blank template. The row is
-  // persisted to Supabase, then prepended to local state on success so the
-  // UI updates immediately.
-  const saveEntryAsTemplate = async (idx: number) => {
-    const e = entries[idx];
-    if (!e.category && !e.title && !e.relatedName && (!e.hours || e.hours === 0)) {
-      alert('請先填寫工作項目內容再儲存。');
-      return;
-    }
-    if (!ownerEmail) {
-      alert('未能識別登入帳戶，請重新登入後再試。');
-      return;
-    }
-    const label = (e.title.trim().split('\n')[0] || e.relatedName || categoryLookup[e.category]?.label || '自訂項目').slice(0, 40);
-    const entrySnapshot = { ...e, aiToolsV2: { ...e.aiToolsV2 } };
-    const { data, error } = await supabase
-      .from('user_report_templates')
-      .insert({ owner_email: ownerEmail, label, entry: entrySnapshot })
-      .select('id, label, entry, created_at')
-      .single();
-    if (error || !data) {
-      console.error('[SubmitReport] save template failed:', error?.message);
-      alert('儲存常用項目失敗，請稍後再試。');
-      return;
-    }
-    setSavedTemplates(prev => [{
-      id: data.id as string,
-      label: data.label as string,
-      entry: data.entry as SavedTemplate['entry'],
-      createdAt: data.created_at as string,
-    }, ...prev]);
   };
 
   const removeSavedTemplate = async (id: string) => {
@@ -1760,20 +1726,9 @@ function SubmitReportPage() {
                       </span>
                     )}
                   </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => saveEntryAsTemplate(idx)}
-                      title="加入到常用匯報項目"
-                      className="flex items-center gap-1 text-[12px] text-amber-600 hover:text-amber-700 px-2 py-1 rounded border border-amber-200 hover:bg-amber-50"
-                    >
-                      <Star size={12} />
-                      <span>加入到常用匯報項目</span>
-                    </button>
-                    {entries.length > 1 && (
-                      <button onClick={() => removeEntry(idx)} className="text-rose-500 hover:text-rose-700 p-1.5 rounded hover:bg-rose-50"><Trash2 size={13} /></button>
-                    )}
-                  </div>
+                  {entries.length > 1 && (
+                    <button onClick={() => removeEntry(idx)} className="text-rose-500 hover:text-rose-700 p-1.5 rounded hover:bg-rose-50"><Trash2 size={13} /></button>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2.5 mb-3">
                   <div className="lg:col-span-2">
