@@ -591,7 +591,7 @@ export function PitchingModule() {
   const handleSyncAsana = async () => {
     setSyncing(true);
     try {
-      const result = await invokeAsanaPitchingSync({ discover: true });
+      const result = await invokeAsanaPitchingSync();
       await refresh();
       toast.success(
         `Asana 同步完成：${result.records_upserted ?? 0} 筆（${result.projects_synced ?? 0} 個專案）`,
