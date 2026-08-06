@@ -1,17 +1,89 @@
-import { useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Search } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpDown, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { resolveDateRange, useFacebookAdsData } from '@/hooks/useFacebookAdsData';
-import type { DateRangePreset } from '@/types/facebookAds';
+import type { DateRangePreset, FacebookAdsCampaign } from '@/types/facebookAds';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
+
+type SortKey =
+  | 'account'
+  | 'campaign'
+  | 'objective'
+  | 'status'
+  | 'impressions'
+  | 'clicks'
+  | 'spend'
+  | 'conversions';
+type SortDir = 'asc' | 'desc';
 
 function formatMoneyFromMicros(micros: number): string {
   return (micros / 1_000_000).toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+function compareText(a: string, b: string): number {
+  return a.localeCompare(b, 'zh-Hant', { sensitivity: 'base', numeric: true });
+}
+
+function getSortValue(c: FacebookAdsCampaign, key: SortKey): string | number {
+  switch (key) {
+    case 'account':
+      return c.accountName || c.adAccountId;
+    case 'campaign':
+      return c.campaignName;
+    case 'objective':
+      return c.objective || '';
+    case 'status':
+      return c.status;
+    case 'impressions':
+      return c.impressions;
+    case 'clicks':
+      return c.clicks;
+    case 'spend':
+      return c.spendMicros;
+    case 'conversions':
+      return c.conversions;
+  }
+}
+
+function SortableTh({
+  label,
+  sortKey,
+  activeKey,
+  sortDir,
+  align = 'left',
+  onSort,
+}: {
+  label: ReactNode;
+  sortKey: SortKey;
+  activeKey: SortKey;
+  sortDir: SortDir;
+  align?: 'left' | 'right';
+  onSort: (key: SortKey) => void;
+}) {
+  const active = activeKey === sortKey;
+  const Icon = active ? (sortDir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <th className={cn('font-medium px-3 py-2.5', align === 'right' ? 'text-right' : 'text-left')}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={cn(
+          'inline-flex items-center gap-1 hover:text-foreground transition-colors',
+          align === 'right' && 'flex-row-reverse',
+          active ? 'text-foreground' : 'text-muted-foreground',
+        )}
+      >
+        <span>{label}</span>
+        <Icon size={12} className={cn(active ? 'text-teal-600' : 'opacity-40')} />
+      </button>
+    </th>
+  );
 }
 
 function statusBadge(status: string) {
@@ -68,6 +140,8 @@ export function FacebookAdsModule() {
   const [accountFilter, setAccountFilter] = useState('all');
   const [businessFilter, setBusinessFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [sortKey, setSortKey] = useState<SortKey>('spend');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const businesses = useMemo(() => {
     const map = new Map<string, string>();
@@ -86,7 +160,7 @@ export function FacebookAdsModule() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return campaigns.filter((c) => {
+    const rows = campaigns.filter((c) => {
       if (accountFilter !== 'all' && c.adAccountId !== accountFilter) return false;
       if (businessFilter !== 'all') {
         const biz = accounts.find((a) => a.adAccountId === c.adAccountId);
@@ -101,7 +175,30 @@ export function FacebookAdsModule() {
         c.adAccountId.includes(q)
       );
     });
-  }, [campaigns, search, accountFilter, statusFilter, businessFilter, accounts]);
+
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      const av = getSortValue(a, sortKey);
+      const bv = getSortValue(b, sortKey);
+      if (typeof av === 'number' && typeof bv === 'number') {
+        return (av - bv) * dir;
+      }
+      return compareText(String(av), String(bv)) * dir;
+    });
+  }, [campaigns, search, accountFilter, statusFilter, businessFilter, accounts, sortKey, sortDir]);
+
+  const onSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir(
+        key === 'impressions' || key === 'clicks' || key === 'spend' || key === 'conversions'
+          ? 'desc'
+          : 'asc',
+      );
+    }
+  };
 
   const totals = useMemo(() => {
     return filtered.reduce(
@@ -177,7 +274,7 @@ export function FacebookAdsModule() {
 
         <div className="flex flex-wrap items-center gap-2">
           <Select value={preset} onValueChange={(v) => setPreset(v as DateRangePreset)}>
-            <SelectTrigger className="w-[140px] h-9 text-[13px]">
+            <SelectTrigger className="w-[140px] h-9 text-[13px] bg-white">
               <SelectValue placeholder="期間" />
             </SelectTrigger>
             <SelectContent>
@@ -194,14 +291,14 @@ export function FacebookAdsModule() {
             <>
               <Input
                 type="date"
-                className="w-[150px] h-9 text-[13px]"
+                className="w-[150px] h-9 text-[13px] bg-white"
                 value={customFrom}
                 onChange={(e) => setCustomFrom(e.target.value)}
               />
               <span className="text-[12px] text-muted-foreground">至</span>
               <Input
                 type="date"
-                className="w-[150px] h-9 text-[13px]"
+                className="w-[150px] h-9 text-[13px] bg-white"
                 value={customTo}
                 onChange={(e) => setCustomTo(e.target.value)}
               />
@@ -217,11 +314,11 @@ export function FacebookAdsModule() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="搜尋 campaign / 帳戶…"
-              className="pl-8 h-9 text-[13px]"
+              className="pl-8 h-9 text-[13px] bg-white"
             />
           </div>
           <Select value={businessFilter} onValueChange={setBusinessFilter}>
-            <SelectTrigger className="w-[180px] h-9 text-[13px]">
+            <SelectTrigger className="w-[180px] h-9 text-[13px] bg-white">
               <SelectValue placeholder="Business" />
             </SelectTrigger>
             <SelectContent>
@@ -234,7 +331,7 @@ export function FacebookAdsModule() {
             </SelectContent>
           </Select>
           <Select value={accountFilter} onValueChange={setAccountFilter}>
-            <SelectTrigger className="w-[200px] h-9 text-[13px]">
+            <SelectTrigger className="w-[200px] h-9 text-[13px] bg-white">
               <SelectValue placeholder="帳戶" />
             </SelectTrigger>
             <SelectContent>
@@ -247,7 +344,7 @@ export function FacebookAdsModule() {
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[130px] h-9 text-[13px]">
+            <SelectTrigger className="w-[130px] h-9 text-[13px] bg-white">
               <SelectValue placeholder="狀態" />
             </SelectTrigger>
             <SelectContent>
@@ -280,14 +377,14 @@ export function FacebookAdsModule() {
           <table className="w-full text-[13px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-muted-foreground">
               <tr>
-                <th className="text-left font-medium px-3 py-2.5">帳戶</th>
-                <th className="text-left font-medium px-3 py-2.5">Campaign</th>
-                <th className="text-left font-medium px-3 py-2.5">Objective</th>
-                <th className="text-left font-medium px-3 py-2.5">狀態</th>
-                <th className="text-right font-medium px-3 py-2.5">Impr.</th>
-                <th className="text-right font-medium px-3 py-2.5">Clicks</th>
-                <th className="text-right font-medium px-3 py-2.5">Spend</th>
-                <th className="text-right font-medium px-3 py-2.5">Conv.</th>
+                <SortableTh label="帳戶" sortKey="account" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SortableTh label="Campaign" sortKey="campaign" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SortableTh label="Objective" sortKey="objective" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SortableTh label="狀態" sortKey="status" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SortableTh label="Impr." sortKey="impressions" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
+                <SortableTh label="Clicks" sortKey="clicks" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
+                <SortableTh label="Spend" sortKey="spend" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
+                <SortableTh label="Conv." sortKey="conversions" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
               </tr>
             </thead>
             <tbody>
