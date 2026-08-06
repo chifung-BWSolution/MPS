@@ -682,7 +682,6 @@ export function PitchingModule() {
     if (selectedRecord?.id === id) {
       setSelectedRecord((prev) => (prev ? { ...prev, status } : null));
     }
-    toast.success(`狀態已更新為「${pitchingStatusConfig[status].label}」`);
   };
 
   const handleConvertToQuote = () => {
