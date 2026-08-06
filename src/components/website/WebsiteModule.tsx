@@ -228,7 +228,7 @@ function AddArticleModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[80vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
@@ -504,7 +504,7 @@ function WebsiteArticlesTab({ site }: { site: WebsiteProfileFull }) {
 
       {/* Remove confirm dialog */}
       {removeConfirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-[380px]">
             <h3 className="text-[16px] font-bold mb-2">確認移除關聯</h3>
             <p className="text-[13px] text-muted-foreground mb-4">確定要移除此文章與網站的關聯嗎？此操作不會刪除文章本身。</p>
@@ -898,7 +898,7 @@ function UnmatchedAdsDomainsModal({
   onCreate: (domain: AdsDiscoveredDomain) => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[860px] max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
@@ -1090,7 +1090,7 @@ function WebsiteFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[85vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
@@ -2035,7 +2035,7 @@ function AddWebsiteToArticleModal({
   const toggle = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[560px] max-h-[70vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="text-[16px] font-bold">加入其他網站</h3>
@@ -2233,7 +2233,7 @@ function ArticleDetailView({ article, onBack }: { article: Article; onBack: () =
             )}
             {/* Remove confirm */}
             {removeConfirmId && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+              <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
                 <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-[380px]">
                   <h3 className="text-[16px] font-bold mb-2">確認移除關聯</h3>
                   <p className="text-[13px] text-muted-foreground mb-4">確定要移除此文章與網站的關聯嗎？此操作不會刪除網站或文章本身。</p>
@@ -2282,7 +2282,7 @@ function BatchAddToWebsiteModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[540px] max-h-[70vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
@@ -2397,7 +2397,7 @@ function CreateArticleModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="text-[16px] font-bold">新增文章</h3>
@@ -2778,7 +2778,7 @@ function SubmitCompleteModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[540px] max-h-[75vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
@@ -3029,7 +3029,7 @@ function PendingContent() {
 
       {/* Batch start confirm */}
       {showBatchStartConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-[380px]">
             <h3 className="text-[16px] font-bold mb-2">批量開始撰寫</h3>
             <p className="text-[13px] text-muted-foreground mb-4">將 {selectedIds.length} 個「待跟進」項目的狀態更新為「撰寫中」？</p>
@@ -3052,7 +3052,7 @@ function PendingContent() {
 
       {/* Batch complete modal */}
       {showBatchCompleteModal && selectedIds.length > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-[420px]">
             <h3 className="text-[16px] font-bold mb-2">批量提交完成</h3>
             <p className="text-[13px] text-muted-foreground mb-3">將以下 {selectedIds.length} 個項目標記為已完成並建立文章記錄：</p>

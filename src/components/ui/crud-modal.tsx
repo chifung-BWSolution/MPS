@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
+import { FixedOverlay } from '@/components/ui/fixed-overlay';
 
 interface CrudModalProps {
   isOpen: boolean;
@@ -23,7 +24,7 @@ export function CrudModal({ isOpen, onClose, title, children, size = 'md', heade
           : 'max-w-[550px] max-h-[85vh]';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <FixedOverlay className="flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className={`relative bg-white rounded-lg shadow-xl w-full ${sizeClass} mx-4 flex flex-col`}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
@@ -39,7 +40,7 @@ export function CrudModal({ isOpen, onClose, title, children, size = 'md', heade
           {children}
         </div>
       </div>
-    </div>
+    </FixedOverlay>
   );
 }
 
@@ -56,7 +57,7 @@ export function DeleteConfirmModal({ isOpen, onClose, onConfirm, itemName, canDe
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <FixedOverlay className="flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white rounded-lg shadow-xl w-full max-w-[420px] mx-4">
         <div className="p-6">
@@ -102,6 +103,6 @@ export function DeleteConfirmModal({ isOpen, onClose, onConfirm, itemName, canDe
           </div>
         </div>
       </div>
-    </div>
+    </FixedOverlay>
   );
 }

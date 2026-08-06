@@ -637,7 +637,7 @@ function ProfileSection() {
 
       {/* Add Role Modal */}
       {showAddRole && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowAddRole(false)}>
+        <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={() => setShowAddRole(false)}>
           <div className="bg-white rounded-lg shadow-xl w-full max-w-[550px] p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-[18px] font-bold">新增角色</h3>
@@ -893,7 +893,7 @@ function UserModal({ user, onSave, onClose }: { user: UserItem | null; onSave: (
   const deptOptions = ['Management', 'PM Team', 'Design', 'Video', 'Content', 'Marketing', 'Finance'];
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[500px] p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-[18px] font-bold">{user ? '編輯使用者' : '新增使用者'}</h3>
@@ -1370,7 +1370,7 @@ function CreditCardModal({ card, onSave, onClose }: { card: CreditCardItem | nul
   const bankOptions = ['HSBC', 'BOC', 'Hang Seng', 'DBS', 'Standard Chartered', 'Citibank', 'Other'];
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[500px] p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-[18px] font-bold">{card ? '編輯信用卡' : '新增信用卡'}</h3>
@@ -1614,7 +1614,7 @@ function QuotationTypeModal({ editingType, onSave, onClose }: {
   const [nameEn, setNameEn] = useState(editingType?.nameEn || '');
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[420px] p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-[18px] font-bold">{editingType ? '編輯報價類型' : '新增報價類型'}</h3>

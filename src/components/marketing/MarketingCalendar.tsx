@@ -1375,7 +1375,7 @@ export function MarketingCalendar() {
 
       {/* === ADD / EDIT EVENT MODAL === */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={closeEventModal}>
+        <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={closeEventModal}>
           <div className="bg-white rounded-lg shadow-xl p-6 w-[480px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">

@@ -464,7 +464,7 @@ export function QuotationItemsManagement() {
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 m-0 bg-black/50 flex items-center justify-center z-[100]">
           <div className="bg-white rounded-md p-6 w-full max-w-sm shadow-xl">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-rose-50 rounded-full flex items-center justify-center">
@@ -489,7 +489,7 @@ export function QuotationItemsManagement() {
 
       {/* Copy to Type Modal */}
       {showCopyToTypeModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 m-0 bg-black/50 flex items-center justify-center z-[100]">
           <div className="bg-white rounded-md p-6 w-full max-w-sm shadow-xl">
             <h3 className="text-[16px] font-bold mb-4">複製到其他報價類型</h3>
             <p className="text-[12px] text-muted-foreground mb-4">選擇要複製 {selectedItems.size} 個項目到的目標類型：</p>
@@ -526,7 +526,7 @@ export function QuotationItemsManagement() {
 
       {/* New Supplier Modal */}
       {showNewSupplierModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 m-0 bg-black/50 flex items-center justify-center z-[100]">
           <div className="bg-white rounded-md p-6 w-full max-w-sm shadow-xl">
             <h3 className="text-[16px] font-bold mb-4">快速新增供應商</h3>
             <div className="space-y-3 mb-6">

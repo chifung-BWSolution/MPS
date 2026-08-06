@@ -221,7 +221,7 @@ function DeleteConfirmModal({
   onCancel: () => void;
 }) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200] p-4">
+    <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[200] p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-[400px]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border/50">
           <h3 className="text-[16px] font-bold text-[#0d1a2d]">確認刪除</h3>
@@ -517,7 +517,7 @@ function CompanyModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200] p-4">
+    <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[200] p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-[600px] max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border/50">
           <h3 className="text-[18px] font-bold text-[#0d1a2d]">{company ? '編輯公司' : '新增公司'}</h3>

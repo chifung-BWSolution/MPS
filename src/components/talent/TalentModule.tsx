@@ -1736,7 +1736,7 @@ function Modal({ title, onClose, children, width = 'max-w-[640px]', headerAction
   headerAction?: React.ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
       <div className={cn('bg-white rounded-lg shadow-xl w-full max-h-[85vh] flex flex-col', width)}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="text-[16px] font-bold">{title}</h3>
