@@ -51,7 +51,7 @@ export const mainMenuItems: MainMenuItem[] = [
     id: 'quotation',
     label: '客戶報價',
     subMenus: [
-      { id: 'pitching', label: 'Pitching 紀錄' },
+      { id: 'pitching', label: 'Pitching' },
       { id: 'list', label: '報價單列表' },
       { id: 'new', label: '新建報價單' },
       { id: 'items', label: '報價項目' },
