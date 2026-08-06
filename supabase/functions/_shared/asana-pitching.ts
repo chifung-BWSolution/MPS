@@ -164,6 +164,13 @@ export function inferProjectTypes(
   if (/system|系統|ngo|platform|app/.test(name)) types.add("bwt_system");
   if (/web|網頁|website|shopify|site/.test(name)) types.add("bwt_web");
 
+  // BWT-prefixed tasks default to web+system unless clearly BWL event
+  if (/^bwt/i.test(taskName.trim()) && !/\bbwl\b/i.test(taskName)) {
+    types.add("bwt_web");
+    types.add("bwt_system");
+    types.delete("bwl_event");
+  }
+
   if (types.size === 0 && projectTypes.length) {
     projectTypes.forEach((t) => types.add(t));
   }
