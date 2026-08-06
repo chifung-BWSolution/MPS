@@ -567,7 +567,7 @@ export async function linkFacebookAccountWebsites(
   const targets = accounts.filter(
     (a) => a.status === "ENABLED" || a.account_status === 1,
   );
-  const processedIds = targets.map((a) => a.ad_account_id);
+  const successfulAccountIds: string[] = [];
   const allLinkRows: FacebookAccountWebsiteRow[] = [];
   const discovered: DiscoveredDomainInput[] = [];
   const accountsWithLinks = new Set<string>();
@@ -596,7 +596,6 @@ export async function linkFacebookAccountWebsites(
       const urlSet = new Set<string>();
       for (const ad of ads) {
         collectHttpUrls(ad.creative ?? ad, urlSet);
-        // Ad name sometimes embeds a domain — only used later as name fallback
       }
       const urls = [...urlSet];
       const creativeDomains = extractDomainsFromUrls(urls);
@@ -608,7 +607,7 @@ export async function linkFacebookAccountWebsites(
       if (matches.length === 0) {
         const nameDomains = extractDomainsFromName(account.account_name);
         matches = matchDomainsToWebsites(nameDomains, websites);
-        matchSource = "name";
+        if (matches.length) matchSource = "name";
         domainsForDiscovery = [...new Set([...creativeDomains, ...nameDomains])];
       }
 
@@ -635,6 +634,8 @@ export async function linkFacebookAccountWebsites(
         accountsWithLinks.add(account.ad_account_id);
         websitesLinked.add(m.website_profile_id);
       }
+      // Only clear/replace junctions for accounts that fetched successfully
+      successfulAccountIds.push(account.ad_account_id);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       linkErrors.push(`${account.ad_account_id}: ${msg.slice(0, 180)}`);
@@ -642,7 +643,7 @@ export async function linkFacebookAccountWebsites(
   });
 
   const sb = supabase as Parameters<typeof replaceFacebookAccountWebsiteLinks>[0];
-  await replaceFacebookAccountWebsiteLinks(sb, processedIds, allLinkRows);
+  await replaceFacebookAccountWebsiteLinks(sb, successfulAccountIds, allLinkRows);
   const { discovered: domainsDiscovered, unmatched: domainsUnmatched } =
     await upsertDiscoveredDomains(
       supabase as Parameters<typeof upsertDiscoveredDomains>[0],

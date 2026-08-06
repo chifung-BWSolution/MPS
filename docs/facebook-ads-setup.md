@@ -122,15 +122,27 @@ where jobname like '%ads-incremental%';
 
 | Slug | 用途 |
 |------|------|
-| `supabase-functions-sync-facebook-ads` | 最近 7 日增量 + 帳戶 prune（手動 + 每日 cron） |
-| `supabase-functions-facebook-ads-backfill-step` | 歷史回填（`start` / `pause` / `resume` / `cancel` / `step`） |
+| `supabase-functions-sync-facebook-ads` | 最近 7 日增量 + 帳戶 prune（手動 + 每日 cron）+ 帳戶↔網站連結 |
+| `supabase-functions-facebook-ads-backfill-step` | 歷史回填（`start` / `pause` / `resume` / `cancel` / `step`）；`start` 時同步網站連結 |
+| `supabase-functions-sync-ads-website-links` | 網站列表「同步廣告網域」：Google+Facebook 目的地 URL 發現與連結 |
 
 部署：
 
 ```bash
 npx supabase functions deploy supabase-functions-sync-facebook-ads --project-ref kwcevjcmdjadhrygjyfp
 npx supabase functions deploy supabase-functions-facebook-ads-backfill-step --project-ref kwcevjcmdjadhrygjyfp
+npx supabase functions deploy supabase-functions-sync-ads-website-links --project-ref kwcevjcmdjadhrygjyfp
+npx supabase functions deploy supabase-functions-sync-google-ads --project-ref kwcevjcmdjadhrygjyfp
+npx supabase functions deploy supabase-functions-google-ads-backfill-step --project-ref kwcevjcmdjadhrygjyfp
 ```
+
+Also apply migration `20260806200000_ads_website_junctions.sql`（`google_ads_campaign_websites`、`facebook_ads_account_websites`、`ads_discovered_domains`）。
+
+## 網站自動連結
+
+- Facebook：**帳戶 ↔ 多網站**（`facebook_ads_account_websites`），來源為 Creative / CTA 目的地 URL（名稱僅 fallback）
+- Google：**Campaign ↔ 網站**（`google_ads_campaign_websites`），來源為 Final URL / landing page
+- 未對應網域寫入 `ads_discovered_domains`；在 `/#website/list` 按「同步廣告網域」可提示建立網站後自動重連
 
 ## 前端路由
 
@@ -138,6 +150,7 @@ npx supabase functions deploy supabase-functions-facebook-ads-backfill-step --pr
 |------|------|
 | `/#marketing/facebook-ads` | Campaign 報表（日期區間、Business/帳戶篩選） |
 | `/#marketing/facebook-ads-sync` | 完整歷史回填控制台 |
+| `/#website/list` | 網站列表：廣告狀態欄、同步廣告網域、未連結網域建立提示 |
 
 Business 篩選與 KPI 由 warehouse 動態產生，**不需改前端**即可支援新增憑證。
 

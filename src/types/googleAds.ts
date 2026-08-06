@@ -57,6 +57,11 @@ export type GoogleAdsBackfillJob = {
     last_month_rows?: number;
     recent_errors?: string[];
     enabled_customer_ids?: string[];
+    websites_linked?: number;
+    domains_discovered?: number;
+    domains_unmatched?: number;
+    campaigns_with_links?: number;
+    link_errors?: string[];
   };
 };
 

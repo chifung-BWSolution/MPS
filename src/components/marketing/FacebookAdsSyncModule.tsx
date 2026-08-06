@@ -159,6 +159,22 @@ export function FacebookAdsSyncModule() {
               <div className="text-muted-foreground text-[11px]">錯誤數</div>
               <div className="font-medium">{job?.errorCount ?? 0}</div>
             </div>
+            <div>
+              <div className="text-muted-foreground text-[11px]">網站連結數</div>
+              <div className="font-medium">{job?.meta?.website_links?.websites_linked ?? '—'}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground text-[11px]">未對應網域</div>
+              <div className="font-medium">{job?.meta?.website_links?.domains_unmatched ?? '—'}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground text-[11px]">有連結的帳戶</div>
+              <div className="font-medium">{job?.meta?.website_links?.accounts_with_links ?? '—'}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground text-[11px]">發現網域數</div>
+              <div className="font-medium">{job?.meta?.website_links?.domains_discovered ?? '—'}</div>
+            </div>
           </div>
           <p className="text-[12px] text-muted-foreground leading-relaxed">
             Meta Insights 約僅保留近 37 個月資料。完整歷史以「每月一個步驟」推進，避免 Edge Function 逾時。
@@ -167,6 +183,7 @@ export function FacebookAdsSyncModule() {
             {job?.meta?.businesses?.length
               ? ` 目前任務涵蓋：${job.meta.businesses.join('、')}。`
               : ''}
+            {' '}啟動時會依 Creative 目的地 URL 自動對應網站；未對應網域可到「網站列表」用「同步廣告網域」建立。
           </p>
         </div>
 

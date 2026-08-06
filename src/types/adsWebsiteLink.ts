@@ -28,5 +28,6 @@ export type AdsWebsiteSyncResult = {
   google?: AdsWebsiteLinkSummary;
   facebook?: AdsWebsiteLinkSummary;
   unmatched: AdsDiscoveredDomain[];
+  linkErrors?: string[];
   error?: string;
 };
