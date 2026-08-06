@@ -5,20 +5,23 @@ import { cn } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
 import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
 import { invokeAsanaPitchingSync } from '@/lib/asanaPitchingApi';
+import { PitchingDetail, RemainingDaysCell, PitchingStatusSelect } from '@/components/quotation/PitchingModule';
 import {
   pitchingStatusConfig,
   formatProjectTypes,
   isProjectPageRecord,
   type PitchingRecord,
+  type PitchingStatus,
 } from '@/data/pitchingData';
-import { PitchingDetail, RemainingDaysCell } from '@/components/quotation/PitchingModule';
 
 function ProjectList({
   records,
   onView,
+  onStatusChange,
 }: {
   records: PitchingRecord[];
   onView: (record: PitchingRecord) => void;
+  onStatusChange: (id: string, status: PitchingStatus) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -101,10 +104,12 @@ function ProjectList({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((record) => {
-                const config = pitchingStatusConfig[record.status];
-                return (
-                  <tr key={record.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+              {filtered.map((record) => (
+                  <tr
+                    key={record.id}
+                    onClick={() => onView(record)}
+                    className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer"
+                  >
                     <td className="px-4 py-3 text-[13px] text-muted-foreground tabular-nums">{record.inquiryDate}</td>
                     <td className="px-4 py-3 text-[13px]">
                       <RemainingDaysCell inquiryDate={record.inquiryDate} status={record.status} />
@@ -112,22 +117,19 @@ function ProjectList({
                     <td className="px-4 py-3 text-[13px] max-w-[180px]">{formatProjectTypes(record.projectTypes)}</td>
                     <td className="px-4 py-3 text-[14px] font-medium">{record.displayName}</td>
                     <td className="px-4 py-3 text-[13px]">{record.assignedPmName || '—'}</td>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <PitchingStatusSelect
+                        value={record.status}
+                        onChange={(status) => onStatusChange(record.id, status)}
+                      />
+                    </td>
                     <td className="px-4 py-3">
-                      <span className={cn('text-[12px] font-medium px-2 py-0.5 rounded-sm', config.bgColor, config.color)}>
-                        {config.label}
+                      <span className="flex items-center gap-1 text-[12px] text-teal-600 font-medium">
+                        詳情 <ChevronRight size={12} />
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => onView(record)}
-                        className="flex items-center gap-1 text-[12px] text-teal-600 font-medium hover:text-teal-700"
-                      >
-                        詳情 <ChevronRight size={12} />
-                      </button>
-                    </td>
                   </tr>
-                );
-              })}
+                ))}
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-[13px] text-muted-foreground">
@@ -145,7 +147,7 @@ function ProjectList({
 
 export function ProjectModule() {
   const { navigateTo } = useApp();
-  const { records, loading, error, lastSyncedAt, refresh } = useQuotationClientProjects();
+  const { records, loading, error, lastSyncedAt, refresh, updateStatus } = useQuotationClientProjects();
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedRecord, setSelectedRecord] = useState<PitchingRecord | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -179,6 +181,18 @@ export function ProjectModule() {
     }
   };
 
+  const handleStatusChange = async (id: string, status: PitchingStatus) => {
+    const { error: updateErr } = await updateStatus(id, status);
+    if (updateErr) {
+      toast.error(`狀態更新失敗：${updateErr.message}`);
+      return;
+    }
+    if (selectedRecord?.id === id) {
+      setSelectedRecord((prev) => (prev ? { ...prev, status } : null));
+    }
+    toast.success(`狀態已更新為「${pitchingStatusConfig[status].label}」`);
+  };
+
   const handleConvertToQuote = () => {
     toast.success('已將 Project 資料帶入新建報價單');
     navigateTo('quotation', 'new');
@@ -193,6 +207,7 @@ export function ProjectModule() {
           setSelectedRecord(null);
         }}
         onConvertToQuote={handleConvertToQuote}
+        onStatusChange={(status) => void handleStatusChange(selectedRecord.id, status)}
       />
     );
   }
@@ -230,7 +245,11 @@ export function ProjectModule() {
       {loading ? (
         <div className="text-[13px] text-muted-foreground py-12 text-center">載入中…</div>
       ) : (
-        <ProjectList records={projectRecords} onView={handleView} />
+        <ProjectList
+          records={projectRecords}
+          onView={handleView}
+          onStatusChange={(id, status) => void handleStatusChange(id, status)}
+        />
       )}
     </div>
   );

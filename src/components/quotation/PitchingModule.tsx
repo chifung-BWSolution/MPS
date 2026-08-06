@@ -14,6 +14,7 @@ import {
   pitchingStatusConfig,
   pitchingClientOptions,
   PITCHING_PROJECT_TYPE_OPTIONS,
+  PITCHING_STATUS_OPTIONS,
   calcRemainingDays,
   formatProjectTypes,
   type PitchingRecord,
@@ -49,6 +50,39 @@ function formatEnquiryDateLabel(iso: string): string {
   if (parts.length !== 3) return iso;
   const [y, m, d] = parts;
   return `${y}年${parseInt(m!, 10)}月${parseInt(d!, 10)}日`;
+}
+
+export function PitchingStatusSelect({
+  value,
+  onChange,
+  className,
+}: {
+  value: PitchingStatus;
+  onChange: (status: PitchingStatus) => void;
+  className?: string;
+}) {
+  const config = pitchingStatusConfig[value];
+  return (
+    <select
+      value={value}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => onChange(e.target.value as PitchingStatus)}
+      className={cn(
+        'text-[12px] font-medium px-2 py-1 rounded-sm border border-transparent cursor-pointer',
+        'hover:ring-1 hover:ring-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-500',
+        config.bgColor,
+        config.color,
+        className,
+      )}
+      aria-label="變更狀態"
+    >
+      {PITCHING_STATUS_OPTIONS.map((status) => (
+        <option key={status} value={status}>
+          {pitchingStatusConfig[status].label}
+        </option>
+      ))}
+    </select>
+  );
 }
 
 export function RemainingDaysCell({ inquiryDate, status }: { inquiryDate: string; status: PitchingStatus }) {
@@ -273,9 +307,11 @@ function NewPitchingModal({
 function PitchingList({
   records,
   onView,
+  onStatusChange,
 }: {
   records: PitchingRecord[];
   onView: (record: PitchingRecord) => void;
+  onStatusChange: (id: string, status: PitchingStatus) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -362,10 +398,12 @@ function PitchingList({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((record) => {
-                const config = pitchingStatusConfig[record.status];
-                return (
-                  <tr key={record.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+              {filtered.map((record) => (
+                  <tr
+                    key={record.id}
+                    onClick={() => onView(record)}
+                    className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer"
+                  >
                     <td className="px-4 py-3 text-[13px] text-muted-foreground tabular-nums">{record.inquiryDate}</td>
                     <td className="px-4 py-3 text-[13px]">
                       <RemainingDaysCell inquiryDate={record.inquiryDate} status={record.status} />
@@ -373,22 +411,19 @@ function PitchingList({
                     <td className="px-4 py-3 text-[13px] max-w-[180px]">{formatProjectTypes(record.projectTypes)}</td>
                     <td className="px-4 py-3 text-[14px] font-medium">{record.displayName}</td>
                     <td className="px-4 py-3 text-[13px]">{record.assignedPmName || '—'}</td>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <PitchingStatusSelect
+                        value={record.status}
+                        onChange={(status) => onStatusChange(record.id, status)}
+                      />
+                    </td>
                     <td className="px-4 py-3">
-                      <span className={cn('text-[12px] font-medium px-2 py-0.5 rounded-sm', config.bgColor, config.color)}>
-                        {config.label}
+                      <span className="flex items-center gap-1 text-[12px] text-teal-600 font-medium">
+                        詳情 <ChevronRight size={12} />
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => onView(record)}
-                        className="flex items-center gap-1 text-[12px] text-teal-600 font-medium hover:text-teal-700"
-                      >
-                        詳情 <ChevronRight size={12} />
-                      </button>
-                    </td>
                   </tr>
-                );
-              })}
+                ))}
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-[13px] text-muted-foreground">
@@ -408,13 +443,14 @@ export function PitchingDetail({
   record,
   onBack,
   onConvertToQuote,
+  onStatusChange,
 }: {
   record: PitchingRecord;
   onBack: () => void;
   onConvertToQuote: () => void;
+  onStatusChange: (status: PitchingStatus) => void;
 }) {
   const [activeTab, setActiveTab] = useState<'info' | 'followups' | 'quotation' | 'client'>('info');
-  const config = pitchingStatusConfig[record.status];
   const remaining = calcRemainingDays(record.inquiryDate, record.status);
 
   const tabs = [
@@ -434,21 +470,30 @@ export function PitchingDetail({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-[20px] font-bold">{record.displayName}</h2>
-              <span className={cn('text-[12px] font-medium px-2 py-0.5 rounded-sm', config.bgColor, config.color)}>
-                {config.label}
-              </span>
+              <PitchingStatusSelect
+                value={record.status}
+                onChange={onStatusChange}
+                className="text-[13px] px-2.5 py-1"
+              />
             </div>
             <p className="text-[13px] text-muted-foreground mt-0.5">{record.pitchingId} · {record.clientName}</p>
           </div>
         </div>
-        {record.status !== 'closed' && (
-          <button
-            onClick={onConvertToQuote}
-            className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors active:scale-[0.97]"
-          >
-            <FileText size={14} /> 轉正式報價單
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          <PitchingStatusSelect
+            value={record.status}
+            onChange={onStatusChange}
+            className="text-[13px] px-3 py-1.5"
+          />
+          {record.status !== 'closed' && (
+            <button
+              onClick={onConvertToQuote}
+              className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors active:scale-[0.97]"
+            >
+              <FileText size={14} /> 轉正式報價單
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex gap-1 border-b border-border">
@@ -575,7 +620,7 @@ export function PitchingDetail({
 export function PitchingModule() {
   const { navigateTo } = useApp();
   const { systemUser, userInfo } = useAuth();
-  const { records, loading, error, lastSyncedAt, refresh, addRecord } = useQuotationClientProjects();
+  const { records, loading, error, lastSyncedAt, refresh, addRecord, updateStatus } = useQuotationClientProjects();
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedRecord, setSelectedRecord] = useState<PitchingRecord | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -628,6 +673,18 @@ export function PitchingModule() {
     toast.success('Pitching 已成功新增');
   };
 
+  const handleStatusChange = async (id: string, status: PitchingStatus) => {
+    const { error: updateErr } = await updateStatus(id, status);
+    if (updateErr) {
+      toast.error(`狀態更新失敗：${updateErr.message}`);
+      return;
+    }
+    if (selectedRecord?.id === id) {
+      setSelectedRecord((prev) => (prev ? { ...prev, status } : null));
+    }
+    toast.success(`狀態已更新為「${pitchingStatusConfig[status].label}」`);
+  };
+
   const handleConvertToQuote = () => {
     toast.success('已將 Pitching 資料帶入新建報價單');
     navigateTo('quotation', 'new');
@@ -642,6 +699,7 @@ export function PitchingModule() {
           setSelectedRecord(null);
         }}
         onConvertToQuote={handleConvertToQuote}
+        onStatusChange={(status) => void handleStatusChange(selectedRecord.id, status)}
       />
     );
   }
@@ -686,7 +744,11 @@ export function PitchingModule() {
       {loading ? (
         <div className="text-center py-12 text-[13px] text-muted-foreground">載入 Pitching 資料中…</div>
       ) : (
-        <PitchingList records={records} onView={handleView} />
+        <PitchingList
+          records={records}
+          onView={handleView}
+          onStatusChange={(id, status) => void handleStatusChange(id, status)}
+        />
       )}
 
       <NewPitchingModal

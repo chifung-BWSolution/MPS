@@ -59,6 +59,13 @@ export const pitchingStatusConfig: Record<PitchingStatus, { label: string; color
   closed: { label: '已結案', color: 'text-slate-600', bgColor: 'bg-slate-100' },
 };
 
+export const PITCHING_STATUS_OPTIONS: PitchingStatus[] = [
+  'initial',
+  'following_up',
+  'confirmed',
+  'closed',
+];
+
 /** Project page: same table as Pitching, filtered by status 確認項目. */
 export function isProjectPageRecord(
   record: Pick<PitchingRecord, 'status'>,

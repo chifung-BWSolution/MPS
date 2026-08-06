@@ -126,7 +126,22 @@ export function useQuotationClientProjects() {
     [],
   );
 
-  return { records, loading, error, lastSyncedAt, refresh, addRecord };
+  const updateStatus = useCallback(async (id: string, status: PitchingStatus) => {
+    const now = new Date().toISOString();
+    const { error: err } = await supabase
+      .from(QUOTATION_CLIENT_PROJECT_TABLE)
+      .update({ status, updated_at: now })
+      .eq('id', id);
+
+    if (!err) {
+      setRecords((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status, updatedAt: now } : r)),
+      );
+    }
+    return { error: err };
+  }, []);
+
+  return { records, loading, error, lastSyncedAt, refresh, addRecord, updateStatus };
 }
 
 /** @deprecated Use useQuotationClientProjects */
