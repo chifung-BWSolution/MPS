@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, X, ExternalLink, Video, Share2, Megaphone, TrendingUp, Mail, Puzzle, Link2, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Loader2, Unlink, Search, Edit, Trash2, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { WebsiteProfileFull, SocialPost, PaidAd, EdmCampaign } from '@/types/app';
+import { WebsiteProfileFull, SocialPost, EdmCampaign } from '@/types/app';
 import {
   getVideosForWebsite,
   getSocialPostsForWebsite,
-  getPaidAdsForWebsite,
   getEdmCampaignsForWebsite,
   getPluginsForWebsite,
   getExternalLinksForWebsite,
@@ -13,6 +12,8 @@ import {
   ExternalLink as ExternalLinkType,
 } from '@/data/websiteDetailData';
 import { useSeoKeywords } from '@/hooks/useSeoKeywords';
+import { useWebsitePaidAds } from '@/hooks/useWebsitePaidAds';
+import type { DateRangePreset } from '@/types/googleAds';
 import type { VideoOutput } from '@/types/videoOutput';
 import {
   VIDEO_OUTPUT_STATUS_COLORS,
@@ -62,21 +63,6 @@ const socialStatusConfig = {
   scheduled: { label: '已排期', color: 'text-amber-700', bgColor: 'bg-amber-50' },
   published: { label: '已發佈', color: 'text-teal-700', bgColor: 'bg-teal-50' },
   archived: { label: '已封存', color: 'text-slate-700', bgColor: 'bg-slate-50' },
-};
-
-const adStatusConfig = {
-  planning: { label: '規劃中', color: 'text-slate-700', bgColor: 'bg-slate-50' },
-  active: { label: '投放中', color: 'text-teal-700', bgColor: 'bg-teal-50' },
-  paused: { label: '已暫停', color: 'text-amber-700', bgColor: 'bg-amber-50' },
-  completed: { label: '已完成', color: 'text-blue-700', bgColor: 'bg-blue-50' },
-};
-
-const adPlatformConfig: Record<string, string> = {
-  google_ads: 'Google Ads',
-  facebook: 'Facebook',
-  instagram: 'Instagram',
-  xiaohongshu: '小紅書',
-  other: '其他',
 };
 
 const seoLevelConfig = {
@@ -598,147 +584,264 @@ export function WebsiteSocialTab({ site }: { site: WebsiteProfileFull }) {
 // ============================================================
 // PAID ADS TAB
 // ============================================================
-export function WebsiteAdsTab({ site }: { site: WebsiteProfileFull }) {
-  const [ads] = useState<PaidAd[]>(() => getPaidAdsForWebsite(site.id));
-  const [showModal, setShowModal] = useState(false);
-  const [newAd, setNewAd] = useState({ campaignName: '', platform: 'google_ads', budget: '', startDate: '', endDate: '' });
+function formatMoneyFromMicros(micros: number): string {
+  return (micros / 1_000_000).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
 
-  const totalBudget = ads.reduce((sum, ad) => sum + ad.budget, 0);
-  const totalSpend = ads.reduce((sum, ad) => sum + ad.actualSpend, 0);
-  const totalImpressions = ads.reduce((sum, ad) => sum + (ad.impressions || 0), 0);
-  const totalClicks = ads.reduce((sum, ad) => sum + (ad.clicks || 0), 0);
-  const totalConversions = ads.reduce((sum, ad) => sum + (ad.conversions || 0), 0);
+function adsApiStatusBadge(status: string) {
+  const s = status.toUpperCase();
+  const color =
+    s === 'ENABLED' || s === 'ACTIVE'
+      ? 'bg-emerald-50 text-emerald-700'
+      : s === 'PAUSED'
+        ? 'bg-amber-50 text-amber-700'
+        : 'bg-slate-100 text-slate-600';
+  return (
+    <span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', color)}>
+      {status}
+    </span>
+  );
+}
+
+const ADS_DATE_PRESETS: { value: DateRangePreset; label: string }[] = [
+  { value: '7d', label: '7 天' },
+  { value: '30d', label: '30 天' },
+  { value: '90d', label: '90 天' },
+  { value: 'ytd', label: '今年' },
+  { value: 'all', label: '全部' },
+];
+
+export function WebsiteAdsTab({ site }: { site: WebsiteProfileFull }) {
+  const [preset, setPreset] = useState<DateRangePreset>('30d');
+  const {
+    googleCampaigns,
+    facebookAccounts,
+    loading,
+    error,
+    dateFrom,
+    dateTo,
+  } = useWebsitePaidAds(site.id, preset);
+
+  const totalItems = googleCampaigns.length + facebookAccounts.length;
+  const totalSpendMicros =
+    googleCampaigns.reduce((sum, c) => sum + c.spendMicros, 0) +
+    facebookAccounts.reduce((sum, a) => sum + a.spendMicros, 0);
+  const totalImpressions =
+    googleCampaigns.reduce((sum, c) => sum + c.impressions, 0) +
+    facebookAccounts.reduce((sum, a) => sum + a.impressions, 0);
+  const totalClicks =
+    googleCampaigns.reduce((sum, c) => sum + c.clicks, 0) +
+    facebookAccounts.reduce((sum, a) => sum + a.clicks, 0);
+  const totalConversions =
+    googleCampaigns.reduce((sum, c) => sum + c.conversions, 0) +
+    facebookAccounts.reduce((sum, a) => sum + a.conversions, 0);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h4 className="text-[15px] font-bold">付費廣告</h4>
-          <p className="text-[12px] text-muted-foreground mt-0.5">共 {ads.length} 個廣告活動</p>
+          <p className="text-[12px] text-muted-foreground mt-0.5">
+            Google 廣告活動 {googleCampaigns.length} · Facebook 廣告帳戶 {facebookAccounts.length}
+            <span className="ml-2">· 指標區間 {dateFrom} → {dateTo}</span>
+          </p>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            資料由 Google / Facebook Ads API 同步自動關聯，無法手動新增或編輯。
+          </p>
         </div>
-        <button onClick={() => setShowModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-medium hover:bg-teal-700 transition-colors">
-          <Plus size={13} />新增廣告
-        </button>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {ADS_DATE_PRESETS.map((p) => (
+            <button
+              key={p.value}
+              type="button"
+              onClick={() => setPreset(p.value)}
+              className={cn(
+                'px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors',
+                preset === p.value
+                  ? 'bg-teal-600 text-white border-teal-600'
+                  : 'bg-white text-muted-foreground border-border hover:bg-muted/40',
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Summary Cards */}
-      {ads.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <div className="bg-teal-50 rounded-md p-3 text-center">
-            <span className="text-[16px] font-bold text-teal-700 block">${totalBudget.toLocaleString()}</span>
-            <span className="text-[10px] text-teal-600">總預算</span>
-          </div>
-          <div className="bg-amber-50 rounded-md p-3 text-center">
-            <span className="text-[16px] font-bold text-amber-700 block">${totalSpend.toLocaleString()}</span>
-            <span className="text-[10px] text-amber-600">已花費</span>
-          </div>
-          <div className="bg-blue-50 rounded-md p-3 text-center">
-            <span className="text-[16px] font-bold text-blue-700 block">{(totalImpressions / 1000).toFixed(1)}K</span>
-            <span className="text-[10px] text-blue-600">曝光</span>
-          </div>
-          <div className="bg-purple-50 rounded-md p-3 text-center">
-            <span className="text-[16px] font-bold text-purple-700 block">{totalClicks.toLocaleString()}</span>
-            <span className="text-[10px] text-purple-600">點擊</span>
-          </div>
-          <div className="bg-green-50 rounded-md p-3 text-center">
-            <span className="text-[16px] font-bold text-green-700 block">{totalConversions}</span>
-            <span className="text-[10px] text-green-600">轉換</span>
-          </div>
+      {error && (
+        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700">
+          {error}
         </div>
       )}
 
-      {ads.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+          <Loader2 size={16} className="animate-spin" />
+          <span className="text-[13px]">載入付費廣告同步資料...</span>
+        </div>
+      ) : totalItems === 0 ? (
         <div className="text-center py-12 border border-dashed border-border rounded-md">
           <Megaphone size={32} className="text-muted-foreground mx-auto mb-3" />
-          <p className="text-[14px] font-medium text-muted-foreground">尚未有付費廣告記錄</p>
+          <p className="text-[14px] font-medium text-muted-foreground">尚未關聯任何付費廣告</p>
+          <p className="text-[12px] text-muted-foreground mt-1">
+            請先於網站列表執行「同步廣告網域」，或完成 Google / Facebook Ads 同步後自動匹配。
+          </p>
         </div>
       ) : (
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">活動名稱</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">平台</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">預算</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">花費</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">曝光</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">點擊</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">轉換</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">ROAS</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ads.map(ad => {
-                const statusCfg = adStatusConfig[ad.status];
-                return (
-                  <tr key={ad.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3 text-[13px] font-medium">{ad.campaignName}</td>
-                    <td className="px-4 py-3"><span className="text-[11px] bg-muted px-1.5 py-0.5 rounded">{adPlatformConfig[ad.platform] || ad.platform}</span></td>
-                    <td className="px-4 py-3 text-[13px]">${ad.budget.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-[13px] font-medium">${ad.actualSpend.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-[12px]">{ad.impressions?.toLocaleString() || '—'}</td>
-                    <td className="px-4 py-3 text-[12px]">{ad.clicks?.toLocaleString() || '—'}</td>
-                    <td className="px-4 py-3 text-[12px]">{ad.conversions || '—'}</td>
-                    <td className="px-4 py-3 text-[13px] font-bold text-teal-700">{ad.roas ? `${ad.roas}x` : '—'}</td>
-                    <td className="px-4 py-3"><span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', statusCfg.bgColor, statusCfg.color)}>{statusCfg.label}</span></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Add Ad Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-[540px]">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h3 className="text-[16px] font-bold">新增付費廣告</h3>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-amber-50 rounded-md p-3 text-center">
+              <span className="text-[16px] font-bold text-amber-700 block">
+                {formatMoneyFromMicros(totalSpendMicros)}
+              </span>
+              <span className="text-[10px] text-amber-600">花費</span>
             </div>
-            <div className="px-6 py-4 space-y-4">
-              <div className="bg-muted/30 rounded-md p-3 text-[12px] text-muted-foreground">
-                公司：<span className="font-medium text-foreground">{site.company}</span> · 品牌：<span className="font-medium text-foreground">{site.brand}</span>
-              </div>
-              <div>
-                <label className="text-[12px] font-medium text-muted-foreground block mb-1">活動名稱 *</label>
-                <input value={newAd.campaignName} onChange={e => setNewAd(p => ({ ...p, campaignName: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" placeholder="廣告活動名稱" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[12px] font-medium text-muted-foreground block mb-1">平台</label>
-                  <select value={newAd.platform} onChange={e => setNewAd(p => ({ ...p, platform: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600">
-                    <option value="google_ads">Google Ads</option>
-                    <option value="facebook">Facebook</option>
-                    <option value="instagram">Instagram</option>
-                    <option value="xiaohongshu">小紅書</option>
-                    <option value="other">其他</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[12px] font-medium text-muted-foreground block mb-1">預算 (HKD)</label>
-                  <input type="number" value={newAd.budget} onChange={e => setNewAd(p => ({ ...p, budget: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" placeholder="0" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[12px] font-medium text-muted-foreground block mb-1">開始日期</label>
-                  <input type="date" value={newAd.startDate} onChange={e => setNewAd(p => ({ ...p, startDate: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" />
-                </div>
-                <div>
-                  <label className="text-[12px] font-medium text-muted-foreground block mb-1">結束日期</label>
-                  <input type="date" value={newAd.endDate} onChange={e => setNewAd(p => ({ ...p, endDate: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" />
-                </div>
-              </div>
+            <div className="bg-blue-50 rounded-md p-3 text-center">
+              <span className="text-[16px] font-bold text-blue-700 block">
+                {totalImpressions.toLocaleString()}
+              </span>
+              <span className="text-[10px] text-blue-600">曝光</span>
             </div>
-            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted rounded-md">取消</button>
-              <button onClick={() => setShowModal(false)} disabled={!newAd.campaignName} className="px-4 py-2 text-[13px] font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed">新增廣告</button>
+            <div className="bg-purple-50 rounded-md p-3 text-center">
+              <span className="text-[16px] font-bold text-purple-700 block">
+                {totalClicks.toLocaleString()}
+              </span>
+              <span className="text-[10px] text-purple-600">點擊</span>
+            </div>
+            <div className="bg-green-50 rounded-md p-3 text-center">
+              <span className="text-[16px] font-bold text-green-700 block">
+                {totalConversions.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </span>
+              <span className="text-[10px] text-green-600">轉換</span>
             </div>
           </div>
-        </div>
+
+          {googleCampaigns.length > 0 && (
+            <div className="space-y-2">
+              <h5 className="text-[13px] font-semibold">Google Ads 活動</h5>
+              <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[880px]">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/30">
+                        <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">活動名稱</th>
+                        <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">帳戶</th>
+                        <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">類型</th>
+                        <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">匹配網域</th>
+                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">曝光</th>
+                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">點擊</th>
+                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">花費</th>
+                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">轉換</th>
+                        <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {googleCampaigns.map((c) => (
+                        <tr key={c.key} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="text-[13px] font-medium">{c.campaignName}</div>
+                            <div className="text-[11px] text-muted-foreground font-mono">{c.campaignId}</div>
+                          </td>
+                          <td className="px-4 py-3 text-[12px] text-muted-foreground">
+                            <div>{c.accountName || c.customerId}</div>
+                            <div className="text-[11px] font-mono">{c.customerId}</div>
+                          </td>
+                          <td className="px-4 py-3 text-[12px] text-muted-foreground whitespace-nowrap">
+                            {c.channelType || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-[12px]">
+                            <div>{c.matchedDomain || '—'}</div>
+                            {c.sampleFinalUrl && (
+                              <a
+                                href={c.sampleFinalUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[11px] text-teal-700 hover:underline inline-flex items-center gap-0.5 max-w-[200px] truncate"
+                              >
+                                {c.sampleFinalUrl}
+                                <ExternalLink size={10} />
+                              </a>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-[12px] text-right tabular-nums">{c.impressions.toLocaleString()}</td>
+                          <td className="px-4 py-3 text-[12px] text-right tabular-nums">{c.clicks.toLocaleString()}</td>
+                          <td className="px-4 py-3 text-[13px] text-right tabular-nums font-medium">{formatMoneyFromMicros(c.spendMicros)}</td>
+                          <td className="px-4 py-3 text-[12px] text-right tabular-nums">
+                            {c.conversions.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-4 py-3">{adsApiStatusBadge(c.status)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {facebookAccounts.length > 0 && (
+            <div className="space-y-2">
+              <h5 className="text-[13px] font-semibold">Facebook Ads 帳戶</h5>
+              <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[880px]">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/30">
+                        <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">帳戶名稱</th>
+                        <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Business</th>
+                        <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">匹配網域</th>
+                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">活動數</th>
+                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">曝光</th>
+                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">點擊</th>
+                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">花費</th>
+                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">轉換</th>
+                        <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {facebookAccounts.map((a) => (
+                        <tr key={a.key} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="text-[13px] font-medium">{a.accountName}</div>
+                            <div className="text-[11px] text-muted-foreground font-mono">{a.adAccountId}</div>
+                          </td>
+                          <td className="px-4 py-3 text-[12px] text-muted-foreground whitespace-nowrap">
+                            {a.businessName || '—'}
+                          </td>
+                          <td className="px-4 py-3 text-[12px]">
+                            <div>{a.matchedDomain || '—'}</div>
+                            {a.sampleFinalUrl && (
+                              <a
+                                href={a.sampleFinalUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[11px] text-teal-700 hover:underline inline-flex items-center gap-0.5 max-w-[200px] truncate"
+                              >
+                                {a.sampleFinalUrl}
+                                <ExternalLink size={10} />
+                              </a>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-[12px] text-right tabular-nums">{a.campaignCount}</td>
+                          <td className="px-4 py-3 text-[12px] text-right tabular-nums">{a.impressions.toLocaleString()}</td>
+                          <td className="px-4 py-3 text-[12px] text-right tabular-nums">{a.clicks.toLocaleString()}</td>
+                          <td className="px-4 py-3 text-[13px] text-right tabular-nums font-medium">{formatMoneyFromMicros(a.spendMicros)}</td>
+                          <td className="px-4 py-3 text-[12px] text-right tabular-nums">
+                            {a.conversions.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-4 py-3">{adsApiStatusBadge(a.status)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
