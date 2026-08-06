@@ -33,7 +33,7 @@ import {
   PITCHING_PROJECT_TYPE_OPTIONS,
 } from '@/data/pitchingData';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
-import { generateQuotationServices, type QuotationAiCatalogItem } from '@/lib/quotationAiApi';
+import { generateQuotationServices, QUOTATION_AI_MODEL_OPTIONS, type QuotationAiCatalogItem, type QuotationAiProvider } from '@/lib/quotationAiApi';
 
 // Supplier options for cost structure
 const supplierOptions = [
@@ -197,6 +197,7 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
   const [projectTypeFilter, setProjectTypeFilter] = useState('all');
   const [clientName, setClientName] = useState('');
   const [requirementsText, setRequirementsText] = useState('');
+  const [aiProvider, setAiProvider] = useState<QuotationAiProvider>('grok');
   const [aiGenerating, setAiGenerating] = useState(false);
   const [quotationDate, setQuotationDate] = useState('');
   const [manHoursEstimate, setManHoursEstimate] = useState<number>(0);
@@ -279,6 +280,7 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
     try {
       const pitching = pitchingRecords.find((record) => record.id === selectedPitchingId);
       const result = await generateQuotationServices({
+        provider: aiProvider,
         quotationTypeName: selectedType?.name,
         isComprehensive,
         selectedTypeNames: selectedTypes
@@ -308,11 +310,6 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
       setServices(mappedServices);
 
       setStep(3);
-      toast.success(
-        result.fallback
-          ? '已使用本地規則生成服務項目（AI 服務暫不可用）'
-          : `AI 已生成服務項目（${result.provider === 'gemini' ? 'Gemini' : result.provider === 'grok' ? 'Grok' : 'AI'}）`,
-      );
     } catch (err) {
       toast.error(`生成失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
     } finally {
@@ -588,32 +585,45 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
                       placeholder="描述客戶需求、範圍、預算期望等，AI 將據此生成服務項目…"
                       className="flex-1 px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-y min-h-[96px]"
                     />
-                    <button
-                      type="button"
-                      onClick={() => void handleGenerateServices()}
-                      disabled={aiGenerating || (isComprehensive && selectedTypes.length === 0)}
-                      className={cn(
-                        'shrink-0 h-[96px] px-4 rounded-md text-[13px] font-medium transition-colors duration-200 flex flex-col items-center justify-center gap-1.5 min-w-[88px]',
-                        aiGenerating || (isComprehensive && selectedTypes.length === 0)
-                          ? 'bg-muted text-muted-foreground cursor-not-allowed'
-                          : 'bg-teal-600 text-white hover:bg-teal-700',
-                      )}
-                    >
-                      {aiGenerating ? (
-                        <>
-                          <Loader2 size={16} className="animate-spin" />
-                          <span>生成中</span>
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles size={16} />
-                          <span>生成</span>
-                        </>
-                      )}
-                    </button>
+                    <div className="shrink-0 flex flex-col gap-2 w-[112px]">
+                      <select
+                        value={aiProvider}
+                        onChange={(e) => setAiProvider(e.target.value as QuotationAiProvider)}
+                        disabled={aiGenerating}
+                        className="h-9 px-2 border border-border rounded-md text-[13px] bg-white focus:outline-none focus:ring-1 focus:ring-teal-600 disabled:opacity-60"
+                        aria-label="AI 模型"
+                      >
+                        {QUOTATION_AI_MODEL_OPTIONS.map((opt) => (
+                          <option key={opt.id} value={opt.id}>{opt.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => void handleGenerateServices()}
+                        disabled={aiGenerating || (isComprehensive && selectedTypes.length === 0)}
+                        className={cn(
+                          'flex-1 min-h-[56px] px-3 rounded-md text-[13px] font-medium transition-colors duration-200 flex flex-col items-center justify-center gap-1.5',
+                          aiGenerating || (isComprehensive && selectedTypes.length === 0)
+                            ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                            : 'bg-teal-600 text-white hover:bg-teal-700',
+                        )}
+                      >
+                        {aiGenerating ? (
+                          <>
+                            <Loader2 size={16} className="animate-spin" />
+                            <span>生成中</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles size={16} />
+                            <span>生成</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                   <p className="text-[11px] text-muted-foreground mt-1.5">
-                    使用 Gemini / Grok AI 分析需求並自動填寫下一步的服務項目；若 AI 不可用，將使用本地規則生成。
+                    選擇 AI 模型後按「生成」，將自動填寫下一步的服務項目；若所選模型不可用，將使用本地規則生成。
                   </p>
                 </div>
               )}

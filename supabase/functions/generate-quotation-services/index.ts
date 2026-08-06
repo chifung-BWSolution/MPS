@@ -170,32 +170,43 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    const provider = String(body.provider ?? "grok");
     const prompt = buildPrompt(body);
     let services: AiService[] = [];
-    let provider = "fallback";
+    let usedProvider = "fallback";
 
-    try {
-      services = await callGemini(prompt);
-      if (services.length) provider = "gemini";
-    } catch (geminiErr) {
-      console.warn("Gemini failed:", geminiErr);
-    }
+    const tryProvider = async (name: "gemini" | "grok") => {
+      if (name === "gemini") return callGemini(prompt);
+      return callGrok(prompt);
+    };
 
-    if (!services.length) {
+    if (provider === "gemini" || provider === "grok") {
       try {
-        services = await callGrok(prompt);
-        if (services.length) provider = "grok";
-      } catch (grokErr) {
-        console.warn("Grok failed:", grokErr);
+        services = await tryProvider(provider);
+        if (services.length) usedProvider = provider;
+      } catch (err) {
+        console.warn(`${provider} failed:`, err);
+      }
+    } else {
+      for (const name of ["gemini", "grok"] as const) {
+        try {
+          services = await tryProvider(name);
+          if (services.length) {
+            usedProvider = name;
+            break;
+          }
+        } catch (err) {
+          console.warn(`${name} failed:`, err);
+        }
       }
     }
 
     if (!services.length) {
       services = fallbackServices(catalog);
-      provider = "fallback";
+      usedProvider = "fallback";
     }
 
-    return new Response(JSON.stringify({ services, provider }), {
+    return new Response(JSON.stringify({ services, provider: usedProvider }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });

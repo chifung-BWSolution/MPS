@@ -11,7 +11,15 @@ export type QuotationAiCatalogItem = {
   category: string;
 };
 
+export type QuotationAiProvider = 'grok' | 'gemini';
+
+export const QUOTATION_AI_MODEL_OPTIONS: { id: QuotationAiProvider; label: string }[] = [
+  { id: 'grok', label: 'Grok' },
+  { id: 'gemini', label: 'Gemini' },
+];
+
 export type GenerateQuotationServicesInput = {
+  provider: QuotationAiProvider;
   quotationTypeName?: string;
   isComprehensive: boolean;
   selectedTypeNames: string[];
@@ -144,6 +152,7 @@ export async function generateQuotationServices(
       services?: Array<Record<string, unknown>>;
       provider?: string;
     }>('generate-quotation-services', {
+      provider: input.provider,
       quotationTypeName: input.quotationTypeName,
       isComprehensive: input.isComprehensive,
       selectedTypeNames: input.selectedTypeNames,
