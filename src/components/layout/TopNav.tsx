@@ -51,7 +51,7 @@ export function TopNav() {
   );
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-[48px] bg-[#0d1a2d] text-white z-50 flex items-center">
+    <header className="fixed top-0 left-0 right-0 h-[48px] bg-[#0d1a2d] text-white z-40 flex items-center">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-5 h-full border-r border-white/10 shrink-0">
         <div className="w-7 h-7 rounded-md bg-teal-600 flex items-center justify-center">
