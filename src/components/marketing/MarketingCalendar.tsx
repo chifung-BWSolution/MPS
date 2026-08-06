@@ -397,7 +397,7 @@ export function MarketingCalendar() {
           sourceId: p.id,
           canManage: false,
           _fullDate: dateStr,
-          statusText: `反向連結：${p.quantity} 條 · ${p.currency} ${p.cost}`,
+          statusText: `反向連結：${p.quantity} 條 · USD ${p.costUsd} / HKD ${p.costHkd}`,
           statusClassName: 'bg-orange-100 text-orange-800',
         };
       });

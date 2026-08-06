@@ -38,7 +38,9 @@ import { toast } from 'sonner';
 import { useBacklinkPurchases } from '@/hooks/useBacklinkPurchases';
 import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
 import { useGoogleBusinessRegistrations } from '@/hooks/useGoogleBusinessRegistrations';
-import type { BacklinkPurchase, GoogleBusinessRegistration } from '@/types/marketingOps';
+import type { BacklinkBrand, BacklinkPurchase, GoogleBusinessRegistration } from '@/types/marketingOps';
+import { BACKLINK_BRANDS } from '@/types/marketingOps';
+import { formatBacklinkHkd, formatBacklinkUsd, normalizeBacklinkCosts } from '@/lib/backlinkCurrency';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1490,8 +1492,9 @@ export function WebsiteCalendarTab({ site }: { site: WebsiteProfileFull }) {
 // ============================================================
 type BacklinkForm = {
   webSupplierId: string;
-  cost: number;
-  currency: 'USD' | 'HKD';
+  costUsd: number;
+  costHkd: number;
+  brand?: BacklinkBrand;
   purchaseDate: string;
   quantity: number;
   notes: string;
@@ -1499,8 +1502,9 @@ type BacklinkForm = {
 
 const emptyBacklinkForm: BacklinkForm = {
   webSupplierId: '',
-  cost: 0,
-  currency: 'USD',
+  costUsd: 0,
+  costHkd: 0,
+  brand: undefined,
   purchaseDate: '',
   quantity: 1,
   notes: '',
@@ -1533,18 +1537,20 @@ export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
 
   const stats = useMemo(() => {
     const totalQty = records.reduce((s, p) => s + p.quantity, 0);
-    const usd = records.filter((p) => p.currency === 'USD').reduce((s, p) => s + p.cost, 0);
-    const hkd = records.filter((p) => p.currency === 'HKD').reduce((s, p) => s + p.cost, 0);
+    const usd = records.reduce((s, p) => s + p.costUsd, 0);
+    const hkd = records.reduce((s, p) => s + p.costHkd, 0);
     return { count: records.length, totalQty, usd, hkd };
   }, [records]);
 
   const handleAdd = async () => {
     if (!form.webSupplierId || !form.purchaseDate || form.quantity < 1) return;
+    const normalized = normalizeBacklinkCosts(form.costUsd, form.costHkd);
     const { error } = await addPurchase({
       websiteProfileId: site.id,
       webSupplierId: form.webSupplierId,
-      cost: form.cost,
-      currency: form.currency,
+      costUsd: normalized.costUsd,
+      costHkd: normalized.costHkd,
+      brand: form.brand,
       purchaseDate: form.purchaseDate,
       quantity: form.quantity,
       notes: form.notes || undefined,
@@ -1559,10 +1565,12 @@ export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
 
   const handleSaveEdit = async () => {
     if (!editing || !editing.webSupplierId || !editing.purchaseDate || editing.quantity < 1) return;
+    const normalized = normalizeBacklinkCosts(editing.costUsd, editing.costHkd);
     const error = await updatePurchase(editing.id, {
       webSupplierId: editing.webSupplierId,
-      cost: editing.cost,
-      currency: editing.currency,
+      costUsd: normalized.costUsd,
+      costHkd: normalized.costHkd,
+      brand: editing.brand,
       purchaseDate: editing.purchaseDate,
       quantity: editing.quantity,
       notes: editing.notes,
@@ -1603,19 +1611,25 @@ export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">費用 *</label>
-            <Input type="number" value={data.cost} onChange={(e) => onChange({ ...data, cost: parseFloat(e.target.value) || 0 })} className="h-9 text-[13px]" />
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">費用 USD</label>
+            <Input type="number" min={0} value={data.costUsd || ''} onChange={(e) => onChange({ ...data, costUsd: parseFloat(e.target.value) || 0 })} className="h-9 text-[13px]" />
           </div>
           <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">幣別</label>
-            <Select value={data.currency} onValueChange={(val) => onChange({ ...data, currency: val as 'USD' | 'HKD' })}>
-              <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="USD">USD</SelectItem>
-                <SelectItem value="HKD">HKD</SelectItem>
-              </SelectContent>
-            </Select>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">費用 HKD</label>
+            <Input type="number" min={0} step="0.01" value={data.costHkd || ''} onChange={(e) => onChange({ ...data, costHkd: parseFloat(e.target.value) || 0 })} className="h-9 text-[13px]" />
           </div>
+        </div>
+        <div>
+          <label className="text-[12px] font-medium text-muted-foreground block mb-1">品牌</label>
+          <Select value={data.brand || '__none__'} onValueChange={(val) => onChange({ ...data, brand: val === '__none__' ? undefined : (val as BacklinkBrand) })}>
+            <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="選擇品牌" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">未指定</SelectItem>
+              {BACKLINK_BRANDS.map((brand) => (
+                <SelectItem key={brand} value={brand}>{brand}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -1675,9 +1689,11 @@ export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
           <table className="w-full text-[13px]">
             <thead className="bg-muted/30">
               <tr>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">品牌</th>
                 <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">供應商網址</th>
                 <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">供應商</th>
-                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">費用</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">費用 USD</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">費用 HKD</th>
                 <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">購買日期</th>
                 <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">數量</th>
                 <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">操作</th>
@@ -1688,9 +1704,11 @@ export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
                 const supplier = supplierMap.get(record.webSupplierId);
                 return (
                   <tr key={record.id} className="border-t border-border/50 hover:bg-muted/10">
+                    <td className="px-4 py-3">{record.brand || '—'}</td>
                     <td className="px-4 py-3 break-all">{supplier?.url || '—'}</td>
                     <td className="px-4 py-3 text-muted-foreground">{supplier?.name || '—'}</td>
-                    <td className="px-4 py-3">{record.currency} ${record.cost.toLocaleString()}</td>
+                    <td className="px-4 py-3 tabular-nums">{formatBacklinkUsd(record.costUsd)}</td>
+                    <td className="px-4 py-3 tabular-nums">{formatBacklinkHkd(record.costHkd)}</td>
                     <td className="px-4 py-3">{record.purchaseDate}</td>
                     <td className="px-4 py-3">{record.quantity}</td>
                     <td className="px-4 py-3">

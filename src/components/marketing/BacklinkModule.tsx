@@ -6,7 +6,9 @@ import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
 import { useGoogleAdsAccounts } from '@/hooks/useGoogleAdsAccounts';
 import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
 import { getManualDisplayName } from '@/lib/domainMatch';
-import type { BacklinkPurchase } from '@/types/marketingOps';
+import { formatBacklinkHkd, formatBacklinkUsd, normalizeBacklinkCosts } from '@/lib/backlinkCurrency';
+import type { BacklinkBrand, BacklinkPurchase } from '@/types/marketingOps';
+import { BACKLINK_BRANDS } from '@/types/marketingOps';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,8 +18,9 @@ import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/s
 type PurchaseForm = {
   websiteProfileId: string;
   webSupplierId: string;
-  cost: number;
-  currency: 'USD' | 'HKD';
+  costUsd: number;
+  costHkd: number;
+  brand?: BacklinkBrand;
   purchaseDate: string;
   quantity: number;
   notes: string;
@@ -28,8 +31,9 @@ type PurchaseForm = {
 const emptyForm: PurchaseForm = {
   websiteProfileId: '',
   webSupplierId: '',
-  cost: 0,
-  currency: 'USD',
+  costUsd: 0,
+  costHkd: 0,
+  brand: undefined,
   purchaseDate: '',
   quantity: 1,
   notes: '',
@@ -128,7 +132,9 @@ function BacklinkDetail({
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
         <h3 className="text-[16px] font-bold mb-4">購買詳情</h3>
         <div className="grid grid-cols-2 gap-4 text-[13px]">
-          <div><span className="text-muted-foreground">費用:</span> <span className="font-medium">{record.currency} ${record.cost.toLocaleString()}</span></div>
+          <div><span className="text-muted-foreground">費用 USD:</span> <span className="font-medium">{formatBacklinkUsd(record.costUsd)}</span></div>
+          <div><span className="text-muted-foreground">費用 HKD:</span> <span className="font-medium">{formatBacklinkHkd(record.costHkd)}</span></div>
+          <div><span className="text-muted-foreground">品牌:</span> <span className="font-medium">{record.brand || '—'}</span></div>
           <div><span className="text-muted-foreground">購買日期:</span> <span className="font-medium">{record.purchaseDate}</span></div>
           <div><span className="text-muted-foreground">反向連結數量:</span> <span className="font-medium">{record.quantity}</span></div>
           <div><span className="text-muted-foreground">備註:</span> <span className="font-medium">{record.notes || '—'}</span></div>
@@ -193,7 +199,7 @@ export function BacklinkModule() {
   } = useBacklinkPurchases();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [currencyFilter, setCurrencyFilter] = useState<'all' | 'USD' | 'HKD'>('all');
+  const [brandFilter, setBrandFilter] = useState<'all' | BacklinkBrand>('all');
   const [accountFilter, setAccountFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
@@ -277,7 +283,7 @@ export function BacklinkModule() {
   const filtered = useMemo(() => {
     return enriched
       .filter((r) => {
-        if (currencyFilter !== 'all' && r.currency !== currencyFilter) return false;
+        if (brandFilter !== 'all' && r.brand !== brandFilter) return false;
         if (accountFilter !== 'all') {
           if (accountFilter === 'unmatched') return !r.resolvedSiteName && !!r.sourceDomain;
           if (r.googleAdsCustomerId !== accountFilter) return false;
@@ -296,18 +302,19 @@ export function BacklinkModule() {
             r.siteName.toLowerCase().includes(q) ||
             (r.resolvedSiteName || r.googleAdsAccountName || '').toLowerCase().includes(q) ||
             (r.sourceDomain || '').toLowerCase().includes(q) ||
+            (r.brand || '').toLowerCase().includes(q) ||
             (r.notes || '').toLowerCase().includes(q)
           );
         }
         return true;
       })
       .sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate));
-  }, [enriched, currencyFilter, accountFilter, yearFilter, dateFrom, dateTo, searchQuery]);
+  }, [enriched, brandFilter, accountFilter, yearFilter, dateFrom, dateTo, searchQuery]);
 
   const stats = useMemo(() => {
     const totalQty = filtered.reduce((s, p) => s + p.quantity, 0);
-    const usd = filtered.filter((p) => p.currency === 'USD').reduce((s, p) => s + p.cost, 0);
-    const hkd = filtered.filter((p) => p.currency === 'HKD').reduce((s, p) => s + p.cost, 0);
+    const usd = filtered.reduce((s, p) => s + p.costUsd, 0);
+    const hkd = filtered.reduce((s, p) => s + p.costHkd, 0);
     return { count: filtered.length, totalQty, usd, hkd };
   }, [filtered]);
 
@@ -336,8 +343,8 @@ export function BacklinkModule() {
     const { error } = await addPurchase({
       websiteProfileId: form.websiteProfileId || undefined,
       webSupplierId: form.webSupplierId,
-      cost: form.cost,
-      currency: form.currency,
+      ...normalizeBacklinkCosts(form.costUsd, form.costHkd),
+      brand: form.brand,
       purchaseDate: form.purchaseDate,
       quantity: form.quantity,
       notes: form.notes || undefined,
@@ -365,11 +372,13 @@ export function BacklinkModule() {
       editing.googleAdsCustomerId && !editing.googleAdsAccountName
         ? googleAdsAccounts.find((a) => a.customerId === editing.googleAdsCustomerId)?.descriptiveName
         : editing.googleAdsAccountName;
+    const normalized = normalizeBacklinkCosts(editing.costUsd, editing.costHkd);
     const error = await updatePurchase(editing.id, {
       websiteProfileId: editing.websiteProfileId || undefined,
       webSupplierId: editing.webSupplierId,
-      cost: editing.cost,
-      currency: editing.currency,
+      costUsd: normalized.costUsd,
+      costHkd: normalized.costHkd,
+      brand: editing.brand,
       purchaseDate: editing.purchaseDate,
       quantity: editing.quantity,
       notes: editing.notes,
@@ -448,6 +457,21 @@ export function BacklinkModule() {
           />
         </div>
         <div>
+          <label className="text-[12px] font-medium text-muted-foreground block mb-1">品牌</label>
+          <Select
+            value={data.brand || '__none__'}
+            onValueChange={(val) => onChange({ ...data, brand: val === '__none__' ? undefined : (val as BacklinkBrand) })}
+          >
+            <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="選擇品牌" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">未指定</SelectItem>
+              {BACKLINK_BRANDS.map((brand) => (
+                <SelectItem key={brand} value={brand}>{brand}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
           <label className="text-[12px] font-medium text-muted-foreground block mb-1">供應商網址 *</label>
           <SearchableSelect
             value={data.webSupplierId}
@@ -472,26 +496,45 @@ export function BacklinkModule() {
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">費用 *</label>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">費用 USD</label>
             <Input
               type="number"
-              value={data.cost}
-              onChange={(e) => onChange({ ...data, cost: parseFloat(e.target.value) || 0 })}
+              min={0}
+              value={data.costUsd || ''}
+              onChange={(e) => {
+                const costUsd = parseFloat(e.target.value) || 0;
+                const next = { ...data, costUsd };
+                if (costUsd > 0 && !data.costHkd) {
+                  const normalized = normalizeBacklinkCosts(costUsd, null);
+                  onChange({ ...next, costHkd: normalized.costHkd });
+                } else {
+                  onChange(next);
+                }
+              }}
               className="h-9 text-[13px]"
+              placeholder="USD"
             />
           </div>
           <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">幣別</label>
-            <Select
-              value={data.currency}
-              onValueChange={(val) => onChange({ ...data, currency: val as 'USD' | 'HKD' })}
-            >
-              <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="USD">USD</SelectItem>
-                <SelectItem value="HKD">HKD</SelectItem>
-              </SelectContent>
-            </Select>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">費用 HKD</label>
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              value={data.costHkd || ''}
+              onChange={(e) => {
+                const costHkd = parseFloat(e.target.value) || 0;
+                const next = { ...data, costHkd };
+                if (costHkd > 0 && !data.costUsd) {
+                  const normalized = normalizeBacklinkCosts(null, costHkd);
+                  onChange({ ...next, costUsd: normalized.costUsd });
+                } else {
+                  onChange(next);
+                }
+              }}
+              className="h-9 text-[13px]"
+              placeholder="HKD"
+            />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
@@ -601,15 +644,17 @@ export function BacklinkModule() {
               ))}
             </SelectContent>
           </Select>
-          <select
-            value={currencyFilter}
-            onChange={(e) => setCurrencyFilter(e.target.value as 'all' | 'USD' | 'HKD')}
-            className="px-2.5 py-1.5 border border-border rounded text-[12px] bg-white focus:outline-none focus:ring-1 focus:ring-teal-600 h-9"
-          >
-            <option value="all">全部幣別</option>
-            <option value="USD">USD</option>
-            <option value="HKD">HKD</option>
-          </select>
+          <Select value={brandFilter} onValueChange={(val) => setBrandFilter(val as 'all' | BacklinkBrand)}>
+            <SelectTrigger className="w-[120px] h-9 text-[13px]">
+              <SelectValue placeholder="品牌" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部品牌</SelectItem>
+              {BACKLINK_BRANDS.map((brand) => (
+                <SelectItem key={brand} value={brand}>{brand}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <button
             onClick={() => { setForm(emptyForm); setShowAddModal(true); }}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700 transition-colors duration-200 h-9"
@@ -645,9 +690,11 @@ export function BacklinkModule() {
           <thead className="bg-muted/30">
             <tr>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">所屬網站</th>
+              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">品牌</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">供應商網址</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">供應商</th>
-              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">費用</th>
+              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">費用 USD</th>
+              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">費用 HKD</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">購買日期</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">數量</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">操作</th>
@@ -660,12 +707,35 @@ export function BacklinkModule() {
                   <SiteCell record={record} siteName={record.siteName} />
                 </td>
                 <td className="px-4 py-3">
+                  <Select
+                    value={record.brand || '__none__'}
+                    onValueChange={(val) => {
+                      const nextBrand = val === '__none__' ? undefined : (val as BacklinkBrand);
+                      if (record.brand === nextBrand) return;
+                      void updatePurchase(record.id, { brand: nextBrand }).then((error) => {
+                        if (error) toast.error(`品牌更新失敗：${error.message}`);
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="h-8 w-[96px] text-[12px]">
+                      <SelectValue placeholder="—" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">—</SelectItem>
+                      {BACKLINK_BRANDS.map((brand) => (
+                        <SelectItem key={brand} value={brand}>{brand}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </td>
+                <td className="px-4 py-3">
                   {record.supplierUrl ? (
                     <span className="break-all text-muted-foreground">{record.supplierUrl}</span>
                   ) : null}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{record.supplierName}</td>
-                <td className="px-4 py-3">{record.currency} ${record.cost.toLocaleString()}</td>
+                <td className="px-4 py-3 tabular-nums">{formatBacklinkUsd(record.costUsd)}</td>
+                <td className="px-4 py-3 tabular-nums">{formatBacklinkHkd(record.costHkd)}</td>
                 <td className="px-4 py-3 tabular-nums">{record.purchaseDate}</td>
                 <td className="px-4 py-3">{record.quantity}</td>
                 <td className="px-4 py-3">

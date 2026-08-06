@@ -25,6 +25,38 @@ const xlsxPath = path.join(
 );
 const outSql = path.join(__dirname, '_backlink_import.sql');
 const DEFAULT_SUPPLIER_ID = 'wps_excel_import';
+const USD_HKD_RATE = 7.8;
+
+function hkdToUsd(hkd) {
+  if (!hkd || hkd <= 0) return 0;
+  return Math.ceil(hkd / USD_HKD_RATE);
+}
+
+function usdToHkd(usd) {
+  if (!usd || usd <= 0) return 0;
+  return Math.ceil(usd * USD_HKD_RATE);
+}
+
+function normalizeCosts(costUsd, costHkd, legacyCost, legacyCurrency) {
+  let usd = costUsd ?? 0;
+  let hkd = costHkd ?? 0;
+  if (usd <= 0 && hkd <= 0 && legacyCost > 0) {
+    if (legacyCurrency === 'HKD') {
+      hkd = legacyCost;
+      usd = hkdToUsd(hkd);
+    } else {
+      usd = legacyCost;
+      hkd = usdToHkd(usd);
+    }
+  } else if (usd > 0 && hkd <= 0) {
+    hkd = usdToHkd(usd);
+  } else if (hkd > 0 && usd <= 0) {
+    usd = hkdToUsd(hkd);
+  }
+  return { cost_usd: usd, cost_hkd: hkd };
+}
+
+const VALID_BRANDS = new Set(['BW', 'FC', 'BSC', 'Wine']);
 
 const MONTH_MAP = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
@@ -334,12 +366,17 @@ function buildEnrichedRows(rows, accounts, websites) {
         });
       }
     }
+    const costs = normalizeCosts(null, null, row.cost, row.currency);
+    const brand = VALID_BRANDS.has(row.brand) ? row.brand : null;
     return {
       id: `bl_xlsx_${String(i + 1).padStart(4, '0')}`,
       web_supplier_id: DEFAULT_SUPPLIER_ID,
       website_profile_id: site?.id ?? null,
       cost: row.cost,
       currency: row.currency,
+      cost_usd: costs.cost_usd,
+      cost_hkd: costs.cost_hkd,
+      brand,
       purchase_date: row.purchaseDate,
       quantity: row.quantity,
       notes: row.actionText,
@@ -456,8 +493,8 @@ async function main() {
   for (let i = 0; i < enriched.length; i++) {
     const r = enriched[i];
     lines.push(
-      `INSERT INTO public.backlink_purchases (id, web_supplier_id, website_profile_id, cost, currency, purchase_date, quantity, notes, source_domain, excel_sheet, google_ads_customer_id, google_ads_account_name) VALUES (` +
-        `${sqlStr(r.id)}, '${DEFAULT_SUPPLIER_ID}', ${r.website_profile_id ? sqlStr(r.website_profile_id) : 'NULL'}, ${r.cost}, '${r.currency}', ${sqlStr(r.purchase_date)}, ${r.quantity}, ${sqlStr(r.notes)}, ${sqlStr(r.source_domain)}, ${sqlStr(r.excel_sheet)}, ${r.google_ads_customer_id ? sqlStr(r.google_ads_customer_id) : 'NULL'}, ${r.google_ads_account_name ? sqlStr(r.google_ads_account_name) : 'NULL'}` +
+      `INSERT INTO public.backlink_purchases (id, web_supplier_id, website_profile_id, cost, currency, cost_usd, cost_hkd, brand, purchase_date, quantity, notes, source_domain, excel_sheet, google_ads_customer_id, google_ads_account_name) VALUES (` +
+        `${sqlStr(r.id)}, '${DEFAULT_SUPPLIER_ID}', ${r.website_profile_id ? sqlStr(r.website_profile_id) : 'NULL'}, ${r.cost}, '${r.currency}', ${r.cost_usd}, ${r.cost_hkd}, ${r.brand ? sqlStr(r.brand) : 'NULL'}, ${sqlStr(r.purchase_date)}, ${r.quantity}, ${sqlStr(r.notes)}, ${sqlStr(r.source_domain)}, ${sqlStr(r.excel_sheet)}, ${r.google_ads_customer_id ? sqlStr(r.google_ads_customer_id) : 'NULL'}, ${r.google_ads_account_name ? sqlStr(r.google_ads_account_name) : 'NULL'}` +
         ') ON CONFLICT (id) DO NOTHING;',
     );
   }
