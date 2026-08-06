@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, ChevronRight, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign } from 'lucide-react';
+import { Search, Plus, ChevronRight, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';

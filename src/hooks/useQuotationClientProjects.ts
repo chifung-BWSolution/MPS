@@ -32,8 +32,21 @@ type DbRow = {
 };
 
 function parseExpenses(raw: unknown): PitchingExpenseItem[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
+  if (raw == null) return [];
+  let items: unknown[] = [];
+  if (Array.isArray(raw)) {
+    items = raw;
+  } else if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) items = parsed;
+    } catch {
+      return [];
+    }
+  } else {
+    return [];
+  }
+  return items
     .filter((item): item is PitchingExpenseItem => {
       return (
         item != null &&
@@ -130,10 +143,13 @@ export function useQuotationClientProjects() {
   }, []);
 
   useEffect(() => {
+    void refresh();
+  }, [session, refresh]);
+
+  useEffect(() => {
+    if (!session) return;
     void (async () => {
-      if (session) {
-        await autoSyncAsanaPitchingIfNeeded();
-      }
+      await autoSyncAsanaPitchingIfNeeded();
       await refresh();
     })();
   }, [session, refresh]);
