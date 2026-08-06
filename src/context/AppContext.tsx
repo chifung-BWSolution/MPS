@@ -53,8 +53,8 @@ export const mainMenuItems: MainMenuItem[] = [
     subMenus: [
       { id: 'pitching', label: 'Pitching' },
       { id: 'projects', label: 'Project' },
-      { id: 'list', label: '報價單列表' },
       { id: 'new', label: '新建報價單' },
+      { id: 'list', label: '報價單列表' },
       { id: 'items', label: '報價項目' },
       { id: 'approval', label: '報價批核' },
       { id: 'clients', label: '客戶列表' },
