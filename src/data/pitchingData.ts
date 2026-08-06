@@ -60,8 +60,9 @@ export const pitchingStatusConfig: Record<PitchingStatus, { label: string; color
 /** Days from enquiry date until follow-up deadline (30-day window). */
 export const PITCHING_FOLLOW_UP_DAYS = 30;
 
+/** Only 初步提案 tracks the 30-day follow-up window from 查詢日期. */
 export function calcRemainingDays(inquiryDate: string, status: PitchingStatus): number | null {
-  if (status === 'closed') return null;
+  if (status !== 'initial') return null;
   const start = new Date(inquiryDate);
   if (Number.isNaN(start.getTime())) return null;
   const deadline = new Date(start);
