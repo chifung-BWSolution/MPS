@@ -57,6 +57,8 @@ export type SyncProjectConfig = {
   sync_default_status?: PitchingStatus | null;
   /** When set, only sync tasks whose Asana section name contains this text */
   sync_section_name?: string | null;
+  /** When true, use project_types from config only (no name-based inference) */
+  sync_project_types_only?: boolean | null;
 };
 
 function getToken(): string {
@@ -298,11 +300,9 @@ export function asanaTaskToRecord(
   const sectionName = taskSectionName(task, project.project_gid);
   const description = taskDescription(task);
   const clientName = parseClientNameFromTaskName(task.name);
-  const projectTypes = inferProjectTypes(
-    task.name,
-    project.project_types || [],
-    project.project_name,
-  );
+  const projectTypes = project.sync_project_types_only
+    ? [...(project.project_types || [])]
+    : inferProjectTypes(task.name, project.project_types || [], project.project_name);
   const status =
     project.sync_default_status ??
     mapCustomFieldStatus(statusLabel, task);
