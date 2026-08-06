@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
           try {
             const row = asanaTaskToRecord(task, project, syncedAt);
             const { error: upsertErr } = await supabase
-              .from("pitching_records")
+              .from("quotation_client_project")
               .upsert(row, { onConflict: "asana_task_gid" });
             if (upsertErr) {
               errors.push(`${task.gid}: ${upsertErr.message}`);

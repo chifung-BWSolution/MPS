@@ -59,17 +59,11 @@ export const pitchingStatusConfig: Record<PitchingStatus, { label: string; color
   closed: { label: '已結案', color: 'text-slate-600', bgColor: 'bg-slate-100' },
 };
 
-/** BWT Active 3 已成交+開工 DONE Deal — shown on Project page */
-export const BWT_ACTIVE_3_PROJECT_GID = '1208704092427590';
-
-/** Project page: confirmed pitching items + BWT Active 3 Asana deals (2026+). */
+/** Project page: same table as Pitching, filtered by status 確認項目. */
 export function isProjectPageRecord(
-  record: Pick<PitchingRecord, 'status' | 'asanaProjectGid'>,
+  record: Pick<PitchingRecord, 'status'>,
 ): boolean {
-  return (
-    record.status === 'confirmed' ||
-    record.asanaProjectGid === BWT_ACTIVE_3_PROJECT_GID
-  );
+  return record.status === 'confirmed';
 }
 
 /** Days from enquiry date until follow-up deadline (30-day window). */

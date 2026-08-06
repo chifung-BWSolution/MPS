@@ -3,6 +3,9 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import type { PitchingProjectType, PitchingRecord, PitchingStatus } from '@/data/pitchingData';
 
+/** Supabase table shared by Pitching and Project pages */
+export const QUOTATION_CLIENT_PROJECT_TABLE = 'quotation_client_project';
+
 type DbRow = {
   id: string;
   asana_task_gid: string | null;
@@ -51,7 +54,8 @@ function mapRow(row: DbRow): PitchingRecord {
   };
 }
 
-export function usePitchingRecords() {
+/** Load all client projects from quotation_client_project (Pitching + Project pages). */
+export function useQuotationClientProjects() {
   const { session } = useAuth();
   const [records, setRecords] = useState<PitchingRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,7 +65,7 @@ export function usePitchingRecords() {
   const refresh = useCallback(async () => {
     setLoading(true);
     const { data, error: err } = await supabase
-      .from('pitching_records')
+      .from(QUOTATION_CLIENT_PROJECT_TABLE)
       .select('*')
       .order('inquiry_date', { ascending: false });
 
@@ -107,7 +111,7 @@ export function usePitchingRecords() {
         created_at: now,
         updated_at: now,
       };
-      const { error: err } = await supabase.from('pitching_records').insert(row);
+      const { error: err } = await supabase.from(QUOTATION_CLIENT_PROJECT_TABLE).insert(row);
       const record: PitchingRecord = {
         ...data,
         id,
@@ -124,3 +128,6 @@ export function usePitchingRecords() {
 
   return { records, loading, error, lastSyncedAt, refresh, addRecord };
 }
+
+/** @deprecated Use useQuotationClientProjects */
+export const usePitchingRecords = useQuotationClientProjects;

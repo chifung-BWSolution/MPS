@@ -1,6 +1,6 @@
 # Asana Pitching 同步設定
 
-Pitching 頁面透過 Supabase Edge Function `sync-asana-pitching` 從 Asana 專案拉取 Task，寫入 `pitching_records` 表。
+Pitching 與 Project 頁面共用 Supabase 表 `quotation_client_project`。Asana 同步透過 Edge Function `sync-asana-pitching` 寫入此表；Project 頁面只顯示狀態為 **確認項目** 的紀錄。
 
 ## 同步邏輯（目前設定）
 
@@ -61,7 +61,7 @@ Migration `20260806150000` 已將 `asana_pitching_projects` 設定為**只啟用
 
 ## 欄位對應（初版）
 
-| Asana | pitching_records |
+| Asana | quotation_client_project |
 |---|---|
 | Task name | display_name |
 | created_at（日期部分） | inquiry_date |
@@ -73,7 +73,7 @@ Migration `20260806150000` 已將 `asana_pitching_projects` 設定為**只啟用
 
 ## 前端使用
 
-- 列表資料來自 Supabase `pitching_records`  
+- 列表資料來自 Supabase `quotation_client_project`（Pitching 顯示全部，Project 篩選 `status = confirmed`）
 - **同步 Asana** → 呼叫 `/functions/v1/sync-asana-pitching`  
 - **新增 Pitching** → 手動寫入 Supabase（可填 Asana 連結，不會自動建立 Asana Task）
 

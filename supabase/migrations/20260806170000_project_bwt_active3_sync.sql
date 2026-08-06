@@ -20,7 +20,7 @@ VALUES (
   '6649488167653',
   ARRAY['bwt_web', 'bwt_system'],
   2026,
-  'closed',
+  'confirmed',
   true
 )
 ON CONFLICT (project_gid) DO UPDATE SET

@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
-import { usePitchingRecords } from '@/hooks/usePitchingRecords';
+import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
 import { invokeAsanaPitchingSync } from '@/lib/asanaPitchingApi';
 import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
@@ -575,7 +575,7 @@ export function PitchingDetail({
 export function PitchingModule() {
   const { navigateTo } = useApp();
   const { systemUser, userInfo } = useAuth();
-  const { records, loading, error, lastSyncedAt, refresh, addRecord } = usePitchingRecords();
+  const { records, loading, error, lastSyncedAt, refresh, addRecord } = useQuotationClientProjects();
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedRecord, setSelectedRecord] = useState<PitchingRecord | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);

@@ -3,13 +3,12 @@ import { Search, ChevronRight, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
-import { usePitchingRecords } from '@/hooks/usePitchingRecords';
+import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
 import { invokeAsanaPitchingSync } from '@/lib/asanaPitchingApi';
 import {
   pitchingStatusConfig,
   formatProjectTypes,
   isProjectPageRecord,
-  BWT_ACTIVE_3_PROJECT_GID,
   type PitchingRecord,
 } from '@/data/pitchingData';
 import { PitchingDetail, RemainingDaysCell } from '@/components/quotation/PitchingModule';
@@ -43,7 +42,6 @@ function ProjectList({
 
   const totalCount = records.length;
   const confirmedCount = records.filter((p) => p.status === 'confirmed').length;
-  const dealCount = records.filter((p) => p.asanaProjectGid === BWT_ACTIVE_3_PROJECT_GID).length;
   const closedCount = records.filter((p) => p.status === 'closed').length;
 
   return (
@@ -59,7 +57,7 @@ function ProjectList({
         </div>
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
           <span className="text-[13px] font-medium text-muted-foreground">已成交開工</span>
-          <span className="text-[22px] font-bold block mt-1 text-emerald-600">{dealCount}</span>
+          <span className="text-[22px] font-bold block mt-1 text-emerald-600">{confirmedCount}</span>
         </div>
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
           <span className="text-[13px] font-medium text-muted-foreground">已結案</span>
@@ -85,7 +83,6 @@ function ProjectList({
         >
           <option value="all">全部狀態</option>
           <option value="confirmed">確認項目</option>
-          <option value="closed">已結案</option>
         </select>
       </div>
 
@@ -148,7 +145,7 @@ function ProjectList({
 
 export function ProjectModule() {
   const { navigateTo } = useApp();
-  const { records, loading, error, lastSyncedAt, refresh } = usePitchingRecords();
+  const { records, loading, error, lastSyncedAt, refresh } = useQuotationClientProjects();
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedRecord, setSelectedRecord] = useState<PitchingRecord | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -206,7 +203,7 @@ export function ProjectModule() {
         <div>
           <h1 className="text-[22px] font-bold">Project</h1>
           <p className="text-[13px] text-muted-foreground mt-1">
-            顯示 Pitching 中已確認的項目，以及 Asana BWT Active 3 已成交開工專案（2026 年起）。
+            顯示 Pitching 中狀態為「確認項目」的專案（與 Pitching 共用 quotation_client_project 資料表）。
           </p>
           {lastSyncedAt && (
             <p className="text-[11px] text-muted-foreground mt-1">
