@@ -5,6 +5,7 @@ import {
   asanaTaskToRecord,
   isTaskInSyncRange,
   listProjectTasks,
+  searchAsanaProjects,
   taskMatchesSectionFilter,
   type SyncProjectConfig,
 } from "../_shared/asana-pitching.ts";
@@ -37,6 +38,14 @@ Deno.serve(async (req) => {
 
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
     const filterGid = (body as { project_gid?: string }).project_gid;
+    const searchProjects = (body as { search_projects?: string }).search_projects;
+
+    if (searchProjects) {
+      const matches = await searchAsanaProjects(searchProjects);
+      return new Response(JSON.stringify({ success: true, matches }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     let query = supabase
       .from("asana_pitching_projects")

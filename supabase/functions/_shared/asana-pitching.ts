@@ -41,7 +41,7 @@ export type AsanaTask = {
   }>;
 };
 
-export type SyncDateMode = "created_exact" | "created_from" | "active_deal";
+export type SyncDateMode = "created_exact" | "created_from" | "active_deal" | "created_or_due_from" | "pipeline" | "all";
 
 export type SyncProjectConfig = {
   project_gid: string;
@@ -88,6 +88,21 @@ async function asanaFetch<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`Asana API ${path}: ${msg}`);
   }
   return json as T;
+}
+
+const DEFAULT_WORKSPACE_GID = "6649488167653";
+
+export async function searchAsanaProjects(query: string, workspaceGid?: string) {
+  const workspace = workspaceGid || Deno.env.get("ASANA_WORKSPACE_GID") || DEFAULT_WORKSPACE_GID;
+  const qs = new URLSearchParams({
+    resource_type: "project",
+    query,
+    count: "50",
+  });
+  const data = await asanaFetch<{ data: Array<{ gid: string; name: string }> }>(
+    `/workspaces/${workspace}/typeahead?${qs}`,
+  );
+  return data.data || [];
 }
 
 export async function listProjectTasks(projectGid: string): Promise<AsanaTask[]> {
@@ -220,6 +235,8 @@ export function isTaskInSyncRange(task: AsanaTask, project: SyncProjectConfig): 
     project.sync_year_from ? "created_from" : "created_exact"
   );
 
+  if (mode === "all") return true;
+
   if (mode === "active_deal") {
     if (task.completed) return false;
     const dueYear = taskDueYear(task);
@@ -227,6 +244,24 @@ export function isTaskInSyncRange(task: AsanaTask, project: SyncProjectConfig): 
     if (dueYear !== null && dueYear >= minYear) return true;
     if (createdYear !== null && createdYear >= minYear) return true;
     if (!task.due_on) return true;
+    return false;
+  }
+
+  if (mode === "created_or_due_from") {
+    const dueYear = taskDueYear(task);
+    const createdYear = taskCreatedYear(task);
+    if (createdYear !== null && createdYear >= minYear) return true;
+    if (dueYear !== null && dueYear >= minYear) return true;
+    return false;
+  }
+
+  /** Quote-stage boards: all open tasks + completed tasks from minYear onward. */
+  if (mode === "pipeline") {
+    if (!task.completed) return true;
+    const dueYear = taskDueYear(task);
+    const createdYear = taskCreatedYear(task);
+    if (createdYear !== null && createdYear >= minYear) return true;
+    if (dueYear !== null && dueYear >= minYear) return true;
     return false;
   }
 
