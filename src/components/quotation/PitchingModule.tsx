@@ -51,7 +51,7 @@ function formatEnquiryDateLabel(iso: string): string {
   return `${y}年${parseInt(m!, 10)}月${parseInt(d!, 10)}日`;
 }
 
-function RemainingDaysCell({ inquiryDate, status }: { inquiryDate: string; status: PitchingStatus }) {
+export function RemainingDaysCell({ inquiryDate, status }: { inquiryDate: string; status: PitchingStatus }) {
   const days = calcRemainingDays(inquiryDate, status);
   if (days === null) return <span className="text-muted-foreground">—</span>;
   const color =
@@ -404,7 +404,7 @@ function PitchingList({
   );
 }
 
-function PitchingDetail({
+export function PitchingDetail({
   record,
   onBack,
   onConvertToQuote,

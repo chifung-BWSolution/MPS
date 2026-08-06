@@ -6,6 +6,8 @@ import type { PitchingProjectType, PitchingRecord, PitchingStatus } from '@/data
 type DbRow = {
   id: string;
   asana_task_gid: string | null;
+  asana_project_gid: string | null;
+  asana_project_name: string | null;
   pitching_code: string | null;
   client_id: string | null;
   client_name: string | null;
@@ -36,6 +38,8 @@ function mapRow(row: DbRow): PitchingRecord {
     inquiryDate: String(row.inquiry_date).slice(0, 10),
     description: row.description ?? undefined,
     projectTypes: (row.project_types || []) as PitchingProjectType[],
+    asanaProjectGid: row.asana_project_gid ?? undefined,
+    asanaProjectName: row.asana_project_name ?? undefined,
     assignedPm: row.assigned_pm || '',
     assignedPmName: row.assigned_pm_name || '—',
     status,

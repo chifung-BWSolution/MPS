@@ -7,6 +7,7 @@ import { useApp } from '@/context/AppContext';
 import { QuotationItemsManagement } from '@/components/quotation/QuotationItemsManagement';
 import { QuotationPreview } from '@/components/quotation/QuotationPreview';
 import { PitchingModule } from '@/components/quotation/PitchingModule';
+import { ProjectModule } from '@/components/quotation/ProjectModule';
 import {
   quotationTypes,
   quotationEntries,
@@ -1489,6 +1490,10 @@ export function QuotationModule({ subModule }: { subModule?: string }) {
 
   if (subModule === 'pitching') {
     return <PitchingModule />;
+  }
+
+  if (subModule === 'projects') {
+    return <ProjectModule />;
   }
 
   if (subModule === 'items') {

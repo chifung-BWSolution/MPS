@@ -6,8 +6,10 @@ export const corsHeaders = {
 
 const ASANA_API = "https://app.asana.com/api/1.0";
 
-/** BWT Active 1 開始緊密跟進中 (not BWA Video V12) */
+/** BWT Active 1 開始緊密跟進中 */
 export const DEFAULT_PITCHING_PROJECT_GID = "1208704092427502";
+/** BWT Active 3 已成交+開工 DONE Deal */
+export const BWT_ACTIVE_3_PROJECT_GID = "1208704092427590";
 export const DEFAULT_SYNC_YEAR = 2026;
 export const DEFAULT_STATUS_FIELD_NAME = "狀態";
 
@@ -44,15 +46,11 @@ export type SyncProjectConfig = {
   project_name: string;
   project_types: string[];
   sync_year?: number | null;
+  /** When set, include tasks with created_at year >= sync_year_from */
+  sync_year_from?: number | null;
   status_field_name?: string | null;
-};
-
-export type SyncProjectConfig = {
-  project_gid: string;
-  project_name: string;
-  project_types: string[];
-  sync_year?: number | null;
-  status_field_name?: string | null;
+  /** Force MPS status for synced rows (e.g. closed for DONE Deal projects) */
+  sync_default_status?: PitchingStatus | null;
 };
 
 function getToken(): string {
@@ -166,7 +164,6 @@ export function inferProjectTypes(
   return [...types];
 }
 
-/** Enquiry date = Task created_at (date part only). */
 export function taskInquiryDate(task: AsanaTask): string {
   if (task.created_at) return task.created_at.slice(0, 10);
   return new Date().toISOString().slice(0, 10);
@@ -178,13 +175,25 @@ export function taskCreatedYear(task: AsanaTask): number | null {
   return Number.isFinite(y) ? y : null;
 }
 
-export function isTaskInSyncYear(task: AsanaTask, syncYear: number): boolean {
-<<<<<<< HEAD
+export function resolveSyncYear(project: SyncProjectConfig): number {
+  if (project.sync_year && project.sync_year > 2000) return project.sync_year;
+  if (project.sync_year_from && project.sync_year_from > 2000) {
+    return project.sync_year_from;
+  }
+  const envYear = parseInt(Deno.env.get("ASANA_SYNC_YEAR") || "", 10);
+  if (Number.isFinite(envYear) && envYear > 2000) return envYear;
+  return DEFAULT_SYNC_YEAR;
+}
+
+/** Filter by sync_year (exact) or sync_year_from (>=). */
+export function isTaskInSyncRange(task: AsanaTask, project: SyncProjectConfig): boolean {
   const year = taskCreatedYear(task);
+  if (year === null) return false;
+  if (project.sync_year_from && project.sync_year_from > 2000) {
+    return year >= project.sync_year_from;
+  }
+  const syncYear = resolveSyncYear(project);
   return year === syncYear;
-=======
-  return taskCreatedYear(task) === syncYear;
->>>>>>> cursor/fix-bwt-active-project-gid-805a
 }
 
 export function customFieldDisplayValue(field: AsanaCustomField): string {
@@ -214,10 +223,6 @@ export function extractStatusLabel(task: AsanaTask, statusFieldName: string): st
   return customFieldDisplayValue(field);
 }
 
-<<<<<<< HEAD
-/** Map Asana 自訂欄位「狀態」→ MPS pitching status. */
-=======
->>>>>>> cursor/fix-bwt-active-project-gid-805a
 export function mapCustomFieldStatus(label: string, task: AsanaTask): PitchingStatus {
   const raw = label.trim();
   if (!raw) {
@@ -256,6 +261,9 @@ export function asanaTaskToRecord(
     project.project_types || [],
     project.project_name,
   );
+  const status =
+    project.sync_default_status ??
+    mapCustomFieldStatus(statusLabel, task);
 
   return {
     id: `asana_${task.gid}`,
@@ -272,16 +280,9 @@ export function asanaTaskToRecord(
     project_types: projectTypes,
     assigned_pm: task.assignee?.gid || null,
     assigned_pm_name: task.assignee?.name || "",
-    status: mapCustomFieldStatus(statusLabel, task),
+    status,
     asana_link: task.permalink_url || `https://app.asana.com/0/0/${task.gid}`,
     synced_at: syncedAt,
     updated_at: syncedAt,
   };
-}
-
-export function resolveSyncYear(project: SyncProjectConfig): number {
-  if (project.sync_year && project.sync_year > 2000) return project.sync_year;
-  const envYear = parseInt(Deno.env.get("ASANA_SYNC_YEAR") || "", 10);
-  if (Number.isFinite(envYear) && envYear > 2000) return envYear;
-  return DEFAULT_SYNC_YEAR;
 }

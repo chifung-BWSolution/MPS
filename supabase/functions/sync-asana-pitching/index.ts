@@ -3,11 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   corsHeaders,
   asanaTaskToRecord,
-  DEFAULT_PITCHING_PROJECT_GID,
-  DEFAULT_SYNC_YEAR,
-  isTaskInSyncYear,
+  isTaskInSyncRange,
   listProjectTasks,
-  resolveSyncYear,
   type SyncProjectConfig,
 } from "../_shared/asana-pitching.ts";
 
@@ -38,76 +35,78 @@ Deno.serve(async (req) => {
     });
 
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
-    const projectGid =
-      (body as { project_gid?: string }).project_gid ||
-      Deno.env.get("ASANA_PITCHING_PROJECT_GID") ||
-      DEFAULT_PITCHING_PROJECT_GID;
+    const filterGid = (body as { project_gid?: string }).project_gid;
 
-    const { data: configured, error: cfgErr } = await supabase
+    let query = supabase
       .from("asana_pitching_projects")
       .select(
-        "project_gid, project_name, project_types, sync_year, status_field_name, enabled",
+        "project_gid, project_name, project_types, sync_year, sync_year_from, status_field_name, sync_default_status, enabled",
       )
-      .eq("enabled", true)
-      .eq("project_gid", projectGid)
-      .maybeSingle();
+      .eq("enabled", true);
 
-    if (cfgErr) throw new Error(`Load project failed: ${cfgErr.message}`);
+    if (filterGid) {
+      query = query.eq("project_gid", filterGid);
+    }
 
-    const project: SyncProjectConfig = configured
-      ? (configured as SyncProjectConfig)
-      : {
-          project_gid: projectGid,
-          project_name: "BWT Active 1 開始緊密跟進中",
-          project_types: ["bwt_web", "bwt_system"],
-          sync_year: DEFAULT_SYNC_YEAR,
-          status_field_name: "狀態",
-        };
+    const { data: configured, error: cfgErr } = await query;
+    if (cfgErr) throw new Error(`Load projects failed: ${cfgErr.message}`);
 
-    const syncYear = resolveSyncYear(project);
+    const projects = (configured || []) as SyncProjectConfig[];
+    if (!projects.length) {
+      throw new Error("No enabled Asana pitching projects configured");
+    }
+
     const syncedAt = new Date().toISOString();
     let tasksFetched = 0;
     let tasksSkipped = 0;
     let recordsUpserted = 0;
     const errors: string[] = [];
 
-    const tasks = await listProjectTasks(project.project_gid);
-    tasksFetched = tasks.length;
-
-    for (const task of tasks) {
-      if (!isTaskInSyncYear(task, syncYear)) {
-        tasksSkipped += 1;
-        continue;
-      }
-
+    for (const project of projects) {
       try {
-        const row = asanaTaskToRecord(task, project, syncedAt);
-        const { error: upsertErr } = await supabase
-          .from("pitching_records")
-          .upsert(row, { onConflict: "asana_task_gid" });
-        if (upsertErr) {
-          errors.push(`${task.gid}: ${upsertErr.message}`);
-        } else {
-          recordsUpserted += 1;
+        const tasks = await listProjectTasks(project.project_gid);
+        tasksFetched += tasks.length;
+
+        for (const task of tasks) {
+          if (!isTaskInSyncRange(task, project)) {
+            tasksSkipped += 1;
+            continue;
+          }
+
+          try {
+            const row = asanaTaskToRecord(task, project, syncedAt);
+            const { error: upsertErr } = await supabase
+              .from("pitching_records")
+              .upsert(row, { onConflict: "asana_task_gid" });
+            if (upsertErr) {
+              errors.push(`${task.gid}: ${upsertErr.message}`);
+            } else {
+              recordsUpserted += 1;
+            }
+          } catch (e) {
+            errors.push(`${task.gid}: ${(e as Error).message}`);
+          }
         }
+
+        await supabase.from("asana_pitching_projects").upsert(
+          {
+            project_gid: project.project_gid,
+            project_name: project.project_name,
+            project_types: project.project_types || [],
+            sync_year: project.sync_year ?? null,
+            sync_year_from: project.sync_year_from ?? null,
+            status_field_name: project.status_field_name || "狀態",
+            sync_default_status: project.sync_default_status ?? null,
+            enabled: true,
+            last_synced_at: syncedAt,
+            updated_at: syncedAt,
+          },
+          { onConflict: "project_gid" },
+        );
       } catch (e) {
-        errors.push(`${task.gid}: ${(e as Error).message}`);
+        errors.push(`${project.project_name}: ${(e as Error).message}`);
       }
     }
-
-    await supabase.from("asana_pitching_projects").upsert(
-      {
-        project_gid: project.project_gid,
-        project_name: project.project_name,
-        project_types: project.project_types || [],
-        sync_year: syncYear,
-        status_field_name: project.status_field_name || "狀態",
-        enabled: true,
-        last_synced_at: syncedAt,
-        updated_at: syncedAt,
-      },
-      { onConflict: "project_gid" },
-    );
 
     const durationMs = Date.now() - startedMs;
     await supabase
@@ -117,7 +116,7 @@ Deno.serve(async (req) => {
         tasks_fetched: tasksFetched,
         tasks_skipped: tasksSkipped,
         records_upserted: recordsUpserted,
-        projects_synced: 1,
+        projects_synced: projects.length,
         error_message: errors.length ? errors.slice(0, 20).join("\n") : null,
         finished_at: new Date().toISOString(),
         duration_ms: durationMs,
@@ -129,9 +128,8 @@ Deno.serve(async (req) => {
         success: true,
         run_id: runId,
         duration_ms: durationMs,
-        project_gid: project.project_gid,
-        project_name: project.project_name,
-        sync_year: syncYear,
+        projects_synced: projects.length,
+        project_gids: projects.map((p) => p.project_gid),
         tasks_fetched: tasksFetched,
         tasks_skipped: tasksSkipped,
         records_upserted: recordsUpserted,
