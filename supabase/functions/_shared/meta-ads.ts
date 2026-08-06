@@ -121,6 +121,24 @@ function sumConversions(actions: unknown): number {
   return matched ? sum : 0;
 }
 
+function slugifyId(value: string, fallback: string): string {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || fallback;
+}
+
+function pickString(o: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const v = o[key];
+    if (v != null && String(v).trim()) return String(v).trim();
+  }
+  return "";
+}
+
+/** Load N Meta app credentials from META_CREDENTIALS_JSON (array). */
 export function loadCredentials(): MetaCredential[] {
   const raw = Deno.env.get("META_CREDENTIALS_JSON") || "";
   if (!raw.trim()) {
@@ -135,14 +153,29 @@ export function loadCredentials(): MetaCredential[] {
   if (!Array.isArray(parsed) || parsed.length === 0) {
     throw new Error("META_CREDENTIALS_JSON must be a non-empty array");
   }
+  const seen = new Set<string>();
   return parsed.map((item, i) => {
     const o = (item || {}) as Record<string, unknown>;
-    const id = String(o.id || o.name || `cred_${i}`).trim();
-    const name = String(o.name || id).trim();
-    const access_token = String(o.access_token || "").trim();
-    const app_id = String(o.app_id || "").trim();
-    const app_secret = String(o.app_secret || "").trim();
-    const api_version = String(o.api_version || "v25.0").trim() || "v25.0";
+    const name = pickString(o, ["name", "business_name", "businessName", "label"]) ||
+      `Credential ${i + 1}`;
+    const id = slugifyId(
+      pickString(o, ["id", "key", "business_key", "businessKey"]) || name,
+      `cred_${i}`,
+    );
+    if (seen.has(id)) {
+      throw new Error(`Duplicate credential id "${id}" in META_CREDENTIALS_JSON`);
+    }
+    seen.add(id);
+    const access_token = pickString(o, [
+      "access_token",
+      "accessToken",
+      "token",
+      "META_ACCESS_TOKEN",
+    ]);
+    const app_id = pickString(o, ["app_id", "appId", "META_APP_ID"]);
+    const app_secret = pickString(o, ["app_secret", "appSecret", "META_APP_SECRET"]);
+    const api_version =
+      pickString(o, ["api_version", "apiVersion", "META_API_VERSION"]) || "v25.0";
     if (!access_token) {
       throw new Error(`Credential ${id} missing access_token`);
     }

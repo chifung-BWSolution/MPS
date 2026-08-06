@@ -39,6 +39,10 @@ type SyncRow = {
   accounts_synced: number;
   campaigns_synced: number;
   error_message: string | null;
+  meta?: {
+    businesses?: string[];
+    credentials_count?: number;
+  } | null;
 };
 
 type AggRow = {
@@ -205,6 +209,8 @@ export function useFacebookAdsData(dateFrom: string, dateTo: string) {
         accountsSynced: s.accounts_synced,
         campaignsSynced: s.campaigns_synced,
         errorMessage: s.error_message ?? undefined,
+        businesses: s.meta?.businesses,
+        credentialsCount: s.meta?.credentials_count,
       });
     } else {
       setLastSync(null);
@@ -228,7 +234,9 @@ export function useFacebookAdsData(dateFrom: string, dateTo: string) {
         durationMs: json.duration_ms,
         campaignsSynced: json.campaigns_synced,
         dailyRows: json.daily_rows,
+        credentialsCount: json.credentials_count,
         businesses: json.businesses,
+        prunedAccounts: json.pruned_accounts,
       };
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);

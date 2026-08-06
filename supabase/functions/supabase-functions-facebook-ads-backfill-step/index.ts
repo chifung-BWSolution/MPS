@@ -68,10 +68,20 @@ Deno.serve(async (req) => {
       const totalMonths = countMonthsInclusive(startMonth, endMonth);
       const jobId = `fbf_${Date.now()}`;
 
-      const { accounts } = await fetchAllAccounts(now.toISOString());
+      const { credentials, accounts } = await fetchAllAccounts(now.toISOString());
       await supabase.from("facebook_ads_accounts").upsert(accounts, {
         onConflict: "ad_account_id",
       });
+      const liveIds = accounts.map((a) => a.ad_account_id);
+      const { data: existingAccs } = await supabase
+        .from("facebook_ads_accounts")
+        .select("ad_account_id");
+      const staleIds = ((existingAccs as { ad_account_id: string }[] | null) ?? [])
+        .map((r) => r.ad_account_id)
+        .filter((id) => !liveIds.includes(id));
+      if (staleIds.length) {
+        await supabase.from("facebook_ads_accounts").delete().in("ad_account_id", staleIds);
+      }
       const enabled = accounts.filter(
         (a) => a.status === "ENABLED" || a.account_status === 1,
       );
@@ -91,6 +101,8 @@ Deno.serve(async (req) => {
         started_at: now.toISOString(),
         updated_at: now.toISOString(),
         meta: {
+          credentials_count: credentials.length,
+          businesses: credentials.map((c) => c.name),
           enabled_ad_account_ids: enabled.map((a) => a.ad_account_id),
           account_business: Object.fromEntries(
             enabled.map((a) => [a.ad_account_id, a.business_key]),

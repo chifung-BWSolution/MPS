@@ -33,7 +33,10 @@ export function invokeFacebookAdsIncrementalSync() {
     daily_rows?: number;
     date_from?: string;
     date_to?: string;
+    credentials_count?: number;
     businesses?: string[];
+    business_keys?: string[];
+    pruned_accounts?: number;
   }>('supabase-functions-sync-facebook-ads', {});
 }
 

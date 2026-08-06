@@ -36,6 +36,8 @@ export type FacebookAdsSyncRun = {
   accountsSynced: number;
   campaignsSynced: number;
   errorMessage?: string;
+  businesses?: string[];
+  credentialsCount?: number;
 };
 
 export type FacebookAdsBackfillJob = {
@@ -59,6 +61,8 @@ export type FacebookAdsBackfillJob = {
     recent_errors?: string[];
     enabled_ad_account_ids?: string[];
     account_business?: Record<string, string>;
+    businesses?: string[];
+    credentials_count?: number;
   };
 };
 
