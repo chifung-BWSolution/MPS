@@ -1379,9 +1379,20 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
     const unmatchedCount = r.result.unmatched?.length ?? 0;
     const g = r.result.google?.websitesLinked ?? 0;
     const f = r.result.facebook?.websitesLinked ?? 0;
+    const errors = [
+      ...(r.result.linkErrors || []),
+      ...(r.result.google?.linkErrors || []),
+      ...(r.result.facebook?.linkErrors || []),
+    ];
     toast.success(`廣告網域同步完成（Google 連結 ${g}、Facebook 連結 ${f}）`);
+    if (errors.length) {
+      toast.error('部分同步錯誤', { description: errors.slice(0, 3).join(' | ') });
+    }
     if (unmatchedCount > 0) setShowUnmatchedModal(true);
-    else toast.message('所有偵測到的網域皆已對應或略過');
+    else if (!errors.length && g + f > 0) toast.message('所有偵測到的網域皆已對應或略過');
+    else if (!errors.length && g + f === 0) {
+      toast.message('未發現可連結的廣告目的地網域（請確認 Ads API 權限與廣告 Final URL）');
+    }
   };
 
   const handleEditWebsite = async (data: WebsiteFormData) => {

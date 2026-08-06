@@ -149,9 +149,12 @@ export async function loadWebsiteRows(supabase: {
     select: (c: string) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
   };
 }): Promise<WebsiteRow[]> {
+  // Only select columns that exist on all envs. Optional Ads/GSC FK columns are
+  // not required for domain matching and may be missing if those migrations
+  // were not applied yet.
   const { data, error } = await supabase
     .from("webandsystem_list")
-    .select("id, domain_url, website_name, google_ads_customer_id, facebook_ads_ad_account_id");
+    .select("id, domain_url, website_name");
   if (error) throw new Error(`Load websites failed: ${error.message}`);
   return ((data as WebsiteRow[] | null) ?? []).filter((w) => w?.id);
 }
