@@ -5,6 +5,7 @@ import {
   fetchAccounts,
   fetchDailyMetricsForRange,
   getAccessToken,
+  linkGoogleCampaignWebsites,
   LOGIN_CUSTOMER_ID,
   toIsoDate,
 } from "../_shared/google-ads.ts";
@@ -78,6 +79,17 @@ Deno.serve(async (req) => {
       if (error) throw new Error(`Campaign upsert failed: ${error.message}`);
     }
 
+    const accountNameByCustomerId = new Map(
+      accounts.map((a) => [a.customer_id, a.descriptive_name]),
+    );
+    const linkSummary = await linkGoogleCampaignWebsites(
+      supabase,
+      accessToken,
+      enabledIds,
+      accountNameByCustomerId,
+      nowIso,
+    );
+
     for (let i = 0; i < daily.length; i += 500) {
       const chunk = daily.slice(i, i + 500);
       const { error } = await supabase
@@ -103,6 +115,11 @@ Deno.serve(async (req) => {
           duration_ms: durationMs,
           error_count: errors.length,
           mode: "incremental_7d",
+          websites_linked: linkSummary.websites_linked,
+          domains_discovered: linkSummary.domains_discovered,
+          domains_unmatched: linkSummary.domains_unmatched,
+          campaigns_with_links: linkSummary.campaigns_with_links,
+          link_errors: linkSummary.link_errors,
         },
       })
       .eq("id", runId);
@@ -120,6 +137,11 @@ Deno.serve(async (req) => {
         duration_ms: durationMs,
         errors: errors.slice(0, 20),
         synced_at: nowIso,
+        websites_linked: linkSummary.websites_linked,
+        domains_discovered: linkSummary.domains_discovered,
+        domains_unmatched: linkSummary.domains_unmatched,
+        campaigns_with_links: linkSummary.campaigns_with_links,
+        link_errors: linkSummary.link_errors,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

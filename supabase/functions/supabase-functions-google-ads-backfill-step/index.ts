@@ -6,6 +6,7 @@ import {
   fetchAccounts,
   fetchDailyMetricsForRange,
   getAccessToken,
+  linkGoogleCampaignWebsites,
   monthEnd,
   monthStart,
   addMonths,
@@ -78,6 +79,18 @@ Deno.serve(async (req) => {
         onConflict: "customer_id",
       });
 
+      const enabledIds = enabled.map((a) => a.customer_id);
+      const accountNameByCustomerId = new Map(
+        accounts.map((a) => [a.customer_id, a.descriptive_name]),
+      );
+      const linkSummary = await linkGoogleCampaignWebsites(
+        supabase,
+        accessToken,
+        enabledIds,
+        accountNameByCustomerId,
+        now.toISOString(),
+      );
+
       const job = {
         id: jobId,
         status: "running",
@@ -92,7 +105,14 @@ Deno.serve(async (req) => {
         last_error: null,
         started_at: now.toISOString(),
         updated_at: now.toISOString(),
-        meta: { enabled_customer_ids: enabled.map((a) => a.customer_id) },
+        meta: {
+          enabled_customer_ids: enabledIds,
+          websites_linked: linkSummary.websites_linked,
+          domains_discovered: linkSummary.domains_discovered,
+          domains_unmatched: linkSummary.domains_unmatched,
+          campaigns_with_links: linkSummary.campaigns_with_links,
+          link_errors: linkSummary.link_errors,
+        },
       };
       const { error } = await supabase.from("google_ads_backfill_jobs").insert(job);
       if (error) throw new Error(error.message);
