@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, ChevronRight, User, FileText, MessageSquare, ArrowLeft, Link2, Save, X, RefreshCw } from 'lucide-react';
+import { Search, Plus, ChevronRight, FileText, MessageSquare, ArrowLeft, Link2, Save, X, RefreshCw, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
@@ -20,7 +20,9 @@ import {
   type PitchingRecord,
   type PitchingStatus,
   type PitchingProjectType,
+  type PitchingExpenseItem,
 } from '@/data/pitchingData';
+import { PitchingBudgetTab } from '@/components/quotation/PitchingBudgetTab';
 
 type NewPitchingForm = {
   clientId: string;
@@ -448,6 +450,9 @@ type DetailDraft = {
   assignedPmName: string;
   asanaLink: string;
   status: PitchingStatus;
+  estimatedIncome: number | undefined;
+  estimatedIncomeCurrency: string;
+  estimatedExpenses: PitchingExpenseItem[];
 };
 
 function draftFromRecord(record: PitchingRecord): DetailDraft {
@@ -460,6 +465,9 @@ function draftFromRecord(record: PitchingRecord): DetailDraft {
     assignedPmName: record.assignedPmName,
     asanaLink: record.asanaLink ?? '',
     status: record.status,
+    estimatedIncome: record.estimatedIncome,
+    estimatedIncomeCurrency: record.estimatedIncomeCurrency ?? 'HKD',
+    estimatedExpenses: record.estimatedExpenses ?? [],
   };
 }
 
@@ -643,7 +651,7 @@ export function PitchingDetail({
   onConvertToQuote: () => void;
   onSave: (id: string, data: QuotationClientProjectUpdate) => Promise<{ error: { message: string } | null }>;
 }) {
-  const [activeTab, setActiveTab] = useState<'info' | 'followups' | 'quotation' | 'client'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'followups' | 'quotation' | 'budget'>('info');
   const [draft, setDraft] = useState<DetailDraft>(() => draftFromRecord(record));
   const [saving, setSaving] = useState(false);
 
@@ -658,6 +666,9 @@ export function PitchingDetail({
     const typesChanged =
       draft.projectTypes.length !== initial.projectTypes.length ||
       [...draft.projectTypes].sort().join(',') !== [...initial.projectTypes].sort().join(',');
+    const expensesChanged =
+      draft.estimatedExpenses.length !== initial.estimatedExpenses.length ||
+      JSON.stringify(draft.estimatedExpenses) !== JSON.stringify(initial.estimatedExpenses);
     return (
       draft.clientName !== initial.clientName ||
       draft.displayName !== initial.displayName ||
@@ -666,6 +677,9 @@ export function PitchingDetail({
       draft.assignedPmName !== initial.assignedPmName ||
       draft.asanaLink !== initial.asanaLink ||
       draft.status !== initial.status ||
+      draft.estimatedIncome !== initial.estimatedIncome ||
+      draft.estimatedIncomeCurrency !== initial.estimatedIncomeCurrency ||
+      expensesChanged ||
       typesChanged
     );
   }, [draft, record]);
@@ -694,6 +708,9 @@ export function PitchingDetail({
       assignedPmName: draft.assignedPmName,
       asanaLink: draft.asanaLink.trim() || undefined,
       status: draft.status,
+      estimatedIncome: draft.estimatedIncome,
+      estimatedIncomeCurrency: draft.estimatedIncomeCurrency,
+      estimatedExpenses: draft.estimatedExpenses,
     };
     const { error } = await onSave(record.id, payload);
     setSaving(false);
@@ -706,7 +723,7 @@ export function PitchingDetail({
     { id: 'info', label: '基本資訊', icon: FileText },
     { id: 'followups', label: '跟進記錄', icon: MessageSquare },
     { id: 'quotation', label: '關聯報價單', icon: FileText },
-    { id: 'client', label: '客戶資料', icon: User },
+    { id: 'budget', label: '預計收入支出', icon: DollarSign },
   ] as const;
 
   return (
@@ -752,7 +769,7 @@ export function PitchingDetail({
               onClick={onConvertToQuote}
               className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors active:scale-[0.97]"
             >
-              <FileText size={14} /> 轉正式報價單
+              <FileText size={14} /> 生成報價單
             </button>
           )}
         </div>
@@ -845,13 +862,13 @@ export function PitchingDetail({
           ) : (
             <>
               <FileText size={24} className="mx-auto text-muted-foreground/50 mb-2" />
-              <p className="text-[13px] text-muted-foreground mb-3">此 Pitching 尚未轉換為正式報價單</p>
+              <p className="text-[13px] text-muted-foreground mb-3">此 Pitching 尚未生成報價單</p>
               {draft.status !== 'closed' && (
                 <button
                   onClick={onConvertToQuote}
                   className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors mx-auto active:scale-[0.97]"
                 >
-                  <FileText size={13} /> 立即轉正式報價單
+                  <FileText size={13} /> 立即生成報價單
                 </button>
               )}
             </>
@@ -859,18 +876,16 @@ export function PitchingDetail({
         </div>
       )}
 
-      {activeTab === 'client' && (
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6 space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center">
-              <User size={18} className="text-teal-600" />
-            </div>
-            <div>
-              <span className="text-[15px] font-medium block">{draft.clientName}</span>
-              <span className="text-[12px] text-muted-foreground">客戶 ID：{record.clientId || '—'}</span>
-            </div>
-          </div>
-        </div>
+      {activeTab === 'budget' && (
+        <PitchingBudgetTab
+          income={draft.estimatedIncome}
+          currency={draft.estimatedIncomeCurrency}
+          expenses={draft.estimatedExpenses}
+          onIncomeChange={(estimatedIncome, estimatedIncomeCurrency) =>
+            patchDraft({ estimatedIncome, estimatedIncomeCurrency })
+          }
+          onExpensesChange={(estimatedExpenses) => patchDraft({ estimatedExpenses })}
+        />
       )}
     </div>
   );

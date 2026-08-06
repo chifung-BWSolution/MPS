@@ -20,6 +20,15 @@ export interface PitchingFollowUp {
   createdBy: string;
 }
 
+/** Expense line item on Pitching budget tab. */
+export interface PitchingExpenseItem {
+  id: string;
+  name: string;
+  amount: number;
+  currency: string;
+  notes?: string;
+}
+
 export interface PitchingRecord {
   id: string;
   pitchingId: string;
@@ -40,6 +49,9 @@ export interface PitchingRecord {
   linkedQuotationId?: string;
   linkedQuotationNumber?: string;
   lastFollowUpDate?: string;
+  estimatedIncome?: number;
+  estimatedIncomeCurrency?: string;
+  estimatedExpenses?: PitchingExpenseItem[];
   createdAt: string;
   updatedAt: string;
   /** @deprecated legacy field */

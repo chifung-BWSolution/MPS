@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import type { PitchingProjectType, PitchingRecord, PitchingStatus } from '@/data/pitchingData';
+import type { PitchingExpenseItem, PitchingProjectType, PitchingRecord, PitchingStatus } from '@/data/pitchingData';
 
 /** Supabase table shared by Pitching and Project pages */
 export const QUOTATION_CLIENT_PROJECT_TABLE = 'quotation_client_project';
@@ -23,9 +23,33 @@ type DbRow = {
   status: string;
   asana_link: string | null;
   notes: string | null;
+  estimated_income: number | null;
+  estimated_income_currency: string | null;
+  estimated_expenses: PitchingExpenseItem[] | null;
   created_at: string;
   updated_at: string;
 };
+
+function parseExpenses(raw: unknown): PitchingExpenseItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item): item is PitchingExpenseItem => {
+      return (
+        item != null &&
+        typeof item === 'object' &&
+        typeof (item as PitchingExpenseItem).id === 'string' &&
+        typeof (item as PitchingExpenseItem).name === 'string' &&
+        typeof (item as PitchingExpenseItem).amount === 'number'
+      );
+    })
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      amount: item.amount,
+      currency: item.currency || 'HKD',
+      notes: item.notes,
+    }));
+}
 
 function mapRow(row: DbRow): PitchingRecord {
   const status = (['initial', 'following_up', 'confirmed', 'closed'].includes(row.status)
@@ -48,6 +72,9 @@ function mapRow(row: DbRow): PitchingRecord {
     status,
     asanaLink: row.asana_link ?? undefined,
     notes: row.notes ?? undefined,
+    estimatedIncome: row.estimated_income != null ? Number(row.estimated_income) : undefined,
+    estimatedIncomeCurrency: row.estimated_income_currency ?? 'HKD',
+    estimatedExpenses: parseExpenses(row.estimated_expenses),
     followUps: [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -67,6 +94,9 @@ export type QuotationClientProjectUpdate = Partial<
     | 'asanaLink'
     | 'status'
     | 'notes'
+    | 'estimatedIncome'
+    | 'estimatedIncomeCurrency'
+    | 'estimatedExpenses'
   >
 >;
 
@@ -169,6 +199,9 @@ export function useQuotationClientProjects() {
     if (data.asanaLink !== undefined) row.asana_link = data.asanaLink || null;
     if (data.status !== undefined) row.status = data.status;
     if (data.notes !== undefined) row.notes = data.notes || null;
+    if (data.estimatedIncome !== undefined) row.estimated_income = data.estimatedIncome;
+    if (data.estimatedIncomeCurrency !== undefined) row.estimated_income_currency = data.estimatedIncomeCurrency;
+    if (data.estimatedExpenses !== undefined) row.estimated_expenses = data.estimatedExpenses;
 
     const { error: err } = await supabase
       .from(QUOTATION_CLIENT_PROJECT_TABLE)
