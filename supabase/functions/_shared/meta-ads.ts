@@ -789,8 +789,13 @@ export async function linkFacebookAccountWebsites(
           const err = p._error != null ? ` err=${String(p._error).slice(0, 80)}` : "";
           return `${name || id}:website=${website}${err}`;
         });
+        const needsPerm = sample.some((s) => s.includes("pages_read") || s.includes("(#10)"));
         linkErrors.push(
-          `${account.ad_account_id}: ${pages.length} pages (${pageSource}, managed=${managed.size}) but none have website URL set | ${sample.join(" ; ")}`,
+          `${account.ad_account_id}: ${pages.length} pages (${pageSource}, managed=${managed.size}) but none have website URL set` +
+            (needsPerm
+              ? " — Meta #10: regenerate tokens after granting pages_show_list + pages_read_engagement, and enable Page Public Metadata Access (website field). Also assign Pages to the System User so /me/accounts returns page tokens."
+              : "") +
+            ` | ${sample.join(" ; ")}`,
         );
       }
 
