@@ -108,6 +108,15 @@ export function formatProjectTypes(types: PitchingProjectType[]): string {
     .join('、');
 }
 
+/** Filter records by selected project type id (or all). */
+export function matchesProjectTypeFilter(
+  types: PitchingProjectType[],
+  filter: string,
+): boolean {
+  if (filter === 'all') return true;
+  return types.includes(filter as PitchingProjectType);
+}
+
 export function generatePitchingId(existingCount: number): string {
   const now = new Date();
   const y = now.getFullYear();

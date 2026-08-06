@@ -5,6 +5,7 @@ import {
   asanaTaskToRecord,
   isTaskInSyncRange,
   listProjectTasks,
+  taskMatchesSectionFilter,
   type SyncProjectConfig,
 } from "../_shared/asana-pitching.ts";
 
@@ -40,7 +41,7 @@ Deno.serve(async (req) => {
     let query = supabase
       .from("asana_pitching_projects")
       .select(
-        "project_gid, project_name, project_types, sync_year, sync_year_from, sync_date_mode, status_field_name, sync_default_status, enabled",
+        "project_gid, project_name, project_types, sync_year, sync_year_from, sync_date_mode, status_field_name, sync_default_status, sync_section_name, enabled",
       )
       .eq("enabled", true);
 
@@ -72,6 +73,10 @@ Deno.serve(async (req) => {
             tasksSkipped += 1;
             continue;
           }
+          if (!taskMatchesSectionFilter(task, project)) {
+            tasksSkipped += 1;
+            continue;
+          }
 
           try {
             const row = asanaTaskToRecord(task, project, syncedAt);
@@ -98,6 +103,7 @@ Deno.serve(async (req) => {
             sync_date_mode: project.sync_date_mode ?? null,
             status_field_name: project.status_field_name || "狀態",
             sync_default_status: project.sync_default_status ?? null,
+            sync_section_name: project.sync_section_name ?? null,
             enabled: true,
             last_synced_at: syncedAt,
             updated_at: syncedAt,

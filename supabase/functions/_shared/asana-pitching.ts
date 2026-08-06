@@ -55,6 +55,8 @@ export type SyncProjectConfig = {
   status_field_name?: string | null;
   /** Force MPS status for synced rows (e.g. closed for DONE Deal projects) */
   sync_default_status?: PitchingStatus | null;
+  /** When set, only sync tasks whose Asana section name contains this text */
+  sync_section_name?: string | null;
 };
 
 function getToken(): string {
@@ -270,6 +272,17 @@ export function mapCustomFieldStatus(label: string, task: AsanaTask): PitchingSt
 export function taskSectionName(task: AsanaTask, projectGid: string): string {
   const membership = task.memberships?.find((m) => m.project?.gid === projectGid);
   return membership?.section?.name || "";
+}
+
+/** Optional section filter — partial case-insensitive match on section name. */
+export function taskMatchesSectionFilter(
+  task: AsanaTask,
+  project: SyncProjectConfig,
+): boolean {
+  const pattern = project.sync_section_name?.trim();
+  if (!pattern) return true;
+  const section = taskSectionName(task, project.project_gid);
+  return section.toLowerCase().includes(pattern.toLowerCase());
 }
 
 export function asanaTaskToRecord(

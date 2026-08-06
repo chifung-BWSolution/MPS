@@ -17,6 +17,7 @@ import {
   PITCHING_STATUS_OPTIONS,
   calcRemainingDays,
   formatProjectTypes,
+  matchesProjectTypeFilter,
   type PitchingRecord,
   type PitchingStatus,
   type PitchingProjectType,
@@ -316,10 +317,12 @@ function PitchingList({
   onStatusChange: (id: string, status: PitchingStatus) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [projectTypeFilter, setProjectTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const filtered = useMemo(() => {
     return records.filter((p) => {
+      if (!matchesProjectTypeFilter(p.projectTypes, projectTypeFilter)) return false;
       if (statusFilter !== 'all' && p.status !== statusFilter) return false;
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
@@ -333,7 +336,7 @@ function PitchingList({
       }
       return true;
     });
-  }, [records, searchQuery, statusFilter]);
+  }, [records, searchQuery, projectTypeFilter, statusFilter]);
 
   const totalCount = records.length;
   const activeCount = records.filter((p) => p.status === 'initial' || p.status === 'following_up' || p.status === 'confirmed').length;
@@ -372,6 +375,18 @@ function PitchingList({
             className="w-full pl-9 pr-4 py-2 text-[13px] border border-border rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
         </div>
+        <select
+          value={projectTypeFilter}
+          onChange={(e) => setProjectTypeFilter(e.target.value)}
+          className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
+        >
+          <option value="all">全部項目類型</option>
+          {PITCHING_PROJECT_TYPE_OPTIONS.map((opt) => (
+            <option key={opt.id} value={opt.id}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
