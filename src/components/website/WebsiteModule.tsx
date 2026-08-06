@@ -256,7 +256,7 @@ function AddArticleModal({
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {mode === 'existing' ? (
             <div className="space-y-3">
-              <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm">
+              <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm bg-white">
                 <Search size={14} className="text-muted-foreground" />
                 <input
                   value={searchQuery}
@@ -1535,23 +1535,23 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm flex-1 max-w-[260px]">
+        <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm flex-1 max-w-[260px] bg-white">
           <Search size={14} className="text-muted-foreground" />
           <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground" placeholder="搜尋網站名稱..." />
         </div>
-        <select value={companyFilter} onChange={(e) => { setCompanyFilter(e.target.value); setBrandFilter('all'); }} className="px-3 py-1.5 border border-border rounded-md text-[13px]">
+        <select value={companyFilter} onChange={(e) => { setCompanyFilter(e.target.value); setBrandFilter('all'); }} className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white">
           <option value="all">所有公司</option>
           {Array.from(new Set(websiteProfiles.map(p => p.company || '').filter(Boolean))).sort().map(code => (
             <option key={code} value={code}>{code}</option>
           ))}
         </select>
-        <select value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px]">
+        <select value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white">
           <option value="all">所有品牌</option>
           {uniqueBrandCodes.map(b => (
             <option key={b.brandCode} value={b.brandCode}>{b.brandCode}</option>
           ))}
         </select>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px]">
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white">
           <option value="all">所有狀態</option>
           <option value="live">已上線</option>
           <option value="development">開發中</option>
@@ -1561,7 +1561,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
         <select
           value={adsFilter}
           onChange={(e) => setAdsFilter(e.target.value as 'all' | 'with' | 'without')}
-          className="px-3 py-1.5 border border-border rounded-md text-[13px]"
+          className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white"
         >
           <option value="all">廣告：全部</option>
           <option value="with">有廣告連結</option>
@@ -1966,7 +1966,7 @@ function AddWebsiteToArticleModal({
           <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm">
+          <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm bg-white">
             <Search size={14} className="text-muted-foreground" />
             <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground" placeholder="搜尋網站名稱..." />
           </div>
@@ -2216,7 +2216,7 @@ function BatchAddToWebsiteModal({
           <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm">
+          <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm bg-white">
             <Search size={14} className="text-muted-foreground" />
             <input value={search} onChange={e => setSearch(e.target.value)} className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground" placeholder="搜尋網站..." />
           </div>
@@ -2408,7 +2408,7 @@ function CreateArticleModal({
                 {selectedWebsiteIds.length > 0 ? `已選 ${selectedWebsiteIds.length} 個` : '可多選'}
               </span>
             </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm mb-2">
+            <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm mb-2 bg-white">
               <Search size={14} className="text-muted-foreground" />
               <input
                 value={websiteSearch}
@@ -2515,19 +2515,19 @@ function GlobalArticleList({ onSelectArticle }: { onSelectArticle: (a: Article) 
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm flex-1 max-w-[260px]">
+        <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm flex-1 max-w-[260px] bg-white">
           <Search size={14} className="text-muted-foreground" />
           <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground" placeholder="搜尋文章..." />
         </div>
-        <select value={companyFilter} onChange={e => { setCompanyFilter(e.target.value); setBrandFilter('all'); }} className="px-3 py-1.5 border border-border rounded-md text-[13px]">
+        <select value={companyFilter} onChange={e => { setCompanyFilter(e.target.value); setBrandFilter('all'); }} className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white">
           <option value="all">所有公司</option>
           {companies.filter(c => c.isActive).map(c => <option key={c.id} value={c.id}>{c.companyCode}</option>)}
         </select>
-        <select value={brandFilter} onChange={e => setBrandFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px]">
+        <select value={brandFilter} onChange={e => setBrandFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white">
           <option value="all">所有品牌</option>
           {filteredBrands.filter(b => b.isActive).map(b => <option key={b.id} value={b.id}>{b.brandCode}</option>)}
         </select>
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px]">
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white">
           <option value="all">所有狀態</option>
           <option value="draft">草稿</option>
           <option value="writing">撰寫中</option>
@@ -2730,7 +2730,7 @@ function SubmitCompleteModal({
 
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-2">選擇網站（可多選）</label>
-            <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm mb-3">
+            <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm mb-3 bg-white">
               <Search size={14} className="text-muted-foreground" />
               <input value={search} onChange={e => setSearch(e.target.value)} className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground" placeholder="搜尋網站..." />
             </div>
