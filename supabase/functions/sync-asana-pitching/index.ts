@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
     let query = supabase
       .from("asana_pitching_projects")
       .select(
-        "project_gid, project_name, project_types, sync_year, sync_year_from, status_field_name, sync_default_status, enabled",
+        "project_gid, project_name, project_types, sync_year, sync_year_from, sync_date_mode, status_field_name, sync_default_status, enabled",
       )
       .eq("enabled", true);
 
@@ -95,6 +95,7 @@ Deno.serve(async (req) => {
             project_types: project.project_types || [],
             sync_year: project.sync_year ?? null,
             sync_year_from: project.sync_year_from ?? null,
+            sync_date_mode: project.sync_date_mode ?? null,
             status_field_name: project.status_field_name || "狀態",
             sync_default_status: project.sync_default_status ?? null,
             enabled: true,

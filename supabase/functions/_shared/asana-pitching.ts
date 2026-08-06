@@ -41,6 +41,8 @@ export type AsanaTask = {
   }>;
 };
 
+export type SyncDateMode = "created_exact" | "created_from" | "active_deal";
+
 export type SyncProjectConfig = {
   project_gid: string;
   project_name: string;
@@ -48,6 +50,8 @@ export type SyncProjectConfig = {
   sync_year?: number | null;
   /** When set, include tasks with created_at year >= sync_year_from */
   sync_year_from?: number | null;
+  /** How to decide which tasks to sync */
+  sync_date_mode?: SyncDateMode | null;
   status_field_name?: string | null;
   /** Force MPS status for synced rows (e.g. closed for DONE Deal projects) */
   sync_default_status?: PitchingStatus | null;
@@ -164,7 +168,10 @@ export function inferProjectTypes(
   return [...types];
 }
 
-export function taskInquiryDate(task: AsanaTask): string {
+export function taskInquiryDate(task: AsanaTask, project?: SyncProjectConfig): string {
+  if (project?.sync_date_mode === "active_deal" && task.due_on) {
+    return task.due_on;
+  }
   if (task.created_at) return task.created_at.slice(0, 10);
   return new Date().toISOString().slice(0, 10);
 }
@@ -172,6 +179,12 @@ export function taskInquiryDate(task: AsanaTask): string {
 export function taskCreatedYear(task: AsanaTask): number | null {
   if (!task.created_at) return null;
   const y = parseInt(task.created_at.slice(0, 4), 10);
+  return Number.isFinite(y) ? y : null;
+}
+
+export function taskDueYear(task: AsanaTask): number | null {
+  if (!task.due_on) return null;
+  const y = parseInt(task.due_on.slice(0, 4), 10);
   return Number.isFinite(y) ? y : null;
 }
 
@@ -185,15 +198,31 @@ export function resolveSyncYear(project: SyncProjectConfig): number {
   return DEFAULT_SYNC_YEAR;
 }
 
-/** Filter by sync_year (exact) or sync_year_from (>=). */
+/** Filter by sync_date_mode and year config. */
 export function isTaskInSyncRange(task: AsanaTask, project: SyncProjectConfig): boolean {
+  const minYear =
+    (project.sync_year_from && project.sync_year_from > 2000
+      ? project.sync_year_from
+      : null) ?? resolveSyncYear(project);
+
+  const mode = project.sync_date_mode ?? (
+    project.sync_year_from ? "created_from" : "created_exact"
+  );
+
+  if (mode === "active_deal") {
+    if (task.completed) return false;
+    const dueYear = taskDueYear(task);
+    const createdYear = taskCreatedYear(task);
+    if (dueYear !== null && dueYear >= minYear) return true;
+    if (createdYear !== null && createdYear >= minYear) return true;
+    if (!task.due_on) return true;
+    return false;
+  }
+
   const year = taskCreatedYear(task);
   if (year === null) return false;
-  if (project.sync_year_from && project.sync_year_from > 2000) {
-    return year >= project.sync_year_from;
-  }
-  const syncYear = resolveSyncYear(project);
-  return year === syncYear;
+  if (mode === "created_from") return year >= minYear;
+  return year === minYear;
 }
 
 export function customFieldDisplayValue(field: AsanaCustomField): string {
@@ -275,7 +304,7 @@ export function asanaTaskToRecord(
     pitching_code: `ASANA-${task.gid.slice(-8)}`,
     client_name: clientName || null,
     display_name: task.name.trim(),
-    inquiry_date: taskInquiryDate(task),
+    inquiry_date: taskInquiryDate(task, project),
     description: description || null,
     project_types: projectTypes,
     assigned_pm: task.assignee?.gid || null,
