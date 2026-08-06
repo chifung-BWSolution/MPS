@@ -5,7 +5,7 @@ Pitching 頁面透過 Supabase Edge Function `sync-asana-pitching` 從 Asana 專
 ## 同步邏輯（目前設定）
 
 - **方向**：僅 Asana → MPS（不會把 MPS 手動新增的 Pitching 寫回 Asana）
-- **專案**：僅 `BWT Active 1 開始緊密跟進中`（GID `1209549009281325`）
+- **專案**：僅 `BWT Active 1 開始緊密跟進中`（GID `1208704092427502`）
 - **年份**：只同步 Task **建立日**在 **2026** 年的項目（`created_at` 年份 = `sync_year`）
 - **查詢日期**：Asana Task **建立日**（`created_at` 的日期部分），非 due date
 - **狀態**：來自 Asana **自訂欄位**（預設欄位名稱 `狀態`），對應 MPS：初步提案 / 跟進中 / 確認項目 / 已結案
@@ -18,7 +18,7 @@ Pitching 頁面透過 Supabase Edge Function `sync-asana-pitching` 從 Asana 專
 | Secret | 說明 |
 |---|---|
 | `ASANA_ACCESS_TOKEN` | Asana **Personal Access Token**（非 Client Secret） |
-| `ASANA_PITCHING_PROJECT_GID` | 否 | 單一專案 GID（預設 `1209549009281325`） |
+| `ASANA_PITCHING_PROJECT_GID` | 否 | 單一專案 GID（預設 `1208704092427502`） |
 | `ASANA_SYNC_YEAR` | 否 | 只同步該建立年份的 Task（預設 `2026`） |
 | `ASANA_STATUS_FIELD_NAME` | 否 | 狀態自訂欄位名稱（預設 `狀態`） |
 
@@ -45,7 +45,7 @@ supabase functions deploy sync-asana-pitching --no-verify-jwt
 
 # 3. 設定 Secrets（示例）
 supabase secrets set ASANA_ACCESS_TOKEN=your_pat_here
-supabase secrets set ASANA_PITCHING_PROJECT_GID=1209549009281325
+supabase secrets set ASANA_PITCHING_PROJECT_GID=1208704092427502
 supabase secrets set ASANA_SYNC_YEAR=2026
 supabase secrets set ASANA_STATUS_FIELD_NAME=狀態
 ```
@@ -54,7 +54,8 @@ supabase secrets set ASANA_STATUS_FIELD_NAME=狀態
 
 Migration `20260806150000` 已將 `asana_pitching_projects` 設定為**只啟用**：
 
-- `1209549009281325` — BWT Active 1 開始緊密跟進中（`sync_year = 2026`，`status_field_name = 狀態`）
+- `1208704092427502` — BWT Active 1 開始緊密跟進中（`sync_year = 2026`，`status_field_name = 狀態`）
+- ~~`1209549009281325`~~ — 舊 seed 錯誤（實為 BWA Video V12，已停用）
 
 其他先前 seed 的專案已設為 `enabled = false`。
 

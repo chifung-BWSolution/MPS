@@ -6,8 +6,8 @@ export const corsHeaders = {
 
 const ASANA_API = "https://app.asana.com/api/1.0";
 
-/** Primary sync target — BWT Active 1 開始緊密跟進中 */
-export const DEFAULT_PITCHING_PROJECT_GID = "1209549009281325";
+/** BWT Active 1 開始緊密跟進中 (not BWA Video V12) */
+export const DEFAULT_PITCHING_PROJECT_GID = "1208704092427502";
 export const DEFAULT_SYNC_YEAR = 2026;
 export const DEFAULT_STATUS_FIELD_NAME = "狀態";
 
@@ -39,9 +39,12 @@ export type AsanaTask = {
   }>;
 };
 
-export type AsanaProject = {
-  gid: string;
-  name: string;
+export type SyncProjectConfig = {
+  project_gid: string;
+  project_name: string;
+  project_types: string[];
+  sync_year?: number | null;
+  status_field_name?: string | null;
 };
 
 export type SyncProjectConfig = {
@@ -176,8 +179,12 @@ export function taskCreatedYear(task: AsanaTask): number | null {
 }
 
 export function isTaskInSyncYear(task: AsanaTask, syncYear: number): boolean {
+<<<<<<< HEAD
   const year = taskCreatedYear(task);
   return year === syncYear;
+=======
+  return taskCreatedYear(task) === syncYear;
+>>>>>>> cursor/fix-bwt-active-project-gid-805a
 }
 
 export function customFieldDisplayValue(field: AsanaCustomField): string {
@@ -207,7 +214,10 @@ export function extractStatusLabel(task: AsanaTask, statusFieldName: string): st
   return customFieldDisplayValue(field);
 }
 
+<<<<<<< HEAD
 /** Map Asana 自訂欄位「狀態」→ MPS pitching status. */
+=======
+>>>>>>> cursor/fix-bwt-active-project-gid-805a
 export function mapCustomFieldStatus(label: string, task: AsanaTask): PitchingStatus {
   const raw = label.trim();
   if (!raw) {
