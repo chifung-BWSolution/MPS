@@ -1,9 +1,11 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, ChevronRight, User, FileText, MessageSquare, ArrowLeft, Link2, Save, X } from 'lucide-react';
+import { Search, Plus, ChevronRight, User, FileText, MessageSquare, ArrowLeft, Link2, Save, X, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
+import { usePitchingRecords } from '@/hooks/usePitchingRecords';
+import { invokeAsanaPitchingSync } from '@/lib/asanaPitchingApi';
 import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +16,6 @@ import {
   PITCHING_PROJECT_TYPE_OPTIONS,
   calcRemainingDays,
   formatProjectTypes,
-  generatePitchingId,
   type PitchingRecord,
   type PitchingStatus,
   type PitchingProjectType,
@@ -574,10 +575,11 @@ function PitchingDetail({
 export function PitchingModule() {
   const { navigateTo } = useApp();
   const { systemUser, userInfo } = useAuth();
-  const [records, setRecords] = useState<PitchingRecord[]>([]);
+  const { records, loading, error, lastSyncedAt, refresh, addRecord } = usePitchingRecords();
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedRecord, setSelectedRecord] = useState<PitchingRecord | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const pmName = systemUser?.display_name || userInfo?.display_name || '—';
 
@@ -586,26 +588,42 @@ export function PitchingModule() {
     setView('detail');
   };
 
-  const handleAddPitching = (form: NewPitchingForm) => {
-    const now = todayIso();
-    const record: PitchingRecord = {
-      id: `pitch-${Date.now()}`,
-      pitchingId: generatePitchingId(records.length),
+  const handleSyncAsana = async () => {
+    setSyncing(true);
+    try {
+      const result = await invokeAsanaPitchingSync({ discover: true });
+      await refresh();
+      toast.success(
+        `Asana 同步完成：${result.records_upserted ?? 0} 筆（${result.projects_synced ?? 0} 個專案）`,
+      );
+      if (result.errors?.length) {
+        toast.warning(`${result.errors.length} 筆同步警告，詳見主控台`);
+        console.warn('[Asana sync]', result.errors);
+      }
+    } catch (e) {
+      toast.error(`Asana 同步失敗：${(e as Error).message}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleAddPitching = async (form: NewPitchingForm) => {
+    const { error: addErr } = await addRecord({
       clientId: form.clientId,
       clientName: form.clientName,
       displayName: form.displayName.trim(),
       inquiryDate: form.inquiryDate,
       description: form.description.trim() || undefined,
       projectTypes: form.projectTypes,
-      asanaLink: form.asanaLink.trim() || undefined,
       assignedPm: systemUser?.id ?? '',
       assignedPmName: pmName,
       status: 'initial',
-      followUps: [],
-      createdAt: now,
-      updatedAt: now,
-    };
-    setRecords((prev) => [record, ...prev]);
+      asanaLink: form.asanaLink.trim() || undefined,
+    });
+    if (addErr) {
+      toast.error(`新增失敗：${addErr.message}`);
+      return;
+    }
     setShowAddModal(false);
     toast.success('Pitching 已成功新增');
   };
@@ -637,15 +655,39 @@ export function PitchingModule() {
             記錄所有客戶初步查詢及提案，追蹤從查詢到報價的完整歷程。
           </p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors duration-200 active:scale-[0.97]"
-        >
-          <Plus size={14} /> 新增 Pitching
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void handleSyncAsana()}
+            disabled={syncing}
+            className="flex items-center gap-1.5 px-4 py-2 border border-teal-200 text-teal-700 bg-teal-50 rounded-md text-[13px] font-medium hover:bg-teal-100 transition-colors disabled:opacity-60"
+          >
+            <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+            {syncing ? '同步 Asana…' : '同步 Asana'}
+          </button>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors duration-200 active:scale-[0.97]"
+          >
+            <Plus size={14} /> 新增 Pitching
+          </button>
+        </div>
       </div>
 
-      <PitchingList records={records} onView={handleView} />
+      {error && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-800">
+          無法載入 Pitching 資料：{error}（請確認已執行 Supabase migration）
+        </div>
+      )}
+      {lastSyncedAt && !error && (
+        <p className="text-[12px] text-muted-foreground">最後更新：{lastSyncedAt.slice(0, 19).replace('T', ' ')}</p>
+      )}
+
+      {loading ? (
+        <div className="text-center py-12 text-[13px] text-muted-foreground">載入 Pitching 資料中…</div>
+      ) : (
+        <PitchingList records={records} onView={handleView} />
+      )}
 
       <NewPitchingModal
         isOpen={showAddModal}
