@@ -899,7 +899,7 @@ function UnmatchedAdsDomainsModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[720px] max-h-[85vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[860px] max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
             <h3 className="text-[16px] font-bold">未連結的廣告網域</h3>
@@ -911,51 +911,104 @@ function UnmatchedAdsDomainsModal({
             <X size={16} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
           {domains.length === 0 ? (
             <div className="text-[13px] text-muted-foreground py-8 text-center">沒有待處理網域</div>
           ) : (
-            domains.map((d) => (
-              <div
-                key={d.normalizedDomain}
-                className="flex flex-wrap items-center justify-between gap-3 border border-border rounded-md px-3 py-2.5"
-              >
-                <div className="min-w-0">
-                  <div className="text-[13px] font-medium truncate">{d.normalizedDomain}</div>
-                  {d.sampleUrl ? (
-                    <div className="text-[11px] text-muted-foreground truncate max-w-[420px]">{d.sampleUrl}</div>
-                  ) : null}
-                  <div className="flex gap-1 mt-1">
-                    {(d.sources || []).map((s) => (
-                      <span
-                        key={s}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase"
-                      >
-                        {s}
-                      </span>
-                    ))}
+            domains.map((d) => {
+              const refs = d.sourceRefs || [];
+              const shown = refs.slice(0, 4);
+              const extra = Math.max(0, refs.length - shown.length);
+              return (
+                <div
+                  key={d.normalizedDomain}
+                  className="flex flex-wrap items-start justify-between gap-3 border border-border rounded-md px-3 py-2.5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-medium truncate">{d.normalizedDomain}</div>
+                    {d.sampleUrl ? (
+                      <div className="text-[11px] text-muted-foreground truncate max-w-[520px]">{d.sampleUrl}</div>
+                    ) : null}
+                    <div className="flex gap-1 mt-1.5 flex-wrap">
+                      {(d.sources || []).map((s) => (
+                        <span
+                          key={s}
+                          className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase"
+                        >
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                    {shown.length > 0 ? (
+                      <div className="mt-2 space-y-1.5">
+                        {shown.map((ref, idx) => (
+                          <div
+                            key={`${ref.platform}-${ref.accountId}-${ref.campaignId || ''}-${idx}`}
+                            className="text-[11px] leading-snug rounded border border-slate-100 bg-slate-50 px-2 py-1.5"
+                          >
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span
+                                className={cn(
+                                  'uppercase text-[10px] font-semibold px-1 py-0.5 rounded',
+                                  ref.platform === 'google'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-blue-100 text-blue-800',
+                                )}
+                              >
+                                {ref.platform}
+                              </span>
+                              <span className="text-muted-foreground">帳戶</span>
+                              <span className="font-medium text-foreground truncate max-w-[280px]">
+                                {ref.accountName || ref.accountId}
+                              </span>
+                              <span className="text-muted-foreground truncate">({ref.accountId})</span>
+                            </div>
+                            {ref.campaignId || ref.campaignName ? (
+                              <div className="mt-0.5 text-muted-foreground">
+                                Campaign：
+                                <span className="text-foreground font-medium ml-1">
+                                  {ref.campaignName || ref.campaignId}
+                                </span>
+                                {ref.campaignId && ref.campaignName ? (
+                                  <span className="ml-1">({ref.campaignId})</span>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <div className="mt-0.5 text-muted-foreground">Campaign：—（帳戶層級）</div>
+                            )}
+                          </div>
+                        ))}
+                        {extra > 0 ? (
+                          <div className="text-[11px] text-muted-foreground">另有 {extra} 個帳戶/Campaign…</div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-[11px] text-muted-foreground">
+                        尚無帳戶/Campaign 明細（請再按一次「同步廣告網域」）
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      disabled={syncing}
+                      onClick={() => onCreate(d)}
+                      className="px-2.5 py-1.5 text-[12px] font-medium rounded-md bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50"
+                    >
+                      建立網站
+                    </button>
+                    <button
+                      type="button"
+                      disabled={syncing}
+                      onClick={() => void onDismiss(d.normalizedDomain)}
+                      className="px-2.5 py-1.5 text-[12px] font-medium rounded-md border border-border hover:bg-muted disabled:opacity-50"
+                    >
+                      略過
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    disabled={syncing}
-                    onClick={() => onCreate(d)}
-                    className="px-2.5 py-1.5 text-[12px] font-medium rounded-md bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50"
-                  >
-                    建立網站
-                  </button>
-                  <button
-                    type="button"
-                    disabled={syncing}
-                    onClick={() => void onDismiss(d.normalizedDomain)}
-                    className="px-2.5 py-1.5 text-[12px] font-medium rounded-md border border-border hover:bg-muted disabled:opacity-50"
-                  >
-                    略過
-                  </button>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
         <div className="px-6 py-3 border-t border-border flex justify-end">

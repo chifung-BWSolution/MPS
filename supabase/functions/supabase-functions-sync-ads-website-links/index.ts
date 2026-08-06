@@ -27,11 +27,39 @@ function json(body: unknown, status = 200) {
   });
 }
 
+function mapSourceRefs(raw: unknown) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const r = item as Record<string, unknown>;
+      const platform = r.platform === "facebook"
+        ? "facebook"
+        : r.platform === "google"
+        ? "google"
+        : null;
+      const accountId = String(r.accountId || "").trim();
+      if (!platform || !accountId) return null;
+      return {
+        platform,
+        accountId,
+        accountName: String(r.accountName || accountId),
+        campaignId: r.campaignId != null && String(r.campaignId)
+          ? String(r.campaignId)
+          : null,
+        campaignName: r.campaignName != null && String(r.campaignName)
+          ? String(r.campaignName)
+          : null,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => !!x);
+}
+
 async function loadUnmatched(supabase: ReturnType<typeof createClient>) {
   const { data, error } = await supabase
     .from("ads_discovered_domains")
     .select(
-      "normalized_domain, sample_url, sources, status, website_profile_id, first_seen_at, last_seen_at",
+      "normalized_domain, sample_url, sources, status, website_profile_id, first_seen_at, last_seen_at, source_refs",
     )
     .eq("status", "unmatched")
     .order("last_seen_at", { ascending: false });
@@ -44,6 +72,7 @@ async function loadUnmatched(supabase: ReturnType<typeof createClient>) {
     websiteProfileId: (r.website_profile_id as string) || null,
     firstSeenAt: (r.first_seen_at as string) || undefined,
     lastSeenAt: (r.last_seen_at as string) || undefined,
+    sourceRefs: mapSourceRefs(r.source_refs),
   }));
 }
 

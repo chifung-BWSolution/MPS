@@ -2,6 +2,14 @@ export type AdsPlatformSource = 'google' | 'facebook';
 
 export type AdsDiscoveredDomainStatus = 'unmatched' | 'linked' | 'dismissed';
 
+export type AdsSourceRef = {
+  platform: AdsPlatformSource;
+  accountId: string;
+  accountName: string;
+  campaignId?: string | null;
+  campaignName?: string | null;
+};
+
 export type AdsDiscoveredDomain = {
   normalizedDomain: string;
   sampleUrl: string | null;
@@ -10,6 +18,7 @@ export type AdsDiscoveredDomain = {
   websiteProfileId: string | null;
   firstSeenAt?: string;
   lastSeenAt?: string;
+  sourceRefs?: AdsSourceRef[];
 };
 
 export type AdsAppliedStatus = 'none' | 'google' | 'facebook' | 'both';

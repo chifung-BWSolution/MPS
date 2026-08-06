@@ -13,12 +13,70 @@ export type DomainMatch = {
   matched_domain: string;
 };
 
+export type AdsSourceRef = {
+  platform: "google" | "facebook";
+  accountId: string;
+  accountName: string;
+  campaignId?: string | null;
+  campaignName?: string | null;
+};
+
 export type DiscoveredDomainInput = {
   normalized_domain: string;
   sample_url: string | null;
   source: "google" | "facebook";
   website_profile_id?: string | null;
+  source_ref?: AdsSourceRef | null;
 };
+
+function sourceRefKey(ref: AdsSourceRef): string {
+  return [
+    ref.platform,
+    ref.accountId || "",
+    ref.campaignId || "",
+  ].join("|");
+}
+
+/** Merge source refs; prefer richer names; cap list size. */
+export function mergeSourceRefs(
+  existing: unknown,
+  incoming: AdsSourceRef[],
+  max = 40,
+): AdsSourceRef[] {
+  const map = new Map<string, AdsSourceRef>();
+  const push = (raw: unknown) => {
+    if (!raw || typeof raw !== "object") return;
+    const r = raw as Record<string, unknown>;
+    const platform = r.platform === "facebook" ? "facebook" : r.platform === "google" ? "google" : null;
+    const accountId = String(r.accountId || "").trim();
+    if (!platform || !accountId) return;
+    const ref: AdsSourceRef = {
+      platform,
+      accountId,
+      accountName: String(r.accountName || accountId),
+      campaignId: r.campaignId != null && String(r.campaignId) ? String(r.campaignId) : null,
+      campaignName: r.campaignName != null && String(r.campaignName)
+        ? String(r.campaignName)
+        : null,
+    };
+    const key = sourceRefKey(ref);
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, ref);
+      return;
+    }
+    map.set(key, {
+      ...prev,
+      accountName: prev.accountName || ref.accountName,
+      campaignName: prev.campaignName || ref.campaignName,
+    });
+  };
+  if (Array.isArray(existing)) {
+    for (const item of existing) push(item);
+  }
+  for (const item of incoming) push(item);
+  return [...map.values()].slice(0, max);
+}
 
 export type GoogleCampaignWebsiteRow = {
   customer_id: string;
@@ -180,16 +238,22 @@ export async function upsertDiscoveredDomains(
 ): Promise<{ discovered: number; unmatched: number }> {
   if (!inputs.length) return { discovered: 0, unmatched: 0 };
 
-  const byDomain = new Map<string, DiscoveredDomainInput & { sources: Set<string> }>();
+  type Agg = DiscoveredDomainInput & {
+    sources: Set<string>;
+    refs: AdsSourceRef[];
+  };
+  const byDomain = new Map<string, Agg>();
   for (const row of inputs) {
     const d = normalizeDomain(row.normalized_domain);
     if (!d) continue;
     const prev = byDomain.get(d);
+    const ref = row.source_ref || null;
     if (!prev) {
       byDomain.set(d, {
         ...row,
         normalized_domain: d,
         sources: new Set([row.source]),
+        refs: ref ? [ref] : [],
       });
     } else {
       prev.sources.add(row.source);
@@ -197,13 +261,16 @@ export async function upsertDiscoveredDomains(
       if (!prev.website_profile_id && row.website_profile_id) {
         prev.website_profile_id = row.website_profile_id;
       }
+      if (ref) prev.refs.push(ref);
     }
   }
 
   const domains = [...byDomain.keys()];
   const { data: existing, error: selErr } = await supabase
     .from("ads_discovered_domains")
-    .select("normalized_domain, sources, status, website_profile_id, sample_url, first_seen_at")
+    .select(
+      "normalized_domain, sources, status, website_profile_id, sample_url, first_seen_at, source_refs",
+    )
     .in("normalized_domain", domains);
   if (selErr) throw new Error(`Load discovered domains failed: ${selErr.message}`);
 
@@ -214,6 +281,7 @@ export async function upsertDiscoveredDomains(
     website_profile_id: string | null;
     sample_url: string | null;
     first_seen_at: string;
+    source_refs?: unknown;
   };
   const existingMap = new Map(
     ((existing as Existing[] | null) ?? []).map((r) => [r.normalized_domain, r]),
@@ -231,6 +299,7 @@ export async function upsertDiscoveredDomains(
       normalized_domain: d,
       sample_url: incoming.sample_url || prev?.sample_url || null,
       sources: [...sources],
+      source_refs: mergeSourceRefs(prev?.source_refs, incoming.refs),
       first_seen_at: prev?.first_seen_at || nowIso,
       last_seen_at: nowIso,
       website_profile_id: websiteId,

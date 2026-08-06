@@ -587,18 +587,56 @@ export async function linkFacebookAccountWebsites(
         `/${account.ad_account_id}/ads`,
         {
           fields:
-            "id,name,creative{object_story_spec,call_to_action,asset_feed_spec,link_url}",
+            "id,name,campaign_id,campaign{id,name},creative{object_story_spec,call_to_action,asset_feed_spec,link_url}",
           limit: "100",
         },
         20,
       );
 
-      const urlSet = new Set<string>();
+      // domain -> urls + campaign refs seen for this account
+      const domainMeta = new Map<
+        string,
+        { urls: string[]; campaigns: Map<string, string> }
+      >();
+      const rememberUrl = (
+        url: string,
+        campaignId: string | null,
+        campaignName: string | null,
+      ) => {
+        const domains = extractDomainsFromUrls([url]);
+        for (const domain of domains) {
+          let meta = domainMeta.get(domain);
+          if (!meta) {
+            meta = { urls: [], campaigns: new Map() };
+            domainMeta.set(domain, meta);
+          }
+          if (!meta.urls.includes(url)) meta.urls.push(url);
+          if (campaignId) {
+            meta.campaigns.set(
+              campaignId,
+              campaignName || meta.campaigns.get(campaignId) || campaignId,
+            );
+          }
+        }
+      };
+
       for (const ad of ads) {
+        const campaignObj = (ad.campaign && typeof ad.campaign === "object")
+          ? (ad.campaign as Record<string, unknown>)
+          : null;
+        const campaignId = String(
+          campaignObj?.id || ad.campaign_id || "",
+        ) || null;
+        const campaignName = campaignObj?.name != null
+          ? String(campaignObj.name)
+          : null;
+        const urlSet = new Set<string>();
         collectHttpUrls(ad.creative ?? ad, urlSet);
+        for (const url of urlSet) rememberUrl(url, campaignId, campaignName);
       }
-      const urls = [...urlSet];
-      const creativeDomains = extractDomainsFromUrls(urls);
+
+      const creativeDomains = [...domainMeta.keys()];
+      const allUrls = [...domainMeta.values()].flatMap((m) => m.urls);
 
       let matches = matchDomainsToWebsites(creativeDomains, websites);
       let matchSource: "creative_link" | "name" = "creative_link";
@@ -609,16 +647,49 @@ export async function linkFacebookAccountWebsites(
         matches = matchDomainsToWebsites(nameDomains, websites);
         if (matches.length) matchSource = "name";
         domainsForDiscovery = [...new Set([...creativeDomains, ...nameDomains])];
+        for (const d of nameDomains) {
+          if (!domainMeta.has(d)) {
+            domainMeta.set(d, { urls: [], campaigns: new Map() });
+          }
+        }
       }
 
       for (const domain of domainsForDiscovery) {
         const domainMatches = matchDomainsToWebsites([domain], websites);
-        discovered.push({
-          normalized_domain: domain,
-          sample_url: pickSampleUrlForDomain(domain, urls),
-          source: "facebook",
-          website_profile_id: domainMatches[0]?.website_profile_id ?? null,
-        });
+        const meta = domainMeta.get(domain);
+        const urls = meta?.urls?.length ? meta.urls : allUrls;
+        const campaigns = [...(meta?.campaigns?.entries() ?? [])];
+        if (campaigns.length === 0) {
+          discovered.push({
+            normalized_domain: domain,
+            sample_url: pickSampleUrlForDomain(domain, urls),
+            source: "facebook",
+            website_profile_id: domainMatches[0]?.website_profile_id ?? null,
+            source_ref: {
+              platform: "facebook",
+              accountId: account.ad_account_id,
+              accountName: account.account_name || account.ad_account_id,
+              campaignId: null,
+              campaignName: null,
+            },
+          });
+        } else {
+          for (const [campaignId, campaignName] of campaigns) {
+            discovered.push({
+              normalized_domain: domain,
+              sample_url: pickSampleUrlForDomain(domain, urls),
+              source: "facebook",
+              website_profile_id: domainMatches[0]?.website_profile_id ?? null,
+              source_ref: {
+                platform: "facebook",
+                accountId: account.ad_account_id,
+                accountName: account.account_name || account.ad_account_id,
+                campaignId,
+                campaignName,
+              },
+            });
+          }
+        }
       }
 
       for (const m of matches) {
@@ -626,7 +697,7 @@ export async function linkFacebookAccountWebsites(
           ad_account_id: account.ad_account_id,
           website_profile_id: m.website_profile_id,
           matched_domain: m.matched_domain,
-          sample_final_url: pickSampleUrlForDomain(m.matched_domain, urls),
+          sample_final_url: pickSampleUrlForDomain(m.matched_domain, allUrls),
           match_source: matchSource,
           last_seen_at: nowIso,
           updated_at: nowIso,

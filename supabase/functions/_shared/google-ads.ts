@@ -529,6 +529,13 @@ export async function linkGoogleCampaignWebsites(
               sample_url: pickSampleUrlForDomain(d, agg.urls),
               source: "google",
               website_profile_id: websiteId,
+              source_ref: {
+                platform: "google",
+                accountId: customerId,
+                accountName: accountName || customerId,
+                campaignId: agg.campaignId,
+                campaignName: agg.campaignName || agg.campaignId,
+              },
             });
           }
         }

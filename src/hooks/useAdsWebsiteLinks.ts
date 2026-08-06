@@ -1,7 +1,27 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import type { AdsAppliedStatus, AdsDiscoveredDomain } from '@/types/adsWebsiteLink';
+import type { AdsAppliedStatus, AdsDiscoveredDomain, AdsSourceRef } from '@/types/adsWebsiteLink';
+
+function mapSourceRefs(raw: unknown): AdsSourceRef[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const r = item as Record<string, unknown>;
+      const platform = r.platform === 'facebook' ? 'facebook' : r.platform === 'google' ? 'google' : null;
+      const accountId = String(r.accountId || '').trim();
+      if (!platform || !accountId) return null;
+      return {
+        platform,
+        accountId,
+        accountName: String(r.accountName || accountId),
+        campaignId: r.campaignId != null && String(r.campaignId) ? String(r.campaignId) : null,
+        campaignName: r.campaignName != null && String(r.campaignName) ? String(r.campaignName) : null,
+      } satisfies AdsSourceRef;
+    })
+    .filter((x): x is AdsSourceRef => !!x);
+}
 import {
   invokeAdsWebsiteDomainSync,
   invokeDismissAdsDomain,
@@ -51,7 +71,7 @@ export function useAdsWebsiteLinks() {
       // Table may not exist yet / function not deployed — fall back to direct select
       const { data } = await supabase
         .from('ads_discovered_domains')
-        .select('normalized_domain, sample_url, sources, status, website_profile_id, first_seen_at, last_seen_at')
+        .select('normalized_domain, sample_url, sources, status, website_profile_id, first_seen_at, last_seen_at, source_refs')
         .eq('status', 'unmatched')
         .order('last_seen_at', { ascending: false });
       setUnmatched(
@@ -63,6 +83,7 @@ export function useAdsWebsiteLinks() {
           websiteProfileId: (r.website_profile_id as string) || null,
           firstSeenAt: (r.first_seen_at as string) || undefined,
           lastSeenAt: (r.last_seen_at as string) || undefined,
+          sourceRefs: mapSourceRefs(r.source_refs),
         })),
       );
     }
