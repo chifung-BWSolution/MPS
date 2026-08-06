@@ -25,14 +25,18 @@ async function invokeFunction<T = Record<string, unknown>>(
   return json;
 }
 
-export function invokeAsanaPitchingSync(options?: { discover?: boolean }) {
+export function invokeAsanaPitchingSync() {
   return invokeFunction<{
     success?: boolean;
     run_id?: string;
     duration_ms?: number;
-    projects_synced?: number;
+    project_gid?: string;
+    project_name?: string;
+    sync_year?: number;
     tasks_fetched?: number;
+    tasks_skipped?: number;
     records_upserted?: number;
+    sync_direction?: string;
     errors?: string[];
-  }>('sync-asana-pitching', { discover: options?.discover ?? false });
+  }>('sync-asana-pitching', {});
 }

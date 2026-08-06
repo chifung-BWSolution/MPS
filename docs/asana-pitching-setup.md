@@ -2,6 +2,15 @@
 
 Pitching 頁面透過 Supabase Edge Function `sync-asana-pitching` 從 Asana 專案拉取 Task，寫入 `pitching_records` 表。
 
+## 同步邏輯（目前設定）
+
+- **方向**：僅 Asana → MPS（不會把 MPS 手動新增的 Pitching 寫回 Asana）
+- **專案**：僅 `BWT Active 1 開始緊密跟進中`（GID `1209549009281325`）
+- **年份**：只同步 Task **建立日**在 **2026** 年的項目（`created_at` 年份 = `sync_year`）
+- **查詢日期**：Asana Task **建立日**（`created_at` 的日期部分），非 due date
+- **狀態**：來自 Asana **自訂欄位**（預設欄位名稱 `狀態`），對應 MPS：初步提案 / 跟進中 / 確認項目 / 已結案
+- **其他欄位**：提案顯示名稱、負責 PM、項目類型等對應規則之後再細調
+
 ## 必要憑證（Supabase Secrets）
 
 在 **Supabase Dashboard → Project Settings → Edge Functions → Secrets** 設定：
@@ -9,7 +18,9 @@ Pitching 頁面透過 Supabase Edge Function `sync-asana-pitching` 從 Asana 專
 | Secret | 說明 |
 |---|---|
 | `ASANA_ACCESS_TOKEN` | Asana **Personal Access Token**（非 Client Secret） |
-| `ASANA_WORKSPACE_GID` | Workspace GID，預設 `6649488167653` |
+| `ASANA_PITCHING_PROJECT_GID` | 否 | 單一專案 GID（預設 `1209549009281325`） |
+| `ASANA_SYNC_YEAR` | 否 | 只同步該建立年份的 Task（預設 `2026`） |
+| `ASANA_STATUS_FIELD_NAME` | 否 | 狀態自訂欄位名稱（預設 `狀態`） |
 
 ### 如何取得 Personal Access Token
 
@@ -25,37 +36,39 @@ Pitching 頁面透過 Supabase Edge Function `sync-asana-pitching` 從 Asana 專
 ```bash
 # 1. 執行 migration
 supabase db push
-# 或在 SQL Editor 執行 supabase/migrations/20260806140000_pitching_asana_warehouse.sql
+# 或在 SQL Editor 依序執行：
+#   supabase/migrations/20260806140000_pitching_asana_warehouse.sql
+#   supabase/migrations/20260806150000_pitching_asana_sync_rules.sql
 
 # 2. 部署 Edge Function
 supabase functions deploy sync-asana-pitching --no-verify-jwt
 
 # 3. 設定 Secrets（示例）
 supabase secrets set ASANA_ACCESS_TOKEN=your_pat_here
-supabase secrets set ASANA_WORKSPACE_GID=6649488167653
+supabase secrets set ASANA_PITCHING_PROJECT_GID=1209549009281325
+supabase secrets set ASANA_SYNC_YEAR=2026
+supabase secrets set ASANA_STATUS_FIELD_NAME=狀態
 ```
 
 ## 同步的 Asana 專案
 
-Migration 已預設 seed 以下 project GID（可在 `asana_pitching_projects` 表調整）：
+Migration `20260806150000` 已將 `asana_pitching_projects` 設定為**只啟用**：
 
-- `1209549009281325` — BWT Active 1 開始緊密跟進中  
-- `1201898424971757` — BWL Active 1 準備報價單  
-- 其他 BWT / BWL Active 專案  
+- `1209549009281325` — BWT Active 1 開始緊密跟進中（`sync_year = 2026`，`status_field_name = 狀態`）
 
-點擊 Pitching 頁面 **「同步 Asana」** 會一併嘗試 discover 名稱含 Active / 報價 的專案。
+其他先前 seed 的專案已設為 `enabled = false`。
 
-## 欄位對應
+## 欄位對應（初版）
 
 | Asana | pitching_records |
 |---|---|
 | Task name | display_name |
-| created_at / due_on | inquiry_date |
+| created_at（日期部分） | inquiry_date |
+| 自訂欄位「狀態」 | status、asana_status_label |
 | assignee.name | assigned_pm_name |
 | notes | description |
 | permalink_url | asana_link |
 | gid | asana_task_gid |
-| Section / Project 名稱 | status、project_types |
 
 ## 前端使用
 
