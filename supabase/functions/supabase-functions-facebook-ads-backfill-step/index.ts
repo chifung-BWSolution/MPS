@@ -6,6 +6,7 @@ import {
   countMonthsInclusive,
   fetchAllAccounts,
   fetchDailyMetricsForRange,
+  linkFacebookAccountWebsites,
   loadCredentials,
   metaHistoryStartDate,
   monthEnd,
@@ -82,6 +83,15 @@ Deno.serve(async (req) => {
       if (staleIds.length) {
         await supabase.from("facebook_ads_accounts").delete().in("ad_account_id", staleIds);
       }
+
+      const nowIso = now.toISOString();
+      const websiteLinks = await linkFacebookAccountWebsites(
+        supabase,
+        credentials,
+        accounts,
+        nowIso,
+      );
+
       const enabled = accounts.filter(
         (a) => a.status === "ENABLED" || a.account_status === 1,
       );
@@ -98,8 +108,8 @@ Deno.serve(async (req) => {
         accounts_targeted: enabled.length,
         error_count: 0,
         last_error: null,
-        started_at: now.toISOString(),
-        updated_at: now.toISOString(),
+        started_at: nowIso,
+        updated_at: nowIso,
         meta: {
           credentials_count: credentials.length,
           businesses: credentials.map((c) => c.name),
@@ -107,6 +117,7 @@ Deno.serve(async (req) => {
           account_business: Object.fromEntries(
             enabled.map((a) => [a.ad_account_id, a.business_key]),
           ),
+          website_links: websiteLinks,
         },
       };
       const { error } = await supabase.from("facebook_ads_backfill_jobs").insert(job);

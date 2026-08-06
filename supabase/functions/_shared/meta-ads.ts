@@ -1,5 +1,18 @@
 /** Shared Meta / Facebook Ads helpers for Edge Functions (multi-credential). */
 
+import {
+  extractDomainsFromName,
+  extractDomainsFromUrls,
+  loadWebsiteRows,
+  matchDomainsToWebsites,
+  pickSampleUrlForDomain,
+  replaceFacebookAccountWebsiteLinks,
+  upsertDiscoveredDomains,
+  type AdsLinkSummary,
+  type DiscoveredDomainInput,
+  type FacebookAccountWebsiteRow,
+} from "./website-match.ts";
+
 export const ACCOUNT_CONCURRENCY = 6;
 /** Meta Insights rejects ranges older than ~37 months */
 export const META_INSIGHTS_MAX_MONTHS = 36;
@@ -513,4 +526,135 @@ export function countMonthsInclusive(start: Date, end: Date): number {
 export function metaHistoryStartDate(now = new Date()): string {
   const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   return toIsoDate(addMonths(d, -(META_INSIGHTS_MAX_MONTHS - 1)));
+}
+
+/** Recursively collect http(s) URL strings from nested creative JSON. */
+function collectHttpUrls(value: unknown, out: Set<string>, depth = 0): void {
+  if (value == null || depth > 24) return;
+  if (typeof value === "string") {
+    const s = value.trim();
+    if (/^https?:\/\//i.test(s)) out.add(s);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectHttpUrls(item, out, depth + 1);
+    return;
+  }
+  if (typeof value === "object") {
+    for (const v of Object.values(value as Record<string, unknown>)) {
+      collectHttpUrls(v, out, depth + 1);
+    }
+  }
+}
+
+/**
+ * Discover landing domains from ENABLED ad creatives and link accounts to
+ * webandsystem_list. Clears/replaces junction rows for processed accounts.
+ */
+export async function linkFacebookAccountWebsites(
+  supabase: {
+    from: (table: string) => unknown;
+  },
+  credentials: MetaCredential[],
+  accounts: AccountRow[],
+  nowIso: string,
+): Promise<AdsLinkSummary> {
+  const linkErrors: string[] = [];
+  const websites = await loadWebsiteRows(
+    supabase as Parameters<typeof loadWebsiteRows>[0],
+  );
+  const credByKey = new Map(credentials.map((c) => [c.id, c]));
+  const targets = accounts.filter(
+    (a) => a.status === "ENABLED" || a.account_status === 1,
+  );
+  const processedIds = targets.map((a) => a.ad_account_id);
+  const allLinkRows: FacebookAccountWebsiteRow[] = [];
+  const discovered: DiscoveredDomainInput[] = [];
+  const accountsWithLinks = new Set<string>();
+  const websitesLinked = new Set<string>();
+
+  await mapPool(targets, ACCOUNT_CONCURRENCY, async (account) => {
+    const cred = credByKey.get(account.business_key);
+    if (!cred) {
+      linkErrors.push(
+        `${account.ad_account_id}: missing credential ${account.business_key}`,
+      );
+      return;
+    }
+    try {
+      const ads = await graphGetAll(
+        cred,
+        `/${account.ad_account_id}/ads`,
+        {
+          fields:
+            "id,name,creative{object_story_spec,call_to_action,asset_feed_spec,link_url}",
+          limit: "100",
+        },
+        20,
+      );
+
+      const urlSet = new Set<string>();
+      for (const ad of ads) {
+        collectHttpUrls(ad.creative ?? ad, urlSet);
+        // Ad name sometimes embeds a domain — only used later as name fallback
+      }
+      const urls = [...urlSet];
+      const creativeDomains = extractDomainsFromUrls(urls);
+
+      let matches = matchDomainsToWebsites(creativeDomains, websites);
+      let matchSource: "creative_link" | "name" = "creative_link";
+      let domainsForDiscovery = creativeDomains;
+
+      if (matches.length === 0) {
+        const nameDomains = extractDomainsFromName(account.account_name);
+        matches = matchDomainsToWebsites(nameDomains, websites);
+        matchSource = "name";
+        domainsForDiscovery = [...new Set([...creativeDomains, ...nameDomains])];
+      }
+
+      for (const domain of domainsForDiscovery) {
+        const domainMatches = matchDomainsToWebsites([domain], websites);
+        discovered.push({
+          normalized_domain: domain,
+          sample_url: pickSampleUrlForDomain(domain, urls),
+          source: "facebook",
+          website_profile_id: domainMatches[0]?.website_profile_id ?? null,
+        });
+      }
+
+      for (const m of matches) {
+        allLinkRows.push({
+          ad_account_id: account.ad_account_id,
+          website_profile_id: m.website_profile_id,
+          matched_domain: m.matched_domain,
+          sample_final_url: pickSampleUrlForDomain(m.matched_domain, urls),
+          match_source: matchSource,
+          last_seen_at: nowIso,
+          updated_at: nowIso,
+        });
+        accountsWithLinks.add(account.ad_account_id);
+        websitesLinked.add(m.website_profile_id);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      linkErrors.push(`${account.ad_account_id}: ${msg.slice(0, 180)}`);
+    }
+  });
+
+  const sb = supabase as Parameters<typeof replaceFacebookAccountWebsiteLinks>[0];
+  await replaceFacebookAccountWebsiteLinks(sb, processedIds, allLinkRows);
+  const { discovered: domainsDiscovered, unmatched: domainsUnmatched } =
+    await upsertDiscoveredDomains(
+      supabase as Parameters<typeof upsertDiscoveredDomains>[0],
+      discovered,
+      nowIso,
+    );
+
+  return {
+    accounts_with_links: accountsWithLinks.size,
+    websites_linked: websitesLinked.size,
+    domains_discovered: domainsDiscovered,
+    domains_unmatched: domainsUnmatched,
+    link_errors: linkErrors,
+  };
 }

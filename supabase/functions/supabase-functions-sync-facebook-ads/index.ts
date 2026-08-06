@@ -4,6 +4,7 @@ import {
   corsHeaders,
   fetchAllAccounts,
   fetchDailyMetricsForRange,
+  linkFacebookAccountWebsites,
   toIsoDate,
 } from "../_shared/meta-ads.ts";
 
@@ -67,6 +68,13 @@ Deno.serve(async (req) => {
       prunedAccounts = count ?? staleIds.length;
     }
 
+    const websiteLinks = await linkFacebookAccountWebsites(
+      supabase,
+      credentials,
+      accounts,
+      nowIso,
+    );
+
     const { daily, campaigns, errors } = await fetchDailyMetricsForRange(
       credentials,
       accounts,
@@ -117,6 +125,7 @@ Deno.serve(async (req) => {
           error_count: errors.length,
           pruned_accounts: prunedAccounts,
           mode: "incremental_7d",
+          website_links: websiteLinks,
         },
       })
       .eq("id", runId);
@@ -137,6 +146,7 @@ Deno.serve(async (req) => {
         duration_ms: durationMs,
         errors: errors.slice(0, 20),
         synced_at: nowIso,
+        website_links: websiteLinks,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
