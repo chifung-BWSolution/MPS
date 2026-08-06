@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Search, ChevronRight, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
-import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
+import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
 import { invokeAsanaPitchingSync } from '@/lib/asanaPitchingApi';
 import { PitchingDetail, RemainingDaysCell, PitchingStatusSelect } from '@/components/quotation/PitchingModule';
 import {
@@ -146,7 +146,7 @@ function ProjectList({
 
 export function ProjectModule() {
   const { navigateTo } = useApp();
-  const { records, loading, error, lastSyncedAt, refresh, updateStatus } = useQuotationClientProjects();
+  const { records, loading, error, lastSyncedAt, refresh, updateStatus, updateRecord } = useQuotationClientProjects();
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedRecord, setSelectedRecord] = useState<PitchingRecord | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -191,6 +191,14 @@ export function ProjectModule() {
     }
   };
 
+  const handleSaveRecord = async (id: string, data: QuotationClientProjectUpdate) => {
+    const { error: saveErr } = await updateRecord(id, data);
+    if (!saveErr && selectedRecord?.id === id) {
+      setSelectedRecord((prev) => (prev ? { ...prev, ...data, updatedAt: new Date().toISOString() } : null));
+    }
+    return { error: saveErr };
+  };
+
   const handleConvertToQuote = () => {
     toast.success('已將 Project 資料帶入新建報價單');
     navigateTo('quotation', 'new');
@@ -205,7 +213,7 @@ export function ProjectModule() {
           setSelectedRecord(null);
         }}
         onConvertToQuote={handleConvertToQuote}
-        onStatusChange={(status) => void handleStatusChange(selectedRecord.id, status)}
+        onSave={handleSaveRecord}
       />
     );
   }

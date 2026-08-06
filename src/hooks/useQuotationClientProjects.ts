@@ -54,6 +54,22 @@ function mapRow(row: DbRow): PitchingRecord {
   };
 }
 
+/** Fields updatable from Pitching / Project detail page. */
+export type QuotationClientProjectUpdate = Partial<
+  Pick<
+    PitchingRecord,
+    | 'clientName'
+    | 'displayName'
+    | 'inquiryDate'
+    | 'description'
+    | 'projectTypes'
+    | 'assignedPmName'
+    | 'asanaLink'
+    | 'status'
+    | 'notes'
+  >
+>;
+
 /** Load all client projects from quotation_client_project (Pitching + Project pages). */
 export function useQuotationClientProjects() {
   const { session } = useAuth();
@@ -141,7 +157,33 @@ export function useQuotationClientProjects() {
     return { error: err };
   }, []);
 
-  return { records, loading, error, lastSyncedAt, refresh, addRecord, updateStatus };
+  const updateRecord = useCallback(async (id: string, data: QuotationClientProjectUpdate) => {
+    const now = new Date().toISOString();
+    const row: Record<string, unknown> = { updated_at: now };
+    if (data.clientName !== undefined) row.client_name = data.clientName || null;
+    if (data.displayName !== undefined) row.display_name = data.displayName;
+    if (data.inquiryDate !== undefined) row.inquiry_date = data.inquiryDate;
+    if (data.description !== undefined) row.description = data.description || null;
+    if (data.projectTypes !== undefined) row.project_types = data.projectTypes;
+    if (data.assignedPmName !== undefined) row.assigned_pm_name = data.assignedPmName || '';
+    if (data.asanaLink !== undefined) row.asana_link = data.asanaLink || null;
+    if (data.status !== undefined) row.status = data.status;
+    if (data.notes !== undefined) row.notes = data.notes || null;
+
+    const { error: err } = await supabase
+      .from(QUOTATION_CLIENT_PROJECT_TABLE)
+      .update(row)
+      .eq('id', id);
+
+    if (!err) {
+      setRecords((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, ...data, updatedAt: now } : r)),
+      );
+    }
+    return { error: err };
+  }, []);
+
+  return { records, loading, error, lastSyncedAt, refresh, addRecord, updateStatus, updateRecord };
 }
 
 /** @deprecated Use useQuotationClientProjects */

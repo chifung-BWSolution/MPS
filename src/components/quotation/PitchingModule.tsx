@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
-import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
+import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
 import { invokeAsanaPitchingSync } from '@/lib/asanaPitchingApi';
 import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
@@ -439,19 +439,268 @@ function PitchingList({
   );
 }
 
+type DetailDraft = {
+  clientName: string;
+  displayName: string;
+  inquiryDate: string;
+  description: string;
+  projectTypes: PitchingProjectType[];
+  assignedPmName: string;
+  asanaLink: string;
+  status: PitchingStatus;
+};
+
+function draftFromRecord(record: PitchingRecord): DetailDraft {
+  return {
+    clientName: record.clientName,
+    displayName: record.displayName,
+    inquiryDate: record.inquiryDate,
+    description: record.description ?? '',
+    projectTypes: record.projectTypes,
+    assignedPmName: record.assignedPmName,
+    asanaLink: record.asanaLink ?? '',
+    status: record.status,
+  };
+}
+
+function EditableTextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return (
+      <div>
+        <span className="text-[12px] text-muted-foreground block mb-1">{label}</span>
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={() => setEditing(false)}
+          autoFocus
+          placeholder={placeholder}
+          className="text-[14px] h-9"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <span className="text-[12px] text-muted-foreground block">{label}</span>
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="text-left text-[14px] font-medium rounded px-1 -mx-1 py-0.5 hover:bg-muted/50 transition-colors w-full"
+      >
+        {value.trim() || <span className="text-muted-foreground font-normal italic">點擊編輯</span>}
+      </button>
+    </div>
+  );
+}
+
+function EditableDateField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return (
+      <div>
+        <span className="text-[12px] text-muted-foreground block mb-1">{label}</span>
+        <Input
+          type="date"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={() => setEditing(false)}
+          autoFocus
+          className="text-[14px] h-9 w-auto"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <span className="text-[12px] text-muted-foreground block">{label}</span>
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="text-left text-[14px] rounded px-1 -mx-1 py-0.5 hover:bg-muted/50 transition-colors"
+      >
+        {value || '—'}
+      </button>
+    </div>
+  );
+}
+
+function EditableTextAreaField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return (
+      <div>
+        <span className="text-[12px] text-muted-foreground block mb-1">{label}</span>
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={() => setEditing(false)}
+          autoFocus
+          rows={5}
+          placeholder={placeholder}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-[14px] leading-relaxed focus:outline-none focus:ring-1 focus:ring-teal-500"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <span className="text-[12px] text-muted-foreground block mb-1">{label}</span>
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="text-left text-[14px] leading-relaxed text-foreground/80 whitespace-pre-wrap rounded px-1 -mx-1 py-0.5 hover:bg-muted/50 transition-colors w-full"
+      >
+        {value.trim() || <span className="text-muted-foreground italic">點擊新增描述</span>}
+      </button>
+    </div>
+  );
+}
+
+function EditableProjectTypesField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: PitchingProjectType[];
+  onChange: (next: PitchingProjectType[]) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return (
+      <div>
+        <span className="text-[12px] text-muted-foreground block mb-1">{label}</span>
+        <ProjectTypeMultiSelect value={value} onChange={onChange} />
+        <button
+          type="button"
+          onClick={() => setEditing(false)}
+          className="mt-2 text-[12px] text-teal-600 hover:text-teal-700"
+        >
+          完成
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <span className="text-[12px] text-muted-foreground block">{label}</span>
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="text-left text-[14px] font-medium rounded px-1 -mx-1 py-0.5 hover:bg-muted/50 transition-colors"
+      >
+        {formatProjectTypes(value)}
+      </button>
+    </div>
+  );
+}
+
 export function PitchingDetail({
   record,
   onBack,
   onConvertToQuote,
-  onStatusChange,
+  onSave,
 }: {
   record: PitchingRecord;
   onBack: () => void;
   onConvertToQuote: () => void;
-  onStatusChange: (status: PitchingStatus) => void;
+  onSave: (id: string, data: QuotationClientProjectUpdate) => Promise<{ error: { message: string } | null }>;
 }) {
   const [activeTab, setActiveTab] = useState<'info' | 'followups' | 'quotation' | 'client'>('info');
-  const remaining = calcRemainingDays(record.inquiryDate, record.status);
+  const [draft, setDraft] = useState<DetailDraft>(() => draftFromRecord(record));
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDraft(draftFromRecord(record));
+  }, [record.id, record.updatedAt]);
+
+  const remaining = calcRemainingDays(draft.inquiryDate, draft.status);
+
+  const hasChanges = useMemo(() => {
+    const initial = draftFromRecord(record);
+    const typesChanged =
+      draft.projectTypes.length !== initial.projectTypes.length ||
+      [...draft.projectTypes].sort().join(',') !== [...initial.projectTypes].sort().join(',');
+    return (
+      draft.clientName !== initial.clientName ||
+      draft.displayName !== initial.displayName ||
+      draft.inquiryDate !== initial.inquiryDate ||
+      draft.description !== initial.description ||
+      draft.assignedPmName !== initial.assignedPmName ||
+      draft.asanaLink !== initial.asanaLink ||
+      draft.status !== initial.status ||
+      typesChanged
+    );
+  }, [draft, record]);
+
+  const patchDraft = (patch: Partial<DetailDraft>) => {
+    setDraft((prev) => ({ ...prev, ...patch }));
+  };
+
+  const handleSave = async () => {
+    if (!draft.displayName.trim()) {
+      toast.error('提案顯示名稱不可為空');
+      return;
+    }
+    if (!draft.inquiryDate) {
+      toast.error('請選擇查詢日期');
+      return;
+    }
+
+    setSaving(true);
+    const payload: QuotationClientProjectUpdate = {
+      clientName: draft.clientName,
+      displayName: draft.displayName.trim(),
+      inquiryDate: draft.inquiryDate,
+      description: draft.description.trim() || undefined,
+      projectTypes: draft.projectTypes,
+      assignedPmName: draft.assignedPmName,
+      asanaLink: draft.asanaLink.trim() || undefined,
+      status: draft.status,
+    };
+    const { error } = await onSave(record.id, payload);
+    setSaving(false);
+    if (error) {
+      toast.error(`儲存失敗：${error.message}`);
+    }
+  };
 
   const tabs = [
     { id: 'info', label: '基本資訊', icon: FileText },
@@ -469,23 +718,36 @@ export function PitchingDetail({
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-[20px] font-bold">{record.displayName}</h2>
-              <PitchingStatusSelect
-                value={record.status}
-                onChange={onStatusChange}
-                className="text-[13px] px-2.5 py-1"
-              />
+              <h2 className="text-[20px] font-bold">{draft.displayName || record.displayName}</h2>
+              <span
+                className={cn(
+                  'text-[12px] font-medium px-2.5 py-1 rounded-sm',
+                  pitchingStatusConfig[draft.status].bgColor,
+                  pitchingStatusConfig[draft.status].color,
+                )}
+              >
+                {pitchingStatusConfig[draft.status].label}
+              </span>
             </div>
-            <p className="text-[13px] text-muted-foreground mt-0.5">{record.pitchingId} · {record.clientName}</p>
+            <p className="text-[13px] text-muted-foreground mt-0.5">{record.pitchingId} · {draft.clientName}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={saving || !hasChanges}
+            className="flex items-center gap-1.5 px-4 py-2 border border-teal-200 text-teal-700 bg-teal-50 rounded-md text-[13px] font-medium hover:bg-teal-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97]"
+          >
+            <Save size={14} className={saving ? 'animate-pulse' : ''} />
+            {saving ? '儲存中…' : '儲存'}
+          </button>
           <PitchingStatusSelect
-            value={record.status}
-            onChange={onStatusChange}
+            value={draft.status}
+            onChange={(status) => patchDraft({ status })}
             className="text-[13px] px-3 py-1.5"
           />
-          {record.status !== 'closed' && (
+          {draft.status !== 'closed' && (
             <button
               onClick={onConvertToQuote}
               className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors active:scale-[0.97]"
@@ -516,18 +778,21 @@ export function PitchingDetail({
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6 space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
-              <div>
-                <span className="text-[12px] text-muted-foreground block">客戶名稱</span>
-                <span className="text-[14px] font-medium">{record.clientName}</span>
-              </div>
-              <div>
-                <span className="text-[12px] text-muted-foreground block">提案顯示名稱</span>
-                <span className="text-[14px] font-medium">{record.displayName}</span>
-              </div>
-              <div>
-                <span className="text-[12px] text-muted-foreground block">查詢日期</span>
-                <span className="text-[14px]">{record.inquiryDate}</span>
-              </div>
+              <EditableTextField
+                label="客戶名稱"
+                value={draft.clientName}
+                onChange={(clientName) => patchDraft({ clientName })}
+              />
+              <EditableTextField
+                label="提案顯示名稱"
+                value={draft.displayName}
+                onChange={(displayName) => patchDraft({ displayName })}
+              />
+              <EditableDateField
+                label="查詢日期"
+                value={draft.inquiryDate}
+                onChange={(inquiryDate) => patchDraft({ inquiryDate })}
+              />
               <div>
                 <span className="text-[12px] text-muted-foreground block">剩餘天數</span>
                 <span className="text-[14px]">
@@ -536,37 +801,31 @@ export function PitchingDetail({
               </div>
             </div>
             <div className="space-y-4">
-              <div>
-                <span className="text-[12px] text-muted-foreground block">項目類型</span>
-                <span className="text-[14px] font-medium">{formatProjectTypes(record.projectTypes)}</span>
-              </div>
-              <div>
-                <span className="text-[12px] text-muted-foreground block">負責 PM</span>
-                <span className="text-[14px]">{record.assignedPmName || '—'}</span>
-              </div>
-              <div>
-                <span className="text-[12px] text-muted-foreground block">Asana 連結</span>
-                {record.asanaLink ? (
-                  <a
-                    href={record.asanaLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[14px] text-teal-600 hover:underline break-all"
-                  >
-                    {record.asanaLink}
-                  </a>
-                ) : (
-                  <span className="text-[14px]">—</span>
-                )}
-              </div>
+              <EditableProjectTypesField
+                label="項目類型"
+                value={draft.projectTypes}
+                onChange={(projectTypes) => patchDraft({ projectTypes })}
+              />
+              <EditableTextField
+                label="負責 PM"
+                value={draft.assignedPmName}
+                onChange={(assignedPmName) => patchDraft({ assignedPmName })}
+              />
+              <EditableTextField
+                label="Asana 連結"
+                value={draft.asanaLink}
+                onChange={(asanaLink) => patchDraft({ asanaLink })}
+                placeholder="https://app.asana.com/..."
+              />
             </div>
           </div>
-          {record.description && (
-            <div className="border-t border-border pt-4">
-              <span className="text-[12px] text-muted-foreground block mb-1">提案描述</span>
-              <p className="text-[14px] leading-relaxed text-foreground/80 whitespace-pre-wrap">{record.description}</p>
-            </div>
-          )}
+          <div className="border-t border-border pt-4">
+            <EditableTextAreaField
+              label="提案描述"
+              value={draft.description}
+              onChange={(description) => patchDraft({ description })}
+            />
+          </div>
         </div>
       )}
 
@@ -587,7 +846,7 @@ export function PitchingDetail({
             <>
               <FileText size={24} className="mx-auto text-muted-foreground/50 mb-2" />
               <p className="text-[13px] text-muted-foreground mb-3">此 Pitching 尚未轉換為正式報價單</p>
-              {record.status !== 'closed' && (
+              {draft.status !== 'closed' && (
                 <button
                   onClick={onConvertToQuote}
                   className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors mx-auto active:scale-[0.97]"
@@ -607,7 +866,7 @@ export function PitchingDetail({
               <User size={18} className="text-teal-600" />
             </div>
             <div>
-              <span className="text-[15px] font-medium block">{record.clientName}</span>
+              <span className="text-[15px] font-medium block">{draft.clientName}</span>
               <span className="text-[12px] text-muted-foreground">客戶 ID：{record.clientId || '—'}</span>
             </div>
           </div>
@@ -620,7 +879,7 @@ export function PitchingDetail({
 export function PitchingModule() {
   const { navigateTo } = useApp();
   const { systemUser, userInfo } = useAuth();
-  const { records, loading, error, lastSyncedAt, refresh, addRecord, updateStatus } = useQuotationClientProjects();
+  const { records, loading, error, lastSyncedAt, refresh, addRecord, updateStatus, updateRecord } = useQuotationClientProjects();
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedRecord, setSelectedRecord] = useState<PitchingRecord | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -684,6 +943,14 @@ export function PitchingModule() {
     }
   };
 
+  const handleSaveRecord = async (id: string, data: QuotationClientProjectUpdate) => {
+    const { error: saveErr } = await updateRecord(id, data);
+    if (!saveErr && selectedRecord?.id === id) {
+      setSelectedRecord((prev) => (prev ? { ...prev, ...data, updatedAt: new Date().toISOString() } : null));
+    }
+    return { error: saveErr };
+  };
+
   const handleConvertToQuote = () => {
     toast.success('已將 Pitching 資料帶入新建報價單');
     navigateTo('quotation', 'new');
@@ -698,7 +965,7 @@ export function PitchingModule() {
           setSelectedRecord(null);
         }}
         onConvertToQuote={handleConvertToQuote}
-        onStatusChange={(status) => void handleStatusChange(selectedRecord.id, status)}
+        onSave={handleSaveRecord}
       />
     );
   }
