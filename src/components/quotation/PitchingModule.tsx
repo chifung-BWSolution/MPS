@@ -1,11 +1,10 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, ChevronRight, FileText, MessageSquare, ArrowLeft, Link2, Save, X, RefreshCw, DollarSign } from 'lucide-react';
+import { Search, Plus, ChevronRight, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
-import { invokeAsanaPitchingSync } from '@/lib/asanaPitchingApi';
 import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -909,36 +908,16 @@ export function PitchingDetail({
 export function PitchingModule() {
   const { navigateTo } = useApp();
   const { systemUser, userInfo } = useAuth();
-  const { records, loading, error, lastSyncedAt, refresh, addRecord, updateStatus, updateRecord } = useQuotationClientProjects();
+  const { records, loading, error, lastSyncedAt, addRecord, updateStatus, updateRecord } = useQuotationClientProjects();
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedRecord, setSelectedRecord] = useState<PitchingRecord | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [syncing, setSyncing] = useState(false);
 
   const pmName = systemUser?.display_name || userInfo?.display_name || '—';
 
   const handleView = (record: PitchingRecord) => {
     setSelectedRecord(record);
     setView('detail');
-  };
-
-  const handleSyncAsana = async () => {
-    setSyncing(true);
-    try {
-      const result = await invokeAsanaPitchingSync();
-      await refresh();
-      toast.success(
-        `Asana 同步完成：${result.records_upserted ?? 0} 筆（${result.projects_synced ?? 0} 個專案）`,
-      );
-      if (result.errors?.length) {
-        toast.warning(`${result.errors.length} 筆同步警告，詳見主控台`);
-        console.warn('[Asana sync]', result.errors);
-      }
-    } catch (e) {
-      toast.error(`Asana 同步失敗：${(e as Error).message}`);
-    } finally {
-      setSyncing(false);
-    }
   };
 
   const handleAddPitching = async (form: NewPitchingForm) => {
@@ -1010,15 +989,6 @@ export function PitchingModule() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => void handleSyncAsana()}
-            disabled={syncing}
-            className="flex items-center gap-1.5 px-4 py-2 border border-teal-200 text-teal-700 bg-teal-50 rounded-md text-[13px] font-medium hover:bg-teal-100 transition-colors disabled:opacity-60"
-          >
-            <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
-            {syncing ? '同步 Asana…' : '同步 Asana'}
-          </button>
           <button
             onClick={() => setShowAddModal(true)}
             className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors duration-200 active:scale-[0.97]"

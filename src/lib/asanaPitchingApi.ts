@@ -36,7 +36,38 @@ export function invokeAsanaPitchingSync() {
     tasks_fetched?: number;
     tasks_skipped?: number;
     records_upserted?: number;
+    projects_synced?: number;
     sync_direction?: string;
     errors?: string[];
   }>('sync-asana-pitching', {});
+}
+
+let inFlightAutoSync: Promise<void> | null = null;
+let lastAutoSyncAt = 0;
+const AUTO_SYNC_COOLDOWN_MS = 2 * 60 * 1000;
+
+/** Background Asana import — deduped across Pitching/Project page mounts. */
+export async function autoSyncAsanaPitchingIfNeeded(): Promise<void> {
+  const now = Date.now();
+  if (inFlightAutoSync) {
+    await inFlightAutoSync;
+    return;
+  }
+  if (now - lastAutoSyncAt < AUTO_SYNC_COOLDOWN_MS) return;
+
+  inFlightAutoSync = invokeAsanaPitchingSync()
+    .then((result) => {
+      lastAutoSyncAt = Date.now();
+      if (result.errors?.length) {
+        console.warn('[Asana auto-sync]', result.errors);
+      }
+    })
+    .catch((e) => {
+      console.warn('[Asana auto-sync failed]', e);
+    })
+    .finally(() => {
+      inFlightAutoSync = null;
+    });
+
+  await inFlightAutoSync;
 }

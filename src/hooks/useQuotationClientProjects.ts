@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { autoSyncAsanaPitchingIfNeeded } from '@/lib/asanaPitchingApi';
 import type { PitchingExpenseItem, PitchingProjectType, PitchingRecord, PitchingStatus } from '@/data/pitchingData';
 
 /** Supabase table shared by Pitching and Project pages */
@@ -129,7 +130,12 @@ export function useQuotationClientProjects() {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    void (async () => {
+      if (session) {
+        await autoSyncAsanaPitchingIfNeeded();
+      }
+      await refresh();
+    })();
   }, [session, refresh]);
 
   const addRecord = useCallback(

@@ -1,9 +1,8 @@
 import { useState, useMemo } from 'react';
-import { Search, ChevronRight, RefreshCw } from 'lucide-react';
+import { Search, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
-import { invokeAsanaPitchingSync } from '@/lib/asanaPitchingApi';
 import { PitchingDetail, RemainingDaysCell, PitchingStatusSelect } from '@/components/quotation/PitchingModule';
 import {
   pitchingStatusConfig,
@@ -162,10 +161,9 @@ function ProjectList({
 
 export function ProjectModule() {
   const { navigateTo } = useApp();
-  const { records, loading, error, lastSyncedAt, refresh, updateStatus, updateRecord } = useQuotationClientProjects();
+  const { records, loading, error, lastSyncedAt, updateStatus, updateRecord } = useQuotationClientProjects();
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedRecord, setSelectedRecord] = useState<PitchingRecord | null>(null);
-  const [syncing, setSyncing] = useState(false);
 
   const projectRecords = useMemo(
     () => records.filter(isProjectPageRecord),
@@ -175,25 +173,6 @@ export function ProjectModule() {
   const handleView = (record: PitchingRecord) => {
     setSelectedRecord(record);
     setView('detail');
-  };
-
-  const handleSyncAsana = async () => {
-    setSyncing(true);
-    try {
-      const result = await invokeAsanaPitchingSync();
-      await refresh();
-      toast.success(
-        `Asana 同步完成：${result.records_upserted ?? 0} 筆（${result.projects_synced ?? 0} 個專案）`,
-      );
-      if (result.errors?.length) {
-        toast.warning(`${result.errors.length} 筆同步警告，詳見主控台`);
-        console.warn('[Asana sync]', result.errors);
-      }
-    } catch (e) {
-      toast.error(`Asana 同步失敗：${(e as Error).message}`);
-    } finally {
-      setSyncing(false);
-    }
   };
 
   const handleStatusChange = async (id: string, status: PitchingStatus) => {
@@ -248,14 +227,6 @@ export function ProjectModule() {
             </p>
           )}
         </div>
-        <button
-          onClick={() => void handleSyncAsana()}
-          disabled={syncing}
-          className="flex items-center gap-1.5 px-4 py-2 border border-border rounded-md text-[13px] font-medium hover:bg-muted/40 transition-colors disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
-          同步 Asana
-        </button>
       </div>
 
       {error && (
