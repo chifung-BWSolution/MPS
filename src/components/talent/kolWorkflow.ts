@@ -62,7 +62,7 @@ export const VIEW_META: Record<
   },
   'new-beauty': {
     title: '新美容KOL',
-    description: '來自 Beauty 18／Beauty 100 同步的美容類 KOL，狀態為未處理。',
+    description: 'Blog 主題或專長含 Beauty 的 KOL（含 KOL 申請批核匯入），狀態為未處理。',
   },
   shortlist: {
     title: '候選名單',
@@ -84,6 +84,46 @@ export const VIEW_META: Record<
 
 export interface KolWorkflowRowWithSource extends KolWorkflowRow {
   source_system?: string | null;
+}
+
+/** Blog 主題或專長是否含 beauty（不分大小寫） */
+export function rowHasBeautyKeyword(row: {
+  blog_themes?: string[] | null;
+  specialty?: string | null;
+}): boolean {
+  const themes = row.blog_themes || [];
+  if (themes.some((t) => /beauty/i.test(t))) return true;
+  return Boolean(row.specialty && /beauty/i.test(row.specialty));
+}
+
+function rowHasFoodKeyword(row: {
+  blog_themes?: string[] | null;
+  specialty?: string | null;
+}): boolean {
+  const themes = row.blog_themes || [];
+  if (themes.some((t) => /food|美食/i.test(t))) return true;
+  return Boolean(row.specialty && /food|美食/i.test(row.specialty));
+}
+
+/** 依 Blog 主題／專長推導 primary_category */
+export function resolvePrimaryCategoryFromThemes(row: {
+  blog_themes?: string[] | null;
+  specialty?: string | null;
+}): KolPrimaryCategory {
+  const hasBeauty = rowHasBeautyKeyword(row);
+  const hasFood = rowHasFoodKeyword(row);
+  if (hasFood && hasBeauty) return 'both';
+  if (hasBeauty) return 'beauty';
+  if (hasFood) return 'food';
+  return 'other';
+}
+
+/** KOL 申請批核寫入 kol_profile 時的 source_system */
+export function resolveSourceSystemFromApply(row: {
+  blog_themes?: string[] | null;
+  specialty?: string | null;
+}): 'beauty18' | 'emailmeform' {
+  return rowHasBeautyKeyword(row) ? 'beauty18' : 'emailmeform';
 }
 
 export function matchesWorkflowView(row: KolWorkflowRowWithSource, view: KolWorkflowView): boolean {

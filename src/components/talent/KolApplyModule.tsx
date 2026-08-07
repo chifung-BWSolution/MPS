@@ -24,6 +24,10 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import {
+  resolvePrimaryCategoryFromThemes,
+  resolveSourceSystemFromApply,
+} from '@/components/talent/kolWorkflow';
 
 // =====================================================================
 // Types
@@ -194,6 +198,10 @@ function formatIg(account: string | null | undefined): string {
   return h ? `@${h}` : '—';
 }
 
+function igUrl(account: string): string {
+  return `https://instagram.com/${encodeURIComponent(account.replace(/^@/, '').trim())}`;
+}
+
 function formatFollowers(n: number | null | undefined): string {
   if (n == null || Number.isNaN(n)) return '—';
   if (n >= 10000) {
@@ -240,13 +248,13 @@ function applyPhotoUrl(row: Pick<KolApplyRow, 'photo_url' | 'work_photo_url'>): 
   return url || null;
 }
 
-/** 100×100，與藝人列表一致 */
+/** 100×100；點擊放大照片（不開啟詳情側邊欄） */
 function ApplyPhotoCell({
   row,
-  onClick,
+  onPhotoClick,
 }: {
   row: KolApplyRow;
-  onClick?: () => void;
+  onPhotoClick?: (url: string | null) => void;
 }) {
   const url = applyPhotoUrl(row);
   const [imgError, setImgError] = useState(false);
@@ -256,12 +264,15 @@ function ApplyPhotoCell({
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={(e) => {
+        e.stopPropagation();
+        onPhotoClick?.(url);
+      }}
       className={cn(
         'relative w-[100px] h-[100px] rounded-lg overflow-hidden shrink-0 border border-slate-200 bg-slate-100',
-        onClick && 'cursor-pointer hover:ring-2 hover:ring-teal-300/80 transition-shadow'
+        'cursor-pointer hover:ring-2 hover:ring-teal-300/80 transition-shadow'
       )}
-      title={onClick ? '查看詳情' : undefined}
+      title="放大照片"
     >
       {showImg ? (
         <img
@@ -366,6 +377,15 @@ function formToPayload(form: FormState) {
   };
 }
 
+function DetailRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[96px_1fr] gap-2 py-1.5 border-b border-slate-100 last:border-0 text-[13px]">
+      <dt className="text-slate-500 shrink-0">{label}</dt>
+      <dd className="text-slate-800 break-words min-w-0">{value || '—'}</dd>
+    </div>
+  );
+}
+
 function FormField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-1">
@@ -402,6 +422,8 @@ export function KolApplyModule() {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editorOpen, setEditorOpen] = useState(false);
+  const [detailRow, setDetailRow] = useState<KolApplyRow | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<{ url: string; name: string } | null>(null);
   const [editing, setEditing] = useState<KolApplyRow | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [saving, setSaving] = useState(false);
@@ -498,9 +520,23 @@ export function KolApplyModule() {
   };
 
   const openEdit = (row: KolApplyRow) => {
+    setDetailRow(null);
     setEditing(row);
     setForm(rowToForm(row));
     setEditorOpen(true);
+  };
+
+  const openDetail = (row: KolApplyRow) => {
+    setDetailRow(row);
+  };
+
+  const closeDetail = () => {
+    setDetailRow(null);
+  };
+
+  const openPhotoPreview = (row: KolApplyRow, url: string | null) => {
+    if (!url) return;
+    setPhotoPreview({ url, name: row.name || 'KOL' });
   };
 
   const closeEditor = () => {
@@ -559,6 +595,7 @@ export function KolApplyModule() {
         .eq('id', row.id);
       if (err) throw err;
       toast.success(`已更新為「${STATUS_META[status].label}」`);
+      if (status === 'rejected') closeDetail();
       await load();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : '更新失敗');
@@ -570,7 +607,9 @@ export function KolApplyModule() {
   const approveAndAddToDb = async (row: KolApplyRow) => {
     setBusyId(row.id);
     try {
-      // 1) upsert-like insert into kol_profile
+      const primaryCategory = resolvePrimaryCategoryFromThemes(row);
+      const sourceSystem = resolveSourceSystemFromApply(row);
+
       const profilePayload = {
         name: row.name,
         salutation: row.salutation,
@@ -615,6 +654,9 @@ export function KolApplyModule() {
         },
         source_created_at: row.applied_at,
         source_status: 'from_apply',
+        primary_category: primaryCategory,
+        source_system: sourceSystem,
+        lifecycle_status: 'unprocessed',
       };
 
       let profileId = row.kol_profile_id;
@@ -626,6 +668,12 @@ export function KolApplyModule() {
           .single();
         if (insErr) throw insErr;
         profileId = data.id as string;
+      } else {
+        const { error: updProfileErr } = await supabase
+          .from('kol_profile')
+          .update(profilePayload)
+          .eq('id', profileId);
+        if (updProfileErr) throw updProfileErr;
       }
 
       const { error: updErr } = await supabase
@@ -639,7 +687,9 @@ export function KolApplyModule() {
         .eq('id', row.id);
       if (updErr) throw updErr;
 
-      toast.success('已批准並加入 KOL 資料庫');
+      const dest = sourceSystem === 'beauty18' ? '新美容KOL' : 'KOL 資料庫';
+      toast.success(`已批准並加入${dest}`);
+      closeDetail();
       await load();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : '批核失敗');
@@ -795,33 +845,45 @@ export function KolApplyModule() {
               ) : (
                 filtered.map((row) => {
                   const busy = busyId === row.id;
+                  const igHandle = row.instagram_account?.trim().replace(/^@/, '');
                   return (
                     <tr
                       key={row.id}
-                      className="border-t border-slate-100 hover:bg-slate-50/80"
+                      className="border-t border-slate-100 hover:bg-slate-50/80 cursor-pointer"
+                      onClick={() => openDetail(row)}
                     >
-                      <td className="px-3 py-2.5 align-top">
+                      <td className="px-3 py-2.5 align-top" onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={selected.has(row.id)}
                           onCheckedChange={(v) => toggleOne(row.id, v === true)}
                         />
                       </td>
                       <td className="px-3 py-2.5 align-top">
-                        <ApplyPhotoCell row={row} onClick={() => openEdit(row)} />
+                        <ApplyPhotoCell
+                          row={row}
+                          onPhotoClick={(url) => openPhotoPreview(row, url)}
+                        />
                       </td>
                       <td className="px-3 py-2.5 align-top">
-                        <button
-                          type="button"
-                          className="text-left"
-                          onClick={() => openEdit(row)}
-                        >
-                          <div className="font-medium text-slate-900">{row.name || '—'}</div>
-                          <div className="text-[11px] text-slate-400" title={formatAppliedFull(row.applied_at)}>
-                            {formatAppliedAt(row.applied_at)}
-                          </div>
-                        </button>
+                        <div className="font-medium text-slate-900">{row.name || '—'}</div>
+                        <div className="text-[11px] text-slate-400" title={formatAppliedFull(row.applied_at)}>
+                          {formatAppliedAt(row.applied_at)}
+                        </div>
                       </td>
-                      <td className="px-3 py-2.5 text-teal-700">{formatIg(row.instagram_account)}</td>
+                      <td className="px-3 py-2.5 align-top" onClick={(e) => e.stopPropagation()}>
+                        {igHandle ? (
+                          <a
+                            href={igUrl(row.instagram_account!)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-teal-700 hover:underline"
+                          >
+                            {formatIg(row.instagram_account)}
+                          </a>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2.5 text-slate-700">
                         ig粉絲：{formatFollowers(row.instagram_followers)}
                       </td>
@@ -835,7 +897,7 @@ export function KolApplyModule() {
                       <td className="px-3 py-2.5">
                         <StatusBadge status={row.audit_status} />
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1.5">
                           {row.audit_status !== 'added_to_db' &&
                             row.audit_status !== 'rejected' && (
@@ -883,6 +945,145 @@ export function KolApplyModule() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Detail sidebar */}
+      {detailRow && (
+        <div className="fixed inset-0 m-0 z-[100] flex justify-end">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/35"
+            aria-label="關閉"
+            onClick={closeDetail}
+          />
+          <aside className="relative w-full max-w-lg h-full bg-white shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <div>
+                <h2 className="text-[16px] font-semibold">{detailRow.name || '（未填姓名）'}</h2>
+                <p className="text-[12px] text-slate-500 mt-0.5">
+                  申請時間：{formatAppliedFull(detailRow.applied_at)}
+                </p>
+              </div>
+              <button type="button" onClick={closeDetail} className="text-slate-400 hover:text-slate-700">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              <div className="flex justify-center">
+                <ApplyPhotoCell
+                  row={detailRow}
+                  onPhotoClick={(url) => openPhotoPreview(detailRow, url)}
+                />
+              </div>
+              <dl>
+                <DetailRow label="狀態" value={<StatusBadge status={detailRow.audit_status} />} />
+                <DetailRow label="稱謂" value={detailRow.salutation} />
+                <DetailRow label="電郵" value={detailRow.email} />
+                <DetailRow label="電話" value={detailRow.phone} />
+                <DetailRow label="年齡層" value={detailRow.age_group} />
+                <DetailRow label="出生月份" value={detailRow.birth_month} />
+                <DetailRow label="居住地區" value={detailRow.residence_area} />
+                <DetailRow label="工作地區" value={detailRow.work_area} />
+                <DetailRow
+                  label="Instagram"
+                  value={
+                    detailRow.instagram_account?.trim() ? (
+                      <a
+                        href={igUrl(detailRow.instagram_account)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-teal-700 hover:underline"
+                      >
+                        {formatIg(detailRow.instagram_account)}
+                      </a>
+                    ) : (
+                      '—'
+                    )
+                  }
+                />
+                <DetailRow
+                  label="ig粉絲"
+                  value={formatFollowers(detailRow.instagram_followers)}
+                />
+                <DetailRow label="Blog 主題" value={(detailRow.blog_themes || []).join('、 ') || '—'} />
+                <DetailRow label="專長" value={detailRow.specialty} />
+                <DetailRow label="發佈平台" value={detailRow.publish_platforms} />
+                <DetailRow label="Openrice" value={detailRow.openrice_level} />
+                <DetailRow label="試食經驗" value={detailRow.tasting_experience} />
+                <DetailRow label="試食頻率" value={detailRow.tasting_frequency} />
+                <DetailRow label="Model 經驗" value={detailRow.model_experience} />
+                <DetailRow label="上鏡經驗" value={detailRow.on_camera_experience} />
+                <DetailRow label="Wine Club" value={detailRow.wine_club} />
+                <DetailRow label="合作意向" value={detailRow.cooperation_intent} />
+                <DetailRow label="可試食時間" value={detailRow.available_times} />
+                <DetailRow label="影片Blog推廣" value={detailRow.video_blog_promo} />
+                <DetailRow label="FB Live 意願" value={detailRow.facebook_live_interest} />
+                <DetailRow label="來源" value={detailRow.source} />
+                <DetailRow label="登入碼" value={detailRow.login_code} />
+              </dl>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2 px-5 py-4 border-t">
+              {detailRow.audit_status !== 'added_to_db' && detailRow.audit_status !== 'rejected' && (
+                <Button
+                  type="button"
+                  className="bg-emerald-600 hover:bg-emerald-700 gap-1"
+                  disabled={busyId === detailRow.id}
+                  onClick={() => void approveAndAddToDb(detailRow)}
+                >
+                  {busyId === detailRow.id ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Check size={14} />
+                  )}
+                  批核
+                </Button>
+              )}
+              {detailRow.audit_status === 'pending_review' && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busyId === detailRow.id}
+                  onClick={() => void setStatus(detailRow, 'rejected')}
+                >
+                  拒絕
+                </Button>
+              )}
+              <Button type="button" variant="outline" onClick={() => openEdit(detailRow)}>
+                編輯
+              </Button>
+              <Button type="button" variant="outline" onClick={closeDetail}>
+                關閉
+              </Button>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {/* Photo lightbox */}
+      {photoPreview && (
+        <div className="fixed inset-0 m-0 z-[110] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/70"
+            aria-label="關閉"
+            onClick={() => setPhotoPreview(null)}
+          />
+          <div className="relative max-w-[min(860px,95vw)] max-h-[90vh] flex flex-col items-end gap-2">
+            <button
+              type="button"
+              onClick={() => setPhotoPreview(null)}
+              className="text-white/90 hover:text-white p-1"
+              aria-label="關閉"
+            >
+              <X size={22} />
+            </button>
+            <img
+              src={photoPreview.url}
+              alt={photoPreview.name}
+              className="max-w-full max-h-[calc(90vh-40px)] object-contain rounded-lg shadow-2xl bg-black/20"
+            />
+          </div>
         </div>
       )}
 
