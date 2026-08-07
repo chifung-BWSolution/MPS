@@ -7,6 +7,69 @@ export function formatSupabaseError(error: unknown, fallback = '操作失敗'): 
   return fallback;
 }
 
+function isHttpUrl(value: string): boolean {
+  const s = value.trim();
+  return /^https?:\/\//i.test(s) || /^www\./i.test(s);
+}
+
+function normalizeHttpUrl(value: string): string {
+  const s = value.trim();
+  if (/^www\./i.test(s)) return `https://${s}`;
+  return s;
+}
+
+function instagramProfileUrl(account: string | null | undefined): string | null {
+  const s = (account || '').trim().replace(/^@/, '');
+  if (!s) return null;
+  return `https://www.instagram.com/${encodeURIComponent(s)}`;
+}
+
+function formatUrlLabel(url: string): string {
+  try {
+    const u = new URL(normalizeHttpUrl(url));
+    const path = u.pathname.replace(/\/$/, '');
+    return `${u.hostname.replace(/^www\./, '')}${path === '' ? '' : path}`;
+  } catch {
+    return url.length > 36 ? `${url.slice(0, 33)}...` : url;
+  }
+}
+
+export interface CooperationPlatformLink {
+  label: string;
+  href: string | null;
+}
+
+export function parseCooperationPlatformLinks(
+  platforms: string[] | null | undefined,
+  kolProfile?: { instagram_account?: string | null } | null
+): CooperationPlatformLink[] {
+  const items = (platforms || []).map((p) => p.trim()).filter(Boolean);
+  const links: CooperationPlatformLink[] = [];
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (isHttpUrl(item)) {
+      links.push({ label: formatUrlLabel(item), href: normalizeHttpUrl(item) });
+      continue;
+    }
+
+    const next = items[i + 1];
+    if (next && isHttpUrl(next)) {
+      links.push({ label: item, href: normalizeHttpUrl(next) });
+      i++;
+      continue;
+    }
+
+    let href: string | null = null;
+    if (/instagram/i.test(item)) {
+      href = instagramProfileUrl(kolProfile?.instagram_account);
+    }
+    links.push({ label: item, href });
+  }
+
+  return links;
+}
+
 export const KOL_COOP_PRESET_PLATFORMS = [
   'Instagram',
   'Facebook',

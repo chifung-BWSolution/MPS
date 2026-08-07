@@ -1859,7 +1859,11 @@ node scripts/push_kol_batches.mjs`}
                     </dl>
                   </section>
 
-                  <KolCooperationHistory kolId={detail.id} refreshKey={coopRefreshKey} />
+                  <KolCooperationHistory
+                    kolId={detail.id}
+                    refreshKey={coopRefreshKey}
+                    kolProfile={{ instagram_account: detail.instagram_account }}
+                  />
                 </div>
               ) : null}
             </div>

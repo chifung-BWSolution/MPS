@@ -11,11 +11,56 @@ import {
   emptyCooperationForm,
   formatSupabaseError,
   KOL_COOP_PRESET_PLATFORMS,
+  parseCooperationPlatformLinks,
   saveCooperationRecord,
   updateCooperationRecord,
   type KolCooperationFormValues,
   type KolCooperationRow,
 } from '@/components/talent/kolCooperation';
+
+export function CooperationPlatformLinks({
+  platforms,
+  kolProfile,
+  chipClassName,
+}: {
+  platforms: string[] | null | undefined;
+  kolProfile?: KolCooperationRow['kol_profile'];
+  chipClassName?: string;
+}) {
+  const links = parseCooperationPlatformLinks(platforms, kolProfile);
+  if (links.length === 0) return <span className="text-slate-400">—</span>;
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {links.map((link, index) =>
+        link.href ? (
+          <a
+            key={`${link.label}-${index}`}
+            href={link.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              'px-1.5 py-0.5 rounded bg-slate-100 text-[11px] text-teal-600 hover:bg-teal-50 hover:underline',
+              chipClassName
+            )}
+          >
+            {link.label}
+          </a>
+        ) : (
+          <span
+            key={`${link.label}-${index}`}
+            className={cn(
+              'px-1.5 py-0.5 rounded bg-slate-100 text-[11px] text-slate-600',
+              chipClassName
+            )}
+          >
+            {link.label}
+          </span>
+        )
+      )}
+    </div>
+  );
+}
 
 export interface KolPickerOption {
   id: string;
@@ -422,20 +467,7 @@ export function CooperationRecordList({
               </td>
               <td className="px-3 py-2.5 text-slate-800">{r.project_name || '—'}</td>
               <td className="px-3 py-2.5">
-                <div className="flex flex-wrap gap-1">
-                  {(r.platforms || []).length === 0 ? (
-                    <span className="text-slate-400">—</span>
-                  ) : (
-                    (r.platforms || []).map((p) => (
-                      <span
-                        key={p}
-                        className="px-1.5 py-0.5 rounded bg-slate-100 text-[11px] text-slate-600"
-                      >
-                        {p}
-                      </span>
-                    ))
-                  )}
-                </div>
+                <CooperationPlatformLinks platforms={r.platforms} kolProfile={r.kol_profile} />
               </td>
               <td className="px-3 py-2.5 text-slate-600 max-w-xs">
                 <p className="line-clamp-3">{r.cooperation_content || r.evaluation || '—'}</p>

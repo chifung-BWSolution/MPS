@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { CooperationPlatformLinks } from '@/components/talent/KolCooperationForm';
 import { useAuth } from '@/context/AuthContext';
 import type { KolProfile } from '@/components/talent/KolListModule';
 import {
@@ -298,9 +299,11 @@ export function KolRatingSection({
 export function KolCooperationHistory({
   kolId,
   refreshKey = 0,
+  kolProfile,
 }: {
   kolId: string;
   refreshKey?: number;
+  kolProfile?: { instagram_account?: string | null };
 }) {
   const [rows, setRows] = useState<KolCooperationRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -350,15 +353,12 @@ export function KolCooperationHistory({
                 </span>
               </div>
               {(r.platforms || []).length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1.5">
-                  {(r.platforms || []).map((p) => (
-                    <span
-                      key={p}
-                      className="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-[10px] text-slate-600"
-                    >
-                      {p}
-                    </span>
-                  ))}
+                <div className="mt-1.5">
+                  <CooperationPlatformLinks
+                    platforms={r.platforms}
+                    kolProfile={kolProfile}
+                    chipClassName="bg-white border border-slate-200 text-[10px]"
+                  />
                 </div>
               )}
               <p className="text-slate-600 mt-1.5 leading-relaxed whitespace-pre-wrap">
