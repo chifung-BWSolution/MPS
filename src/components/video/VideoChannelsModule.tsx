@@ -148,7 +148,7 @@ function ChannelDetail({ channel, onBack }: { channel: any; onBack: () => void }
 
       {/* Link Modal */}
       {showLinkModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowLinkModal(false)}>
+        <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={() => setShowLinkModal(false)}>
           <div className="bg-white rounded-lg shadow-xl p-6 w-[480px] max-h-[70vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-[16px] font-bold">選擇關聯網站（可多選）</h3>

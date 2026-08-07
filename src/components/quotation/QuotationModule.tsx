@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback } from 'react';
-import { Search, Plus, FileText, Eye, Download, Check, X, AlertTriangle, ChevronRight, Trash2, DollarSign, Award, Pencil, Save, RotateCcw, Layers, GripVertical, Clock, Users, ArrowLeft, ExternalLink } from 'lucide-react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { Search, Plus, FileText, Eye, Download, Check, X, AlertTriangle, ChevronRight, Trash2, DollarSign, Award, Pencil, Save, RotateCcw, Layers, GripVertical, Clock, Users, ArrowLeft, ExternalLink, Sparkles, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { CRMModule } from '@/components/crm/CRMModule';
@@ -7,10 +7,12 @@ import { useApp } from '@/context/AppContext';
 import { QuotationItemsManagement } from '@/components/quotation/QuotationItemsManagement';
 import { QuotationPreview } from '@/components/quotation/QuotationPreview';
 import { PitchingModule } from '@/components/quotation/PitchingModule';
+import { ProjectModule } from '@/components/quotation/ProjectModule';
 import {
   quotationTypes,
   quotationEntries,
   clientProjects,
+  presetQuotationItems,
   getQuotationTypeName,
   getStatusConfig,
   getClientProjectStatusConfig,
@@ -24,6 +26,14 @@ import {
   Milestone,
   termsTemplates,
 } from '@/data/quotationData';
+import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
+import {
+  formatProjectTypes,
+  matchesProjectTypeFilter,
+  PITCHING_PROJECT_TYPE_OPTIONS,
+} from '@/data/pitchingData';
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
+import { generateQuotationServices, getQuotationAiModelId, QUOTATION_AI_MODEL_OPTIONS, type QuotationAiCatalogItem, type QuotationAiProvider } from '@/lib/quotationAiApi';
 
 // Supplier options for cost structure
 const supplierOptions = [
@@ -178,15 +188,22 @@ function QuotationList({ onViewQuote, onPreviewQuote }: { onViewQuote: (id: stri
 
 // ===== NEW QUOTATION WIZARD =====
 function NewQuotationWizard({ onClose }: { onClose: () => void }) {
+  const { records: pitchingRecords, loading: pitchingLoading } = useQuotationClientProjects();
   const [step, setStep] = useState(1);
   const [selectedType, setSelectedType] = useState<QuotationType | null>(null);
   const [isComprehensive, setIsComprehensive] = useState(false);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-  const [clientMode, setClientMode] = useState<'existing' | 'new'>('existing');
+  const [selectedPitchingId, setSelectedPitchingId] = useState('');
+  const [projectTypeFilter, setProjectTypeFilter] = useState('all');
   const [clientName, setClientName] = useState('');
-  const [clientContact, setClientContact] = useState('');
-  const [clientEmail, setClientEmail] = useState('');
-  const [clientPhone, setClientPhone] = useState('');
+  const [requirementsText, setRequirementsText] = useState('');
+  const [aiProvider, setAiProvider] = useState<QuotationAiProvider>('grok');
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [generationMeta, setGenerationMeta] = useState<{
+    provider: string;
+    model: string;
+    fallback: boolean;
+  } | null>(null);
   const [quotationDate, setQuotationDate] = useState('');
   const [manHoursEstimate, setManHoursEstimate] = useState<number>(0);
   const [asanaLink, setAsanaLink] = useState('');
@@ -201,6 +218,118 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
     items: [],
   });
   const [costErrors, setCostErrors] = useState<string[]>([]);
+
+  const selectedPitching = useMemo(
+    () => pitchingRecords.find((record) => record.id === selectedPitchingId),
+    [pitchingRecords, selectedPitchingId],
+  );
+
+  const filteredPitchingRecords = useMemo(() => {
+    return pitchingRecords.filter((record) => matchesProjectTypeFilter(record.projectTypes, projectTypeFilter));
+  }, [pitchingRecords, projectTypeFilter]);
+
+  const pitchingOptions = useMemo((): SearchableSelectOption[] => {
+    return filteredPitchingRecords.map((record) => ({
+      value: record.id,
+      label: `${record.displayName} · ${record.clientName}`,
+      keywords: [
+        record.pitchingId,
+        record.clientName,
+        record.displayName,
+        formatProjectTypes(record.projectTypes),
+        record.assignedPmName,
+        record.description,
+      ].filter(Boolean).join(' '),
+    }));
+  }, [filteredPitchingRecords]);
+
+  const catalogItems = useMemo((): QuotationAiCatalogItem[] => {
+    const typeIds = isComprehensive ? selectedTypes : selectedType ? [selectedType.id] : [];
+    if (!typeIds.length) return [];
+    return presetQuotationItems
+      .filter((item) => typeIds.includes(item.category) || (isComprehensive && item.category === 'comprehensive'))
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        defaultPrice: item.defaultPrice,
+        defaultCost: item.defaultCost,
+        supplierName: item.supplierName,
+        category: item.category,
+      }));
+  }, [isComprehensive, selectedType, selectedTypes]);
+
+  useEffect(() => {
+    if (!selectedPitchingId) return;
+    if (!filteredPitchingRecords.some((record) => record.id === selectedPitchingId)) {
+      setSelectedPitchingId('');
+      setClientName('');
+    }
+  }, [filteredPitchingRecords, selectedPitchingId]);
+
+  const handleSelectPitching = (pitchingId: string) => {
+    setSelectedPitchingId(pitchingId);
+    const record = pitchingRecords.find((item) => item.id === pitchingId);
+    if (!record) {
+      setClientName('');
+      return;
+    }
+    setClientName(record.clientName);
+    const seedText = [record.description, record.notes, record.displayName].filter(Boolean).join('\n');
+    if (seedText) setRequirementsText(seedText);
+    if (record.asanaLink) setAsanaLink(record.asanaLink);
+  };
+
+  const handleGenerateServices = async () => {
+    if (!selectedPitchingId || (isComprehensive && selectedTypes.length === 0) || aiGenerating) return;
+    setAiGenerating(true);
+    try {
+      const pitching = pitchingRecords.find((record) => record.id === selectedPitchingId);
+      const result = await generateQuotationServices({
+        provider: aiProvider,
+        quotationTypeName: selectedType?.name,
+        isComprehensive,
+        selectedTypeNames: selectedTypes
+          .map((typeId) => quotationTypes.find((type) => type.id === typeId)?.name)
+          .filter(Boolean) as string[],
+        pitchingRecord: pitching,
+        requirements: requirementsText.trim(),
+        catalogItems,
+      });
+
+      const mappedServices = result.services.map((service, idx) => {
+        const catalog = catalogItems.find(
+          (item) => item.name.toLowerCase() === service.name.toLowerCase(),
+        );
+        const typePrefix =
+          catalog && catalog.category !== 'comprehensive'
+            ? catalog.category
+            : isComprehensive
+              ? selectedTypes[idx % selectedTypes.length] || selectedTypes[0] || 'custom'
+              : selectedType?.id || 'custom';
+        return {
+          ...service,
+          id: isComprehensive ? `svc-${typePrefix}-${idx}` : `svc-${idx}`,
+        };
+      });
+
+      setServices(mappedServices);
+      setGenerationMeta({
+        provider: result.provider,
+        model: result.model || getQuotationAiModelId(aiProvider),
+        fallback: result.fallback,
+      });
+
+      if (result.fallback) {
+        toast.error(result.error || 'AI 生成失敗，已改用本地規則生成服務項目');
+      }
+
+      setStep(3);
+    } catch (err) {
+      toast.error(`生成失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
+    } finally {
+      setAiGenerating(false);
+    }
+  };
 
   const handleSelectType = (type: QuotationType) => {
     setSelectedType(type);
@@ -422,66 +551,127 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            <p className="text-[14px] text-muted-foreground mb-4">選擇或新增客戶：</p>
-            <div className="flex gap-3 mb-6">
-              <button onClick={() => setClientMode('existing')}
-                className={cn('px-4 py-2 rounded-md text-sm font-medium transition-colors', clientMode === 'existing' ? 'bg-teal-600 text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80')}>現有客戶</button>
-              <button onClick={() => setClientMode('new')}
-                className={cn('px-4 py-2 rounded-md text-sm font-medium transition-colors', clientMode === 'new' ? 'bg-teal-600 text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80')}>新增客戶</button>
-            </div>
-            {clientMode === 'existing' ? (
+            <div className="space-y-4">
               <div>
                 <label className="text-[13px] font-medium text-muted-foreground block mb-1.5">搜尋客戶</label>
-                <select value={clientName} onChange={(e) => setClientName(e.target.value)}
-                  className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-teal-600">
-                  <option value="">選擇客戶...</option>
-                  <option value="Acme Corp">Acme Corp</option>
-                  <option value="Bella Wines">Bella Wines (美酒莊園)</option>
-                  <option value="TechStart Inc">TechStart Inc (新創科技)</option>
-                  <option value="Green Living">Green Living (綠色生活)</option>
-                  <option value="SportMax">SportMax (運動達人)</option>
-                  <option value="FoodCraft">FoodCraft (食工坊)</option>
-                </select>
+                <div className="flex flex-wrap items-center gap-3 mb-3">
+                  <select
+                    value={projectTypeFilter}
+                    onChange={(e) => setProjectTypeFilter(e.target.value)}
+                    className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500 h-9"
+                  >
+                    <option value="all">全部項目類型</option>
+                    {PITCHING_PROJECT_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt.id} value={opt.id}>{opt.label}</option>
+                    ))}
+                  </select>
+                  {pitchingLoading && (
+                    <span className="text-[12px] text-muted-foreground inline-flex items-center gap-1">
+                      <Loader2 size={12} className="animate-spin" /> 載入 Pitching 資料…
+                    </span>
+                  )}
+                </div>
+                <SearchableSelect
+                  value={selectedPitchingId}
+                  onValueChange={handleSelectPitching}
+                  options={pitchingOptions}
+                  placeholder="選擇 Pitching 客戶…"
+                  searchPlaceholder="搜尋客戶、顯示名稱、項目類型、Pitching ID…"
+                  emptyText={pitchingLoading ? '載入中…' : '找不到符合的 Pitching 紀錄'}
+                />
+                {selectedPitching && (
+                  <div className="mt-2 text-[12px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
+                    <span><span className="font-medium text-foreground">客戶：</span>{selectedPitching.clientName}</span>
+                    <span><span className="font-medium text-foreground">項目類型：</span>{formatProjectTypes(selectedPitching.projectTypes)}</span>
+                    <span><span className="font-medium text-foreground">Pitching ID：</span>{selectedPitching.pitchingId}</span>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+              {selectedPitchingId && (
                 <div>
-                  <label className="text-[13px] font-medium text-muted-foreground block mb-1.5">客戶名稱</label>
-                  <input value={clientName} onChange={(e) => setClientName(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="輸入客戶公司名稱" />
+                  <label className="text-[13px] font-medium text-muted-foreground block mb-1.5">客戶需求 / 報價說明</label>
+                  <div className="flex gap-2 items-start">
+                    <textarea
+                      value={requirementsText}
+                      onChange={(e) => setRequirementsText(e.target.value)}
+                      rows={4}
+                      placeholder="描述客戶需求、範圍、預算期望等，AI 將據此生成服務項目…"
+                      className="flex-1 px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-y min-h-[96px]"
+                    />
+                    <div className="shrink-0 flex flex-col gap-2 w-[148px]">
+                      <div>
+                        <label className="text-[11px] text-muted-foreground block mb-1">AI 模型</label>
+                        <select
+                          value={aiProvider}
+                          onChange={(e) => setAiProvider(e.target.value as QuotationAiProvider)}
+                          disabled={aiGenerating}
+                          className="w-full h-9 px-2 border border-border rounded-md text-[13px] bg-white focus:outline-none focus:ring-1 focus:ring-teal-600 disabled:opacity-60"
+                          aria-label="AI 模型"
+                        >
+                          {QUOTATION_AI_MODEL_OPTIONS.map((opt) => (
+                            <option key={opt.id} value={opt.id}>{opt.label} · {opt.modelId}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleGenerateServices()}
+                        disabled={aiGenerating || (isComprehensive && selectedTypes.length === 0)}
+                        className={cn(
+                          'flex-1 min-h-[56px] px-3 rounded-md text-[13px] font-medium transition-colors duration-200 flex flex-col items-center justify-center gap-1.5',
+                          aiGenerating || (isComprehensive && selectedTypes.length === 0)
+                            ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                            : 'bg-teal-600 text-white hover:bg-teal-700',
+                        )}
+                      >
+                        {aiGenerating ? (
+                          <>
+                            <Loader2 size={16} className="animate-spin" />
+                            <span>生成中</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles size={16} />
+                            <span>生成</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1.5">
+                    目前選擇：<span className="font-medium text-foreground">{QUOTATION_AI_MODEL_OPTIONS.find((opt) => opt.id === aiProvider)?.label} · {getQuotationAiModelId(aiProvider)}</span>
+                  </p>
                 </div>
-                <div>
-                  <label className="text-[13px] font-medium text-muted-foreground block mb-1.5">聯絡人</label>
-                  <input value={clientContact} onChange={(e) => setClientContact(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="聯絡人姓名" />
-                </div>
-                <div>
-                  <label className="text-[13px] font-medium text-muted-foreground block mb-1.5">電郵</label>
-                  <input value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="email@example.com" />
-                </div>
-                <div>
-                  <label className="text-[13px] font-medium text-muted-foreground block mb-1.5">電話</label>
-                  <input value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="+852 XXXX XXXX" />
-                </div>
-              </div>
-            )}
+              )}
+            </div>
             <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => { setStep(1); setIsComprehensive(false); setSelectedTypes([]); }} className="px-4 py-2 text-sm border border-border rounded-md hover:bg-muted transition-colors duration-200">上一步</button>
-              <button onClick={() => setStep(3)} disabled={!clientName || (isComprehensive && selectedTypes.length === 0)}
-                className={cn('px-4 py-2 text-sm rounded-md transition-colors duration-200', (clientName && (!isComprehensive || selectedTypes.length > 0)) ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-muted text-muted-foreground cursor-not-allowed')}>下一步</button>
+              <button onClick={() => { setStep(1); setIsComprehensive(false); setSelectedTypes([]); setSelectedPitchingId(''); setClientName(''); setRequirementsText(''); }} className="px-4 py-2 text-sm border border-border rounded-md hover:bg-muted transition-colors duration-200">上一步</button>
             </div>
           </div>
         )}
 
         {step === 3 && (
           <div className="space-y-6">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <p className="text-[14px] text-muted-foreground">
                 {isComprehensive ? (
                   <>報價模式：<span className="font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">綜合方案</span> | 包含 <span className="font-medium text-foreground">{selectedTypes.length}</span> 個類型</>
                 ) : (
                   <>報價類型：<span className="font-medium text-foreground">{selectedType?.name}</span></>
                 )}
-                {' '}| 客戶：<span className="font-medium text-foreground">{clientName}</span>
+                {' '}| 客戶：<span className="font-medium text-foreground">{selectedPitching?.displayName || clientName}</span>
               </p>
+              {generationMeta && (
+                <span className={cn(
+                  'inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border',
+                  generationMeta.fallback
+                    ? 'border-amber-200 bg-amber-50 text-amber-800'
+                    : 'border-teal-200 bg-teal-50 text-teal-800',
+                )}>
+                  {generationMeta.fallback ? '本地規則' : 'AI 生成'} · {generationMeta.provider === 'grok' ? 'Grok' : generationMeta.provider === 'gemini' ? 'Gemini' : generationMeta.provider} · {generationMeta.model}
+                </span>
+              )}
             </div>
 
             {/* Comprehensive: Add items from other types */}
@@ -1261,7 +1451,7 @@ function QuotationApproval({ onPreviewQuote }: { onPreviewQuote?: (quote: Quotat
 
         {/* Won Deal Modal */}
         {showWonModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 m-0 bg-black/50 flex items-center justify-center z-[100]">
             <div className="bg-white rounded-md p-6 w-full max-w-md shadow-xl">
               <h3 className="text-[18px] font-bold mb-4">確認成交</h3>
               <p className="text-[13px] text-muted-foreground mb-4">請上載客戶簽署的 PDF 文件以確認成交。成交後系統將自動建立客戶項目記錄。</p>
@@ -1489,6 +1679,10 @@ export function QuotationModule({ subModule }: { subModule?: string }) {
 
   if (subModule === 'pitching') {
     return <PitchingModule />;
+  }
+
+  if (subModule === 'projects') {
+    return <ProjectModule />;
   }
 
   if (subModule === 'items') {

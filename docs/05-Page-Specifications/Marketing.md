@@ -8,7 +8,10 @@
 | `/marketing/calendar` | 行銷日曆 | 全渠道排期日曆 |
 | `/marketing/social` | 社交媒體 | Social Posts 管理 |
 | `/marketing/edm` | EDM 管理 | 電郵/短訊營銷 |
-| `/marketing/paid-ads` | 付費廣告 | Paid Ads 管理 |
+| `/marketing/google-ads` | Google Ads | MCC Campaign 成效（每日指標彙總） |
+| `/marketing/google-ads-sync` | Google Ads 同步 | 歷史回填 / 增量同步 |
+| `/marketing/facebook-ads` | Facebook Ads | Meta Campaign 成效（多 Business） |
+| `/marketing/facebook-ads-sync` | Facebook Ads 同步 | 歷史回填（約 37 個月） / 增量同步 |
 | `/marketing/seo` | SEO 關鍵字 | 全站 SEO 管理 |
 | `/marketing/seo-upgrade` | SEO 升級 | 升級記錄 |
 | `/marketing/graphic-design` | 平面設計 | 平面設計製作追蹤 |

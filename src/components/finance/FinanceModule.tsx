@@ -228,7 +228,7 @@ function PaymentRecordModal({ invoice, onSave, onClose }: { invoice: Invoice; on
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[450px] p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-[18px] font-bold">記錄付款</h3>
@@ -278,7 +278,7 @@ function ReceiptUploadModal({ invoice, onUpload, onClose }: { invoice: Invoice; 
   const [fileName, setFileName] = useState('');
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[400px] p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-[18px] font-bold">上傳收據</h3>
@@ -416,7 +416,7 @@ function CreditCardFormModal({ card, onSave, onClose }: { card: CreditCardEntry 
   const bankOptions = ['HSBC', 'Bank of China', 'Hang Seng', 'DBS', 'Standard Chartered', 'Citibank', 'Other'];
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[500px] p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-[18px] font-bold">{card ? '編輯信用卡' : '新增信用卡'}</h3>

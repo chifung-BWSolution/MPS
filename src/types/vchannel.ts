@@ -37,6 +37,8 @@ export interface VchannelAccount {
   loginMethod?: string;
   operatorCode?: string;
   feedhiveManaged: boolean;
+  /** Meta Ads account id (act_…) when linked from facebook_ads_accounts */
+  facebookAdsAdAccountId?: string;
   notes?: string;
   sortOrder: number;
   createdAt?: string;

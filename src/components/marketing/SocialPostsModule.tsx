@@ -288,7 +288,7 @@ function SocialPostDetail({ post, onBack }: { post: any; onBack: () => void }) {
 
       {/* Link Website Modal */}
       {showLinkModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowLinkModal(false)}>
+        <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={() => setShowLinkModal(false)}>
           <div className="bg-white rounded-lg shadow-xl p-6 w-[480px] max-h-[70vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-[16px] font-bold">選擇關聯網站（可多選）</h3>
@@ -324,7 +324,7 @@ function SocialPostDetail({ post, onBack }: { post: any; onBack: () => void }) {
 
       {/* Link Project Modal */}
       {showProjectModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowProjectModal(false)}>
+        <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={() => setShowProjectModal(false)}>
           <div className="bg-white rounded-lg shadow-xl p-6 w-[480px] max-h-[70vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-[16px] font-bold">選擇關聯項目（可多選）</h3>
@@ -344,7 +344,7 @@ function SocialPostDetail({ post, onBack }: { post: any; onBack: () => void }) {
 
       {/* Delete Confirm */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+        <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]">
           <div className="bg-white rounded-lg shadow-xl p-6 w-[400px]">
             <h3 className="text-[16px] font-bold mb-2">確認刪除</h3>
             <p className="text-[13px] text-muted-foreground mb-4">確認要刪除此帖文嗎？此操作無法撤銷。</p>

@@ -332,7 +332,7 @@ export function CRMModule({ subModule }: { subModule?: string }) {
 
       {/* Add / Edit Client Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 m-0 bg-black/50 flex items-center justify-center z-[100]">
           <div className="bg-white rounded-md p-6 w-full max-w-lg shadow-xl max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-[18px] font-bold">{editingClient ? '編輯客戶' : '新增客戶'}</h3>

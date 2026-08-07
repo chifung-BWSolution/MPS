@@ -158,7 +158,7 @@ export function validateWorkLogDrafts(drafts: VideoWorkLogDraft[]): string | nul
 
 export async function fetchStaffDirectoryOptions(): Promise<{ staffId: string; displayName: string }[]> {
   const { data, error } = await supabase
-    .from('staff_directory')
+    .from('staffs')
     .select('bubble_staff_id, display_name')
     .not('bubble_staff_id', 'is', null)
     .order('display_name');

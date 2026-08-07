@@ -7,7 +7,6 @@ import {
   websiteVideos,
   websiteSocialPosts,
   websitePaidAds,
-  websiteSeoKeywords,
   websiteEdmCampaigns,
 } from '@/data/websiteDetailData';
 import { websiteProfiles } from '@/data/websiteData';
@@ -46,20 +45,9 @@ export function getAllPaidAds(): (PaidAd & { websiteName: string; company: strin
   return result;
 }
 
+/** Sample SEO seeds cleared — real data loads via useSeoKeywords / Supabase. */
 export function getAllSeoKeywords(): (SeoKeyword & { websiteName: string; company: string; brand: string })[] {
-  const result: (SeoKeyword & { websiteName: string; company: string; brand: string })[] = [];
-  for (const [wsId, keywords] of Object.entries(websiteSeoKeywords)) {
-    const profile = websiteProfiles.find(p => p.id === wsId);
-    for (const kw of keywords) {
-      result.push({
-        ...kw,
-        websiteName: profile?.websiteName || wsId,
-        company: profile?.company || '',
-        brand: profile?.brand || '',
-      });
-    }
-  }
-  return result;
+  return [];
 }
 
 export function getAllEdmCampaigns(): (EdmCampaign & { websiteName: string; company: string; brand: string })[] {

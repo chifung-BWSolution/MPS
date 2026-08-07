@@ -232,7 +232,7 @@ export function PromptLibrary() {
 
       {/* Add Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 m-0 bg-black/50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-lg w-full max-w-lg p-6 space-y-4 shadow-xl">
             <h2 className="text-lg font-bold">新增 Prompt</h2>
             <div className="space-y-3">
@@ -309,7 +309,7 @@ export function PromptLibrary() {
 
       {/* Edit Modal */}
       {editingPrompt && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 m-0 bg-black/50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-lg w-full max-w-lg p-6 space-y-4 shadow-xl">
             <h2 className="text-lg font-bold">編輯 Prompt</h2>
             <div className="space-y-3">

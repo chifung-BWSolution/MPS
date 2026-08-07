@@ -1,0 +1,25 @@
+---
+description: Do not use Supabase MCP; use Supabase CLI for live DB and migrations
+alwaysApply: true
+---
+
+# Supabase — use CLI, not MCP
+
+For this repository, **do not use Supabase MCP**. It is not working in this project environment.
+
+## Required
+
+- Use the **Supabase CLI** as the primary option for:
+  - Live database inspection / querying
+  - Schema inspection
+  - Migrations (create, apply, push, status)
+- Prefer local migration files under `supabase/migrations/` and CLI workflows (`supabase db …`, `supabase migration …`, linked project commands) over any MCP-based database tools.
+
+## Do not
+
+- Do **not** call Supabase MCP tools for database view, schema discovery, or migrations.
+- Do **not** spend time diagnosing or retrying Supabase MCP auth/connection failures for routine DB work — switch to the CLI instead.
+
+## Exceptions
+
+Only consider Supabase MCP if the user explicitly insists on it after being told it is unreliable here; still prefer CLI when possible.

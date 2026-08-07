@@ -57,7 +57,7 @@ export function ProjectFocus({ onSelectProject }: { onSelectProject?: (projectId
   }, [incompleteProjects, hoursMap]);
 
   const getCompanyName = (companyId: string) => companies.find(c => c.id === companyId)?.companyNameZh || '—';
-  const getBrandName = (brandId: string) => brands.find(b => b.id === brandId)?.brandNameZh || '—';
+  const getBrandName = (brandId: string) => brands.find(b => b.id === brandId)?.displayName || '—';
 
   return (
     <div className="space-y-5">

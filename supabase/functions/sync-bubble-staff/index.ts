@@ -34,7 +34,6 @@ interface BubbleStaff {
   'N_BU'?: string;
   'N_Team'?: string;
   'N_Team Role'?: string;
-  'Brands'?: string[];
   'Profile Pic'?: string;
   'Voov ID'?: number;
   'New Work Phone'?: string;
@@ -150,9 +149,9 @@ Deno.serve(async (req: Request) => {
     // Step 2: Full refresh - clear existing data then re-sync from Live
     // This ensures no stale test-mode data remains
     // IMPORTANT: Preserve manually-added records (bubble_staff_id starting with 'manual_')
-    console.log('[sync-bubble-staff] Performing FULL REFRESH — clearing existing staff_directory records (preserving manual entries)...');
+    console.log('[sync-bubble-staff] Performing FULL REFRESH — clearing existing staffs records (preserving manual entries)...');
     const { error: deleteError, count: deletedCount } = await supabaseAdmin
-      .from('staff_directory')
+      .from('staffs')
       .delete({ count: 'exact' })
       .not('bubble_staff_id', 'like', 'manual_%')
       .neq('bubble_staff_id', '');  // Delete all non-manual records
@@ -199,7 +198,6 @@ Deno.serve(async (req: Request) => {
         team_id: staff['N_Team'] || null,
         team_role: staff['N_Team Role'] || null,
         business_unit: staff['N_BU'] || null,
-        brands: staff['Brands'] || null,
         profile_pic_url: staff['Profile Pic'] || null,
         voov_id: staff['Voov ID']?.toString() || null,
         bubble_created_date: staff['Created Date'] || null,
@@ -209,9 +207,9 @@ Deno.serve(async (req: Request) => {
     });
 
     // Batch upsert
-    console.log(`[sync-bubble-staff] Upserting ${upsertData.length} records to staff_directory...`);
+    console.log(`[sync-bubble-staff] Upserting ${upsertData.length} records to staffs...`);
     const { error: upsertError } = await supabaseAdmin
-      .from('staff_directory')
+      .from('staffs')
       .upsert(upsertData, { 
         onConflict: 'bubble_staff_id',
         ignoreDuplicates: false 
@@ -237,30 +235,6 @@ Deno.serve(async (req: Request) => {
     ).length;
     const inactiveCount = bubbleStaff.length - activeCount;
     const teams = new Set(bubbleStaff.map(s => s['N_Team']).filter(Boolean));
-
-    // Step 5: Also update system_users table if staff have matching records
-    const { data: systemUsers } = await supabaseAdmin
-      .from('system_users')
-      .select('id, bubble_staff_id');
-
-    if (systemUsers && systemUsers.length > 0) {
-      for (const sysUser of systemUsers) {
-        const matchingBubbleStaff = bubbleStaff.find(s => s._id === sysUser.bubble_staff_id);
-        if (matchingBubbleStaff) {
-          await supabaseAdmin
-            .from('system_users')
-            .update({
-              display_name: matchingBubbleStaff['Display Name'] || '',
-              email: matchingBubbleStaff['Work Email'] || '',
-              position: matchingBubbleStaff['Position'] || null,
-              profile_pic_url: matchingBubbleStaff['Profile Pic'] || null,
-              is_active: matchingBubbleStaff['O_Status'] === 'Active' || matchingBubbleStaff['O_Status_Text'] === 'Active',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', sysUser.id);
-        }
-      }
-    }
 
     return new Response(
       JSON.stringify({

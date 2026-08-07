@@ -93,7 +93,7 @@ function AddWebsiteModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[560px] max-h-[70vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="text-[16px] font-bold">加入其他網站</h3>
@@ -559,7 +559,7 @@ function AddArticleModal({ onClose, onAdd }: { onClose: () => void; onAdd: (arti
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[680px] max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="text-[16px] font-bold">新增文章記錄</h3>
@@ -583,7 +583,7 @@ function AddArticleModal({ onClose, onAdd }: { onClose: () => void; onAdd: (arti
               <select value={brandId} onChange={(e) => setBrandId(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600">
                 <option value="">選擇品牌</option>
                 {filteredBrands.filter(b => b.isActive).map(b => (
-                  <option key={b.id} value={b.id}>{b.brandCode} - {b.brandNameZh}</option>
+                  <option key={b.id} value={b.id}>{b.brandCode} - {b.displayName}</option>
                 ))}
               </select>
             </div>

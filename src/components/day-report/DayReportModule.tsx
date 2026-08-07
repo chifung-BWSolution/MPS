@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Plus, Check, X, AlertTriangle, ChevronLeft, ChevronRight, Link, Sparkles, Clock, Users, BarChart3, Calendar, FileText, Zap, Bot, Trash2, RefreshCw, Eye, MapPin, CalendarDays, Loader2, Shield, Star, Upload, Image as ImageIcon } from 'lucide-react';
+import { Plus, Check, X, AlertTriangle, ChevronLeft, ChevronRight, Link, Sparkles, Clock, Users, BarChart3, Calendar, FileText, Zap, Bot, Trash2, RefreshCw, Eye, MapPin, CalendarDays, Loader2, Shield, Upload, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -13,7 +13,7 @@ import {
   OutcomeType,
   AITool,
 } from '@/data/dayReportDataV2';
-import { WorkCategoriesManager, defaultCategoryRelationMap } from '@/components/day-report/WorkCategoriesManager';
+import { WorkCategoriesManager, defaultCategoryRelationMap, type CategoryRelationType } from '@/components/day-report/WorkCategoriesManager';
 import { HolidaySettings } from '@/components/day-report/HolidaySettings';
 import { TeamDashboard } from '@/components/day-report/TeamDashboard';
 import { ProjectAnalysis } from '@/components/day-report/ProjectAnalysis';
@@ -188,61 +188,11 @@ function SubmitReportPage() {
   // AI Tools category structure — use module-level EMPTY_AI_TOOLS for stable refs
   const emptyAiTools = EMPTY_AI_TOOLS;
 
-  // Authenticated user — needed early so the saved-templates storage key can
-  // be scoped per-user (see SavedTemplate state below).
   const { systemUser } = useAuth();
 
   // Work entries
   const [entries, setEntries] = useState<ReportFormEntry[]>([createBlankReportEntry()]);
   const imageInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
-
-  // User-saved 常用匯報項目 templates — backed by Supabase
-  // public.user_report_templates so they follow the user across devices.
-  // Each row stores a full work-entry snapshot and is keyed by the user's
-  // lowercased email; we filter reads/writes by that on the client (RLS is
-  // permissive for authenticated users, mirroring confirmed_artist).
-  type SavedTemplate = {
-    id: string;
-    label: string;       // shown in the chip; falls back to title or category
-    entry: typeof entries[number];
-    createdAt: string;
-  };
-  const ownerEmail = useMemo(
-    () => (systemUser?.email || '').toLowerCase().trim(),
-    [systemUser?.email],
-  );
-  const [savedTemplates, setSavedTemplates] = useState<SavedTemplate[]>([]);
-
-  // Load templates whenever the authenticated identity changes.
-  useEffect(() => {
-    let cancelled = false;
-    if (!ownerEmail) {
-      setSavedTemplates([]);
-      return;
-    }
-    (async () => {
-      const { data, error } = await supabase
-        .from('user_report_templates')
-        .select('id, label, entry, created_at')
-        .eq('owner_email', ownerEmail)
-        .order('created_at', { ascending: false });
-      if (cancelled) return;
-      if (error) {
-        console.warn('[SubmitReport] load saved templates failed:', error.message);
-        setSavedTemplates([]);
-        return;
-      }
-      setSavedTemplates(
-        (data || []).map(r => ({
-          id: r.id as string,
-          label: r.label as string,
-          entry: r.entry as SavedTemplate['entry'],
-          createdAt: r.created_at as string,
-        })),
-      );
-    })();
-    return () => { cancelled = true; };
-  }, [ownerEmail]);
 
   const [targetHours, setTargetHours] = useState<number>(8);
   const [underHoursReason, setUnderHoursReason] = useState('');
@@ -251,6 +201,7 @@ function SubmitReportPage() {
   const [tempSaved, setTempSaved] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTempSaving, setIsTempSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [existingReportId, setExistingReportId] = useState<string | null>(null);
   const [existingReportStatus, setExistingReportStatus] = useState<string | null>(null);
@@ -341,7 +292,7 @@ function SubmitReportPage() {
         return;
       }
       const { data } = await supabase
-        .from('staff_directory')
+        .from('staffs')
         .select('bubble_staff_id')
         .ilike('work_email', email)
         .limit(1)
@@ -362,7 +313,7 @@ function SubmitReportPage() {
       if (!systemUser?.bubble_staff_id) return;
       try {
         const { data: staffRow, error } = await supabase
-          .from('staff_directory')
+          .from('staffs')
           .select('office')
           .eq('bubble_staff_id', systemUser.bubble_staff_id)
           .maybeSingle();
@@ -506,21 +457,31 @@ function SubmitReportPage() {
 
           if (entriesData && entriesData.length > 0) {
             console.log('[SubmitReport] Loaded', entriesData.length, 'entries for report');
-            const loadedEntries = entriesData.map((e: any) => ({
-              category: (e.category || '') as WorkCategory | '',
-              relatedId: e.related_id || '',
-              relatedName: e.related_name || '',
-              title: e.title || '',
-              hours: Number(e.hours) || 0,
-              outcomeType: (e.outcome_type || '') as OutcomeType | '',
-              outcomeUrl: e.outcome_url || '',
-              outcomeImages: e.outcome_images || [],
-              outcomeImageFiles: [] as File[],
-              growthExperience: e.growth_experience || '',
-              isAiAssisted: e.is_ai_assisted || false,
-              aiTools: (e.ai_tools || []) as AITool[],
-              aiToolsV2: (e.ai_tools_v2 || { ...emptyAiTools }) as AiToolsSelection,
-            }));
+            const loadedEntries = entriesData.map((e: any) => {
+              const category = (e.category || '') as WorkCategory | '';
+              // Only strip related_* when we positively know relation_type is none.
+              // If dynamicTypes has not loaded yet for a custom category, keep DB values.
+              const knownRelation = category
+                ? (dynamicTypes.find(t => t.id === category)?.relationType
+                  ?? defaultCategoryRelationMap[category as WorkCategory])
+                : undefined;
+              const dropRelation = knownRelation === 'none';
+              return {
+                category,
+                relatedId: dropRelation ? '' : (e.related_id || ''),
+                relatedName: dropRelation ? '' : (e.related_name || ''),
+                title: e.title || '',
+                hours: Number(e.hours) || 0,
+                outcomeType: (e.outcome_type || '') as OutcomeType | '',
+                outcomeUrl: e.outcome_url || '',
+                outcomeImages: e.outcome_images || [],
+                outcomeImageFiles: [] as File[],
+                growthExperience: e.growth_experience || '',
+                isAiAssisted: e.is_ai_assisted || false,
+                aiTools: (e.ai_tools || []) as AITool[],
+                aiToolsV2: (e.ai_tools_v2 || { ...emptyAiTools }) as AiToolsSelection,
+              };
+            });
             const mergedEntries = await applyPendingMerge(loadedEntries);
             if (!cancelled) setEntries(mergedEntries);
           } else {
@@ -658,27 +619,224 @@ function SubmitReportPage() {
     return dates;
   }, [office, dbReports]);
 
-  // Recent frequent items from the user's past reports (for quick selection)
-  const recentFrequentItems = useMemo(() => {
-    const currentUserId = 'u1'; // mock current user
-    const userReports = dailyReportsV2.filter(r => r.userId === currentUserId && !r.isLeave);
-    const allEntries = userReports.flatMap(r => r.entries);
-    
-    // Count frequency of each relatedName + category combo
-    const itemMap: Record<string, { relatedId: string; relatedName: string; category: WorkCategory; count: number; lastUsed: string; totalHours: number }> = {};
-    allEntries.forEach(entry => {
-      if (!entry.relatedName) return;
-      const key = `${entry.relatedName}__${entry.category}`;
-      if (!itemMap[key]) {
-        itemMap[key] = { relatedId: entry.relatedId || '', relatedName: entry.relatedName, category: entry.category, count: 0, lastUsed: entry.createdAt, totalHours: 0 };
+  // Recent frequent items from the user's real past reports (for quick selection).
+  // Aggregates day_report_entries by related_id + category over the last ~90 days,
+  // then resolves display names from webandsystem_list.website_name (never related_name).
+  // Categories with relation_type=none have no linked system — always show "N/A".
+  type FrequentItem = {
+    relatedId: string;
+    relatedName: string;
+    category: WorkCategory;
+    count: number;
+    lastUsed: string;
+    totalHours: number;
+  };
+  const [recentFrequentItems, setRecentFrequentItems] = useState<FrequentItem[]>([]);
+
+  const resolveRelationType = useCallback((category: string): CategoryRelationType => {
+    const dyn = dynamicTypes.find(t => t.id === category);
+    if (dyn?.relationType) return dyn.relationType;
+    return defaultCategoryRelationMap[category as WorkCategory] ?? 'none';
+  }, [dynamicTypes]);
+
+  const loadRecentFrequentItems = useCallback(async () => {
+    if (!currentStaffId) {
+      setRecentFrequentItems([]);
+      return;
+    }
+    try {
+      const today = new Date();
+      const start = new Date(today);
+      start.setDate(start.getDate() - 89);
+      const toLocalDateStr = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+      // Prefer non-leave reports in the lookback window so leave days don't
+      // dilute recommendations. Fall back to entries-by-staff if the join path fails.
+      const { data: reports, error: reportErr } = await supabase
+        .from('day_reports')
+        .select('id')
+        .eq('staff_id', currentStaffId)
+        .eq('is_leave', false)
+        .gte('report_date', toLocalDateStr(start))
+        .lte('report_date', toLocalDateStr(today));
+
+      if (reportErr) {
+        console.warn('[SubmitReport] load frequent reports failed:', reportErr.message);
       }
-      itemMap[key].count += 1;
-      itemMap[key].totalHours += entry.hours;
-      if (entry.createdAt > itemMap[key].lastUsed) itemMap[key].lastUsed = entry.createdAt;
-    });
-    
-    return Object.values(itemMap).sort((a, b) => b.count - a.count).slice(0, 8);
-  }, []);
+
+      type EntryRow = {
+        related_id: string | null;
+        category: string;
+        hours: number | null;
+        created_at: string | null;
+      };
+      let entryRows: EntryRow[] = [];
+
+      if (reports && reports.length > 0) {
+        const reportIds = reports.map(r => r.id);
+        const chunkSize = 200;
+        for (let i = 0; i < reportIds.length; i += chunkSize) {
+          const chunk = reportIds.slice(i, i + chunkSize);
+          const { data, error } = await supabase
+            .from('day_report_entries')
+            .select('related_id, category, hours, created_at')
+            .in('day_report_id', chunk);
+          if (error) {
+            console.warn('[SubmitReport] load frequent entries failed:', error.message);
+            continue;
+          }
+          if (data) entryRows = entryRows.concat(data as EntryRow[]);
+        }
+      } else if (!reportErr) {
+        // No reports in window — keep empty recommendations.
+        entryRows = [];
+      } else {
+        // Report query failed; fall back to recent entries by staff_id.
+        const { data, error } = await supabase
+          .from('day_report_entries')
+          .select('related_id, category, hours, created_at')
+          .eq('staff_id', currentStaffId)
+          .order('created_at', { ascending: false })
+          .limit(300);
+        if (error) {
+          console.warn('[SubmitReport] frequent entries fallback failed:', error.message);
+          setRecentFrequentItems([]);
+          return;
+        }
+        entryRows = (data || []) as EntryRow[];
+      }
+
+      // Only resolve names for categories that actually link to a system/project.
+      // Stale related_id on relation_type=none entries must be ignored (see N/A below).
+      const relatedIds = Array.from(
+        new Set(
+          entryRows
+            .filter(e => {
+              const category = (e.category || '').trim();
+              return !!category && resolveRelationType(category) !== 'none';
+            })
+            .map(e => (e.related_id || '').trim())
+            .filter(Boolean),
+        ),
+      );
+
+      // Latest canonical names from master tables — never use denormalized related_name.
+      const websiteNameById = new Map<string, string>();
+      const projectNameById = new Map<string, string>();
+      if (relatedIds.length > 0) {
+        const chunkSize = 200;
+        for (let i = 0; i < relatedIds.length; i += chunkSize) {
+          const chunk = relatedIds.slice(i, i + chunkSize);
+          const { data: websiteRows, error: websiteErr } = await supabase
+            .from('webandsystem_list')
+            .select('id, website_name')
+            .in('id', chunk);
+          if (websiteErr) {
+            console.warn('[SubmitReport] load website names failed:', websiteErr.message);
+          } else {
+            (websiteRows || []).forEach(row => {
+              const name = ((row.website_name as string) || '').trim();
+              if (row.id && name) websiteNameById.set(row.id as string, name);
+            });
+          }
+        }
+
+        const unresolvedIds = relatedIds.filter(id => !websiteNameById.has(id));
+        for (let i = 0; i < unresolvedIds.length; i += chunkSize) {
+          const chunk = unresolvedIds.slice(i, i + chunkSize);
+          const { data: projectRows, error: projectErr } = await supabase
+            .from('projects_list')
+            .select('id, name')
+            .in('id', chunk);
+          if (projectErr) {
+            console.warn('[SubmitReport] load project names failed:', projectErr.message);
+          } else {
+            (projectRows || []).forEach(row => {
+              const name = ((row.name as string) || '').trim();
+              if (row.id && name) projectNameById.set(row.id as string, name);
+            });
+          }
+        }
+      }
+
+      const itemMap: Record<string, FrequentItem> = {};
+      entryRows.forEach(entry => {
+        const category = (entry.category || '') as WorkCategory;
+        if (!category) return;
+
+        const relationType = resolveRelationType(category);
+        const hours = Number(entry.hours) || 0;
+        const createdAt = entry.created_at || '';
+
+        // relation_type=none: no linked webandsystem — aggregate by category only, show N/A.
+        // Ignore any leftover related_id from when the user switched categories before save.
+        if (relationType === 'none') {
+          const key = `__none__${category}`;
+          if (!itemMap[key]) {
+            itemMap[key] = {
+              relatedId: '',
+              relatedName: 'N/A',
+              category,
+              count: 0,
+              lastUsed: createdAt,
+              totalHours: 0,
+            };
+          }
+          itemMap[key].count += 1;
+          itemMap[key].totalHours += hours;
+          itemMap[key].relatedName = 'N/A';
+          if (createdAt && createdAt > itemMap[key].lastUsed) {
+            itemMap[key].lastUsed = createdAt;
+          }
+          return;
+        }
+
+        const relatedId = (entry.related_id || '').trim();
+        if (!relatedId) return;
+        const relatedName = websiteNameById.get(relatedId) || projectNameById.get(relatedId) || '';
+        // Skip orphans that no longer exist in master data.
+        if (!relatedName) return;
+        const key = `${relatedId}__${category}`;
+        if (!itemMap[key]) {
+          itemMap[key] = {
+            relatedId,
+            relatedName,
+            category,
+            count: 0,
+            lastUsed: createdAt,
+            totalHours: 0,
+          };
+        }
+        itemMap[key].count += 1;
+        itemMap[key].totalHours += hours;
+        itemMap[key].relatedName = relatedName;
+        if (createdAt && createdAt > itemMap[key].lastUsed) {
+          itemMap[key].lastUsed = createdAt;
+        }
+      });
+
+      const ranked = Object.values(itemMap)
+        .map(item => ({
+          ...item,
+          totalHours: Math.round(item.totalHours * 10) / 10,
+        }))
+        .sort((a, b) => {
+          if (b.count !== a.count) return b.count - a.count;
+          return (b.lastUsed || '').localeCompare(a.lastUsed || '');
+        })
+        .slice(0, 8);
+
+      setRecentFrequentItems(ranked);
+    } catch (err) {
+      console.error('[SubmitReport] Exception loading frequent items:', err);
+      setRecentFrequentItems([]);
+    }
+  }, [currentStaffId, resolveRelationType]);
+
+  useEffect(() => {
+    loadRecentFrequentItems();
+  }, [loadRecentFrequentItems]);
 
   const totalHours = entries.reduce((sum, e) => sum + (e.hours || 0), 0);
   const otHours = Math.max(0, totalHours - 8);
@@ -730,76 +888,6 @@ function SubmitReportPage() {
     const newEntries = [...entries];
     (newEntries[idx] as any)[field] = value;
     setEntries(newEntries);
-  };
-
-  // Snapshot the current row into 常用匯報項目. Skip if the row is essentially
-  // empty so users can't accidentally save a blank template. The row is
-  // persisted to Supabase, then prepended to local state on success so the
-  // UI updates immediately.
-  const saveEntryAsTemplate = async (idx: number) => {
-    const e = entries[idx];
-    if (!e.category && !e.title && !e.relatedName && (!e.hours || e.hours === 0)) {
-      alert('請先填寫工作項目內容再儲存。');
-      return;
-    }
-    if (!ownerEmail) {
-      alert('未能識別登入帳戶，請重新登入後再試。');
-      return;
-    }
-    const label = (e.title.trim().split('\n')[0] || e.relatedName || categoryLookup[e.category]?.label || '自訂項目').slice(0, 40);
-    const entrySnapshot = { ...e, aiToolsV2: { ...e.aiToolsV2 } };
-    const { data, error } = await supabase
-      .from('user_report_templates')
-      .insert({ owner_email: ownerEmail, label, entry: entrySnapshot })
-      .select('id, label, entry, created_at')
-      .single();
-    if (error || !data) {
-      console.error('[SubmitReport] save template failed:', error?.message);
-      alert('儲存常用項目失敗，請稍後再試。');
-      return;
-    }
-    setSavedTemplates(prev => [{
-      id: data.id as string,
-      label: data.label as string,
-      entry: data.entry as SavedTemplate['entry'],
-      createdAt: data.created_at as string,
-    }, ...prev]);
-  };
-
-  const removeSavedTemplate = async (id: string) => {
-    // Optimistic remove — restore on failure so the user sees the actual state.
-    const prev = savedTemplates;
-    setSavedTemplates(s => s.filter(t => t.id !== id));
-    const { error } = await supabase
-      .from('user_report_templates')
-      .delete()
-      .eq('id', id);
-    if (error) {
-      console.error('[SubmitReport] delete template failed:', error.message);
-      alert('移除失敗，請稍後再試。');
-      setSavedTemplates(prev);
-    }
-  };
-
-  // Click a saved chip → drop a fresh row pre-filled with its snapshot. If
-  // the first row is still empty we replace it instead of appending so the
-  // form stays tidy.
-  const applySavedTemplate = (tpl: SavedTemplate) => {
-    const newEntry = {
-      ...tpl.entry,
-      aiToolsV2: { ...tpl.entry.aiToolsV2 },
-      outcomeImages: [...(tpl.entry.outcomeImages || [])],
-      outcomeImageFiles: [] as File[],
-      aiTools: [...(tpl.entry.aiTools || [])],
-    };
-    const firstEmpty = entries.findIndex(e => !e.category && !e.title && e.hours === 0);
-    if (firstEmpty >= 0) {
-      const next = [...entries];
-      next[firstEmpty] = newEntry;
-      setEntries(next);
-    } else {
-      setEntries([...entries, newEntry]);
-    }
   };
 
   const handleRefreshPending = async () => {
@@ -972,12 +1060,15 @@ function SubmitReportPage() {
       const entryRecords = filteredEntries
         .map((e, idx) => {
           const allImages = [...e.outcomeImages, ...uploadedUrlsPerEntry[idx]];
+          const relationType = resolveRelationType(e.category);
+          const hasRelation = relationType !== 'none';
           return ({
           day_report_id: reportId,
           staff_id: currentStaffId,
           category: e.category,
-          related_id: e.relatedId || null,
-          related_name: e.relatedName || null,
+          // Strip stale related_* when the work type has no system/project link.
+          related_id: hasRelation ? (e.relatedId || null) : null,
+          related_name: hasRelation ? (e.relatedName || null) : null,
           title: e.title || '',
           hours: e.hours,
           outcome_type: e.outcomeType || null,
@@ -1036,6 +1127,8 @@ function SubmitReportPage() {
       setExistingReportId(reportId);
       setExistingReportStatus(saveMode);
       loadDbReports();
+      // Refresh quick-add recommendations so the just-saved items appear.
+      void loadRecentFrequentItems();
 
       if (saveMode === 'draft') {
         setTempSaved(true);
@@ -1054,6 +1147,74 @@ function SubmitReportPage() {
 
   const handleTempSave = () => saveReport('draft');
   const handleSubmit = () => saveReport('submitted');
+
+  const handleDeleteReport = async () => {
+    if (!existingReportId || !currentStaffId) return;
+    const dateLabel = formatDateFull(selectedDate);
+    if (!confirm(`確定要刪除 ${dateLabel} 的整份匯報嗎？\n此操作無法復原，所有工作項目將一併移除。`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setSubmitError(null);
+    try {
+      const { data: oldEntries } = await supabase
+        .from('day_report_entries')
+        .select('related_id')
+        .eq('day_report_id', existingReportId)
+        .not('related_id', 'is', null);
+
+      const affectedWebsiteIds = new Set<string>();
+      oldEntries?.forEach(e => e.related_id && affectedWebsiteIds.add(e.related_id));
+
+      // Entries cascade via ON DELETE CASCADE on day_report_id
+      const { error: deleteError } = await supabase
+        .from('day_reports')
+        .delete()
+        .eq('id', existingReportId)
+        .eq('staff_id', currentStaffId);
+
+      if (deleteError) {
+        throw new Error(deleteError.message);
+      }
+
+      if (affectedWebsiteIds.size > 0) {
+        await Promise.all(
+          Array.from(affectedWebsiteIds).map(async (websiteId) => {
+            const { data: hoursData } = await supabase
+              .from('day_report_entries')
+              .select('hours')
+              .eq('related_id', websiteId);
+            const total = (hoursData ?? []).reduce((sum, row) => sum + (Number(row.hours) || 0), 0);
+            await supabase
+              .from('webandsystem_list')
+              .update({ total_hours: total })
+              .eq('id', websiteId);
+          })
+        );
+      }
+
+      if (draftStorageKey) {
+        try { localStorage.removeItem(draftStorageKey); } catch {}
+      }
+
+      setExistingReportId(null);
+      setExistingReportStatus(null);
+      setUnderHoursReason('');
+      setTargetHours(8);
+      setSubmitted(false);
+      setTempSaved(false);
+      const mergedEntries = await applyPendingMerge([createBlankReportEntry()]);
+      setEntries(mergedEntries);
+      await loadDbReports();
+      void loadRecentFrequentItems();
+      await refreshPendingCount();
+    } catch (err: any) {
+      setSubmitError(err.message || '刪除匯報失敗，請重試。');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const quickTemplates = [
     { category: 'website_design' as WorkCategory, title: '網站設計及更新', hours: 2, relatedName: '' },
@@ -1325,85 +1486,38 @@ function SubmitReportPage() {
           </div>
 
           {/* Recent Frequent Items — Quick Add from past reports */}
-          {(recentFrequentItems.length > 0 || savedTemplates.length > 0) && (
+          {recentFrequentItems.length > 0 && (
             <div className="bg-white rounded-lg border border-border/60 px-4 py-3">
               <div className="flex items-center gap-2 mb-2.5">
                 <Sparkles size={14} className="text-amber-500" />
                 <span className="text-[14px] font-bold text-foreground">常用匯報項目</span>
-                <span className="text-[13px] text-muted-foreground">（自訂 + 根據你的歷史匯報自動推薦，點擊快速填入）</span>
+                <span className="text-[13px] text-muted-foreground">（根據你的歷史匯報自動推薦，點擊快速填入）</span>
               </div>
-
-              {/* User-saved templates first — these capture full entry payloads
-                  so a single click restores category, hours, title, AI tools etc. */}
-              {savedTemplates.length > 0 && (
-                <div className="mb-3">
-                  <div className="text-[12px] text-muted-foreground mb-1.5">我的常用項目</div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {savedTemplates.map(tpl => {
-                      const cat = tpl.entry.category as WorkCategory | '';
-                      const config = cat ? categoryLookup[cat] : null;
-                      return (
-                        <div
-                          key={tpl.id}
-                          className="group relative flex items-start gap-2 px-3 py-2.5 rounded-lg border bg-amber-50/40 border-amber-200/70 hover:border-amber-400 hover:shadow-sm transition-all"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => applySavedTemplate(tpl)}
-                            className="flex-1 flex items-start gap-2 text-left"
-                          >
-                            {config ? (
-                              <span className={cn('text-[12px] px-1.5 py-0.5 rounded shrink-0 mt-0.5', config.bg, config.color)}>
-                                {config.icon}
-                              </span>
-                            ) : (
-                              <span className="text-[12px] px-1.5 py-0.5 rounded shrink-0 mt-0.5 bg-amber-100 text-amber-700">★</span>
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className="text-[14px] font-medium text-foreground truncate">{tpl.label}</div>
-                              <div className="text-[12px] text-muted-foreground truncate">
-                                {[
-                                  config?.label,
-                                  tpl.entry.relatedName,
-                                  tpl.entry.hours ? `${tpl.entry.hours}h` : null,
-                                ].filter(Boolean).join(' · ') || '自訂項目'}
-                              </div>
-                            </div>
-                            <Plus size={12} className="text-amber-600 shrink-0 mt-1" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removeSavedTemplate(tpl.id)}
-                            title="移除這個常用項目"
-                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-rose-600 p-0.5 rounded transition-opacity"
-                          >
-                            <X size={11} />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {recentFrequentItems.length > 0 && savedTemplates.length > 0 && (
-                <div className="text-[12px] text-muted-foreground mb-1.5">歷史推薦</div>
-              )}
-              {recentFrequentItems.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {recentFrequentItems.map((item, idx) => {
-                  const config = categoryLookup[item.category];
+                {recentFrequentItems.map((item) => {
+                  const config = categoryLookup[item.category] || {
+                    bg: 'bg-gray-50',
+                    color: 'text-gray-600',
+                    icon: '📋',
+                    label: item.category,
+                  };
+                  const systemLabel = item.relatedName?.trim() ? item.relatedName : 'N/A';
+                  const isNoRelation = resolveRelationType(item.category) === 'none' || systemLabel === 'N/A';
                   return (
                     <button
-                      key={idx}
+                      key={`${item.relatedId || 'none'}__${item.category}`}
+                      type="button"
                       onClick={() => {
                         // Auto-fill: use applyQuickTemplate style — fill empty or add new
                         const firstEmpty = entries.findIndex(e => !e.category && !e.title && e.hours === 0);
+                        const relatedId = isNoRelation ? '' : item.relatedId;
+                        const relatedName = isNoRelation ? '' : item.relatedName;
                         const newEntry = {
                           category: item.category,
-                          relatedId: item.relatedId,
-                          relatedName: item.relatedName,
-                          title: item.relatedName, // pre-fill title with the project name
+                          relatedId,
+                          relatedName,
+                          // Pre-fill title with linked system/project name when available
+                          title: relatedName,
                           hours: Math.round((item.totalHours / item.count) * 2) / 2, // average hours rounded to 0.5
                           outcomeType: '' as OutcomeType | '',
                           outcomeUrl: '',
@@ -1431,15 +1545,14 @@ function SubmitReportPage() {
                         {config.icon}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[14px] font-medium text-foreground truncate">{item.relatedName}</div>
-                        <div className="text-[12px] text-muted-foreground truncate">{config.label} · {item.count}次 · {item.totalHours}h</div>
+                        <div className="text-[14px] font-medium text-foreground truncate">{config.label}</div>
+                        <div className="text-[12px] text-muted-foreground truncate">{systemLabel} · {item.count}次 · {item.totalHours}h</div>
                       </div>
                       <Plus size={12} className="text-teal-500 shrink-0 mt-1" />
                     </button>
                   );
                 })}
               </div>
-              )}
             </div>
           )}
         </div>
@@ -1523,6 +1636,25 @@ function SubmitReportPage() {
               )}
               {aiUsedInEntries && (<span className="flex items-center gap-1 text-[13px] px-2 py-1 rounded-full bg-purple-50 text-purple-700 font-medium"><Bot size={11} /> AI 輔助</span>)}
               </div>
+
+              {/* Delete entire report — shown only when a saved report exists for this date */}
+              {isUpdateMode && (
+                <button
+                  type="button"
+                  onClick={handleDeleteReport}
+                  disabled={isDeleting || isSubmitting || isTempSaving}
+                  title="刪除整份匯報"
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-2 rounded-lg border text-[14px] font-medium transition-all',
+                    isDeleting || isSubmitting || isTempSaving
+                      ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
+                      : 'bg-white text-rose-600 border-rose-300 hover:bg-rose-50 hover:border-rose-400',
+                  )}
+                >
+                  {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                  {isDeleting ? '刪除中...' : '刪除匯報'}
+                </button>
+              )}
             </div>
           </div>
 
@@ -1557,25 +1689,35 @@ function SubmitReportPage() {
                       </span>
                     )}
                   </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => saveEntryAsTemplate(idx)}
-                      title="加入到常用匯報項目"
-                      className="flex items-center gap-1 text-[12px] text-amber-600 hover:text-amber-700 px-2 py-1 rounded border border-amber-200 hover:bg-amber-50"
-                    >
-                      <Star size={12} />
-                      <span>加入到常用匯報項目</span>
-                    </button>
-                    {entries.length > 1 && (
-                      <button onClick={() => removeEntry(idx)} className="text-rose-500 hover:text-rose-700 p-1.5 rounded hover:bg-rose-50"><Trash2 size={13} /></button>
-                    )}
-                  </div>
+                  {entries.length > 1 && (
+                    <button onClick={() => removeEntry(idx)} className="text-rose-500 hover:text-rose-700 p-1.5 rounded hover:bg-rose-50"><Trash2 size={13} /></button>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2.5 mb-3">
                   <div className="lg:col-span-2">
                     <label className="text-[13px] font-semibold text-muted-foreground block mb-1">工作類別 *</label>
-                    <select value={entry.category} onChange={(e) => updateEntry(idx, 'category', e.target.value)} className="w-full px-2.5 py-2 border border-border rounded-md text-[15px] bg-white focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all">
+                    <select
+                      value={entry.category}
+                      onChange={(e) => {
+                        const newCategory = e.target.value;
+                        const newEntries = [...entries];
+                        const next = { ...newEntries[idx], category: newCategory };
+                        // relation_type=none has no linked system — clear any leftover related_*
+                        // from a previous category so it is not saved / recommended later.
+                        const nextRelation = newCategory
+                          ? (dynamicTypes.find(t => t.id === newCategory)?.relationType
+                            ?? defaultCategoryRelationMap[newCategory as WorkCategory]
+                            ?? 'none')
+                          : 'none';
+                        if (!newCategory || nextRelation === 'none') {
+                          next.relatedId = '';
+                          next.relatedName = '';
+                        }
+                        newEntries[idx] = next;
+                        setEntries(newEntries);
+                      }}
+                      className="w-full px-2.5 py-2 border border-border rounded-md text-[15px] bg-white focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
+                    >
                       <option value="">選擇類別...</option>
                       {(dynamicTypes.length > 0
                         ? dynamicTypes.filter(t => t.isActive)
@@ -1894,7 +2036,7 @@ function TodayTeamReports() {
       try {
         // 1. Fetch active staff from staff_directory; department comes from user_info
         const { data: staffData, error: staffErr } = await supabase
-          .from('staff_directory')
+          .from('staffs')
           .select('id, bubble_staff_id, display_name, position, status')
           .eq('status', 'active')
           .neq('position', 'Director');
@@ -2292,7 +2434,7 @@ function WorkCalendar() {
         }
 
         let staffQuery = supabase
-          .from('staff_directory')
+          .from('staffs')
           .select('bubble_staff_id, display_name')
           .eq('status', 'active')
           .neq('position', 'Director');

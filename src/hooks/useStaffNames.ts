@@ -9,7 +9,7 @@ export function useStaffNames() {
     let cancelled = false;
     (async () => {
       const { data, error } = await supabase
-        .from('user_info')
+        .from('users')
         .select('display_name, system_status')
         .order('display_name', { ascending: true });
       if (cancelled) return;

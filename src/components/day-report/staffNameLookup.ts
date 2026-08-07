@@ -8,11 +8,11 @@ export async function fetchStaffNameMap(staffIds: string[]): Promise<Record<stri
 
   const [{ data: sdRows }, { data: uiRows }] = await Promise.all([
     supabase
-      .from('staff_directory')
+      .from('staffs')
       .select('bubble_staff_id, display_name')
       .in('bubble_staff_id', unique),
     supabase
-      .from('user_info')
+      .from('users')
       .select('staff_id, display_name')
       .in('staff_id', unique),
   ]);

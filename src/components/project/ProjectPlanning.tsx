@@ -154,7 +154,7 @@ export function ProjectPlanning({ onSelectProject, forcedCategory, projects, loa
             <SelectContent>
               <SelectItem value="all">所有品牌</SelectItem>
               {availableBrands.map(b => (
-                <SelectItem key={b.id} value={b.id}>{b.brandCode} - {b.brandNameZh}</SelectItem>
+                <SelectItem key={b.id} value={b.id}>{b.brandCode} - {b.displayName}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -242,7 +242,7 @@ export function ProjectPlanning({ onSelectProject, forcedCategory, projects, loa
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: brandItem?.primaryColor }} />
+                        <span className="w-2.5 h-2.5 rounded-sm bg-teal-600" />
                         <span className="text-[12px] font-medium">{project.brand}</span>
                       </div>
                     </td>
@@ -361,7 +361,7 @@ export function ProjectPlanning({ onSelectProject, forcedCategory, projects, loa
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">品牌</label>
                 <Select value={editingProject.brandId} onValueChange={(val) => setEditingProject({ ...editingProject, brandId: val })}>
                   <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
-                  <SelectContent>{brands.filter(b => b.companyId === editingProject.companyId).map(b => <SelectItem key={b.id} value={b.id}>{b.brandCode} - {b.brandNameZh}</SelectItem>)}</SelectContent>
+                  <SelectContent>{brands.filter(b => b.companyId === editingProject.companyId).map(b => <SelectItem key={b.id} value={b.id}>{b.brandCode} - {b.displayName}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>

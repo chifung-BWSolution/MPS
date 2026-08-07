@@ -84,7 +84,7 @@ export function DataIntegrityCheck() {
 
       // ===== 2. Brand Checks =====
       // Check: All brands reference valid company
-      const brandOrphans = brands.filter(b => !companies.find(c => c.id === b.companyId));
+      const brandOrphans = brands.filter(b => !companies.find(c => c.uuid === b.companyId || c.id === b.companyId));
       allChecks.push({
         id: 'brand-company-fk',
         module: '品牌管理',
@@ -93,13 +93,13 @@ export function DataIntegrityCheck() {
         message: brandOrphans.length > 0
           ? `${brandOrphans.length} 個品牌找不到對應的公司記錄`
           : '所有品牌均正確關聯到公司',
-        details: brandOrphans.map(b => `${b.brandNameZh} (ID: ${b.id}) → 公司 ID: ${b.companyId} [不存在]`),
+        details: brandOrphans.map(b => `${b.displayName} (ID: ${b.id}) → 公司 ID: ${b.companyId} [不存在]`),
         affectedCount: brandOrphans.length,
         totalCount: brands.length,
       });
 
       // Check: Brand required fields
-      const brandMissing = brands.filter(b => !b.brandCode || !b.brandNameZh);
+      const brandMissing = brands.filter(b => !b.brandCode || !b.displayName);
       allChecks.push({
         id: 'brand-required-fields',
         module: '品牌管理',
@@ -160,7 +160,7 @@ export function DataIntegrityCheck() {
           : '所有項目的品牌均屬於正確公司',
         details: projectBrandMismatch.map(p => {
           const brand = brands.find(b => b.id === p.brandId);
-          return `${p.name}: 品牌 "${brand?.brandNameZh}" 屬於公司 "${brand?.companyId}", 但項目指定公司 "${p.companyId}"`;
+          return `${p.name}: 品牌 "${brand?.displayName}" 屬於公司 "${brand?.companyId}", 但項目指定公司 "${p.companyId}"`;
         }),
         affectedCount: projectBrandMismatch.length,
         totalCount: projects.length,
@@ -447,7 +447,7 @@ export function DataIntegrityCheck() {
           : '所有報價的品牌均屬於正確公司',
         details: quotBrandCompanyMismatch.map(q => {
           const brand = brands.find(b => b.id === q.brandId);
-          return `${q.quoteId}: 品牌 "${brand?.brandNameZh}" 屬於 "${brand?.companyId}", 但報價公司為 "${q.companyId}"`;
+          return `${q.quoteId}: 品牌 "${brand?.displayName}" 屬於 "${brand?.companyId}", 但報價公司為 "${q.companyId}"`;
         }),
         affectedCount: quotBrandCompanyMismatch.length,
         totalCount: quotationEntries.length,
@@ -585,7 +585,7 @@ export function DataIntegrityCheck() {
       });
 
       // ===== 16. 網站→公司/品牌 FK Consistency =====
-      const websiteCompanyOrphans = websites.filter(w => w.companyId && !companies.find(c => c.id === w.companyId));
+      const websiteCompanyOrphans = websites.filter(w => w.companyId && !companies.find(c => c.uuid === w.companyId || c.id === w.companyId));
       allChecks.push({
         id: 'website-company-fk',
         module: '網站管理',
@@ -629,7 +629,7 @@ export function DataIntegrityCheck() {
           : '所有網站的品牌與公司鏈結正確',
         details: websiteBrandCompanyMismatch.map(w => {
           const brand = brands.find(b => b.id === w.brandId);
-          return `${w.websiteName}: 品牌 "${brand?.brandNameZh}" 屬於 "${brand?.companyId}", 但網站公司為 "${w.companyId}"`;
+          return `${w.websiteName}: 品牌 "${brand?.displayName}" 屬於 "${brand?.companyId}", 但網站公司為 "${w.companyId}"`;
         }),
         affectedCount: websiteBrandCompanyMismatch.length,
         totalCount: websites.length,
@@ -682,7 +682,7 @@ export function DataIntegrityCheck() {
       // ===== 17. Cross-module ID consistency =====
       // Check: company counts match actual
       const companyBrandCountMismatch = companies.filter(c => {
-        const actualBrands = brands.filter(b => b.companyId === c.id).length;
+        const actualBrands = brands.filter(b => b.companyId === c.uuid || b.companyId === c.id).length;
         return c.brandCount !== undefined && c.brandCount !== actualBrands;
       });
       allChecks.push({
@@ -694,7 +694,7 @@ export function DataIntegrityCheck() {
           ? `${companyBrandCountMismatch.length} 間公司的品牌計數與實際不符`
           : '所有公司品牌計數正確',
         details: companyBrandCountMismatch.map(c => {
-          const actual = brands.filter(b => b.companyId === c.id).length;
+          const actual = brands.filter(b => b.companyId === c.uuid || b.companyId === c.id).length;
           return `${c.companyNameZh}: 顯示 ${c.brandCount} 個品牌, 實際 ${actual} 個`;
         }),
         affectedCount: companyBrandCountMismatch.length,
@@ -738,7 +738,7 @@ export function DataIntegrityCheck() {
           : '所有品牌項目計數正確',
         details: brandProjectCountMismatch.map(b => {
           const actual = projects.filter(p => p.brandId === b.id).length;
-          return `${b.brandNameZh}: 顯示 ${b.projectCount} 個項目, 實際 ${actual} 個`;
+          return `${b.displayName}: 顯示 ${b.projectCount} 個項目, 實際 ${actual} 個`;
         }),
         affectedCount: brandProjectCountMismatch.length,
         totalCount: brands.length,

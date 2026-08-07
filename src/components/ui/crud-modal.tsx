@@ -1,24 +1,32 @@
 import { ReactNode } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
+import { FixedOverlay } from '@/components/ui/fixed-overlay';
 
 interface CrudModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   headerActions?: ReactNode;
 }
 
 export function CrudModal({ isOpen, onClose, title, children, size = 'md', headerActions }: CrudModalProps) {
   if (!isOpen) return null;
 
-  const sizeClass = size === 'sm' ? 'max-w-[400px]' : size === 'lg' ? 'max-w-[700px]' : 'max-w-[550px]';
+  const sizeClass =
+    size === 'sm'
+      ? 'max-w-[400px] max-h-[85vh]'
+      : size === 'lg'
+        ? 'max-w-[700px] max-h-[85vh]'
+        : size === 'xl'
+          ? 'max-w-[780px] max-h-[92vh] min-h-[min(720px,92vh)]'
+          : 'max-w-[550px] max-h-[85vh]';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <FixedOverlay className="flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className={`relative bg-white rounded-lg shadow-xl w-full ${sizeClass} mx-4 max-h-[85vh] flex flex-col`}>
+      <div className={`relative bg-white rounded-lg shadow-xl w-full ${sizeClass} mx-4 flex flex-col`}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h2 className="text-[16px] font-bold">{title}</h2>
           <div className="flex items-center gap-2">
@@ -32,7 +40,7 @@ export function CrudModal({ isOpen, onClose, title, children, size = 'md', heade
           {children}
         </div>
       </div>
-    </div>
+    </FixedOverlay>
   );
 }
 
@@ -49,7 +57,7 @@ export function DeleteConfirmModal({ isOpen, onClose, onConfirm, itemName, canDe
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <FixedOverlay className="flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white rounded-lg shadow-xl w-full max-w-[420px] mx-4">
         <div className="p-6">
@@ -95,6 +103,6 @@ export function DeleteConfirmModal({ isOpen, onClose, onConfirm, itemName, canDe
           </div>
         </div>
       </div>
-    </div>
+    </FixedOverlay>
   );
 }

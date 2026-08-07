@@ -345,7 +345,7 @@ export function WorkInspection() {
       }
 
       let staffQuery = supabase
-        .from('staff_directory')
+        .from('staffs')
         .select('bubble_staff_id, display_name, base_location, team_id, position, status')
         .eq('status', 'active')
         .neq('position', 'Director');

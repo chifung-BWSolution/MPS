@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import type { BacklinkPurchase } from '@/types/marketingOps';
+import { normalizeBacklinkCosts } from '@/lib/backlinkCurrency';
+import type { BacklinkBrand, BacklinkPurchase } from '@/types/marketingOps';
 
 type DbRow = {
   id: string;
@@ -9,21 +10,82 @@ type DbRow = {
   web_supplier_id: string;
   cost: number | string;
   currency: string;
+  cost_usd: number | string | null;
+  cost_hkd: number | string | null;
+  brand: string | null;
   purchase_date: string;
   quantity: number;
   notes: string | null;
+  google_ads_customer_id: string | null;
+  google_ads_account_name: string | null;
+  source_domain: string | null;
+  excel_sheet: string | null;
 };
 
+const VALID_BRANDS = new Set(['BW', 'FC', 'BSC', 'Wine']);
+
+function mapBrand(value: string | null | undefined): BacklinkBrand | undefined {
+  if (value && VALID_BRANDS.has(value)) return value as BacklinkBrand;
+  return undefined;
+}
+
+function resolveCosts(row: DbRow): { costUsd: number; costHkd: number } {
+  const hasNewColumns = row.cost_usd != null || row.cost_hkd != null;
+  if (hasNewColumns) {
+    return normalizeBacklinkCosts(
+      row.cost_usd != null ? Number(row.cost_usd) : null,
+      row.cost_hkd != null ? Number(row.cost_hkd) : null,
+    );
+  }
+
+  const legacyCost = Number(row.cost) || 0;
+  if (row.currency === 'HKD') {
+    return normalizeBacklinkCosts(null, legacyCost);
+  }
+  return normalizeBacklinkCosts(legacyCost, null);
+}
+
 function mapRow(row: DbRow): BacklinkPurchase {
+  const { costUsd, costHkd } = resolveCosts(row);
   return {
     id: row.id,
     websiteProfileId: row.website_profile_id ?? undefined,
     webSupplierId: row.web_supplier_id,
-    cost: Number(row.cost) || 0,
-    currency: row.currency === 'HKD' ? 'HKD' : 'USD',
+    costUsd,
+    costHkd,
+    brand: mapBrand(row.brand),
     purchaseDate: String(row.purchase_date).substring(0, 10),
     quantity: Number(row.quantity) || 1,
     notes: row.notes ?? undefined,
+    googleAdsCustomerId: row.google_ads_customer_id ?? undefined,
+    googleAdsAccountName: row.google_ads_account_name ?? undefined,
+    sourceDomain: row.source_domain ?? undefined,
+    excelSheet: row.excel_sheet ?? undefined,
+  };
+}
+
+function toDbCosts(data: Pick<BacklinkPurchase, 'costUsd' | 'costHkd'>) {
+  return normalizeBacklinkCosts(data.costUsd, data.costHkd);
+}
+
+function toInsertRow(data: Omit<BacklinkPurchase, 'id'> & { id: string }) {
+  const { costUsd, costHkd } = toDbCosts(data);
+  return {
+    id: data.id,
+    website_profile_id: data.websiteProfileId ?? null,
+    web_supplier_id: data.webSupplierId,
+    cost_usd: costUsd,
+    cost_hkd: costHkd,
+    cost: costUsd > 0 ? costUsd : costHkd,
+    currency: costUsd > 0 && costHkd <= 0 ? 'USD' : costHkd > 0 && costUsd <= 0 ? 'HKD' : 'USD',
+    brand: data.brand ?? null,
+    purchase_date: data.purchaseDate,
+    quantity: data.quantity,
+    notes: data.notes ?? null,
+    google_ads_customer_id: data.googleAdsCustomerId ?? null,
+    google_ads_account_name: data.googleAdsAccountName ?? null,
+    source_domain: data.sourceDomain ?? null,
+    excel_sheet: data.excelSheet ?? null,
   };
 }
 
@@ -55,18 +117,9 @@ export function useBacklinkPurchases() {
 
   const addPurchase = useCallback(async (data: Omit<BacklinkPurchase, 'id'> & { id?: string }) => {
     const id = data.id || `bl_${Date.now()}`;
-    const row = {
-      id,
-      website_profile_id: data.websiteProfileId ?? null,
-      web_supplier_id: data.webSupplierId,
-      cost: data.cost,
-      currency: data.currency,
-      purchase_date: data.purchaseDate,
-      quantity: data.quantity,
-      notes: data.notes ?? null,
-    };
+    const row = toInsertRow({ ...data, id });
     const { error: err } = await supabase.from('backlink_purchases').insert(row);
-    const record = { ...data, id };
+    const record = mapRow(row as DbRow);
     if (!err) setPurchases(prev => [record, ...prev]);
     return { data: err ? null : record, error: err };
   }, []);
@@ -75,17 +128,43 @@ export function useBacklinkPurchases() {
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (data.websiteProfileId !== undefined) patch.website_profile_id = data.websiteProfileId || null;
     if (data.webSupplierId !== undefined) patch.web_supplier_id = data.webSupplierId;
-    if (data.cost !== undefined) patch.cost = data.cost;
-    if (data.currency !== undefined) patch.currency = data.currency;
+    if (data.costUsd !== undefined || data.costHkd !== undefined) {
+      const current = purchases.find((p) => p.id === id);
+      const { costUsd, costHkd } = toDbCosts({
+        costUsd: data.costUsd ?? current?.costUsd ?? 0,
+        costHkd: data.costHkd ?? current?.costHkd ?? 0,
+      });
+      patch.cost_usd = costUsd;
+      patch.cost_hkd = costHkd;
+      patch.cost = costUsd > 0 ? costUsd : costHkd;
+      patch.currency = costHkd > 0 && costUsd <= 0 ? 'HKD' : 'USD';
+    }
+    if (data.brand !== undefined) patch.brand = data.brand ?? null;
     if (data.purchaseDate !== undefined) patch.purchase_date = data.purchaseDate;
     if (data.quantity !== undefined) patch.quantity = data.quantity;
     if (data.notes !== undefined) patch.notes = data.notes ?? null;
+    if (data.googleAdsCustomerId !== undefined) patch.google_ads_customer_id = data.googleAdsCustomerId || null;
+    if (data.googleAdsAccountName !== undefined) patch.google_ads_account_name = data.googleAdsAccountName || null;
+    if (data.sourceDomain !== undefined) patch.source_domain = data.sourceDomain || null;
+    if (data.excelSheet !== undefined) patch.excel_sheet = data.excelSheet || null;
     const { error: err } = await supabase.from('backlink_purchases').update(patch).eq('id', id);
     if (!err) {
-      setPurchases(prev => prev.map(p => (p.id === id ? { ...p, ...data } : p)));
+      setPurchases(prev => prev.map(p => {
+        if (p.id !== id) return p;
+        const next = { ...p, ...data };
+        if (data.costUsd !== undefined || data.costHkd !== undefined) {
+          const normalized = toDbCosts({
+            costUsd: next.costUsd,
+            costHkd: next.costHkd,
+          });
+          next.costUsd = normalized.costUsd;
+          next.costHkd = normalized.costHkd;
+        }
+        return next;
+      }));
     }
     return err;
-  }, []);
+  }, [purchases]);
 
   const deletePurchase = useCallback(async (id: string) => {
     const { error: err } = await supabase.from('backlink_purchases').delete().eq('id', id);
@@ -93,5 +172,19 @@ export function useBacklinkPurchases() {
     return err;
   }, []);
 
-  return { purchases, loading, error, refresh, addPurchase, updatePurchase, deletePurchase };
+  const bulkImport = useCallback(async (items: Omit<BacklinkPurchase, 'id'>[]) => {
+    if (!items.length) return { inserted: 0, error: null as { message: string } | null };
+    const rows = items.map((data, i) => toInsertRow({
+      ...data,
+      id: `bl_imp_${Date.now()}_${i}`,
+    }));
+    const { error: err } = await supabase.from('backlink_purchases').insert(rows);
+    if (!err) {
+      const records = rows.map((row) => mapRow(row as DbRow));
+      setPurchases(prev => [...records, ...prev]);
+    }
+    return { inserted: err ? 0 : rows.length, error: err };
+  }, []);
+
+  return { purchases, loading, error, refresh, addPurchase, updatePurchase, deletePurchase, bulkImport };
 }

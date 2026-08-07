@@ -311,7 +311,7 @@ export function DistributionTrackingModule() {
 
       {/* Add / Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowModal(false)}>
+        <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={() => setShowModal(false)}>
           <div className="bg-white rounded-lg shadow-xl p-6 w-[640px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-[16px] font-bold">{editingGroup ? '編輯發佈記錄' : '新增發佈記錄'}</h3>

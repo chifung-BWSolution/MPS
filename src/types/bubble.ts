@@ -31,7 +31,6 @@ export interface BubbleStaff {
   'N_BU'?: string; // Business Unit reference ID
   'N_Team'?: string; // Team reference ID
   'N_Team Role'?: string; // Team Role reference ID
-  'Brands'?: string[]; // Array of Brand reference IDs
   'Profile Pic'?: string;
   'Clock In Face'?: string;
   'Clock In Face amazon ID'?: string;
@@ -69,7 +68,6 @@ export const STAFF_FIELDS = {
   BUSINESS_UNIT: 'N_BU',
   TEAM: 'N_Team',
   TEAM_ROLE: 'N_Team Role',
-  BRANDS: 'Brands',
   PROFILE_PIC: 'Profile Pic',
   CLOCK_IN_FACE: 'Clock In Face',
   VOOV_ID: 'Voov ID',

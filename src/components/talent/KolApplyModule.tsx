@@ -888,7 +888,7 @@ export function KolApplyModule() {
 
       {/* Editor */}
       {editorOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end">
+        <div className="fixed inset-0 m-0 z-[100] flex justify-end">
           <button
             type="button"
             className="absolute inset-0 bg-black/35"

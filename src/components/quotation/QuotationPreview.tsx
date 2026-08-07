@@ -351,7 +351,7 @@ export function QuotationPreview({ quote: initialQuote, onClose, onUpdateQuote }
   const displayServices = quote.services.filter(s => s.isSelected);
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/60 flex flex-col">
+    <div className="fixed inset-0 m-0 z-[9999] bg-black/60 flex flex-col">
       {/* Top toolbar */}
       <div className="bg-white border-b border-border flex items-center justify-between px-6 py-3 shrink-0">
         <div className="flex items-center gap-3">

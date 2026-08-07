@@ -11,15 +11,24 @@ export interface WebPageSupplier {
   createdAt?: string;
 }
 
+export type BacklinkBrand = 'BW' | 'FC' | 'BSC' | 'Wine';
+
+export const BACKLINK_BRANDS: BacklinkBrand[] = ['BW', 'FC', 'BSC', 'Wine'];
+
 export interface BacklinkPurchase {
   id: string;
   websiteProfileId?: string;
   webSupplierId: string;
-  cost: number;
-  currency: 'USD' | 'HKD';
+  costUsd: number;
+  costHkd: number;
+  brand?: BacklinkBrand;
   purchaseDate: string;
   quantity: number;
   notes?: string;
+  googleAdsCustomerId?: string;
+  googleAdsAccountName?: string;
+  sourceDomain?: string;
+  excelSheet?: string;
 }
 
 export interface GoogleBusinessRegistration {

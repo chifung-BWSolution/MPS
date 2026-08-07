@@ -25,21 +25,39 @@ const ROLE_OPTIONS: { value: string; label: string; color: string }[] = [
 
 const DEPT_OPTIONS = ['Management', 'PM Team', 'Design', 'Video', 'Content', 'Marketing', 'Finance'];
 
+/** UI shape for whitelist users (backed by public.users). */
 interface SystemUser {
   id: string;
-  auth_user_id: string | null;
-  bubble_staff_id: string;
+  bubble_staff_id: string; // maps to users.staff_id
   display_name: string;
   email: string;
-  role: string;
+  role: string; // maps to users.role_tag
   department: string | null;
   position: string | null;
   profile_pic_url: string | null;
-  is_active: boolean;
+  is_active: boolean; // maps to users.system_status === 'active'
   google_email: string | null;
   last_login_at: string | null;
   invited_at: string;
   created_at: string;
+}
+
+function mapUsersRow(row: any): SystemUser {
+  return {
+    id: row.id,
+    bubble_staff_id: row.staff_id,
+    display_name: row.display_name || row.email || row.staff_id || '',
+    email: row.email || '',
+    role: row.role_tag || 'staff',
+    department: row.department || null,
+    position: null,
+    profile_pic_url: null,
+    is_active: (row.system_status || '').toLowerCase() === 'active',
+    google_email: row.google_email || null,
+    last_login_at: null,
+    invited_at: row.created_at || '',
+    created_at: row.created_at || '',
+  };
 }
 
 export function UserManagement() {
@@ -54,19 +72,19 @@ export function UserManagement() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingUser, setEditingUser] = useState<SystemUser | null>(null);
 
-  // Fetch system users from Supabase
+  // Fetch whitelist users from public.users
   const fetchSystemUsers = useCallback(async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('system_users')
+        .from('users')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setSystemUsers(data || []);
+      setSystemUsers((data || []).map(mapUsersRow));
     } catch (err: any) {
-      console.error('Failed to fetch system users:', err);
+      console.error('Failed to fetch users:', err);
       toast.error('無法載入系統使用者', { description: err.message });
     } finally {
       setLoading(false);
@@ -85,43 +103,33 @@ export function UserManagement() {
       const resolvedGoogleEmail = googleEmail || workEmail || null;
 
       const { data, error } = await supabase
-        .from('system_users')
-        .insert({
-          bubble_staff_id: staff._id,
+        .from('users')
+        .upsert({
+          staff_id: staff._id,
           display_name: displayName,
           email: workEmail,
-          role,
+          role_tag: role,
           department: staff['N_Team'] || null,
-          position: staff['Position'] || null,
-          profile_pic_url: toBubbleCdnUrl(staff['Profile Pic']) || null,
           google_email: resolvedGoogleEmail,
-          is_active: true,
-        })
+          classification: 'system_user',
+          system_status: 'active',
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'staff_id' })
         .select()
         .single();
 
       if (error) throw error;
-      setSystemUsers(prev => [data, ...prev]);
+      const mapped = mapUsersRow(data);
+      setSystemUsers(prev => {
+        const without = prev.filter(u => u.bubble_staff_id !== mapped.bubble_staff_id);
+        return [mapped, ...without];
+      });
       toast.success(`已加入「${displayName}」為系統使用者`, {
         description: `角色: ${ROLE_OPTIONS.find(r => r.value === role)?.label || role}`,
       });
       setShowStaffPicker(false);
-
-      // Also upsert into user_info table for dual-email auth
-      await supabase
-        .from('user_info')
-        .upsert({
-          staff_id: staff._id,
-          role_tag: role,
-          classification: 'system_user',
-          system_status: 'active',
-          display_name: displayName,
-          email: workEmail,
-          google_email: resolvedGoogleEmail,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'staff_id' });
     } catch (err: any) {
-      console.error('Failed to add system user:', err);
+      console.error('Failed to add user:', err);
       if (err.message?.includes('duplicate')) {
         toast.error('此員工已經是系統使用者');
       } else {
@@ -130,34 +138,31 @@ export function UserManagement() {
     }
   };
 
-  // Update system user
+  // Update whitelist user
   const handleUpdateUser = async (userId: string, updates: Partial<SystemUser>) => {
     try {
+      const dbUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (updates.display_name !== undefined) dbUpdates.display_name = updates.display_name;
+      if (updates.email !== undefined) dbUpdates.email = updates.email;
+      if (updates.google_email !== undefined) dbUpdates.google_email = updates.google_email;
+      if (updates.role !== undefined) dbUpdates.role_tag = updates.role;
+      if (updates.department !== undefined) dbUpdates.department = updates.department;
+      if (updates.is_active !== undefined) {
+        dbUpdates.system_status = updates.is_active ? 'active' : 'inactive';
+      }
+
       const { data, error } = await supabase
-        .from('system_users')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .from('users')
+        .update(dbUpdates)
         .eq('id', userId)
         .select()
         .single();
 
       if (error) throw error;
-      setSystemUsers(prev => prev.map(u => u.id === userId ? data : u));
+      setSystemUsers(prev => prev.map(u => u.id === userId ? mapUsersRow(data) : u));
       toast.success('已更新使用者資料');
       setShowEditModal(false);
       setEditingUser(null);
-
-      // Also sync google_email to user_info table if google_email was updated
-      if (updates.google_email !== undefined && data) {
-        await supabase
-          .from('user_info')
-          .update({
-            google_email: updates.google_email,
-            display_name: data.display_name,
-            email: data.email,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('staff_id', data.bubble_staff_id);
-      }
     } catch (err: any) {
       toast.error('更新失敗', { description: err.message });
     }
@@ -168,8 +173,11 @@ export function UserManagement() {
     const newStatus = !user.is_active;
     try {
       const { error } = await supabase
-        .from('system_users')
-        .update({ is_active: newStatus, updated_at: new Date().toISOString() })
+        .from('users')
+        .update({
+          system_status: newStatus ? 'active' : 'inactive',
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', user.id);
 
       if (error) throw error;
@@ -185,7 +193,7 @@ export function UserManagement() {
     if (!confirm(`確定要移除「${user.display_name}」的系統存取權限嗎？\n此操作不會影響員工列表中的資料。`)) return;
     try {
       const { error } = await supabase
-        .from('system_users')
+        .from('users')
         .delete()
         .eq('id', user.id);
 
@@ -502,7 +510,7 @@ function StaffPickerModal({
       setLoading(true);
       try {
         const { data, error } = await supabase
-          .from('staff_directory')
+          .from('staffs')
           .select('*')
           .eq('status', 'active')
           .order('display_name', { ascending: true });
@@ -564,7 +572,7 @@ function StaffPickerModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[700px] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-border/50">
@@ -828,7 +836,7 @@ function EditUserModal({
   });
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[500px] p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-[18px] font-bold">編輯使用者</h3>

@@ -19,6 +19,10 @@ import {
   Filter,
 } from 'lucide-react';
 
+function companyKey(c: Company) {
+  return c.uuid || c.id;
+}
+
 export function BrandManagementSettings() {
   const { brands: brandsData, loading: brandsLoading, addBrand, updateBrand, deleteBrand } = useBrands();
   const { companies, loading: companiesLoading } = useCompanies();
@@ -33,21 +37,21 @@ export function BrandManagementSettings() {
     const q = searchQuery.toLowerCase();
     const matchesSearch =
       b.brandCode.toLowerCase().includes(q) ||
-      b.brandNameZh.includes(q) ||
-      b.brandNameEn.toLowerCase().includes(q) ||
-      (b.industry || '').toLowerCase().includes(q);
+      b.displayName.toLowerCase().includes(q);
     const matchesCompany = filterCompanyId === 'all' || b.companyId === filterCompanyId;
     return matchesSearch && matchesCompany;
   });
 
+  const getCompany = (companyId: string) =>
+    companies.find((c) => companyKey(c) === companyId || c.id === companyId);
+
   const getCompanyName = (companyId: string) => {
-    const c = companies.find((c) => c.id === companyId);
+    const c = getCompany(companyId);
     if (!c) return '';
     return c.companyNameEn || c.companyNameZh || '';
   };
 
-  const getCompanyCode = (companyId: string) =>
-    companies.find((c) => c.id === companyId)?.companyCode || '';
+  const getCompanyCode = (companyId: string) => getCompany(companyId)?.companyCode || '';
 
   const getActiveProjectCount = (brandId: string) =>
     projects.filter((p) => p.brandId === brandId && p.status === 'active').length;
@@ -70,20 +74,12 @@ export function BrandManagementSettings() {
       await updateBrand(editingBrand.id, formData);
     } else {
       const newBrand: Brand = {
-        id: `b${Date.now()}`,
+        id: crypto.randomUUID(),
         companyId: formData.companyId || '',
         brandCode: formData.brandCode || '',
-        brandNameZh: formData.brandNameZh || '',
-        brandNameEn: formData.brandNameEn || '',
-        industry: formData.industry || '',
-        logoUrl: formData.logoUrl || '',
-        officialUrl: formData.officialUrl || '',
-        primaryColor: formData.primaryColor || '#0D9488',
-        description: formData.description || '',
+        displayName: formData.displayName || formData.brandCode || '',
         isActive: true,
         projectCount: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
       };
       await addBrand(newBrand);
     }
@@ -115,7 +111,7 @@ export function BrandManagementSettings() {
         <div>
           <h2 className="text-[22px] font-bold text-[#0d1a2d]">品牌管理</h2>
           <p className="text-[13px] text-muted-foreground mt-1">
-            管理各公司旗下的品牌資料、行業分類及品牌主色。
+            管理各公司旗下的品牌代碼與顯示名稱。網站請在「網站列表」掛在品牌之下。
           </p>
         </div>
       </div>
@@ -126,7 +122,7 @@ export function BrandManagementSettings() {
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
-              placeholder="搜尋品牌名稱、編碼..."
+              placeholder="搜尋品牌代碼、顯示名稱..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-2 border border-border rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
@@ -141,7 +137,7 @@ export function BrandManagementSettings() {
             >
               <option value="all">全部公司</option>
               {companies.filter(c => c.isActive).map((c) => (
-                <option key={c.id} value={c.id}>{c.companyCode} - {c.companyNameEn || c.companyNameZh}</option>
+                <option key={companyKey(c)} value={companyKey(c)}>{c.companyCode} - {c.companyNameEn || c.companyNameZh}</option>
               ))}
             </select>
           </div>
@@ -214,7 +210,6 @@ export function BrandManagementSettings() {
         <BrandModal
           brand={editingBrand}
           companies={companies.filter(c => c.isActive)}
-          existingCodes={brandsData.filter((b) => b.id !== editingBrand?.id).map((b) => b.brandCode)}
           onSave={handleSave}
           onClose={() => { setIsModalOpen(false); setEditingBrand(null); }}
         />
@@ -222,7 +217,7 @@ export function BrandManagementSettings() {
 
       {deleteTarget && (
         <DeleteConfirmModal
-          name={deleteTarget.brandNameZh}
+          name={deleteTarget.displayName}
           onConfirm={handleConfirmDelete}
           onCancel={() => setDeleteTarget(null)}
         />
@@ -231,7 +226,6 @@ export function BrandManagementSettings() {
   );
 }
 
-// === Delete Confirm Modal ===
 function DeleteConfirmModal({
   name,
   onConfirm,
@@ -242,7 +236,7 @@ function DeleteConfirmModal({
   onCancel: () => void;
 }) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200] p-4">
+    <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[200] p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-[400px]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border/50">
           <h3 className="text-[16px] font-bold text-[#0d1a2d]">確認刪除</h3>
@@ -252,7 +246,7 @@ function DeleteConfirmModal({
         </div>
         <div className="px-6 py-5">
           <p className="text-[14px] text-[#0d1a2d]">
-            確定要刪除 <span className="font-bold">「{name}」</span> 的項目嗎？
+            確定要刪除 <span className="font-bold">「{name}」</span> 嗎？
           </p>
           <p className="text-[12px] text-muted-foreground mt-1.5">此操作無法復原。</p>
         </div>
@@ -275,7 +269,6 @@ function DeleteConfirmModal({
   );
 }
 
-// === Card View ===
 function BrandCardView({
   brands,
   getCompanyName,
@@ -309,16 +302,9 @@ function BrandCardView({
           >
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
-                {brand.logoUrl ? (
-                  <img src={brand.logoUrl} alt={brand.brandCode} className="w-10 h-10 rounded-lg object-cover border" />
-                ) : (
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center border"
-                    style={{ backgroundColor: brand.primaryColor + '15', borderColor: brand.primaryColor + '30' }}
-                  >
-                    <Tags size={18} style={{ color: brand.primaryColor }} />
-                  </div>
-                )}
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center border bg-teal-50 border-teal-100">
+                  <Tags size={18} className="text-teal-700" />
+                </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-[12px] font-mono font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded">
@@ -328,8 +314,7 @@ function BrandCardView({
                       <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">已停用</span>
                     )}
                   </div>
-                  <h3 className="text-[14px] font-bold text-[#0d1a2d] mt-1 leading-tight">{brand.brandNameZh}</h3>
-                  <p className="text-[11px] text-muted-foreground">{brand.brandNameEn}</p>
+                  <h3 className="text-[14px] font-bold text-[#0d1a2d] mt-1 leading-tight">{brand.displayName}</h3>
                 </div>
               </div>
             </div>
@@ -343,19 +328,6 @@ function BrandCardView({
                   <span className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded mr-1.5">{getCompanyCode(brand.companyId)}</span>
                   {getCompanyName(brand.companyId)}
                 </span>
-              </div>
-              {brand.industry && (
-                <div className="flex items-center justify-between text-[12px]">
-                  <span className="text-muted-foreground">行業類別</span>
-                  <span className="text-[11px] bg-muted px-2 py-0.5 rounded">{brand.industry}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between text-[12px]">
-                <span className="text-muted-foreground">品牌主色</span>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-sm border border-[rgba(13,26,45,0.1)]" style={{ backgroundColor: brand.primaryColor }} />
-                  <span className="font-mono text-[11px]">{brand.primaryColor}</span>
-                </div>
               </div>
             </div>
 
@@ -380,17 +352,7 @@ function BrandCardView({
                   />
                 </div>
               </div>
-            ) : (
-              <div className="mb-4">
-                <div className="flex items-center justify-between text-[11px] mb-1.5">
-                  <span className="text-muted-foreground flex items-center gap-1"><TrendingUp size={11} />今年目標達成率</span>
-                  <span className="text-[11px] text-muted-foreground">未設定</span>
-                </div>
-                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full rounded-full bg-gray-200" style={{ width: '0%' }} />
-                </div>
-              </div>
-            )}
+            ) : null}
 
             <div className="flex items-center gap-2 pt-3 border-t border-border/50">
               <button
@@ -415,7 +377,6 @@ function BrandCardView({
   );
 }
 
-// === Table View ===
 function BrandTableView({
   brands,
   getCompanyName,
@@ -440,10 +401,8 @@ function BrandTableView({
           <thead className="bg-muted/50 border-b border-border/50">
             <tr>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">品牌編碼</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">品牌名稱</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">顯示名稱</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">所屬公司</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">行業</th>
-              <th className="text-center px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">品牌主色</th>
               <th className="text-center px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">項目數</th>
               <th className="text-center px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">達成率</th>
               <th className="text-center px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">狀態</th>
@@ -459,28 +418,12 @@ function BrandTableView({
                     <span className="font-mono font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded text-[11px]">{brand.brandCode}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <div>
-                      <span className="font-medium text-[#0d1a2d]">{brand.brandNameZh}</span>
-                      <p className="text-[11px] text-muted-foreground">{brand.brandNameEn}</p>
-                    </div>
+                    <span className="font-medium text-[#0d1a2d]">{brand.displayName}</span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded">{getCompanyCode(brand.companyId)}</span>
                       <span className="text-[12px]">{getCompanyName(brand.companyId)}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {brand.industry ? (
-                      <span className="text-[11px] bg-muted px-2 py-0.5 rounded">{brand.industry}</span>
-                    ) : (
-                      <span className="text-[11px] text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="w-4 h-4 rounded-sm border border-[rgba(13,26,45,0.1)]" style={{ backgroundColor: brand.primaryColor }} />
-                      <span className="font-mono text-[11px] text-muted-foreground">{brand.primaryColor}</span>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-center">
@@ -490,15 +433,7 @@ function BrandTableView({
                   </td>
                   <td className="px-4 py-3 text-center">
                     {yearPlan ? (
-                      <div className="flex items-center gap-2 justify-center">
-                        <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div
-                            className={cn('h-full rounded-full', yearPlan.progress >= 70 ? 'bg-teal-500' : yearPlan.progress >= 40 ? 'bg-amber-500' : 'bg-rose-400')}
-                            style={{ width: `${yearPlan.progress}%` }}
-                          />
-                        </div>
-                        <span className="text-[11px] font-medium">{yearPlan.progress}%</span>
-                      </div>
+                      <span className="text-[11px] font-medium">{yearPlan.progress}%</span>
                     ) : (
                       <span className="text-[11px] text-muted-foreground">未設定</span>
                     )}
@@ -535,52 +470,61 @@ function BrandTableView({
   );
 }
 
-// === Brand Modal ===
 function BrandModal({
   brand,
   companies,
-  existingCodes,
   onSave,
   onClose,
 }: {
   brand: Brand | null;
   companies: Company[];
-  existingCodes: string[];
   onSave: (data: Partial<Brand>) => void;
   onClose: () => void;
 }) {
   const [form, setForm] = useState<Partial<Brand>>({
     companyId: brand?.companyId || '',
     brandCode: brand?.brandCode || '',
-    brandNameZh: brand?.brandNameZh || '',
-    brandNameEn: brand?.brandNameEn || '',
-    industry: brand?.industry || '',
-    logoUrl: brand?.logoUrl || '',
-    officialUrl: brand?.officialUrl || '',
-    primaryColor: brand?.primaryColor || '#0D9488',
-    description: brand?.description || '',
+    displayName: brand?.displayName || '',
+    isActive: brand?.isActive ?? true,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const validate = () => {
     const errs: Record<string, string> = {};
     if (!form.companyId?.trim()) errs.companyId = '請選擇所屬公司';
+    if (!form.brandCode?.trim()) errs.brandCode = '請輸入品牌代碼';
+    if (!form.displayName?.trim()) errs.displayName = '請輸入顯示名稱';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
 
   const handleSubmit = () => {
-    if (validate()) onSave({ ...form, brandCode: form.brandCode?.trim().toUpperCase() || '' });
+    if (!validate()) return;
+    const code = form.brandCode?.trim() || '';
+    onSave({
+      ...form,
+      brandCode: code,
+      displayName: form.displayName?.trim() || code,
+    });
   };
 
-  const updateField = (field: keyof Brand, value: string) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
-    if (errors[field]) setErrors((prev) => { const next = { ...prev }; delete next[field]; return next; });
+  const updateField = (field: keyof Brand, value: string | boolean) => {
+    setForm((prev) => {
+      const next = { ...prev, [field]: value };
+      if (field === 'brandCode' && typeof value === 'string') {
+        const code = value.trim();
+        if (!prev.displayName || prev.displayName === prev.brandCode) {
+          next.displayName = code;
+        }
+      }
+      return next;
+    });
+    if (errors[field as string]) setErrors((prev) => { const next = { ...prev }; delete next[field as string]; return next; });
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200] p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-[560px] max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[200] p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-[480px] max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border/50">
           <h3 className="text-[18px] font-bold text-[#0d1a2d]">{brand ? '編輯品牌' : '新增品牌'}</h3>
           <button onClick={onClose} className="p-1.5 rounded-md hover:bg-muted transition-colors">
@@ -590,68 +534,51 @@ function BrandModal({
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           <div>
-            <p className="text-[12px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">所屬公司（必選）</p>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">所屬公司 *</label>
+            <select
+              value={form.companyId || ''}
+              onChange={(e) => updateField('companyId', e.target.value)}
+              className={cn(
+                'w-full px-3 py-2 border rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all appearance-none bg-white',
+                errors.companyId ? 'border-rose-400 bg-rose-50/30' : 'border-border'
+              )}
+            >
+              <option value="">— 請選擇公司 —</option>
+              {companies.map((c) => (
+                <option key={companyKey(c)} value={companyKey(c)}>{c.companyCode} - {c.companyNameEn || c.companyNameZh}</option>
+              ))}
+            </select>
+            {errors.companyId && <p className="text-[11px] text-rose-500 mt-1">{errors.companyId}</p>}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">公司</label>
-              <select
-                value={form.companyId || ''}
-                onChange={(e) => updateField('companyId', e.target.value)}
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">品牌代碼 *</label>
+              <input
+                type="text"
+                value={form.brandCode || ''}
+                onChange={(e) => updateField('brandCode', e.target.value)}
+                placeholder="如 BWA, FCC"
                 className={cn(
-                  'w-full px-3 py-2 border rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all appearance-none bg-white',
-                  errors.companyId ? 'border-rose-400 bg-rose-50/30' : 'border-border'
+                  'w-full px-3 py-2 border rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all',
+                  errors.brandCode ? 'border-rose-400 bg-rose-50/30' : 'border-border'
                 )}
-              >
-                <option value="">— 請選擇公司 —</option>
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>{c.companyCode} - {c.companyNameEn || c.companyNameZh}</option>
-                ))}
-              </select>
-              {errors.companyId && <p className="text-[11px] text-rose-500 mt-1">{errors.companyId}</p>}
-            </div>
-          </div>
-
-          <div>
-            <p className="text-[12px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">品牌資料</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FieldInput label="品牌編碼（選填）" value={form.brandCode || ''} onChange={(v) => updateField('brandCode', v)} error={errors.brandCode} placeholder="如 BW, ACI" />
-              <FieldInput label="中文品牌名" value={form.brandNameZh || ''} onChange={(v) => updateField('brandNameZh', v)} placeholder="志豐企業" />
-              <FieldInput label="英文品牌名" value={form.brandNameEn || ''} onChange={(v) => updateField('brandNameEn', v)} placeholder="BWDesign Centre" className="md:col-span-2" />
-            </div>
-          </div>
-
-          <div>
-            <p className="text-[12px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">選填資料</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FieldInput label="行業類別" value={form.industry || ''} onChange={(v) => updateField('industry', v)} placeholder="IT & Design" />
-              <div>
-                <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">品牌主色</label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="color"
-                    value={form.primaryColor || '#0D9488'}
-                    onChange={(e) => updateField('primaryColor', e.target.value)}
-                    className="w-10 h-9 rounded-md border border-border cursor-pointer"
-                  />
-                  <input
-                    type="text"
-                    value={form.primaryColor || '#0D9488'}
-                    onChange={(e) => updateField('primaryColor', e.target.value)}
-                    className="flex-1 px-3 py-2 border border-border rounded-lg text-[13px] font-mono focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
-                  />
-                </div>
-              </div>
-              <FieldInput label="官方網址" value={form.officialUrl || ''} onChange={(v) => updateField('officialUrl', v)} placeholder="https://..." className="md:col-span-2" />
-              <FieldInput label="品牌 Logo URL" value={form.logoUrl || ''} onChange={(v) => updateField('logoUrl', v)} placeholder="https://..." className="md:col-span-2" />
-            </div>
-            <div className="mt-4">
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">描述</label>
-              <textarea
-                value={form.description || ''}
-                onChange={(e) => updateField('description', e.target.value)}
-                placeholder="品牌簡述..."
-                rows={2}
-                className="w-full px-3 py-2 border border-border rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all resize-none"
               />
+              {errors.brandCode && <p className="text-[11px] text-rose-500 mt-1">{errors.brandCode}</p>}
+            </div>
+            <div>
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">顯示名稱 *</label>
+              <input
+                type="text"
+                value={form.displayName || ''}
+                onChange={(e) => updateField('displayName', e.target.value)}
+                placeholder="預設與品牌代碼相同"
+                className={cn(
+                  'w-full px-3 py-2 border rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all',
+                  errors.displayName ? 'border-rose-400 bg-rose-50/30' : 'border-border'
+                )}
+              />
+              {errors.displayName && <p className="text-[11px] text-rose-500 mt-1">{errors.displayName}</p>}
             </div>
           </div>
         </div>
@@ -665,33 +592,6 @@ function BrandModal({
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-// === Field Input Helper ===
-function FieldInput({
-  label, value, onChange, error, placeholder, disabled, className,
-}: {
-  label: string; value: string; onChange: (value: string) => void;
-  error?: string; placeholder?: string; disabled?: boolean; className?: string;
-}) {
-  return (
-    <div className={className}>
-      <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">{label}</label>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        disabled={disabled}
-        className={cn(
-          'w-full px-3 py-2 border rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all',
-          error ? 'border-rose-400 bg-rose-50/30' : 'border-border',
-          disabled && 'bg-muted cursor-not-allowed'
-        )}
-      />
-      {error && <p className="text-[11px] text-rose-500 mt-1">{error}</p>}
     </div>
   );
 }

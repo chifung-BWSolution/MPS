@@ -422,6 +422,6 @@ export function getTopProjectsByHours(year: number, month: number, limit = 10) {
     .map(item => ({
       ...item,
       companyName: companies.find(c => c.id === item.companyId)?.companyNameZh || '—',
-      brandName: brands.find(b => b.id === item.brandId)?.brandNameZh || '—',
+      brandName: brands.find(b => b.id === item.brandId)?.displayName || '—',
     }));
 }

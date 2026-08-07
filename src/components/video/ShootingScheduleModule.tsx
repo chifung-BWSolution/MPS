@@ -120,7 +120,7 @@ function TaskModal({ item, onClose, onSave }: TaskModalProps) {
   const isEdit = !!item;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h2 className="text-[16px] font-bold">{isEdit ? '編輯拍攝任務' : '新增拍攝任務'}</h2>

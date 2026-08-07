@@ -43,7 +43,7 @@ export function useRecentActivity() {
     const load = async () => {
       setLoading(true);
 
-      const [dayReportsRes, confirmedRes, rejectedRes, eventsRes, templatesRes] = await Promise.all([
+      const [dayReportsRes, confirmedRes, rejectedRes, eventsRes] = await Promise.all([
         supabase
           .from('day_reports')
           .select('id, staff_id, report_date, submitted_at, status')
@@ -64,11 +64,6 @@ export function useRecentActivity() {
           .select('id, title, type, brand, created_at')
           .order('created_at', { ascending: false })
           .limit(ACTIVITY_LIMIT),
-        supabase
-          .from('user_report_templates')
-          .select('id, owner_email, label, created_at')
-          .order('created_at', { ascending: false })
-          .limit(ACTIVITY_LIMIT),
       ]);
 
       // Resolve staff display names for any staff_id we encountered.
@@ -78,7 +73,7 @@ export function useRecentActivity() {
       let staffNameById = new Map<string, string>();
       if (staffIds.length > 0) {
         const { data: staffRows } = await supabase
-          .from('staff_directory')
+          .from('staffs')
           .select('bubble_staff_id, display_name, full_name')
           .in('bubble_staff_id', staffIds);
         staffNameById = new Map(
@@ -146,21 +141,6 @@ export function useRecentActivity() {
           occurredAt: ts,
           navModule: 'marketing',
           navSubModule: 'calendar',
-        });
-      });
-
-      (templatesRes.data ?? []).forEach(t => {
-        const ts = (t.created_at as string) || '';
-        if (!ts) return;
-        const ownerLabel = (t.owner_email as string)?.split('@')[0] || '同事';
-        merged.push({
-          id: `tpl-${t.id}`,
-          user: ownerLabel,
-          action: `加入了常用匯報項目「${t.label}」`,
-          time: formatRelative(ts),
-          occurredAt: ts,
-          navModule: 'day-report',
-          navSubModule: 'submit',
         });
       });
 
