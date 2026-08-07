@@ -1,3 +1,6 @@
+import { instagramProfileUrl } from '@/lib/instagram';
+import { kolOwnerIdColumn, type KolTableName } from '@/components/talent/kolWorkflow';
+
 export function formatSupabaseError(error: unknown, fallback = '操作失敗'): string {
   if (error instanceof Error) return error.message;
   if (error && typeof error === 'object' && 'message' in error) {
@@ -16,12 +19,6 @@ function normalizeHttpUrl(value: string): string {
   const s = value.trim();
   if (/^www\./i.test(s)) return `https://${s}`;
   return s;
-}
-
-function instagramProfileUrl(account: string | null | undefined): string | null {
-  const s = (account || '').trim().replace(/^@/, '');
-  if (!s) return null;
-  return `https://www.instagram.com/${encodeURIComponent(s)}`;
 }
 
 function formatUrlLabel(url: string): string {
@@ -129,11 +126,12 @@ function toCooperatedAt(value: string): string {
 
 export async function markKolAsCooperated(
   kolProfileId: string,
-  cooperatedAt: string
+  cooperatedAt: string,
+  table: KolTableName = 'kol_profile'
 ): Promise<void> {
   const { supabase } = await import('@/lib/supabase');
   const { data: profile, error: readErr } = await supabase
-    .from('kol_profile')
+    .from(table)
     .select('lifecycle_status')
     .eq('id', kolProfileId)
     .single();
@@ -145,7 +143,7 @@ export async function markKolAsCooperated(
     : `${cooperatedAt}T12:00:00.000Z`;
 
   const { error } = await supabase
-    .from('kol_profile')
+    .from(table)
     .update({
       lifecycle_status: 'cooperated',
       cooperated_at: at,
@@ -157,13 +155,15 @@ export async function markKolAsCooperated(
 
 export async function saveCooperationRecord(
   values: KolCooperationFormValues,
-  createdBy: string
+  createdBy: string,
+  table: KolTableName = 'kol_profile'
 ): Promise<void> {
   const { supabase } = await import('@/lib/supabase');
   const cooperatedAt = toCooperatedAt(values.cooperated_at);
+  const ownerColumn = kolOwnerIdColumn(table);
 
   const { error } = await supabase.from('kol_cooperation').insert({
-    kol_profile_id: values.kol_profile_id,
+    [ownerColumn]: values.kol_profile_id,
     project_name: values.project_name.trim(),
     cooperation_content: values.cooperation_content.trim(),
     evaluation: values.cooperation_content.trim(),
@@ -172,20 +172,22 @@ export async function saveCooperationRecord(
     created_by: createdBy,
   });
   if (error) throw error;
-  await markKolAsCooperated(values.kol_profile_id, cooperatedAt);
+  await markKolAsCooperated(values.kol_profile_id, cooperatedAt, table);
 }
 
 export async function updateCooperationRecord(
   id: string,
-  values: KolCooperationFormValues
+  values: KolCooperationFormValues,
+  table: KolTableName = 'kol_profile'
 ): Promise<void> {
   const { supabase } = await import('@/lib/supabase');
   const cooperatedAt = toCooperatedAt(values.cooperated_at);
+  const ownerColumn = kolOwnerIdColumn(table);
 
   const { error } = await supabase
     .from('kol_cooperation')
     .update({
-      kol_profile_id: values.kol_profile_id,
+      [ownerColumn]: values.kol_profile_id,
       project_name: values.project_name.trim(),
       cooperation_content: values.cooperation_content.trim(),
       evaluation: values.cooperation_content.trim(),
@@ -194,7 +196,7 @@ export async function updateCooperationRecord(
     })
     .eq('id', id);
   if (error) throw error;
-  await markKolAsCooperated(values.kol_profile_id, cooperatedAt);
+  await markKolAsCooperated(values.kol_profile_id, cooperatedAt, table);
 }
 
 export async function deleteCooperationRecord(id: string): Promise<void> {

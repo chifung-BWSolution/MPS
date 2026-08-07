@@ -14,9 +14,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: true,
   },
   global: {
-    fetch: (...args) => fetch(...args).catch((err) => {
-      console.warn('[Supabase] Network error:', err.message);
-      throw err;
-    }),
+    fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+      fetch(input, init).catch((err) => {
+        console.warn('[Supabase] Network error:', err.message);
+        throw err;
+      }),
   },
 });

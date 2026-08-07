@@ -6,11 +6,11 @@ export type AdsSourceRef = {
   platform: AdsPlatformSource;
   accountId: string;
   accountName: string;
-  campaignId?: string | null;
-  campaignName?: string | null;
+  campaignId: string | null;
+  campaignName: string | null;
   /** Legacy Facebook page refs may still exist in ads_discovered_domains */
-  pageId?: string | null;
-  pageName?: string | null;
+  pageId: string | null;
+  pageName: string | null;
 };
 
 export type AdsDiscoveredDomain = {

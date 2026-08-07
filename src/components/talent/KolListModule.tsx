@@ -51,6 +51,8 @@ import {
   matchesWorkflowView,
   VIEW_META,
   WORKFLOW_ACTION_LABELS,
+  kolTableForView,
+  type KolTableName,
   type KolWorkflowView,
 } from '@/components/talent/kolWorkflow';
 import { KolDetailExtras, KolCooperationHistory } from '@/components/talent/KolDetailExtras';
@@ -260,6 +262,25 @@ function igUrl(account: string | null | undefined): string | null {
   return instagramProfileUrl(account);
 }
 
+function renderListIgCell(account: string | null | undefined) {
+  const ig = formatIg(account);
+  const link = igUrl(account);
+  if (!ig) return <span className="text-slate-400">—</span>;
+  if (!link) return <span className="text-teal-700">{ig}</span>;
+  return (
+    <a
+      href={link}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      className="text-teal-700 hover:underline"
+    >
+      {ig}
+    </a>
+  );
+}
+
 function facebookHref(url: string | null | undefined): string | null {
   const s = (url || '').trim();
   if (!s) return null;
@@ -385,13 +406,13 @@ function formToPayload(form: FormState): Partial<KolProfile> {
   };
 }
 
-async function fetchAllKolProfiles(): Promise<KolProfile[]> {
+async function fetchKolRows(table: KolTableName): Promise<KolProfile[]> {
   const pageSize = 1000;
   const all: KolProfile[] = [];
   for (let from = 0; ; from += pageSize) {
     const to = from + pageSize - 1;
     const { data, error } = await supabase
-      .from('kol_profile')
+      .from(table)
       .select('*')
       .order('created_at', { ascending: false })
       .range(from, to);
@@ -742,6 +763,7 @@ function LinkValue({ href, children }: { href: string | null; children: ReactNod
 
 export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWorkflowView }) {
   const viewMeta = VIEW_META[workflowView];
+  const kolTable = kolTableForView(workflowView);
   const { systemUser, userInfo, user } = useAuth();
   const actorName =
     systemUser?.display_name || userInfo?.display_name || user?.email || '同事';
@@ -777,7 +799,7 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchAllKolProfiles();
+      const data = await fetchKolRows(kolTable);
       setRows(data);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -785,7 +807,7 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [kolTable]);
 
   useEffect(() => {
     void load();
@@ -924,9 +946,16 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
     try {
       if (creating) {
         const { data, error: err } = await supabase
-          .from('kol_profile')
+          .from(kolTable)
           .insert({
             ...payload,
+            ...(kolTable === 'kol_new_beauty'
+              ? {
+                  primary_category: 'beauty',
+                  source_system: 'beauty18',
+                  lifecycle_status: 'unprocessed',
+                }
+              : {}),
             raw_payload: {
               themeLabel: themeLabel({
                 blog_themes: payload.blog_themes || [],
@@ -943,7 +972,7 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
         setDetail(data as KolProfile);
       } else if (detail) {
         const { data, error: err } = await supabase
-          .from('kol_profile')
+          .from(kolTable)
           .update(payload)
           .eq('id', detail.id)
           .select('*')
@@ -983,7 +1012,7 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
         updated_at: new Date().toISOString(),
       };
       const { data, error: err } = await supabase
-        .from('kol_profile')
+        .from(kolTable)
         .update(patch)
         .eq('id', detail.id)
         .select('*')
@@ -1014,7 +1043,7 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
         updated_at: new Date().toISOString(),
       };
       const { data, error: err } = await supabase
-        .from('kol_profile')
+        .from(kolTable)
         .update(patch)
         .eq('id', detail.id)
         .select('*')
@@ -1043,7 +1072,7 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
   const handleSaveTags = async (tags: string[]) => {
     if (!detail) return;
     const { data, error: err } = await supabase
-      .from('kol_profile')
+      .from(kolTable)
       .update({ tags, updated_at: new Date().toISOString() })
       .eq('id', detail.id)
       .select('*')
@@ -1071,7 +1100,7 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
       const now = new Date().toISOString();
       const ids = [...selectedIds];
       const { error: err } = await supabase
-        .from('kol_profile')
+        .from(kolTable)
         .update({
           lifecycle_status: 'shortlist',
           shortlist_at: now,
@@ -1397,7 +1426,7 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
                       <td className="px-3 py-2 text-slate-600">{genderLabel(row.salutation)}</td>
                       <td className="px-3 py-2 text-slate-600">{row.age_group || '—'}</td>
                       <td className="px-3 py-2 text-slate-600">{row.phone || '—'}</td>
-                      <td className="px-3 py-2 text-teal-700">{formatIg(row.instagram_account) || '—'}</td>
+                      <td className="px-3 py-2">{renderListIgCell(row.instagram_account)}</td>
                       <td className="px-3 py-2 text-slate-600">{formatCount(row.instagram_followers)}</td>
                       <td className="px-3 py-2 text-slate-600">{row.openrice_level || '—'}</td>
                       <td className="px-3 py-2 text-slate-600">{formatEntryDate(row)}</td>
@@ -1917,11 +1946,12 @@ node scripts/push_kol_batches.mjs`}
 
                   <KolDetailExtras
                     detail={detail}
+                    kolTable={kolTable}
                     onTagsSave={handleSaveTags}
                     onProfileRefresh={async () => {
                       if (!detail) return;
                       const { data, error: err } = await supabase
-                        .from('kol_profile')
+                        .from(kolTable)
                         .select('*')
                         .eq('id', detail.id)
                         .single();
@@ -1953,6 +1983,7 @@ node scripts/push_kol_batches.mjs`}
 
                   <KolCooperationHistory
                     kolId={detail.id}
+                    kolTable={kolTable}
                     refreshKey={coopRefreshKey}
                     kolProfile={{ instagram_account: detail.instagram_account }}
                   />
@@ -2033,6 +2064,7 @@ node scripts/push_kol_batches.mjs`}
                 <div className="px-5 py-4">
                   <KolCooperationForm
                     createdBy={actorName}
+                    kolTable={kolTable}
                     fixedKol={{
                       id: detail.id,
                       name: detail.name,
@@ -2045,7 +2077,7 @@ node scripts/push_kol_batches.mjs`}
                       setShowCoopModal(false);
                       setCoopRefreshKey((k) => k + 1);
                       const { data, error: err } = await supabase
-                        .from('kol_profile')
+                        .from(kolTable)
                         .select('*')
                         .eq('id', detail.id)
                         .single();

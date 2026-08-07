@@ -174,8 +174,6 @@ export function deriveVideoOutputStatus(row: Pick<
         return 'in_production';
       case 'prep':
         return 'pending';
-      case 'delisted':
-        return 'delisted';
     }
   }
 

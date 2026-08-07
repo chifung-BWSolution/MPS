@@ -17,6 +17,7 @@ import {
   type KolCooperationFormValues,
   type KolCooperationRow,
 } from '@/components/talent/kolCooperation';
+import type { KolTableName } from '@/components/talent/kolWorkflow';
 
 export function CooperationPlatformLinks({
   platforms,
@@ -24,7 +25,7 @@ export function CooperationPlatformLinks({
   chipClassName,
 }: {
   platforms: string[] | null | undefined;
-  kolProfile?: KolCooperationRow['kol_profile'];
+  kolProfile?: { instagram_account?: string | null } | null;
   chipClassName?: string;
 }) {
   const links = parseCooperationPlatformLinks(platforms, kolProfile);
@@ -278,6 +279,7 @@ export function KolCooperationForm({
   fixedKol,
   recordId,
   initialValues,
+  kolTable = 'kol_profile',
   onSuccess,
   onCancel,
   submitLabel = '儲存合作記錄',
@@ -286,6 +288,7 @@ export function KolCooperationForm({
   fixedKol?: KolPickerOption | null;
   recordId?: string;
   initialValues?: KolCooperationFormValues;
+  kolTable?: KolTableName;
   onSuccess: () => void;
   onCancel?: () => void;
   submitLabel?: string;
@@ -333,10 +336,10 @@ export function KolCooperationForm({
         ...form,
       };
       if (recordId) {
-        await updateCooperationRecord(recordId, payload);
+        await updateCooperationRecord(recordId, payload, kolTable);
         toast.success('已更新合作記錄');
       } else {
-        await saveCooperationRecord(payload, createdBy);
+        await saveCooperationRecord(payload, createdBy, kolTable);
         toast.success('已儲存合作記錄');
       }
       if (!isEditing) {

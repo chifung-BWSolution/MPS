@@ -15,6 +15,19 @@ export type KolWorkflowView =
   | 'cooperated'
   | 'star';
 
+/** Supabase table for each KOL workflow view. */
+export type KolTableName = 'kol_profile' | 'kol_new_beauty';
+
+export function kolTableForView(view: KolWorkflowView): KolTableName {
+  return view === 'new-beauty' ? 'kol_new_beauty' : 'kol_profile';
+}
+
+export function kolOwnerIdColumn(
+  table: KolTableName
+): 'kol_profile_id' | 'kol_new_beauty_id' {
+  return table === 'kol_new_beauty' ? 'kol_new_beauty_id' : 'kol_profile_id';
+}
+
 export const LIFECYCLE_LABELS: Record<KolLifecycleStatus, string> = {
   unprocessed: '未處理',
   shortlist: '候選',
@@ -62,7 +75,7 @@ export const VIEW_META: Record<
   },
   'new-beauty': {
     title: '新美容KOL',
-    description: 'Blog 主題或專長含 Beauty 的 KOL（含 KOL 申請批核匯入），狀態為未處理。',
+    description: 'Blog 主題或專長含 Beauty 的 KOL（含 KOL 申請批核匯入），獨立資料表 kol_new_beauty。',
   },
   shortlist: {
     title: '候選名單',
@@ -143,11 +156,8 @@ export function matchesWorkflowView(row: KolWorkflowRowWithSource, view: KolWork
         source !== 'beauty18'
       );
     case 'new-beauty':
-      return (
-        status === 'unprocessed' &&
-        (cat === 'beauty' || cat === 'both') &&
-        source === 'beauty18'
-      );
+      // Rows live in kol_new_beauty; list module filters lifecycle only.
+      return status === 'unprocessed';
     case 'shortlist':
       return status === 'shortlist';
     case 'meeting':

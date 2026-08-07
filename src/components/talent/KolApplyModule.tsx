@@ -23,6 +23,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import {
+  formatInstagramDisplay,
+  instagramProfileUrl,
+  normalizeInstagramAccount,
+} from '@/lib/instagram';
 import { supabase } from '@/lib/supabase';
 import {
   resolvePrimaryCategoryFromThemes,
@@ -87,6 +92,7 @@ export interface KolApply {
   reviewed_at: string | null;
   reviewed_by: string | null;
   kol_profile_id: string | null;
+  kol_new_beauty_id: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -193,13 +199,11 @@ const emptyForm = (): FormState => ({
 // =====================================================================
 
 function formatIg(account: string | null | undefined): string {
-  if (!account?.trim()) return '—';
-  const h = account.trim().replace(/^@/, '');
-  return h ? `@${h}` : '—';
+  return formatInstagramDisplay(account) ?? '—';
 }
 
-function igUrl(account: string): string {
-  return `https://instagram.com/${encodeURIComponent(account.replace(/^@/, '').trim())}`;
+function igUrl(account: string | null | undefined): string | null {
+  return instagramProfileUrl(account);
 }
 
 function formatFollowers(n: number | null | undefined): string {
@@ -356,7 +360,7 @@ function formToPayload(form: FormState) {
     work_area: form.work_area.trim() || null,
     specialty: form.specialty.trim() || null,
     blog_themes: themes,
-    instagram_account: form.instagram_account.trim().replace(/^@/, '') || null,
+    instagram_account: normalizeInstagramAccount(form.instagram_account.trim()) || null,
     instagram_followers: Number.isFinite(igFollowers as number) ? igFollowers : null,
     facebook_url: form.facebook_url.trim() || null,
     facebook_likes: Number.isFinite(fbLikes as number) ? fbLikes : null,
@@ -609,6 +613,7 @@ export function KolApplyModule() {
     try {
       const primaryCategory = resolvePrimaryCategoryFromThemes(row);
       const sourceSystem = resolveSourceSystemFromApply(row);
+      const isNewBeauty = sourceSystem === 'beauty18';
 
       const profilePayload = {
         name: row.name,
@@ -656,8 +661,45 @@ export function KolApplyModule() {
         source_status: 'from_apply',
         primary_category: primaryCategory,
         source_system: sourceSystem,
-        lifecycle_status: 'unprocessed',
+        lifecycle_status: 'unprocessed' as const,
+        ...(isNewBeauty ? { kol_apply_id: row.id } : {}),
       };
+
+      if (isNewBeauty) {
+        let newBeautyId = row.kol_new_beauty_id;
+        if (!newBeautyId) {
+          const { data, error: insErr } = await supabase
+            .from('kol_new_beauty')
+            .insert(profilePayload)
+            .select('id')
+            .single();
+          if (insErr) throw insErr;
+          newBeautyId = data.id as string;
+        } else {
+          const { error: updProfileErr } = await supabase
+            .from('kol_new_beauty')
+            .update(profilePayload)
+            .eq('id', newBeautyId);
+          if (updProfileErr) throw updProfileErr;
+        }
+
+        const { error: updErr } = await supabase
+          .from('kol_apply')
+          .update({
+            audit_status: 'added_to_db',
+            kol_new_beauty_id: newBeautyId,
+            kol_profile_id: null,
+            reviewed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', row.id);
+        if (updErr) throw updErr;
+
+        toast.success('已批准並加入新美容KOL');
+        closeDetail();
+        await load();
+        return;
+      }
 
       let profileId = row.kol_profile_id;
       if (!profileId) {
@@ -687,8 +729,7 @@ export function KolApplyModule() {
         .eq('id', row.id);
       if (updErr) throw updErr;
 
-      const dest = sourceSystem === 'beauty18' ? '新美容KOL' : 'KOL 資料庫';
-      toast.success(`已批准並加入${dest}`);
+      toast.success('已批准並加入KOL 資料庫');
       closeDetail();
       await load();
     } catch (e: unknown) {
@@ -845,7 +886,8 @@ export function KolApplyModule() {
               ) : (
                 filtered.map((row) => {
                   const busy = busyId === row.id;
-                  const igHandle = row.instagram_account?.trim().replace(/^@/, '');
+                  const igLink = igUrl(row.instagram_account);
+                  const igLabel = formatIg(row.instagram_account);
                   return (
                     <tr
                       key={row.id}
@@ -871,15 +913,19 @@ export function KolApplyModule() {
                         </div>
                       </td>
                       <td className="px-3 py-2.5 align-top" onClick={(e) => e.stopPropagation()}>
-                        {igHandle ? (
+                        {igLabel !== '—' ? (
+                          igLink ? (
                           <a
-                            href={igUrl(row.instagram_account!)}
+                            href={igLink}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-teal-700 hover:underline"
                           >
-                            {formatIg(row.instagram_account)}
+                            {igLabel}
                           </a>
+                          ) : (
+                          <span className="text-slate-600">{igLabel}</span>
+                          )
                         ) : (
                           <span className="text-slate-400">—</span>
                         )}
@@ -989,14 +1035,18 @@ export function KolApplyModule() {
                   label="Instagram"
                   value={
                     detailRow.instagram_account?.trim() ? (
-                      <a
-                        href={igUrl(detailRow.instagram_account)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-teal-700 hover:underline"
-                      >
-                        {formatIg(detailRow.instagram_account)}
-                      </a>
+                      igUrl(detailRow.instagram_account) ? (
+                        <a
+                          href={igUrl(detailRow.instagram_account)!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-teal-700 hover:underline"
+                        >
+                          {formatIg(detailRow.instagram_account)}
+                        </a>
+                      ) : (
+                        formatIg(detailRow.instagram_account)
+                      )
                     ) : (
                       '—'
                     )
