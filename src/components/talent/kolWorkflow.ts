@@ -9,6 +9,7 @@ export type KolWorkflowView =
   | 'all'
   | 'food'
   | 'beauty'
+  | 'new-beauty'
   | 'shortlist'
   | 'meeting'
   | 'cooperated'
@@ -48,16 +49,20 @@ export const VIEW_META: Record<
   { title: string; description: string }
 > = {
   all: {
-    title: 'KOL列表',
+    title: '全部KOL',
     description: '全量 KOL 資料庫，含所有分類與狀態。',
   },
   food: {
-    title: '美食 KOL',
+    title: '美食KOL',
     description: '來自 Foodies／表單的美食類 KOL，狀態為未處理。',
   },
   beauty: {
-    title: '美容 KOL',
+    title: '美容KOL',
     description: '美麗事件 Beauty 類 KOL，狀態為未處理。',
+  },
+  'new-beauty': {
+    title: '新美容KOL',
+    description: '來自 Beauty 18／Beauty 100 同步的美容類 KOL，狀態為未處理。',
   },
   shortlist: {
     title: '候選名單',
@@ -77,9 +82,14 @@ export const VIEW_META: Record<
   },
 };
 
-export function matchesWorkflowView(row: KolWorkflowRow, view: KolWorkflowView): boolean {
+export interface KolWorkflowRowWithSource extends KolWorkflowRow {
+  source_system?: string | null;
+}
+
+export function matchesWorkflowView(row: KolWorkflowRowWithSource, view: KolWorkflowView): boolean {
   const cat = (row.primary_category || 'other') as KolPrimaryCategory;
   const status = (row.lifecycle_status || 'unprocessed') as KolLifecycleStatus;
+  const source = row.source_system || 'manual';
 
   switch (view) {
     case 'all':
@@ -87,7 +97,17 @@ export function matchesWorkflowView(row: KolWorkflowRow, view: KolWorkflowView):
     case 'food':
       return status === 'unprocessed' && (cat === 'food' || cat === 'both');
     case 'beauty':
-      return status === 'unprocessed' && (cat === 'beauty' || cat === 'both');
+      return (
+        status === 'unprocessed' &&
+        (cat === 'beauty' || cat === 'both') &&
+        source !== 'beauty18'
+      );
+    case 'new-beauty':
+      return (
+        status === 'unprocessed' &&
+        (cat === 'beauty' || cat === 'both') &&
+        source === 'beauty18'
+      );
     case 'shortlist':
       return status === 'shortlist';
     case 'meeting':

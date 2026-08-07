@@ -3142,6 +3142,8 @@ export function TalentModule({ subModule }: { subModule?: string }) {
       return <KolListModule workflowView="food" />;
     case 'kol-beauty':
       return <KolListModule workflowView="beauty" />;
+    case 'kol-new-beauty':
+      return <KolListModule workflowView="new-beauty" />;
     case 'kol-shortlist':
       return <KolListModule workflowView="shortlist" />;
     case 'kol-meeting':

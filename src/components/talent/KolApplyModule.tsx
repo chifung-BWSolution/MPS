@@ -673,7 +673,7 @@ export function KolApplyModule() {
       <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-[32px] font-bold tracking-tight">KOL申請管理</h1>
+            <h1 className="text-[32px] font-bold tracking-tight">KOL申請列表</h1>
             <p className="text-[14px] text-muted-foreground mt-1">
               管理 KOL 報名申請、審核狀態，並可批准加入 KOL 列表。
             </p>
