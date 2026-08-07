@@ -16,6 +16,8 @@ type DbRow = {
   client_id: string | null;
   client_name: string | null;
   display_name: string;
+  company_name_en: string | null;
+  company_name_zh: string | null;
   inquiry_date: string;
   description: string | null;
   project_types: string[] | null;
@@ -76,6 +78,8 @@ function mapRow(row: DbRow): PitchingRecord {
     clientId: row.client_id ?? undefined,
     clientName: row.client_name || '—',
     displayName: row.display_name,
+    companyNameEn: row.company_name_en ?? undefined,
+    companyNameZh: row.company_name_zh ?? undefined,
     inquiryDate: String(row.inquiry_date).slice(0, 10),
     description: row.description ?? undefined,
     projectTypes: (row.project_types || []) as PitchingProjectType[],
@@ -101,6 +105,8 @@ export type QuotationClientProjectUpdate = Partial<
     PitchingRecord,
     | 'clientName'
     | 'displayName'
+    | 'companyNameEn'
+    | 'companyNameZh'
     | 'inquiryDate'
     | 'description'
     | 'projectTypes'
@@ -168,6 +174,8 @@ export function useQuotationClientProjects() {
         client_id: data.clientId ?? null,
         client_name: data.clientName || null,
         display_name: data.displayName,
+        company_name_en: data.companyNameEn?.trim() || null,
+        company_name_zh: data.companyNameZh?.trim() || null,
         inquiry_date: data.inquiryDate,
         description: data.description ?? null,
         project_types: data.projectTypes,
@@ -214,6 +222,8 @@ export function useQuotationClientProjects() {
     const row: Record<string, unknown> = { updated_at: now };
     if (data.clientName !== undefined) row.client_name = data.clientName || null;
     if (data.displayName !== undefined) row.display_name = data.displayName;
+    if (data.companyNameEn !== undefined) row.company_name_en = data.companyNameEn?.trim() || null;
+    if (data.companyNameZh !== undefined) row.company_name_zh = data.companyNameZh?.trim() || null;
     if (data.inquiryDate !== undefined) row.inquiry_date = data.inquiryDate;
     if (data.description !== undefined) row.description = data.description || null;
     if (data.projectTypes !== undefined) row.project_types = data.projectTypes;
