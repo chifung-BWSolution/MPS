@@ -256,14 +256,17 @@ function applyPhotoUrl(row: Pick<KolApplyRow, 'photo_url' | 'work_photo_url'>): 
 function ApplyPhotoCell({
   row,
   onPhotoClick,
+  size = 'md',
 }: {
   row: KolApplyRow;
   onPhotoClick?: (url: string | null) => void;
+  size?: 'sm' | 'md';
 }) {
   const url = applyPhotoUrl(row);
   const [imgError, setImgError] = useState(false);
   const showImg = Boolean(url) && !imgError;
   const initial = (row.name || '?').trim().slice(0, 1) || '?';
+  const dim = size === 'sm' ? 64 : 100;
 
   return (
     <button
@@ -273,9 +276,10 @@ function ApplyPhotoCell({
         onPhotoClick?.(url);
       }}
       className={cn(
-        'relative w-[100px] h-[100px] rounded-lg overflow-hidden shrink-0 border border-slate-200 bg-slate-100',
+        'relative rounded-lg overflow-hidden shrink-0 border border-slate-200 bg-slate-100',
         'cursor-pointer hover:ring-2 hover:ring-teal-300/80 transition-shadow'
       )}
+      style={{ width: dim, height: dim }}
       title="放大照片"
     >
       {showImg ? (
@@ -855,8 +859,8 @@ export function KolApplyModule() {
           載入失敗：{error}
         </div>
       ) : (
-        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-          <table className="w-full text-[13px]">
+        <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto">
+          <table className="w-full min-w-[960px] text-[13px]">
             <thead className="bg-slate-50 text-slate-600">
               <tr>
                 <th className="w-10 px-3 py-2">
@@ -865,7 +869,7 @@ export function KolApplyModule() {
                     onCheckedChange={(v) => toggleAll(v === true)}
                   />
                 </th>
-                <th className="text-left font-medium px-3 py-2 w-[116px]">照片</th>
+                <th className="text-left font-medium px-3 py-2 w-[80px]">照片</th>
                 <th className="text-left font-medium px-3 py-2">姓名</th>
                 <th className="text-left font-medium px-3 py-2">IG 帳號</th>
                 <th className="text-left font-medium px-3 py-2">粉絲數</th>
@@ -894,25 +898,31 @@ export function KolApplyModule() {
                       className="border-t border-slate-100 hover:bg-slate-50/80 cursor-pointer"
                       onClick={() => openDetail(row)}
                     >
-                      <td className="px-3 py-2.5 align-top" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-3 py-2.5 align-middle" onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={selected.has(row.id)}
                           onCheckedChange={(v) => toggleOne(row.id, v === true)}
                         />
                       </td>
-                      <td className="px-3 py-2.5 align-top">
+                      <td className="px-3 py-2.5 align-middle">
                         <ApplyPhotoCell
                           row={row}
+                          size="sm"
                           onPhotoClick={(url) => openPhotoPreview(row, url)}
                         />
                       </td>
-                      <td className="px-3 py-2.5 align-top">
-                        <div className="font-medium text-slate-900">{row.name || '—'}</div>
-                        <div className="text-[11px] text-slate-400" title={formatAppliedFull(row.applied_at)}>
-                          {formatAppliedAt(row.applied_at)}
-                        </div>
+                      <td className="px-3 py-2.5 align-middle whitespace-nowrap">
+                        <span className="font-medium text-slate-900">{row.name || '—'}</span>
+                        {row.applied_at ? (
+                          <span
+                            className="text-[11px] text-slate-400 ml-2"
+                            title={formatAppliedFull(row.applied_at)}
+                          >
+                            {formatAppliedAt(row.applied_at)}
+                          </span>
+                        ) : null}
                       </td>
-                      <td className="px-3 py-2.5 align-top" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-3 py-2.5 align-middle whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         {igLabel !== '—' ? (
                           igLink ? (
                           <a
@@ -930,20 +940,20 @@ export function KolApplyModule() {
                           <span className="text-slate-400">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-slate-700">
+                      <td className="px-3 py-2.5 align-middle whitespace-nowrap text-slate-700">
                         ig粉絲：{formatFollowers(row.instagram_followers)}
                       </td>
-                      <td className="px-3 py-2.5 text-slate-600">{themeLabel(row)}</td>
-                      <td className="px-3 py-2.5 text-slate-600 max-w-[140px] truncate">
+                      <td className="px-3 py-2.5 align-middle whitespace-nowrap text-slate-600">{themeLabel(row)}</td>
+                      <td className="px-3 py-2.5 align-middle whitespace-nowrap text-slate-600 max-w-[140px] truncate">
                         {row.source || '—'}
                       </td>
-                      <td className="px-3 py-2.5 font-mono text-slate-700">
+                      <td className="px-3 py-2.5 align-middle whitespace-nowrap font-mono text-slate-700">
                         {row.login_code || '—'}
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-2.5 align-middle whitespace-nowrap">
                         <StatusBadge status={row.audit_status} />
                       </td>
-                      <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-3 py-2.5 align-middle whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1.5">
                           {row.audit_status !== 'added_to_db' &&
                             row.audit_status !== 'rejected' && (
