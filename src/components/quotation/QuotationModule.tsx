@@ -32,6 +32,7 @@ import {
   PITCHING_PROJECT_TYPE_OPTIONS,
 } from '@/data/pitchingData';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
+import { ClientRequirementsQuestionnaire } from '@/components/quotation/ClientRequirementsQuestionnaire';
 
 // Supplier options for cost structure
 const supplierOptions = [
@@ -593,7 +594,6 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
               </p>
             </div>
 
-            {/* Comprehensive: Add items from other types */}
             {isComprehensive && (
               <div className="bg-amber-50/50 border border-amber-200 rounded-md p-4">
                 <div className="flex items-center gap-2 mb-3">
@@ -606,7 +606,6 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
                     return type ? (
                       <span key={typeId} className="inline-flex items-center gap-1 text-[11px] bg-white border border-amber-200 text-amber-700 px-2 py-1 rounded-md font-medium">
                         <FileText size={10} /> {type.name}
-                        <span className="text-muted-foreground ml-1">({services.filter(s => s.id.startsWith('svc-' + typeId + '-')).length} 項)</span>
                       </span>
                     ) : null;
                   })}
@@ -614,236 +613,17 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            {/* Service Items */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-[15px] font-bold">服務項目</h4>
-                <button onClick={handleAddCustomService} className="flex items-center gap-1 text-[12px] text-teal-600 font-medium hover:text-teal-700">
-                  <Plus size={12} />新增自訂項目
-                </button>
-              </div>
-
-              {/* Group by type in comprehensive mode */}
-              {isComprehensive ? (
-                <div className="space-y-4">
-                  {selectedTypes.map(typeId => {
-                    const type = quotationTypes.find(t => t.id === typeId);
-                    const typeServices = services.filter(s => s.id.startsWith('svc-' + typeId + '-'));
-                    if (!type || typeServices.length === 0) return null;
-                    return (
-                      <div key={typeId} className="border border-border rounded-md overflow-hidden">
-                        <div className="bg-muted/40 px-3 py-2 border-b border-border flex items-center gap-2">
-                          <FileText size={12} className="text-teal-600" />
-                          <span className="text-[12px] font-bold">{type.name}</span>
-                          <span className="text-[10px] text-muted-foreground">({typeServices.length} 項)</span>
-                        </div>
-                        <table className="w-full">
-                          <thead>
-                            <tr className="bg-muted/20 border-b border-border">
-                              <th className="text-left text-[11px] font-medium text-muted-foreground px-3 py-2 w-8">選</th>
-                              <th className="text-left text-[11px] font-medium text-muted-foreground px-3 py-2">項目名稱</th>
-                              <th className="text-left text-[11px] font-medium text-muted-foreground px-3 py-2 w-16">數量</th>
-                              <th className="text-left text-[11px] font-medium text-muted-foreground px-3 py-2 w-24">售價</th>
-                              <th className="text-left text-[11px] font-medium text-muted-foreground px-3 py-2 w-20">折扣%</th>
-                              <th className="text-left text-[11px] font-medium text-muted-foreground px-3 py-2 w-24">小計</th>
-                              <th className="text-left text-[11px] font-medium text-muted-foreground px-3 py-2 w-12">顯示</th>
-                              <th className="text-left text-[11px] font-medium text-muted-foreground px-3 py-2 w-8"></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {typeServices.map((svc) => {
-                              let itemTotal = svc.price * svc.quantity;
-                              if (svc.discount > 0) {
-                                itemTotal = svc.discountType === 'percentage' ? itemTotal * (1 - svc.discount / 100) : itemTotal - svc.discount;
-                              }
-                              return (
-                                <tr key={svc.id} className={cn('border-b border-border/50', !svc.isSelected && 'opacity-40')}>
-                                  <td className="px-3 py-2">
-                                    <input type="checkbox" checked={svc.isSelected} onChange={(e) => updateService(svc.id, 'isSelected', e.target.checked)} className="w-3.5 h-3.5 rounded border-border text-teal-600 focus:ring-teal-600" />
-                                  </td>
-                                  <td className="px-3 py-2">
-                                    <input value={svc.name} onChange={(e) => updateService(svc.id, 'name', e.target.value)} className="w-full text-[13px] bg-transparent border-none outline-none" placeholder="服務名稱" />
-                                  </td>
-                                  <td className="px-3 py-2">
-                                    <input type="number" value={svc.quantity} onChange={(e) => updateService(svc.id, 'quantity', parseInt(e.target.value) || 1)} className="w-full text-[13px] bg-transparent border border-border rounded px-1.5 py-0.5" min={1} />
-                                  </td>
-                                  <td className="px-3 py-2">
-                                    <input type="number" value={svc.price} onChange={(e) => updateService(svc.id, 'price', parseInt(e.target.value) || 0)} className="w-full text-[13px] bg-transparent border border-border rounded px-1.5 py-0.5" />
-                                  </td>
-                                  <td className="px-3 py-2">
-                                    <input type="number" value={svc.discount} onChange={(e) => updateService(svc.id, 'discount', parseInt(e.target.value) || 0)} className="w-full text-[13px] bg-transparent border border-border rounded px-1.5 py-0.5" placeholder="0" />
-                                  </td>
-                                  <td className="px-3 py-2 text-[13px] font-medium">${Math.round(itemTotal).toLocaleString()}</td>
-                                  <td className="px-3 py-2 text-center">
-                                    <input type="checkbox" checked={svc.isVisible} onChange={(e) => updateService(svc.id, 'isVisible', e.target.checked)} className="w-3.5 h-3.5 rounded border-border text-teal-600 focus:ring-teal-600" />
-                                  </td>
-                                  <td className="px-3 py-2">
-                                    <button onClick={() => removeService(svc.id)} className="text-rose-400 hover:text-rose-600"><Trash2 size={12} /></button>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    );
-                  })}
-
-                  {/* Custom items (not tied to type) */}
-                  {services.filter(s => !selectedTypes.some(t => s.id.startsWith('svc-' + t + '-'))).length > 0 && (
-                    <div className="border border-border rounded-md overflow-hidden">
-                      <div className="bg-muted/40 px-3 py-2 border-b border-border flex items-center gap-2">
-                        <Plus size={12} className="text-teal-600" />
-                        <span className="text-[12px] font-bold">自訂項目</span>
-                      </div>
-                      <table className="w-full">
-                        <tbody>
-                          {services.filter(s => !selectedTypes.some(t => s.id.startsWith('svc-' + t + '-'))).map((svc) => {
-                            let itemTotal = svc.price * svc.quantity;
-                            if (svc.discount > 0) {
-                              itemTotal = svc.discountType === 'percentage' ? itemTotal * (1 - svc.discount / 100) : itemTotal - svc.discount;
-                            }
-                            return (
-                              <tr key={svc.id} className={cn('border-b border-border/50', !svc.isSelected && 'opacity-40')}>
-                                <td className="px-3 py-2 w-8">
-                                  <input type="checkbox" checked={svc.isSelected} onChange={(e) => updateService(svc.id, 'isSelected', e.target.checked)} className="w-3.5 h-3.5 rounded border-border text-teal-600 focus:ring-teal-600" />
-                                </td>
-                                <td className="px-3 py-2">
-                                  <input value={svc.name} onChange={(e) => updateService(svc.id, 'name', e.target.value)} className="w-full text-[13px] bg-transparent border-none outline-none" placeholder="服務名稱" />
-                                </td>
-                                <td className="px-3 py-2 w-16">
-                                  <input type="number" value={svc.quantity} onChange={(e) => updateService(svc.id, 'quantity', parseInt(e.target.value) || 1)} className="w-full text-[13px] bg-transparent border border-border rounded px-1.5 py-0.5" min={1} />
-                                </td>
-                                <td className="px-3 py-2 w-24">
-                                  <input type="number" value={svc.price} onChange={(e) => updateService(svc.id, 'price', parseInt(e.target.value) || 0)} className="w-full text-[13px] bg-transparent border border-border rounded px-1.5 py-0.5" />
-                                </td>
-                                <td className="px-3 py-2 w-20">
-                                  <input type="number" value={svc.discount} onChange={(e) => updateService(svc.id, 'discount', parseInt(e.target.value) || 0)} className="w-full text-[13px] bg-transparent border border-border rounded px-1.5 py-0.5" placeholder="0" />
-                                </td>
-                                <td className="px-3 py-2 w-24 text-[13px] font-medium">${Math.round(itemTotal).toLocaleString()}</td>
-                                <td className="px-3 py-2 w-12 text-center">
-                                  <input type="checkbox" checked={svc.isVisible} onChange={(e) => updateService(svc.id, 'isVisible', e.target.checked)} className="w-3.5 h-3.5 rounded border-border text-teal-600 focus:ring-teal-600" />
-                                </td>
-                                <td className="px-3 py-2 w-8">
-                                  <button onClick={() => removeService(svc.id)} className="text-rose-400 hover:text-rose-600"><Trash2 size={12} /></button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                /* Single type mode - original table */
-                <div className="border border-border rounded-md overflow-hidden overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-muted/30 border-b border-border">
-                        <th className="text-left text-[11px] font-medium text-muted-foreground px-3 py-2 w-8">選</th>
-                        <th className="text-left text-[11px] font-medium text-muted-foreground px-3 py-2">項目名稱</th>
-                        <th className="text-left text-[11px] font-medium text-muted-foreground px-3 py-2 w-16">數量</th>
-                        <th className="text-left text-[11px] font-medium text-muted-foreground px-3 py-2 w-24">售價</th>
-                        <th className="text-left text-[11px] font-medium text-muted-foreground px-3 py-2 w-20">折扣%</th>
-                        <th className="text-left text-[11px] font-medium text-muted-foreground px-3 py-2 w-24">小計</th>
-                        <th className="text-left text-[11px] font-medium text-muted-foreground px-3 py-2 w-12">顯示</th>
-                        <th className="text-left text-[11px] font-medium text-muted-foreground px-3 py-2 w-8"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {services.map((svc) => {
-                        let itemTotal = svc.price * svc.quantity;
-                        if (svc.discount > 0) {
-                          itemTotal = svc.discountType === 'percentage' ? itemTotal * (1 - svc.discount / 100) : itemTotal - svc.discount;
-                        }
-                        return (
-                          <tr key={svc.id} className={cn('border-b border-border/50', !svc.isSelected && 'opacity-40')}>
-                            <td className="px-3 py-2">
-                              <input type="checkbox" checked={svc.isSelected} onChange={(e) => updateService(svc.id, 'isSelected', e.target.checked)} className="w-3.5 h-3.5 rounded border-border text-teal-600 focus:ring-teal-600" />
-                            </td>
-                            <td className="px-3 py-2">
-                              <input value={svc.name} onChange={(e) => updateService(svc.id, 'name', e.target.value)} className="w-full text-[13px] bg-transparent border-none outline-none" placeholder="服務名稱" />
-                            </td>
-                            <td className="px-3 py-2">
-                              <input type="number" value={svc.quantity} onChange={(e) => updateService(svc.id, 'quantity', parseInt(e.target.value) || 1)} className="w-full text-[13px] bg-transparent border border-border rounded px-1.5 py-0.5" min={1} />
-                            </td>
-                            <td className="px-3 py-2">
-                              <input type="number" value={svc.price} onChange={(e) => updateService(svc.id, 'price', parseInt(e.target.value) || 0)} className="w-full text-[13px] bg-transparent border border-border rounded px-1.5 py-0.5" />
-                            </td>
-                            <td className="px-3 py-2">
-                              <input type="number" value={svc.discount} onChange={(e) => updateService(svc.id, 'discount', parseInt(e.target.value) || 0)} className="w-full text-[13px] bg-transparent border border-border rounded px-1.5 py-0.5" placeholder="0" />
-                            </td>
-                            <td className="px-3 py-2 text-[13px] font-medium">${Math.round(itemTotal).toLocaleString()}</td>
-                            <td className="px-3 py-2 text-center">
-                              <input type="checkbox" checked={svc.isVisible} onChange={(e) => updateService(svc.id, 'isVisible', e.target.checked)} className="w-3.5 h-3.5 rounded border-border text-teal-600 focus:ring-teal-600" />
-                            </td>
-                            <td className="px-3 py-2">
-                              <button onClick={() => removeService(svc.id)} className="text-rose-400 hover:text-rose-600"><Trash2 size={12} /></button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* Overall Discount & Total */}
-            <div className="flex items-center gap-4 flex-wrap">
-              <label className="text-[13px] font-medium">整體折扣：</label>
-              <input type="number" value={overallDiscount} onChange={(e) => setOverallDiscount(parseInt(e.target.value) || 0)} className="w-20 px-2 py-1 border border-border rounded-md text-[13px]" />
-              <select value={overallDiscountType} onChange={(e) => setOverallDiscountType(e.target.value as 'percentage' | 'fixed')} className="px-2 py-1 border border-border rounded-md text-[13px]">
-                <option value="percentage">%</option>
-                <option value="fixed">HKD</option>
-              </select>
-              <span className="text-[15px] font-bold ml-auto">總計：<span className="text-teal-600">${calculateTotal().toLocaleString()}</span></span>
-            </div>
-
-            {/* Terms */}
-            <div>
-              <label className="text-[13px] font-medium text-muted-foreground block mb-1.5">Terms & Conditions</label>
-              {/* Template selector */}
-              <div className="mb-2">
-                <select
-                  onChange={(e) => {
-                    const template = termsTemplates.find(t => t.id === e.target.value);
-                    if (template) {
-                      setTerms(prev => prev ? `${prev}\n${template.content}` : template.content);
-                    }
-                  }}
-                  value=""
-                  className="px-3 py-1.5 border border-border rounded-md text-[12px] text-muted-foreground focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-                >
-                  <option value="" disabled>套用條款範本...</option>
-                  {termsTemplates
-                    .filter(t => t.quotationTypeId === (selectedType?.id || '') || t.quotationTypeId === 'all')
-                    .map(t => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}{t.isDefault ? ' (預設)' : ''}{t.quotationTypeId === 'all' ? ' [通用]' : ''}
-                      </option>
-                    ))
-                  }
-                </select>
-              </div>
-              <textarea value={terms} onChange={(e) => setTerms(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none" rows={4} placeholder="輸入條款內容，或從上方選擇範本..." />
-            </div>
-
-            {/* Payment */}
-            <div>
-              <label className="text-[13px] font-medium text-muted-foreground block mb-2">付款安排</label>
-              <div className="space-y-2">
-                {paymentArrangement.map((stage) => (
-                  <div key={stage.id} className="flex items-center gap-3 p-2 bg-muted/20 rounded-md">
-                    <span className="text-[12px] font-medium w-20">{stage.label}</span>
-                    <span className="text-[12px] text-teal-600 font-bold w-12">{stage.percentage}%</span>
-                    <span className="text-[12px] text-muted-foreground flex-1">{stage.description}</span>
-                    <span className="text-[12px] font-medium">${Math.round(calculateTotal() * stage.percentage / 100).toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <ClientRequirementsQuestionnaire
+              initialForm={{
+                companyName: selectedPitching?.clientName || clientName,
+                contactName: selectedPitching?.clientName || '',
+                contactPhone: '',
+                email: '',
+                businessSummary: requirementsText || selectedPitching?.description || '',
+                existingWebsite: selectedPitching?.asanaLink || '',
+              }}
+              onSummaryGenerated={(summary) => setRequirementsText(summary)}
+            />
 
             <div className="flex justify-end gap-2">
               <button onClick={() => { updateCostRevenue(); setStep(4); }} className="px-4 py-2 text-sm bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors duration-200">下一步：Cost Structure</button>
