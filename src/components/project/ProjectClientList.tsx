@@ -1,25 +1,18 @@
 import { FileText } from 'lucide-react';
-import { ProjectPlanning } from './ProjectPlanning';
-import { useClientProjects } from '@/hooks/useClientProjects';
+import { ProjectMasterList } from './ProjectMasterList';
 
 export function ProjectClientList({ onSelectProject }: { onSelectProject?: (projectId: string) => void }) {
-  const { projects, loading, updateProject, deleteProject } = useClientProjects();
-
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <FileText size={14} className="text-teal-600" />
         <span className="text-[12px] text-muted-foreground">
-          表格整合「服務類型及數量」與「交付時間表」，點擊項目可查看完整詳情
+          來自報價客戶項目（quotation_client_project）同步；點擊可查看工時與團隊匯報
         </span>
       </div>
-      <ProjectPlanning
+      <ProjectMasterList
+        relatedTypes={['quotation_client']}
         onSelectProject={onSelectProject}
-        forcedCategory="client"
-        projects={projects}
-        loading={loading}
-        updateProject={updateProject}
-        deleteProject={deleteProject}
       />
     </div>
   );
