@@ -135,6 +135,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'kol-list', label: '全部KOL', section: 'KOL' },
       { id: 'kol-food', label: '美食KOL', section: 'KOL' },
       { id: 'kol-beauty', label: '美容KOL', section: 'KOL' },
+      { id: 'kol-cooperated', label: '已合作KOL', section: 'KOL' },
       { id: 'kol-apply', label: 'KOL申請列表', section: 'KOL' },
       { id: 'kol-new-beauty', label: '新美容KOL', section: 'KOL' },
     ],
