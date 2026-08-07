@@ -13,14 +13,13 @@ import {
   OutcomeType,
   AITool,
 } from '@/data/dayReportDataV2';
-import { WorkCategoriesManager, defaultCategoryRelationMap, type CategoryRelationType } from '@/components/day-report/WorkCategoriesManager';
+import { WorkCategoriesManager, defaultCategoryRelationMap, isRelationRequired, type CategoryRelationType } from '@/components/day-report/WorkCategoriesManager';
 import { HolidaySettings } from '@/components/day-report/HolidaySettings';
 import { TeamDashboard } from '@/components/day-report/TeamDashboard';
 import { ProjectAnalysis } from '@/components/day-report/ProjectAnalysis';
 import { SearchableProjectSelect } from '@/components/day-report/SearchableProjectSelect';
-import { useDataStore } from '@/context/DataStore';
 import { useDayReportTypes } from '@/hooks/useDayReportTypes';
-import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
+import { useProjects, relatedTypeLabels, type ProjectRelatedType } from '@/hooks/useProjects';
 import { usePendingReportItems } from '@/hooks/usePendingReportItems';
 import {
   consumePendingItems,
@@ -169,8 +168,7 @@ function createBlankReportEntry(): ReportFormEntry {
 }
 
 function SubmitReportPage() {
-  const { projects } = useDataStore();
-  const { profiles: websites } = useWebsiteProfiles();
+  const { projects: masterProjects } = useProjects({ activeOnly: true });
   const { types: dynamicTypes } = useDayReportTypes();
   const categoryLookup = useCategoryLookup();
   const [office, setOffice] = useState<OfficeLocation>('hk');
@@ -213,28 +211,21 @@ function SubmitReportPage() {
   const isUpdateMode = !!existingReportId;
   const isDraftReport = existingReportStatus === 'draft';
 
-  // Reactive helper: get related items for a work category from DataStore (live data)
-  const getRelatedItemsLive = useCallback((category: WorkCategory): { id: string; name: string }[] => {
-    switch (category) {
-      case 'website_design':
-      case 'website_dev':
-      case 'article_writing':
-      case 'video_shooting':
-      case 'video_editing':
-      case 'social_media':
-      case 'edm':
-      case 'paid_ads':
-      case 'seo':
-      case 'graphic_design':
-        return websites.map(ws => ({ id: ws.id, name: ws.websiteName }));
-      case 'client_meeting':
-        return projects.map(p => ({ id: p.id, name: p.name }));
-      case 'internal_meeting':
-      case 'training':
-      default:
-        return projects.map(p => ({ id: p.id, name: p.name }));
+  const getRelatedItemsForRelation = useCallback((relationType: CategoryRelationType | undefined): { id: string; name: string }[] => {
+    if (!relationType || relationType === 'none') return [];
+    if (relationType === 'optional') {
+      return masterProjects.map(p => ({
+        id: p.id,
+        name: `${p.name}（${relatedTypeLabels[p.relatedType]}）`,
+      }));
     }
-  }, [websites, projects]);
+    if (relationType === 'webandsystem' || relationType === 'quotation_client' || relationType === 'vchannel') {
+      return masterProjects
+        .filter(p => p.relatedType === (relationType as ProjectRelatedType))
+        .map(p => ({ id: p.id, name: p.name }));
+    }
+    return [];
+  }, [masterProjects]);
 
   // Current staff — derived from the authenticated user resolved above
   const [currentStaffId, setCurrentStaffId] = useState<string | null>(null);
@@ -621,7 +612,7 @@ function SubmitReportPage() {
 
   // Recent frequent items from the user's real past reports (for quick selection).
   // Aggregates day_report_entries by related_id + category over the last ~90 days,
-  // then resolves display names from webandsystem_list.website_name (never related_name).
+  // then resolves display names from projects.name (never related_name).
   // Categories with relation_type=none have no linked system — always show "N/A".
   type FrequentItem = {
     relatedId: string;
@@ -721,32 +712,14 @@ function SubmitReportPage() {
         ),
       );
 
-      // Latest canonical names from master tables — never use denormalized related_name.
-      const websiteNameById = new Map<string, string>();
+      // Latest canonical names from projects master — never use denormalized related_name.
       const projectNameById = new Map<string, string>();
       if (relatedIds.length > 0) {
         const chunkSize = 200;
         for (let i = 0; i < relatedIds.length; i += chunkSize) {
           const chunk = relatedIds.slice(i, i + chunkSize);
-          const { data: websiteRows, error: websiteErr } = await supabase
-            .from('webandsystem_list')
-            .select('id, website_name')
-            .in('id', chunk);
-          if (websiteErr) {
-            console.warn('[SubmitReport] load website names failed:', websiteErr.message);
-          } else {
-            (websiteRows || []).forEach(row => {
-              const name = ((row.website_name as string) || '').trim();
-              if (row.id && name) websiteNameById.set(row.id as string, name);
-            });
-          }
-        }
-
-        const unresolvedIds = relatedIds.filter(id => !websiteNameById.has(id));
-        for (let i = 0; i < unresolvedIds.length; i += chunkSize) {
-          const chunk = unresolvedIds.slice(i, i + chunkSize);
           const { data: projectRows, error: projectErr } = await supabase
-            .from('projects_list')
+            .from('projects')
             .select('id, name')
             .in('id', chunk);
           if (projectErr) {
@@ -769,7 +742,7 @@ function SubmitReportPage() {
         const hours = Number(entry.hours) || 0;
         const createdAt = entry.created_at || '';
 
-        // relation_type=none: no linked webandsystem — aggregate by category only, show N/A.
+        // relation_type=none: no linked project — aggregate by category only, show N/A.
         // Ignore any leftover related_id from when the user switched categories before save.
         if (relationType === 'none') {
           const key = `__none__${category}`;
@@ -792,9 +765,29 @@ function SubmitReportPage() {
           return;
         }
 
+        // optional with no project selected: allow category-only quick add
         const relatedId = (entry.related_id || '').trim();
-        if (!relatedId) return;
-        const relatedName = websiteNameById.get(relatedId) || projectNameById.get(relatedId) || '';
+        if (!relatedId) {
+          if (relationType !== 'optional') return;
+          const key = `__optional_empty__${category}`;
+          if (!itemMap[key]) {
+            itemMap[key] = {
+              relatedId: '',
+              relatedName: '（未選項目）',
+              category,
+              count: 0,
+              lastUsed: createdAt,
+              totalHours: 0,
+            };
+          }
+          itemMap[key].count += 1;
+          itemMap[key].totalHours += hours;
+          if (createdAt && createdAt > itemMap[key].lastUsed) {
+            itemMap[key].lastUsed = createdAt;
+          }
+          return;
+        }
+        const relatedName = projectNameById.get(relatedId) || '';
         // Skip orphans that no longer exist in master data.
         if (!relatedName) return;
         const key = `${relatedId}__${category}`;
@@ -850,10 +843,15 @@ function SubmitReportPage() {
   
   // Cross-field validation: sum of task hours must equal declared target
   const hoursMatch = totalHours === targetHours;
+  const missingRequiredRelated = entries.some((e) => {
+    if (!e.category || !(e.hours > 0)) return false;
+    const relationType = resolveRelationType(e.category);
+    return isRelationRequired(relationType) && !e.relatedId;
+  });
   const canSubmitWork = (
     hoursMatch || 
     (isUnderHours && underHoursReason.length > 0)
-  ) && totalHours > 0;
+  ) && totalHours > 0 && !missingRequiredRelated;
   
   const canSubmit = canSubmitWork;
   const hasTempSaveContent = entries.some(e => e.category && e.hours > 0);
@@ -991,7 +989,6 @@ function SubmitReportPage() {
 
     try {
       let reportId: string;
-      const affectedWebsiteIds = new Set<string>();
       const reportPayload = {
         total_hours: totalHours,
         target_hours: targetHours,
@@ -1016,13 +1013,6 @@ function SubmitReportPage() {
           throw new Error(updateError.message);
         }
         reportId = existingReportId;
-
-        const { data: oldEntries } = await supabase
-          .from('day_report_entries')
-          .select('related_id')
-          .eq('day_report_id', existingReportId)
-          .not('related_id', 'is', null);
-        oldEntries?.forEach(e => e.related_id && affectedWebsiteIds.add(e.related_id));
 
         const { error: deleteError } = await supabase
           .from('day_report_entries')
@@ -1103,23 +1093,7 @@ function SubmitReportPage() {
         await refreshPendingCount();
       }
 
-      entryRecords.forEach(e => e.related_id && affectedWebsiteIds.add(e.related_id));
-
-      if (affectedWebsiteIds.size > 0) {
-        await Promise.all(
-          Array.from(affectedWebsiteIds).map(async (websiteId) => {
-            const { data: hoursData } = await supabase
-              .from('day_report_entries')
-              .select('hours')
-              .eq('related_id', websiteId);
-            const total = (hoursData ?? []).reduce((sum, row) => sum + (Number(row.hours) || 0), 0);
-            await supabase
-              .from('webandsystem_list')
-              .update({ total_hours: total })
-              .eq('id', websiteId);
-          })
-        );
-      }
+      // Website total_hours is maintained by DB trigger via projects mapping.
 
       if (draftStorageKey) {
         try { localStorage.removeItem(draftStorageKey); } catch {}
@@ -1158,16 +1132,8 @@ function SubmitReportPage() {
     setIsDeleting(true);
     setSubmitError(null);
     try {
-      const { data: oldEntries } = await supabase
-        .from('day_report_entries')
-        .select('related_id')
-        .eq('day_report_id', existingReportId)
-        .not('related_id', 'is', null);
-
-      const affectedWebsiteIds = new Set<string>();
-      oldEntries?.forEach(e => e.related_id && affectedWebsiteIds.add(e.related_id));
-
-      // Entries cascade via ON DELETE CASCADE on day_report_id
+      // Entries cascade via ON DELETE CASCADE on day_report_id.
+      // Website total_hours is maintained by DB trigger via projects mapping.
       const { error: deleteError } = await supabase
         .from('day_reports')
         .delete()
@@ -1176,22 +1142,6 @@ function SubmitReportPage() {
 
       if (deleteError) {
         throw new Error(deleteError.message);
-      }
-
-      if (affectedWebsiteIds.size > 0) {
-        await Promise.all(
-          Array.from(affectedWebsiteIds).map(async (websiteId) => {
-            const { data: hoursData } = await supabase
-              .from('day_report_entries')
-              .select('hours')
-              .eq('related_id', websiteId);
-            const total = (hoursData ?? []).reduce((sum, row) => sum + (Number(row.hours) || 0), 0);
-            await supabase
-              .from('webandsystem_list')
-              .update({ total_hours: total })
-              .eq('id', websiteId);
-          })
-        );
       }
 
       if (draftStorageKey) {
@@ -1729,31 +1679,44 @@ function SubmitReportPage() {
                     {(() => {
                       const dynType = entry.category ? dynamicTypes.find(t => t.id === entry.category) : null;
                       const relationType = dynType?.relationType
-                        ?? (entry.category ? defaultCategoryRelationMap[entry.category as WorkCategory] : undefined);
+                        ?? (entry.category ? defaultCategoryRelationMap[entry.category as WorkCategory] : undefined)
+                        ?? 'none';
+                      const required = isRelationRequired(relationType);
+                      const label =
+                        relationType === 'none' ? '關聯項目'
+                        : relationType === 'optional' ? '關聯項目（選填）'
+                        : relationType === 'webandsystem' ? '關聯網站/系統 *'
+                        : relationType === 'quotation_client' ? '關聯客戶項目 *'
+                        : relationType === 'vchannel' ? '關聯影片頻道 *'
+                        : '關聯項目 *';
+                      const placeholder =
+                        relationType === 'optional' ? '可選：搜尋任一類型項目...'
+                        : relationType === 'webandsystem' ? '搜尋網站/系統...'
+                        : relationType === 'quotation_client' ? '搜尋客戶項目...'
+                        : relationType === 'vchannel' ? '搜尋影片頻道...'
+                        : '搜尋項目...';
                       return (
                         <>
                           <label className="text-[13px] font-semibold text-muted-foreground block mb-1">
-                            {relationType === 'internal_project' ? '關聯內部項目'
-                              : relationType === 'none' ? '關聯項目（選填）'
-                              : '關聯項目/網站'}
+                            {label}
                           </label>
                           {relationType === 'none' ? (
                             <SearchableProjectSelect items={[]} value="" onChange={() => {}} disabled={true} />
-                          ) : relationType === 'internal_project' ? (
-                            <SearchableProjectSelect
-                              items={projects.filter(p => p.projectCategory === 'internal').map(p => ({ id: p.id, name: p.name }))}
-                              value={entry.relatedId}
-                              onChange={(id, name) => { updateEntry(idx, 'relatedId', id); updateEntry(idx, 'relatedName', name); }}
-                              placeholder="搜尋內部項目..."
-                              className="border-teal-200 bg-teal-50/30"
-                            />
                           ) : (
                             <SearchableProjectSelect
-                              items={entry.category ? getRelatedItemsLive(entry.category as WorkCategory) : []}
+                              items={getRelatedItemsForRelation(relationType)}
                               value={entry.relatedId}
-                              onChange={(id, name) => { updateEntry(idx, 'relatedId', id); updateEntry(idx, 'relatedName', name); }}
+                              onChange={(id, name) => {
+                                // Strip type suffix from optional labels when storing related_name
+                                const cleanName = relationType === 'optional'
+                                  ? (masterProjects.find(p => p.id === id)?.name || name)
+                                  : name;
+                                updateEntry(idx, 'relatedId', id);
+                                updateEntry(idx, 'relatedName', cleanName);
+                              }}
                               disabled={!entry.category}
-                              placeholder="搜尋項目/網站..."
+                              placeholder={placeholder}
+                              className={required && !entry.relatedId ? 'border-amber-200 bg-amber-50/20' : undefined}
                             />
                           )}
                         </>
@@ -1962,7 +1925,12 @@ function SubmitReportPage() {
           <Plus size={13} /> 新增工作項目
         </button>
         <div className="flex items-center gap-3">
-          {!canSubmit && totalHours > 0 && !hoursMatch && (
+          {!canSubmit && totalHours > 0 && missingRequiredRelated && (
+            <span className="text-[14px] text-amber-600 font-medium bg-amber-50 px-3 py-1.5 rounded-md border border-amber-200">
+              請為必填關聯類型選擇項目
+            </span>
+          )}
+          {!canSubmit && totalHours > 0 && !hoursMatch && !missingRequiredRelated && (
             <span className="text-[14px] text-rose-500 font-medium bg-rose-50 px-3 py-1.5 rounded-md border border-rose-200">
               ⚠️ 正式提交需工時 = {targetHours}h（目前 {totalHours}h）；可先暫存
             </span>
@@ -2900,7 +2868,7 @@ export function DayReportModule({ subModule }: { subModule?: string }) {
       case 'team-view': return { title: '匯報統計', subtitle: '工作檢查查看填寫情況 · 工時分析統計類別工時與占比。' };
       case 'monthly': return { title: '月度報告', subtitle: '本月工時排名、AI 使用統計及類別分佈分析。' };
       case 'analytics': return { title: '項目分析', subtitle: '按系統／網站項目統計人員投入工時與占比 — 支援按天／週／月篩選。' };
-      case 'work-categories': return { title: '工作類型管理', subtitle: '管理匯報工作類別的關聯規則 — 設定哪些類別關聯項目/網站、內部項目或無需關聯。' };
+      case 'work-categories': return { title: '工作類型管理', subtitle: '管理匯報工作類別的關聯規則 — 網站/系統、客戶項目、影片頻道、可選關聯或無需關聯。' };
       case 'holiday-settings': return { title: '假期設定', subtitle: '自動載入香港及深圳公眾假期 · Admin 可設定星期六上班人員、公司活動日、免匯報日。' };
       default: return { title: '提交匯報', subtitle: '支援香港/深圳雙辦公室 · 14天匯報總覽 · 常用項目快速填入 · 週六加班匯報 · 多日假期申報 · AI 追蹤 · 8h驗證。' };
     }

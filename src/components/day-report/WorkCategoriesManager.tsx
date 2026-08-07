@@ -3,13 +3,27 @@ import { Plus, Edit2, Trash2, GripVertical, Globe, Building2, FolderOpen, Tag, C
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { WorkCategory } from '@/data/dayReportDataV2';
-import { projects } from '@/data/mockData';
 import { useDayReportTypes } from '@/hooks/useDayReportTypes';
 
 // ============================
 // Work Category Type Definition
 // ============================
-export type CategoryRelationType = 'project_website' | 'internal_project' | 'none';
+export type CategoryRelationType =
+  | 'webandsystem'
+  | 'quotation_client'
+  | 'vchannel'
+  | 'optional'
+  | 'none';
+
+export const REQUIRED_RELATION_TYPES: CategoryRelationType[] = [
+  'webandsystem',
+  'quotation_client',
+  'vchannel',
+];
+
+export function isRelationRequired(relationType: CategoryRelationType | undefined | null): boolean {
+  return !!relationType && REQUIRED_RELATION_TYPES.includes(relationType);
+}
 
 // Project Module Groups — work categories associate with these
 export type ProjectModuleGroup = 'website_system' | 'marketing' | 'video_production' | 'talent';
@@ -61,18 +75,18 @@ export interface WorkCategoryConfig {
 
 // Default category-to-relation mapping
 const defaultCategoryRelationMap: Record<WorkCategory, CategoryRelationType> = {
-  website_design: 'project_website',
-  website_dev: 'project_website',
-  article_writing: 'project_website',
-  video_shooting: 'project_website',
-  video_editing: 'project_website',
-  social_media: 'project_website',
-  edm: 'project_website',
-  paid_ads: 'project_website',
-  seo: 'project_website',
-  graphic_design: 'project_website',
-  client_meeting: 'project_website',
-  internal_meeting: 'internal_project',
+  website_design: 'webandsystem',
+  website_dev: 'webandsystem',
+  article_writing: 'webandsystem',
+  video_shooting: 'vchannel',
+  video_editing: 'vchannel',
+  social_media: 'vchannel',
+  edm: 'webandsystem',
+  paid_ads: 'webandsystem',
+  seo: 'webandsystem',
+  graphic_design: 'webandsystem',
+  client_meeting: 'quotation_client',
+  internal_meeting: 'optional',
   training: 'none',
 };
 
@@ -94,23 +108,37 @@ const defaultAssociatedModules: Record<WorkCategory, ProjectModuleGroup[]> = {
 };
 
 const relationTypeLabels: Record<CategoryRelationType, { label: string; description: string; icon: React.ElementType; color: string; bg: string }> = {
-  project_website: {
-    label: '關聯項目及網站',
-    description: '選擇時會顯示所有客戶項目和網站',
+  webandsystem: {
+    label: '網站/系統（必填）',
+    description: '必須選擇一個網站或系統項目',
     icon: Globe,
     color: 'text-blue-700',
     bg: 'bg-blue-50',
   },
-  internal_project: {
-    label: '關聯內部項目',
-    description: '選擇時只顯示內部項目，不顯示客戶項目和網站',
+  quotation_client: {
+    label: '客戶項目（必填）',
+    description: '必須選擇一個已確認的客戶項目',
     icon: Building2,
+    color: 'text-amber-700',
+    bg: 'bg-amber-50',
+  },
+  vchannel: {
+    label: '影片頻道（必填）',
+    description: '必須選擇一個影片頻道項目',
+    icon: Video,
+    color: 'text-purple-700',
+    bg: 'bg-purple-50',
+  },
+  optional: {
+    label: '可選關聯',
+    description: '可選任一類型項目，亦可留空',
+    icon: Tag,
     color: 'text-teal-700',
     bg: 'bg-teal-50',
   },
   none: {
     label: '無需關聯',
-    description: '不需要關聯任何項目或網站',
+    description: '不顯示項目選擇，關聯欄位固定為空',
     icon: FolderOpen,
     color: 'text-gray-600',
     bg: 'bg-gray-50',
@@ -156,7 +184,7 @@ export function WorkCategoriesManager() {
     icon: '📋',
     color: 'text-blue-700',
     bg: 'bg-blue-100',
-    relationType: 'project_website' as CategoryRelationType,
+    relationType: 'webandsystem' as CategoryRelationType,
     associatedModules: [] as ProjectModuleGroup[],
   });
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -240,7 +268,7 @@ export function WorkCategoriesManager() {
       associatedModules: newForm.associatedModules,
     };
     await addType(newItem);
-    setNewForm({ label: '', description: '', icon: '📋', color: 'text-blue-700', bg: 'bg-blue-100', relationType: 'project_website', associatedModules: [] });
+    setNewForm({ label: '', description: '', icon: '📋', color: 'text-blue-700', bg: 'bg-blue-100', relationType: 'webandsystem', associatedModules: [] });
     setShowAddNew(false);
     toast.success(`已新增「${newLabel}」工作類型`, { description: '新類型已加入列表並預設啟用' });
   };
@@ -260,12 +288,11 @@ export function WorkCategoriesManager() {
 
   // Stats
   const activeCount = categories.filter(c => c.isActive).length;
-  const internalCount = categories.filter(c => c.relationType === 'internal_project').length;
-  const projectWebsiteCount = categories.filter(c => c.relationType === 'project_website').length;
+  const webandsystemCount = categories.filter(c => c.relationType === 'webandsystem').length;
+  const quotationCount = categories.filter(c => c.relationType === 'quotation_client').length;
+  const vchannelCount = categories.filter(c => c.relationType === 'vchannel').length;
+  const optionalCount = categories.filter(c => c.relationType === 'optional').length;
   const noneCount = categories.filter(c => c.relationType === 'none').length;
-
-  // Internal projects for preview
-  const internalProjects = projects.filter(p => p.projectCategory === 'internal');
 
   if (loading) {
     return (
@@ -279,26 +306,31 @@ export function WorkCategoriesManager() {
   return (
     <div className="space-y-5">
       {/* Stats Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] p-3.5 shadow-sm">
           <span className="text-[11px] text-muted-foreground font-medium">啟用類別</span>
           <div className="text-[22px] font-bold text-teal-600 mt-1">{activeCount}</div>
           <span className="text-[11px] text-muted-foreground">/ {categories.length} 總數</span>
         </div>
         <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] p-3.5 shadow-sm">
-          <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-1"><Globe size={10} className="text-blue-600" />關聯項目+網站</span>
-          <div className="text-[22px] font-bold text-blue-600 mt-1">{projectWebsiteCount}</div>
-          <span className="text-[11px] text-muted-foreground">顯示所有項目和網站</span>
+          <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-1"><Globe size={10} className="text-blue-600" />網站/系統</span>
+          <div className="text-[22px] font-bold text-blue-600 mt-1">{webandsystemCount}</div>
         </div>
         <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] p-3.5 shadow-sm">
-          <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-1"><Building2 size={10} className="text-teal-600" />僅內部項目</span>
-          <div className="text-[22px] font-bold text-teal-600 mt-1">{internalCount}</div>
-          <span className="text-[11px] text-muted-foreground">只顯示內部項目</span>
+          <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-1"><Building2 size={10} className="text-amber-600" />客戶項目</span>
+          <div className="text-[22px] font-bold text-amber-600 mt-1">{quotationCount}</div>
+        </div>
+        <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] p-3.5 shadow-sm">
+          <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-1"><Video size={10} className="text-purple-600" />影片頻道</span>
+          <div className="text-[22px] font-bold text-purple-600 mt-1">{vchannelCount}</div>
+        </div>
+        <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] p-3.5 shadow-sm">
+          <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-1"><Tag size={10} className="text-teal-600" />可選關聯</span>
+          <div className="text-[22px] font-bold text-teal-600 mt-1">{optionalCount}</div>
         </div>
         <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] p-3.5 shadow-sm">
           <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-1"><FolderOpen size={10} className="text-gray-500" />無需關聯</span>
           <div className="text-[22px] font-bold text-gray-600 mt-1">{noneCount}</div>
-          <span className="text-[11px] text-muted-foreground">不顯示任何關聯</span>
         </div>
       </div>
 
@@ -402,7 +434,7 @@ export function WorkCategoriesManager() {
               {/* Row 3: Relation Type */}
               <div>
                 <label className="text-[11px] font-semibold text-muted-foreground block mb-1.5">關聯類型</label>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {(Object.entries(relationTypeLabels) as [CategoryRelationType, typeof relationTypeLabels['none']][]).map(([key, config]) => {
                     const Icon = config.icon;
                     return (
@@ -540,7 +572,7 @@ export function WorkCategoriesManager() {
                       {/* Relation Type */}
                       <div>
                         <label className="text-[12px] font-semibold text-muted-foreground block mb-1.5">關聯類型</label>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                           {(Object.entries(relationTypeLabels) as [CategoryRelationType, typeof relationTypeLabels['none']][]).map(([key, config]) => {
                             const Icon = config.icon;
                             return (
@@ -717,45 +749,30 @@ export function WorkCategoriesManager() {
         </div>
       </div>
 
-      {/* Internal Projects Preview Panel */}
+      {/* Relation type legend */}
       <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-border/50 bg-gradient-to-r from-teal-50/50 to-white">
           <h3 className="text-[14px] font-bold flex items-center gap-2">
-            <Building2 size={14} className="text-teal-600" />
-            內部項目列表預覽
+            <Tag size={14} className="text-teal-600" />
+            關聯類型說明
           </h3>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            當同事選擇「關聯內部項目」類型的工作類別時，將會看到以下項目列表
+            項目選項來自同步後的 projects 主表（網站/系統、客戶項目、影片頻道）
           </p>
         </div>
-        <div className="p-4">
-          {internalProjects.length === 0 ? (
-            <p className="text-[13px] text-muted-foreground text-center py-6">暫無內部項目</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {internalProjects.map((proj) => (
-                <div key={proj.id} className="flex items-center gap-3 p-3 rounded-lg border border-border/50 bg-muted/5 hover:border-teal-200 transition-colors">
-                  <div className="w-8 h-8 rounded-lg bg-teal-100 flex items-center justify-center shrink-0">
-                    <Building2 size={14} className="text-teal-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[13px] font-medium block truncate">{proj.name}</span>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[11px] text-muted-foreground">{(proj as any).brand || '—'}</span>
-                      <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-medium',
-                        proj.status === 'active' ? 'bg-teal-100 text-teal-700' :
-                        proj.status === 'planning' ? 'bg-blue-100 text-blue-700' :
-                        proj.status === 'completed' ? 'bg-gray-100 text-gray-600' :
-                        'bg-amber-100 text-amber-700'
-                      )}>
-                        {proj.status === 'active' ? '進行中' : proj.status === 'planning' ? '規劃中' : proj.status === 'completed' ? '已完成' : '暫停'}
-                      </span>
-                    </div>
-                  </div>
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+          {(Object.entries(relationTypeLabels) as [CategoryRelationType, typeof relationTypeLabels['none']][]).map(([key, config]) => {
+            const Icon = config.icon;
+            return (
+              <div key={key} className={cn('flex items-start gap-2 p-3 rounded-lg border', config.bg)}>
+                <Icon size={14} className={cn('mt-0.5 shrink-0', config.color)} />
+                <div>
+                  <span className={cn('text-[12px] font-bold block', config.color)}>{config.label}</span>
+                  <span className="text-[11px] text-muted-foreground">{config.description}</span>
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

@@ -5,18 +5,18 @@ import { useAuth } from '@/context/AuthContext';
 import { categoryConfig } from '@/data/dayReportDataV2';
 
 const defaultRelation: Record<string, CategoryRelationType> = {
-  website_design: 'project_website',
-  website_dev: 'project_website',
-  article_writing: 'project_website',
-  video_shooting: 'project_website',
-  video_editing: 'project_website',
-  social_media: 'project_website',
-  edm: 'project_website',
-  paid_ads: 'project_website',
-  seo: 'project_website',
-  graphic_design: 'project_website',
-  client_meeting: 'project_website',
-  internal_meeting: 'internal_project',
+  website_design: 'webandsystem',
+  website_dev: 'webandsystem',
+  article_writing: 'webandsystem',
+  video_shooting: 'vchannel',
+  video_editing: 'vchannel',
+  social_media: 'vchannel',
+  edm: 'webandsystem',
+  paid_ads: 'webandsystem',
+  seo: 'webandsystem',
+  graphic_design: 'webandsystem',
+  client_meeting: 'quotation_client',
+  internal_meeting: 'optional',
   training: 'none',
 };
 
@@ -65,7 +65,13 @@ type DbRow = {
   associated_modules: string[];
 };
 
-const validRelationTypes = new Set<CategoryRelationType>(['project_website', 'internal_project', 'none']);
+const validRelationTypes = new Set<CategoryRelationType>([
+  'webandsystem',
+  'quotation_client',
+  'vchannel',
+  'optional',
+  'none',
+]);
 const validModuleGroups = new Set<ProjectModuleGroup>(['website_system', 'marketing', 'video_production', 'talent']);
 
 function mapRow(row: DbRow): WorkCategoryConfig {

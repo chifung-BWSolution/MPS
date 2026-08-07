@@ -17,11 +17,12 @@ type Mode = 'team' | 'personal';
 type PeriodType = 'day' | 'week' | 'month';
 type ProfileTypeFilter = 'all' | 'system' | 'website';
 
-interface WebsiteProfileLite {
+interface ProjectProfileLite {
   id: string;
-  website_name: string;
+  name: string;
   profile_type: string;
   domain_url: string | null;
+  related_type: string;
 }
 
 interface EntryRow {
@@ -208,7 +209,7 @@ export function ProjectAnalysis() {
   const [periodType, setPeriodType] = useState<PeriodType>('week');
   const [typeFilter, setTypeFilter] = useState<ProfileTypeFilter>('all');
   const [anchorDate, setAnchorDate] = useState(() => new Date());
-  const [profiles, setProfiles] = useState<WebsiteProfileLite[]>([]);
+  const [profiles, setProfiles] = useState<ProjectProfileLite[]>([]);
   const [entries, setEntries] = useState<EntryRow[]>([]);
   const [staffNameById, setStaffNameById] = useState<Record<string, string>>({});
   const [departmentByStaffId, setDepartmentByStaffId] = useState<Record<string, string>>({});
@@ -222,11 +223,11 @@ export function ProjectAnalysis() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [{ data: profileData }, { data: reportData }] = await Promise.all([
+      const [{ data: projectData }, { data: reportData }] = await Promise.all([
         supabase
-          .from('webandsystem_list')
-          .select('id, website_name, profile_type, domain_url')
-          .order('website_name', { ascending: true }),
+          .from('projects')
+          .select('id, name, related_type, meta')
+          .order('name', { ascending: true }),
         supabase
           .from('day_reports')
           .select('id')
@@ -234,7 +235,17 @@ export function ProjectAnalysis() {
           .lte('report_date', dateRange.end),
       ]);
 
-      setProfiles((profileData || []) as WebsiteProfileLite[]);
+      const mappedProfiles: ProjectProfileLite[] = ((projectData || []) as any[]).map((p) => {
+        const meta = (p.meta && typeof p.meta === 'object') ? p.meta : {};
+        return {
+          id: p.id,
+          name: p.name,
+          profile_type: String(meta.profile_type || p.related_type || 'unknown'),
+          domain_url: meta.domain_url ? String(meta.domain_url) : null,
+          related_type: p.related_type,
+        };
+      });
+      setProfiles(mappedProfiles);
 
       let entryData: EntryRow[] = [];
       if (reportData && reportData.length > 0) {
@@ -279,7 +290,7 @@ export function ProjectAnalysis() {
   };
 
   const profileById = useMemo(() => {
-    const map = new Map<string, WebsiteProfileLite>();
+    const map = new Map<string, ProjectProfileLite>();
     profiles.forEach((p) => map.set(p.id, p));
     return map;
   }, [profiles]);
@@ -290,7 +301,7 @@ export function ProjectAnalysis() {
       ? normalizeProfileType(profile.profile_type)
       : 'unknown';
     return {
-      name: profile?.website_name || relatedName || projectId,
+      name: profile?.name || relatedName || projectId,
       profileType,
       domainUrl: profile?.domain_url ?? null,
     };
