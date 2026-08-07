@@ -703,13 +703,13 @@ export function StaffDirectory() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="搜尋姓名、電郵、職位..."
-            className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+            className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
           />
         </div>
         <select
           value={filterClassification}
           onChange={(e) => setFilterClassification(e.target.value as any)}
-          className="px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+          className="px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
         >
           <option value="all">所有分類</option>
           <option value="system_user">系統使用者</option>
@@ -719,7 +719,7 @@ export function StaffDirectory() {
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value as any)}
-          className="px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+          className="px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
         >
           <option value="all">所有狀態</option>
           <option value="active">在職</option>
@@ -729,7 +729,7 @@ export function StaffDirectory() {
           <select
             value={filterTeam}
             onChange={(e) => setFilterTeam(e.target.value)}
-            className="px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+            className="px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
           >
             <option value="all">所有團隊</option>
             {teams.map((team) => (
@@ -742,7 +742,7 @@ export function StaffDirectory() {
         <button
           onClick={() => refetch()}
           disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-md text-[13px] font-medium hover:bg-muted/50 transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-md text-[13px] font-medium hover:bg-muted/50 transition-colors disabled:opacity-50 bg-white"
         >
           <RefreshCw size={13} className={cn(loading && 'animate-spin')} />
           刷新

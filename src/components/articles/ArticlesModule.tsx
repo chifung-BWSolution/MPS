@@ -101,7 +101,7 @@ function AddWebsiteModal({
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm">
+          <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm bg-white">
             <Search size={14} className="text-muted-foreground" />
             <input
               value={searchQuery}
@@ -356,23 +356,23 @@ function ArticleList({ onSelectArticle }: { onSelectArticle: (article: Article) 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm flex-1 max-w-[260px]">
+        <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm flex-1 max-w-[260px] bg-white">
           <Search size={14} className="text-muted-foreground" />
           <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground" placeholder="搜尋文章..." />
         </div>
-        <select value={companyFilter} onChange={(e) => { setCompanyFilter(e.target.value); setBrandFilter('all'); }} className="px-3 py-1.5 border border-border rounded-md text-[13px]">
+        <select value={companyFilter} onChange={(e) => { setCompanyFilter(e.target.value); setBrandFilter('all'); }} className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white">
           <option value="all">所有公司</option>
           {companies.filter(c => c.isActive).map(c => (
             <option key={c.id} value={c.id}>{c.companyCode}</option>
           ))}
         </select>
-        <select value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px]">
+        <select value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white">
           <option value="all">所有品牌</option>
           {filteredBrands.filter(b => b.isActive).map(b => (
             <option key={b.id} value={b.id}>{b.brandCode}</option>
           ))}
         </select>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px]">
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white">
           <option value="all">所有狀態</option>
           <option value="draft">草稿</option>
           <option value="writing">撰寫中</option>
@@ -571,7 +571,7 @@ function AddArticleModal({ onClose, onAdd }: { onClose: () => void; onAdd: (arti
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">公司</label>
-              <select value={companyId} onChange={(e) => { setCompanyId(e.target.value); setBrandId(''); }} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600">
+              <select value={companyId} onChange={(e) => { setCompanyId(e.target.value); setBrandId(''); }} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white">
                 <option value="">選擇公司</option>
                 {companies.filter(c => c.isActive).map(c => (
                   <option key={c.id} value={c.id}>{c.companyCode} - {c.companyNameZh}</option>
@@ -580,7 +580,7 @@ function AddArticleModal({ onClose, onAdd }: { onClose: () => void; onAdd: (arti
             </div>
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">品牌</label>
-              <select value={brandId} onChange={(e) => setBrandId(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600">
+              <select value={brandId} onChange={(e) => setBrandId(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white">
                 <option value="">選擇品牌</option>
                 {filteredBrands.filter(b => b.isActive).map(b => (
                   <option key={b.id} value={b.id}>{b.brandCode} - {b.displayName}</option>
@@ -592,14 +592,14 @@ function AddArticleModal({ onClose, onAdd }: { onClose: () => void; onAdd: (arti
           {/* Title */}
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">文章標題 *</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="輸入文章標題..." />
+            <input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="輸入文章標題..." />
           </div>
 
           {/* Channel & Status */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">渠道</label>
-              <select value={channel} onChange={(e) => setChannel(e.target.value as Article['channel'])} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600">
+              <select value={channel} onChange={(e) => setChannel(e.target.value as Article['channel'])} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white">
                 <option value="website_article">網站文章</option>
                 <option value="youtube">YouTube</option>
                 <option value="facebook">Facebook</option>
@@ -610,7 +610,7 @@ function AddArticleModal({ onClose, onAdd }: { onClose: () => void; onAdd: (arti
             </div>
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">狀態</label>
-              <select value={contentStatus} onChange={(e) => setContentStatus(e.target.value as Article['contentStatus'])} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600">
+              <select value={contentStatus} onChange={(e) => setContentStatus(e.target.value as Article['contentStatus'])} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white">
                 <option value="draft">草稿</option>
                 <option value="writing">撰寫中</option>
                 <option value="review">審核中</option>
@@ -623,33 +623,33 @@ function AddArticleModal({ onClose, onAdd }: { onClose: () => void; onAdd: (arti
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">撰稿人</label>
-              <input value={authorName} onChange={(e) => setAuthorName(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="撰稿人名稱" />
+              <input value={authorName} onChange={(e) => setAuthorName(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="撰稿人名稱" />
             </div>
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">字數</label>
-              <input type="number" value={wordCount || ''} onChange={(e) => setWordCount(Number(e.target.value))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="0" />
+              <input type="number" value={wordCount || ''} onChange={(e) => setWordCount(Number(e.target.value))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="0" />
             </div>
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">文章工時 (h)</label>
-              <input type="number" step="0.5" value={hoursSpent || ''} onChange={(e) => setHoursSpent(Number(e.target.value))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="0" />
+              <input type="number" step="0.5" value={hoursSpent || ''} onChange={(e) => setHoursSpent(Number(e.target.value))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="0" />
             </div>
           </div>
 
           {/* Report Date */}
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">日報日期</label>
-            <input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" />
+            <input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" />
           </div>
 
           {/* URL + Asana */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">文章連結 (Output Link)</label>
-              <input value={url} onChange={(e) => setUrl(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="https://..." />
+              <input value={url} onChange={(e) => setUrl(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="https://..." />
             </div>
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">Asana 連結</label>
-              <input value={asanaLink} onChange={(e) => setAsanaLink(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="https://app.asana.com/..." />
+              <input value={asanaLink} onChange={(e) => setAsanaLink(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="https://app.asana.com/..." />
             </div>
           </div>
 
@@ -662,7 +662,7 @@ function AddArticleModal({ onClose, onAdd }: { onClose: () => void; onAdd: (arti
                 <option value="S2">S2</option>
                 <option value="S3">S3</option>
               </select>
-              <input value={kwInput} onChange={(e) => setKwInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addKeyword(); }}} className="flex-1 px-3 py-1.5 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="輸入關鍵字，按 Enter 新增" />
+              <input value={kwInput} onChange={(e) => setKwInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addKeyword(); }}} className="flex-1 px-3 py-1.5 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="輸入關鍵字，按 Enter 新增" />
               <button onClick={addKeyword} className="px-2.5 py-1.5 bg-teal-600 text-white rounded-md text-[12px] hover:bg-teal-700">
                 <Plus size={12} />
               </button>

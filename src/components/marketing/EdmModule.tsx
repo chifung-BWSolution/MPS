@@ -132,7 +132,7 @@ export function EdmModule() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="搜尋主題..."
-                className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               />
             </div>
             <div className="flex items-center gap-1">
@@ -194,23 +194,23 @@ export function EdmModule() {
                 </div>
                 <div className="md:col-span-2">
                   <label className="text-[12px] font-medium text-muted-foreground block mb-1">主題 *</label>
-                  <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="輸入郵件主題" />
+                  <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="輸入郵件主題" />
                 </div>
                 <div>
                   <label className="text-[12px] font-medium text-muted-foreground block mb-1">發送日期</label>
-                  <input type="date" className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" />
+                  <input type="date" className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" />
                 </div>
                 <div>
                   <label className="text-[12px] font-medium text-muted-foreground block mb-1">收件人類型</label>
-                  <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="如：VIP客戶、訂閱者" />
+                  <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="如：VIP客戶、訂閱者" />
                 </div>
                 <div>
                   <label className="text-[12px] font-medium text-muted-foreground block mb-1">收件人數</label>
-                  <input type="number" className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="0" />
+                  <input type="number" className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="0" />
                 </div>
                 <div>
                   <label className="text-[12px] font-medium text-muted-foreground block mb-1">投入工時</label>
-                  <input type="number" step="0.5" className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="0" />
+                  <input type="number" step="0.5" className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="0" />
                 </div>
               </div>
               <div className="flex items-center gap-3 mt-4">

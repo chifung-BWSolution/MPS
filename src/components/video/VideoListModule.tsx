@@ -615,7 +615,7 @@ function AddVideoModal({ onClose, onSave }: { onClose: () => void; onSave: (vide
                 type="date"
                 value={form.shootDate}
                 onChange={e => set('shootDate', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               />
             </div>
             <div>
@@ -624,7 +624,7 @@ function AddVideoModal({ onClose, onSave }: { onClose: () => void; onSave: (vide
                 type="date"
                 value={form.publishDate}
                 onChange={e => set('publishDate', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               />
             </div>
           </div>
@@ -639,7 +639,7 @@ function AddVideoModal({ onClose, onSave }: { onClose: () => void; onSave: (vide
                 value={form.durationSeconds}
                 onChange={e => set('durationSeconds', e.target.value)}
                 placeholder="例如：180"
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               />
             </div>
             <div>
@@ -651,7 +651,7 @@ function AddVideoModal({ onClose, onSave }: { onClose: () => void; onSave: (vide
                 value={form.editingHours}
                 onChange={e => set('editingHours', e.target.value)}
                 placeholder="例如：8"
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               />
             </div>
           </div>
@@ -664,7 +664,7 @@ function AddVideoModal({ onClose, onSave }: { onClose: () => void; onSave: (vide
               onChange={e => set('description', e.target.value)}
               rows={3}
               placeholder="簡短描述影片內容..."
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none bg-white"
             />
           </div>
 
@@ -676,7 +676,7 @@ function AddVideoModal({ onClose, onSave }: { onClose: () => void; onSave: (vide
                 type="date"
                 value={form.reportDate}
                 onChange={e => set('reportDate', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               />
             </div>
             <div>
@@ -686,7 +686,7 @@ function AddVideoModal({ onClose, onSave }: { onClose: () => void; onSave: (vide
                 value={form.asanaLink}
                 onChange={e => set('asanaLink', e.target.value)}
                 placeholder="https://app.asana.com/..."
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               />
             </div>
           </div>
@@ -697,7 +697,7 @@ function AddVideoModal({ onClose, onSave }: { onClose: () => void; onSave: (vide
               value={form.outputLink}
               onChange={e => set('outputLink', e.target.value)}
               placeholder="https://..."
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
             />
           </div>
         </div>
@@ -799,7 +799,7 @@ export function VideoListModule() {
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-[220px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜尋影片..." className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" />
+          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜尋影片..." className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" />
         </div>
         <select value={filterCompany} onChange={e => setFilterCompany(e.target.value)} className="px-2.5 py-1.5 border border-border rounded text-[12px] bg-white focus:outline-none focus:ring-1 focus:ring-teal-600">
           <option value="all">全部公司</option>

@@ -358,7 +358,7 @@ function ProfileSection() {
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">姓名</label>
             <input
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               value={profile.name}
               onChange={(e) => setProfile({ ...profile, name: e.target.value })}
             />
@@ -366,7 +366,7 @@ function ProfileSection() {
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">電郵地址</label>
             <input
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               value={profile.email}
               onChange={(e) => setProfile({ ...profile, email: e.target.value })}
             />
@@ -374,7 +374,7 @@ function ProfileSection() {
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">職位</label>
             <input
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               value={profile.position}
               onChange={(e) => setProfile({ ...profile, position: e.target.value })}
             />
@@ -382,7 +382,7 @@ function ProfileSection() {
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">部門</label>
             <input
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               value={profile.department}
               onChange={(e) => setProfile({ ...profile, department: e.target.value })}
             />
@@ -390,7 +390,7 @@ function ProfileSection() {
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">聯絡電話</label>
             <input
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               value={profile.phone}
               onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
             />
@@ -527,7 +527,7 @@ function ProfileSection() {
                       <div>
                         <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">所屬公司</label>
                         <select
-                          className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                          className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                           value={assignment.companyId}
                           onChange={(e) => {
                             handleUpdateRoleAssignment(assignment.id, {
@@ -649,7 +649,7 @@ function ProfileSection() {
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">所屬公司 *</label>
                 <select
-                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                   value={newRole.companyId || ''}
                   onChange={(e) => setNewRole({ ...newRole, companyId: e.target.value, brandIds: [] })}
                 >
@@ -876,7 +876,7 @@ function UserModal({ user, onSave, onClose }: { user: UserItem | null; onSave: (
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">姓名 *</label>
             <input
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder="輸入姓名"
@@ -885,7 +885,7 @@ function UserModal({ user, onSave, onClose }: { user: UserItem | null; onSave: (
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">電郵地址 *</label>
             <input
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               placeholder="email@company.com"
@@ -895,7 +895,7 @@ function UserModal({ user, onSave, onClose }: { user: UserItem | null; onSave: (
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">角色 *</label>
               <select
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 value={formData.role}
                 onChange={(e) => setFormData({ ...formData, role: e.target.value })}
               >
@@ -907,7 +907,7 @@ function UserModal({ user, onSave, onClose }: { user: UserItem | null; onSave: (
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">部門 *</label>
               <select
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 value={formData.department}
                 onChange={(e) => setFormData({ ...formData, department: e.target.value })}
               >
@@ -1046,7 +1046,7 @@ function NotificationsSection() {
             type="number"
             value={advanceDays}
             onChange={(e) => setAdvanceDays(parseInt(e.target.value) || 30)}
-            className="w-24 px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+            className="w-24 px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
           />
         </div>
         <div className="border-t border-border/50 pt-4 space-y-3">
@@ -1354,7 +1354,7 @@ function CreditCardModal({ card, onSave, onClose }: { card: CreditCardItem | nul
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">所屬公司 *</label>
               <select
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 value={formData.company}
                 onChange={(e) => setFormData({ ...formData, company: e.target.value })}
               >
@@ -1367,7 +1367,7 @@ function CreditCardModal({ card, onSave, onClose }: { card: CreditCardItem | nul
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">銀行 *</label>
               <select
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 value={formData.bank}
                 onChange={(e) => setFormData({ ...formData, bank: e.target.value })}
               >
@@ -1385,7 +1385,7 @@ function CreditCardModal({ card, onSave, onClose }: { card: CreditCardItem | nul
                 <input
                   type={showCardNumber ? 'text' : 'password'}
                   maxLength={4}
-                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                   value={formData.lastFour}
                   onChange={(e) => setFormData({ ...formData, lastFour: e.target.value.replace(/\D/g, '').slice(0, 4) })}
                   placeholder="0000"
@@ -1402,7 +1402,7 @@ function CreditCardModal({ card, onSave, onClose }: { card: CreditCardItem | nul
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">到期日 (YYYY-MM) *</label>
               <input
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 value={formData.expiry}
                 onChange={(e) => setFormData({ ...formData, expiry: e.target.value })}
                 placeholder="2025-12"
@@ -1412,7 +1412,7 @@ function CreditCardModal({ card, onSave, onClose }: { card: CreditCardItem | nul
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">用途</label>
             <input
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               value={formData.purpose}
               onChange={(e) => setFormData({ ...formData, purpose: e.target.value })}
               placeholder="例：廣告投放、工具訂閱"
@@ -1422,7 +1422,7 @@ function CreditCardModal({ card, onSave, onClose }: { card: CreditCardItem | nul
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">卡主</label>
               <input
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 value={formData.holder}
                 onChange={(e) => setFormData({ ...formData, holder: e.target.value })}
                 placeholder="持卡人名稱"
@@ -1431,7 +1431,7 @@ function CreditCardModal({ card, onSave, onClose }: { card: CreditCardItem | nul
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">保管人</label>
               <input
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 value={formData.custodian}
                 onChange={(e) => setFormData({ ...formData, custodian: e.target.value })}
                 placeholder="保管人名稱"
@@ -1597,7 +1597,7 @@ function QuotationTypeModal({ editingType, onSave, onClose }: {
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               placeholder="如：網站設計"
             />
           </div>
@@ -1606,7 +1606,7 @@ function QuotationTypeModal({ editingType, onSave, onClose }: {
             <input
               value={nameEn}
               onChange={(e) => setNameEn(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               placeholder="如：Web Design"
             />
           </div>

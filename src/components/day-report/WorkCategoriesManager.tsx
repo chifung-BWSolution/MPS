@@ -368,14 +368,14 @@ export function WorkCategoriesManager() {
                   <input
                     value={newForm.label}
                     onChange={(e) => setNewForm({ ...newForm, label: e.target.value })}
-                    className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                    className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                     placeholder="輸入工作類型名稱..."
                   />
                   <label className="text-[11px] font-semibold text-muted-foreground block mb-1.5 mt-2">描述</label>
                   <input
                     value={newForm.description}
                     onChange={(e) => setNewForm({ ...newForm, description: e.target.value })}
-                    className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                    className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                     placeholder="工作類型描述..."
                   />
                 </div>
@@ -598,7 +598,7 @@ export function WorkCategoriesManager() {
                         <input
                           value={editForm.description}
                           onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                          className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                          className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                           placeholder="工作類型描述..."
                         />
                       </div>

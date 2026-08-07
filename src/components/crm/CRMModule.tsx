@@ -248,11 +248,11 @@ export function CRMModule({ subModule }: { subModule?: string }) {
 
       {/* Filters */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm flex-1 max-w-[280px]">
+        <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm flex-1 max-w-[280px] bg-white">
           <Search size={14} className="text-muted-foreground" />
           <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground" placeholder="搜尋客戶名稱..." />
         </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px]">
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white">
           <option value="all">所有狀態</option>
           <option value="active">合作中</option>
           <option value="prospect">潛在客戶</option>
@@ -436,7 +436,7 @@ export function CRMModule({ subModule }: { subModule?: string }) {
                 <textarea
                   value={formData.notes || ''}
                   onChange={(e) => updateForm('notes', e.target.value)}
-                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none"
+                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none bg-white"
                   rows={3}
                   placeholder="任何備註..."
                 />

@@ -1875,7 +1875,7 @@ function SubmitReportPage() {
                       />
                       {/* Upload trigger row */}
                       <div
-                        className="flex items-center gap-2 px-2.5 py-1.5 border border-dashed border-border rounded-md cursor-pointer hover:bg-muted/30 transition-colors select-none"
+                        className="flex items-center gap-2 px-2.5 py-1.5 border border-dashed border-border rounded-md cursor-pointer hover:bg-muted/30 transition-colors select-none bg-white"
                         onClick={() => imageInputRefs.current[idx]?.click()}
                       >
                         <Upload size={13} className="text-muted-foreground shrink-0" />
@@ -2842,7 +2842,7 @@ function MonthlyReport() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <select value={selectedMonth} onChange={(e) => setSelectedMonth(Number(e.target.value))} className="px-3 py-1.5 border border-border rounded-md text-[13px]">
+        <select value={selectedMonth} onChange={(e) => setSelectedMonth(Number(e.target.value))} className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white">
           {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}月</option>)}
         </select>
         <div className="flex items-center gap-3 text-[12px]">

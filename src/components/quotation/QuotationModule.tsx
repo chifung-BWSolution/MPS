@@ -96,7 +96,7 @@ function QuotationList({ onViewQuote, onPreviewQuote }: { onViewQuote: (id: stri
 
       {/* Filters */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm flex-1 max-w-[280px]">
+        <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm flex-1 max-w-[280px] bg-white">
           <Search size={14} className="text-muted-foreground" />
           <input
             value={searchQuery}
@@ -108,7 +108,7 @@ function QuotationList({ onViewQuote, onPreviewQuote }: { onViewQuote: (id: stri
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-1.5 border border-border rounded-md text-[13px]"
+          className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white"
         >
           <option value="all">所有狀態</option>
           <option value="draft">草稿</option>

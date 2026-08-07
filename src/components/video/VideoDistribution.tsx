@@ -211,7 +211,7 @@ export function VideoDistribution() {
               <input
                 value={newChannel}
                 onChange={e => setNewChannel(e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 placeholder="頻道名稱"
               />
             </div>
@@ -220,7 +220,7 @@ export function VideoDistribution() {
               <input
                 value={newCompany}
                 onChange={e => setNewCompany(e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 placeholder="公司"
               />
             </div>
@@ -229,7 +229,7 @@ export function VideoDistribution() {
               <input
                 value={newBrand}
                 onChange={e => setNewBrand(e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 placeholder="品牌"
               />
             </div>

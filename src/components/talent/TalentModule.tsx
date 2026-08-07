@@ -624,7 +624,7 @@ function TalentForm({
           <input
             value={form.name || ''}
             onChange={(e) => set('name', e.target.value)}
-            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
           />
         </div>
         <div>
@@ -632,7 +632,7 @@ function TalentForm({
           <input
             value={form.stageName || ''}
             onChange={(e) => set('stageName', e.target.value)}
-            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
           />
         </div>
         <div>
@@ -641,7 +641,7 @@ function TalentForm({
             type="number"
             value={form.age ?? ''}
             onChange={(e) => set('age', e.target.value ? Number(e.target.value) : undefined)}
-            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
           />
         </div>
         <div>
@@ -650,7 +650,7 @@ function TalentForm({
             type="number"
             value={form.height ?? ''}
             onChange={(e) => set('height', e.target.value ? Number(e.target.value) : undefined)}
-            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
           />
         </div>
         <div>
@@ -659,7 +659,7 @@ function TalentForm({
             placeholder="32-24-34"
             value={form.measurements || ''}
             onChange={(e) => set('measurements', e.target.value)}
-            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
           />
         </div>
         <div>
@@ -667,7 +667,7 @@ function TalentForm({
           <select
             value={form.region}
             onChange={(e) => set('region', e.target.value as Region)}
-            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
           >
             {Object.entries(REGION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
@@ -707,7 +707,7 @@ function TalentForm({
             value={form.aspirations || ''}
             onChange={(e) => set('aspirations', e.target.value)}
             placeholder="例如：自媒體、直播、旅遊博主..."
-            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+            className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
           />
         </div>
         <div className="flex items-end">
@@ -744,7 +744,7 @@ function TalentForm({
           onChange={(e) => setInterviewNotes(e.target.value)}
           rows={3}
           placeholder="例如：態度積極、有主持經驗..."
-          className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+          className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
         />
       </div>
 
@@ -755,7 +755,7 @@ function TalentForm({
           value={auditionUrl}
           onChange={(e) => setAuditionUrl(e.target.value)}
           placeholder="https://..."
-          className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+          className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
         />
         <label
           className={cn(
@@ -1310,7 +1310,7 @@ function TalentList() {
       {/* Filters */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm flex-1 max-w-[260px]">
+          <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm flex-1 max-w-[260px] bg-white">
             <Search size={14} className="text-muted-foreground" />
             <input
               value={search}
@@ -1322,7 +1322,7 @@ function TalentList() {
           <select
             value={regionFilter}
             onChange={(e) => setRegionFilter(e.target.value as 'all' | Region)}
-            className="px-3 py-1.5 border border-border rounded-md text-[13px]"
+            className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white"
           >
             <option value="all">所有地區</option>
             {Object.entries(REGION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -1330,7 +1330,7 @@ function TalentList() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as 'all' | CooperationStage)}
-            className="px-3 py-1.5 border border-border rounded-md text-[13px]"
+            className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white"
           >
             <option value="all">所有合作狀態</option>
             {COOPERATION_STAGES.map(stage => (
@@ -1642,7 +1642,7 @@ function TalentList() {
               type="button"
               onClick={() => { setShowRejectConfirm(false); setRejectError(null); }}
               disabled={rejecting}
-              className="px-3 py-1.5 text-[13px] border border-border rounded-md hover:bg-muted disabled:opacity-50"
+              className="px-3 py-1.5 text-[13px] border border-border rounded-md hover:bg-muted disabled:opacity-50 bg-white"
             >
               否
             </button>
@@ -2203,7 +2203,7 @@ function TalentInvite() {
               <input
                 readOnly
                 value={inviteUrl}
-                className="flex-1 px-3 py-2 border border-border rounded-md text-[13px] bg-muted/30 font-mono"
+                className="flex-1 px-3 py-2 border border-border rounded-md text-[13px] bg-muted/30 font-mono bg-white"
               />
               <button
                 onClick={() => {
@@ -2212,7 +2212,7 @@ function TalentInvite() {
                     setTimeout(() => setCopied(false), 1500);
                   });
                 }}
-                className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-md text-[13px] hover:bg-muted"
+                className="flex items-center gap-1.5 px-3 py-2 border border-border rounded-md text-[13px] hover:bg-muted bg-white"
               >
                 {copied ? <Check size={14} className="text-teal-600" /> : <Copy size={14} />}
                 {copied ? '已複製' : '複製'}
@@ -2406,7 +2406,7 @@ function InterviewRatingEditor({ talent, onSave, onCancel }: {
           type="datetime-local"
           value={scheduledAt}
           onChange={(e) => setScheduledAt(e.target.value)}
-          className="w-full px-3 py-2 border border-border rounded-md text-[13px]"
+          className="w-full px-3 py-2 border border-border rounded-md text-[13px] bg-white"
         />
       </div>
 
@@ -2429,7 +2429,7 @@ function InterviewRatingEditor({ talent, onSave, onCancel }: {
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
           placeholder="例如：態度積極、有主持經驗..."
-          className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+          className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
         />
       </div>
 
@@ -2443,7 +2443,7 @@ function InterviewRatingEditor({ talent, onSave, onCancel }: {
           value={reportHours || ''}
           onChange={(e) => setReportHours(parseFloat(e.target.value) || 0)}
           placeholder="例如：1.5"
-          className="w-full px-3 py-2 border border-border rounded-md text-[13px]"
+          className="w-full px-3 py-2 border border-border rounded-md text-[13px] bg-white"
         />
         <p className="text-[11px] text-muted-foreground mt-1">完成面試時填寫，將自動帶入工作匯報</p>
       </div>
@@ -2454,7 +2454,7 @@ function InterviewRatingEditor({ talent, onSave, onCancel }: {
           value={mediaUrl}
           onChange={(e) => setMediaUrl(e.target.value)}
           placeholder="https://..."
-          className="w-full px-3 py-2 border border-border rounded-md text-[13px]"
+          className="w-full px-3 py-2 border border-border rounded-md text-[13px] bg-white"
         />
       </div>
 
@@ -2566,7 +2566,7 @@ function InterviewRecordModal({ record, onClose }: {
             <FileText size={14} className="text-muted-foreground" />
             面試備註
           </h4>
-          <div className="min-h-[88px] whitespace-pre-wrap rounded-md border border-border bg-muted/20 px-3 py-2 text-[13px] leading-6">
+          <div className="min-h-[88px] whitespace-pre-wrap rounded-md border border-border bg-muted/20 px-3 py-2 text-[13px] leading-6 bg-white">
             {notes || <span className="text-muted-foreground">暫無面試記錄。</span>}
           </div>
         </div>

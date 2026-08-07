@@ -163,7 +163,7 @@ export function ReviewActionModal({ open, video, mode, onClose, onApprove, onRej
                   setRejectError(null);
                 }}
                 rows={4}
-                className="w-full border border-border rounded-md px-3 py-2 text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full border border-border rounded-md px-3 py-2 text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 placeholder="請填寫拒絕理由，方便製作端修正。"
               />
               {rejectError && <p className="text-[12px] text-rose-600">{rejectError}</p>}

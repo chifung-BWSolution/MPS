@@ -156,7 +156,7 @@ function TaskModal({ item, onClose, onSave }: TaskModalProps) {
                 type="date"
                 value={form.publishDate}
                 onChange={e => set('publishDate', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               />
             </div>
           </div>
@@ -179,7 +179,7 @@ function TaskModal({ item, onClose, onSave }: TaskModalProps) {
               <input
                 value={form.location}
                 onChange={e => set('location', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 placeholder="例：公司攝影棚 / 戶外"
               />
             </div>
@@ -215,7 +215,7 @@ function TaskModal({ item, onClose, onSave }: TaskModalProps) {
                 type="number"
                 value={form.durationSeconds}
                 onChange={e => set('durationSeconds', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 placeholder="60"
                 min={0}
               />
@@ -228,7 +228,7 @@ function TaskModal({ item, onClose, onSave }: TaskModalProps) {
                 type="number"
                 value={form.editingHours}
                 onChange={e => set('editingHours', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 placeholder="4"
                 min={0}
                 step={0.5}
@@ -239,7 +239,7 @@ function TaskModal({ item, onClose, onSave }: TaskModalProps) {
               <input
                 value={form.notes}
                 onChange={e => set('notes', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 placeholder="其他備註"
               />
             </div>

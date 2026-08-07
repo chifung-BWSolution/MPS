@@ -309,7 +309,7 @@ function AddArticleModal({
                 <input
                   value={newArticle.title}
                   onChange={(e) => setNewArticle(prev => ({ ...prev, title: e.target.value }))}
-                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                   placeholder="輸入文章標題"
                 />
               </div>
@@ -318,7 +318,7 @@ function AddArticleModal({
                 <select
                   value={newArticle.channel}
                   onChange={(e) => setNewArticle(prev => ({ ...prev, channel: e.target.value }))}
-                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 >
                   <option value="website_article">網站文章</option>
                   <option value="youtube">YouTube</option>
@@ -332,7 +332,7 @@ function AddArticleModal({
                 <input
                   value={newArticle.authorName}
                   onChange={(e) => setNewArticle(prev => ({ ...prev, authorName: e.target.value }))}
-                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                   placeholder="撰稿人名稱"
                 />
               </div>
@@ -1009,7 +1009,7 @@ function UnmatchedAdsDomainsModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-3 py-1.5 text-[13px] rounded-md border border-border hover:bg-muted"
+            className="px-3 py-1.5 text-[13px] rounded-md border border-border hover:bg-muted bg-white"
           >
             關閉
           </button>
@@ -1113,7 +1113,7 @@ function WebsiteFormModal({
             <input
               value={form.websiteName}
               onChange={(e) => handleChange('websiteName', e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               placeholder={form.profileType === 'system' ? '輸入系統名稱' : '輸入網站名稱'}
             />
           </div>
@@ -1124,7 +1124,7 @@ function WebsiteFormModal({
             <input
               value={form.domainUrl}
               onChange={(e) => handleChange('domainUrl', e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               placeholder={form.profileType === 'system' ? 'app.example.com' : 'www.example.com'}
             />
           </div>
@@ -1136,7 +1136,7 @@ function WebsiteFormModal({
               <select
                 value={form.companyId}
                 onChange={(e) => handleChange('companyId', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               >
                 <option value="">選擇公司</option>
                 {companies.filter(c => c.isActive).map(c => (
@@ -1149,7 +1149,7 @@ function WebsiteFormModal({
               <select
                 value={form.brand}
                 onChange={(e) => handleChange('brand', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               >
                 <option value="">選擇品牌</option>
                 {uniqueBrandCodes.map(code => {
@@ -1178,7 +1178,7 @@ function WebsiteFormModal({
                     handleChange('platform', e.target.value);
                   }
                 }}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               >
                 <option value="">選擇平台</option>
                 {platformOptions
@@ -1198,7 +1198,7 @@ function WebsiteFormModal({
                   }}
                   maxLength={10}
                   placeholder="輸入自訂平台 (最多10字)"
-                  className="mt-2 w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                  className="mt-2 w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 />
               )}
             </div>
@@ -1207,7 +1207,7 @@ function WebsiteFormModal({
               <input
                 value={form.hostingProvider}
                 onChange={(e) => handleChange('hostingProvider', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 placeholder="如 Cloudways, AWS..."
               />
             </div>
@@ -1220,7 +1220,7 @@ function WebsiteFormModal({
               <select
                 value={form.level}
                 onChange={(e) => handleChange('level', Number(e.target.value) as WebsiteLevel)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               >
                 <option value={1}>L1 主打</option>
                 <option value={2}>L2 重要</option>
@@ -1234,7 +1234,7 @@ function WebsiteFormModal({
               <select
                 value={form.status}
                 onChange={(e) => handleChange('status', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               >
                 <option value="development">開發中</option>
                 <option value="live">已上線</option>
@@ -1254,7 +1254,7 @@ function WebsiteFormModal({
                   <select
                     value={form.systemType || ''}
                     onChange={(e) => handleChange('systemType', e.target.value || undefined)}
-                    className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-purple-600"
+                    className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-purple-600 bg-white"
                   >
                     <option value="">選擇類型...</option>
                     <option value="internal_tool">內部工具</option>
@@ -1270,7 +1270,7 @@ function WebsiteFormModal({
                   <input
                     value={form.deploymentEnv || ''}
                     onChange={(e) => handleChange('deploymentEnv', e.target.value)}
-                    className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-purple-600"
+                    className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-purple-600 bg-white"
                     placeholder="如 AWS, Vercel, GCP..."
                   />
                 </div>
@@ -1280,7 +1280,7 @@ function WebsiteFormModal({
                 <input
                   value={(form.techStack || []).join(', ')}
                   onChange={(e) => handleChange('techStack', e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean))}
-                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-purple-600"
+                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-purple-600 bg-white"
                   placeholder="React, TypeScript, Supabase..."
                 />
               </div>
@@ -1289,7 +1289,7 @@ function WebsiteFormModal({
                 <input
                   value={form.apiDocUrl || ''}
                   onChange={(e) => handleChange('apiDocUrl', e.target.value)}
-                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-purple-600"
+                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-purple-600 bg-white"
                   placeholder="https://api-docs.example.com"
                 />
               </div>
@@ -1303,7 +1303,7 @@ function WebsiteFormModal({
               value={form.notes}
               onChange={(e) => handleChange('notes', e.target.value)}
               rows={3}
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 resize-none"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 resize-none bg-white"
               placeholder="其他備註..."
             />
           </div>
@@ -2394,7 +2394,7 @@ function CreateArticleModal({
             <input
               value={title}
               onChange={e => setTitle(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               placeholder="輸入文章標題"
             />
           </div>
@@ -2405,7 +2405,7 @@ function CreateArticleModal({
               <select
                 value={channel}
                 onChange={e => setChannel(e.target.value as Article['channel'])}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               >
                 <option value="website_article">網站文章</option>
                 <option value="youtube">YouTube</option>
@@ -2420,7 +2420,7 @@ function CreateArticleModal({
               <select
                 value={contentStatus}
                 onChange={e => setContentStatus(e.target.value as Article['contentStatus'])}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               >
                 <option value="draft">草稿</option>
                 <option value="writing">撰寫中</option>
@@ -2436,7 +2436,7 @@ function CreateArticleModal({
               <input
                 value={authorName}
                 onChange={e => setAuthorName(e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 placeholder="撰稿人名稱"
               />
             </div>
@@ -2445,7 +2445,7 @@ function CreateArticleModal({
               <input
                 value={hoursSpent}
                 onChange={e => setHoursSpent(e.target.value.replace(/[^0-9.]/g, ''))}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 placeholder="例：2.5"
               />
             </div>
@@ -2456,7 +2456,7 @@ function CreateArticleModal({
             <input
               value={url}
               onChange={e => setUrl(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               placeholder="https://..."
             />
           </div>

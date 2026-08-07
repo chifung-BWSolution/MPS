@@ -478,7 +478,7 @@ export function SocialPostsModule() {
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="搜尋帖文..."
-            className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+            className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
           />
         </div>
         <select
@@ -684,7 +684,7 @@ export function SocialPostsModule() {
                 <textarea
                   value={newPost.content}
                   onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none"
+                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none bg-white"
                   rows={5}
                   placeholder="輸入帖文內容..."
                 />
@@ -960,7 +960,7 @@ export function SocialPostsModule() {
             </div>
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1">內容</label>
-              <textarea value={editingPost.content || ''} onChange={(e) => setEditingPost({ ...editingPost, content: e.target.value })} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none" rows={3} />
+              <textarea value={editingPost.content || ''} onChange={(e) => setEditingPost({ ...editingPost, content: e.target.value })} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none bg-white" rows={3} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>

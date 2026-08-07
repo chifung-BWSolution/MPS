@@ -528,7 +528,7 @@ export function VideoChannelsList() {
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="搜尋編號、名稱或品牌..."
-                className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               />
             </div>
             <Select value={importanceFilter} onValueChange={setImportanceFilter}>

@@ -387,7 +387,7 @@ export function WebsiteVideosTab({
                   <input
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
-                    className="w-full h-9 pl-9 pr-3 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
+                    className="w-full h-9 pl-9 pr-3 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                     placeholder="搜尋主題或 Video Code..."
                   />
                 </div>
@@ -554,7 +554,7 @@ export function WebsiteSocialTab({ site }: { site: WebsiteProfileFull }) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-[12px] font-medium text-muted-foreground block mb-1">平台 *</label>
-                  <select value={newPost.platform} onChange={e => setNewPost(p => ({ ...p, platform: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600">
+                  <select value={newPost.platform} onChange={e => setNewPost(p => ({ ...p, platform: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white">
                     <option value="facebook">Facebook</option>
                     <option value="instagram">Instagram</option>
                     <option value="xiaohongshu">小紅書</option>
@@ -564,12 +564,12 @@ export function WebsiteSocialTab({ site }: { site: WebsiteProfileFull }) {
                 </div>
                 <div>
                   <label className="text-[12px] font-medium text-muted-foreground block mb-1">排期日期</label>
-                  <input type="date" value={newPost.scheduledDate} onChange={e => setNewPost(p => ({ ...p, scheduledDate: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" />
+                  <input type="date" value={newPost.scheduledDate} onChange={e => setNewPost(p => ({ ...p, scheduledDate: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" />
                 </div>
               </div>
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">內容 *</label>
-                <textarea value={newPost.content} onChange={e => setNewPost(p => ({ ...p, content: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 h-24 resize-none" placeholder="輸入帖文內容..." />
+                <textarea value={newPost.content} onChange={e => setNewPost(p => ({ ...p, content: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 h-24 resize-none bg-white" placeholder="輸入帖文內容..." />
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
@@ -890,12 +890,12 @@ export function WebsiteSeoTab({ site }: { site: WebsiteProfileFull }) {
             <div className="px-6 py-4 space-y-4">
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">關鍵字 *</label>
-                <input value={newKeyword.keyword} onChange={e => setNewKeyword(p => ({ ...p, keyword: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" placeholder="輸入關鍵字" />
+                <input value={newKeyword.keyword} onChange={e => setNewKeyword(p => ({ ...p, keyword: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="輸入關鍵字" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-[12px] font-medium text-muted-foreground block mb-1">等級</label>
-                  <select value={newKeyword.level} onChange={e => setNewKeyword(p => ({ ...p, level: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600">
+                  <select value={newKeyword.level} onChange={e => setNewKeyword(p => ({ ...p, level: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white">
                     <option value="level_1">S1 核心</option>
                     <option value="level_2">S2 重要</option>
                     <option value="level_3">S3 長尾</option>
@@ -903,12 +903,12 @@ export function WebsiteSeoTab({ site }: { site: WebsiteProfileFull }) {
                 </div>
                 <div>
                   <label className="text-[12px] font-medium text-muted-foreground block mb-1">目標排名</label>
-                  <input type="number" value={newKeyword.targetRanking} onChange={e => setNewKeyword(p => ({ ...p, targetRanking: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" placeholder="e.g. 5" />
+                  <input type="number" value={newKeyword.targetRanking} onChange={e => setNewKeyword(p => ({ ...p, targetRanking: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="e.g. 5" />
                 </div>
               </div>
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">目標頁面</label>
-                <input value={newKeyword.targetPage} onChange={e => setNewKeyword(p => ({ ...p, targetPage: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" placeholder="/services/web-design" />
+                <input value={newKeyword.targetPage} onChange={e => setNewKeyword(p => ({ ...p, targetPage: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="/services/web-design" />
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
@@ -1018,24 +1018,24 @@ export function WebsiteEdmTab({ site }: { site: WebsiteProfileFull }) {
               </div>
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">主題 *</label>
-                <input value={newEdm.subject} onChange={e => setNewEdm(p => ({ ...p, subject: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" placeholder="EDM 主題" />
+                <input value={newEdm.subject} onChange={e => setNewEdm(p => ({ ...p, subject: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="EDM 主題" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-[12px] font-medium text-muted-foreground block mb-1">類型</label>
-                  <select value={newEdm.campaignType} onChange={e => setNewEdm(p => ({ ...p, campaignType: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600">
+                  <select value={newEdm.campaignType} onChange={e => setNewEdm(p => ({ ...p, campaignType: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white">
                     <option value="email">電郵</option>
                     <option value="sms">短訊</option>
                   </select>
                 </div>
                 <div>
                   <label className="text-[12px] font-medium text-muted-foreground block mb-1">發送日期</label>
-                  <input type="date" value={newEdm.sendDate} onChange={e => setNewEdm(p => ({ ...p, sendDate: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" />
+                  <input type="date" value={newEdm.sendDate} onChange={e => setNewEdm(p => ({ ...p, sendDate: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" />
                 </div>
               </div>
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">收件人類別</label>
-                <input value={newEdm.recipientType} onChange={e => setNewEdm(p => ({ ...p, recipientType: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" placeholder="例如：全部訂閱者、VIP 會員" />
+                <input value={newEdm.recipientType} onChange={e => setNewEdm(p => ({ ...p, recipientType: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="例如：全部訂閱者、VIP 會員" />
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
@@ -1143,16 +1143,16 @@ export function WebsitePluginsTab({ site }: { site: WebsiteProfileFull }) {
               </div>
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">插件名稱 *</label>
-                <input value={newPlugin.pluginName} onChange={e => setNewPlugin(p => ({ ...p, pluginName: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" placeholder="例如：Yoast SEO Premium" />
+                <input value={newPlugin.pluginName} onChange={e => setNewPlugin(p => ({ ...p, pluginName: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="例如：Yoast SEO Premium" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-[12px] font-medium text-muted-foreground block mb-1">費用 (USD)</label>
-                  <input type="number" value={newPlugin.cost} onChange={e => setNewPlugin(p => ({ ...p, cost: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" placeholder="0" />
+                  <input type="number" value={newPlugin.cost} onChange={e => setNewPlugin(p => ({ ...p, cost: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="0" />
                 </div>
                 <div>
                   <label className="text-[12px] font-medium text-muted-foreground block mb-1">計費週期</label>
-                  <select value={newPlugin.billingCycle} onChange={e => setNewPlugin(p => ({ ...p, billingCycle: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600">
+                  <select value={newPlugin.billingCycle} onChange={e => setNewPlugin(p => ({ ...p, billingCycle: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white">
                     <option value="monthly">月付</option>
                     <option value="annual">年付</option>
                     <option value="one_time">一次性</option>
@@ -1162,7 +1162,7 @@ export function WebsitePluginsTab({ site }: { site: WebsiteProfileFull }) {
               </div>
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">到期日</label>
-                <input type="date" value={newPlugin.expiryDate} onChange={e => setNewPlugin(p => ({ ...p, expiryDate: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" />
+                <input type="date" value={newPlugin.expiryDate} onChange={e => setNewPlugin(p => ({ ...p, expiryDate: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" />
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
@@ -1234,15 +1234,15 @@ export function WebsiteLinksTab({ site }: { site: WebsiteProfileFull }) {
             <div className="px-6 py-4 space-y-4">
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">連結名稱 *</label>
-                <input value={newLink.label} onChange={e => setNewLink(p => ({ ...p, label: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" placeholder="例如：Figma 設計稿" />
+                <input value={newLink.label} onChange={e => setNewLink(p => ({ ...p, label: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="例如：Figma 設計稿" />
               </div>
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">URL *</label>
-                <input value={newLink.url} onChange={e => setNewLink(p => ({ ...p, url: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600" placeholder="https://..." />
+                <input value={newLink.url} onChange={e => setNewLink(p => ({ ...p, url: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="https://..." />
               </div>
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">連結類型</label>
-                <select value={newLink.linkType} onChange={e => setNewLink(p => ({ ...p, linkType: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600">
+                <select value={newLink.linkType} onChange={e => setNewLink(p => ({ ...p, linkType: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white">
                   <option value="figma">Figma</option>
                   <option value="github">GitHub</option>
                   <option value="staging">Staging</option>
@@ -1777,7 +1777,7 @@ export function WebsiteGoogleBusinessTab({ site }: { site: WebsiteProfileFull })
         <textarea
           value={data.content}
           onChange={(e) => onChange({ ...data, content: e.target.value })}
-          className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none"
+          className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none bg-white"
           rows={4}
           placeholder="業務資訊、地址、營業時間等"
         />

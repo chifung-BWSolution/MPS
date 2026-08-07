@@ -164,7 +164,7 @@ export function GoogleBusinessModule() {
         <textarea
           value={data.content}
           onChange={(e) => onChange({ ...data, content: e.target.value })}
-          className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none"
+          className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none bg-white"
           rows={4}
           placeholder="登記的業務資訊、地址、營業時間、服務說明等"
         />
@@ -188,7 +188,7 @@ export function GoogleBusinessModule() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="搜尋網站、網址、內容、日期..."
-            className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+            className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
           />
         </div>
         <button

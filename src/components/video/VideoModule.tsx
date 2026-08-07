@@ -32,7 +32,7 @@ function VideoLibrary() {
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="搜尋影片..."
-            className="pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 w-[200px]"
+            className="pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 w-[200px] bg-white"
           />
         </div>
       </div>

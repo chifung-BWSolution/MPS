@@ -75,7 +75,7 @@ function ChannelDetail({ channel, onBack }: { channel: any; onBack: () => void }
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">影片標題 *</label>
-                <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="輸入影片標題" />
+                <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="輸入影片標題" />
               </div>
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">關聯網站</label>
@@ -88,7 +88,7 @@ function ChannelDetail({ channel, onBack }: { channel: any; onBack: () => void }
               </div>
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">拍攝日期</label>
-                <input type="date" className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" />
+                <input type="date" className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" />
               </div>
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">製作狀態</label>

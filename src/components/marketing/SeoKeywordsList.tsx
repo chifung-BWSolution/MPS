@@ -51,11 +51,11 @@ export function SeoKeywordsList() {
             </div>
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1">行業/主題</label>
-              <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="例如：紅酒、活動策劃..." />
+              <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="例如：紅酒、活動策劃..." />
             </div>
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1">種子關鍵字</label>
-              <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" placeholder="用逗號分隔多個關鍵字" />
+              <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="用逗號分隔多個關鍵字" />
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -94,7 +94,7 @@ export function SeoKeywordsList() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="搜尋關鍵字..."
-            className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+            className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
           />
         </div>
         <div className="flex items-center gap-1.5">

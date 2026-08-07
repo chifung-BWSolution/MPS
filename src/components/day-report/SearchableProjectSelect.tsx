@@ -124,7 +124,7 @@ export function SearchableProjectSelect({
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder={searchPlaceholder}
-                className="w-full pl-8 pr-3 py-1.5 border border-border/60 rounded text-[12px] bg-gray-50/50 focus:bg-white focus:border-teal-300 focus:ring-1 focus:ring-teal-200 outline-none transition-all"
+                className="w-full pl-8 pr-3 py-1.5 border border-border/60 rounded text-[12px] bg-white focus:bg-white focus:border-teal-300 focus:ring-1 focus:ring-teal-200 outline-none transition-all"
               />
               {searchTerm && (
                 <button
@@ -165,7 +165,7 @@ export function SearchableProjectSelect({
 
           {/* Footer with count */}
           {items.length > 0 && (
-            <div className="px-3 py-1.5 border-t border-border/60 text-[10px] text-muted-foreground bg-gray-50/50">
+            <div className="px-3 py-1.5 border-t border-border/60 text-[10px] text-muted-foreground bg-white">
               {searchTerm
                 ? `${filteredItems.length} / ${items.length} 項目`
                 : `共 ${items.length} 個項目`

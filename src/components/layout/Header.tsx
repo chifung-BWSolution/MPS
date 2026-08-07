@@ -49,7 +49,7 @@ export function Header() {
         {/* Search */}
         <div
           className={cn(
-            'flex items-center gap-2 rounded-md border px-3 py-1.5 transition-all duration-200',
+            'flex items-center gap-2 rounded-md border px-3 py-1.5 transition-all duration-200 bg-white',
             searchFocused ? 'border-teal-600 ring-1 ring-teal-600/20 w-[260px]' : 'border-[rgba(13,26,45,0.12)] w-[180px]'
           )}
         >

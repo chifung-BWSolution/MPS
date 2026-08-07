@@ -1065,7 +1065,7 @@ function CheckResultRow({ check }: { check: CheckResult }) {
   return (
     <div className="border-b border-[rgba(13,26,45,0.04)] last:border-b-0">
       <div
-        className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50/50 cursor-pointer"
+        className="flex items-center gap-3 px-4 py-2.5 hover:bg-white cursor-pointer"
         onClick={() => check.details && check.details.length > 0 && setExpanded(!expanded)}
       >
         <SeverityIcon className={cn('w-4 h-4 shrink-0', severityColor)} />

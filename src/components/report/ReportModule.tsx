@@ -366,7 +366,7 @@ function YearPlanReport() {
       {/* Filter */}
       <div className="flex items-center gap-3">
         <Filter size={13} className="text-muted-foreground" />
-        <select value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600">
+        <select value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white">
           <option value="all">全部公司</option>
           {companies.map(c => <option key={c} value={c}>{c}</option>)}
         </select>

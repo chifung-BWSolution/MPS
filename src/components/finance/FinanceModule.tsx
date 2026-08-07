@@ -111,7 +111,7 @@ function InvoiceList() {
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <Filter size={13} className="text-muted-foreground" />
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600">
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white">
             <option value="all">全部狀態</option>
             <option value="pending">待付</option>
             <option value="overdue">逾期</option>
@@ -119,7 +119,7 @@ function InvoiceList() {
             <option value="paid">已付</option>
           </select>
         </div>
-        <select value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600">
+        <select value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white">
           <option value="all">全部公司</option>
           {companyOptions.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
@@ -244,12 +244,12 @@ function PaymentRecordModal({ invoice, onSave, onClose }: { invoice: Invoice; on
           </div>
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">付款金額 (HKD) *</label>
-            <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} max={remaining} min={1} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" />
+            <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} max={remaining} min={1} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" />
             {parseFloat(amount) > remaining && <p className="text-[11px] text-rose-500 mt-1">付款金額不能超過待付款項</p>}
           </div>
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">付款方式</label>
-            <select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600">
+            <select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white">
               <option value="銀行轉帳">銀行轉帳</option>
               <option value="支票">支票</option>
               <option value="現金">現金</option>
@@ -259,7 +259,7 @@ function PaymentRecordModal({ invoice, onSave, onClose }: { invoice: Invoice; on
           </div>
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">備註</label>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none" rows={2} placeholder="如：第一期付款..." />
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none bg-white" rows={2} placeholder="如：第一期付款..." />
           </div>
         </div>
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border/50">
@@ -310,7 +310,7 @@ function PaymentTracker() {
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Filter size={13} className="text-muted-foreground" />
-        <select value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600">
+        <select value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white">
           <option value="all">全部公司</option>
           {companyOptions.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
@@ -426,14 +426,14 @@ function CreditCardFormModal({ card, onSave, onClose }: { card: CreditCardEntry 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">所屬公司 *</label>
-              <select className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" value={formData.companyName} onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}>
+              <select className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" value={formData.companyName} onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}>
                 <option value="">選擇公司</option>
                 {companyOptions.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">銀行 *</label>
-              <select className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" value={formData.bank} onChange={(e) => setFormData({ ...formData, bank: e.target.value })}>
+              <select className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" value={formData.bank} onChange={(e) => setFormData({ ...formData, bank: e.target.value })}>
                 <option value="">選擇銀行</option>
                 {bankOptions.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
@@ -443,27 +443,27 @@ function CreditCardFormModal({ card, onSave, onClose }: { card: CreditCardEntry 
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">卡號末四位 *</label>
               <div className="relative">
-                <input type={showCardNumber ? 'text' : 'password'} maxLength={4} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" value={formData.lastFour} onChange={(e) => setFormData({ ...formData, lastFour: e.target.value.replace(/\D/g, '').slice(0, 4) })} placeholder="0000" />
+                <input type={showCardNumber ? 'text' : 'password'} maxLength={4} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" value={formData.lastFour} onChange={(e) => setFormData({ ...formData, lastFour: e.target.value.replace(/\D/g, '').slice(0, 4) })} placeholder="0000" />
                 <button type="button" onClick={() => setShowCardNumber(!showCardNumber)} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">{showCardNumber ? <EyeOff size={14} /> : <Eye size={14} />}</button>
               </div>
             </div>
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">到期日 (YYYY-MM) *</label>
-              <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" value={formData.expiryDate} onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })} placeholder="2025-12" />
+              <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" value={formData.expiryDate} onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })} placeholder="2025-12" />
             </div>
           </div>
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">用途</label>
-            <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" value={formData.purpose} onChange={(e) => setFormData({ ...formData, purpose: e.target.value })} placeholder="例：廣告投放、工具訂閱" />
+            <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" value={formData.purpose} onChange={(e) => setFormData({ ...formData, purpose: e.target.value })} placeholder="例：廣告投放、工具訂閱" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">卡主</label>
-              <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" value={formData.cardHolder} onChange={(e) => setFormData({ ...formData, cardHolder: e.target.value })} placeholder="持卡人名稱" />
+              <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" value={formData.cardHolder} onChange={(e) => setFormData({ ...formData, cardHolder: e.target.value })} placeholder="持卡人名稱" />
             </div>
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">保管人</label>
-              <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600" value={formData.custodian} onChange={(e) => setFormData({ ...formData, custodian: e.target.value })} placeholder="保管人名稱" />
+              <input className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white" value={formData.custodian} onChange={(e) => setFormData({ ...formData, custodian: e.target.value })} placeholder="保管人名稱" />
             </div>
           </div>
         </div>

@@ -285,13 +285,13 @@ export function UserManagement() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="搜尋姓名、電郵..."
-            className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+            className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
           />
         </div>
         <select
           value={filterRole}
           onChange={(e) => setFilterRole(e.target.value)}
-          className="px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+          className="px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
         >
           <option value="all">所有角色</option>
           {ROLE_OPTIONS.map(r => (
@@ -301,7 +301,7 @@ export function UserManagement() {
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value as any)}
-          className="px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+          className="px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
         >
           <option value="all">所有狀態</option>
           <option value="active">啟用中</option>
@@ -597,7 +597,7 @@ function StaffPickerModal({
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="搜尋員工姓名、電郵、職位..."
-                  className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                  className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 />
               </div>
 
@@ -709,7 +709,7 @@ function StaffPickerModal({
                     value={googleEmail}
                     onChange={(e) => setGoogleEmail(e.target.value)}
                     placeholder="user@gmail.com 或 user@company.com"
-                    className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                    className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                   />
                 </div>
               </div>
@@ -850,7 +850,7 @@ function EditUserModal({
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">顯示名稱</label>
             <input
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] bg-muted/30"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] bg-muted/30 bg-white"
               value={formData.display_name}
               readOnly
             />
@@ -861,7 +861,7 @@ function EditUserModal({
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">系統角色 *</label>
             <select
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               value={formData.role}
               onChange={(e) => setFormData({ ...formData, role: e.target.value })}
             >
@@ -875,7 +875,7 @@ function EditUserModal({
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">部門</label>
             <select
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               value={formData.department}
               onChange={(e) => setFormData({ ...formData, department: e.target.value })}
             >
@@ -893,7 +893,7 @@ function EditUserModal({
               <Chrome size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500" />
               <input
                 type="email"
-                className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+                className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                 value={formData.google_email}
                 onChange={(e) => setFormData({ ...formData, google_email: e.target.value })}
                 placeholder="Google 帳號電郵"

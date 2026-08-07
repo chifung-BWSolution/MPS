@@ -303,7 +303,7 @@ function TermsTemplateModal({ editingTemplate, onSave, onClose }: {
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
               placeholder="如：標準網站設計條款"
             />
           </div>
@@ -329,7 +329,7 @@ function TermsTemplateModal({ editingTemplate, onSave, onClose }: {
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 min-h-[180px] leading-relaxed"
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 min-h-[180px] leading-relaxed bg-white"
               placeholder="每行為一條條款，例如：&#10;1. 本報價有效期為30天。&#10;2. 設計稿修改不超過3次。&#10;3. 專案完成後提供30天免費維護。"
             />
             <p className="text-[10px] text-muted-foreground mt-1">每行為一條條款，建議以數字編號開頭。</p>

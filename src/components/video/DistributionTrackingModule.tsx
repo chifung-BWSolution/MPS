@@ -197,7 +197,7 @@ export function DistributionTrackingModule() {
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="搜尋影片..."
-            className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600"
+            className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
           />
         </div>
         <select

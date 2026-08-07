@@ -212,7 +212,7 @@ export function GraphicDesignModule() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="搜索設計標題、網站、設計師、項目..."
-            className="w-full pl-9 pr-3 py-2 text-[13px] border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-teal-500"
+            className="w-full pl-9 pr-3 py-2 text-[13px] border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white"
           />
         </div>
         {filterStatus !== 'all' && (
