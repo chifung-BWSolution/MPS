@@ -74,7 +74,6 @@ export function StaffDirectory() {
         'N_BU': row.business_unit || undefined,
         'N_Team': row.team_id || undefined,
         'N_Team Role': row.team_role || undefined,
-        'Brands': row.brands || undefined,
         'Profile Pic': row.profile_pic_url || undefined,
         'Voov ID': row.voov_id ? Number(row.voov_id) || undefined : undefined,
         'Created By': '',

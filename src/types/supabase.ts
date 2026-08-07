@@ -186,7 +186,6 @@ export type Database = {
           al_quota: number | null
           base_location: string | null
           birthday: string | null
-          brands: Json | null
           bubble_created_date: string | null
           bubble_modified_date: string | null
           bubble_staff_id: string
@@ -219,7 +218,6 @@ export type Database = {
           al_quota?: number | null
           base_location?: string | null
           birthday?: string | null
-          brands?: Json | null
           bubble_created_date?: string | null
           bubble_modified_date?: string | null
           bubble_staff_id: string
@@ -252,7 +250,6 @@ export type Database = {
           al_quota?: number | null
           base_location?: string | null
           birthday?: string | null
-          brands?: Json | null
           bubble_created_date?: string | null
           bubble_modified_date?: string | null
           bubble_staff_id?: string

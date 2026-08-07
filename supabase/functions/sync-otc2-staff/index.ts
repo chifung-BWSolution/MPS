@@ -47,7 +47,6 @@ interface Otc2Staff {
   team_name: string | null;
   n_team_role: string | null;
   team_role_name: string | null;
-  brands: unknown;
   profile_pic: string | null;
   voov_id: number | null;
   bubble_created_date: string | null;
@@ -109,7 +108,6 @@ async function fetchAllOtc2Staff(otc2: ReturnType<typeof createClient>): Promise
           "team_name",
           "n_team_role",
           "team_role_name",
-          "brands",
           "profile_pic",
           "voov_id",
           "bubble_created_date",
@@ -223,7 +221,6 @@ Deno.serve(async (req: Request) => {
         team_id: staff.team_name || staff.n_team || null,
         team_role: staff.team_role_name || staff.n_team_role || null,
         business_unit: staff.bu_name || staff.n_bu || null,
-        brands: staff.brands ?? null,
         profile_pic_url: staff.profile_pic || null,
         voov_id: staff.voov_id != null ? String(staff.voov_id) : null,
         bubble_created_date: staff.bubble_created_date || null,

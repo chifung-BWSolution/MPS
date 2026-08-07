@@ -34,7 +34,6 @@ interface BubbleStaff {
   'N_BU'?: string;
   'N_Team'?: string;
   'N_Team Role'?: string;
-  'Brands'?: string[];
   'Profile Pic'?: string;
   'Voov ID'?: number;
   'New Work Phone'?: string;
@@ -199,7 +198,6 @@ Deno.serve(async (req: Request) => {
         team_id: staff['N_Team'] || null,
         team_role: staff['N_Team Role'] || null,
         business_unit: staff['N_BU'] || null,
-        brands: staff['Brands'] || null,
         profile_pic_url: staff['Profile Pic'] || null,
         voov_id: staff['Voov ID']?.toString() || null,
         bubble_created_date: staff['Created Date'] || null,
