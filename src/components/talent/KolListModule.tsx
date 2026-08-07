@@ -730,12 +730,7 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
     const list = rows.filter((r) => {
       if (!matchesWorkflowView(r, workflowView)) return false;
       if (hasPhotoOnly && !hasPhotoUrl(r)) return false;
-      if (q) {
-        const hay = [r.name, r.instagram_account, r.phone, r.email]
-          .map((x) => (x || '').toLowerCase())
-          .join(' ');
-        if (!hay.includes(q)) return false;
-      }
+      if (q && !(r.name || '').toLowerCase().includes(q)) return false;
       if (filters.ageGroup && r.age_group !== filters.ageGroup) return false;
       if (filters.birthMonth && r.birth_month !== filters.birthMonth) return false;
       if (filters.area) {
@@ -1063,7 +1058,7 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="名稱/IG/電話"
+                placeholder="名稱"
                 className="pl-6 h-8 text-[11px] bg-white"
               />
             </div>
