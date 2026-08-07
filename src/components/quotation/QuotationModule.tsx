@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Search, Plus, FileText, Eye, Download, Check, X, AlertTriangle, ChevronRight, Trash2, DollarSign, Award, Pencil, Save, RotateCcw, Layers, GripVertical, Clock, Users, ArrowLeft, ExternalLink, Sparkles, Loader2 } from 'lucide-react';
+import { Search, Plus, FileText, Eye, Download, Check, X, AlertTriangle, ChevronRight, Trash2, DollarSign, Award, Pencil, Save, RotateCcw, Layers, GripVertical, Clock, Users, ArrowLeft, ExternalLink, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { CRMModule } from '@/components/crm/CRMModule';
@@ -12,7 +12,6 @@ import {
   quotationTypes,
   quotationEntries,
   clientProjects,
-  presetQuotationItems,
   getQuotationTypeName,
   getStatusConfig,
   getClientProjectStatusConfig,
@@ -33,7 +32,6 @@ import {
   PITCHING_PROJECT_TYPE_OPTIONS,
 } from '@/data/pitchingData';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
-import { generateQuotationServices, getQuotationAiModelId, QUOTATION_AI_MODEL_OPTIONS, type QuotationAiCatalogItem, type QuotationAiProvider } from '@/lib/quotationAiApi';
 
 // Supplier options for cost structure
 const supplierOptions = [
@@ -197,13 +195,6 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
   const [projectTypeFilter, setProjectTypeFilter] = useState('all');
   const [clientName, setClientName] = useState('');
   const [requirementsText, setRequirementsText] = useState('');
-  const [aiProvider, setAiProvider] = useState<QuotationAiProvider>('grok');
-  const [aiGenerating, setAiGenerating] = useState(false);
-  const [generationMeta, setGenerationMeta] = useState<{
-    provider: string;
-    model: string;
-    fallback: boolean;
-  } | null>(null);
   const [quotationDate, setQuotationDate] = useState('');
   const [manHoursEstimate, setManHoursEstimate] = useState<number>(0);
   const [asanaLink, setAsanaLink] = useState('');
@@ -243,21 +234,6 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
     }));
   }, [filteredPitchingRecords]);
 
-  const catalogItems = useMemo((): QuotationAiCatalogItem[] => {
-    const typeIds = isComprehensive ? selectedTypes : selectedType ? [selectedType.id] : [];
-    if (!typeIds.length) return [];
-    return presetQuotationItems
-      .filter((item) => typeIds.includes(item.category) || (isComprehensive && item.category === 'comprehensive'))
-      .map((item) => ({
-        id: item.id,
-        name: item.name,
-        defaultPrice: item.defaultPrice,
-        defaultCost: item.defaultCost,
-        supplierName: item.supplierName,
-        category: item.category,
-      }));
-  }, [isComprehensive, selectedType, selectedTypes]);
-
   useEffect(() => {
     if (!selectedPitchingId) return;
     if (!filteredPitchingRecords.some((record) => record.id === selectedPitchingId)) {
@@ -279,56 +255,35 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
     if (record.asanaLink) setAsanaLink(record.asanaLink);
   };
 
-  const handleGenerateServices = async () => {
-    if (!selectedPitchingId || (isComprehensive && selectedTypes.length === 0) || aiGenerating) return;
-    setAiGenerating(true);
-    try {
-      const pitching = pitchingRecords.find((record) => record.id === selectedPitchingId);
-      const result = await generateQuotationServices({
-        provider: aiProvider,
-        quotationTypeName: selectedType?.name,
-        isComprehensive,
-        selectedTypeNames: selectedTypes
-          .map((typeId) => quotationTypes.find((type) => type.id === typeId)?.name)
-          .filter(Boolean) as string[],
-        pitchingRecord: pitching,
-        requirements: requirementsText.trim(),
-        catalogItems,
-      });
-
-      const mappedServices = result.services.map((service, idx) => {
-        const catalog = catalogItems.find(
-          (item) => item.name.toLowerCase() === service.name.toLowerCase(),
-        );
-        const typePrefix =
-          catalog && catalog.category !== 'comprehensive'
-            ? catalog.category
-            : isComprehensive
-              ? selectedTypes[idx % selectedTypes.length] || selectedTypes[0] || 'custom'
-              : selectedType?.id || 'custom';
-        return {
-          ...service,
-          id: isComprehensive ? `svc-${typePrefix}-${idx}` : `svc-${idx}`,
-        };
-      });
-
-      setServices(mappedServices);
-      setGenerationMeta({
-        provider: result.provider,
-        model: result.model || getQuotationAiModelId(aiProvider),
-        fallback: result.fallback,
-      });
-
-      if (result.fallback) {
-        toast.error(result.error || 'AI 生成失敗，已改用本地規則生成服務項目');
-      }
-
-      setStep(3);
-    } catch (err) {
-      toast.error(`生成失敗：${err instanceof Error ? err.message : '未知錯誤'}`);
-    } finally {
-      setAiGenerating(false);
+  const handlePreviousStep = () => {
+    if (step === 2) {
+      setStep(1);
+      setIsComprehensive(false);
+      setSelectedTypes([]);
+      setSelectedPitchingId('');
+      setClientName('');
+      setRequirementsText('');
+      return;
     }
+    if (step === 3) {
+      setStep(2);
+      return;
+    }
+    if (step === 4) {
+      setStep(3);
+    }
+  };
+
+  const handleNextFromStep2 = () => {
+    if (isComprehensive && selectedTypes.length === 0) {
+      toast.error('請至少選擇一個服務類型');
+      return;
+    }
+    if (!selectedPitchingId) {
+      toast.error('請選擇 Pitching 客戶');
+      return;
+    }
+    setStep(3);
   };
 
   const handleSelectType = (type: QuotationType) => {
@@ -445,7 +400,19 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
     <div className="space-y-6">
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-[18px] font-bold">新建報價單</h3>
+          <div className="flex items-center gap-3">
+            <h3 className="text-[18px] font-bold">新建報價單</h3>
+            {step > 1 && (
+              <button
+                type="button"
+                onClick={handlePreviousStep}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] border border-border rounded-md hover:bg-muted transition-colors duration-200 text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft size={14} />
+                上一步
+              </button>
+            )}
+          </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm">✕</button>
         </div>
 
@@ -591,62 +558,24 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
               {selectedPitchingId && (
                 <div>
                   <label className="text-[13px] font-medium text-muted-foreground block mb-1.5">客戶需求 / 報價說明</label>
-                  <div className="flex gap-2 items-start">
-                    <textarea
-                      value={requirementsText}
-                      onChange={(e) => setRequirementsText(e.target.value)}
-                      rows={4}
-                      placeholder="描述客戶需求、範圍、預算期望等，AI 將據此生成服務項目…"
-                      className="flex-1 px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-y min-h-[96px]"
-                    />
-                    <div className="shrink-0 flex flex-col gap-2 w-[148px]">
-                      <div>
-                        <label className="text-[11px] text-muted-foreground block mb-1">AI 模型</label>
-                        <select
-                          value={aiProvider}
-                          onChange={(e) => setAiProvider(e.target.value as QuotationAiProvider)}
-                          disabled={aiGenerating}
-                          className="w-full h-9 px-2 border border-border rounded-md text-[13px] bg-white focus:outline-none focus:ring-1 focus:ring-teal-600 disabled:opacity-60"
-                          aria-label="AI 模型"
-                        >
-                          {QUOTATION_AI_MODEL_OPTIONS.map((opt) => (
-                            <option key={opt.id} value={opt.id}>{opt.label} · {opt.modelId}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleGenerateServices()}
-                        disabled={aiGenerating || (isComprehensive && selectedTypes.length === 0)}
-                        className={cn(
-                          'flex-1 min-h-[56px] px-3 rounded-md text-[13px] font-medium transition-colors duration-200 flex flex-col items-center justify-center gap-1.5',
-                          aiGenerating || (isComprehensive && selectedTypes.length === 0)
-                            ? 'bg-muted text-muted-foreground cursor-not-allowed'
-                            : 'bg-teal-600 text-white hover:bg-teal-700',
-                        )}
-                      >
-                        {aiGenerating ? (
-                          <>
-                            <Loader2 size={16} className="animate-spin" />
-                            <span>生成中</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles size={16} />
-                            <span>生成</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-1.5">
-                    目前選擇：<span className="font-medium text-foreground">{QUOTATION_AI_MODEL_OPTIONS.find((opt) => opt.id === aiProvider)?.label} · {getQuotationAiModelId(aiProvider)}</span>
-                  </p>
+                  <textarea
+                    value={requirementsText}
+                    onChange={(e) => setRequirementsText(e.target.value)}
+                    rows={4}
+                    placeholder="描述客戶需求、範圍、預算期望等…"
+                    className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-y min-h-[96px]"
+                  />
                 </div>
               )}
             </div>
             <div className="flex justify-end gap-2 mt-6">
-              <button onClick={() => { setStep(1); setIsComprehensive(false); setSelectedTypes([]); setSelectedPitchingId(''); setClientName(''); setRequirementsText(''); }} className="px-4 py-2 text-sm border border-border rounded-md hover:bg-muted transition-colors duration-200">上一步</button>
+              <button
+                type="button"
+                onClick={handleNextFromStep2}
+                className="px-4 py-2 text-sm bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors duration-200"
+              >
+                下一步
+              </button>
             </div>
           </div>
         )}
@@ -662,16 +591,6 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
                 )}
                 {' '}| 客戶：<span className="font-medium text-foreground">{selectedPitching?.displayName || clientName}</span>
               </p>
-              {generationMeta && (
-                <span className={cn(
-                  'inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md border',
-                  generationMeta.fallback
-                    ? 'border-amber-200 bg-amber-50 text-amber-800'
-                    : 'border-teal-200 bg-teal-50 text-teal-800',
-                )}>
-                  {generationMeta.fallback ? '本地規則' : 'AI 生成'} · {generationMeta.provider === 'grok' ? 'Grok' : generationMeta.provider === 'gemini' ? 'Gemini' : generationMeta.provider} · {generationMeta.model}
-                </span>
-              )}
             </div>
 
             {/* Comprehensive: Add items from other types */}
@@ -927,7 +846,6 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
             </div>
 
             <div className="flex justify-end gap-2">
-              <button onClick={() => setStep(2)} className="px-4 py-2 text-sm border border-border rounded-md hover:bg-muted transition-colors duration-200">上一步</button>
               <button onClick={() => { updateCostRevenue(); setStep(4); }} className="px-4 py-2 text-sm bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors duration-200">下一步：Cost Structure</button>
             </div>
           </div>
@@ -1010,7 +928,6 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
             )}
 
             <div className="flex justify-end gap-2">
-              <button onClick={() => setStep(3)} className="px-4 py-2 text-sm border border-border rounded-md hover:bg-muted transition-colors duration-200">上一步</button>
               <button onClick={onClose} className="px-4 py-2 text-sm border border-border rounded-md hover:bg-muted transition-colors duration-200">儲存草稿</button>
               <button onClick={handleSubmit} className="px-4 py-2 text-sm bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors duration-200">提交批核</button>
             </div>
