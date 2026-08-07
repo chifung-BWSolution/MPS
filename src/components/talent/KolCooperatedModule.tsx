@@ -36,6 +36,8 @@ export function KolCooperatedModule() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [platformFilter, setPlatformFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,22 +63,16 @@ export function KolCooperatedModule() {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
       if (platformFilter && !(r.platforms || []).includes(platformFilter)) return false;
+
+      const recordDate = r.cooperated_at.slice(0, 10);
+      if (dateFrom && recordDate < dateFrom) return false;
+      if (dateTo && recordDate > dateTo) return false;
+
       if (!q) return true;
-      const hay = [
-        r.project_name,
-        r.cooperation_content,
-        r.evaluation,
-        r.kol_profile?.name,
-        r.kol_profile?.instagram_account,
-        r.kol_profile?.phone,
-        r.created_by,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return hay.includes(q);
+      const name = (r.kol_profile?.name || '').toLowerCase();
+      return name.includes(q);
     });
-  }, [rows, search, platformFilter]);
+  }, [rows, search, platformFilter, dateFrom, dateTo]);
 
   const closeForm = () => {
     setShowForm(false);
@@ -132,10 +128,41 @@ export function KolCooperatedModule() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜尋 KOL / 項目 / 內容"
+            placeholder="搜尋 KOL 名稱"
             className="pl-8 h-9 text-[13px]"
           />
         </div>
+        <Input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          className="h-9 w-[150px] text-[13px]"
+          title="合作日期（起）"
+          aria-label="合作日期（起）"
+        />
+        <span className="text-[12px] text-slate-400">至</span>
+        <Input
+          type="date"
+          value={dateTo}
+          onChange={(e) => setDateTo(e.target.value)}
+          className="h-9 w-[150px] text-[13px]"
+          title="合作日期（迄）"
+          aria-label="合作日期（迄）"
+        />
+        {(dateFrom || dateTo) && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-9 text-[12px] text-slate-500"
+            onClick={() => {
+              setDateFrom('');
+              setDateTo('');
+            }}
+          >
+            清除日期
+          </Button>
+        )}
         <Select
           value={platformFilter || '__all__'}
           onValueChange={(v) => setPlatformFilter(v === '__all__' ? '' : v)}
