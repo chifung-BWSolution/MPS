@@ -57,6 +57,7 @@ import {
 } from '@/components/talent/kolWorkflow';
 import { KolDetailExtras, KolCooperationHistory } from '@/components/talent/KolDetailExtras';
 import { KolCooperationForm } from '@/components/talent/KolCooperationForm';
+import { formatSupabaseError } from '@/components/talent/kolCooperation';
 import { starUpgradeWarning } from '@/components/talent/kolRating';
 import { useAuth } from '@/context/AuthContext';
 
@@ -802,7 +803,7 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
       const data = await fetchKolRows(kolTable);
       setRows(data);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(formatSupabaseError(e, '載入 KOL 資料失敗'));
       setRows([]);
     } finally {
       setLoading(false);

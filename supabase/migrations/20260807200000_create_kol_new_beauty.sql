@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS public.kol_new_beauty (
 );
 
 ALTER TABLE public.kol_new_beauty
+  ADD PRIMARY KEY (id);
+
+ALTER TABLE public.kol_new_beauty
   ADD COLUMN IF NOT EXISTS kol_apply_id uuid REFERENCES public.kol_apply (id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS kol_new_beauty_apply_idx

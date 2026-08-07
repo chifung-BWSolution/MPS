@@ -3,9 +3,14 @@ import { kolOwnerIdColumn, type KolTableName } from '@/components/talent/kolWork
 
 export function formatSupabaseError(error: unknown, fallback = '操作失敗'): string {
   if (error instanceof Error) return error.message;
-  if (error && typeof error === 'object' && 'message' in error) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === 'string' && message.trim()) return message;
+  if (error && typeof error === 'object') {
+    const e = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+    if (typeof e.message === 'string' && e.message.trim()) {
+      const parts = [e.message.trim()];
+      if (typeof e.details === 'string' && e.details.trim()) parts.push(e.details.trim());
+      if (typeof e.hint === 'string' && e.hint.trim()) parts.push(e.hint.trim());
+      return parts.join(' — ');
+    }
   }
   return fallback;
 }
