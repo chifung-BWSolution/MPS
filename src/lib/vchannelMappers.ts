@@ -8,7 +8,8 @@ type DbVchannelRow = {
   public_name: string;
   importance: VchannelImportance;
   device_type: VchannelDeviceType;
-  brand_code: string;
+  brand_list_id: string | null;
+  brand_list?: { brand_code: string } | null;
   status: VchannelStatus;
   platform_status: Record<string, PlatformStatusValue>;
   video_count: number;
@@ -44,7 +45,8 @@ export function mapVchannelRow(row: DbVchannelRow): Vchannel {
     publicName: row.public_name,
     importance: row.importance,
     deviceType: row.device_type,
-    brandCode: row.brand_code,
+    brandListId: row.brand_list_id,
+    brandCode: row.brand_list?.brand_code ?? '',
     status: row.status,
     platformStatus: row.platform_status ?? {},
     videoCount: row.video_count,
@@ -75,14 +77,14 @@ export function mapAccountRow(row: DbAccountRow): VchannelAccount {
   };
 }
 
-export function vchannelToDbRow(input: Partial<Vchannel> & Pick<Vchannel, 'channelCode' | 'internalName' | 'publicName' | 'importance' | 'deviceType' | 'brandCode' | 'status' | 'platformStatus'>) {
+export function vchannelToDbRow(input: Partial<Vchannel> & Pick<Vchannel, 'channelCode' | 'internalName' | 'publicName' | 'importance' | 'deviceType' | 'brandListId' | 'status' | 'platformStatus'>) {
   return {
     channel_code: input.channelCode,
     internal_name: input.internalName,
     public_name: input.publicName,
     importance: input.importance,
     device_type: input.deviceType,
-    brand_code: input.brandCode,
+    brand_list_id: input.brandListId,
     status: input.status,
     platform_status: input.platformStatus,
     video_count: input.videoCount ?? 0,

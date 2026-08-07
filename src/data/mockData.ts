@@ -75,6 +75,9 @@ export const companies: (Company & { __sampleData: true })[] = [
 export const brands: (Brand & { __sampleData: true })[] = [
   { __sampleData: true, id: 'b056bcb8-67b5-592f-b265-711df4b657f1', companyId: 'dacb20dc-2181-5138-982e-989a853acc12', brandCode: 'BSC', displayName: 'BSC', isActive: true, projectCount: 1 },
   { __sampleData: true, id: 'f13c0169-6513-58be-bd6d-baa3fd813cc5', companyId: '954961df-ae61-57c6-bdcc-09e92eddba42', brandCode: 'BWA', displayName: 'BWA', isActive: true, projectCount: 3 },
+  { __sampleData: true, id: '32915d65-1a44-588d-8368-d3eeb9f15803', companyId: '954961df-ae61-57c6-bdcc-09e92eddba42', brandCode: 'CFA', displayName: 'CFA', isActive: true, projectCount: 0 },
+  { __sampleData: true, id: 'a02f5d1c-3584-597d-834d-7fbbb09e7ca7', companyId: '954961df-ae61-57c6-bdcc-09e92eddba42', brandCode: 'CFB', displayName: 'CFB', isActive: true, projectCount: 0 },
+  { __sampleData: true, id: 'aefe9a23-6e4b-5ba1-98f1-16243ff3260c', companyId: '954961df-ae61-57c6-bdcc-09e92eddba42', brandCode: 'CF', displayName: 'CF', isActive: true, projectCount: 0 },
   { __sampleData: true, id: '74c13191-55d0-5074-bc5e-65bbb3934dc9', companyId: '25709685-229e-5efa-80bb-a0da30269f59', brandCode: 'BWD', displayName: 'BWD', isActive: true, projectCount: 0 },
   { __sampleData: true, id: '3b7d3552-6335-5f04-894b-bb00bf52d7e2', companyId: '25709685-229e-5efa-80bb-a0da30269f59', brandCode: 'BWF', displayName: 'BWF', isActive: true, projectCount: 0 },
   { __sampleData: true, id: 'f1f8a3a6-187f-58a9-8270-428df26c6666', companyId: 'b1a22b78-3e4b-56ac-bd83-3a3795cb6ae9', brandCode: 'FCC', displayName: 'FCC', isActive: true, projectCount: 0 },

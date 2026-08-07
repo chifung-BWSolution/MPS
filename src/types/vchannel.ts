@@ -16,6 +16,9 @@ export interface Vchannel {
   publicName: string;
   importance: VchannelImportance;
   deviceType: VchannelDeviceType;
+  /** UUID FK → brand_list.id */
+  brandListId: string | null;
+  /** Resolved from brand_list for display/filter (not a DB column) */
   brandCode: string;
   status: VchannelStatus;
   platformStatus: Record<string, VchannelPlatformStatus>;
