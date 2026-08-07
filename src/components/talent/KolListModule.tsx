@@ -3,6 +3,7 @@ import {
   Camera,
   ChevronLeft,
   ChevronRight,
+  ChevronsUpDown,
   Facebook,
   Instagram,
   Loader2,
@@ -25,7 +26,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import { cn } from '@/lib/utils';
+import {
+  formatInstagramDisplay,
+  instagramProfileUrl,
+  normalizeInstagramAccount,
+} from '@/lib/instagram';
 import { supabase } from '@/lib/supabase';
 import {
   availableWorkflowActions,
@@ -238,13 +253,11 @@ function genderLabel(salutation: string | null | undefined): string {
 }
 
 function formatIg(account: string | null | undefined): string | null {
-  if (!account?.trim()) return null;
-  const handle = account.trim().replace(/^@/, '');
-  return handle ? `@${handle}` : null;
+  return formatInstagramDisplay(account);
 }
 
-function igUrl(account: string): string {
-  return `https://instagram.com/${encodeURIComponent(account.replace(/^@/, '').trim())}`;
+function igUrl(account: string | null | undefined): string | null {
+  return instagramProfileUrl(account);
 }
 
 function facebookHref(url: string | null | undefined): string | null {
@@ -350,7 +363,7 @@ function formToPayload(form: FormState): Partial<KolProfile> {
     work_area: form.work_area.trim() || null,
     specialty: form.specialty.trim() || null,
     blog_themes: themes,
-    instagram_account: form.instagram_account.trim().replace(/^@/, '') || null,
+    instagram_account: normalizeInstagramAccount(form.instagram_account.trim()) || null,
     instagram_followers: Number.isFinite(followers as number) ? followers : null,
     openrice_level: form.openrice_level.trim() || null,
     publish_platforms: form.publish_platforms.trim() || null,
@@ -414,6 +427,7 @@ function KolCard({
   onToggleSelect?: () => void;
 }) {
   const ig = formatIg(row.instagram_account);
+  const igLink = igUrl(row.instagram_account);
   const tag = categoryBadgeLabel(row.primary_category, workflowView);
   const status = row.lifecycle_status || 'unprocessed';
   const statusLabel =
@@ -486,8 +500,9 @@ function KolCard({
       <div className="px-2 pb-2 space-y-1 border-t border-slate-100 pt-1.5 text-[11px]">
         <div className="flex items-center gap-1 min-w-0">
           {ig ? (
+            igLink ? (
             <a
-              href={igUrl(row.instagram_account!)}
+              href={igLink}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
@@ -496,6 +511,12 @@ function KolCard({
               <Instagram size={11} className="shrink-0" />
               <span className="truncate">{ig}</span>
             </a>
+            ) : (
+            <span className="inline-flex items-center gap-0.5 text-slate-600 min-w-0">
+              <Instagram size={11} className="shrink-0" />
+              <span className="truncate">{ig}</span>
+            </span>
+            )
           ) : (
             <span className="text-slate-400 inline-flex items-center gap-0.5">
               <Instagram size={11} />
@@ -615,6 +636,79 @@ function FilterInput({
   );
 }
 
+function FilterSearchableSelect({
+  label,
+  value,
+  onChange,
+  options,
+  allLabel = '全部',
+  className,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  allLabel?: string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const placeholder = `${label}·${allLabel}`;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          role="combobox"
+          aria-expanded={open}
+          title={value ? `${label}：${value}` : label}
+          className={cn(
+            'flex h-8 w-full min-w-0 items-center justify-between gap-1 rounded-md border border-input bg-white px-1.5 text-[11px] shadow-xs',
+            value ? 'border-teal-400 text-teal-800' : 'text-muted-foreground',
+            className
+          )}
+        >
+          <span className="truncate text-left">{value || placeholder}</span>
+          <ChevronsUpDown className="h-3 w-3 shrink-0 opacity-50" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-[160px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder={`搜尋${label}…`} className="h-8 text-[11px]" />
+          <CommandList>
+            <CommandEmpty className="text-[11px]">找不到結果</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value={`${label} ${allLabel}`}
+                className="text-[11px]"
+                onSelect={() => {
+                  onChange('');
+                  setOpen(false);
+                }}
+              >
+                {placeholder}
+              </CommandItem>
+              {options.map((opt) => (
+                <CommandItem
+                  key={opt}
+                  value={opt}
+                  className="text-[11px]"
+                  onSelect={() => {
+                    onChange(opt);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="truncate">{opt}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function FormField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-1">
@@ -712,13 +806,17 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
     return {
       ageGroup: uniqueSorted(rows.map((r) => r.age_group)),
       birthMonth: uniqueSorted(rows.map((r) => r.birth_month)),
+      area: uniqueSorted(rows.flatMap((r) => [r.residence_area, r.work_area])),
       theme: [...themes].sort((a, b) => a.localeCompare(b, 'zh-Hant')),
       tag: [...tagSet].sort((a, b) => a.localeCompare(b, 'zh-Hant')),
       openriceLevel: uniqueSorted(rows.map((r) => r.openrice_level)),
+      publishPlatforms: uniqueSorted(rows.map((r) => r.publish_platforms)),
       tastingFrequency: uniqueSorted(rows.map((r) => r.tasting_frequency)),
       tastingExperience: uniqueSorted(rows.map((r) => r.tasting_experience)),
       modelExperience: uniqueSorted(rows.map((r) => r.model_experience)),
       wineClub: uniqueSorted(rows.map((r) => r.wine_club)),
+      specialty: uniqueSorted(rows.map((r) => r.specialty)),
+      cooperationIntent: uniqueSorted(rows.map((r) => r.cooperation_intent)),
     };
   }, [rows]);
 
@@ -735,10 +833,7 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
       if (filters.birthMonth && r.birth_month !== filters.birthMonth) return false;
       if (filters.area) {
         const areaQ = filters.area.trim();
-        const hit =
-          (r.residence_area || '').includes(areaQ) ||
-          (r.work_area || '').includes(areaQ);
-        if (!hit) return false;
+        if (r.residence_area !== areaQ && r.work_area !== areaQ) return false;
       }
       if (filters.theme) {
         const label = themeLabel(r);
@@ -748,10 +843,7 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
           themes.some((t) => t.includes(filters.theme) || filters.theme.includes(t));
         if (!hit) return false;
       }
-      if (filters.specialty) {
-        const s = (r.specialty || '').toLowerCase();
-        if (!s.includes(filters.specialty.trim().toLowerCase())) return false;
-      }
+      if (filters.specialty && r.specialty !== filters.specialty) return false;
       if (filters.tag) {
         const tags = r.tags || [];
         if (!tags.some((t) => t === filters.tag || t.includes(filters.tag))) return false;
@@ -759,18 +851,12 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
       if (igMin != null && !Number.isNaN(igMin) && (r.instagram_followers ?? 0) < igMin) return false;
       if (igMax != null && !Number.isNaN(igMax) && (r.instagram_followers ?? 0) > igMax) return false;
       if (filters.openriceLevel && r.openrice_level !== filters.openriceLevel) return false;
-      if (filters.publishPlatforms) {
-        const p = (r.publish_platforms || '').toLowerCase();
-        if (!p.includes(filters.publishPlatforms.trim().toLowerCase())) return false;
-      }
+      if (filters.publishPlatforms && r.publish_platforms !== filters.publishPlatforms) return false;
       if (filters.tastingFrequency && r.tasting_frequency !== filters.tastingFrequency) return false;
       if (filters.tastingExperience && r.tasting_experience !== filters.tastingExperience) return false;
       if (filters.modelExperience && r.model_experience !== filters.modelExperience) return false;
       if (filters.wineClub && r.wine_club !== filters.wineClub) return false;
-      if (filters.cooperationIntent) {
-        const c = (r.cooperation_intent || '').toLowerCase();
-        if (!c.includes(filters.cooperationIntent.trim().toLowerCase())) return false;
-      }
+      if (filters.cooperationIntent && r.cooperation_intent !== filters.cooperationIntent) return false;
       return true;
     });
 
@@ -1074,11 +1160,11 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
               onChange={(v) => setFilters((f) => ({ ...f, birthMonth: v }))}
               options={filterOptions.birthMonth}
             />
-            <FilterInput
+            <FilterSearchableSelect
               label="地區"
               value={filters.area}
               onChange={(v) => setFilters((f) => ({ ...f, area: v }))}
-              placeholder="地區"
+              options={filterOptions.area}
             />
             <FilterSelect
               label="主題"
@@ -1131,11 +1217,12 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
               options={filterOptions.openriceLevel}
               allLabel="不限"
             />
-            <FilterInput
+            <FilterSearchableSelect
               label="發佈平台"
               value={filters.publishPlatforms}
               onChange={(v) => setFilters((f) => ({ ...f, publishPlatforms: v }))}
-              placeholder="發佈平台"
+              options={filterOptions.publishPlatforms}
+              allLabel="不限"
             />
             <FilterSelect
               label="試食頻率"
@@ -1165,11 +1252,11 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
               options={filterOptions.wineClub}
               allLabel="不限"
             />
-            <FilterInput
+            <FilterSearchableSelect
               label="專長"
               value={filters.specialty}
               onChange={(v) => setFilters((f) => ({ ...f, specialty: v }))}
-              placeholder="專長"
+              options={filterOptions.specialty}
             />
             <FilterSelect
               label="標籤"
@@ -1178,11 +1265,12 @@ export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWork
               options={filterOptions.tag}
               allLabel="全部"
             />
-            <FilterInput
+            <FilterSearchableSelect
               label="合作意向"
               value={filters.cooperationIntent}
               onChange={(v) => setFilters((f) => ({ ...f, cooperationIntent: v }))}
-              placeholder="合作意向"
+              options={filterOptions.cooperationIntent}
+              allLabel="不限"
             />
             <label className="inline-flex items-center gap-1.5 h-8 px-1.5 shrink-0 cursor-pointer select-none">
               <Checkbox
@@ -1626,9 +1714,13 @@ node scripts/push_kol_batches.mjs`}
                         value={
                           detail.instagram_account ? (
                             <span>
-                              <LinkValue href={igUrl(detail.instagram_account)}>
-                                {formatIg(detail.instagram_account)}
-                              </LinkValue>
+                              {igUrl(detail.instagram_account) ? (
+                                <LinkValue href={igUrl(detail.instagram_account)!}>
+                                  {formatIg(detail.instagram_account)}
+                                </LinkValue>
+                              ) : (
+                                formatIg(detail.instagram_account)
+                              )}
                               <span className="text-slate-500"> · 粉絲 {formatCount(detail.instagram_followers)}</span>
                             </span>
                           ) : (
