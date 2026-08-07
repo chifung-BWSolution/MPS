@@ -1,3 +1,12 @@
+export function formatSupabaseError(error: unknown, fallback = '操作失敗'): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) return message;
+  }
+  return fallback;
+}
+
 export const KOL_COOP_PRESET_PLATFORMS = [
   'Instagram',
   'Facebook',

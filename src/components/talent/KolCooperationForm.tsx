@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import {
   emptyCooperationForm,
+  formatSupabaseError,
   KOL_COOP_PRESET_PLATFORMS,
   saveCooperationRecord,
   type KolCooperationFormValues,
@@ -143,7 +144,7 @@ function KolPicker({
       if (error) throw error;
       setOptions((data as KolPickerOption[]) || []);
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(formatSupabaseError(e, '搜尋 KOL 失敗'));
       setOptions([]);
     } finally {
       setLoading(false);
@@ -273,7 +274,7 @@ export function KolCooperationForm({
       if (!fixedKol) setKolId('');
       onSuccess();
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      toast.error(formatSupabaseError(e, '儲存合作記錄失敗'));
     } finally {
       setSaving(false);
     }
