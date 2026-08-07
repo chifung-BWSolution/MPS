@@ -13,7 +13,7 @@ import {
   OutcomeType,
   AITool,
 } from '@/data/dayReportDataV2';
-import { WorkCategoriesManager, defaultCategoryRelationMap } from '@/components/day-report/WorkCategoriesManager';
+import { WorkCategoriesManager, defaultCategoryRelationMap, type CategoryRelationType } from '@/components/day-report/WorkCategoriesManager';
 import { HolidaySettings } from '@/components/day-report/HolidaySettings';
 import { TeamDashboard } from '@/components/day-report/TeamDashboard';
 import { ProjectAnalysis } from '@/components/day-report/ProjectAnalysis';
@@ -457,21 +457,31 @@ function SubmitReportPage() {
 
           if (entriesData && entriesData.length > 0) {
             console.log('[SubmitReport] Loaded', entriesData.length, 'entries for report');
-            const loadedEntries = entriesData.map((e: any) => ({
-              category: (e.category || '') as WorkCategory | '',
-              relatedId: e.related_id || '',
-              relatedName: e.related_name || '',
-              title: e.title || '',
-              hours: Number(e.hours) || 0,
-              outcomeType: (e.outcome_type || '') as OutcomeType | '',
-              outcomeUrl: e.outcome_url || '',
-              outcomeImages: e.outcome_images || [],
-              outcomeImageFiles: [] as File[],
-              growthExperience: e.growth_experience || '',
-              isAiAssisted: e.is_ai_assisted || false,
-              aiTools: (e.ai_tools || []) as AITool[],
-              aiToolsV2: (e.ai_tools_v2 || { ...emptyAiTools }) as AiToolsSelection,
-            }));
+            const loadedEntries = entriesData.map((e: any) => {
+              const category = (e.category || '') as WorkCategory | '';
+              // Only strip related_* when we positively know relation_type is none.
+              // If dynamicTypes has not loaded yet for a custom category, keep DB values.
+              const knownRelation = category
+                ? (dynamicTypes.find(t => t.id === category)?.relationType
+                  ?? defaultCategoryRelationMap[category as WorkCategory])
+                : undefined;
+              const dropRelation = knownRelation === 'none';
+              return {
+                category,
+                relatedId: dropRelation ? '' : (e.related_id || ''),
+                relatedName: dropRelation ? '' : (e.related_name || ''),
+                title: e.title || '',
+                hours: Number(e.hours) || 0,
+                outcomeType: (e.outcome_type || '') as OutcomeType | '',
+                outcomeUrl: e.outcome_url || '',
+                outcomeImages: e.outcome_images || [],
+                outcomeImageFiles: [] as File[],
+                growthExperience: e.growth_experience || '',
+                isAiAssisted: e.is_ai_assisted || false,
+                aiTools: (e.ai_tools || []) as AITool[],
+                aiToolsV2: (e.ai_tools_v2 || { ...emptyAiTools }) as AiToolsSelection,
+              };
+            });
             const mergedEntries = await applyPendingMerge(loadedEntries);
             if (!cancelled) setEntries(mergedEntries);
           } else {
@@ -612,6 +622,7 @@ function SubmitReportPage() {
   // Recent frequent items from the user's real past reports (for quick selection).
   // Aggregates day_report_entries by related_id + category over the last ~90 days,
   // then resolves display names from webandsystem_list.website_name (never related_name).
+  // Categories with relation_type=none have no linked system — always show "N/A".
   type FrequentItem = {
     relatedId: string;
     relatedName: string;
@@ -621,6 +632,12 @@ function SubmitReportPage() {
     totalHours: number;
   };
   const [recentFrequentItems, setRecentFrequentItems] = useState<FrequentItem[]>([]);
+
+  const resolveRelationType = useCallback((category: string): CategoryRelationType => {
+    const dyn = dynamicTypes.find(t => t.id === category);
+    if (dyn?.relationType) return dyn.relationType;
+    return defaultCategoryRelationMap[category as WorkCategory] ?? 'none';
+  }, [dynamicTypes]);
 
   const loadRecentFrequentItems = useCallback(async () => {
     if (!currentStaffId) {
@@ -690,9 +707,15 @@ function SubmitReportPage() {
         entryRows = (data || []) as EntryRow[];
       }
 
+      // Only resolve names for categories that actually link to a system/project.
+      // Stale related_id on relation_type=none entries must be ignored (see N/A below).
       const relatedIds = Array.from(
         new Set(
           entryRows
+            .filter(e => {
+              const category = (e.category || '').trim();
+              return !!category && resolveRelationType(category) !== 'none';
+            })
             .map(e => (e.related_id || '').trim())
             .filter(Boolean),
         ),
@@ -739,15 +762,42 @@ function SubmitReportPage() {
 
       const itemMap: Record<string, FrequentItem> = {};
       entryRows.forEach(entry => {
-        const relatedId = (entry.related_id || '').trim();
         const category = (entry.category || '') as WorkCategory;
-        if (!relatedId || !category) return;
+        if (!category) return;
+
+        const relationType = resolveRelationType(category);
+        const hours = Number(entry.hours) || 0;
+        const createdAt = entry.created_at || '';
+
+        // relation_type=none: no linked webandsystem — aggregate by category only, show N/A.
+        // Ignore any leftover related_id from when the user switched categories before save.
+        if (relationType === 'none') {
+          const key = `__none__${category}`;
+          if (!itemMap[key]) {
+            itemMap[key] = {
+              relatedId: '',
+              relatedName: 'N/A',
+              category,
+              count: 0,
+              lastUsed: createdAt,
+              totalHours: 0,
+            };
+          }
+          itemMap[key].count += 1;
+          itemMap[key].totalHours += hours;
+          itemMap[key].relatedName = 'N/A';
+          if (createdAt && createdAt > itemMap[key].lastUsed) {
+            itemMap[key].lastUsed = createdAt;
+          }
+          return;
+        }
+
+        const relatedId = (entry.related_id || '').trim();
+        if (!relatedId) return;
         const relatedName = websiteNameById.get(relatedId) || projectNameById.get(relatedId) || '';
         // Skip orphans that no longer exist in master data.
         if (!relatedName) return;
         const key = `${relatedId}__${category}`;
-        const hours = Number(entry.hours) || 0;
-        const createdAt = entry.created_at || '';
         if (!itemMap[key]) {
           itemMap[key] = {
             relatedId,
@@ -782,7 +832,7 @@ function SubmitReportPage() {
       console.error('[SubmitReport] Exception loading frequent items:', err);
       setRecentFrequentItems([]);
     }
-  }, [currentStaffId]);
+  }, [currentStaffId, resolveRelationType]);
 
   useEffect(() => {
     loadRecentFrequentItems();
@@ -1010,12 +1060,15 @@ function SubmitReportPage() {
       const entryRecords = filteredEntries
         .map((e, idx) => {
           const allImages = [...e.outcomeImages, ...uploadedUrlsPerEntry[idx]];
+          const relationType = resolveRelationType(e.category);
+          const hasRelation = relationType !== 'none';
           return ({
           day_report_id: reportId,
           staff_id: currentStaffId,
           category: e.category,
-          related_id: e.relatedId || null,
-          related_name: e.relatedName || null,
+          // Strip stale related_* when the work type has no system/project link.
+          related_id: hasRelation ? (e.relatedId || null) : null,
+          related_name: hasRelation ? (e.relatedName || null) : null,
           title: e.title || '',
           hours: e.hours,
           outcome_type: e.outcomeType || null,
@@ -1448,18 +1501,23 @@ function SubmitReportPage() {
                     icon: '📋',
                     label: item.category,
                   };
+                  const systemLabel = item.relatedName?.trim() ? item.relatedName : 'N/A';
+                  const isNoRelation = resolveRelationType(item.category) === 'none' || systemLabel === 'N/A';
                   return (
                     <button
-                      key={`${item.relatedId}__${item.category}`}
+                      key={`${item.relatedId || 'none'}__${item.category}`}
                       type="button"
                       onClick={() => {
                         // Auto-fill: use applyQuickTemplate style — fill empty or add new
                         const firstEmpty = entries.findIndex(e => !e.category && !e.title && e.hours === 0);
+                        const relatedId = isNoRelation ? '' : item.relatedId;
+                        const relatedName = isNoRelation ? '' : item.relatedName;
                         const newEntry = {
                           category: item.category,
-                          relatedId: item.relatedId,
-                          relatedName: item.relatedName,
-                          title: item.relatedName, // pre-fill title with the latest master name
+                          relatedId,
+                          relatedName,
+                          // Pre-fill title with linked system/project name when available
+                          title: relatedName,
                           hours: Math.round((item.totalHours / item.count) * 2) / 2, // average hours rounded to 0.5
                           outcomeType: '' as OutcomeType | '',
                           outcomeUrl: '',
@@ -1487,8 +1545,8 @@ function SubmitReportPage() {
                         {config.icon}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[14px] font-medium text-foreground truncate">{item.relatedName}</div>
-                        <div className="text-[12px] text-muted-foreground truncate">{config.label} · {item.count}次 · {item.totalHours}h</div>
+                        <div className="text-[14px] font-medium text-foreground truncate">{config.label}</div>
+                        <div className="text-[12px] text-muted-foreground truncate">{systemLabel} · {item.count}次 · {item.totalHours}h</div>
                       </div>
                       <Plus size={12} className="text-teal-500 shrink-0 mt-1" />
                     </button>
@@ -1638,7 +1696,28 @@ function SubmitReportPage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2.5 mb-3">
                   <div className="lg:col-span-2">
                     <label className="text-[13px] font-semibold text-muted-foreground block mb-1">工作類別 *</label>
-                    <select value={entry.category} onChange={(e) => updateEntry(idx, 'category', e.target.value)} className="w-full px-2.5 py-2 border border-border rounded-md text-[15px] bg-white focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all">
+                    <select
+                      value={entry.category}
+                      onChange={(e) => {
+                        const newCategory = e.target.value;
+                        const newEntries = [...entries];
+                        const next = { ...newEntries[idx], category: newCategory };
+                        // relation_type=none has no linked system — clear any leftover related_*
+                        // from a previous category so it is not saved / recommended later.
+                        const nextRelation = newCategory
+                          ? (dynamicTypes.find(t => t.id === newCategory)?.relationType
+                            ?? defaultCategoryRelationMap[newCategory as WorkCategory]
+                            ?? 'none')
+                          : 'none';
+                        if (!newCategory || nextRelation === 'none') {
+                          next.relatedId = '';
+                          next.relatedName = '';
+                        }
+                        newEntries[idx] = next;
+                        setEntries(newEntries);
+                      }}
+                      className="w-full px-2.5 py-2 border border-border rounded-md text-[15px] bg-white focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
+                    >
                       <option value="">選擇類別...</option>
                       {(dynamicTypes.length > 0
                         ? dynamicTypes.filter(t => t.isActive)
