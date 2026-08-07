@@ -185,7 +185,7 @@ function KolPicker({
       const { data, error } = await supabase
         .from('kol_profile')
         .select('id, name, instagram_account, phone')
-        .or(`name.ilike.${pattern},instagram_account.ilike.${pattern},phone.ilike.${pattern}`)
+        .ilike('name', pattern)
         .limit(12);
       if (error) throw error;
       setOptions((data as KolPickerOption[]) || []);
@@ -232,13 +232,13 @@ function KolPicker({
 
   return (
     <div className="space-y-2">
-      <Label className="text-[12px] text-slate-600">選擇 KOL（S1 篩選）</Label>
+      <Label className="text-[12px] text-slate-600">選擇 KOL</Label>
       <div className="relative">
         <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="搜尋姓名 / IG / 電話"
+          placeholder="搜尋姓名"
           className="pl-8 h-9 text-[13px]"
         />
         {loading && (
