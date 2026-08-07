@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Plus, Search, X } from 'lucide-react';
+import { Plus, Search, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -16,6 +17,9 @@ import {
   KolCooperationForm,
 } from '@/components/talent/KolCooperationForm';
 import {
+  cooperationRowToForm,
+  deleteCooperationRecord,
+  formatSupabaseError,
   KOL_COOP_PRESET_PLATFORMS,
   type KolCooperationRow,
 } from '@/components/talent/kolCooperation';
@@ -28,6 +32,8 @@ export function KolCooperatedModule() {
   const [rows, setRows] = useState<KolCooperationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingRow, setEditingRow] = useState<KolCooperationRow | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [platformFilter, setPlatformFilter] = useState('');
 
@@ -71,6 +77,35 @@ export function KolCooperatedModule() {
       return hay.includes(q);
     });
   }, [rows, search, platformFilter]);
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingRow(null);
+  };
+
+  const handleDelete = async (row: KolCooperationRow) => {
+    const label = row.project_name || row.kol_profile?.name || '此筆記錄';
+    if (!confirm(`確定刪除「${label}」？`)) return;
+    setDeletingId(row.id);
+    try {
+      await deleteCooperationRecord(row.id);
+      toast.success('已刪除合作記錄');
+      void load();
+    } catch (e: unknown) {
+      toast.error(formatSupabaseError(e, '刪除合作記錄失敗'));
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const editingFixedKol = editingRow?.kol_profile
+    ? {
+        id: editingRow.kol_profile_id,
+        name: editingRow.kol_profile.name,
+        instagram_account: editingRow.kol_profile.instagram_account,
+        phone: editingRow.kol_profile.phone,
+      }
+    : null;
 
   return (
     <div className="space-y-5">
@@ -119,21 +154,29 @@ export function KolCooperatedModule() {
         </Select>
       </div>
 
-      <CooperationRecordList rows={filtered} loading={loading} />
+      <CooperationRecordList
+        rows={filtered}
+        loading={loading}
+        deletingId={deletingId}
+        onEdit={setEditingRow}
+        onDelete={(row) => void handleDelete(row)}
+      />
 
-      {showForm && (
+      {(showForm || editingRow) && (
         <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b sticky top-0 bg-white">
               <div>
-                <h2 className="text-[16px] font-semibold">新增合作記錄</h2>
+                <h2 className="text-[16px] font-semibold">
+                  {editingRow ? '編輯合作記錄' : '新增合作記錄'}
+                </h2>
                 <p className="text-[12px] text-slate-500 mt-0.5">
                   S1 選 KOL → S2 項目 → S3 內容 → S4 平台 → S5 日期
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setShowForm(false)}
+                onClick={closeForm}
                 className="text-slate-400 hover:text-slate-700"
               >
                 <X size={18} />
@@ -141,12 +184,17 @@ export function KolCooperatedModule() {
             </div>
             <div className="px-5 py-4">
               <KolCooperationForm
+                key={editingRow?.id || 'new'}
                 createdBy={createdBy}
+                fixedKol={editingFixedKol}
+                recordId={editingRow?.id}
+                initialValues={editingRow ? cooperationRowToForm(editingRow) : undefined}
+                submitLabel={editingRow ? '儲存變更' : '儲存合作記錄'}
                 onSuccess={() => {
-                  setShowForm(false);
+                  closeForm();
                   void load();
                 }}
-                onCancel={() => setShowForm(false)}
+                onCancel={closeForm}
               />
             </div>
           </div>

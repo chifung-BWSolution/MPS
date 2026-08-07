@@ -50,6 +50,20 @@ export const emptyCooperationForm = (): Omit<KolCooperationFormValues, 'kol_prof
   cooperated_at: new Date().toISOString().slice(0, 10),
 });
 
+export function cooperationRowToForm(row: KolCooperationRow): KolCooperationFormValues {
+  return {
+    kol_profile_id: row.kol_profile_id,
+    project_name: row.project_name || '',
+    cooperation_content: row.cooperation_content || row.evaluation || '',
+    platforms: row.platforms || [],
+    cooperated_at: row.cooperated_at.slice(0, 10),
+  };
+}
+
+function toCooperatedAt(value: string): string {
+  return value.includes('T') ? value : `${value}T12:00:00.000Z`;
+}
+
 export async function markKolAsCooperated(
   kolProfileId: string,
   cooperatedAt: string
@@ -83,9 +97,7 @@ export async function saveCooperationRecord(
   createdBy: string
 ): Promise<void> {
   const { supabase } = await import('@/lib/supabase');
-  const cooperatedAt = values.cooperated_at.includes('T')
-    ? values.cooperated_at
-    : `${values.cooperated_at}T12:00:00.000Z`;
+  const cooperatedAt = toCooperatedAt(values.cooperated_at);
 
   const { error } = await supabase.from('kol_cooperation').insert({
     kol_profile_id: values.kol_profile_id,
@@ -98,4 +110,32 @@ export async function saveCooperationRecord(
   });
   if (error) throw error;
   await markKolAsCooperated(values.kol_profile_id, cooperatedAt);
+}
+
+export async function updateCooperationRecord(
+  id: string,
+  values: KolCooperationFormValues
+): Promise<void> {
+  const { supabase } = await import('@/lib/supabase');
+  const cooperatedAt = toCooperatedAt(values.cooperated_at);
+
+  const { error } = await supabase
+    .from('kol_cooperation')
+    .update({
+      kol_profile_id: values.kol_profile_id,
+      project_name: values.project_name.trim(),
+      cooperation_content: values.cooperation_content.trim(),
+      evaluation: values.cooperation_content.trim(),
+      platforms: values.platforms,
+      cooperated_at: cooperatedAt,
+    })
+    .eq('id', id);
+  if (error) throw error;
+  await markKolAsCooperated(values.kol_profile_id, cooperatedAt);
+}
+
+export async function deleteCooperationRecord(id: string): Promise<void> {
+  const { supabase } = await import('@/lib/supabase');
+  const { error } = await supabase.from('kol_cooperation').delete().eq('id', id);
+  if (error) throw error;
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Search, X } from 'lucide-react';
+import { Loader2, Pencil, Search, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,7 @@ import {
   formatSupabaseError,
   KOL_COOP_PRESET_PLATFORMS,
   saveCooperationRecord,
+  updateCooperationRecord,
   type KolCooperationFormValues,
   type KolCooperationRow,
 } from '@/components/talent/kolCooperation';
@@ -230,19 +231,37 @@ function KolPicker({
 export function KolCooperationForm({
   createdBy,
   fixedKol,
+  recordId,
+  initialValues,
   onSuccess,
   onCancel,
   submitLabel = '儲存合作記錄',
 }: {
   createdBy: string;
   fixedKol?: KolPickerOption | null;
+  recordId?: string;
+  initialValues?: KolCooperationFormValues;
   onSuccess: () => void;
   onCancel?: () => void;
   submitLabel?: string;
 }) {
-  const [kolId, setKolId] = useState(fixedKol?.id || '');
-  const [form, setForm] = useState(emptyCooperationForm());
+  const isEditing = Boolean(recordId);
+  const [kolId, setKolId] = useState(initialValues?.kol_profile_id || fixedKol?.id || '');
+  const [form, setForm] = useState(() => {
+    if (initialValues) {
+      const { kol_profile_id: _kolProfileId, ...rest } = initialValues;
+      return rest;
+    }
+    return emptyCooperationForm();
+  });
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!initialValues) return;
+    setKolId(initialValues.kol_profile_id);
+    const { kol_profile_id: _kolProfileId, ...rest } = initialValues;
+    setForm(rest);
+  }, [initialValues]);
 
   const canSubmit = useMemo(
     () => Boolean(kolId && form.project_name.trim() && form.cooperation_content.trim()),
@@ -268,13 +287,20 @@ export function KolCooperationForm({
         kol_profile_id: kolId,
         ...form,
       };
-      await saveCooperationRecord(payload, createdBy);
-      toast.success('已儲存合作記錄');
-      setForm(emptyCooperationForm());
-      if (!fixedKol) setKolId('');
+      if (recordId) {
+        await updateCooperationRecord(recordId, payload);
+        toast.success('已更新合作記錄');
+      } else {
+        await saveCooperationRecord(payload, createdBy);
+        toast.success('已儲存合作記錄');
+      }
+      if (!isEditing) {
+        setForm(emptyCooperationForm());
+        if (!fixedKol) setKolId('');
+      }
       onSuccess();
     } catch (e: unknown) {
-      toast.error(formatSupabaseError(e, '儲存合作記錄失敗'));
+      toast.error(formatSupabaseError(e, isEditing ? '更新合作記錄失敗' : '儲存合作記錄失敗'));
     } finally {
       setSaving(false);
     }
@@ -338,9 +364,15 @@ export function KolCooperationForm({
 export function CooperationRecordList({
   rows,
   loading,
+  onEdit,
+  onDelete,
+  deletingId,
 }: {
   rows: KolCooperationRow[];
   loading: boolean;
+  onEdit?: (row: KolCooperationRow) => void;
+  onDelete?: (row: KolCooperationRow) => void;
+  deletingId?: string | null;
 }) {
   if (loading) {
     return (
@@ -369,6 +401,9 @@ export function CooperationRecordList({
             <th className="text-left font-medium px-3 py-2.5">平台</th>
             <th className="text-left font-medium px-3 py-2.5">合作內容</th>
             <th className="text-left font-medium px-3 py-2.5">記錄人</th>
+            {(onEdit || onDelete) && (
+              <th className="text-left font-medium px-3 py-2.5 w-[88px]">操作</th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -406,6 +441,37 @@ export function CooperationRecordList({
                 <p className="line-clamp-3">{r.cooperation_content || r.evaluation || '—'}</p>
               </td>
               <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{r.created_by || '—'}</td>
+              {(onEdit || onDelete) && (
+                <td className="px-3 py-2.5 whitespace-nowrap">
+                  <div className="flex items-center gap-1">
+                    {onEdit && (
+                      <button
+                        type="button"
+                        className="p-1.5 text-slate-500 hover:text-teal-700 hover:bg-teal-50 rounded-md"
+                        title="編輯"
+                        onClick={() => onEdit(r)}
+                      >
+                        <Pencil size={15} />
+                      </button>
+                    )}
+                    {onDelete && (
+                      <button
+                        type="button"
+                        className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-md disabled:opacity-50"
+                        title="刪除"
+                        disabled={deletingId === r.id}
+                        onClick={() => onDelete(r)}
+                      >
+                        {deletingId === r.id ? (
+                          <Loader2 size={15} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={15} />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
