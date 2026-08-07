@@ -5,6 +5,8 @@ import type { Vchannel, VchannelDeviceType, VchannelImportance, VchannelStatus }
 import { mapVchannelRow, vchannelToDbRow } from '@/lib/vchannelMappers';
 import type { PlatformStatusValue } from '@/lib/vchannelPlatformStatus';
 
+const VCHANNEL_SELECT = '*, brand_list ( brand_code )';
+
 export function useVchannels() {
   const { session } = useAuth();
   const [channels, setChannels] = useState<Vchannel[]>([]);
@@ -15,7 +17,7 @@ export function useVchannels() {
     setLoading(true);
     const { data, error: fetchError } = await supabase
       .from('vchannels')
-      .select('*')
+      .select(VCHANNEL_SELECT)
       .order('channel_code');
 
     if (fetchError) {
@@ -38,7 +40,7 @@ export function useVchannels() {
     publicName: string;
     importance: VchannelImportance;
     deviceType: VchannelDeviceType;
-    brandCode: string;
+    brandListId: string | null;
     status: VchannelStatus;
     platformStatus: Record<string, PlatformStatusValue>;
     notes?: string;
@@ -51,7 +53,7 @@ export function useVchannels() {
     const { data, error: insertError } = await supabase
       .from('vchannels')
       .insert(row)
-      .select('*')
+      .select(VCHANNEL_SELECT)
       .single();
 
     if (insertError) return insertError;
@@ -69,7 +71,7 @@ export function useVchannels() {
       .from('vchannels')
       .update(row)
       .eq('id', id)
-      .select('*')
+      .select(VCHANNEL_SELECT)
       .single();
 
     if (updateError) return updateError;

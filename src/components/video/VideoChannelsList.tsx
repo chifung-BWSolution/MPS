@@ -6,6 +6,7 @@ import type { Vchannel, VchannelDeviceType, VchannelImportance, VchannelStatus }
 import { formatChannelCodes, parseChannelCodes } from '@/types/vchannel';
 import { useVchannels } from '@/hooks/useVchannels';
 import { useVchannelAccounts } from '@/hooks/useVchannelAccounts';
+import { useBrands } from '@/hooks/useBrands';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -52,7 +53,7 @@ const emptyChannel = {
   publicName: '',
   importance: 'A3' as VchannelImportance,
   deviceType: 'DM' as VchannelDeviceType,
-  brandCode: '',
+  brandListId: '' as string,
   status: 'active' as VchannelStatus,
   platformStatus: {} as Record<string, PlatformStatusValue>,
   notes: '',
@@ -128,9 +129,11 @@ function PlatformStatusEditor({
 function ChannelForm({
   form,
   setForm,
+  brandOptions,
 }: {
   form: typeof emptyChannel;
   setForm: React.Dispatch<React.SetStateAction<typeof emptyChannel>>;
+  brandOptions: { id: string; brandCode: string; displayName: string }[];
 }) {
   return (
     <div className="space-y-4">
@@ -146,7 +149,19 @@ function ChannelForm({
         </div>
         <div>
           <label className="text-[12px] font-medium text-muted-foreground block mb-1">品牌分類 *</label>
-          <Input value={form.brandCode} onChange={e => setForm({ ...form, brandCode: e.target.value })} className="h-9 text-[13px]" />
+          <Select
+            value={form.brandListId || undefined}
+            onValueChange={val => setForm({ ...form, brandListId: val })}
+          >
+            <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="選擇品牌" /></SelectTrigger>
+            <SelectContent>
+              {brandOptions.map(b => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.brandCode}{b.displayName !== b.brandCode ? ` — ${b.displayName}` : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
       <div>
@@ -203,6 +218,7 @@ function ChannelForm({
 
 export function VideoChannelsList() {
   const { channels, loading, error, addChannel, updateChannel, deleteChannel } = useVchannels();
+  const { brands } = useBrands();
   const {
     accounts,
     loading: accountsLoading,
@@ -212,6 +228,23 @@ export function VideoChannelsList() {
     deleteAccount,
     accountsForChannel,
   } = useVchannelAccounts();
+
+  const activeBrandOptions = useMemo(
+    () => brands.filter(b => b.isActive).map(b => ({ id: b.id, brandCode: b.brandCode, displayName: b.displayName })),
+    [brands],
+  );
+
+  const brandCodeById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const b of brands) map.set(b.id, b.brandCode);
+    return map;
+  }, [brands]);
+
+  const channelBrandLabel = useCallback((ch: Vchannel) => {
+    if (ch.brandCode) return ch.brandCode;
+    if (ch.brandListId) return brandCodeById.get(ch.brandListId) ?? '—';
+    return '—';
+  }, [brandCodeById]);
 
   const [activeTab, setActiveTab] = useState<'channels' | 'accounts'>('channels');
   const [syncingFbAds, setSyncingFbAds] = useState(false);
@@ -257,25 +290,26 @@ export function VideoChannelsList() {
     void refreshChannelWorkHours(channels.map(ch => ch.id));
   }, [channels, refreshChannelWorkHours]);
 
-  const brandOptions = useMemo(
-    () => [...new Set(channels.map(c => c.brandCode).filter(Boolean))].sort(),
-    [channels],
+  const brandFilterOptions = useMemo(
+    () => [...new Set(channels.map(c => channelBrandLabel(c)).filter(code => code && code !== '—'))].sort(),
+    [channels, channelBrandLabel],
   );
 
   const filteredChannels = useMemo(() => {
     return channels.filter(ch => {
       if (importanceFilter !== 'all' && ch.importance !== importanceFilter) return false;
-      if (brandFilter !== 'all' && ch.brandCode !== brandFilter) return false;
+      const brandLabel = channelBrandLabel(ch);
+      if (brandFilter !== 'all' && brandLabel !== brandFilter) return false;
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase();
       return (
         ch.channelCode.toLowerCase().includes(q) ||
         ch.internalName.toLowerCase().includes(q) ||
         ch.publicName.toLowerCase().includes(q) ||
-        ch.brandCode.toLowerCase().includes(q)
+        brandLabel.toLowerCase().includes(q)
       );
     });
-  }, [channels, searchQuery, importanceFilter, brandFilter]);
+  }, [channels, searchQuery, importanceFilter, brandFilter, channelBrandLabel]);
 
   const openedPlatformCount = (ch: Vchannel) =>
     PLATFORM_KEYS.filter(k => {
@@ -284,9 +318,12 @@ export function VideoChannelsList() {
     }).length;
 
   const handleAdd = async () => {
-    if (!newChannel.channelCode.trim() || !newChannel.internalName.trim()) return;
+    if (!newChannel.channelCode.trim() || !newChannel.internalName.trim() || !newChannel.brandListId) return;
     setSaving(true);
-    const err = await addChannel(newChannel);
+    const err = await addChannel({
+      ...newChannel,
+      brandListId: newChannel.brandListId || null,
+    });
     setSaving(false);
     if (err) {
       alert(typeof err === 'object' && 'message' in err ? err.message : String(err));
@@ -305,7 +342,7 @@ export function VideoChannelsList() {
       publicName: editForm.publicName,
       importance: editForm.importance,
       deviceType: editForm.deviceType,
-      brandCode: editForm.brandCode,
+      brandListId: editForm.brandListId || null,
       status: editForm.status,
       platformStatus: editForm.platformStatus,
       notes: editForm.notes,
@@ -327,7 +364,7 @@ export function VideoChannelsList() {
       publicName: channel.publicName,
       importance: channel.importance,
       deviceType: channel.deviceType,
-      brandCode: channel.brandCode,
+      brandListId: channel.brandListId ?? '',
       status: channel.status,
       platformStatus: channel.platformStatus,
       notes: channel.notes ?? '',
@@ -505,7 +542,7 @@ export function VideoChannelsList() {
               <SelectTrigger className="w-[140px] h-9 text-[12px]"><SelectValue placeholder="品牌" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">全部品牌</SelectItem>
-                {brandOptions.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                {brandFilterOptions.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
               </SelectContent>
             </Select>
             <button
@@ -552,7 +589,7 @@ export function VideoChannelsList() {
                         <td className="px-3 py-3 font-mono text-[12px] font-bold">{channel.channelCode}</td>
                         <td className="px-3 py-3 font-medium max-w-[180px]">{channel.internalName}</td>
                         <td className="px-3 py-3 text-muted-foreground max-w-[180px]">{channel.publicName}</td>
-                        <td className="px-3 py-3"><span className="text-[11px] bg-muted px-2 py-0.5 rounded">{channel.brandCode}</span></td>
+                        <td className="px-3 py-3"><span className="text-[11px] bg-muted px-2 py-0.5 rounded">{channelBrandLabel(channel)}</span></td>
                         <td className="px-3 py-3">
                           <span className={cn('text-[11px] font-bold px-2 py-0.5 rounded', iConfig.bg, iConfig.color)}>{iConfig.label}</span>
                         </td>
@@ -725,7 +762,7 @@ export function VideoChannelsList() {
       )}
 
       <CrudModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="新增 Vchannel">
-        <ChannelForm form={newChannel} setForm={setNewChannel} />
+        <ChannelForm form={newChannel} setForm={setNewChannel} brandOptions={activeBrandOptions} />
         <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
           <Button variant="secondary" onClick={() => setShowAddModal(false)}>取消</Button>
           <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleAdd} disabled={saving}>{saving ? '儲存中...' : '新增'}</Button>
@@ -733,7 +770,7 @@ export function VideoChannelsList() {
       </CrudModal>
 
       <CrudModal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title={`編輯 ${editForm.channelCode}`}>
-        <ChannelForm form={editForm} setForm={setEditForm} />
+        <ChannelForm form={editForm} setForm={setEditForm} brandOptions={activeBrandOptions} />
         <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
           <Button variant="secondary" onClick={() => setShowEditModal(false)}>取消</Button>
           <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSaveEdit} disabled={saving}>{saving ? '儲存中...' : '儲存'}</Button>
