@@ -22,34 +22,20 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-
-const colorPresets = [
-  '#0D9488', '#3B82F6', '#7C3AED', '#F59E0B', '#10B981',
-  '#EF4444', '#EC4899', '#6366F1', '#14B8A6', '#F97316',
-];
 
 interface BrandFormData {
   companyId: string;
   brandCode: string;
-  brandNameZh: string;
-  brandNameEn: string;
-  industry: string;
-  primaryColor: string;
-  description: string;
+  displayName: string;
   isActive: boolean;
 }
 
 const emptyBrand: BrandFormData = {
   companyId: '',
   brandCode: '',
-  brandNameZh: '',
-  brandNameEn: '',
-  industry: '',
-  primaryColor: '#0D9488',
-  description: '',
+  displayName: '',
   isActive: true,
 };
 
@@ -60,6 +46,11 @@ export function BrandManagement({ onSelectBrand }: { onSelectBrand?: (brandId: s
   const [formData, setFormData] = useState<BrandFormData>(emptyBrand);
   const [filterCompany, setFilterCompany] = useState<string>('all');
   const [saving, setSaving] = useState(false);
+
+  const companyOptions = companies.map((c) => ({
+    ...c,
+    key: c.uuid || c.id,
+  }));
 
   const handleOpenNew = () => {
     setEditingBrand(null);
@@ -72,11 +63,7 @@ export function BrandManagement({ onSelectBrand }: { onSelectBrand?: (brandId: s
     setFormData({
       companyId: brand.companyId,
       brandCode: brand.brandCode,
-      brandNameZh: brand.brandNameZh,
-      brandNameEn: brand.brandNameEn,
-      industry: brand.industry || '',
-      primaryColor: brand.primaryColor,
-      description: brand.description || '',
+      displayName: brand.displayName,
       isActive: brand.isActive,
     });
     setIsDialogOpen(true);
@@ -94,8 +81,9 @@ export function BrandManagement({ onSelectBrand }: { onSelectBrand?: (brandId: s
         toast.success('品牌已更新');
       } else {
         const newBrand: Brand = {
-          id: `brand_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          id: crypto.randomUUID(),
           ...formData,
+          displayName: formData.displayName || formData.brandCode,
           projectCount: 0,
         };
         const err = await addBrand(newBrand);
@@ -120,12 +108,11 @@ export function BrandManagement({ onSelectBrand }: { onSelectBrand?: (brandId: s
   const activeBrands = filteredBrands.filter(b => b.isActive);
   const inactiveBrands = filteredBrands.filter(b => !b.isActive);
 
-  // Group by company
-  const groupedByCompany = companies
-    .filter(c => filterCompany === 'all' || c.id === filterCompany)
+  const groupedByCompany = companyOptions
+    .filter(c => filterCompany === 'all' || c.key === filterCompany)
     .map(company => ({
       company,
-      brands: filteredBrands.filter(b => b.companyId === company.id),
+      brands: filteredBrands.filter(b => b.companyId === company.key || b.companyId === company.id),
     }))
     .filter(g => g.brands.length > 0);
 
@@ -138,7 +125,6 @@ export function BrandManagement({ onSelectBrand }: { onSelectBrand?: (brandId: s
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-[22px] font-bold tracking-tight">品牌管理</h2>
@@ -153,8 +139,8 @@ export function BrandManagement({ onSelectBrand }: { onSelectBrand?: (brandId: s
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">所有公司</SelectItem>
-              {companies.filter(c => c.isActive).map(c => (
-                <SelectItem key={c.id} value={c.id}>{c.companyCode} - {c.companyNameZh}</SelectItem>
+              {companyOptions.filter(c => c.isActive).map(c => (
+                <SelectItem key={c.key} value={c.key}>{c.companyCode} - {c.companyNameZh || c.companyNameEn}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -165,7 +151,7 @@ export function BrandManagement({ onSelectBrand }: { onSelectBrand?: (brandId: s
                 新增品牌
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[480px]">
+            <DialogContent className="sm:max-w-[420px]">
               <DialogHeader>
                 <DialogTitle>{editingBrand ? '編輯品牌' : '新增品牌'}</DialogTitle>
               </DialogHeader>
@@ -177,45 +163,36 @@ export function BrandManagement({ onSelectBrand }: { onSelectBrand?: (brandId: s
                       <SelectValue placeholder="選擇公司（必填）" />
                     </SelectTrigger>
                     <SelectContent>
-                      {companies.filter(c => c.isActive).map(c => (
-                        <SelectItem key={c.id} value={c.id}>{c.companyCode} - {c.companyNameZh}</SelectItem>
+                      {companyOptions.filter(c => c.isActive).map(c => (
+                        <SelectItem key={c.key} value={c.key}>{c.companyCode} - {c.companyNameZh || c.companyNameEn}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-[13px]">品牌代碼 *</Label>
-                    <Input value={formData.brandCode} onChange={(e) => setFormData({ ...formData, brandCode: e.target.value.toUpperCase() })} placeholder="BW" className="text-[13px]" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[13px]">行業</Label>
-                    <Input value={formData.industry} onChange={(e) => setFormData({ ...formData, industry: e.target.value })} placeholder="IT & Design" className="text-[13px]" />
-                  </div>
+                <div className="space-y-2">
+                  <Label className="text-[13px]">品牌代碼 *</Label>
+                  <Input
+                    value={formData.brandCode}
+                    onChange={(e) => {
+                      const code = e.target.value;
+                      setFormData({
+                        ...formData,
+                        brandCode: code,
+                        displayName: !formData.displayName || formData.displayName === formData.brandCode ? code : formData.displayName,
+                      });
+                    }}
+                    placeholder="BWA"
+                    className="text-[13px]"
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-[13px]">品牌中文名稱 *</Label>
-                  <Input value={formData.brandNameZh} onChange={(e) => setFormData({ ...formData, brandNameZh: e.target.value })} placeholder="志豐企業" className="text-[13px]" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[13px]">品牌英文名稱 *</Label>
-                  <Input value={formData.brandNameEn} onChange={(e) => setFormData({ ...formData, brandNameEn: e.target.value })} placeholder="BWDesign Centre" className="text-[13px]" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[13px]">主要顏色</Label>
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded border border-border" style={{ backgroundColor: formData.primaryColor }} />
-                    <Input value={formData.primaryColor} onChange={(e) => setFormData({ ...formData, primaryColor: e.target.value })} placeholder="#0D9488" className="text-[13px] flex-1" />
-                  </div>
-                  <div className="flex gap-1.5 flex-wrap mt-1">
-                    {colorPresets.map(c => (
-                      <button key={c} className={cn('w-5 h-5 rounded-sm border transition-all', formData.primaryColor === c ? 'ring-2 ring-offset-1 ring-teal-600' : 'border-border')} style={{ backgroundColor: c }} onClick={() => setFormData({ ...formData, primaryColor: c })} />
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[13px]">描述</Label>
-                  <Textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="品牌說明..." rows={3} className="text-[13px]" />
+                  <Label className="text-[13px]">顯示名稱 *</Label>
+                  <Input
+                    value={formData.displayName}
+                    onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+                    placeholder="預設與品牌代碼相同"
+                    className="text-[13px]"
+                  />
                 </div>
                 <div className="flex items-center gap-3">
                   <Switch checked={formData.isActive} onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })} />
@@ -223,7 +200,7 @@ export function BrandManagement({ onSelectBrand }: { onSelectBrand?: (brandId: s
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="outline" size="sm" onClick={() => setIsDialogOpen(false)}>取消</Button>
-                  <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={handleSave} disabled={saving || !formData.companyId || !formData.brandCode || !formData.brandNameZh || !formData.brandNameEn}>
+                  <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={handleSave} disabled={saving || !formData.companyId || !formData.brandCode || !formData.displayName}>
                     {saving ? '儲存中...' : editingBrand ? '保存' : '新增'}
                   </Button>
                 </div>
@@ -233,7 +210,6 @@ export function BrandManagement({ onSelectBrand }: { onSelectBrand?: (brandId: s
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] p-4">
           <span className="text-[12px] font-medium text-muted-foreground">活躍品牌</span>
@@ -249,13 +225,12 @@ export function BrandManagement({ onSelectBrand }: { onSelectBrand?: (brandId: s
         </div>
       </div>
 
-      {/* Brand Cards grouped by company */}
       {groupedByCompany.map(({ company, brands: companyBrands }) => (
-        <div key={company.id} className="space-y-3">
+        <div key={company.key} className="space-y-3">
           <div className="flex items-center gap-2">
             <Building2 size={14} className="text-teal-600" />
             <h3 className="text-[14px] font-bold">{company.companyCode}</h3>
-            <span className="text-[12px] text-muted-foreground">- {company.companyNameZh}</span>
+            <span className="text-[12px] text-muted-foreground">- {company.companyNameZh || company.companyNameEn}</span>
             <Badge variant="secondary" className="text-[10px] h-5">{companyBrands.length} 品牌</Badge>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -272,12 +247,12 @@ export function BrandManagement({ onSelectBrand }: { onSelectBrand?: (brandId: s
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-md flex items-center justify-center text-white font-bold text-[14px]" style={{ backgroundColor: brand.primaryColor }}>
-                        {brand.brandCode}
+                      <div className="w-10 h-10 rounded-md flex items-center justify-center text-white font-bold text-[14px] bg-teal-600">
+                        {brand.brandCode.slice(0, 3)}
                       </div>
                       <div>
-                        <h4 className="text-[15px] font-bold">{brand.brandNameZh}</h4>
-                        <span className="text-[12px] text-muted-foreground">{brand.brandNameEn}</span>
+                        <h4 className="text-[15px] font-bold">{brand.displayName}</h4>
+                        <span className="text-[12px] text-muted-foreground">{brand.brandCode}</span>
                       </div>
                     </div>
                     <button onClick={(e) => { e.stopPropagation(); handleEdit(brand); }} className="p-1.5 rounded hover:bg-muted transition-colors">
@@ -285,11 +260,6 @@ export function BrandManagement({ onSelectBrand }: { onSelectBrand?: (brandId: s
                     </button>
                   </div>
 
-                  {brand.description && (
-                    <p className="text-[12px] text-muted-foreground mb-3 line-clamp-2">{brand.description}</p>
-                  )}
-
-                  {/* Year Plan Achievement */}
                   {achievement !== null && (
                     <div className="mb-3">
                       <div className="flex justify-between items-center mb-1">

@@ -66,6 +66,7 @@ export function CompanyManagementSettings() {
     } else {
       const newCompany: Company = {
         id: `c${Date.now()}`,
+        uuid: crypto.randomUUID(),
         companyCode: formData.companyCode || '',
         companyNameZh: formData.companyNameZh || '',
         companyNameEn: formData.companyNameEn || '',

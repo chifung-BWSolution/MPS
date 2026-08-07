@@ -107,7 +107,7 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
     return Array.from(map.values());
   }, [brands]);
 
-  const selectedCompany = companies.find(c => c.id === formData.companyId);
+  const selectedCompany = companies.find(c => c.uuid === formData.companyId || c.id === formData.companyId);
   const selectedBrand = brands.find(b => b.id === formData.brandId);
 
   const canNext = () => {
@@ -138,7 +138,7 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
     if (!validateForm()) return;
 
     const selectedBrandData = brands.find(b => b.id === formData.brandId);
-    const selectedCompanyData = companies.find(c => c.id === formData.companyId);
+    const selectedCompanyData = companies.find(c => c.uuid === formData.companyId || c.id === formData.companyId);
     const newProject = {
       id: `p_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       name: formData.name,
@@ -274,7 +274,7 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
                 {dedupedBrands.map(brand => {
-                  const company = companies.find(c => c.id === brand.companyId);
+                  const company = companies.find(c => c.uuid === brand.companyId || c.id === brand.companyId);
                   const companyName = company?.companyNameZh || company?.companyNameEn || '—';
                   const isSelected = formData.brandId === brand.id;
                   return (
@@ -289,10 +289,7 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
                       )}
                     >
                       <div className="flex items-center gap-3">
-                        <div
-                          className="w-10 h-10 rounded-md flex items-center justify-center text-white font-bold text-[12px] flex-shrink-0"
-                          style={{ backgroundColor: brand.primaryColor }}
-                        >
+                        <div className="w-10 h-10 rounded-md flex items-center justify-center text-white font-bold text-[12px] flex-shrink-0 bg-teal-600">
                           {brand.brandCode}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -306,9 +303,6 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
                         )}
                       </div>
                       <div className="mt-2 flex items-center gap-3 text-[11px]">
-                        {brand.industry && (
-                          <span className="text-muted-foreground">{brand.industry}</span>
-                        )}
                         <span className="text-blue-600 font-medium ml-auto">
                           {getActiveProjectCount(brand.brandCode)} 個活躍項目
                         </span>
@@ -329,7 +323,7 @@ export function ProjectNewWizard({ onBack }: { onBack: () => void }) {
               <div className="mt-2 flex items-center gap-2 bg-teal-50/80 border border-teal-200 rounded-md px-3 py-2">
                 <Sparkles size={14} className="text-teal-600 flex-shrink-0" />
                 <p className="text-[12px] text-teal-700">
-                  所屬品牌：<span className="font-bold" style={{ color: selectedBrand?.primaryColor }}>{selectedBrand?.brandCode}</span>
+                  所屬品牌：<span className="font-bold text-teal-700">{selectedBrand?.brandCode}</span>
                   &nbsp;|&nbsp;所屬公司：<span className="font-bold">{selectedCompany?.companyNameZh || selectedCompany?.companyNameEn}</span>
                 </p>
               </div>

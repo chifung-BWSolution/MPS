@@ -103,7 +103,7 @@ export function MyProjects() {
                         {project.name}
                       </CardTitle>
                       <p className="text-[12px] text-muted-foreground mt-0.5">
-                        {brand?.brandNameZh || company?.companyNameZh || project.clientName || '—'}
+                        {brand?.displayName || company?.companyNameZh || project.clientName || '—'}
                       </p>
                     </div>
                   </div>

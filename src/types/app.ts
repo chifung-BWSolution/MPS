@@ -15,6 +15,8 @@ export interface User {
 // === Company (Top Level) ===
 export interface Company {
   id: string;
+  /** Stable UUID used by brand_list / webandsystem UUID FKs */
+  uuid: string;
   companyCode: string;
   companyNameZh: string;
   companyNameEn: string;
@@ -36,19 +38,12 @@ export interface Company {
 // === Brand (belongs to Company) ===
 export interface Brand {
   id: string;
+  /** UUID FK → company_list.uuid */
   companyId: string;
   brandCode: string;
-  brandNameZh: string;
-  brandNameEn: string;
-  industry?: string;
-  logoUrl?: string;
-  officialUrl?: string;
-  primaryColor: string;
-  description?: string;
+  displayName: string;
   isActive: boolean;
   projectCount?: number;
-  createdAt?: string;
-  updatedAt?: string;
 }
 
 // === Year Plan ===

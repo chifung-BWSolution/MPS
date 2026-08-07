@@ -495,8 +495,8 @@ function ProfileSection() {
                               key={brand.id}
                               className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600"
                             >
-                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: brand.primaryColor }} />
-                              {brand.brandNameZh}
+                              <span className="w-2 h-2 rounded-full bg-teal-600" />
+                              {brand.displayName}
                             </span>
                           ))}
                         </div>
@@ -569,8 +569,8 @@ function ProfileSection() {
                                     }}
                                     className="w-3.5 h-3.5 rounded border-border text-teal-600 focus:ring-teal-600"
                                   />
-                                  <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: brand.primaryColor }} />
-                                  <span className="text-[12px] font-medium">{brand.brandNameZh}</span>
+                                  <span className="w-3 h-3 rounded-full shrink-0 bg-teal-600" />
+                                  <span className="text-[12px] font-medium">{brand.displayName}</span>
                                   <span className="text-[11px] text-muted-foreground ml-auto">{brand.brandCode}</span>
                                 </label>
                               ))
@@ -687,8 +687,8 @@ function ProfileSection() {
                             }}
                             className="w-3.5 h-3.5 rounded border-border text-teal-600 focus:ring-teal-600"
                           />
-                          <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: brand.primaryColor }} />
-                          <span className="text-[12px] font-medium">{brand.brandNameZh}</span>
+                          <span className="w-3 h-3 rounded-full shrink-0 bg-teal-600" />
+                          <span className="text-[12px] font-medium">{brand.displayName}</span>
                           <span className="text-[11px] text-muted-foreground ml-auto">{brand.brandCode}</span>
                         </label>
                       ))

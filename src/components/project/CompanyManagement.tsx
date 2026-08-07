@@ -84,6 +84,7 @@ export function CompanyManagement() {
     } else {
       const newCompany: Company = {
         id: `c${Date.now()}`,
+        uuid: crypto.randomUUID(),
         ...formData,
         logoUrl: '',
         brandCount: 0,

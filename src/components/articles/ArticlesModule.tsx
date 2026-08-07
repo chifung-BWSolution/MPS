@@ -583,7 +583,7 @@ function AddArticleModal({ onClose, onAdd }: { onClose: () => void; onAdd: (arti
               <select value={brandId} onChange={(e) => setBrandId(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600">
                 <option value="">選擇品牌</option>
                 {filteredBrands.filter(b => b.isActive).map(b => (
-                  <option key={b.id} value={b.id}>{b.brandCode} - {b.brandNameZh}</option>
+                  <option key={b.id} value={b.id}>{b.brandCode} - {b.displayName}</option>
                 ))}
               </select>
             </div>

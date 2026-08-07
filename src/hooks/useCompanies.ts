@@ -6,6 +6,7 @@ import { companies as staticCompanies } from '@/data/mockData';
 
 type DbRow = {
   id: string;
+  uuid: string | null;
   company_code: string;
   company_name_zh: string;
   company_name_en: string;
@@ -25,6 +26,7 @@ type DbRow = {
 function mapRow(row: DbRow): Company {
   return {
     id: row.id,
+    uuid: row.uuid || row.id,
     companyCode: row.company_code,
     companyNameZh: row.company_name_zh,
     companyNameEn: row.company_name_en,
@@ -70,6 +72,7 @@ export function useCompanies() {
   const addCompany = useCallback(async (company: Company) => {
     const row = {
       id: company.id,
+      uuid: company.uuid || undefined,
       company_code: company.companyCode,
       company_name_zh: company.companyNameZh,
       company_name_en: company.companyNameEn,

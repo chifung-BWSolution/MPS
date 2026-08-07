@@ -185,7 +185,7 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
     { number: 3, label: '項目詳情', icon: FileText },
   ];
 
-  const selectedCompany = companies.find(c => c.id === formData.companyId);
+  const selectedCompany = companies.find(c => c.uuid === formData.companyId || c.id === formData.companyId);
   const selectedBrand = brands.find(b => b.id === formData.brandId);
 
   const filteredClients = useMemo(() => {
@@ -323,7 +323,7 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
   const generateDescription = () => {
     const typeLabel = clientProjectTypes.find(t => t.value === formData.projectType)?.label || '';
     const billingLabel = billingModelLabels[formData.billingModel];
-    return `為「${formData.clientCompanyName}」提供${typeLabel}服務。\n收費模式：${billingLabel}${formData.billingModel === 'recurring' ? `（${billingFrequencyLabels[formData.billingFrequency]}）` : ''}。\n預計工時：${formData.estimatedHours || '待定'}小時。\n負責品牌：${selectedBrand?.brandNameZh || ''}（${selectedCompany?.companyNameZh || ''}）`;
+    return `為「${formData.clientCompanyName}」提供${typeLabel}服務。\n收費模式：${billingLabel}${formData.billingModel === 'recurring' ? `（${billingFrequencyLabels[formData.billingFrequency]}）` : ''}。\n預計工時：${formData.estimatedHours || '待定'}小時。\n負責品牌：${selectedBrand?.displayName || ''}（${selectedCompany?.companyNameZh || ''}）`;
   };
 
   const isFormValid = formData.name && formData.companyId && formData.brandId && formData.startDate && formData.clientCompanyName;
@@ -494,7 +494,7 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
                 {dedupedBrands.map(brand => {
-                  const company = companies.find(c => c.id === brand.companyId);
+                  const company = companies.find(c => c.uuid === brand.companyId || c.id === brand.companyId);
                   const companyName = company?.companyNameZh || company?.companyNameEn || '—';
                   const isSelected = formData.brandId === brand.id;
                   return (
@@ -509,10 +509,7 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
                       )}
                     >
                       <div className="flex items-center gap-3">
-                        <div
-                          className="w-10 h-10 rounded-md flex items-center justify-center text-white font-bold text-[12px] flex-shrink-0"
-                          style={{ backgroundColor: brand.primaryColor }}
-                        >
+                        <div className="w-10 h-10 rounded-md flex items-center justify-center text-white font-bold text-[12px] flex-shrink-0 bg-teal-600">
                           {brand.brandCode}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -526,9 +523,6 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
                         )}
                       </div>
                       <div className="mt-2 flex items-center gap-3 text-[11px]">
-                        {brand.industry && (
-                          <span className="text-muted-foreground">{brand.industry}</span>
-                        )}
                         <span className="text-blue-600 font-medium ml-auto">
                           {getActiveProjectCount(brand.brandCode)} 個活躍客戶項目
                         </span>
@@ -771,7 +765,7 @@ export function ProjectNewClientWizard({ onBack }: { onBack: () => void }) {
                 <Sparkles size={14} className="text-teal-600 flex-shrink-0" />
                 <p className="text-[12px] text-teal-700">
                   客戶：<span className="font-bold">{formData.clientCompanyName}</span>
-                  &nbsp;|&nbsp;品牌：<span className="font-bold" style={{ color: selectedBrand?.primaryColor }}>{selectedBrand?.brandCode}</span>
+                  &nbsp;|&nbsp;品牌：<span className="font-bold text-teal-700">{selectedBrand?.brandCode}</span>
                   &nbsp;|&nbsp;所屬公司：<span className="font-bold">{selectedCompany?.companyNameZh || selectedCompany?.companyNameEn}</span>
                 </p>
               </div>

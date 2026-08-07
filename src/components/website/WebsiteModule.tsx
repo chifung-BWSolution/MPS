@@ -1032,12 +1032,18 @@ function WebsiteFormModal({
 }) {
   const [form, setForm] = useState<WebsiteFormData>(initialData || emptyFormData);
   const { companies } = useCompanies();
-  const { profiles: existingProfiles } = useWebsiteProfiles();
+  const { brands } = useBrands();
   const uniqueBrandCodes = Array.from(
-    new Set([
-      ...existingProfiles.map(p => (p.brand || '').trim()).filter(Boolean),
-      'OB',
-    ])
+    new Set(
+      brands
+        .filter(b => b.isActive)
+        .filter(b => {
+          if (!form.companyId) return true;
+          const co = companies.find(c => c.uuid === form.companyId || c.id === form.companyId);
+          return b.companyId === form.companyId || b.companyId === co?.uuid || b.companyId === co?.id;
+        })
+        .map(b => b.brandCode)
+    )
   ).sort();
   const { byCategory: optionsByCategory } = useSystemOptions();
   const platformOptions = optionsByCategory('platform');
@@ -1134,7 +1140,7 @@ function WebsiteFormModal({
               >
                 <option value="">選擇公司</option>
                 {companies.filter(c => c.isActive).map(c => (
-                  <option key={c.id} value={c.id}>{c.companyCode} — {c.companyNameEn}</option>
+                  <option key={c.uuid || c.id} value={c.uuid || c.id}>{c.companyCode} — {c.companyNameEn}</option>
                 ))}
               </select>
             </div>
@@ -1146,9 +1152,12 @@ function WebsiteFormModal({
                 className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600"
               >
                 <option value="">選擇品牌</option>
-                {uniqueBrandCodes.map(code => (
-                  <option key={code} value={code}>{code}</option>
-                ))}
+                {uniqueBrandCodes.map(code => {
+                  const brand = brands.find(b => b.brandCode === code);
+                  return (
+                    <option key={code} value={code}>{brand ? `${brand.brandCode} — ${brand.displayName}` : code}</option>
+                  );
+                })}
               </select>
             </div>
           </div>
@@ -1346,7 +1355,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
   const filteredBrands = companyFilter === 'all'
     ? brands
     : brands.filter(b => {
-        const co = companies.find(c => c.id === b.companyId);
+        const co = companies.find(c => c.uuid === b.companyId || c.id === b.companyId);
         return co?.companyCode === companyFilter;
       });
   // Deduplicate brands by brandCode for the filter dropdown
@@ -1369,17 +1378,19 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
   const handleAddWebsite = async (data: WebsiteFormData) => {
     // Capture before modal onClose clears pending (form modal calls onSave then onClose sync)
     const domainToLink = pendingCreateDomain;
-    const company = companies.find(c => c.id === data.companyId);
+    const company = companies.find(c => c.uuid === data.companyId || c.id === data.companyId);
+    const brandRow = brands.find(b => b.brandCode === data.brand && (b.companyId === (company?.uuid || company?.id) || !data.companyId))
+      || brands.find(b => b.brandCode === data.brand);
     const newSite: WebsiteProfileFull = {
       id: `${data.profileType === 'system' ? 'sys' : 'ws'}_${Date.now()}`,
-      companyId: data.companyId,
-      brandId: '',
+      companyId: company?.uuid || data.companyId,
+      brandId: brandRow?.id || data.brandId || '',
       websiteName: data.websiteName,
       domainUrl: data.domainUrl,
       platform: data.platform as WebsiteProfileFull['platform'],
       hostingProvider: data.hostingProvider,
       company: company?.companyCode || '',
-      brand: data.brand || '',
+      brand: brandRow?.brandCode || data.brand || '',
       level: data.level,
       status: data.status,
       notes: data.notes || undefined,
@@ -1444,16 +1455,18 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
 
   const handleEditWebsite = async (data: WebsiteFormData) => {
     if (!editingSite) return;
-    const company = companies.find(c => c.id === data.companyId);
+    const company = companies.find(c => c.uuid === data.companyId || c.id === data.companyId);
+    const brandRow = brands.find(b => b.brandCode === data.brand && (b.companyId === (company?.uuid || company?.id) || !data.companyId))
+      || brands.find(b => b.brandCode === data.brand);
     const updates = {
       websiteName: data.websiteName,
       domainUrl: data.domainUrl,
-      companyId: data.companyId,
-      brandId: '',
+      companyId: company?.uuid || data.companyId,
+      brandId: brandRow?.id || data.brandId || '',
       platform: data.platform as WebsiteProfileFull['platform'],
       hostingProvider: data.hostingProvider,
       company: company?.companyCode ?? editingSite.company ?? '',
-      brand: data.brand || editingSite.brand || '',
+      brand: brandRow?.brandCode || data.brand || editingSite.brand || '',
       level: data.level,
       status: data.status,
       notes: data.notes || undefined,
@@ -2526,9 +2539,9 @@ function GlobalArticleList({ onSelectArticle }: { onSelectArticle: (a: Article) 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [, forceUpdate] = useState(0);
 
-  const filteredBrands = companyFilter === 'all' ? brands : brands.filter(b => b.companyId === companyFilter);
+  const filteredBrands = companyFilter === 'all' ? brands : brands.filter(b => b.companyId === companyFilter || companies.find(c => c.id === companyFilter)?.uuid === b.companyId);
   const filtered = allArticles.filter(a => {
-    if (companyFilter !== 'all' && a.companyId !== companyFilter) return false;
+    if (companyFilter !== 'all' && a.companyId !== companyFilter && companies.find(c => c.id === companyFilter)?.uuid !== a.companyId && companies.find(c => c.uuid === companyFilter)?.uuid !== a.companyId) return false;
     if (brandFilter !== 'all' && a.brandId !== brandFilter) return false;
     if (statusFilter !== 'all' && a.contentStatus !== statusFilter) return false;
     if (searchQuery && !a.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -2568,7 +2581,7 @@ function GlobalArticleList({ onSelectArticle }: { onSelectArticle: (a: Article) 
         </div>
         <select value={companyFilter} onChange={e => { setCompanyFilter(e.target.value); setBrandFilter('all'); }} className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white">
           <option value="all">所有公司</option>
-          {companies.filter(c => c.isActive).map(c => <option key={c.id} value={c.id}>{c.companyCode}</option>)}
+          {companies.filter(c => c.isActive).map(c => <option key={c.uuid || c.id} value={c.uuid || c.id}>{c.companyCode}</option>)}
         </select>
         <select value={brandFilter} onChange={e => setBrandFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white">
           <option value="all">所有品牌</option>

@@ -21,6 +21,8 @@ type DbRow = {
   project_id: string | null;
   company_id: string | null;
   brand_id: string | null;
+  brand_list_id: string | null;
+  company_list_id: string | null;
   notes: string | null;
   hosting_provider: string | null;
   system_type: string | null;
@@ -30,8 +32,9 @@ function mapRow(row: DbRow): WebsiteProfileFull {
   return {
     id: row.id,
     projectId: row.project_id ?? undefined,
-    companyId: row.company_id ?? '',
-    brandId: row.brand_id ?? '',
+    // Prefer new UUID FKs; fall back to legacy text ids
+    companyId: row.company_list_id ?? row.company_id ?? '',
+    brandId: row.brand_list_id ?? row.brand_id ?? '',
     websiteName: row.website_name,
     domainUrl: row.domain_url ?? undefined,
     platform: (row.platform as WebsiteProfileFull['platform']) ?? 'other',
@@ -98,6 +101,8 @@ export function useWebsiteProfiles() {
       project_id: site.projectId ?? null,
       company_id: site.companyId || null,
       brand_id: site.brandId || null,
+      company_list_id: site.companyId || null,
+      brand_list_id: site.brandId || null,
       notes: site.notes ?? null,
       hosting_provider: site.hostingProvider ?? null,
       system_type: site.systemType ?? null,
@@ -122,8 +127,14 @@ export function useWebsiteProfiles() {
     if (updates.articlesCount !== undefined) row.articles_count = updates.articlesCount;
     if (updates.videosCount !== undefined) row.videos_count = updates.videosCount;
     if (updates.totalHours !== undefined) row.total_hours = updates.totalHours;
-    if (updates.companyId !== undefined) row.company_id = updates.companyId || null;
-    if (updates.brandId !== undefined) row.brand_id = updates.brandId || null;
+    if (updates.companyId !== undefined) {
+      row.company_id = updates.companyId || null;
+      row.company_list_id = updates.companyId || null;
+    }
+    if (updates.brandId !== undefined) {
+      row.brand_id = updates.brandId || null;
+      row.brand_list_id = updates.brandId || null;
+    }
     if (updates.notes !== undefined) row.notes = updates.notes;
     if (updates.hostingProvider !== undefined) row.hosting_provider = updates.hostingProvider ?? null;
     if (updates.systemType !== undefined) row.system_type = updates.systemType ?? null;

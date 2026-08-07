@@ -8,16 +8,8 @@ type DbRow = {
   id: string;
   company_id: string;
   brand_code: string;
-  brand_name_zh: string;
-  brand_name_en: string;
-  industry: string | null;
-  logo_url: string | null;
-  official_url: string | null;
-  primary_color: string;
-  description: string | null;
+  display_name: string;
   is_active: boolean;
-  created_at: string;
-  updated_at: string;
 };
 
 function mapRow(row: DbRow): Brand {
@@ -25,16 +17,8 @@ function mapRow(row: DbRow): Brand {
     id: row.id,
     companyId: row.company_id,
     brandCode: row.brand_code,
-    brandNameZh: row.brand_name_zh,
-    brandNameEn: row.brand_name_en,
-    industry: row.industry ?? '',
-    logoUrl: row.logo_url ?? '',
-    officialUrl: row.official_url ?? '',
-    primaryColor: row.primary_color,
-    description: row.description ?? '',
+    displayName: row.display_name,
     isActive: row.is_active,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
   };
 }
 
@@ -48,7 +32,7 @@ export function useBrands() {
     setLoading(true);
     supabase
       .from('brand_list')
-      .select('*')
+      .select('id, company_id, brand_code, display_name, is_active')
       .order('brand_code')
       .then(({ data, error }) => {
         if (error) {
@@ -68,13 +52,7 @@ export function useBrands() {
       id: brand.id,
       company_id: brand.companyId,
       brand_code: brand.brandCode,
-      brand_name_zh: brand.brandNameZh,
-      brand_name_en: brand.brandNameEn,
-      industry: brand.industry || null,
-      logo_url: brand.logoUrl || null,
-      official_url: brand.officialUrl || null,
-      primary_color: brand.primaryColor,
-      description: brand.description || null,
+      display_name: brand.displayName,
       is_active: brand.isActive,
     };
     const { error } = await supabase.from('brand_list').insert(row);
@@ -83,16 +61,10 @@ export function useBrands() {
   }, []);
 
   const updateBrand = useCallback(async (id: string, updates: Partial<Brand>) => {
-    const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    const row: Record<string, unknown> = {};
     if (updates.companyId !== undefined) row.company_id = updates.companyId;
     if (updates.brandCode !== undefined) row.brand_code = updates.brandCode;
-    if (updates.brandNameZh !== undefined) row.brand_name_zh = updates.brandNameZh;
-    if (updates.brandNameEn !== undefined) row.brand_name_en = updates.brandNameEn;
-    if (updates.industry !== undefined) row.industry = updates.industry || null;
-    if (updates.logoUrl !== undefined) row.logo_url = updates.logoUrl || null;
-    if (updates.officialUrl !== undefined) row.official_url = updates.officialUrl || null;
-    if (updates.primaryColor !== undefined) row.primary_color = updates.primaryColor;
-    if (updates.description !== undefined) row.description = updates.description || null;
+    if (updates.displayName !== undefined) row.display_name = updates.displayName;
     if (updates.isActive !== undefined) row.is_active = updates.isActive;
 
     const { error } = await supabase.from('brand_list').update(row).eq('id', id);
