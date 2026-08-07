@@ -51,7 +51,7 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
       case 'credit-cards': return { title: '信用卡管理', subtitle: '管理公司付款信用卡。' };
       case 'quotation-settings': return { title: '客戶報價設定', subtitle: '管理報價類型、預設服務項目及付款安排。' };
       case 'terms-conditions': return { title: '條款及細則管理', subtitle: '管理各報價類型的條款範本，報價時可選擇或編輯。' };
-      case 'staff-directory': return { title: '員工列表', subtitle: '查看所有員工資料，資料來源：OTC2 Staff（同步至 staff_directory）。' };
+      case 'staff-directory': return { title: '員工列表', subtitle: '查看所有員工資料，資料來源：OTC2 Staff（同步至 staffs）。' };
       case 'login-logs': return { title: '登入紀錄', subtitle: '查看用戶登入歷史記錄。' };
       case 'data-integrity': return { title: '資料完整性檢查', subtitle: '檢查每一個頁面的資料完整性，確保各模組之間資料一致性。' };
       case 'sample-data': return { title: '模擬數據管理', subtitle: '管理系統中的模擬數據，準備切換至真實數據時使用。' };
@@ -137,7 +137,7 @@ function ProfileSection() {
     phone: '',
   });
 
-  // Dynamically populate profile from authenticated user + staff_directory + system_users.phone
+  // Dynamically populate profile from authenticated user + staffs
   useEffect(() => {
     const loadProfile = async () => {
       const authEmail = systemUser?.email || systemUser?.google_email || session?.user?.email || '';
@@ -152,32 +152,14 @@ function ProfileSection() {
 
       console.log('[Settings:loadProfile] Starting. authEmail:', authEmail, '| systemUser.phone:', systemUser?.phone, '| bubble_staff_id:', systemUser?.bubble_staff_id);
 
-      // === Step 1: Direct query system_users.phone (newly added column) ===
-      if (!phone && authEmail) {
-        try {
-          const { data: sysRow } = await supabase
-            .from('system_users')
-            .select('phone')
-            .or(`email.ilike.${authEmail},google_email.ilike.${authEmail}`)
-            .limit(1)
-            .maybeSingle();
-          if (sysRow?.phone) {
-            phone = sysRow.phone;
-            console.log('[Settings:loadProfile] Got phone from system_users:', phone);
-          }
-        } catch (err) {
-          console.warn('[Settings] system_users.phone lookup failed:', err);
-        }
-      }
-
-      // === Step 2: Try staff_directory by bubble_staff_id ===
+      // === Step 1: Try staffs by bubble_staff_id ===
       const PROFILE_TIMEOUT = 5000;
       
       if (systemUser?.bubble_staff_id) {
         try {
           const result = await Promise.race([
             supabase
-              .from('staff_directory')
+              .from('staffs')
               .select('display_name, full_name, position, work_phone, private_phone, base_location, business_unit')
               .eq('bubble_staff_id', systemUser.bubble_staff_id)
               .maybeSingle(),
@@ -202,7 +184,7 @@ function ProfileSection() {
         try {
           const result = await Promise.race([
             supabase
-              .from('staff_directory')
+              .from('staffs')
               .select('display_name, full_name, position, work_phone, private_phone, base_location, business_unit, work_email')
               .ilike('work_email', authEmail)
               .limit(1)
@@ -223,7 +205,7 @@ function ProfileSection() {
           if (!phone) {
             const result2 = await Promise.race([
               supabase
-                .from('staff_directory')
+                .from('staffs')
                 .select('display_name, full_name, position, work_phone, private_phone, base_location, business_unit, private_email')
                 .ilike('private_email', authEmail)
                 .limit(1)
@@ -298,22 +280,11 @@ function ProfileSection() {
   const handleSaveProfile = async () => {
     const authEmail = systemUser?.email || systemUser?.google_email || session?.user?.email || '';
     
-    // Persist phone to system_users
+    // Persist phone to staffs.work_phone
     if (authEmail) {
       try {
-        await supabase
-          .from('system_users')
-          .update({ phone: profile.phone, updated_at: new Date().toISOString() })
-          .or(`email.ilike.${authEmail},google_email.ilike.${authEmail}`);
-        console.log('[Settings] Saved phone to system_users:', profile.phone);
-      } catch (err) {
-        console.warn('[Settings] Failed to save phone to system_users:', err);
-      }
-
-      // Also persist to staff_directory.work_phone
-      try {
         const { data: staffMatch } = await supabase
-          .from('staff_directory')
+          .from('staffs')
           .select('id')
           .or(`work_email.ilike.${authEmail},private_email.ilike.${authEmail}`)
           .limit(1)
@@ -321,13 +292,13 @@ function ProfileSection() {
         
         if (staffMatch?.id) {
           await supabase
-            .from('staff_directory')
+            .from('staffs')
             .update({ work_phone: profile.phone, updated_at: new Date().toISOString() })
             .eq('id', staffMatch.id);
           console.log('[Settings] Saved phone to staff_directory:', profile.phone);
         } else if (systemUser?.bubble_staff_id) {
           await supabase
-            .from('staff_directory')
+            .from('staffs')
             .update({ work_phone: profile.phone, updated_at: new Date().toISOString() })
             .eq('bubble_staff_id', systemUser.bubble_staff_id);
           console.log('[Settings] Saved phone to staff_directory via bubble_staff_id:', profile.phone);

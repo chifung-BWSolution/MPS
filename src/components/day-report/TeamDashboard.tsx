@@ -516,7 +516,7 @@ export function TeamDashboard() {
       }
 
       let pickerQuery = supabase
-        .from('staff_directory')
+        .from('staffs')
         .select('id, bubble_staff_id, display_name, position, user_role, status, base_location, team_id, business_unit, profile_pic_url')
         .eq('status', 'active')
         .neq('position', 'Director');
@@ -560,7 +560,7 @@ export function TeamDashboard() {
       }
 
       let staffQuery = supabase
-        .from('staff_directory')
+        .from('staffs')
         .select('id, bubble_staff_id, display_name, position, user_role, status, base_location, team_id, business_unit, profile_pic_url')
         .eq('status', 'active')
         .neq('position', 'Director');

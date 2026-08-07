@@ -71,14 +71,14 @@ function isStaffActive(status: string | null | undefined): boolean {
 }
 
 /**
- * Flexible whitelist lookup: case-insensitive check across google_email and email columns
- * in BOTH system_users and user_info tables.
+ * Flexible whitelist lookup against public.users (email / google_email),
+ * enriched by public.staffs (staff_id = bubble_staff_id).
  *
- * When the same email matches multiple people (shared work mailbox), prefer the row linked
- * to staff_directory.status = 'active'. Falls back to inactive only if no active match exists.
+ * When the same email matches multiple people (shared work mailbox), prefer the row
+ * linked to staffs.status = 'active'. Falls back to inactive only if no active match exists.
  *
  * Uses parallel .ilike() queries instead of PostgREST `.or()` because the latter mis-parses
- * email values containing "." and "@" — that caused 4s hangs / 400 errors before.
+ * email values containing "." and "@".
  */
 async function findSystemUserByEmail(email: string): Promise<{ data: SystemUserProfile | null; error: any }> {
   const normalizedEmail = email.toLowerCase().trim();
@@ -103,11 +103,10 @@ async function findSystemUserByEmail(email: string): Promise<{ data: SystemUserP
     }, MASTER_TIMEOUT_MS);
   });
 
-  const lookupAllInTable = async (table: 'system_users' | 'user_info') => {
-    // Fetch ALL matches (shared mailboxes can have multiple rows).
+  const lookupAllInUsers = async () => {
     const [byGoogle, byEmail] = await Promise.all([
-      supabase.from(table).select('*').ilike('google_email', normalizedEmail),
-      supabase.from(table).select('*').ilike('email', normalizedEmail),
+      supabase.from('users').select('*').ilike('google_email', normalizedEmail),
+      supabase.from('users').select('*').ilike('email', normalizedEmail),
     ]);
     const rows = dedupeById([...(byGoogle.data || []), ...(byEmail.data || [])] as any[]);
     return {
@@ -122,7 +121,7 @@ async function findSystemUserByEmail(email: string): Promise<{ data: SystemUserP
 
     const queries: PromiseLike<any>[] = [
       supabase
-        .from('staff_directory')
+        .from('staffs')
         .select('bubble_staff_id, display_name, full_name, status, position, work_email')
         .ilike('work_email', normalizedEmail),
     ];
@@ -130,7 +129,7 @@ async function findSystemUserByEmail(email: string): Promise<{ data: SystemUserP
     if (uniqueIds.length > 0) {
       queries.push(
         supabase
-          .from('staff_directory')
+          .from('staffs')
           .select('bubble_staff_id, display_name, full_name, status, position, work_email')
           .in('bubble_staff_id', uniqueIds)
       );
@@ -145,26 +144,7 @@ async function findSystemUserByEmail(email: string): Promise<{ data: SystemUserP
     return map;
   };
 
-  const pickPreferredSystemUser = (
-    rows: any[],
-    staffMap: Map<string, StaffDirectoryLite>
-  ): any | null => {
-    if (rows.length === 0) return null;
-    const scored = rows.map((row) => {
-      const staff = staffMap.get(row.bubble_staff_id);
-      const staffActive = isStaffActive(staff?.status);
-      const accountActive = row.is_active === true || row.is_active === null;
-      // Higher is better
-      let score = 0;
-      if (staffActive) score += 100;
-      if (accountActive) score += 10;
-      return { row, score, staff };
-    });
-    scored.sort((a, b) => b.score - a.score);
-    return scored[0]?.row || null;
-  };
-
-  const pickPreferredUserInfo = (
+  const pickPreferredUser = (
     rows: any[],
     staffMap: Map<string, StaffDirectoryLite>
   ): { ui: any; staff: StaffDirectoryLite | null } | null => {
@@ -185,101 +165,40 @@ async function findSystemUserByEmail(email: string): Promise<{ data: SystemUserP
 
   const lookupLogic = async (): Promise<{ data: SystemUserProfile | null; error: any }> => {
     try {
-      // Attempt 1: system_users (all matches)
-      const { data: sysMatches, error: err1 } = await lookupAllInTable('system_users');
-      console.log('[Auth:findSystemUserByEmail] Attempt 1 (system_users):', {
-        count: sysMatches.length,
-        error: err1?.message || null,
-      });
-
-      // Attempt 2: user_info (all matches)
-      const { data: uiMatches, error: err2 } = await lookupAllInTable('user_info');
-      console.log('[Auth:findSystemUserByEmail] Attempt 2 (user_info):', {
-        count: uiMatches.length,
-        staff_ids: uiMatches.map((r: any) => r.staff_id),
-        error: err2?.message || null,
+      const { data: userMatches, error: usersErr } = await lookupAllInUsers();
+      console.log('[Auth:findSystemUserByEmail] users matches:', {
+        count: userMatches.length,
+        staff_ids: userMatches.map((r: any) => r.staff_id),
+        error: usersErr?.message || null,
       });
 
       if (timedOut) return { data: null, error: new Error('Timed out') };
 
-      const staffIds = [
-        ...sysMatches.map((r: any) => r.bubble_staff_id),
-        ...uiMatches.map((r: any) => r.staff_id),
-      ].filter(Boolean);
-
+      const staffIds = userMatches.map((r: any) => r.staff_id).filter(Boolean);
       const staffMap = await loadStaffStatusMap(staffIds);
-      console.log('[Auth:findSystemUserByEmail] staff_directory status map:', {
+      console.log('[Auth:findSystemUserByEmail] staffs status map:', {
         size: staffMap.size,
         active: [...staffMap.values()].filter((s) => isStaffActive(s.status)).map((s) => s.display_name),
       });
 
       if (timedOut) return { data: null, error: new Error('Timed out') };
 
-      // Prefer active staff_directory among system_users
-      const sysMatch = pickPreferredSystemUser(sysMatches, staffMap);
-      if (sysMatch) {
-        const staff = staffMap.get(sysMatch.bubble_staff_id);
-        console.log('[Auth:findSystemUserByEmail] ✅ Picked system_users:', {
-          display_name: sysMatch.display_name,
-          bubble_staff_id: sysMatch.bubble_staff_id,
-          staff_status: staff?.status || null,
-        });
-        // Prefer staff_directory display name when available (e.g. Julie)
-        if (staff?.display_name || staff?.full_name) {
-          return {
-            data: {
-              ...(sysMatch as SystemUserProfile),
-              display_name: staff.display_name || staff.full_name || sysMatch.display_name,
-              position: staff.position || sysMatch.position,
-            },
-            error: null,
-          };
-        }
-        return { data: sysMatch as SystemUserProfile, error: null };
-      }
-
-      // Prefer active staff_directory among user_info
-      const uiPick = pickPreferredUserInfo(uiMatches, staffMap);
-      if (uiPick?.ui) {
-        const uiMatch = uiPick.ui;
-        console.log('[Auth:findSystemUserByEmail] ✅ Picked user_info:', {
+      const pick = pickPreferredUser(userMatches, staffMap);
+      if (pick?.ui) {
+        const uiMatch = pick.ui;
+        console.log('[Auth:findSystemUserByEmail] ✅ Picked users:', {
           display_name: uiMatch.display_name,
           staff_id: uiMatch.staff_id,
-          staff_status: uiPick.staff?.status || null,
+          staff_status: pick.staff?.status || null,
         });
-
-        if (uiMatch.staff_id) {
-          if (timedOut) return { data: null, error: new Error('Timed out') };
-          const { data: sysUserFromUI } = await supabase
-            .from('system_users')
-            .select('*')
-            .eq('bubble_staff_id', uiMatch.staff_id)
-            .limit(1)
-            .maybeSingle();
-          if (sysUserFromUI) {
-            const staff = uiPick.staff;
-            if (staff?.display_name || staff?.full_name) {
-              return {
-                data: {
-                  ...(sysUserFromUI as SystemUserProfile),
-                  display_name: staff.display_name || staff.full_name || sysUserFromUI.display_name,
-                  position: staff.position || sysUserFromUI.position,
-                },
-                error: null,
-              };
-            }
-            return { data: sysUserFromUI as SystemUserProfile, error: null };
-          }
-        }
-
         return {
-          data: bootstrapSystemUserFromUserInfo(uiMatch, normalizedEmail, uiPick.staff),
+          data: bootstrapSystemUserFromUserInfo(uiMatch, normalizedEmail, pick.staff),
           error: null,
         };
       }
 
-      console.warn('[Auth:findSystemUserByEmail] ❌ All attempts failed for:', normalizedEmail);
-      return { data: null, error: err1 || err2 || new Error('Not found in any lookup path') };
+      console.warn('[Auth:findSystemUserByEmail] ❌ No users match for:', normalizedEmail);
+      return { data: null, error: usersErr || new Error('Not found in users whitelist') };
     } catch (err) {
       console.warn('[Auth:findSystemUserByEmail] Query error:', err);
       return { data: null, error: err };
@@ -356,9 +275,7 @@ function mapRoleTagDisplay(roleTag: string | null | undefined, classification?: 
 }
 
 /**
- * Bootstrap a SystemUserProfile from a user_info record alone.
- * Used when user_info exists but there's no matching system_users row.
- * Prefer staff_directory display_name/position when provided (active staff preferred upstream).
+ * Bootstrap a SystemUserProfile from a users row + optional staffs enrichment.
  */
 function bootstrapSystemUserFromUserInfo(
   uiRecord: any,
@@ -368,7 +285,7 @@ function bootstrapSystemUserFromUserInfo(
   const role = mapRoleToInternal(uiRecord.role_tag, uiRecord.classification);
   const displayName =
     staff?.display_name || staff?.full_name || uiRecord.display_name || uiRecord.email || email;
-  console.log('[Auth:bootstrap] Creating SystemUserProfile from user_info:', {
+  console.log('[Auth:bootstrap] Creating SystemUserProfile from users:', {
     staff_id: uiRecord.staff_id,
     display_name: displayName,
     role_tag: uiRecord.role_tag,
@@ -389,7 +306,7 @@ function bootstrapSystemUserFromUserInfo(
     position: staff?.position || uiRecord.role_tag || uiRecord.classification || null,
     phone: null,
     profile_pic_url: uiRecord.profile_pic_url || null,
-    is_active: true, // If they're in user_info, they're authorized
+    is_active: true, // If they're in users, they're authorized
     google_email: uiRecord.google_email || email,
   };
 }
@@ -601,17 +518,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             authSucceededRef.current = true;
             foundInDB = true;
 
-            // Update auth_user_id + last_login_at (fire and forget).
-            // Skip when sysUser.id is a synthesized bootstrap/fallback id — those are
-            // not valid UUIDs, and PATCHing system_users with them returns 400.
-            const isSyntheticId = sysUser.id.startsWith('ui-bootstrap-') || sysUser.id.startsWith('fallback-');
-            if (authUserId && !isSyntheticId) {
-              supabase.from('system_users')
-                .update({ auth_user_id: authUserId, last_login_at: new Date().toISOString() })
-                .eq('id', sysUser.id)
-                .then(() => console.log('[Auth] Master bypass: Updated auth_user_id'))
-                .catch((e) => console.warn('[Auth] Master bypass: Update failed:', e));
-            }
 
             // Enrich phone — fire and forget
             (async () => {
@@ -619,7 +525,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 let phone: string | null = null;
                 if (sysUser.bubble_staff_id) {
                   const { data: staffRow } = await supabase
-                    .from('staff_directory')
+                    .from('staffs')
                     .select('work_phone, private_phone')
                     .eq('bubble_staff_id', sysUser.bubble_staff_id)
                     .maybeSingle();
@@ -627,7 +533,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
                 if (!phone) {
                   const { data: staffByEmail } = await supabase
-                    .from('staff_directory')
+                    .from('staffs')
                     .select('work_phone, private_phone')
                     .ilike('work_email', normalizedEmail)
                     .limit(1)
@@ -640,10 +546,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               } catch {}
             })();
 
-            // Fetch user_info
+            // Fetch users row
             try {
               const { data: uInfo } = await supabase
-                .from('user_info')
+                .from('users')
                 .select('*')
                 .eq('staff_id', sysUser.bubble_staff_id)
                 .limit(1)
@@ -716,20 +622,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (sysUser) {
         // ✅ AUTHORIZED — set system user immediately
         console.log('[Auth] ✅ Lookup authorized:', sysUser.display_name, sysUser.role);
-        // Enrich with phone from staff_directory (if not already present)
+        // Enrich with phone from staffs (if not already present)
         const enrichedUser = { ...sysUser, phone: sysUser.phone || null };
         setSystemUser(enrichedUser);
         setAuthError(null);
         authSucceededRef.current = true; // CRITICAL: Mark auth as succeeded IMMEDIATELY
 
-        // Enrich phone from staff_directory — fire and forget, updates state when ready
+        // Enrich phone from staffs — fire and forget, updates state when ready
         (async () => {
           try {
             let phone: string | null = null;
             // Try by bubble_staff_id first
             if (sysUser.bubble_staff_id) {
               const { data: staffRow } = await supabase
-                .from('staff_directory')
+                .from('staffs')
                 .select('work_phone, private_phone')
                 .eq('bubble_staff_id', sysUser.bubble_staff_id)
                 .maybeSingle();
@@ -740,7 +646,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Fallback: try by email
             if (!phone && normalizedEmail) {
               const { data: staffByEmail } = await supabase
-                .from('staff_directory')
+                .from('staffs')
                 .select('work_phone, private_phone')
                 .ilike('work_email', normalizedEmail)
                 .limit(1)
@@ -750,7 +656,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
             }
             if (phone) {
-              console.log('[Auth] 📞 Phone enriched from staff_directory:', phone);
+              console.log('[Auth] 📞 Phone enriched from staffs:', phone);
               setSystemUser(prev => prev ? { ...prev, phone } : prev);
             }
           } catch (err) {
@@ -764,28 +670,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!isSyntheticId) {
           if (!sysUser.auth_user_id && authUserId) {
             supabase
-              .from('system_users')
-              .update({
-                auth_user_id: authUserId,
-                last_login_at: new Date().toISOString(),
-              })
-              .eq('id', sysUser.id)
-              .then(() => console.log('[Auth] Updated auth_user_id + last_login_at'))
-              .catch((e) => console.warn('[Auth] Non-blocking update failed:', e));
-          } else {
             supabase
-              .from('system_users')
-              .update({ last_login_at: new Date().toISOString() })
-              .eq('id', sysUser.id)
-              .then(() => {})
-              .catch((e) => console.warn('[Auth] Non-blocking update failed:', e));
-          }
         }
 
-        // Step 2: Fetch user_info for role_tag (joined via staff_id = bubble_staff_id, NO status filter)
+        // Step 2: Fetch users row for role_tag (joined via staff_id = bubble_staff_id, NO status filter)
         try {
           const { data: uInfo } = await supabase
-            .from('user_info')
+            .from('users')
             .select('*')
             .eq('staff_id', sysUser.bubble_staff_id)
             .limit(1)
@@ -799,17 +690,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             };
             setUserInfo(mappedUInfo);
 
-            // Enrich systemUser.role from user_info.role_tag so permissions match staff directory
+            // Enrich systemUser.role from users.role_tag so permissions match users.role_tag
             if (uInfo.role_tag || uInfo.classification) {
               const enrichedRole = mapRoleToInternal(uInfo.role_tag, uInfo.classification);
-              console.log('[Auth] Enriching role from user_info:', uInfo.role_tag, '->', enrichedRole);
+              console.log('[Auth] Enriching role from users:', uInfo.role_tag, '->', enrichedRole);
               setSystemUser(prev => prev ? { ...prev, role: enrichedRole } : prev);
             }
           } else {
             setUserInfo(null);
           }
         } catch (uiErr) {
-          console.warn('[Auth] user_info fetch failed (non-blocking):', uiErr);
+          console.warn('[Auth] users fetch failed (non-blocking):', uiErr);
           setUserInfo(null);
         }
 
@@ -817,11 +708,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // findSystemUserByEmail already checks system_users + user_info comprehensively.
+      // findSystemUserByEmail already checks users + staffs comprehensively.
       // No additional fallback queries needed — they were causing 502 by cascading timeouts.
 
       // All lookups failed — NOT authorized
-      const failMsg = `Auth FAILED: All lookup attempts exhausted for email "${normalizedEmail}". No matching record in system_users or user_info tables.`;
+      const failMsg = `Auth FAILED: All lookup attempts exhausted for email "${normalizedEmail}". No matching record in users (whitelist) / staffs tables.`;
       console.error('[Auth] ❌', failMsg);
       setSystemUser(null);
       setUserInfo(null);
@@ -923,11 +814,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             // Fire and forget — don't await these
             supabase
-              .from('system_users')
-              .update({ last_login_at: new Date().toISOString() })
-              .eq('id', sysUser.id)
-              .then(() => {})
-              .catch((e) => console.warn('[Auth] Non-blocking update failed:', e));
 
             // Enrich phone — fire and forget
             (async () => {
@@ -935,7 +821,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 let phone: string | null = null;
                 if (sysUser.bubble_staff_id) {
                   const { data: staffRow } = await supabase
-                    .from('staff_directory')
+                    .from('staffs')
                     .select('work_phone, private_phone')
                     .eq('bubble_staff_id', sysUser.bubble_staff_id)
                     .maybeSingle();
@@ -943,7 +829,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
                 if (!phone) {
                   const { data: staffByEmail } = await supabase
-                    .from('staff_directory')
+                    .from('staffs')
                     .select('work_phone, private_phone')
                     .ilike('work_email', email.toLowerCase().trim())
                     .limit(1)
@@ -956,10 +842,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               } catch {}
             })();
 
-            // Fetch user_info — non-blocking with try-catch
+            // Fetch users row — non-blocking with try-catch
             try {
               const { data: uInfo } = await supabase
-                .from('user_info')
+                .from('users')
                 .select('*')
                 .eq('staff_id', sysUser.bubble_staff_id)
                 .limit(1)
@@ -1018,7 +904,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // ====== Normal dev bypass flow ======
-        console.log('[Auth] Dev bypass: querying system_users for email:', email);
+        console.log('[Auth] Dev bypass: querying users for email:', email);
         const { data: sysUser, error: sysError } = await findSystemUserByEmail(email);
         
         console.log('[Auth] Dev bypass lookup result:', { found: !!sysUser, error: sysError?.message });
@@ -1037,13 +923,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthError(null);
         authSucceededRef.current = true;
 
-        // Enrich phone from staff_directory — fire and forget
+        // Enrich phone from staffs — fire and forget
         (async () => {
           try {
             let phone: string | null = null;
             if (sysUser.bubble_staff_id) {
               const { data: staffRow } = await supabase
-                .from('staff_directory')
+                .from('staffs')
                 .select('work_phone, private_phone')
                 .eq('bubble_staff_id', sysUser.bubble_staff_id)
                 .maybeSingle();
@@ -1053,7 +939,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
             if (!phone) {
               const { data: staffByEmail } = await supabase
-                .from('staff_directory')
+                .from('staffs')
                 .select('work_phone, private_phone')
                 .ilike('work_email', email.toLowerCase().trim())
                 .limit(1)
@@ -1074,17 +960,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Update last_login_at — fire and forget (don't await)
         if (!sysUser.id.startsWith('ui-bootstrap-') && !sysUser.id.startsWith('fallback-')) {
           supabase
-            .from('system_users')
-            .update({ last_login_at: new Date().toISOString() })
-            .eq('id', sysUser.id)
-            .then(() => {})
-            .catch((e) => console.warn('[Auth] Non-blocking update failed:', e));
-        }
 
-        // Step 2: Fetch user_info for role_tag — with try-catch
+        // Step 2: Fetch users row for role_tag — with try-catch
         try {
           const { data: uInfo } = await supabase
-            .from('user_info')
+            .from('users')
             .select('*')
             .eq('staff_id', sysUser.bubble_staff_id)
             .limit(1)
@@ -1092,14 +972,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           setUserInfo(uInfo || null);
 
-          // Enrich systemUser.role from user_info.role_tag so permissions match staff directory
+          // Enrich systemUser.role from users.role_tag so permissions match users.role_tag
           if (uInfo?.role_tag || uInfo?.classification) {
             const enrichedRole = mapRoleToInternal(uInfo.role_tag, uInfo.classification);
-            console.log('[Auth] Dev bypass: enriching role from user_info:', uInfo.role_tag, '->', enrichedRole);
+            console.log('[Auth] Dev bypass: enriching role from users:', uInfo.role_tag, '->', enrichedRole);
             setSystemUser(prev => prev ? { ...prev, role: enrichedRole } : prev);
           }
         } catch (uiErr) {
-          console.warn('[Auth] user_info fetch failed (non-blocking):', uiErr);
+          console.warn('[Auth] users fetch failed (non-blocking):', uiErr);
           setUserInfo(null);
         }
 

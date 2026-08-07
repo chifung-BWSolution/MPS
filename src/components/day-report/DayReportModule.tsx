@@ -292,7 +292,7 @@ function SubmitReportPage() {
         return;
       }
       const { data } = await supabase
-        .from('staff_directory')
+        .from('staffs')
         .select('bubble_staff_id')
         .ilike('work_email', email)
         .limit(1)
@@ -313,7 +313,7 @@ function SubmitReportPage() {
       if (!systemUser?.bubble_staff_id) return;
       try {
         const { data: staffRow, error } = await supabase
-          .from('staff_directory')
+          .from('staffs')
           .select('office')
           .eq('bubble_staff_id', systemUser.bubble_staff_id)
           .maybeSingle();
@@ -2036,7 +2036,7 @@ function TodayTeamReports() {
       try {
         // 1. Fetch active staff from staff_directory; department comes from user_info
         const { data: staffData, error: staffErr } = await supabase
-          .from('staff_directory')
+          .from('staffs')
           .select('id, bubble_staff_id, display_name, position, status')
           .eq('status', 'active')
           .neq('position', 'Director');
@@ -2434,7 +2434,7 @@ function WorkCalendar() {
         }
 
         let staffQuery = supabase
-          .from('staff_directory')
+          .from('staffs')
           .select('bubble_staff_id, display_name')
           .eq('status', 'active')
           .neq('position', 'Director');

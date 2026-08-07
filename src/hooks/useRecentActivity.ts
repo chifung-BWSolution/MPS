@@ -73,7 +73,7 @@ export function useRecentActivity() {
       let staffNameById = new Map<string, string>();
       if (staffIds.length > 0) {
         const { data: staffRows } = await supabase
-          .from('staff_directory')
+          .from('staffs')
           .select('bubble_staff_id, display_name, full_name')
           .in('bubble_staff_id', staffIds);
         staffNameById = new Map(

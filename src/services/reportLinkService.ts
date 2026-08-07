@@ -86,7 +86,7 @@ export async function resolveBubbleStaffId(systemUser: SystemUserLike): Promise<
   if (!email) return id || null;
 
   const { data } = await supabase
-    .from('staff_directory')
+    .from('staffs')
     .select('bubble_staff_id')
     .ilike('work_email', email)
     .limit(1)

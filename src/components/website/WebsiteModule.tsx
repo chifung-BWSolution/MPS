@@ -554,13 +554,13 @@ function WebsiteDetail({
 
       // Try staff_directory first (bubble_staff_id = the long Bubble ID)
       const { data: dirData } = await supabase
-        .from('staff_directory')
+        .from('staffs')
         .select('bubble_staff_id, display_name, full_name')
         .in('bubble_staff_id', staffIds);
 
       // Also try user_info (staff_id = same Bubble ID, display_name synced from StaffDirectory)
       const { data: uiData } = await supabase
-        .from('user_info')
+        .from('users')
         .select('staff_id, display_name')
         .in('staff_id', staffIds);
 

@@ -10,7 +10,7 @@ export function isValidDepartment(dept: string | null | undefined): dept is stri
 /** Distinct department values from user_info (canonical source). */
 export async function fetchDistinctDepartments(): Promise<string[]> {
   const { data, error } = await supabase
-    .from('user_info')
+    .from('users')
     .select('department')
     .not('department', 'is', null)
     .neq('department', '')
@@ -30,7 +30,7 @@ export async function fetchDistinctDepartments(): Promise<string[]> {
 
 /** staff_id → department from user_info. */
 export async function fetchDepartmentMap(staffIds?: string[]): Promise<Record<string, string>> {
-  let query = supabase.from('user_info').select('staff_id, department');
+  let query = supabase.from('users').select('staff_id, department');
   if (staffIds?.length) query = query.in('staff_id', staffIds);
 
   const { data, error } = await query;
@@ -51,7 +51,7 @@ export async function fetchDepartmentMap(staffIds?: string[]): Promise<Record<st
 /** All staff_ids assigned to a department in user_info. */
 export async function fetchStaffIdsByDepartment(department: string): Promise<string[]> {
   const { data, error } = await supabase
-    .from('user_info')
+    .from('users')
     .select('staff_id')
     .eq('department', department);
 
@@ -66,7 +66,7 @@ export async function fetchStaffIdsByDepartment(department: string): Promise<str
 /** Resolve a single user's department from user_info. */
 export async function fetchDepartmentByStaffId(staffId: string): Promise<string | null> {
   const { data, error } = await supabase
-    .from('user_info')
+    .from('users')
     .select('department')
     .eq('staff_id', staffId)
     .maybeSingle();

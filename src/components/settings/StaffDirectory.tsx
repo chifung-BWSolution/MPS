@@ -39,7 +39,7 @@ export function StaffDirectory() {
     setError(null);
     try {
       const { data, error: fetchErr } = await supabase
-        .from('staff_directory')
+        .from('staffs')
         .select('*')
         .order('synced_at', { ascending: false });
 
@@ -127,14 +127,14 @@ export function StaffDirectory() {
   const [departmentMap, setDepartmentMap] = useState<Record<string, string>>({});
 
   // Cache of system_users for google_email lookup during save
-  const [systemUsersCache, setSystemUsersCache] = useState<{ bubble_staff_id: string; google_email: string | null }[]>([]);
+  const [systemUsersCache, setSystemUsersCache] = useState<{ staff_id: string; google_email: string | null }[]>([]);
 
   // Load system_users cache for google_email mapping
   const loadSystemUsersCache = useCallback(async () => {
     try {
       const { data } = await supabase
-        .from('system_users')
-        .select('bubble_staff_id, google_email');
+        .from('users')
+        .select('staff_id, google_email');
       if (data) {
         setSystemUsersCache(data);
       }
@@ -151,7 +151,7 @@ export function StaffDirectory() {
   const loadUserInfo = useCallback(async () => {
     try {
       const { data, error: fetchErr } = await supabase
-        .from('user_info')
+        .from('users')
         .select('*');
 
       if (fetchErr) {
@@ -213,7 +213,7 @@ export function StaffDirectory() {
           const displayName = staffEntry?.['Display Name'] || staffEntry?.['Full Name'] || null;
           const workEmail = staffEntry?.['Work Email'] || null;
           // Look up google_email from googleEmailMap first, then system_users cache, then fallback to workEmail
-          const sysUser = systemUsersCache.find(su => su.bubble_staff_id === c.bubbleId);
+          const sysUser = systemUsersCache.find(su => su.staff_id === c.bubbleId);
           const googleEmail = googleEmailMap[c.bubbleId] || sysUser?.google_email || workEmail;
 
           return {
@@ -238,7 +238,7 @@ export function StaffDirectory() {
       // Delete records that are back to "other_staff"
       if (otherStaffIds.length > 0) {
         const { error: deleteErr } = await supabase
-          .from('user_info')
+          .from('users')
           .delete()
           .in('staff_id', otherStaffIds);
 
@@ -250,7 +250,7 @@ export function StaffDirectory() {
       // Upsert system_user and disabled records
       if (records.length > 0) {
         const { error: upsertErr } = await supabase
-          .from('user_info')
+          .from('users')
           .upsert(records, { onConflict: 'staff_id' });
 
         if (upsertErr) {
@@ -286,7 +286,7 @@ export function StaffDirectory() {
     // Persist immediately to staff_directory
     try {
       await supabase
-        .from('staff_directory')
+        .from('staffs')
         .update({ office, updated_at: new Date().toISOString() })
         .eq('bubble_staff_id', staffId);
     } catch (err) {
@@ -295,7 +295,7 @@ export function StaffDirectory() {
     // Also persist to user_info table
     try {
       const { error } = await supabase
-        .from('user_info')
+        .from('users')
         .update({ office, updated_at: new Date().toISOString() })
         .eq('staff_id', staffId);
       if (error) {
@@ -314,7 +314,7 @@ export function StaffDirectory() {
     setHasUnsavedChanges(true);
     try {
       const { error } = await supabase
-        .from('user_info')
+        .from('users')
         .update({ department, updated_at: new Date().toISOString() })
         .eq('staff_id', staffId);
       if (error) {
@@ -1069,7 +1069,7 @@ export function StaffDirectory() {
             <span>顯示 {filteredStaff.length} / {staffList.length} 位員工 （{systemUserCount} 位系統使用者 · {disabledCount} 位不能使用系統）</span>
             <span className="flex items-center gap-1.5">
               <Database size={11} className="text-teal-600" />
-              <span className="text-teal-700 font-medium">資料來源：OTC2 → staff_directory</span>
+              <span className="text-teal-700 font-medium">資料來源：OTC2 → staffs</span>
             </span>
           </div>
         </div>

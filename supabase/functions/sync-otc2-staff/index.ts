@@ -179,11 +179,11 @@ Deno.serve(async (req: Request) => {
 
     // Upsert merge: keep existing rows (including manual_*), update/insert OTC2 records only.
     const { data: existingRows, error: existingError } = await supabaseAdmin
-      .from("staff_directory")
+      .from("staffs")
       .select("bubble_staff_id");
 
     if (existingError) {
-      throw new Error(`Failed to load existing staff_directory: ${existingError.message}`);
+      throw new Error(`Failed to load existing staffs: ${existingError.message}`);
     }
 
     const existingIds = new Set((existingRows || []).map((r: { bubble_staff_id: string }) => r.bubble_staff_id));
@@ -236,7 +236,7 @@ Deno.serve(async (req: Request) => {
     // Batch upsert (PostgREST payload limit ~1MB; 225 rows is fine in one shot)
     console.log(`[sync-otc2-staff] Upserting ${upsertData.length} records...`);
     const { error: upsertError } = await supabaseAdmin
-      .from("staff_directory")
+      .from("staffs")
       .upsert(upsertData, {
         onConflict: "bubble_staff_id",
         ignoreDuplicates: false,
@@ -257,30 +257,6 @@ Deno.serve(async (req: Request) => {
     const activeCount = syncable.filter(isActiveStaff).length;
     const inactiveCount = syncable.length - activeCount;
     const teams = new Set(syncable.map((s) => s.team_name || s.n_team).filter(Boolean));
-
-    // Keep system_users profile fields in sync when bubble_staff_id matches.
-    const { data: systemUsers } = await supabaseAdmin
-      .from("system_users")
-      .select("id, bubble_staff_id");
-
-    if (systemUsers && systemUsers.length > 0) {
-      const byBubbleId = new Map(syncable.map((s) => [s.bubble_id as string, s]));
-      for (const sysUser of systemUsers) {
-        const match = byBubbleId.get(sysUser.bubble_staff_id);
-        if (!match) continue;
-        await supabaseAdmin
-          .from("system_users")
-          .update({
-            display_name: match.display_name || match.full_name || "",
-            email: match.work_email || match.linked_user_email || "",
-            position: match.position || null,
-            profile_pic_url: match.profile_pic || null,
-            is_active: isActiveStaff(match),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", sysUser.id);
-      }
-    }
 
     return new Response(
       JSON.stringify({
