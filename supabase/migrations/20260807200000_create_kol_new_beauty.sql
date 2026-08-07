@@ -135,7 +135,15 @@ SELECT
   p.fee_standard, p.recognized_at, p.recognized_by,
   p.shortlist_at, p.meeting_at, p.meeting_location, p.meeting_notes, p.meeting_status,
   p.cooperated_at, p.rating_avg, p.rating_count, p.last_rated_at, p.meeting_owner,
-  NULLIF(p.raw_payload->>'fromKolApplyId', '')::uuid
+  CASE
+    WHEN NULLIF(p.raw_payload->>'fromKolApplyId', '')::uuid IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM public.kol_apply a
+        WHERE a.id = NULLIF(p.raw_payload->>'fromKolApplyId', '')::uuid
+      )
+    THEN NULLIF(p.raw_payload->>'fromKolApplyId', '')::uuid
+    ELSE NULL
+  END
 FROM public.kol_profile p
 WHERE p.source_system = 'beauty18'
 ON CONFLICT (id) DO NOTHING;
