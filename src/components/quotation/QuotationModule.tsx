@@ -12,7 +12,6 @@ import {
   quotationTypes,
   quotationEntries,
   clientProjects,
-  presetQuotationItems,
   getQuotationTypeName,
   getStatusConfig,
   getClientProjectStatusConfig,
