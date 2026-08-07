@@ -99,14 +99,15 @@ export interface KolWorkflowRowWithSource extends KolWorkflowRow {
   source_system?: string | null;
 }
 
-/** Blog 主題或專長是否含 beauty（不分大小寫） */
+/** Blog 主題或專長是否含 beauty（不分大小寫，含美麗／美容） */
 export function rowHasBeautyKeyword(row: {
   blog_themes?: string[] | null;
   specialty?: string | null;
 }): boolean {
+  const pattern = /beauty|美麗|美容/i;
   const themes = row.blog_themes || [];
-  if (themes.some((t) => /beauty/i.test(t))) return true;
-  return Boolean(row.specialty && /beauty/i.test(row.specialty));
+  if (themes.some((t) => pattern.test(t))) return true;
+  return Boolean(row.specialty && pattern.test(row.specialty));
 }
 
 function rowHasFoodKeyword(row: {
