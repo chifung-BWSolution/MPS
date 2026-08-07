@@ -328,44 +328,6 @@ export type Database = {
         }
         Relationships: []
       }
-        Insert: {
-          auth_user_id?: string | null
-          bubble_staff_id: string
-          created_at?: string | null
-          department?: string | null
-          display_name: string
-          email: string
-          google_email?: string | null
-          id?: string
-          invited_at?: string | null
-          invited_by?: string | null
-          is_active?: boolean | null
-          last_login_at?: string | null
-          position?: string | null
-          profile_pic_url?: string | null
-          role?: string
-          updated_at?: string | null
-        }
-        Update: {
-          auth_user_id?: string | null
-          bubble_staff_id?: string
-          created_at?: string | null
-          department?: string | null
-          display_name?: string
-          email?: string
-          google_email?: string | null
-          id?: string
-          invited_at?: string | null
-          invited_by?: string | null
-          is_active?: boolean | null
-          last_login_at?: string | null
-          position?: string | null
-          profile_pic_url?: string | null
-          role?: string
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
     }
     Views: {
       [_ in never]: never

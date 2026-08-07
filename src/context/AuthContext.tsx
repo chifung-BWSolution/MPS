@@ -664,15 +664,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         })();
 
-        // Update auth_user_id and last_login_at — fire and forget.
-        // Skip when sysUser.id is a synthesized bootstrap/fallback id (not a valid UUID).
-        const isSyntheticId = sysUser.id.startsWith('ui-bootstrap-') || sysUser.id.startsWith('fallback-');
-        if (!isSyntheticId) {
-          if (!sysUser.auth_user_id && authUserId) {
-            supabase
-            supabase
-        }
-
         // Step 2: Fetch users row for role_tag (joined via staff_id = bubble_staff_id, NO status filter)
         try {
           const { data: uInfo } = await supabase
@@ -811,9 +802,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setSystemUser({ ...sysUser, phone: sysUser.phone || null });
             setAuthError(null);
             authSucceededRef.current = true;
-
-            // Fire and forget — don't await these
-            supabase
 
             // Enrich phone — fire and forget
             (async () => {
@@ -956,10 +944,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.warn('[Auth] Dev bypass phone enrichment failed:', err);
           }
         })();
-
-        // Update last_login_at — fire and forget (don't await)
-        if (!sysUser.id.startsWith('ui-bootstrap-') && !sysUser.id.startsWith('fallback-')) {
-          supabase
 
         // Step 2: Fetch users row for role_tag — with try-catch
         try {
