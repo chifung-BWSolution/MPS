@@ -56,9 +56,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'new', label: '新建報價單' },
       { id: 'list', label: '報價單列表' },
       { id: 'items', label: '報價項目' },
-      { id: 'approval', label: '報價批核' },
       { id: 'clients', label: '客戶列表' },
-      { id: 'client-projects', label: '客戶項目' },
     ],
   },
   {

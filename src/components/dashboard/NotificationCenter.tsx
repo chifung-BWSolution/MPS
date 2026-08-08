@@ -20,7 +20,7 @@ const typeConfig = {
 };
 
 const notifications: NotificationItem[] = [
-  { id: '1', title: '報價審核', message: 'QT-2024-031 等待您的審核', type: 'approval', time: '5 分鐘前', module: 'quotation', subModule: 'approval' },
+  { id: '1', title: '報價審核', message: 'QT-2024-031 等待您的審核', type: 'approval', time: '5 分鐘前', module: 'quotation', subModule: 'list' },
   { id: '2', title: '逾期任務', message: '品牌指南交付已逾期 2 天', type: 'overdue', time: '1 小時前', module: 'project', subModule: 'focus' },
   { id: '3', title: '預算警示', message: '酒莊活動預算已使用 85%', type: 'alert', time: '2 小時前', module: 'project', subModule: 'focus' },
   { id: '4', title: '報告已核准', message: '您 12/12 的日報已通過審核', type: 'completed', time: '3 小時前', module: 'day-report', subModule: 'submit' },

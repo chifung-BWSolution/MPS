@@ -1388,20 +1388,6 @@ export function QuotationModule({ subModule }: { subModule?: string }) {
     return <>{previewOverlay}<CRMModule subModule="list" /></>;
   }
 
-  if (subModule === 'client-projects') {
-    return (
-      <>{previewOverlay}
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-[32px] font-bold tracking-tight">客戶項目</h1>
-          <p className="text-[14px] text-muted-foreground mt-1">查看所有已成交的客戶項目及交付進度。</p>
-        </div>
-        <ClientProjectsList onPreviewQuote={(quote) => setPreviewQuote(quote)} />
-      </div>
-      </>
-    );
-  }
-
   if (subModule === 'new') {
     return (
       <>{previewOverlay}
@@ -1411,20 +1397,6 @@ export function QuotationModule({ subModule }: { subModule?: string }) {
           <p className="text-[14px] text-muted-foreground mt-1">建立新的報價單並提交批核。</p>
         </div>
         <NewQuotationWizard onClose={() => navigateTo('quotation', 'list')} />
-      </div>
-      </>
-    );
-  }
-
-  if (subModule === 'approval') {
-    return (
-      <>{previewOverlay}
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-[32px] font-bold tracking-tight">報價批核</h1>
-          <p className="text-[14px] text-muted-foreground mt-1">審批待確認的報價單，查看 Cost Structure。</p>
-        </div>
-        <QuotationApproval onPreviewQuote={(quote) => setPreviewQuote(quote)} />
       </div>
       </>
     );
