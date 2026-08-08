@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Search, Plus, FileText, Eye, Download, Check, X, AlertTriangle, ChevronRight, Trash2, DollarSign, Award, Pencil, Save, RotateCcw, Layers, GripVertical, Clock, Users, ArrowLeft, ExternalLink, Loader2 } from 'lucide-react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { Search, Plus, FileText, Eye, Download, Check, X, AlertTriangle, ChevronRight, Trash2, DollarSign, Award, Pencil, Save, RotateCcw, Layers, GripVertical, Clock, Users, ArrowLeft, ExternalLink, Loader2, Copy, ClipboardList } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { CRMModule } from '@/components/crm/CRMModule';
@@ -32,7 +32,11 @@ import {
   PITCHING_PROJECT_TYPE_OPTIONS,
 } from '@/data/pitchingData';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
-import { ClientRequirementsQuestionnaire } from '@/components/quotation/ClientRequirementsQuestionnaire';
+import { ClientRequirementsQuestionnaire, type ClientRequirementsFormRef } from '@/components/quotation/ClientRequirementsQuestionnaire';
+import {
+  generateCostStructureSummary,
+  mergeRequirementsAndCostSummary,
+} from '@/data/clientRequirementsQuestionnaire';
 
 // Supplier options for cost structure
 const supplierOptions = [
@@ -210,6 +214,9 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
     items: [],
   });
   const [costErrors, setCostErrors] = useState<string[]>([]);
+  const [integratedSummary, setIntegratedSummary] = useState('');
+  const [summaryCopied, setSummaryCopied] = useState(false);
+  const questionnaireRef = useRef<ClientRequirementsFormRef>(null);
 
   const selectedPitching = useMemo(
     () => pitchingRecords.find((record) => record.id === selectedPitchingId),
@@ -268,10 +275,6 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
     }
     if (step === 3) {
       setStep(2);
-      return;
-    }
-    if (step === 4) {
-      setStep(3);
     }
   };
 
@@ -351,28 +354,85 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
     return Math.round(subtotal);
   };
 
-  const updateCostRevenue = () => {
-    const revenue = calculateTotal();
-    const totalCosts = (costStructure.items || []).reduce((acc, item) => acc + item.amount, 0);
-    const profit = revenue - totalCosts;
-    const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
-    setCostStructure(prev => ({ ...prev, totalRevenue: revenue, laborCost: totalCosts, supplierCost: 0, outsourcingCost: 0, otherCost: 0, grossProfit: profit, grossMargin: Math.round(margin * 10) / 10 }));
+  const getRevenue = () => {
+    const fromServices = calculateTotal();
+    if (fromServices > 0) return fromServices;
+    return selectedPitching?.estimatedIncome ?? 0;
   };
+
+  const getTotalCosts = (cs: CostStructure) =>
+    cs.laborCost + cs.supplierCost + cs.outsourcingCost + cs.otherCost;
+
+  const syncCostStructureRevenue = (cs: CostStructure): CostStructure => {
+    const revenue = getRevenue();
+    const totalCosts = getTotalCosts(cs);
+    const profit = revenue - totalCosts;
+    const margin = revenue > 0 ? Math.round((profit / revenue) * 1000) / 10 : 0;
+    return { ...cs, totalRevenue: revenue, grossProfit: profit, grossMargin: margin };
+  };
+
+  const updateCostField = (key: keyof Pick<CostStructure, 'laborCost' | 'supplierCost' | 'outsourcingCost' | 'otherCost'>, val: number) => {
+    setCostStructure((prev) => syncCostStructureRevenue({ ...prev, [key]: val }));
+  };
+
+  const syncedCostStructure = useMemo(
+    () => syncCostStructureRevenue(costStructure),
+    [costStructure, services, overallDiscount, overallDiscountType, selectedPitching?.estimatedIncome],
+  );
+
+  useEffect(() => {
+    if (step !== 3) return;
+    setCostStructure((prev) => syncCostStructureRevenue(prev));
+  }, [step, services, overallDiscount, overallDiscountType, selectedPitching?.estimatedIncome]);
+
+  const buildCostSummaryInput = () => ({
+    revenue: syncedCostStructure.totalRevenue,
+    laborCost: syncedCostStructure.laborCost,
+    supplierCost: syncedCostStructure.supplierCost,
+    outsourcingCost: syncedCostStructure.outsourcingCost,
+    otherCost: syncedCostStructure.otherCost,
+    grossProfit: syncedCostStructure.grossProfit,
+    grossMargin: syncedCostStructure.grossMargin,
+  });
 
   const validateCostStructure = (): boolean => {
     const errors: string[] = [];
-    const items = costStructure.items || [];
-    if (items.length === 0) {
-      errors.push('請至少新增一項支出項目');
+    if (!integratedSummary.trim()) {
+      errors.push('請先產生客戶需求清單（整合報價內容與 Cost Structure）');
     }
-    if (items.some(item => !item.name.trim())) {
-      errors.push('所有支出項目必須填寫名稱');
-    }
-    if (items.some(item => item.amount <= 0)) {
-      errors.push('所有支出金額必須大於 0');
+    if (getRevenue() <= 0) {
+      errors.push('收入總額必須大於 0，請確認報價類型預設服務或 Pitching 預估收入');
     }
     setCostErrors(errors);
     return errors.length === 0;
+  };
+
+  const handleGenerateIntegratedSummary = () => {
+    const validationErrors = questionnaireRef.current?.validate() ?? ['問卷尚未載入'];
+    if (validationErrors.length) {
+      setCostErrors(validationErrors);
+      toast.error(validationErrors[0]);
+      return;
+    }
+    setCostErrors([]);
+    const requirementsSummary = questionnaireRef.current!.generateSummary();
+    const costSummary = generateCostStructureSummary(buildCostSummaryInput());
+    const merged = mergeRequirementsAndCostSummary(requirementsSummary, costSummary);
+    setIntegratedSummary(merged);
+    setRequirementsText(merged);
+    toast.success('客戶需求清單已產生（含 Cost Structure）');
+  };
+
+  const handleCopyIntegratedSummary = async () => {
+    if (!integratedSummary) return;
+    try {
+      await navigator.clipboard.writeText(integratedSummary);
+      setSummaryCopied(true);
+      toast.success('已複製到剪貼簿');
+      setTimeout(() => setSummaryCopied(false), 2000);
+    } catch {
+      toast.error('複製失敗，請手動選取文字');
+    }
   };
 
   const handleSubmit = () => {
@@ -419,7 +479,7 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
 
         {/* Step Indicator */}
         <div className="flex items-center gap-2 mb-8">
-          {['選擇報價類型', '選擇客戶', '編輯報價內容', 'Cost Structure'].map((label, idx) => (
+          {['選擇報價類型', '選擇客戶', '編輯報價內容'].map((label, idx) => (
             <div key={idx} className="flex items-center gap-2">
               <div className="flex flex-col items-center gap-1">
                 <div className={cn(
@@ -430,7 +490,7 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
                 </div>
                 <span className={cn('text-[12px] whitespace-nowrap', step === idx + 1 ? 'text-teal-600 font-medium' : 'text-muted-foreground')}>{label}</span>
               </div>
-              {idx < 3 && <div className={cn('w-12 h-0.5 mt-[-16px]', step > idx + 1 ? 'bg-teal-600' : 'bg-muted')} />}
+              {idx < 2 && <div className={cn('w-12 h-0.5 mt-[-16px]', step > idx + 1 ? 'bg-teal-600' : 'bg-muted')} />}
             </div>
           ))}
         </div>
@@ -614,87 +674,108 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
             )}
 
             <ClientRequirementsQuestionnaire
+              ref={questionnaireRef}
+              hideGenerateSection
               initialForm={{
                 companyName: selectedPitching?.clientName || clientName,
                 contactName: selectedPitching?.clientName || '',
                 businessSummary: [selectedPitching?.description, selectedPitching?.notes, requirementsText].filter(Boolean).join('\n') || '',
                 existingWebsite: selectedPitching?.asanaLink || '',
               }}
-              onSummaryGenerated={(summary) => setRequirementsText(summary)}
             />
 
-            <div className="flex justify-end gap-2">
-              <button onClick={() => { updateCostRevenue(); setStep(4); }} className="px-4 py-2 text-sm bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors duration-200">下一步：Cost Structure</button>
-            </div>
-          </div>
-        )}
+            {/* Cost Structure — 整合至 Step 3，置於產生清單之前 */}
+            <div className="space-y-4 pt-2 border-t border-border">
+              <div className="flex items-center gap-2">
+                <DollarSign size={18} className="text-teal-600" />
+                <h4 className="text-[15px] font-bold">Cost Structure（預算收入與支出）</h4>
+              </div>
+              <p className="text-[13px] text-muted-foreground">必須填寫 Cost Structure，產生客戶需求清單時將一併整合。</p>
 
-        {/* STEP 4 */}
-        {step === 4 && (
-          <div className="space-y-6">
-            <div className="flex items-center gap-2 mb-2">
-              <DollarSign size={18} className="text-teal-600" />
-              <h4 className="text-[15px] font-bold">Cost Structure（預算收入與支出）</h4>
-            </div>
-            <p className="text-[13px] text-muted-foreground">必須填寫完整 Cost Structure，否則無法提交報價單。</p>
+              <div className="bg-teal-50/50 border border-teal-200 rounded-md p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[14px] font-medium">收入總額（自動計算）</span>
+                  <span className="text-[20px] font-bold text-teal-600">${getRevenue().toLocaleString()}</span>
+                </div>
+                {getRevenue() === 0 && selectedPitching?.estimatedIncome == null && (
+                  <p className="text-[11px] text-amber-700 mt-2">提示：目前無預設服務收入，請於 Pitching 設定預估收入或確認報價類型預設項目。</p>
+                )}
+              </div>
 
-            <div className="bg-teal-50/50 border border-teal-200 rounded-md p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[14px] font-medium">收入總額（自動計算）</span>
-                <span className="text-[20px] font-bold text-teal-600">${calculateTotal().toLocaleString()}</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {([
+                  { key: 'laborCost' as const, label: '人工成本' },
+                  { key: 'supplierCost' as const, label: '供應商費用' },
+                  { key: 'outsourcingCost' as const, label: '外包費用' },
+                  { key: 'otherCost' as const, label: '其他費用' },
+                ]).map(({ key, label }) => (
+                  <div key={key}>
+                    <label className="text-[13px] font-medium text-muted-foreground block mb-1.5">{label}</label>
+                    <input
+                      type="number"
+                      value={costStructure[key] || ''}
+                      onChange={(e) => updateCostField(key, parseInt(e.target.value) || 0)}
+                      className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-teal-600"
+                      placeholder="0"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-white border border-border rounded-md p-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <span className="text-[11px] text-muted-foreground block">總支出</span>
+                    <span className="text-[18px] font-bold text-rose-600">
+                      ${getTotalCosts(syncedCostStructure).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="text-center">
+                    <span className="text-[11px] text-muted-foreground block">預計毛利</span>
+                    <span className={cn('text-[18px] font-bold', syncedCostStructure.grossProfit >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                      ${syncedCostStructure.grossProfit.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="text-center">
+                    <span className="text-[11px] text-muted-foreground block">毛利率</span>
+                    <span className={cn('text-[18px] font-bold', syncedCostStructure.grossMargin >= 50 ? 'text-emerald-600' : syncedCostStructure.grossMargin >= 30 ? 'text-amber-600' : 'text-rose-600')}>
+                      {syncedCostStructure.grossMargin}%
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[
-                { key: 'laborCost', label: '人工成本' },
-                { key: 'supplierCost', label: '供應商費用' },
-                { key: 'outsourcingCost', label: '外包費用' },
-                { key: 'otherCost', label: '其他費用' },
-              ].map(({ key, label }) => (
-                <div key={key}>
-                  <label className="text-[13px] font-medium text-muted-foreground block mb-1.5">{label}</label>
-                  <input
-                    type="number"
-                    value={(costStructure as any)[key] || ''}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value) || 0;
-                      const newCs = { ...costStructure, [key]: val };
-                      const rev = calculateTotal();
-                      const totalCosts = newCs.laborCost + newCs.supplierCost + newCs.outsourcingCost + newCs.otherCost;
-                      newCs.totalRevenue = rev;
-                      newCs.grossProfit = rev - totalCosts;
-                      newCs.grossMargin = rev > 0 ? Math.round((rev - totalCosts) / rev * 1000) / 10 : 0;
-                      setCostStructure(newCs);
-                    }}
-                    className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-teal-600"
-                    placeholder="0"
-                  />
-                </div>
-              ))}
-            </div>
+            {/* 整合產生客戶需求清單 */}
+            <div className="space-y-4 pt-2">
+              <button
+                type="button"
+                onClick={handleGenerateIntegratedSummary}
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-teal-600 text-white rounded-lg text-[14px] font-semibold hover:bg-teal-700 shadow-sm transition-colors"
+              >
+                <ClipboardList size={18} />
+                產生客戶需求清單
+              </button>
+              <p className="text-[12px] text-muted-foreground">整合「編輯報價內容」問卷與 Cost Structure，產生完整內部需求摘要。</p>
 
-            <div className="bg-white border border-border rounded-md p-4">
-              <div className="grid grid-cols-3 gap-4">
-                <div className="text-center">
-                  <span className="text-[11px] text-muted-foreground block">總支出</span>
-                  <span className="text-[18px] font-bold text-rose-600">
-                    ${(costStructure.laborCost + costStructure.supplierCost + costStructure.outsourcingCost + costStructure.otherCost).toLocaleString()}
-                  </span>
+              {integratedSummary && (
+                <div className="rounded-lg border border-teal-200 bg-teal-50/30 p-5 shadow-sm">
+                  <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                    <h4 className="text-[14px] font-bold text-foreground">已產生的客戶需求清單（含 Cost Structure）</h4>
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyIntegratedSummary()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-teal-300 text-teal-700 bg-white rounded-md hover:bg-teal-50 transition-colors"
+                    >
+                      {summaryCopied ? <Check size={14} /> : <Copy size={14} />}
+                      {summaryCopied ? '已複製' : '一鍵複製'}
+                    </button>
+                  </div>
+                  <pre className="whitespace-pre-wrap text-[12px] leading-relaxed text-muted-foreground font-mono bg-white border border-border rounded-md p-4 max-h-[480px] overflow-y-auto">
+                    {integratedSummary}
+                  </pre>
                 </div>
-                <div className="text-center">
-                  <span className="text-[11px] text-muted-foreground block">預計毛利</span>
-                  <span className={cn('text-[18px] font-bold', costStructure.grossProfit >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
-                    ${costStructure.grossProfit.toLocaleString()}
-                  </span>
-                </div>
-                <div className="text-center">
-                  <span className="text-[11px] text-muted-foreground block">毛利率</span>
-                  <span className={cn('text-[18px] font-bold', costStructure.grossMargin >= 50 ? 'text-emerald-600' : costStructure.grossMargin >= 30 ? 'text-amber-600' : 'text-rose-600')}>
-                    {costStructure.grossMargin}%
-                  </span>
-                </div>
-              </div>
+              )}
             </div>
 
             {costErrors.length > 0 && (
@@ -705,7 +786,7 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 pt-2">
               <button onClick={onClose} className="px-4 py-2 text-sm border border-border rounded-md hover:bg-muted transition-colors duration-200">儲存草稿</button>
               <button onClick={handleSubmit} className="px-4 py-2 text-sm bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors duration-200">提交批核</button>
             </div>

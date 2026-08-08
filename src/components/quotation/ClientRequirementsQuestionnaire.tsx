@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Copy, Check, ClipboardList, Shield } from 'lucide-react';
+import { useState, useImperativeHandle, forwardRef } from 'react';
+import { Copy, Check, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
@@ -33,6 +33,14 @@ import {
 type Props = {
   initialForm?: Partial<ClientRequirementsForm>;
   onSummaryGenerated?: (summary: string) => void;
+  /** 隱藏內建「產生清單」按鈕與摘要（由父層整合 Cost Structure 後統一產生） */
+  hideGenerateSection?: boolean;
+};
+
+export type ClientRequirementsFormRef = {
+  validate: () => string[];
+  generateSummary: () => string;
+  getForm: () => ClientRequirementsForm;
 };
 
 function SectionCard({
@@ -174,7 +182,8 @@ function RadioGroup({
   );
 }
 
-export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerated }: Props) {
+export const ClientRequirementsQuestionnaire = forwardRef<ClientRequirementsFormRef, Props>(
+  function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerated, hideGenerateSection = false }, ref) {
   const { systemUser, userInfo } = useAuth();
   const defaultPmName = systemUser?.display_name || userInfo?.display_name || '';
 
@@ -186,6 +195,12 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
   const [summary, setSummary] = useState('');
   const [copied, setCopied] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+
+  useImperativeHandle(ref, () => ({
+    validate: () => validateClientRequirementsForm(form),
+    generateSummary: () => generateClientRequirementsSummary(form),
+    getForm: () => form,
+  }), [form]);
 
   const patch = (updates: Partial<ClientRequirementsForm>) => {
     setForm((prev) => ({ ...prev, ...updates }));
@@ -553,35 +568,38 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
         </div>
       </SectionCard>
 
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
-        <button
-          type="button"
-          onClick={handleGenerate}
-          className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg text-[14px] font-semibold hover:bg-blue-700 shadow-sm transition-colors"
-        >
-          <ClipboardList size={16} />
-          產生客戶需求清單
-        </button>
-      </div>
-
-      {summary && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50/30 p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-            <h4 className="text-[14px] font-bold text-slate-800">已產生的客戶需求清單</h4>
+      {!hideGenerateSection && (
+        <>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
             <button
               type="button"
-              onClick={() => void handleCopy()}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-blue-300 text-blue-700 bg-white rounded-md hover:bg-blue-50 transition-colors"
+              onClick={handleGenerate}
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg text-[14px] font-semibold hover:bg-blue-700 shadow-sm transition-colors"
             >
-              {copied ? <Check size={14} /> : <Copy size={14} />}
-              {copied ? '已複製' : '一鍵複製'}
+              產生客戶需求清單
             </button>
           </div>
-          <pre className="whitespace-pre-wrap text-[12px] leading-relaxed text-slate-700 font-mono bg-white border border-slate-200 rounded-md p-4 max-h-[480px] overflow-y-auto">
-            {summary}
-          </pre>
-        </div>
+
+          {summary && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50/30 p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                <h4 className="text-[14px] font-bold text-slate-800">已產生的客戶需求清單</h4>
+                <button
+                  type="button"
+                  onClick={() => void handleCopy()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-blue-300 text-blue-700 bg-white rounded-md hover:bg-blue-50 transition-colors"
+                >
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                  {copied ? '已複製' : '一鍵複製'}
+                </button>
+              </div>
+              <pre className="whitespace-pre-wrap text-[12px] leading-relaxed text-slate-700 font-mono bg-white border border-slate-200 rounded-md p-4 max-h-[480px] overflow-y-auto">
+                {summary}
+              </pre>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
-}
+});

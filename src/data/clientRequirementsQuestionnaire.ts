@@ -345,3 +345,32 @@ export function generateClientRequirementsSummary(form: ClientRequirementsForm):
 
   return lines.join('\n');
 }
+
+export type CostStructureSummaryInput = {
+  revenue: number;
+  laborCost: number;
+  supplierCost: number;
+  outsourcingCost: number;
+  otherCost: number;
+  grossProfit: number;
+  grossMargin: number;
+};
+
+export function generateCostStructureSummary(cost: CostStructureSummaryInput): string {
+  const totalExpenses = cost.laborCost + cost.supplierCost + cost.outsourcingCost + cost.otherCost;
+  return [
+    '【Cost Structure（預算收入與支出）】',
+    `收入總額：$${cost.revenue.toLocaleString()}`,
+    `人工成本：$${cost.laborCost.toLocaleString()}`,
+    `供應商費用：$${cost.supplierCost.toLocaleString()}`,
+    `外包費用：$${cost.outsourcingCost.toLocaleString()}`,
+    `其他費用：$${cost.otherCost.toLocaleString()}`,
+    `總支出：$${totalExpenses.toLocaleString()}`,
+    `預計毛利：$${cost.grossProfit.toLocaleString()}`,
+    `毛利率：${cost.grossMargin}%`,
+  ].join('\n');
+}
+
+export function mergeRequirementsAndCostSummary(requirementsSummary: string, costSummary: string): string {
+  return `${requirementsSummary}\n\n${'─'.repeat(40)}\n\n${costSummary}`;
+}
