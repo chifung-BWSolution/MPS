@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Copy, Check, ClipboardList } from 'lucide-react';
+import { Copy, Check, ClipboardList, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
+import { useAuth } from '@/context/AuthContext';
 import {
   type ClientRequirementsForm,
   emptyClientRequirementsForm,
@@ -44,11 +45,11 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-slate-200/80 bg-white p-5 sm:p-6 shadow-sm">
-      <h4 className="text-[15px] font-bold text-slate-800">{title}</h4>
-      {subtitle && <p className="text-[12px] text-slate-500 mt-1 mb-4">{subtitle}</p>}
+    <section className="rounded-lg border border-slate-200 bg-white p-5 sm:p-6 shadow-sm">
+      <h4 className="text-[15px] font-bold text-slate-800 border-l-4 border-blue-600 pl-3">{title}</h4>
+      {subtitle && <p className="text-[12px] text-slate-500 mt-2 mb-4 pl-3">{subtitle}</p>}
       {!subtitle && <div className="mb-4" />}
-      {children}
+      <div className="pl-0 sm:pl-1">{children}</div>
     </section>
   );
 }
@@ -90,7 +91,7 @@ function CheckboxGroup({
             className={cn(
               'flex items-start gap-2.5 p-3 rounded-md border cursor-pointer transition-colors',
               value.includes(opt)
-                ? 'border-teal-300 bg-teal-50/60'
+                ? 'border-blue-300 bg-blue-50/70'
                 : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50',
             )}
           >
@@ -98,7 +99,7 @@ function CheckboxGroup({
               type="checkbox"
               checked={value.includes(opt)}
               onChange={() => toggle(opt)}
-              className="mt-0.5 w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+              className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
             />
             <span className="text-[13px] text-slate-700 leading-snug">{opt}</span>
           </label>
@@ -146,7 +147,7 @@ function RadioGroup({
             className={cn(
               'flex items-start gap-2.5 p-3 rounded-md border cursor-pointer transition-colors',
               value === opt.value
-                ? 'border-teal-300 bg-teal-50/60'
+                ? 'border-blue-300 bg-blue-50/70'
                 : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50',
             )}
           >
@@ -155,7 +156,7 @@ function RadioGroup({
               name={name}
               checked={value === opt.value}
               onChange={() => onChange(opt.value)}
-              className="mt-0.5 w-4 h-4 border-slate-300 text-teal-600 focus:ring-teal-500"
+              className="mt-0.5 w-4 h-4 border-slate-300 text-blue-600 focus:ring-blue-500"
             />
             <span className="text-[13px] text-slate-700 leading-snug">{opt.label}</span>
           </label>
@@ -174,8 +175,12 @@ function RadioGroup({
 }
 
 export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerated }: Props) {
+  const { systemUser, userInfo } = useAuth();
+  const defaultPmName = systemUser?.display_name || userInfo?.display_name || '';
+
   const [form, setForm] = useState<ClientRequirementsForm>(() => ({
     ...emptyClientRequirementsForm(),
+    filledBy: defaultPmName,
     ...initialForm,
   }));
   const [summary, setSummary] = useState('');
@@ -220,12 +225,16 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
 
   return (
     <div className="space-y-5">
-      <div className="rounded-lg border border-teal-200/60 bg-gradient-to-r from-teal-50/80 to-slate-50/80 px-5 py-4">
-        <div className="flex items-center gap-2">
-          <ClipboardList size={18} className="text-teal-600 shrink-0" />
+      <div className="rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-slate-50 px-5 py-4 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-md bg-blue-600 flex items-center justify-center shrink-0">
+            <Shield size={18} className="text-white" />
+          </div>
           <div>
-            <h3 className="text-[16px] font-bold text-slate-800">客戶需求問卷（網頁與系統開發估價）</h3>
-            <p className="text-[12px] text-slate-500 mt-0.5">請填寫以下問卷，完成後可產生格式化的客戶需求清單供報價使用</p>
+            <h3 className="text-[16px] font-bold text-slate-800">客戶需求記錄表（內部使用）</h3>
+            <p className="text-[12px] text-slate-500 mt-1 leading-relaxed">
+              供項目經理／報價員在與客戶初步溝通後填寫，完整記錄客戶需求，方便後續製作報價單。
+            </p>
           </div>
         </div>
       </div>
@@ -238,46 +247,54 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
         </div>
       )}
 
-      <SectionCard title="第一階段：基本資訊">
+      <SectionCard title="頂部資訊">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <FieldLabel required>公司／品牌名稱</FieldLabel>
+            <FieldLabel required>填寫人（項目經理姓名）</FieldLabel>
+            <Input value={form.filledBy} onChange={(e) => patch({ filledBy: e.target.value })} className="h-9 text-[13px]" placeholder="項目經理姓名" />
+          </div>
+          <div>
+            <FieldLabel required>填寫日期</FieldLabel>
+            <Input type="date" value={form.filledDate} onChange={(e) => patch({ filledDate: e.target.value })} className="h-9 text-[13px]" />
+          </div>
+          <div>
+            <FieldLabel required>客戶公司／品牌名稱</FieldLabel>
             <Input value={form.companyName} onChange={(e) => patch({ companyName: e.target.value })} className="h-9 text-[13px]" />
           </div>
           <div>
-            <FieldLabel required>聯絡人姓名</FieldLabel>
+            <FieldLabel required>客戶聯絡人</FieldLabel>
             <Input value={form.contactName} onChange={(e) => patch({ contactName: e.target.value })} className="h-9 text-[13px]" />
           </div>
           <div>
-            <FieldLabel required>聯絡電話／WhatsApp</FieldLabel>
+            <FieldLabel required>客戶電話／WhatsApp</FieldLabel>
             <Input value={form.contactPhone} onChange={(e) => patch({ contactPhone: e.target.value })} className="h-9 text-[13px]" />
           </div>
           <div>
-            <FieldLabel required>電郵</FieldLabel>
+            <FieldLabel required>客戶電郵</FieldLabel>
             <Input type="email" value={form.email} onChange={(e) => patch({ email: e.target.value })} className="h-9 text-[13px]" />
           </div>
           <div>
             <FieldLabel>現有網站網址</FieldLabel>
-            <Input value={form.existingWebsite} onChange={(e) => patch({ existingWebsite: e.target.value })} placeholder="https://…" className="h-9 text-[13px]" />
+            <Input value={form.existingWebsite} onChange={(e) => patch({ existingWebsite: e.target.value })} placeholder="https://…（選填）" className="h-9 text-[13px]" />
           </div>
           <div>
             <FieldLabel>現有網上商城網址</FieldLabel>
-            <Input value={form.existingEcommerceUrl} onChange={(e) => patch({ existingEcommerceUrl: e.target.value })} placeholder="https://…" className="h-9 text-[13px]" />
+            <Input value={form.existingEcommerceUrl} onChange={(e) => patch({ existingEcommerceUrl: e.target.value })} placeholder="https://…（選填）" className="h-9 text-[13px]" />
           </div>
         </div>
         <div className="mt-4">
-          <FieldLabel required>主要業務簡述</FieldLabel>
+          <FieldLabel required>客戶主要業務簡述</FieldLabel>
           <textarea
             value={form.businessSummary}
             onChange={(e) => patch({ businessSummary: e.target.value })}
             rows={3}
-            className="w-full px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-500 resize-y"
-            placeholder="簡述公司業務、產品／服務、目標客群…"
+            className="w-full px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y"
+            placeholder="記錄客戶業務、產品／服務、目標客群等重點…"
           />
         </div>
       </SectionCard>
 
-      <SectionCard title="第二階段：專案性質與現有狀況">
+      <SectionCard title="第一階段：專案性質與現有狀況">
         <div className="space-y-5">
           <div>
             <FieldLabel required>1. 專案主要目標（可多選）</FieldLabel>
@@ -291,8 +308,8 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
           </div>
           {showCurrentProblems && (
             <div>
-              <FieldLabel>2. 目前最大問題（可多選）</FieldLabel>
-              <p className="text-[11px] text-slate-500 mb-2">因已填寫現有網站網址，請選擇目前面對的問題</p>
+              <FieldLabel>2. 現有網站主要問題（可多選）</FieldLabel>
+              <p className="text-[11px] text-slate-500 mb-2">已填寫現有網站網址，請記錄客戶反映的主要問題</p>
               <CheckboxGroup
                 options={CURRENT_PROBLEM_OPTIONS}
                 value={form.currentProblems}
@@ -305,8 +322,7 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
         </div>
       </SectionCard>
 
-      <SectionCard title="第三階段：網站類型" subtitle="請選擇主要網站類型（核心分流）">
-        <FieldLabel required>主要網站類型（單選）</FieldLabel>
+      <SectionCard title="第二階段：網站類型" subtitle="客戶需要的網站類型（核心分流，單選）">
         <RadioGroup
           name="siteType"
           options={SITE_TYPE_OPTIONS}
@@ -319,18 +335,14 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
       </SectionCard>
 
       {form.siteType && (
-        <SectionCard title="第四階段：功能需求" subtitle="根據網站類型顯示對應功能區塊">
+        <SectionCard title="第三階段：功能需求" subtitle="根據網站類型動態顯示對應功能區塊">
           <div className="space-y-6">
             {showStatic && (
-              <div className="space-y-4 p-4 rounded-md bg-slate-50/80 border border-slate-200/60">
-                <h5 className="text-[13px] font-bold text-teal-700">A. Static Site 功能區塊</h5>
+              <div className="space-y-4 p-4 rounded-md bg-slate-50 border border-slate-200/80">
+                <h5 className="text-[13px] font-bold text-blue-700">A. Static Site 功能</h5>
                 <div>
                   <FieldLabel>設計與體驗（可多選）</FieldLabel>
-                  <CheckboxGroup
-                    options={STATIC_DESIGN_OPTIONS}
-                    value={form.staticDesign}
-                    onChange={(staticDesign) => patch({ staticDesign })}
-                  />
+                  <CheckboxGroup options={STATIC_DESIGN_OPTIONS} value={form.staticDesign} onChange={(staticDesign) => patch({ staticDesign })} />
                 </div>
                 <div>
                   <FieldLabel>內容與行銷（可多選）</FieldLabel>
@@ -346,8 +358,8 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
             )}
 
             {showEcommerce && (
-              <div className="space-y-4 p-4 rounded-md bg-slate-50/80 border border-slate-200/60">
-                <h5 className="text-[13px] font-bold text-teal-700">B. Ecommerce 功能區塊</h5>
+              <div className="space-y-4 p-4 rounded-md bg-slate-50 border border-slate-200/80">
+                <h5 className="text-[13px] font-bold text-blue-700">B. Ecommerce 功能</h5>
                 <div>
                   <FieldLabel>產品管理（可多選）</FieldLabel>
                   <CheckboxGroup options={ECOMMERCE_PRODUCT_OPTIONS} value={form.ecommerceProduct} onChange={(ecommerceProduct) => patch({ ecommerceProduct })} />
@@ -374,15 +386,15 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
             )}
 
             {showCustom && (
-              <div className="p-4 rounded-md bg-slate-50/80 border border-slate-200/60">
-                <h5 className="text-[13px] font-bold text-teal-700 mb-3">C. 客製化 Web System 區塊</h5>
-                <FieldLabel>請描述主要業務流程與核心功能</FieldLabel>
+              <div className="p-4 rounded-md bg-slate-50 border border-slate-200/80">
+                <h5 className="text-[13px] font-bold text-blue-700 mb-3">C. 客製化 Web System</h5>
+                <FieldLabel>記錄客戶需要的業務流程與核心功能</FieldLabel>
                 <textarea
                   value={form.customSystemDescription}
                   onChange={(e) => patch({ customSystemDescription: e.target.value })}
                   rows={5}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-500 resize-y"
-                  placeholder="例如：會員登入、預約系統、後台報表、API 整合…"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y"
+                  placeholder="例如：會員登入、預約系統、後台報表、API 整合、審批流程…"
                 />
               </div>
             )}
@@ -401,7 +413,7 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
         </SectionCard>
       )}
 
-      <SectionCard title="第五階段：語系、素材與設計">
+      <SectionCard title="第四階段：語系、素材與設計">
         <div className="space-y-5">
           <div>
             <FieldLabel required>1. 語言支援（單選）</FieldLabel>
@@ -414,18 +426,18 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
               onOtherChange={(languageSupportOther) => patch({ languageSupportOther })}
               otherOptionValue="其他／多國語言"
             />
-          </div>
-          <div>
-            <FieldLabel required>需要語言切換按鈕？</FieldLabel>
-            <RadioGroup
-              name="languageSwitcher"
-              options={[
-                { value: 'yes', label: '是' },
-                { value: 'no', label: '否' },
-              ]}
-              value={form.languageSwitcher}
-              onChange={(languageSwitcher) => patch({ languageSwitcher: languageSwitcher as 'yes' | 'no' })}
-            />
+            <div className="mt-3">
+              <FieldLabel required>需要語言切換按鈕？</FieldLabel>
+              <RadioGroup
+                name="languageSwitcher"
+                options={[
+                  { value: 'yes', label: '是' },
+                  { value: 'no', label: '否' },
+                ]}
+                value={form.languageSwitcher}
+                onChange={(languageSwitcher) => patch({ languageSwitcher: languageSwitcher as 'yes' | 'no' })}
+              />
+            </div>
           </div>
           <div>
             <FieldLabel required>2. 素材狀態（單選）</FieldLabel>
@@ -446,6 +458,9 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
               options={BRAND_GUIDELINE_OPTIONS}
               value={form.brandGuidelines}
               onChange={(brandGuidelines) => patch({ brandGuidelines })}
+              otherValue={form.brandGuidelinesOther}
+              onOtherChange={(brandGuidelinesOther) => patch({ brandGuidelinesOther })}
+              otherOptionValue="其他"
             />
           </div>
           <div>
@@ -458,7 +473,7 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
               onOtherChange={(styleOther) => patch({ styleOther })}
             />
             <div className="mt-3">
-              <FieldLabel>參考網站網址</FieldLabel>
+              <FieldLabel>客戶提供的參考網站網址</FieldLabel>
               <Input
                 value={form.referenceUrls}
                 onChange={(e) => patch({ referenceUrls: e.target.value })}
@@ -470,7 +485,7 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
         </div>
       </SectionCard>
 
-      <SectionCard title="第六階段：維護、推廣、預算、時程">
+      <SectionCard title="第五階段：維護、推廣、預算、時程">
         <div className="space-y-5">
           <div>
             <FieldLabel>1. 全年維護服務（可多選）</FieldLabel>
@@ -489,7 +504,7 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
                       className={cn(
                         'px-3 py-1.5 rounded-md border text-[13px] cursor-pointer transition-colors',
                         form.maintenanceTier === tier
-                          ? 'border-teal-400 bg-teal-50 text-teal-800 font-medium'
+                          ? 'border-blue-400 bg-blue-50 text-blue-800 font-medium'
                           : 'border-slate-200 hover:border-slate-300',
                       )}
                     >
@@ -518,21 +533,21 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
             />
           </div>
           <div>
-            <FieldLabel required>3. 預算範圍（單選）</FieldLabel>
+            <FieldLabel required>3. 客戶預算範圍（單選）</FieldLabel>
             <RadioGroup name="budgetRange" options={BUDGET_OPTIONS} value={form.budgetRange} onChange={(budgetRange) => patch({ budgetRange })} />
           </div>
           <div>
-            <FieldLabel required>4. 預計上線時間（單選）</FieldLabel>
+            <FieldLabel required>4. 客戶希望上線時間（單選）</FieldLabel>
             <RadioGroup name="launchTimeline" options={TIMELINE_OPTIONS} value={form.launchTimeline} onChange={(launchTimeline) => patch({ launchTimeline })} />
           </div>
           <div>
-            <FieldLabel>5. 其他特別要求</FieldLabel>
+            <FieldLabel>5. 其他備註／特別要求</FieldLabel>
             <textarea
               value={form.additionalNotes}
               onChange={(e) => patch({ additionalNotes: e.target.value })}
               rows={4}
-              className="w-full px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-500 resize-y"
-              placeholder="任何其他需求或備註…"
+              className="w-full px-3 py-2 border border-slate-200 rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y"
+              placeholder="記錄客戶額外提到的細節、限制、或重要對話重點…"
             />
           </div>
         </div>
@@ -542,7 +557,7 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
         <button
           type="button"
           onClick={handleGenerate}
-          className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-teal-600 text-white rounded-lg text-[14px] font-semibold hover:bg-teal-700 shadow-sm transition-colors"
+          className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg text-[14px] font-semibold hover:bg-blue-700 shadow-sm transition-colors"
         >
           <ClipboardList size={16} />
           產生客戶需求清單
@@ -550,13 +565,13 @@ export function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerate
       </div>
 
       {summary && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-5 shadow-sm">
+        <div className="rounded-lg border border-blue-200 bg-blue-50/30 p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
             <h4 className="text-[14px] font-bold text-slate-800">已產生的客戶需求清單</h4>
             <button
               type="button"
               onClick={() => void handleCopy()}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-teal-200 text-teal-700 bg-white rounded-md hover:bg-teal-50 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-blue-300 text-blue-700 bg-white rounded-md hover:bg-blue-50 transition-colors"
             >
               {copied ? <Check size={14} /> : <Copy size={14} />}
               {copied ? '已複製' : '一鍵複製'}

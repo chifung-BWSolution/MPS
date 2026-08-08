@@ -617,9 +617,7 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
               initialForm={{
                 companyName: selectedPitching?.clientName || clientName,
                 contactName: selectedPitching?.clientName || '',
-                contactPhone: '',
-                email: '',
-                businessSummary: requirementsText || selectedPitching?.description || '',
+                businessSummary: [selectedPitching?.description, selectedPitching?.notes, requirementsText].filter(Boolean).join('\n') || '',
                 existingWebsite: selectedPitching?.asanaLink || '',
               }}
               onSummaryGenerated={(summary) => setRequirementsText(summary)}
