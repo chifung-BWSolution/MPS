@@ -26,6 +26,7 @@ import {
   termsTemplates,
 } from '@/data/quotationData';
 import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
+import { useQuotations, type QuotationWizardPayload } from '@/hooks/useQuotations';
 import {
   formatProjectTypes,
   matchesProjectTypeFilter,
@@ -56,12 +57,24 @@ const supplierOptions = [
 ];
 
 // ===== QUOTATION LIST =====
-function QuotationList({ onViewQuote, onPreviewQuote }: { onViewQuote: (id: string) => void; onPreviewQuote?: (quote: QuotationEntry) => void }) {
+function QuotationList({
+  quotes,
+  loading,
+  dbQuoteIds,
+  onViewQuote,
+  onPreviewQuote,
+}: {
+  quotes: QuotationEntry[];
+  loading?: boolean;
+  dbQuoteIds: Set<string>;
+  onViewQuote: (id: string) => void;
+  onPreviewQuote?: (quote: QuotationEntry) => void;
+}) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const filtered = useMemo(() => {
-    return quotationEntries.filter(q => {
+    return quotes.filter(q => {
       if (statusFilter !== 'all' && q.status !== statusFilter) return false;
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
@@ -69,11 +82,11 @@ function QuotationList({ onViewQuote, onPreviewQuote }: { onViewQuote: (id: stri
       }
       return true;
     });
-  }, [searchQuery, statusFilter]);
+  }, [quotes, searchQuery, statusFilter]);
 
-  const totalAmount = quotationEntries.reduce((acc, q) => acc + q.amount, 0);
-  const wonCount = quotationEntries.filter(q => q.status === 'won').length;
-  const pendingCount = quotationEntries.filter(q => q.status === 'pending_approval').length;
+  const totalAmount = quotes.reduce((acc, q) => acc + q.amount, 0);
+  const wonCount = quotes.filter(q => q.status === 'won').length;
+  const pendingCount = quotes.filter(q => q.status === 'pending_approval').length;
 
   return (
     <div className="space-y-6">
@@ -85,7 +98,7 @@ function QuotationList({ onViewQuote, onPreviewQuote }: { onViewQuote: (id: stri
         </div>
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
           <span className="text-[13px] font-medium text-muted-foreground">報價單總數</span>
-          <span className="text-[22px] font-bold block mt-1 text-teal-600">{quotationEntries.length}</span>
+          <span className="text-[22px] font-bold block mt-1 text-teal-600">{quotes.length}</span>
         </div>
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
           <span className="text-[13px] font-medium text-muted-foreground">已成交</span>
@@ -125,6 +138,11 @@ function QuotationList({ onViewQuote, onPreviewQuote }: { onViewQuote: (id: stri
 
       {/* Table */}
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-hidden">
+        {loading && (
+          <div className="px-4 py-3 text-[13px] text-muted-foreground flex items-center gap-2 border-b border-border">
+            <Loader2 size={14} className="animate-spin" /> 載入報價單…
+          </div>
+        )}
         <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-muted/30">
@@ -143,7 +161,15 @@ function QuotationList({ onViewQuote, onPreviewQuote }: { onViewQuote: (id: stri
               const config = getStatusConfig(quote.status);
               return (
                 <tr key={quote.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors duration-200">
-                  <td className="px-4 py-3 text-[14px] font-medium text-teal-600">{quote.quoteId}</td>
+                  <td className="px-4 py-3 text-[14px] font-medium">
+                    <button
+                      type="button"
+                      onClick={() => onViewQuote(quote.id)}
+                      className="text-teal-600 hover:text-teal-700 hover:underline"
+                    >
+                      {quote.quoteId}
+                    </button>
+                  </td>
                   <td className="px-4 py-3 text-[14px]">{quote.client}</td>
                   <td className="px-4 py-3 text-[14px]">{getQuotationTypeName(quote.quotationType)}</td>
                   <td className="px-4 py-3 text-[14px] font-medium">${quote.amount.toLocaleString()}</td>
@@ -160,7 +186,11 @@ function QuotationList({ onViewQuote, onPreviewQuote }: { onViewQuote: (id: stri
                   <td className="px-4 py-3 text-[14px] text-muted-foreground">{quote.createdDate}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <button onClick={() => onViewQuote(quote.id)} className="text-teal-600 hover:text-teal-700 text-[12px] font-medium" title="檢視">
+                      <button
+                        onClick={() => onViewQuote(quote.id)}
+                        className="text-teal-600 hover:text-teal-700 text-[12px] font-medium"
+                        title={dbQuoteIds.has(quote.id) ? '查看報價內容' : '檢視'}
+                      >
                         <Eye size={14} />
                       </button>
                       <button onClick={() => onPreviewQuote?.(quote)} className="text-muted-foreground hover:text-teal-600 text-[12px] font-medium" title="預覽">
@@ -190,31 +220,45 @@ function QuotationList({ onViewQuote, onPreviewQuote }: { onViewQuote: (id: stri
 }
 
 // ===== NEW QUOTATION WIZARD =====
-function NewQuotationWizard({ onClose }: { onClose: () => void }) {
+type NewQuotationWizardProps = {
+  onClose: () => void;
+  onSaved?: () => void;
+  saveQuotation: ReturnType<typeof useQuotations>['saveQuotation'];
+  editQuote?: QuotationEntry;
+  editPayload?: QuotationWizardPayload;
+};
+
+function NewQuotationWizard({ onClose, onSaved, saveQuotation, editQuote, editPayload }: NewQuotationWizardProps) {
+  const isEditMode = Boolean(editQuote && editPayload);
   const { records: pitchingRecords, loading: pitchingLoading } = useQuotationClientProjects();
-  const [step, setStep] = useState(1);
-  const [selectedType, setSelectedType] = useState<QuotationType | null>(null);
-  const [isComprehensive, setIsComprehensive] = useState(false);
-  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-  const [selectedPitchingId, setSelectedPitchingId] = useState('');
+  const [step, setStep] = useState(isEditMode ? 3 : 1);
+  const [editingId, setEditingId] = useState<string | undefined>(editQuote?.id);
+  const [saving, setSaving] = useState(false);
+  const [selectedType, setSelectedType] = useState<QuotationType | null>(() => {
+    if (!editPayload?.selectedTypeId) return null;
+    return quotationTypes.find((t) => t.id === editPayload.selectedTypeId) ?? null;
+  });
+  const [isComprehensive, setIsComprehensive] = useState(editPayload?.isComprehensive ?? false);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(editPayload?.selectedTypes ?? []);
+  const [selectedPitchingId, setSelectedPitchingId] = useState(editPayload?.selectedPitchingId ?? '');
   const [projectTypeFilter, setProjectTypeFilter] = useState('all');
-  const [clientName, setClientName] = useState('');
-  const [requirementsText, setRequirementsText] = useState('');
+  const [clientName, setClientName] = useState(editPayload?.clientName ?? editQuote?.client ?? '');
+  const [requirementsText, setRequirementsText] = useState(editPayload?.requirementsText ?? '');
   const [quotationDate, setQuotationDate] = useState('');
   const [manHoursEstimate, setManHoursEstimate] = useState<number>(0);
   const [asanaLink, setAsanaLink] = useState('');
   const [outputLink, setOutputLink] = useState('');
-  const [services, setServices] = useState<QuotationServiceItem[]>([]);
-  const [terms, setTerms] = useState('');
-  const [paymentArrangement, setPaymentArrangement] = useState<PaymentStage[]>([]);
-  const [overallDiscount, setOverallDiscount] = useState(0);
-  const [overallDiscountType, setOverallDiscountType] = useState<'percentage' | 'fixed'>('percentage');
-  const [costStructure, setCostStructure] = useState<CostStructure>({
+  const [services, setServices] = useState<QuotationServiceItem[]>(editPayload?.services ?? []);
+  const [terms, setTerms] = useState(editPayload?.terms ?? '');
+  const [paymentArrangement, setPaymentArrangement] = useState<PaymentStage[]>(editPayload?.paymentArrangement ?? []);
+  const [overallDiscount, setOverallDiscount] = useState(editPayload?.overallDiscount ?? 0);
+  const [overallDiscountType, setOverallDiscountType] = useState<'percentage' | 'fixed'>(editPayload?.overallDiscountType ?? 'percentage');
+  const [costStructure, setCostStructure] = useState<CostStructure>(editPayload?.costStructure ?? {
     totalRevenue: 0, laborCost: 0, supplierCost: 0, outsourcingCost: 0, otherCost: 0, grossProfit: 0, grossMargin: 0,
     items: [],
   });
   const [costErrors, setCostErrors] = useState<string[]>([]);
-  const [integratedSummary, setIntegratedSummary] = useState('');
+  const [integratedSummary, setIntegratedSummary] = useState(editPayload?.integratedSummary ?? '');
   const [summaryCopied, setSummaryCopied] = useState(false);
   const questionnaireRef = useRef<ClientRequirementsFormRef>(null);
 
@@ -264,6 +308,10 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
   };
 
   const handlePreviousStep = () => {
+    if (isEditMode && step === 3) {
+      onClose();
+      return;
+    }
     if (step === 2) {
       setStep(1);
       setIsComprehensive(false);
@@ -395,19 +443,80 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
     grossMargin: syncedCostStructure.grossMargin,
   });
 
-  const validateCostStructure = (): boolean => {
-    const errors: string[] = [];
-    if (!integratedSummary.trim()) {
-      errors.push('請先產生客戶需求清單（整合報價內容與 Cost Structure）');
+  const validateBeforeSave = (): boolean => {
+    const errors = questionnaireRef.current?.validate() ?? ['問卷尚未載入'];
+    if (errors.length) {
+      setCostErrors(errors);
+      toast.error(errors[0]);
+      return false;
     }
     if (getRevenue() <= 0) {
-      errors.push('收入總額必須大於 0，請確認報價類型預設服務或 Pitching 預估收入');
+      const msg = '收入總額必須大於 0，請確認報價類型預設服務或 Pitching 預估收入';
+      setCostErrors([msg]);
+      toast.error(msg);
+      return false;
     }
-    setCostErrors(errors);
-    return errors.length === 0;
+    setCostErrors([]);
+    return true;
   };
 
-  const handleGenerateIntegratedSummary = () => {
+  const buildWizardPayload = (summary: string): QuotationWizardPayload => ({
+    isComprehensive,
+    selectedTypeId: selectedType?.id ?? null,
+    selectedTypes,
+    selectedPitchingId,
+    clientName: selectedPitching?.clientName || clientName,
+    requirementsText: summary,
+    clientRequirementsForm: questionnaireRef.current!.getForm(),
+    costStructure: syncedCostStructure,
+    integratedSummary: summary,
+    services,
+    terms,
+    paymentArrangement,
+    overallDiscount,
+    overallDiscountType,
+  });
+
+  const handleFinish = async () => {
+    if (!validateBeforeSave()) return;
+
+    let summary = integratedSummary.trim();
+    if (!summary) {
+      const requirementsSummary = questionnaireRef.current!.generateSummary();
+      const costSummary = generateCostStructureSummary(buildCostSummaryInput());
+      summary = mergeRequirementsAndCostSummary(requirementsSummary, costSummary);
+      setIntegratedSummary(summary);
+      setRequirementsText(summary);
+    }
+
+    setSaving(true);
+    const result = await saveQuotation({
+      id: editingId,
+      clientName: selectedPitching?.displayName || clientName,
+      pitchingRecordId: selectedPitchingId || null,
+      quotationTypeId: isComprehensive ? (selectedTypes[0] ?? null) : (selectedType?.id ?? null),
+      quotationMode: isComprehensive ? 'comprehensive' : 'single',
+      status: 'draft',
+      amount: syncedCostStructure.totalRevenue,
+      costTotal: getTotalCosts(syncedCostStructure),
+      grossProfit: syncedCostStructure.grossProfit,
+      grossMargin: syncedCostStructure.grossMargin,
+      wizardPayload: buildWizardPayload(summary),
+      integratedSummary: summary,
+    });
+    setSaving(false);
+
+    if (!result) {
+      toast.error('儲存失敗，請稍後再試');
+      return;
+    }
+    if (!editingId) setEditingId(result.id);
+    toast.success(`報價單 ${result.quoteCode} 已儲存`);
+    onSaved?.();
+    onClose();
+  };
+
+  const handleAddCustomService = () => {
     const validationErrors = questionnaireRef.current?.validate() ?? ['問卷尚未載入'];
     if (validationErrors.length) {
       setCostErrors(validationErrors);
@@ -435,14 +544,7 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const handleSubmit = () => {
-    if (!validateCostStructure()) return;
-    const modeLabel = isComprehensive ? '（綜合方案）' : '';
-    alert(`報價單${modeLabel}已成功提交批核！`);
-    onClose();
-  };
-
-  const handleAddCustomService = () => {
+  const handleGenerateIntegratedSummary = () => {
     setServices([...services, {
       id: `svc-custom-${Date.now()}`, name: '', price: 0, cost: 0, supplierName: '',
       quantity: 1, discount: 0, discountType: 'percentage', isVisible: true, isSelected: true,
@@ -462,8 +564,8 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <h3 className="text-[18px] font-bold">新建報價單</h3>
-            {step > 1 && (
+            <h3 className="text-[18px] font-bold">{isEditMode ? `編輯報價單 · ${editQuote?.quoteId}` : '新建報價單'}</h3>
+            {step > 1 && !isEditMode && (
               <button
                 type="button"
                 onClick={handlePreviousStep}
@@ -478,6 +580,7 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Step Indicator */}
+        {!isEditMode && (
         <div className="flex items-center gap-2 mb-8">
           {['選擇報價類型', '選擇客戶', '編輯報價內容'].map((label, idx) => (
             <div key={idx} className="flex items-center gap-2">
@@ -494,9 +597,10 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
             </div>
           ))}
         </div>
+        )}
 
         {/* STEP 1 */}
-        {step === 1 && (
+        {!isEditMode && step === 1 && (
           <div>
             <p className="text-[14px] text-muted-foreground mb-4">選擇報價類型，系統將自動載入對應的預設項目、T&C 及付款安排：</p>
             
@@ -543,7 +647,7 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
         )}
 
         {/* STEP 2 */}
-        {step === 2 && (
+        {!isEditMode && step === 2 && (
           <div>
             {/* Comprehensive Type Selector */}
             {isComprehensive && (
@@ -676,7 +780,8 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
             <ClientRequirementsQuestionnaire
               ref={questionnaireRef}
               hideGenerateSection
-              initialForm={{
+              formKey={editQuote?.id ?? (step === 3 ? `new-${selectedPitchingId || 'none'}` : 'new')}
+              initialForm={editPayload?.clientRequirementsForm ?? {
                 companyName: selectedPitching?.clientName || clientName,
                 contactName: selectedPitching?.clientName || '',
                 businessSummary: [selectedPitching?.description, selectedPitching?.notes, requirementsText].filter(Boolean).join('\n') || '',
@@ -787,8 +892,22 @@ function NewQuotationWizard({ onClose }: { onClose: () => void }) {
             )}
 
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={onClose} className="px-4 py-2 text-sm border border-border rounded-md hover:bg-muted transition-colors duration-200">儲存草稿</button>
-              <button onClick={handleSubmit} className="px-4 py-2 text-sm bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors duration-200">提交批核</button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-sm border border-border rounded-md hover:bg-muted transition-colors duration-200"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleFinish()}
+                disabled={saving}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors duration-200 disabled:opacity-60"
+              >
+                {saving && <Loader2 size={14} className="animate-spin" />}
+                完成
+              </button>
             </div>
           </div>
         )}
@@ -1446,8 +1565,25 @@ function ClientProjectsList({ onPreviewQuote }: { onPreviewQuote?: (quote: Quota
 // ===== MAIN MODULE =====
 export function QuotationModule({ subModule }: { subModule?: string }) {
   const { navigateTo } = useApp();
+  const { records: dbQuotes, loading: quotesLoading, saveQuotation, getPayload, refresh: refreshQuotes } = useQuotations();
   const [viewingQuoteId, setViewingQuoteId] = useState<string | null>(null);
   const [previewQuote, setPreviewQuote] = useState<typeof quotationEntries[0] | null>(null);
+
+  const dbQuoteIds = useMemo(() => new Set(dbQuotes.map((q) => q.id)), [dbQuotes]);
+
+  const allQuotes = useMemo(() => {
+    const sample = quotationEntries.filter((q) => (q as { __sampleData?: boolean }).__sampleData !== false);
+    return [...dbQuotes, ...sample];
+  }, [dbQuotes]);
+
+  const handleViewQuote = useCallback((id: string) => {
+    if (dbQuoteIds.has(id)) {
+      setViewingQuoteId(id);
+      return;
+    }
+    const sample = quotationEntries.find((q) => q.id === id);
+    if (sample) setPreviewQuote(sample);
+  }, [dbQuoteIds]);
 
   const previewOverlay = previewQuote ? (
     <QuotationPreview quote={previewQuote} onClose={() => setPreviewQuote(null)} />
@@ -1469,15 +1605,46 @@ export function QuotationModule({ subModule }: { subModule?: string }) {
     return <>{previewOverlay}<CRMModule subModule="list" /></>;
   }
 
+  if (viewingQuoteId) {
+    const editQuote = dbQuotes.find((q) => q.id === viewingQuoteId);
+    const editPayload = getPayload(viewingQuoteId);
+    if (editQuote && editPayload) {
+      return (
+        <>{previewOverlay}
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-[32px] font-bold tracking-tight">報價單 · {editQuote.quoteId}</h1>
+            <p className="text-[14px] text-muted-foreground mt-1">查看及編輯已儲存的報價內容。</p>
+          </div>
+          <NewQuotationWizard
+            editQuote={editQuote}
+            editPayload={editPayload}
+            saveQuotation={saveQuotation}
+            onClose={() => setViewingQuoteId(null)}
+            onSaved={() => {
+              void refreshQuotes();
+              setViewingQuoteId(null);
+            }}
+          />
+        </div>
+        </>
+      );
+    }
+  }
+
   if (subModule === 'new') {
     return (
       <>{previewOverlay}
       <div className="space-y-6">
         <div>
           <h1 className="text-[32px] font-bold tracking-tight">新建報價單</h1>
-          <p className="text-[14px] text-muted-foreground mt-1">建立新的報價單並提交批核。</p>
+          <p className="text-[14px] text-muted-foreground mt-1">建立新的報價單，完成後儲存至報價單列表。</p>
         </div>
-        <NewQuotationWizard onClose={() => navigateTo('quotation', 'list')} />
+        <NewQuotationWizard
+          saveQuotation={saveQuotation}
+          onClose={() => navigateTo('quotation', 'list')}
+          onSaved={() => void refreshQuotes()}
+        />
       </div>
       </>
     );
@@ -1497,7 +1664,13 @@ export function QuotationModule({ subModule }: { subModule?: string }) {
           <Plus size={14} />新建報價單
         </button>
       </div>
-      <QuotationList onViewQuote={(id) => setViewingQuoteId(id)} onPreviewQuote={(quote) => setPreviewQuote(quote)} />
+      <QuotationList
+        quotes={allQuotes}
+        loading={quotesLoading}
+        dbQuoteIds={dbQuoteIds}
+        onViewQuote={handleViewQuote}
+        onPreviewQuote={(quote) => setPreviewQuote(quote)}
+      />
     </div>
     </>
   );
