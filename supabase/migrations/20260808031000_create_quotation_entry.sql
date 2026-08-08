@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS public.quotation_entry (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   quote_code text NOT NULL UNIQUE,
   client_name text NOT NULL,
-  pitching_record_id uuid REFERENCES public.quotation_client_project(id) ON DELETE SET NULL,
+  pitching_record_id text REFERENCES public.quotation_client_project(id) ON DELETE SET NULL,
   quotation_type_id text,
   quotation_mode text NOT NULL DEFAULT 'single' CHECK (quotation_mode IN ('single', 'comprehensive')),
   status text NOT NULL DEFAULT 'draft' CHECK (status IN (
