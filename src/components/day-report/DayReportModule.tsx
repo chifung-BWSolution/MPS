@@ -39,6 +39,19 @@ import {
 // Office Location & Holiday Config
 // ============================
 type OfficeLocation = 'hk' | 'sz';
+type HoursPreset = 'full' | 'half' | 'custom' | 'off';
+
+function getFullDayHours(office: OfficeLocation): number {
+  return office === 'sz' ? 7.5 : 8;
+}
+
+function inferHoursPreset(hours: number, office: OfficeLocation): HoursPreset {
+  const full = getFullDayHours(office);
+  if (hours === 0) return 'off';
+  if (hours === 4) return 'half';
+  if (hours === full) return 'full';
+  return 'custom';
+}
 
 // HK Public Holidays 2025 (key dates)
 const hkPublicHolidays2025 = [
@@ -193,7 +206,31 @@ function SubmitReportPage() {
   const imageInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   const [targetHours, setTargetHours] = useState<number>(8);
+  const [hoursPreset, setHoursPreset] = useState<HoursPreset>('full');
   const [underHoursReason, setUnderHoursReason] = useState('');
+  const fullDayHours = getFullDayHours(office);
+
+  const applyHoursPreset = useCallback((preset: HoursPreset, officeLoc: OfficeLocation = office) => {
+    setHoursPreset(preset);
+    if (preset === 'full') setTargetHours(getFullDayHours(officeLoc));
+    else if (preset === 'half') setTargetHours(4);
+    else if (preset === 'off') setTargetHours(0);
+    else if (preset === 'custom') {
+      setTargetHours((prev) => {
+        if (prev === 0 || prev === 4 || prev === getFullDayHours(officeLoc)) {
+          return getFullDayHours(officeLoc);
+        }
+        return prev;
+      });
+    }
+  }, [office]);
+
+  const switchOffice = useCallback((next: OfficeLocation) => {
+    setOffice(next);
+    if (hoursPreset === 'full') {
+      setTargetHours(getFullDayHours(next));
+    }
+  }, [hoursPreset]);
   const [isPulling, setIsPulling] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [tempSaved, setTempSaved] = useState(false);
@@ -313,7 +350,7 @@ function SubmitReportPage() {
           console.error('[SubmitReport] Error fetching staff office:', error);
           // Fallback to HK defaults
           setOffice('hk');
-          setTargetHours(8);
+          applyHoursPreset('full', 'hk');
           return;
         }
 
@@ -322,17 +359,17 @@ function SubmitReportPage() {
 
         if (officeValue === '深圳') {
           setOffice('sz');
-          setTargetHours(7.5);
+          applyHoursPreset('full', 'sz');
         } else {
           // "香港" or any unexpected/empty value → default to HK
           setOffice('hk');
-          setTargetHours(8);
+          applyHoursPreset('full', 'hk');
         }
       } catch (err) {
         console.error('[SubmitReport] Exception fetching staff office:', err);
         // Graceful fallback
         setOffice('hk');
-        setTargetHours(8);
+        applyHoursPreset('full', 'hk');
       }
     }
 
@@ -425,8 +462,13 @@ function SubmitReportPage() {
           console.log('[SubmitReport] Found existing report:', reportData.id, 'hours:', reportData.total_hours, 'status:', reportData.status);
           setExistingReportId(reportData.id);
           setExistingReportStatus(reportData.status || 'submitted');
-          if (reportData.target_hours) setTargetHours(Number(reportData.target_hours));
-          if (reportData.office_location) setOffice(reportData.office_location as OfficeLocation);
+          const loadedOffice = (reportData.office_location as OfficeLocation) || office;
+          if (reportData.office_location) setOffice(loadedOffice);
+          if (reportData.target_hours != null) {
+            const hours = Number(reportData.target_hours);
+            setTargetHours(hours);
+            setHoursPreset(inferHoursPreset(hours, loadedOffice));
+          }
           if (reportData.under_hours_reason) {
             setUnderHoursReason(reportData.under_hours_reason);
           } else {
@@ -496,6 +538,7 @@ function SubmitReportPage() {
               const draft = JSON.parse(raw) as {
                 entries?: ReportFormEntry[];
                 targetHours?: number;
+                hoursPreset?: HoursPreset;
                 underHoursReason?: string;
                 office?: OfficeLocation;
               };
@@ -503,17 +546,26 @@ function SubmitReportPage() {
                 restoredEntries = draft.entries;
                 draftRestored = true;
               }
-              if (typeof draft.targetHours === 'number') setTargetHours(draft.targetHours);
-              else setTargetHours(8);
-              setUnderHoursReason(typeof draft.underHoursReason === 'string' ? draft.underHoursReason : '');
+              const draftOffice = draft.office || office;
               if (draft.office) setOffice(draft.office);
+              if (typeof draft.targetHours === 'number') {
+                setTargetHours(draft.targetHours);
+                setHoursPreset(
+                  draft.hoursPreset && ['full', 'half', 'custom', 'off'].includes(draft.hoursPreset)
+                    ? draft.hoursPreset
+                    : inferHoursPreset(draft.targetHours, draftOffice),
+                );
+              } else {
+                applyHoursPreset('full', draftOffice);
+              }
+              setUnderHoursReason(typeof draft.underHoursReason === 'string' ? draft.underHoursReason : '');
             }
           } catch (err) {
             console.warn('[SubmitReport] failed to restore draft inside loadExistingReport:', err);
           }
           if (!draftRestored) {
             setUnderHoursReason('');
-            setTargetHours(8);
+            applyHoursPreset('full', office);
           }
           const baseEntries = restoredEntries && restoredEntries.length > 0
             ? restoredEntries
@@ -566,12 +618,14 @@ function SubmitReportPage() {
   useEffect(() => {
     if (!draftStorageKey || !draftHydrated || existingReportId) return;
     const hasContent = entries.some(e => e.category || e.title || e.hours > 0 || e.relatedName)
-      || underHoursReason.length > 0;
+      || underHoursReason.length > 0
+      || hoursPreset !== 'full'
+      || targetHours !== fullDayHours;
     try {
       if (hasContent) {
         localStorage.setItem(
           draftStorageKey,
-          JSON.stringify({ entries, targetHours, underHoursReason, office }),
+          JSON.stringify({ entries, targetHours, hoursPreset, underHoursReason, office }),
         );
       } else {
         localStorage.removeItem(draftStorageKey);
@@ -579,7 +633,7 @@ function SubmitReportPage() {
     } catch (err) {
       console.warn('[SubmitReport] failed to persist draft:', err);
     }
-  }, [draftStorageKey, draftHydrated, existingReportId, entries, targetHours, underHoursReason, office]);
+  }, [draftStorageKey, draftHydrated, existingReportId, entries, targetHours, hoursPreset, underHoursReason, office, fullDayHours]);
 
   // Generate list of available dates (past 14 days) — always relative to real current date
   const availableDates = useMemo(() => {
@@ -832,14 +886,15 @@ function SubmitReportPage() {
   }, [loadRecentFrequentItems]);
 
   const totalHours = entries.reduce((sum, e) => sum + (e.hours || 0), 0);
-  const otHours = Math.max(0, totalHours - 8);
-  const isOT = totalHours > 8;
+  const otHours = Math.max(0, totalHours - fullDayHours);
+  const isOT = totalHours > fullDayHours;
   const selectedDateIsHoliday = isPublicHoliday(selectedDate, office);
   const selectedDateIsSat = isSaturday(selectedDate);
   const selectedDateIsSun = new Date(selectedDate).getDay() === 0;
+  const isDayOff = hoursPreset === 'off' || targetHours === 0;
   
   // On holidays/weekends, minimum hours = 0 (any hours count as OT)
-  const isUnderHours = !selectedDateIsHoliday && !selectedDateIsSun && !selectedDateIsSat && totalHours < targetHours && totalHours > 0;
+  const isUnderHours = !isDayOff && !selectedDateIsHoliday && !selectedDateIsSun && !selectedDateIsSat && totalHours < targetHours && totalHours > 0;
   
   // Cross-field validation: sum of task hours must equal declared target
   const hoursMatch = totalHours === targetHours;
@@ -852,9 +907,11 @@ function SubmitReportPage() {
     hoursMatch || 
     (isUnderHours && underHoursReason.length > 0)
   ) && totalHours > 0 && !missingRequiredRelated;
+  // 放假：允許以 0 工時正式提交（無需工作項目）
+  const canSubmitLeave = isDayOff && totalHours === 0;
   
-  const canSubmit = canSubmitWork;
-  const hasTempSaveContent = entries.some(e => e.category && e.hours > 0);
+  const canSubmit = canSubmitWork || canSubmitLeave;
+  const hasTempSaveContent = entries.some(e => e.category && e.hours > 0) || isDayOff;
   // After formal submit, use「更新匯報」; 暫存 is for incomplete drafts only
   const canTempSave = hasTempSaveContent
     && !isSubmitting
@@ -972,7 +1029,7 @@ function SubmitReportPage() {
       return;
     }
     if (saveMode === 'draft' && !hasTempSaveContent) {
-      setSubmitError('暫存前請至少填寫一個有工時的工作項目。');
+      setSubmitError(isDayOff ? '暫存失敗，請重試。' : '暫存前請至少填寫一個有工時的工作項目。');
       return;
     }
     const asanaEntry = entries.find(e => e.outcomeType === 'url' && /app\.asana\.com/i.test(e.outcomeUrl));
@@ -992,9 +1049,9 @@ function SubmitReportPage() {
       const reportPayload = {
         total_hours: totalHours,
         target_hours: targetHours,
-        ot_hours: otHours,
-        is_leave: false,
-        is_half_day: false,
+        ot_hours: isDayOff ? 0 : otHours,
+        is_leave: isDayOff,
+        is_half_day: hoursPreset === 'half',
         office_location: office,
         is_holiday: selectedDateIsHoliday,
         is_weekend: selectedDateIsSat || selectedDateIsSun,
@@ -1151,7 +1208,7 @@ function SubmitReportPage() {
       setExistingReportId(null);
       setExistingReportStatus(null);
       setUnderHoursReason('');
-      setTargetHours(8);
+      applyHoursPreset('full', office);
       setSubmitted(false);
       setTempSaved(false);
       const mergedEntries = await applyPendingMerge([createBlankReportEntry()]);
@@ -1257,13 +1314,13 @@ function SubmitReportPage() {
               <span className="text-[14px] font-semibold text-teal-700">辦公室：</span>
               <div className="flex items-center gap-0.5 p-0.5 bg-teal-100/60 rounded-md">
                 <button 
-                  onClick={() => { setOffice('hk'); setTargetHours(8); }} 
+                  onClick={() => switchOffice('hk')} 
                   className={cn('px-3 py-1.5 rounded text-[14px] font-medium transition-all', office === 'hk' ? 'bg-white shadow-sm text-teal-800' : 'text-teal-600 hover:text-teal-800')}
                 >
                   🇭🇰 香港
                 </button>
                 <button 
-                  onClick={() => { setOffice('sz'); setTargetHours(7.5); }} 
+                  onClick={() => switchOffice('sz')} 
                   className={cn('px-3 py-1.5 rounded text-[14px] font-medium transition-all', office === 'sz' ? 'bg-white shadow-sm text-teal-800' : 'text-teal-600 hover:text-teal-800')}
                 >
                   🇨🇳 深圳
@@ -1523,68 +1580,51 @@ function SubmitReportPage() {
             </div>
           )}
           {/* Hours Status Bar */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-border/60">
-              <span className="text-[14px] font-medium text-muted-foreground">{formatDateShort(selectedDate)}</span>
-              {(selectedDateIsHoliday || selectedDateIsSun) && <span className="text-[12px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">OT 日</span>}
-              {selectedDateIsSat && !selectedDateIsHoliday && <span className="text-[12px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 font-medium">星期六</span>}
-            </div>
-            
-            {/* Right-aligned group: Target Hours + Total Filled */}
-            <div className="ml-auto flex items-center gap-4">
-              {/* Editable Target Hours */}
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-rose-50 border-2 border-rose-300">
-                <span className="text-[13px] font-semibold text-rose-700">目標工時：</span>
-                <input 
-                  type="number" 
-                  step="0.5" 
-                  min="0.5" 
-                  max="16" 
-                  value={targetHours} 
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value);
-                    if (!isNaN(val) && val >= 0.5 && val <= 16) {
-                      // Round to nearest 0.5
-                      setTargetHours(Math.round(val * 2) / 2);
-                    }
-                  }}
-                  className="w-14 px-2 py-1 border border-rose-300 rounded-md text-[16px] font-bold text-rose-700 text-center bg-white focus:ring-2 focus:ring-rose-200 focus:border-rose-400"
-                />
-                <span className="text-[16px] font-bold text-rose-700">h</span>
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-border/60">
+                <span className="text-[14px] font-medium text-muted-foreground">{formatDateShort(selectedDate)}</span>
+                {(selectedDateIsHoliday || selectedDateIsSun) && <span className="text-[12px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">OT 日</span>}
+                {selectedDateIsSat && !selectedDateIsHoliday && <span className="text-[12px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 font-medium">星期六</span>}
               </div>
 
               {/* Total Filled Progress */}
-              <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-border/60">
-              <Clock size={14} className="text-muted-foreground" />
-              <span className="text-[14px] text-muted-foreground">已填：</span>
-              <span className={cn('text-[20px] font-bold', 
-                hoursMatch ? 'text-teal-600' :
-                (selectedDateIsHoliday || selectedDateIsSun) ? 'text-amber-600' :
-                isOT ? 'text-amber-600' : 
-                totalHours > 0 ? 'text-rose-500' : 'text-gray-400'
-              )}>
-                {totalHours}h
-                {hoursMatch && <span className="text-[13px] font-normal ml-1 text-teal-600">✓</span>}
-                {(isOT || ((selectedDateIsHoliday || selectedDateIsSun) && totalHours > 0)) && 
-                  <span className="text-[13px] font-normal ml-1">
-                    OT {selectedDateIsHoliday || selectedDateIsSun ? `+${totalHours}h` : `+${otHours}h`}
-                  </span>
-                }
-              </span>
-              <div className="w-24 h-2.5 bg-muted rounded-full overflow-hidden">
-                <div className={cn('h-full rounded-full transition-all', 
-                  hoursMatch ? 'bg-teal-500' :
-                  (selectedDateIsHoliday || selectedDateIsSun) ? 'bg-amber-500' :
-                  isOT ? 'bg-amber-500' : 
-                  totalHours >= targetHours ? 'bg-teal-500' : 'bg-rose-400'
-                )} style={{ width: `${Math.min((totalHours / Math.max(targetHours, 1)) * 100, 100)}%` }} />
-              </div>
-              {!hoursMatch && totalHours > 0 && (
-                <span className="text-[13px] text-rose-500 font-medium">
-                  {totalHours < targetHours ? `差 ${(targetHours - totalHours).toFixed(1)}h` : `超出 ${(totalHours - targetHours).toFixed(1)}h`}
+              <div className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-border/60">
+                <Clock size={14} className="text-muted-foreground" />
+                <span className="text-[14px] text-muted-foreground">已填：</span>
+                <span className={cn('text-[20px] font-bold',
+                  hoursMatch || isDayOff ? 'text-teal-600' :
+                  (selectedDateIsHoliday || selectedDateIsSun) ? 'text-amber-600' :
+                  isOT ? 'text-amber-600' :
+                  totalHours > 0 ? 'text-rose-500' : 'text-gray-400'
+                )}>
+                  {totalHours}h
+                  {(hoursMatch || isDayOff) && <span className="text-[13px] font-normal ml-1 text-teal-600">✓</span>}
+                  {!isDayOff && (isOT || ((selectedDateIsHoliday || selectedDateIsSun) && totalHours > 0)) &&
+                    <span className="text-[13px] font-normal ml-1">
+                      OT {selectedDateIsHoliday || selectedDateIsSun ? `+${totalHours}h` : `+${otHours}h`}
+                    </span>
+                  }
                 </span>
-              )}
-              {aiUsedInEntries && (<span className="flex items-center gap-1 text-[13px] px-2 py-1 rounded-full bg-purple-50 text-purple-700 font-medium"><Bot size={11} /> AI 輔助</span>)}
+                {!isDayOff && (
+                  <div className="w-24 h-2.5 bg-muted rounded-full overflow-hidden">
+                    <div className={cn('h-full rounded-full transition-all',
+                      hoursMatch ? 'bg-teal-500' :
+                      (selectedDateIsHoliday || selectedDateIsSun) ? 'bg-amber-500' :
+                      isOT ? 'bg-amber-500' :
+                      totalHours >= targetHours ? 'bg-teal-500' : 'bg-rose-400'
+                    )} style={{ width: `${Math.min((totalHours / Math.max(targetHours, 1)) * 100, 100)}%` }} />
+                  </div>
+                )}
+                {!isDayOff && !hoursMatch && totalHours > 0 && (
+                  <span className="text-[13px] text-rose-500 font-medium">
+                    {totalHours < targetHours ? `差 ${(targetHours - totalHours).toFixed(1)}h` : `超出 ${(totalHours - targetHours).toFixed(1)}h`}
+                  </span>
+                )}
+                {isDayOff && (
+                  <span className="text-[13px] text-slate-600 font-medium">放假日</span>
+                )}
+                {aiUsedInEntries && (<span className="flex items-center gap-1 text-[13px] px-2 py-1 rounded-full bg-purple-50 text-purple-700 font-medium"><Bot size={11} /> AI 輔助</span>)}
               </div>
 
               {/* Delete entire report — shown only when a saved report exists for this date */}
@@ -1604,6 +1644,52 @@ function SubmitReportPage() {
                   {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                   {isDeleting ? '刪除中...' : '刪除匯報'}
                 </button>
+              )}
+            </div>
+
+            {/* Target Hours option field */}
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-rose-50 border-2 border-rose-300 flex-wrap">
+              <span className="text-[13px] font-semibold text-rose-700 shrink-0">目標工時：</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {([
+                  { id: 'full' as const, label: `全日 (${fullDayHours === 7.5 ? '7.5' : '8'}h)` },
+                  { id: 'half' as const, label: '半日 (4h)' },
+                  { id: 'custom' as const, label: '自訂工作時數' },
+                  { id: 'off' as const, label: '放假 (0h)' },
+                ]).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => applyHoursPreset(opt.id)}
+                    className={cn(
+                      'px-3.5 py-1.5 rounded-full text-[13px] font-medium transition-all border',
+                      hoursPreset === opt.id
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                        : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300 hover:text-blue-700',
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {hoursPreset === 'custom' && (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0.5"
+                    max="16"
+                    value={targetHours}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      if (!isNaN(val) && val >= 0.5 && val <= 16) {
+                        setTargetHours(Math.round(val * 2) / 2);
+                      }
+                    }}
+                    className="w-14 px-2 py-1 border border-rose-300 rounded-md text-[16px] font-bold text-rose-700 text-center bg-white focus:ring-2 focus:ring-rose-200 focus:border-rose-400"
+                  />
+                  <span className="text-[16px] font-bold text-rose-700">h</span>
+                </div>
               )}
             </div>
           </div>
@@ -1925,19 +2011,24 @@ function SubmitReportPage() {
           <Plus size={13} /> 新增工作項目
         </button>
         <div className="flex items-center gap-3">
-          {!canSubmit && totalHours > 0 && missingRequiredRelated && (
+          {!canSubmit && !isDayOff && totalHours > 0 && missingRequiredRelated && (
             <span className="text-[14px] text-amber-600 font-medium bg-amber-50 px-3 py-1.5 rounded-md border border-amber-200">
               請為必填關聯類型選擇項目
             </span>
           )}
-          {!canSubmit && totalHours > 0 && !hoursMatch && !missingRequiredRelated && (
+          {!canSubmit && !isDayOff && totalHours > 0 && !hoursMatch && !missingRequiredRelated && (
             <span className="text-[14px] text-rose-500 font-medium bg-rose-50 px-3 py-1.5 rounded-md border border-rose-200">
               ⚠️ 正式提交需工時 = {targetHours}h（目前 {totalHours}h）；可先暫存
             </span>
           )}
-          {!canSubmit && totalHours === 0 && (
+          {!canSubmit && !isDayOff && totalHours === 0 && (
             <span className="text-[14px] text-gray-500 font-medium">
               請填寫至少一個工作項目
+            </span>
+          )}
+          {isDayOff && canSubmit && (
+            <span className="text-[14px] text-slate-600 font-medium bg-slate-50 px-3 py-1.5 rounded-md border border-slate-200">
+              已選擇放假（0h），可直接提交
             </span>
           )}
           <button
