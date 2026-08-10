@@ -15,8 +15,8 @@ export interface BubbleStaff {
   'Full Name'?: string;
   'Position': string;
   'O_User Role': string;
-  'O_Status': 'Active' | 'Inactive';
-  'O_Status_Text': 'Active' | 'Inactive';
+  'O_Status': 'Active' | 'Inactive' | 'Probation';
+  'O_Status_Text': 'Active' | 'Inactive' | 'Probation';
   'Work Email': string;
   'Private Email'?: string;
   'Work Phone'?: number;
