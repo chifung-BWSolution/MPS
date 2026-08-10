@@ -2,15 +2,18 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { resolveDateRange, useFacebookAdsData } from '@/hooks/useFacebookAdsData';
+import { useBrands } from '@/hooks/useBrands';
 import type { DateRangePreset, FacebookAdsCampaign } from '@/types/facebookAds';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { CrudModal } from '@/components/ui/crud-modal';
 import { cn } from '@/lib/utils';
 
 type SortKey =
   | 'account'
   | 'campaign'
+  | 'brand'
   | 'objective'
   | 'status'
   | 'impressions'
@@ -36,6 +39,8 @@ function getSortValue(c: FacebookAdsCampaign, key: SortKey): string | number {
       return c.accountName || c.adAccountId;
     case 'campaign':
       return c.campaignName;
+    case 'brand':
+      return c.brandCode || c.brandDisplayName || '';
     case 'objective':
       return c.objective || '';
     case 'status':
@@ -130,7 +135,9 @@ export function FacebookAdsModule() {
     error,
     refresh,
     triggerSync,
+    updateCampaignBrand,
   } = useFacebookAdsData(range.from, range.to);
+  const { brands } = useBrands();
 
   useEffect(() => {
     setRange(resolveDateRange(preset, customFrom, customTo, dataMinDate, dataMaxDate));
@@ -140,8 +147,17 @@ export function FacebookAdsModule() {
   const [accountFilter, setAccountFilter] = useState('all');
   const [businessFilter, setBusinessFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [brandFilter, setBrandFilter] = useState('all');
   const [sortKey, setSortKey] = useState<SortKey>('spend');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [brandEditCampaign, setBrandEditCampaign] = useState<FacebookAdsCampaign | null>(null);
+  const [brandDraft, setBrandDraft] = useState<string>('__none__');
+  const [savingBrand, setSavingBrand] = useState(false);
+
+  const activeBrands = useMemo(
+    () => brands.filter((b) => b.isActive).sort((a, b) => a.brandCode.localeCompare(b.brandCode)),
+    [brands],
+  );
 
   const businesses = useMemo(() => {
     const map = new Map<string, string>();
@@ -167,11 +183,17 @@ export function FacebookAdsModule() {
         if (!biz || biz.businessKey !== businessFilter) return false;
       }
       if (statusFilter !== 'all' && c.status.toUpperCase() !== statusFilter) return false;
+      if (brandFilter === 'none' && c.brandListId) return false;
+      if (brandFilter !== 'all' && brandFilter !== 'none' && c.brandListId !== brandFilter) {
+        return false;
+      }
       if (!q) return true;
       return (
         c.campaignName.toLowerCase().includes(q) ||
         (c.accountName || '').toLowerCase().includes(q) ||
         (c.businessName || '').toLowerCase().includes(q) ||
+        (c.brandCode || '').toLowerCase().includes(q) ||
+        (c.brandDisplayName || '').toLowerCase().includes(q) ||
         c.adAccountId.includes(q)
       );
     });
@@ -185,7 +207,17 @@ export function FacebookAdsModule() {
       }
       return compareText(String(av), String(bv)) * dir;
     });
-  }, [campaigns, search, accountFilter, statusFilter, businessFilter, accounts, sortKey, sortDir]);
+  }, [
+    campaigns,
+    search,
+    accountFilter,
+    statusFilter,
+    businessFilter,
+    brandFilter,
+    accounts,
+    sortKey,
+    sortDir,
+  ]);
 
   const onSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -230,6 +262,25 @@ export function FacebookAdsModule() {
             : '';
       toast.success(`最近 7 日資料已更新${secs}${rows}${biz}`);
     } else toast.error(result.error || '同步失敗');
+  };
+
+  const openBrandDialog = (campaign: FacebookAdsCampaign) => {
+    setBrandEditCampaign(campaign);
+    setBrandDraft(campaign.brandListId || '__none__');
+  };
+
+  const saveBrandAssignment = async () => {
+    if (!brandEditCampaign) return;
+    setSavingBrand(true);
+    const nextId = brandDraft === '__none__' ? null : brandDraft;
+    const result = await updateCampaignBrand(brandEditCampaign.id, nextId);
+    setSavingBrand(false);
+    if (!result.ok) {
+      toast.error('更新品牌失敗', { description: result.error });
+      return;
+    }
+    toast.success('已更新 Campaign 品牌');
+    setBrandEditCampaign(null);
   };
 
   return (
@@ -354,6 +405,21 @@ export function FacebookAdsModule() {
               <SelectItem value="REMOVED">REMOVED</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={brandFilter} onValueChange={setBrandFilter}>
+            <SelectTrigger className="w-[170px] h-9 text-[13px] bg-white">
+              <SelectValue placeholder="品牌" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部品牌</SelectItem>
+              <SelectItem value="none">未設定品牌</SelectItem>
+              {activeBrands.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.brandCode}
+                  {b.displayName !== b.brandCode ? ` — ${b.displayName}` : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="text-[12px] text-muted-foreground">
@@ -379,6 +445,7 @@ export function FacebookAdsModule() {
               <tr>
                 <SortableTh label="帳戶" sortKey="account" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortableTh label="Campaign" sortKey="campaign" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SortableTh label="品牌" sortKey="brand" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortableTh label="Objective" sortKey="objective" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortableTh label="狀態" sortKey="status" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortableTh label="Impr." sortKey="impressions" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
@@ -390,14 +457,14 @@ export function FacebookAdsModule() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
                     載入中…
                   </td>
                 </tr>
               )}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
                     此日期區間尚無資料。請先到「Facebook Ads 同步」執行完整歷史回填，或按 Refresh recent。
                   </td>
                 </tr>
@@ -418,6 +485,26 @@ export function FacebookAdsModule() {
                       </div>
                     </td>
                     <td className="px-3 py-2.5 font-medium">{c.campaignName}</td>
+                    <td className="px-3 py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => openBrandDialog(c)}
+                        className={cn(
+                          'text-left text-[12px] rounded px-1.5 py-0.5 -mx-1.5 transition-colors',
+                          c.brandListId
+                            ? 'text-teal-700 hover:bg-teal-50 font-medium'
+                            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                        )}
+                      >
+                        {c.brandCode
+                          ? `${c.brandCode}${
+                              c.brandDisplayName && c.brandDisplayName !== c.brandCode
+                                ? ` · ${c.brandDisplayName}`
+                                : ''
+                            }`
+                          : '設定品牌'}
+                      </button>
+                    </td>
                     <td className="px-3 py-2.5 text-muted-foreground">
                       {c.objective || '—'}
                     </td>
@@ -440,6 +527,62 @@ export function FacebookAdsModule() {
           </table>
         </div>
       </div>
+
+      <CrudModal
+        isOpen={!!brandEditCampaign}
+        onClose={() => !savingBrand && setBrandEditCampaign(null)}
+        title="設定 Campaign 品牌"
+        size="sm"
+      >
+        {brandEditCampaign ? (
+          <div className="space-y-4">
+            <div>
+              <div className="text-[12px] text-muted-foreground mb-1">Campaign</div>
+              <div className="text-[14px] font-medium">{brandEditCampaign.campaignName}</div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">
+                {brandEditCampaign.accountName || brandEditCampaign.adAccountId}
+                {' · '}
+                {brandEditCampaign.campaignId}
+              </div>
+            </div>
+            <div>
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1">
+                品牌（brand_list）
+              </label>
+              <Select value={brandDraft} onValueChange={setBrandDraft}>
+                <SelectTrigger className="h-9 text-[13px]">
+                  <SelectValue placeholder="選擇品牌" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">未設定</SelectItem>
+                  {activeBrands.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.brandCode}
+                      {b.displayName !== b.brandCode ? ` — ${b.displayName}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
+              <Button
+                variant="secondary"
+                disabled={savingBrand}
+                onClick={() => setBrandEditCampaign(null)}
+              >
+                取消
+              </Button>
+              <Button
+                className="bg-teal-600 hover:bg-teal-700 text-white"
+                disabled={savingBrand}
+                onClick={() => void saveBrandAssignment()}
+              >
+                {savingBrand ? '儲存中…' : '儲存'}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </CrudModal>
     </div>
   );
 }

@@ -6,7 +6,6 @@ import {
   countMonthsInclusive,
   fetchAllAccounts,
   fetchDailyMetricsForRange,
-  linkFacebookAccountVchannels,
   loadCredentials,
   metaHistoryStartDate,
   monthEnd,
@@ -85,11 +84,6 @@ Deno.serve(async (req) => {
       }
 
       const nowIso = now.toISOString();
-      const vchannelLinks = await linkFacebookAccountVchannels(
-        supabase,
-        accounts,
-        nowIso,
-      );
 
       const enabled = accounts.filter(
         (a) => a.status === "ENABLED" || a.account_status === 1,
@@ -116,7 +110,6 @@ Deno.serve(async (req) => {
           account_business: Object.fromEntries(
             enabled.map((a) => [a.ad_account_id, a.business_key]),
           ),
-          vchannel_links: vchannelLinks,
         },
       };
       const { error } = await supabase.from("facebook_ads_backfill_jobs").insert(job);

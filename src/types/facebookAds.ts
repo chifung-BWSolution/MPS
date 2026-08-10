@@ -17,6 +17,10 @@ export type FacebookAdsCampaign = {
   campaignName: string;
   status: string;
   objective?: string;
+  /** Manual FK → brand_list.id */
+  brandListId?: string | null;
+  brandCode?: string;
+  brandDisplayName?: string;
   impressions: number;
   clicks: number;
   spendMicros: number;
@@ -63,15 +67,6 @@ export type FacebookAdsBackfillJob = {
     account_business?: Record<string, string>;
     businesses?: string[];
     credentials_count?: number;
-    vchannel_links?: {
-      accounts_processed?: number;
-      accounts_linked?: number;
-      vchannels_linked?: number;
-      vchannels_created?: number;
-      matched_explicit?: number;
-      matched_name?: number;
-      link_errors?: string[];
-    };
   };
 };
 

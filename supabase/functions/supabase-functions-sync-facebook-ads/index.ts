@@ -4,7 +4,6 @@ import {
   corsHeaders,
   fetchAllAccounts,
   fetchDailyMetricsForRange,
-  linkFacebookAccountVchannels,
   toIsoDate,
   type AccountRow,
 } from "../_shared/meta-ads.ts";
@@ -59,58 +58,7 @@ Deno.serve(async (req) => {
       throw new Error("Missing SUPABASE_URL or service role key");
     }
 
-    const body = await req.json().catch(() => ({}));
-    const action = String(body.action || "sync");
-
-    // Light sync: refresh accounts from Meta (optional) + link vchannel_accounts
-    if (action === "link_vchannels") {
-      const nowIso = new Date().toISOString();
-      const refreshFromApi = body.refreshFromApi !== false;
-      let accounts: AccountRow[] = [];
-      let credentialsCount = 0;
-      let businesses: string[] = [];
-
-      if (refreshFromApi) {
-        const fetched = await fetchAllAccounts(nowIso);
-        credentialsCount = fetched.credentials.length;
-        businesses = fetched.credentials.map((c) => c.name);
-        accounts = fetched.accounts;
-        await upsertAndPruneAccounts(supabase, accounts);
-      } else {
-        const { data, error } = await supabase
-          .from("facebook_ads_accounts")
-          .select(
-            "ad_account_id, account_name, currency_code, time_zone, status, account_status, business_key, business_name, last_synced_at, updated_at",
-          );
-        if (error) throw new Error(error.message);
-        accounts = ((data as AccountRow[] | null) ?? []).map((a) => ({
-          ...a,
-          last_synced_at: a.last_synced_at || nowIso,
-          updated_at: a.updated_at || nowIso,
-        }));
-      }
-
-      const vchannelLinks = await linkFacebookAccountVchannels(
-        supabase,
-        accounts,
-        nowIso,
-      );
-      return new Response(
-        JSON.stringify({
-          success: true,
-          action: "link_vchannels",
-          accounts_processed: accounts.length,
-          credentials_count: credentialsCount,
-          businesses,
-          vchannel_links: vchannelLinks,
-          synced_at: nowIso,
-        }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 200,
-        },
-      );
-    }
+    await req.json().catch(() => ({}));
 
     await supabase.from("facebook_ads_sync_runs").insert({
       id: runId,
@@ -128,12 +76,6 @@ Deno.serve(async (req) => {
     const { credentials, accounts } = await fetchAllAccounts(nowIso);
     const prunedAccounts = await upsertAndPruneAccounts(supabase, accounts);
 
-    const vchannelLinks = await linkFacebookAccountVchannels(
-      supabase,
-      accounts,
-      nowIso,
-    );
-
     const { daily, campaigns, errors } = await fetchDailyMetricsForRange(
       credentials,
       accounts,
@@ -142,6 +84,7 @@ Deno.serve(async (req) => {
       nowIso,
     );
 
+    // Omit brand_list_id so manual brand assignments survive upserts
     for (let i = 0; i < campaigns.length; i += 500) {
       const chunk = campaigns.slice(i, i + 500).map((c) => ({
         ...c,
@@ -184,7 +127,6 @@ Deno.serve(async (req) => {
           error_count: errors.length,
           pruned_accounts: prunedAccounts,
           mode: "incremental_7d",
-          vchannel_links: vchannelLinks,
         },
       })
       .eq("id", runId);
@@ -205,7 +147,6 @@ Deno.serve(async (req) => {
         duration_ms: durationMs,
         errors: errors.slice(0, 20),
         synced_at: nowIso,
-        vchannel_links: vchannelLinks,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

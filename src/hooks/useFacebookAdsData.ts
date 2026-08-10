@@ -28,7 +28,14 @@ type CampaignMetaRow = {
   campaign_name: string;
   status: string;
   objective: string | null;
+  brand_list_id: string | null;
   last_synced_at: string | null;
+};
+
+type BrandRow = {
+  id: string;
+  brand_code: string;
+  display_name: string;
 };
 
 type SyncRow = {
@@ -115,14 +122,19 @@ export function useFacebookAdsData(dateFrom: string, dateTo: string) {
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const [accRes, campRes, syncRes, minRes, maxRes, aggRes] = await Promise.all([
+    const [accRes, campRes, brandRes, syncRes, minRes, maxRes, aggRes] = await Promise.all([
       supabase
         .from('facebook_ads_accounts')
         .select('*')
         .order('account_name', { ascending: true }),
       supabase.from('facebook_ads_campaigns').select(
-        'id,ad_account_id,campaign_id,campaign_name,status,objective,last_synced_at',
+        'id,ad_account_id,campaign_id,campaign_name,status,objective,brand_list_id,last_synced_at',
       ),
+      supabase
+        .from('brand_list')
+        .select('id, brand_code, display_name')
+        .eq('is_active', true)
+        .order('brand_code'),
       supabase
         .from('facebook_ads_sync_runs')
         .select('*')
@@ -166,6 +178,9 @@ export function useFacebookAdsData(dateFrom: string, dateTo: string) {
     const nameById = new Map(mappedAccounts.map((a) => [a.adAccountId, a.accountName]));
     const bizById = new Map(mappedAccounts.map((a) => [a.adAccountId, a.businessName]));
 
+    const brandById = new Map(
+      ((brandRes.data as BrandRow[] | null) ?? []).map((b) => [b.id, b]),
+    );
     const metaByKey = new Map(
       ((campRes.data as CampaignMetaRow[] | null) ?? []).map((c) => [c.id, c]),
     );
@@ -174,6 +189,8 @@ export function useFacebookAdsData(dateFrom: string, dateTo: string) {
       .map((row) => {
         const id = `${row.ad_account_id}:${row.campaign_id}`;
         const meta = metaByKey.get(id);
+        const brandId = meta?.brand_list_id ?? null;
+        const brand = brandId ? brandById.get(brandId) : undefined;
         const impressions = Number(row.impressions) || 0;
         const clicks = Number(row.clicks) || 0;
         return {
@@ -183,6 +200,9 @@ export function useFacebookAdsData(dateFrom: string, dateTo: string) {
           campaignName: meta?.campaign_name || row.campaign_id,
           status: meta?.status || 'UNKNOWN',
           objective: meta?.objective ?? undefined,
+          brandListId: brandId,
+          brandCode: brand?.brand_code,
+          brandDisplayName: brand?.display_name,
           impressions,
           clicks,
           spendMicros: Number(row.spend_micros) || 0,
@@ -247,6 +267,22 @@ export function useFacebookAdsData(dateFrom: string, dateTo: string) {
     }
   }, [refresh]);
 
+  const updateCampaignBrand = useCallback(
+    async (campaignId: string, brandListId: string | null) => {
+      const { error: updErr } = await supabase
+        .from('facebook_ads_campaigns')
+        .update({
+          brand_list_id: brandListId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', campaignId);
+      if (updErr) return { ok: false as const, error: updErr.message };
+      await refresh();
+      return { ok: true as const };
+    },
+    [refresh],
+  );
+
   return {
     accounts,
     campaigns,
@@ -258,5 +294,6 @@ export function useFacebookAdsData(dateFrom: string, dateTo: string) {
     error,
     refresh,
     triggerSync,
+    updateCampaignBrand,
   };
 }

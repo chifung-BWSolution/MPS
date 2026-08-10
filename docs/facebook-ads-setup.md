@@ -122,8 +122,8 @@ where jobname like '%ads-incremental%';
 
 | Slug | 用途 |
 |------|------|
-| `supabase-functions-sync-facebook-ads` | 最近 7 日增量 + 帳戶 prune（手動 + 每日 cron）+ 帳戶↔`vchannel_accounts` 連結；亦支援 `action: link_vchannels` |
-| `supabase-functions-facebook-ads-backfill-step` | 歷史回填（`start` / `pause` / `resume` / `cancel` / `step`）；`start` 時同步 Vchannel 連結 |
+| `supabase-functions-sync-facebook-ads` | 最近 7 日增量 + 帳戶 prune（手動 + 每日 cron） |
+| `supabase-functions-facebook-ads-backfill-step` | 歷史回填（`start` / `pause` / `resume` / `cancel` / `step`） |
 | `supabase-functions-sync-ads-website-links` | 網站列表「同步廣告網域」：**僅 Google** 目的地 URL 發現與連結 |
 
 部署：
@@ -138,13 +138,12 @@ npx supabase functions deploy supabase-functions-google-ads-backfill-step --proj
 
 Also apply:
 - `20260806200000_ads_website_junctions.sql`（`google_ads_campaign_websites`、`ads_discovered_domains`）
-- `20260806220000_facebook_ads_account_vchannels.sql`（drop FB↔website；`facebook_ads_account_vchannels` + `vchannel_accounts.facebook_ads_ad_account_id`）
+- `20260810040000_facebook_ads_campaign_brand.sql`（drop FB↔vchannel；`facebook_ads_campaigns.brand_list_id`）
 
-## Facebook ↔ Vchannel 自動連結
+## Campaign ↔ 品牌（手動）
 
-- Facebook：**Ad Account ↔ `vchannel_accounts`**（`facebook_ads_account_vchannels`），僅 `platform = 'Facebook'`
-- 匹配順序：`facebook_ads_ad_account_id` 明確對應 → 帳戶名稱對 `account_label` → **自動建立** Vchannel 帳號（空 `vchannel_codes`，可稍後補頻道）
-- 增量同步 / 回填 `start` / 影音頻道「同步 Facebook Ads」皆會觸發
+- `facebook_ads_campaigns.brand_list_id` → `brand_list.id`（uuid，可空）
+- 在 `/#marketing/facebook-ads` 點「品牌」欄開啟 dialog 手動設定；Ads sync **不會**覆寫此欄位
 
 ## 網站自動連結（Google only）
 
@@ -155,10 +154,9 @@ Also apply:
 
 | Hash | 說明 |
 |------|------|
-| `/#marketing/facebook-ads` | Campaign 報表（日期區間、Business/帳戶篩選） |
+| `/#marketing/facebook-ads` | Campaign 報表；手動設定品牌 |
 | `/#marketing/facebook-ads-sync` | 完整歷史回填控制台 |
 | `/#website/list` | 網站列表：Google 廣告狀態欄、同步廣告網域、未連結網域建立提示 |
-| `/#video/channels`（帳號分頁） | Vchannel 平台帳號：Facebook Ads 欄、同步 Facebook Ads |
 
 Business 篩選與 KPI 由 warehouse 動態產生，**不需改前端**即可支援新增憑證。
 

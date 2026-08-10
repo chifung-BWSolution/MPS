@@ -159,22 +159,6 @@ export function FacebookAdsSyncModule() {
               <div className="text-muted-foreground text-[11px]">錯誤數</div>
               <div className="font-medium">{job?.errorCount ?? 0}</div>
             </div>
-            <div>
-              <div className="text-muted-foreground text-[11px]">Vchannel 連結</div>
-              <div className="font-medium">{job?.meta?.vchannel_links?.vchannels_linked ?? '—'}</div>
-            </div>
-            <div>
-              <div className="text-muted-foreground text-[11px]">新建 Vchannel</div>
-              <div className="font-medium">{job?.meta?.vchannel_links?.vchannels_created ?? '—'}</div>
-            </div>
-            <div>
-              <div className="text-muted-foreground text-[11px]">有連結的廣告帳戶</div>
-              <div className="font-medium">{job?.meta?.vchannel_links?.accounts_linked ?? '—'}</div>
-            </div>
-            <div>
-              <div className="text-muted-foreground text-[11px]">名稱匹配</div>
-              <div className="font-medium">{job?.meta?.vchannel_links?.matched_name ?? '—'}</div>
-            </div>
           </div>
           <p className="text-[12px] text-muted-foreground leading-relaxed">
             Meta Insights 約僅保留近 37 個月資料。完整歷史以「每月一個步驟」推進，避免 Edge Function 逾時。
@@ -183,7 +167,7 @@ export function FacebookAdsSyncModule() {
             {job?.meta?.businesses?.length
               ? ` 目前任務涵蓋：${job.meta.businesses.join('、')}。`
               : ''}
-            {' '}啟動時會將 Facebook 廣告帳戶對應到 <code className="text-[11px]">vchannel_accounts</code>（platform = Facebook），找不到則自動建立。
+            {' '}Campaign 品牌請至「Facebook Ads」報表頁手動設定。
           </p>
         </div>
 

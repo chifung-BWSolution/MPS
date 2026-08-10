@@ -37,39 +37,7 @@ export function invokeFacebookAdsIncrementalSync() {
     businesses?: string[];
     business_keys?: string[];
     pruned_accounts?: number;
-    vchannel_links?: {
-      accounts_processed?: number;
-      accounts_linked?: number;
-      vchannels_linked?: number;
-      vchannels_created?: number;
-      matched_explicit?: number;
-      matched_name?: number;
-      link_errors?: string[];
-    };
   }>('supabase-functions-sync-facebook-ads', {});
-}
-
-/** Refresh facebook_ads_accounts (optional) and sync → vchannel_accounts (platform=Facebook). */
-export function invokeFacebookAdsVchannelLink(refreshFromApi = true) {
-  return invokeFunction<{
-    success?: boolean;
-    action?: string;
-    accounts_processed?: number;
-    credentials_count?: number;
-    businesses?: string[];
-    vchannel_links?: {
-      accounts_processed?: number;
-      accounts_linked?: number;
-      vchannels_linked?: number;
-      vchannels_created?: number;
-      matched_explicit?: number;
-      matched_name?: number;
-      link_errors?: string[];
-    };
-  }>('supabase-functions-sync-facebook-ads', {
-    action: 'link_vchannels',
-    refreshFromApi,
-  });
 }
 
 export function invokeFacebookAdsBackfill(action: string, jobId?: string) {
