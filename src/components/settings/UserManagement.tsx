@@ -8,6 +8,7 @@ import {
   AlertTriangle, Eye, EyeOff
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { resolveStaffOfficeAndDepartment } from '@/lib/staffMapping';
 
 // Role labels matching PRD
 const ROLE_OPTIONS: { value: string; label: string; color: string }[] = [
@@ -101,6 +102,11 @@ export function UserManagement() {
       const displayName = staff['Display Name'] || staff['Full Name'] || '';
       const workEmail = staff['Work Email'] || '';
       const resolvedGoogleEmail = googleEmail || workEmail || null;
+      const { office, department } = resolveStaffOfficeAndDepartment({
+        base_location: staff['O_Base Location'],
+        team_id: staff['N_Team'],
+        business_unit: staff['N_BU'],
+      });
 
       const { data, error } = await supabase
         .from('users')
@@ -109,7 +115,8 @@ export function UserManagement() {
           display_name: displayName,
           email: workEmail,
           role_tag: role,
-          department: staff['N_Team'] || null,
+          department: department || null,
+          office: office || null,
           google_email: resolvedGoogleEmail,
           classification: 'system_user',
           system_status: 'active',

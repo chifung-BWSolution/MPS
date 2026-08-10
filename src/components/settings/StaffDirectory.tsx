@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { Search, RefreshCw, Users, Phone, Mail, Building2, Briefcase, UserCheck, UserX, Tag, ChevronDown, Shield, Ban, CheckSquare, Square, MinusSquare, CloudDownload, CheckCircle2, AlertCircle, Loader2, ArrowUpDown, Database, Save, Chrome, Edit } from 'lucide-react';
 import { type BubbleStaff, toBubbleCdnUrl } from '@/types/bubble';
 import { supabase } from '@/lib/supabase';
+import { resolveStaffOfficeAndDepartment } from '@/lib/staffMapping';
 
 // Role labels (身份標籤) matching the PRD roles - determines page access
 const ROLE_LABELS: Record<string, { label: string; color: string; modules: string }> = {
@@ -90,12 +91,22 @@ export function StaffDirectory() {
       }));
       setStaffList(converted);
 
-      // Populate office map from staff_directory (department comes from user_info)
+      // Populate office/department from synced staffs (with Team → department mapping)
       const officeData: Record<string, string> = {};
+      const deptData: Record<string, string> = {};
       rows.forEach((row: any) => {
-        if (row.office) officeData[row.bubble_staff_id] = row.office;
+        const { office, department } = resolveStaffOfficeAndDepartment({
+          office: row.office,
+          base_location: row.base_location,
+          department: row.department,
+          team_id: row.team_id,
+          business_unit: row.business_unit,
+        });
+        if (office) officeData[row.bubble_staff_id] = office;
+        if (department) deptData[row.bubble_staff_id] = department;
       });
       setOfficeMap(prev => ({ ...prev, ...officeData }));
+      setDepartmentMap(prev => ({ ...prev, ...deptData }));
     } catch (err: any) {
       console.warn('[StaffDirectory] Supabase fetch error:', err.message);
       setError(err.message);
@@ -204,6 +215,26 @@ export function StaffDirectory() {
     loadUserInfo();
   }, [loadUserInfo]);
 
+  const getSyncedOfficeDepartment = useCallback((staffId: string) => {
+    const staff = staffList.find((s) => s._id === staffId);
+    if (!staff) return { office: null, department: null };
+    return resolveStaffOfficeAndDepartment({
+      base_location: staff['O_Base Location'],
+      team_id: staff['N_Team'],
+      business_unit: staff['N_BU'],
+    });
+  }, [staffList]);
+
+  const applySyncedOfficeDepartment = useCallback((staffId: string) => {
+    const { office, department } = getSyncedOfficeDepartment(staffId);
+    if (office) {
+      setOfficeMap((prev) => (prev[staffId] ? prev : { ...prev, [staffId]: office }));
+    }
+    if (department) {
+      setDepartmentMap((prev) => (prev[staffId] ? prev : { ...prev, [staffId]: department }));
+    }
+  }, [getSyncedOfficeDepartment]);
+
   // Save all user configs to Supabase user_info table
   const handleSaveUserConfigs = async () => {
     setSaving(true);
@@ -223,6 +254,8 @@ export function StaffDirectory() {
           const sysUser = systemUsersCache.find(su => su.staff_id === c.bubbleId);
           const googleEmail = googleEmailMap[c.bubbleId] || sysUser?.google_email || workEmail;
 
+          const synced = getSyncedOfficeDepartment(c.bubbleId);
+
           return {
             staff_id: c.bubbleId,
             role_tag: c.roleTag || null,
@@ -231,8 +264,8 @@ export function StaffDirectory() {
             display_name: displayName,
             email: workEmail,
             google_email: googleEmail,
-            office: officeMap[c.bubbleId] || null,
-            department: departmentMap[c.bubbleId] || null,
+            office: officeMap[c.bubbleId] || synced.office || null,
+            department: departmentMap[c.bubbleId] || synced.department || null,
             updated_at: new Date().toISOString(),
           };
         });
@@ -377,6 +410,7 @@ export function StaffDirectory() {
       } else {
         setSyncResult(data);
         await fetchFromSupabase();
+        await loadUserInfo();
       }
     } catch (err: any) {
       setSyncResult({ success: false, message: `Network error: ${err.message}` });
@@ -426,6 +460,9 @@ export function StaffDirectory() {
   };
 
   const handleSetClassification = (staffId: string, classification: StaffClassification) => {
+    if (classification === 'system_user') {
+      applySyncedOfficeDepartment(staffId);
+    }
     setUserConfigs(prev => {
       const existing = prev.find(c => c.bubbleId === staffId);
       if (existing) {
@@ -438,6 +475,7 @@ export function StaffDirectory() {
   };
 
   const handleSetRole = (staffId: string, roleTag: string) => {
+    applySyncedOfficeDepartment(staffId);
     setUserConfigs(prev => {
       const existing = prev.find(c => c.bubbleId === staffId);
       if (existing) {
