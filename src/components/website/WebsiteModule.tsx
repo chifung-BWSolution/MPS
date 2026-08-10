@@ -24,6 +24,10 @@ import { useDataStore } from '@/context/DataStore';
 import { adsStatusLabel, useAdsWebsiteLinks } from '@/hooks/useAdsWebsiteLinks';
 import type { AdsAppliedStatus, AdsDiscoveredDomain } from '@/types/adsWebsiteLink';
 import {
+  readSelectedWebsiteId,
+  writeSelectedWebsiteId,
+} from '@/lib/websiteNavigation';
+import {
   WebsiteVideosTab,
   WebsiteSocialTab,
   WebsiteAdsTab,
@@ -3072,14 +3076,31 @@ function PendingContent() {
 
 // ===== Main Export =====
 export function WebsiteModule({ subModule }: { subModule?: string }) {
+  const { profiles } = useWebsiteProfiles();
   const [selectedSite, setSelectedSite] = useState<WebsiteProfileFull | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
 
-  // Reset selections when sub-module changes (fixes sidebar nav bug)
+  // Reset selections when sub-module changes (fixes sidebar nav bug),
+  // but keep a pending deep-link website id from other modules.
   useEffect(() => {
-    setSelectedSite(null);
     setSelectedArticle(null);
+    const pendingId = readSelectedWebsiteId();
+    if (!pendingId) setSelectedSite(null);
   }, [subModule]);
+
+  // Open website detail when navigated here with a selected website id.
+  useEffect(() => {
+    const pendingId = readSelectedWebsiteId();
+    if (!pendingId || profiles.length === 0) return;
+    const site = profiles.find((p) => p.id === pendingId);
+    if (site) setSelectedSite(site);
+    else writeSelectedWebsiteId(null);
+  }, [profiles, subModule]);
+
+  const handleBackFromSite = () => {
+    writeSelectedWebsiteId(null);
+    setSelectedSite(null);
+  };
 
   // Article detail view (from articles-list)
   if (selectedArticle) {
@@ -3091,7 +3112,7 @@ export function WebsiteModule({ subModule }: { subModule?: string }) {
     return (
       <WebsiteDetail
         site={selectedSite}
-        onBack={() => setSelectedSite(null)}
+        onBack={handleBackFromSite}
         onSitePatch={patch => setSelectedSite(s => (s ? { ...s, ...patch } : null))}
       />
     );

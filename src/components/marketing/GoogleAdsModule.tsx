@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
+import { useApp } from '@/context/AppContext';
 import { resolveDateRange, useGoogleAdsData } from '@/hooks/useGoogleAdsData';
 import type { DateRangePreset, GoogleAdsCampaign } from '@/types/googleAds';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { openWebsiteDetail } from '@/lib/websiteNavigation';
 import { cn } from '@/lib/utils';
 
 type SortKey =
@@ -38,7 +40,7 @@ function getSortValue(c: GoogleAdsCampaign, key: SortKey): string | number {
     case 'campaign':
       return c.campaignName;
     case 'website':
-      return c.matchedDomains.join(', ');
+      return c.matchedWebsites.map((w) => w.domain).join(', ');
     case 'type':
       return c.advertisingChannelType || '';
     case 'status':
@@ -115,6 +117,7 @@ function daysAgoIso(n: number) {
 }
 
 export function GoogleAdsModule() {
+  const { navigateTo } = useApp();
   const [preset, setPreset] = useState<DateRangePreset>('30d');
   const [customFrom, setCustomFrom] = useState(daysAgoIso(30));
   const [customTo, setCustomTo] = useState(todayIso());
@@ -154,7 +157,7 @@ export function GoogleAdsModule() {
   const websiteOptions = useMemo(() => {
     const set = new Set<string>();
     for (const c of campaigns) {
-      for (const d of c.matchedDomains) set.add(d);
+      for (const w of c.matchedWebsites) set.add(w.domain);
     }
     return [...set].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
   }, [campaigns]);
@@ -164,11 +167,11 @@ export function GoogleAdsModule() {
     const rows = campaigns.filter((c) => {
       if (accountFilter !== 'all' && c.customerId !== accountFilter) return false;
       if (statusFilter !== 'all' && c.status.toUpperCase() !== statusFilter) return false;
-      if (websiteFilter === 'none' && c.matchedDomains.length > 0) return false;
+      if (websiteFilter === 'none' && c.matchedWebsites.length > 0) return false;
       if (
         websiteFilter !== 'all' &&
         websiteFilter !== 'none' &&
-        !c.matchedDomains.includes(websiteFilter)
+        !c.matchedWebsites.some((w) => w.domain === websiteFilter)
       ) {
         return false;
       }
@@ -177,7 +180,7 @@ export function GoogleAdsModule() {
         c.campaignName.toLowerCase().includes(q) ||
         (c.accountName || '').toLowerCase().includes(q) ||
         c.customerId.includes(q) ||
-        c.matchedDomains.some((d) => d.toLowerCase().includes(q))
+        c.matchedWebsites.some((w) => w.domain.toLowerCase().includes(q))
       );
     });
 
@@ -408,13 +411,19 @@ export function GoogleAdsModule() {
                       <div className="text-[11px] text-muted-foreground">{c.customerId}</div>
                     </td>
                     <td className="px-3 py-2.5 font-medium">{c.campaignName}</td>
-                    <td className="px-3 py-2.5 text-teal-700">
-                      {c.matchedDomains.length > 0 ? (
+                    <td className="px-3 py-2.5">
+                      {c.matchedWebsites.length > 0 ? (
                         <div className="space-y-0.5">
-                          {c.matchedDomains.map((domain) => (
-                            <div key={domain} className="text-[12px] leading-snug">
-                              {domain}
-                            </div>
+                          {c.matchedWebsites.map((w) => (
+                            <button
+                              key={`${w.websiteProfileId}:${w.domain}`}
+                              type="button"
+                              onClick={() => openWebsiteDetail(w.websiteProfileId, navigateTo)}
+                              className="block text-left text-[12px] leading-snug text-teal-700 hover:text-teal-800 hover:underline"
+                              title="開啟網站詳情"
+                            >
+                              {w.domain}
+                            </button>
                           ))}
                         </div>
                       ) : (

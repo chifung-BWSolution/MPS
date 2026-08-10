@@ -55,6 +55,7 @@ type CampaignWebsiteRow = {
   campaign_id: string;
   campaign_row_id: string;
   matched_domain: string;
+  website_profile_id: string;
 };
 
 function mapAccount(row: AccountRow): GoogleAdsAccount {
@@ -153,7 +154,7 @@ export function useGoogleAdsData(
       }),
       supabase
         .from('google_ads_campaign_websites')
-        .select('customer_id,campaign_id,campaign_row_id,matched_domain'),
+        .select('customer_id,campaign_id,campaign_row_id,matched_domain,website_profile_id'),
     ]);
 
     if (accRes.error || campRes.error || aggRes.error) {
@@ -174,18 +175,26 @@ export function useGoogleAdsData(
     setAccounts(mappedAccounts);
     const nameById = new Map(mappedAccounts.map((a) => [a.customerId, a.descriptiveName]));
 
-    const domainsByCampaign = new Map<string, string[]>();
+    const websitesByCampaign = new Map<
+      string,
+      { domain: string; websiteProfileId: string }[]
+    >();
     for (const link of (websiteRes.data as CampaignWebsiteRow[] | null) ?? []) {
       const key =
         link.campaign_row_id || `${link.customer_id}:${link.campaign_id}`;
       const domain = (link.matched_domain || '').trim();
-      if (!domain) continue;
-      const existing = domainsByCampaign.get(key) ?? [];
-      if (!existing.includes(domain)) existing.push(domain);
-      domainsByCampaign.set(key, existing);
+      const websiteProfileId = (link.website_profile_id || '').trim();
+      if (!domain || !websiteProfileId) continue;
+      const existing = websitesByCampaign.get(key) ?? [];
+      if (!existing.some((w) => w.websiteProfileId === websiteProfileId && w.domain === domain)) {
+        existing.push({ domain, websiteProfileId });
+      }
+      websitesByCampaign.set(key, existing);
     }
-    for (const domains of domainsByCampaign.values()) {
-      domains.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    for (const websites of websitesByCampaign.values()) {
+      websites.sort((a, b) =>
+        a.domain.localeCompare(b.domain, undefined, { sensitivity: 'base' }),
+      );
     }
 
     const metaByKey = new Map(
@@ -212,7 +221,7 @@ export function useGoogleAdsData(
           ctr: impressions > 0 ? clicks / impressions : 0,
           lastSyncedAt: meta?.last_synced_at ?? undefined,
           accountName: nameById.get(row.customer_id),
-          matchedDomains: domainsByCampaign.get(id) ?? [],
+          matchedWebsites: websitesByCampaign.get(id) ?? [],
         };
       })
       .sort((a, b) => b.costMicros - a.costMicros);

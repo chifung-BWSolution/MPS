@@ -10,6 +10,11 @@ export type GoogleAdsAccount = {
   lastSyncedAt?: string;
 };
 
+export type GoogleAdsMatchedWebsite = {
+  domain: string;
+  websiteProfileId: string;
+};
+
 export type GoogleAdsCampaign = {
   id: string;
   customerId: string;
@@ -25,8 +30,8 @@ export type GoogleAdsCampaign = {
   averageCpcMicros?: number;
   lastSyncedAt?: string;
   accountName?: string;
-  /** Domains from google_ads_campaign_websites.matched_domain */
-  matchedDomains: string[];
+  /** Links from google_ads_campaign_websites (matched_domain + website_profile_id) */
+  matchedWebsites: GoogleAdsMatchedWebsite[];
 };
 
 export type GoogleAdsSyncRun = {
