@@ -16,6 +16,7 @@ import {
   PITCHING_STATUS_OPTIONS,
   calcRemainingDays,
   formatProjectTypes,
+  hasRequiredCompanyName,
   matchesProjectTypeFilter,
   type PitchingRecord,
   type PitchingStatus,
@@ -28,6 +29,8 @@ type NewPitchingForm = {
   clientId: string;
   clientName: string;
   displayName: string;
+  companyNameEn: string;
+  companyNameZh: string;
   inquiryDate: string;
   description: string;
   projectTypes: PitchingProjectType[];
@@ -40,6 +43,8 @@ const emptyForm = (): NewPitchingForm => ({
   clientId: '',
   clientName: '',
   displayName: '',
+  companyNameEn: '',
+  companyNameZh: '',
   inquiryDate: todayIso(),
   description: '',
   projectTypes: [],
@@ -184,6 +189,10 @@ function NewPitchingModal({
       toast.error('請填寫顯示名稱');
       return;
     }
+    if (!hasRequiredCompanyName(form.companyNameEn, form.companyNameZh)) {
+      toast.error('請填寫公司名稱（英文或中文至少填寫一項）');
+      return;
+    }
     if (!form.inquiryDate) {
       toast.error('請選擇查詢日期');
       return;
@@ -237,6 +246,30 @@ function NewPitchingModal({
               系統會使用此名稱作為主要顯示，選擇客戶時會自動填入，可手動覆蓋
             </p>
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1">公司名稱 (Eng) *</label>
+              <Input
+                value={form.companyNameEn}
+                onChange={(e) => setForm((prev) => ({ ...prev, companyNameEn: e.target.value }))}
+                placeholder="Company name in English"
+                className="h-9 text-[13px]"
+              />
+            </div>
+            <div>
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1">公司名稱 (中文) *</label>
+              <Input
+                value={form.companyNameZh}
+                onChange={(e) => setForm((prev) => ({ ...prev, companyNameZh: e.target.value }))}
+                placeholder="公司中文名稱"
+                className="h-9 text-[13px]"
+              />
+            </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground -mt-2">
+            英文或中文至少填寫一項（可兩項都填）
+          </p>
 
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1">查詢日期 Enquiry Date *</label>
@@ -458,6 +491,8 @@ function PitchingList({
 type DetailDraft = {
   clientName: string;
   displayName: string;
+  companyNameEn: string;
+  companyNameZh: string;
   inquiryDate: string;
   description: string;
   projectTypes: PitchingProjectType[];
@@ -473,6 +508,8 @@ function draftFromRecord(record: PitchingRecord): DetailDraft {
   return {
     clientName: record.clientName,
     displayName: record.displayName,
+    companyNameEn: record.companyNameEn ?? '',
+    companyNameZh: record.companyNameZh ?? '',
     inquiryDate: record.inquiryDate,
     description: record.description ?? '',
     projectTypes: record.projectTypes,
@@ -686,6 +723,8 @@ export function PitchingDetail({
     return (
       draft.clientName !== initial.clientName ||
       draft.displayName !== initial.displayName ||
+      draft.companyNameEn !== initial.companyNameEn ||
+      draft.companyNameZh !== initial.companyNameZh ||
       draft.inquiryDate !== initial.inquiryDate ||
       draft.description !== initial.description ||
       draft.assignedPmName !== initial.assignedPmName ||
@@ -707,6 +746,10 @@ export function PitchingDetail({
       toast.error('提案顯示名稱不可為空');
       return;
     }
+    if (!hasRequiredCompanyName(draft.companyNameEn, draft.companyNameZh)) {
+      toast.error('請填寫公司名稱（英文或中文至少填寫一項）');
+      return;
+    }
     if (!draft.inquiryDate) {
       toast.error('請選擇查詢日期');
       return;
@@ -716,6 +759,8 @@ export function PitchingDetail({
     const payload: QuotationClientProjectUpdate = {
       clientName: draft.clientName,
       displayName: draft.displayName.trim(),
+      companyNameEn: draft.companyNameEn.trim() || undefined,
+      companyNameZh: draft.companyNameZh.trim() || undefined,
       inquiryDate: draft.inquiryDate,
       description: draft.description.trim() || undefined,
       projectTypes: draft.projectTypes,
@@ -819,6 +864,20 @@ export function PitchingDetail({
                 value={draft.displayName}
                 onChange={(displayName) => patchDraft({ displayName })}
               />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <EditableTextField
+                  label="公司名稱 (Eng) *"
+                  value={draft.companyNameEn}
+                  onChange={(companyNameEn) => patchDraft({ companyNameEn })}
+                  placeholder="Company name in English"
+                />
+                <EditableTextField
+                  label="公司名稱 (中文) *"
+                  value={draft.companyNameZh}
+                  onChange={(companyNameZh) => patchDraft({ companyNameZh })}
+                  placeholder="公司中文名稱"
+                />
+              </div>
               <EditableDateField
                 label="查詢日期"
                 value={draft.inquiryDate}
@@ -925,6 +984,8 @@ export function PitchingModule() {
       clientId: form.clientId,
       clientName: form.clientName,
       displayName: form.displayName.trim(),
+      companyNameEn: form.companyNameEn.trim() || undefined,
+      companyNameZh: form.companyNameZh.trim() || undefined,
       inquiryDate: form.inquiryDate,
       description: form.description.trim() || undefined,
       projectTypes: form.projectTypes,

@@ -35,6 +35,8 @@ export interface PitchingRecord {
   clientName: string;
   clientId?: string;
   displayName: string;
+  companyNameEn?: string;
+  companyNameZh?: string;
   inquiryDate: string;
   description?: string;
   projectTypes: PitchingProjectType[];
@@ -115,6 +117,14 @@ export function matchesProjectTypeFilter(
 ): boolean {
   if (filter === 'all') return true;
   return types.includes(filter as PitchingProjectType);
+}
+
+/** At least one company name (English or Chinese) must be provided. */
+export function hasRequiredCompanyName(
+  en: string | undefined | null,
+  zh: string | undefined | null,
+): boolean {
+  return Boolean(en?.trim() || zh?.trim());
 }
 
 export function generatePitchingId(existingCount: number): string {
