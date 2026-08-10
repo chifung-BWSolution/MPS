@@ -225,10 +225,12 @@ const AppContext = (globalThis as any)[APP_CONTEXT_KEY] as React.Context<AppCont
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const { systemUser, session } = useAuth();
-  // Parse module/submodule from hash: #module/submodule
+  // Parse module/submodule from hash: #module/submodule[?query]
+  // Query strings (e.g. campaign detail) must not pollute the submenu id.
   const parseHash = () => {
-    const hash = window.location.hash.replace('#', '');
-    const [mod, sub] = hash.split('/');
+    const hash = window.location.hash.replace(/^#/, '');
+    const path = hash.split('?')[0] || '';
+    const [mod, sub] = path.split('/');
     return { mod: mod || 'dashboard', sub: sub || '' };
   };
 
@@ -238,14 +240,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return resolveSubModule(mod, sub || undefined);
   });
 
-  // Normalize hash if it points to a hidden/invalid sub-module
+  // Normalize hash if it points to a hidden/invalid sub-module.
+  // Preserve any query string (e.g. campaign detail params).
   useEffect(() => {
     const { mod, sub } = parseHash();
     const resolved = resolveSubModule(mod, sub || undefined);
-    const current = window.location.hash.replace('#', '');
-    const expected = `${mod}/${resolved}`;
-    if (current !== expected) {
-      window.location.replace(`#${expected}`);
+    const raw = window.location.hash.replace(/^#/, '');
+    const qIndex = raw.indexOf('?');
+    const query = qIndex >= 0 ? raw.slice(qIndex) : '';
+    const path = qIndex >= 0 ? raw.slice(0, qIndex) : raw;
+    const expectedPath = `${mod}/${resolved}`;
+    if (path !== expectedPath) {
+      window.location.replace(`#${expectedPath}${query}`);
     }
   }, []);
 

@@ -8,7 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { openWebsiteDetail } from '@/lib/websiteNavigation';
+import {
+  parseAdsCampaignHashQuery,
+  setGoogleAdsCampaignHash,
+} from '@/lib/adsCampaignNavigation';
 import { cn } from '@/lib/utils';
+import { GoogleAdsCampaignDetail } from './campaign-detail/GoogleAdsCampaignDetail';
 
 type SortKey =
   | 'account'
@@ -116,14 +121,34 @@ function daysAgoIso(n: number) {
   return d.toISOString().slice(0, 10);
 }
 
+function readInitialListRange() {
+  const q = parseAdsCampaignHashQuery();
+  const preset = q.preset || '30d';
+  const customFrom = q.from || daysAgoIso(30);
+  const customTo = q.to || todayIso();
+  return {
+    preset: preset as DateRangePreset,
+    customFrom,
+    customTo,
+    range: resolveDateRange(preset, customFrom, customTo),
+  };
+}
+
 export function GoogleAdsModule() {
   const { navigateTo } = useApp();
-  const [preset, setPreset] = useState<DateRangePreset>('30d');
-  const [customFrom, setCustomFrom] = useState(daysAgoIso(30));
-  const [customTo, setCustomTo] = useState(todayIso());
-  const [range, setRange] = useState(() =>
-    resolveDateRange('30d', daysAgoIso(30), todayIso()),
-  );
+  const [hashQuery, setHashQuery] = useState(() => parseAdsCampaignHashQuery());
+
+  useEffect(() => {
+    const onHashChange = () => setHashQuery(parseAdsCampaignHashQuery());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  const initial = useMemo(() => readInitialListRange(), []);
+  const [preset, setPreset] = useState<DateRangePreset>(initial.preset);
+  const [customFrom, setCustomFrom] = useState(initial.customFrom);
+  const [customTo, setCustomTo] = useState(initial.customTo);
+  const [range, setRange] = useState(() => initial.range);
 
   const {
     accounts,
@@ -141,6 +166,14 @@ export function GoogleAdsModule() {
   useEffect(() => {
     setRange(resolveDateRange(preset, customFrom, customTo, dataMinDate, dataMaxDate));
   }, [preset, customFrom, customTo, dataMinDate, dataMaxDate]);
+
+  // When returning from detail (campaign cleared), restore range from hash if present.
+  useEffect(() => {
+    if (hashQuery.campaign) return;
+    if (hashQuery.preset) setPreset(hashQuery.preset);
+    if (hashQuery.from) setCustomFrom(hashQuery.from);
+    if (hashQuery.to) setCustomTo(hashQuery.to);
+  }, [hashQuery.campaign, hashQuery.preset, hashQuery.from, hashQuery.to]);
 
   const [search, setSearch] = useState('');
   const [accountFilter, setAccountFilter] = useState('all');
@@ -233,6 +266,28 @@ export function GoogleAdsModule() {
       toast.success(`最近 7 日資料已更新${secs}${rows}`);
     } else toast.error(result.error || '同步失敗');
   };
+
+  const openCampaign = (c: GoogleAdsCampaign) => {
+    setGoogleAdsCampaignHash({
+      campaignKey: c.id,
+      preset,
+      from: range.from,
+      to: range.to,
+    });
+  };
+
+  if (hashQuery.campaign) {
+    return (
+      <GoogleAdsCampaignDetail
+        campaignKey={hashQuery.campaign}
+        initialPreset={hashQuery.preset || preset}
+        initialFrom={hashQuery.from || range.from}
+        initialTo={hashQuery.to || range.to}
+        dataMinDate={dataMinDate}
+        dataMaxDate={dataMaxDate}
+      />
+    );
+  }
 
   return (
     <div className="space-y-0">
@@ -356,7 +411,7 @@ export function GoogleAdsModule() {
         </div>
 
         <div className="text-[12px] text-muted-foreground">
-          MCC 564-140-4438 · 報表由每日指標彙總
+          MCC 564-140-4438 · 報表由每日指標彙總 · 點擊列可開啟 Campaign 詳情
           {dataMinDate && dataMaxDate
             ? ` · 已同步資料 ${dataMinDate} ~ ${dataMaxDate}`
             : ' · 尚無每日指標（請至「Google Ads 同步」執行歷史回填）'}
@@ -402,7 +457,16 @@ export function GoogleAdsModule() {
                 filtered.map((c) => (
                   <tr
                     key={c.id}
-                    className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openCampaign(c)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openCampaign(c);
+                      }
+                    }}
+                    className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer"
                   >
                     <td className="px-3 py-2.5">
                       <div className="font-medium text-foreground">
@@ -410,7 +474,7 @@ export function GoogleAdsModule() {
                       </div>
                       <div className="text-[11px] text-muted-foreground">{c.customerId}</div>
                     </td>
-                    <td className="px-3 py-2.5 font-medium">{c.campaignName}</td>
+                    <td className="px-3 py-2.5 font-medium text-teal-800">{c.campaignName}</td>
                     <td className="px-3 py-2.5">
                       {c.matchedWebsites.length > 0 ? (
                         <div className="space-y-0.5">
@@ -418,7 +482,10 @@ export function GoogleAdsModule() {
                             <button
                               key={`${w.websiteProfileId}:${w.domain}`}
                               type="button"
-                              onClick={() => openWebsiteDetail(w.websiteProfileId, navigateTo)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openWebsiteDetail(w.websiteProfileId, navigateTo);
+                              }}
                               className="block text-left text-[12px] leading-snug text-teal-700 hover:text-teal-800 hover:underline"
                               title="開啟網站詳情"
                             >

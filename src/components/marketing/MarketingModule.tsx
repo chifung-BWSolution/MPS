@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { SocialPostsModule } from './SocialPostsModule';
 import { EdmManagementModule } from './EdmManagementModule';
 import { GoogleAdsModule } from './GoogleAdsModule';
@@ -10,9 +11,24 @@ import { GraphicDesignModule } from './GraphicDesignModule';
 import { BacklinkModule } from './BacklinkModule';
 import { GoogleBusinessModule } from './GoogleBusinessModule';
 import { MarketingCalendar } from './MarketingCalendar';
+import { parseAdsCampaignHashQuery } from '@/lib/adsCampaignNavigation';
 
 export function MarketingModule({ subModule }: { subModule?: string }) {
   const activeTab = subModule || 'calendar';
+  const [adsDetailOpen, setAdsDetailOpen] = useState(
+    () => activeTab === 'google-ads' && !!parseAdsCampaignHashQuery().campaign,
+  );
+
+  useEffect(() => {
+    const sync = () => {
+      setAdsDetailOpen(
+        activeTab === 'google-ads' && !!parseAdsCampaignHashQuery().campaign,
+      );
+    };
+    sync();
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
+  }, [activeTab]);
 
   const getTitle = () => {
     switch (activeTab) {
@@ -33,16 +49,17 @@ export function MarketingModule({ subModule }: { subModule?: string }) {
   };
 
   const { title, subtitle } = getTitle();
+  const hidePageHeader = adsDetailOpen;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-[32px] font-bold tracking-tight">{title}</h1>
-        <p className="text-[14px] text-muted-foreground mt-1">{subtitle}</p>
-      </div>
+      {!hidePageHeader && (
+        <div>
+          <h1 className="text-[32px] font-bold tracking-tight">{title}</h1>
+          <p className="text-[14px] text-muted-foreground mt-1">{subtitle}</p>
+        </div>
+      )}
 
-      {/* Content */}
       {activeTab === 'calendar' && <MarketingCalendar />}
       {activeTab === 'social' && <SocialPostsModule />}
       {activeTab === 'edm' && <EdmManagementModule />}

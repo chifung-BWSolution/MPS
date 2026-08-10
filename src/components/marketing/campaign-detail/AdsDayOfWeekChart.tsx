@@ -1,0 +1,64 @@
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import type { AdsDailySeriesPoint } from './types';
+
+const DOW_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
+
+export function AdsDayOfWeekChart({ series }: { series: AdsDailySeriesPoint[] }) {
+  const buckets = DOW_LABELS.map((label) => ({
+    day: label,
+    clicks: 0,
+    cost: 0,
+  }));
+
+  for (const point of series) {
+    const [y, m, d] = point.date.split('-').map(Number);
+    const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    buckets[dow].clicks += point.clicks;
+    buckets[dow].cost += point.cost;
+  }
+
+  const data = buckets.map((b) => ({
+    ...b,
+    cost: Number(b.cost.toFixed(2)),
+  }));
+
+  return (
+    <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md shadow-card p-4 h-full">
+      <div className="mb-3">
+        <h3 className="text-[14px] font-semibold">Day of week</h3>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          期間內各星期幾的 Clicks / Cost 合計
+        </p>
+      </div>
+      <div className="h-[240px]">
+        {series.every((p) => p.clicks === 0 && p.cost === 0) ? (
+          <div className="h-full flex items-center justify-center text-[12px] text-muted-foreground">
+            此期間尚無資料
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+              <YAxis yAxisId="left" tick={{ fontSize: 11 }} width={40} allowDecimals={false} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} width={44} />
+              <Tooltip contentStyle={{ fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Bar yAxisId="left" dataKey="clicks" name="Clicks" fill="#2563eb" radius={[3, 3, 0, 0]} />
+              <Bar yAxisId="right" dataKey="cost" name="Cost" fill="#f59e0b" radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </div>
+  );
+}

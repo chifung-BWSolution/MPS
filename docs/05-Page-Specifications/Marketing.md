@@ -18,6 +18,16 @@
 | `/marketing/backlink` | 反向連結 | 反向連結購買紀錄 |
 | `/marketing/google-business` | Google Business | Google Business 登記 |
 
+### Google Ads — Campaign 詳情
+
+- **列表：** `#marketing/google-ads` — MCC campaign 成效表；點擊列開啟詳情。
+- **詳情：** `#marketing/google-ads?campaign={customerId}:{campaignId}&preset=30d&from=YYYY-MM-DD&to=YYYY-MM-DD`
+  - 繼承列表的日期區間，詳情頁可再調整；變更會寫回 hash（可重新整理／分享）。
+  - 資料來源：`google_ads_campaign_daily_metrics`（campaign 每日指標）。
+  - 區塊：KPI（含前期比較與 sparkline）、Performance 趨勢圖、Traffic efficiency donut、Day-of-week、Daily metrics 表。
+  - 預留空狀態：Ad Groups / Keywords / Search Terms（尚未同步細項）。
+  - 共用 shell（`AdsCampaignDetailShell`）供後續 Facebook Ads 詳情複用。
+
 ---
 
 ## Google Business

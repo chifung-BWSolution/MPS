@@ -73,3 +73,37 @@ export type GoogleAdsBackfillJob = {
 };
 
 export type DateRangePreset = '7d' | '14d' | '30d' | '90d' | 'ytd' | 'all' | 'custom';
+
+export type GoogleAdsDailyMetricPoint = {
+  date: string;
+  impressions: number;
+  clicks: number;
+  costMicros: number;
+  conversions: number;
+  ctr: number;
+  averageCpcMicros: number;
+};
+
+export type GoogleAdsMetricTotals = {
+  impressions: number;
+  clicks: number;
+  costMicros: number;
+  conversions: number;
+  ctr: number;
+  averageCpcMicros: number;
+  cpaMicros: number | null;
+};
+
+export type GoogleAdsCampaignDetail = {
+  customerId: string;
+  campaignId: string;
+  campaignName: string;
+  status: string;
+  advertisingChannelType?: string;
+  accountName?: string;
+  currencyCode?: string;
+  matchedWebsites: GoogleAdsMatchedWebsite[];
+  series: GoogleAdsDailyMetricPoint[];
+  totals: GoogleAdsMetricTotals;
+  previousTotals: GoogleAdsMetricTotals;
+};
