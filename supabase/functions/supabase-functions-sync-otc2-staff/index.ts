@@ -231,6 +231,7 @@ Deno.serve(async (req: Request) => {
 
       const active = isActiveStaff(staff);
       const office = resolveOffice(staff);
+      const department = resolveDepartment(staff);
       const entryDate = toDateString(staff.entry_date);
 
       return {
@@ -244,9 +245,9 @@ Deno.serve(async (req: Request) => {
         private_email: staff.private_email || null,
         work_phone: staff.work_phone || staff.direct_phone || staff.login_mobile || null,
         private_phone: staff.private_phone || null,
-        base_location: office,
-        // Confirmed: overwrite office from OTC2 base location; do not touch department.
+        base_location: staff.base_location || staff.o_base_location || null,
         office,
+        department,
         birthday: staff.birthday || null,
         entry_date: entryDate,
         joining_date: entryDate,
@@ -285,6 +286,31 @@ Deno.serve(async (req: Request) => {
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
       );
+    }
+
+    // Backfill users.office / users.department from synced staff when still empty
+    const backfillRows = upsertData.filter((row) => row.office || row.department);
+    for (const row of backfillRows) {
+      const patch: Record<string, string> = { updated_at: new Date().toISOString() };
+      if (row.office) patch.office = row.office;
+      if (row.department) patch.department = row.department;
+
+      const { error: backfillError } = await supabaseAdmin
+        .from("users")
+        .update(patch)
+        .eq("staff_id", row.bubble_staff_id)
+        .or(
+          [
+            row.office ? "office.is.null" : "",
+            row.department ? "department.is.null" : "",
+          ].filter(Boolean).join(","),
+        );
+
+      if (backfillError) {
+        console.warn(
+          `[sync-otc2-staff] users backfill skipped for ${row.bubble_staff_id}: ${backfillError.message}`,
+        );
+      }
     }
 
     const activeCount = syncable.filter(isActiveStaff).length;
