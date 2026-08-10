@@ -1,4 +1,4 @@
-import { useState, useImperativeHandle, forwardRef } from 'react';
+import { useState, useImperativeHandle, forwardRef, useEffect } from 'react';
 import { Copy, Check, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -35,6 +35,8 @@ type Props = {
   onSummaryGenerated?: (summary: string) => void;
   /** 隱藏內建「產生清單」按鈕與摘要（由父層整合 Cost Structure 後統一產生） */
   hideGenerateSection?: boolean;
+  /** 變更時重設表單（用於載入已儲存報價單） */
+  formKey?: string;
 };
 
 export type ClientRequirementsFormRef = {
@@ -183,7 +185,7 @@ function RadioGroup({
 }
 
 export const ClientRequirementsQuestionnaire = forwardRef<ClientRequirementsFormRef, Props>(
-  function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerated, hideGenerateSection = false }, ref) {
+  function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerated, hideGenerateSection = false, formKey }, ref) {
   const { systemUser, userInfo } = useAuth();
   const defaultPmName = systemUser?.display_name || userInfo?.display_name || '';
 
@@ -195,6 +197,18 @@ export const ClientRequirementsQuestionnaire = forwardRef<ClientRequirementsForm
   const [summary, setSummary] = useState('');
   const [copied, setCopied] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!formKey) return;
+    setForm({
+      ...emptyClientRequirementsForm(),
+      filledBy: defaultPmName,
+      ...initialForm,
+    });
+    setSummary('');
+    setErrors([]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when formKey changes
+  }, [formKey]);
 
   useImperativeHandle(ref, () => ({
     validate: () => validateClientRequirementsForm(form),
