@@ -26,6 +26,10 @@ import {
   termsTemplates,
 } from '@/data/quotationData';
 import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
+import { ClientFormModal } from '@/components/crm/ClientFormModal';
+import { useQuotationClientList } from '@/hooks/useQuotationClientList';
+import type { QuotationClientInput } from '@/data/quotationClientList';
+import { useAuth } from '@/context/AuthContext';
 import { useQuotations, type QuotationWizardPayload } from '@/hooks/useQuotations';
 import {
   formatProjectTypes,
@@ -230,7 +234,9 @@ type NewQuotationWizardProps = {
 
 function NewQuotationWizard({ onClose, onSaved, saveQuotation, editQuote, editPayload }: NewQuotationWizardProps) {
   const isEditMode = Boolean(editQuote && editPayload);
-  const { records: pitchingRecords, loading: pitchingLoading } = useQuotationClientProjects();
+  const { records: pitchingRecords, loading: pitchingLoading, addRecord: addPitchingRecord, refresh: refreshPitching } = useQuotationClientProjects();
+  const { addClient } = useQuotationClientList();
+  const { systemUser, userInfo } = useAuth();
   const [step, setStep] = useState(isEditMode ? 3 : 1);
   const [editingId, setEditingId] = useState<string | undefined>(editQuote?.id);
   const [saving, setSaving] = useState(false);
@@ -261,6 +267,8 @@ function NewQuotationWizard({ onClose, onSaved, saveQuotation, editQuote, editPa
   const [integratedSummary, setIntegratedSummary] = useState(editPayload?.integratedSummary ?? '');
   const [summaryCopied, setSummaryCopied] = useState(false);
   const questionnaireRef = useRef<ClientRequirementsFormRef>(null);
+  const [showQuickAddClient, setShowQuickAddClient] = useState(false);
+  const [savingClient, setSavingClient] = useState(false);
 
   const selectedPitching = useMemo(
     () => pitchingRecords.find((record) => record.id === selectedPitchingId),
@@ -517,6 +525,13 @@ function NewQuotationWizard({ onClose, onSaved, saveQuotation, editQuote, editPa
   };
 
   const handleAddCustomService = () => {
+    setServices([...services, {
+      id: `svc-custom-${Date.now()}`, name: '', price: 0, cost: 0, supplierName: '',
+      quantity: 1, discount: 0, discountType: 'percentage', isVisible: true, isSelected: true,
+    }]);
+  };
+
+  const handleGenerateIntegratedSummary = () => {
     const validationErrors = questionnaireRef.current?.validate() ?? ['問卷尚未載入'];
     if (validationErrors.length) {
       setCostErrors(validationErrors);
@@ -532,6 +547,44 @@ function NewQuotationWizard({ onClose, onSaved, saveQuotation, editQuote, editPa
     toast.success('客戶需求清單已產生（含 Cost Structure）');
   };
 
+  const handleQuickAddClient = async (input: QuotationClientInput) => {
+    setSavingClient(true);
+    const client = await addClient(input);
+    if (!client) {
+      setSavingClient(false);
+      toast.error('儲存客戶失敗');
+      return null;
+    }
+
+    const pmName = systemUser?.display_name || userInfo?.display_name || '—';
+    const { data: pitching, error } = await addPitchingRecord({
+      clientId: client.id,
+      clientName: client.companyNameZh,
+      displayName: client.companyNameZh,
+      companyNameEn: client.companyNameEn,
+      companyNameZh: client.companyNameZh,
+      inquiryDate: client.inquiryDate,
+      description: client.notes,
+      projectTypes: [],
+      assignedPm: '',
+      assignedPmName: pmName,
+      status: 'initial',
+      notes: client.notes,
+    });
+    setSavingClient(false);
+
+    if (error || !pitching) {
+      toast.error('客戶已儲存，但建立 Pitching 紀錄失敗');
+      return client;
+    }
+
+    await refreshPitching();
+    setSelectedPitchingId(pitching.id);
+    setClientName(client.companyNameZh);
+    if (client.notes) setRequirementsText(client.notes);
+    return client;
+  };
+
   const handleCopyIntegratedSummary = async () => {
     if (!integratedSummary) return;
     try {
@@ -544,14 +597,7 @@ function NewQuotationWizard({ onClose, onSaved, saveQuotation, editQuote, editPa
     }
   };
 
-  const handleGenerateIntegratedSummary = () => {
-    setServices([...services, {
-      id: `svc-custom-${Date.now()}`, name: '', price: 0, cost: 0, supplierName: '',
-      quantity: 1, discount: 0, discountType: 'percentage', isVisible: true, isSelected: true,
-    }]);
-  };
-
-  const updateService = (id: string, field: keyof QuotationServiceItem, value: any) => {
+  const updateService = (id: string, field: keyof QuotationServiceItem, value: unknown) => {
     setServices(services.map(s => s.id === id ? { ...s, [field]: value } : s));
   };
 
@@ -566,14 +612,26 @@ function NewQuotationWizard({ onClose, onSaved, saveQuotation, editQuote, editPa
           <div className="flex items-center gap-3">
             <h3 className="text-[18px] font-bold">{isEditMode ? `編輯報價單 · ${editQuote?.quoteId}` : '新建報價單'}</h3>
             {step > 1 && !isEditMode && (
-              <button
-                type="button"
-                onClick={handlePreviousStep}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] border border-border rounded-md hover:bg-muted transition-colors duration-200 text-muted-foreground hover:text-foreground"
-              >
-                <ArrowLeft size={14} />
-                上一步
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handlePreviousStep}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] border border-border rounded-md hover:bg-muted transition-colors duration-200 text-muted-foreground hover:text-foreground"
+                >
+                  <ArrowLeft size={14} />
+                  上一步
+                </button>
+                {step === 2 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickAddClient(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] border border-teal-200 text-teal-700 bg-teal-50 rounded-md hover:bg-teal-100 transition-colors duration-200 font-medium"
+                  >
+                    <Plus size={14} />
+                    快速新增客戶
+                  </button>
+                )}
+              </>
             )}
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm">✕</button>
@@ -912,11 +970,16 @@ function NewQuotationWizard({ onClose, onSaved, saveQuotation, editQuote, editPa
           </div>
         )}
       </div>
+
+      <ClientFormModal
+        open={showQuickAddClient}
+        onClose={() => setShowQuickAddClient(false)}
+        onSave={handleQuickAddClient}
+        saving={savingClient}
+      />
     </div>
   );
 }
-
-// ===== APPROVAL MODULE =====
 function QuotationApproval({ onPreviewQuote }: { onPreviewQuote?: (quote: QuotationEntry) => void }) {
   const [selectedQuote, setSelectedQuote] = useState<QuotationEntry | null>(null);
   const [showWonModal, setShowWonModal] = useState(false);

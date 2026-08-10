@@ -5,13 +5,13 @@ import { cn } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
+import { useQuotationClientList } from '@/hooks/useQuotationClientList';
 import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   pitchingStatusConfig,
-  pitchingClientOptions,
   PITCHING_PROJECT_TYPE_OPTIONS,
   PITCHING_STATUS_OPTIONS,
   calcRemainingDays,
@@ -144,10 +144,12 @@ function NewPitchingModal({
   isOpen,
   onClose,
   onSubmit,
+  clientOptions,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (form: NewPitchingForm) => void;
+  clientOptions: { value: string; label: string; keywords: string }[];
 }) {
   const [form, setForm] = useState<NewPitchingForm>(emptyForm);
 
@@ -155,28 +157,18 @@ function NewPitchingModal({
     if (isOpen) setForm(emptyForm());
   }, [isOpen]);
 
-  const clientOptions = useMemo(
-    () =>
-      pitchingClientOptions.map((c) => ({
-        value: c.id,
-        label: c.name,
-        keywords: c.name,
-      })),
-    [],
-  );
-
   const handleClose = () => {
     setForm(emptyForm());
     onClose();
   };
 
   const handleClientChange = (clientId: string) => {
-    const client = pitchingClientOptions.find((c) => c.id === clientId);
+    const client = clientOptions.find((c) => c.value === clientId);
     setForm((prev) => ({
       ...prev,
       clientId,
-      clientName: client?.name ?? '',
-      displayName: prev.displayName || client?.name || '',
+      clientName: client?.label ?? '',
+      displayName: prev.displayName || client?.label || '',
     }));
   };
 
@@ -968,11 +960,22 @@ export function PitchingModule() {
   const { navigateTo } = useApp();
   const { systemUser, userInfo } = useAuth();
   const { records, loading, error, lastSyncedAt, addRecord, updateStatus, updateRecord } = useQuotationClientProjects();
+  const { records: clientListRecords } = useQuotationClientList();
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedRecord, setSelectedRecord] = useState<PitchingRecord | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
   const pmName = systemUser?.display_name || userInfo?.display_name || '—';
+
+  const pitchingClientOptions = useMemo(
+    () =>
+      clientListRecords.map((c) => ({
+        value: c.id,
+        label: c.companyNameZh,
+        keywords: [c.companyNameZh, c.companyNameEn, c.contactPerson, c.brandName].filter(Boolean).join(' '),
+      })),
+    [clientListRecords],
+  );
 
   const handleView = (record: PitchingRecord) => {
     setSelectedRecord(record);
@@ -1082,6 +1085,7 @@ export function PitchingModule() {
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         onSubmit={handleAddPitching}
+        clientOptions={pitchingClientOptions}
       />
     </div>
   );
