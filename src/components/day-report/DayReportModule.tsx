@@ -1580,75 +1580,15 @@ function SubmitReportPage() {
             </div>
           )}
           {/* Hours Status Bar */}
-          <div className="space-y-2.5">
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-border/60">
-                <span className="text-[14px] font-medium text-muted-foreground">{formatDateShort(selectedDate)}</span>
-                {(selectedDateIsHoliday || selectedDateIsSun) && <span className="text-[12px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">OT 日</span>}
-                {selectedDateIsSat && !selectedDateIsHoliday && <span className="text-[12px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 font-medium">星期六</span>}
-              </div>
-
-              {/* Total Filled Progress */}
-              <div className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-border/60">
-                <Clock size={14} className="text-muted-foreground" />
-                <span className="text-[14px] text-muted-foreground">已填：</span>
-                <span className={cn('text-[20px] font-bold',
-                  hoursMatch || isDayOff ? 'text-teal-600' :
-                  (selectedDateIsHoliday || selectedDateIsSun) ? 'text-amber-600' :
-                  isOT ? 'text-amber-600' :
-                  totalHours > 0 ? 'text-rose-500' : 'text-gray-400'
-                )}>
-                  {totalHours}h
-                  {(hoursMatch || isDayOff) && <span className="text-[13px] font-normal ml-1 text-teal-600">✓</span>}
-                  {!isDayOff && (isOT || ((selectedDateIsHoliday || selectedDateIsSun) && totalHours > 0)) &&
-                    <span className="text-[13px] font-normal ml-1">
-                      OT {selectedDateIsHoliday || selectedDateIsSun ? `+${totalHours}h` : `+${otHours}h`}
-                    </span>
-                  }
-                </span>
-                {!isDayOff && (
-                  <div className="w-24 h-2.5 bg-muted rounded-full overflow-hidden">
-                    <div className={cn('h-full rounded-full transition-all',
-                      hoursMatch ? 'bg-teal-500' :
-                      (selectedDateIsHoliday || selectedDateIsSun) ? 'bg-amber-500' :
-                      isOT ? 'bg-amber-500' :
-                      totalHours >= targetHours ? 'bg-teal-500' : 'bg-rose-400'
-                    )} style={{ width: `${Math.min((totalHours / Math.max(targetHours, 1)) * 100, 100)}%` }} />
-                  </div>
-                )}
-                {!isDayOff && !hoursMatch && totalHours > 0 && (
-                  <span className="text-[13px] text-rose-500 font-medium">
-                    {totalHours < targetHours ? `差 ${(targetHours - totalHours).toFixed(1)}h` : `超出 ${(totalHours - targetHours).toFixed(1)}h`}
-                  </span>
-                )}
-                {isDayOff && (
-                  <span className="text-[13px] text-slate-600 font-medium">放假日</span>
-                )}
-                {aiUsedInEntries && (<span className="flex items-center gap-1 text-[13px] px-2 py-1 rounded-full bg-purple-50 text-purple-700 font-medium"><Bot size={11} /> AI 輔助</span>)}
-              </div>
-
-              {/* Delete entire report — shown only when a saved report exists for this date */}
-              {isUpdateMode && (
-                <button
-                  type="button"
-                  onClick={handleDeleteReport}
-                  disabled={isDeleting || isSubmitting || isTempSaving}
-                  title="刪除整份匯報"
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-2 rounded-lg border text-[14px] font-medium transition-all',
-                    isDeleting || isSubmitting || isTempSaving
-                      ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
-                      : 'bg-white text-rose-600 border-rose-300 hover:bg-rose-50 hover:border-rose-400',
-                  )}
-                >
-                  {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                  {isDeleting ? '刪除中...' : '刪除匯報'}
-                </button>
-              )}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-border/60 shrink-0">
+              <span className="text-[14px] font-medium text-muted-foreground">{formatDateShort(selectedDate)}</span>
+              {(selectedDateIsHoliday || selectedDateIsSun) && <span className="text-[12px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">OT 日</span>}
+              {selectedDateIsSat && !selectedDateIsHoliday && <span className="text-[12px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 font-medium">星期六</span>}
             </div>
 
-            {/* Target Hours option field */}
-            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-rose-50 border-2 border-rose-300 flex-wrap">
+            {/* Target Hours option field — between date and filled progress */}
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-rose-50 border-2 border-rose-300 flex-wrap min-w-0">
               <span className="text-[13px] font-semibold text-rose-700 shrink-0">目標工時：</span>
               <div className="flex items-center gap-1.5 flex-wrap">
                 {([
@@ -1662,7 +1602,7 @@ function SubmitReportPage() {
                     type="button"
                     onClick={() => applyHoursPreset(opt.id)}
                     className={cn(
-                      'px-3.5 py-1.5 rounded-full text-[13px] font-medium transition-all border',
+                      'px-3 py-1.5 rounded-full text-[13px] font-medium transition-all border',
                       hoursPreset === opt.id
                         ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
                         : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300 hover:text-blue-700',
@@ -1692,6 +1632,64 @@ function SubmitReportPage() {
                 </div>
               )}
             </div>
+
+            {/* Total Filled Progress */}
+            <div className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-border/60 shrink-0">
+              <Clock size={14} className="text-muted-foreground" />
+              <span className="text-[14px] text-muted-foreground">已填：</span>
+              <span className={cn('text-[20px] font-bold',
+                hoursMatch || isDayOff ? 'text-teal-600' :
+                (selectedDateIsHoliday || selectedDateIsSun) ? 'text-amber-600' :
+                isOT ? 'text-amber-600' :
+                totalHours > 0 ? 'text-rose-500' : 'text-gray-400'
+              )}>
+                {totalHours}h
+                {(hoursMatch || isDayOff) && <span className="text-[13px] font-normal ml-1 text-teal-600">✓</span>}
+                {!isDayOff && (isOT || ((selectedDateIsHoliday || selectedDateIsSun) && totalHours > 0)) &&
+                  <span className="text-[13px] font-normal ml-1">
+                    OT {selectedDateIsHoliday || selectedDateIsSun ? `+${totalHours}h` : `+${otHours}h`}
+                  </span>
+                }
+              </span>
+              {!isDayOff && (
+                <div className="w-24 h-2.5 bg-muted rounded-full overflow-hidden">
+                  <div className={cn('h-full rounded-full transition-all',
+                    hoursMatch ? 'bg-teal-500' :
+                    (selectedDateIsHoliday || selectedDateIsSun) ? 'bg-amber-500' :
+                    isOT ? 'bg-amber-500' :
+                    totalHours >= targetHours ? 'bg-teal-500' : 'bg-rose-400'
+                  )} style={{ width: `${Math.min((totalHours / Math.max(targetHours, 1)) * 100, 100)}%` }} />
+                </div>
+              )}
+              {!isDayOff && !hoursMatch && totalHours > 0 && (
+                <span className="text-[13px] text-rose-500 font-medium">
+                  {totalHours < targetHours ? `差 ${(targetHours - totalHours).toFixed(1)}h` : `超出 ${(totalHours - targetHours).toFixed(1)}h`}
+                </span>
+              )}
+              {isDayOff && (
+                <span className="text-[13px] text-slate-600 font-medium">放假日</span>
+              )}
+              {aiUsedInEntries && (<span className="flex items-center gap-1 text-[13px] px-2 py-1 rounded-full bg-purple-50 text-purple-700 font-medium"><Bot size={11} /> AI 輔助</span>)}
+            </div>
+
+            {/* Delete entire report — shown only when a saved report exists for this date */}
+            {isUpdateMode && (
+              <button
+                type="button"
+                onClick={handleDeleteReport}
+                disabled={isDeleting || isSubmitting || isTempSaving}
+                title="刪除整份匯報"
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-2 rounded-lg border text-[14px] font-medium transition-all',
+                  isDeleting || isSubmitting || isTempSaving
+                    ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
+                    : 'bg-white text-rose-600 border-rose-300 hover:bg-rose-50 hover:border-rose-400',
+                )}
+              >
+                {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                {isDeleting ? '刪除中...' : '刪除匯報'}
+              </button>
+            )}
           </div>
 
           {/* Quick Templates */}
