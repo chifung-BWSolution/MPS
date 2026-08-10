@@ -310,6 +310,7 @@ interface DataStoreContextType {
 | `ai-keyword-generator` | OpenAI integration for SEO keyword generation |
 | `ai-title-generator` | OpenAI integration for SEO title suggestions |
 | `notification-scheduler` | Cron-triggered alerts (credit card expiry, plugin expiry) |
+| `send-email` | Transactional email via Resend (`RESEND_API_KEY`) |
 | `report-generator` | Automated performance report PDF generation |
 
 ### 5.5 Realtime Subscriptions
@@ -389,6 +390,8 @@ Developer → Git Push → Vite Build → Static Hosting (Vercel / Netlify)
 | `VITE_SUPABASE_ANON_KEY` | Supabase publishable anon key |
 | `SUPABASE_SERVICE_KEY` | Server-side service role key (Edge Functions only) |
 | `OPENAI_API_KEY` | For AI keyword/title generation (Edge Functions only) |
+| `RESEND_API_KEY` | Resend API key for transactional email (Edge Function `send-email` only) |
+| `RESEND_FROM_EMAIL` | Optional default From address (e.g. `MPS <noreply@your-domain.com>`) |
 
 ---
 
