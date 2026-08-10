@@ -4,6 +4,8 @@ import {
   corsHeaders,
   fetchAllAccounts,
   fetchDailyMetricsForRange,
+  loadCredentials,
+  probeInsightsConversions,
   toIsoDate,
   type AccountRow,
 } from "../_shared/meta-ads.ts";
@@ -58,7 +60,50 @@ Deno.serve(async (req) => {
       throw new Error("Missing SUPABASE_URL or service role key");
     }
 
-    await req.json().catch(() => ({}));
+    const body = (await req.json().catch(() => ({}))) as {
+      probe?: boolean;
+      adAccountId?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      businessKey?: string;
+    };
+
+    // Read-only Insights sample for debugging conversion action_type names.
+    if (body.probe) {
+      const credentials = loadCredentials();
+      const adAccountId = String(body.adAccountId || "").trim();
+      if (!adAccountId) {
+        throw new Error("probe requires adAccountId");
+      }
+      const cred =
+        credentials.find((c) => c.id === body.businessKey) || credentials[0];
+      if (!cred) throw new Error("No Meta credentials configured");
+      const dateTo = body.dateTo || toIsoDate(new Date());
+      const from = new Date();
+      from.setUTCDate(from.getUTCDate() - 6);
+      const dateFrom = body.dateFrom || toIsoDate(from);
+      const samples = await probeInsightsConversions(
+        cred,
+        adAccountId,
+        dateFrom,
+        dateTo,
+      );
+      return new Response(
+        JSON.stringify({
+          success: true,
+          probe: true,
+          business_key: cred.id,
+          ad_account_id: adAccountId,
+          date_from: dateFrom,
+          date_to: dateTo,
+          campaigns: samples,
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        },
+      );
+    }
 
     await supabase.from("facebook_ads_sync_runs").insert({
       id: runId,
