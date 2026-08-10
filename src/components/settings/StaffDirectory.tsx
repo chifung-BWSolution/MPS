@@ -1425,11 +1425,13 @@ function StaffTable({
                     {/* 職位 */}
                     <td className="px-4 py-3">
                       <span className="text-[13px]">{staffMember['Position'] || '—'}</span>
-                      {staffMember['O_Probation'] && staffMember['O_Probation'] !== '正式員工' && (
+                      {(staffMember['O_Probation'] && staffMember['O_Probation'] !== '正式員工') ||
+                      staffMember['O_Status'] === 'Probation' ||
+                      staffMember['O_Status_Text'] === 'Probation' ? (
                         <span className="ml-1.5 px-1.5 py-0.5 text-[10px] bg-amber-50 text-amber-700 rounded">
-                          {staffMember['O_Probation']}
+                          {staffMember['O_Probation'] || '試用期'}
                         </span>
-                      )}
+                      ) : null}
                     </td>
                     {/* 電郵 */}
                     <td className="px-4 py-3 text-muted-foreground">

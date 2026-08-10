@@ -58,6 +58,13 @@ function isActiveStaff(staff: Otc2Staff): boolean {
   return status === "Active" || status === "Probation";
 }
 
+function resolveProbationStatus(staff: Otc2Staff): string | null {
+  if (staff.o_probation) return staff.o_probation;
+  const status = staff.o_status || staff.o_status_text || "";
+  if (status === "Probation") return "試用期";
+  return null;
+}
+
 function toDateString(value: string | null | undefined): string | null {
   if (!value) return null;
   const d = new Date(value);
@@ -65,9 +72,37 @@ function toDateString(value: string | null | undefined): string | null {
   return d.toISOString().split("T")[0];
 }
 
+function normalizeOffice(baseLocation: string | null | undefined): string | null {
+  const raw = (baseLocation || "").trim().toLowerCase();
+  if (!raw) return null;
+  if (raw.includes("sz") || raw.includes("深圳") || raw.includes("shenzhen")) return "深圳";
+  if (raw.includes("hk") || raw.includes("香港") || raw.includes("hong kong")) return "香港";
+  return null;
+}
+
 function resolveOffice(staff: Otc2Staff): string | null {
-  const loc = (staff.base_location || staff.o_base_location || "").trim();
-  return loc || null;
+  return normalizeOffice(staff.base_location || staff.o_base_location);
+}
+
+/** Map OTC team_name → MPS department (keep in sync with src/lib/staffMapping.ts) */
+function resolveDepartment(staff: Otc2Staff): string | null {
+  const team = (staff.team_name || staff.n_team || "").trim();
+  const bu = (staff.bu_name || staff.n_bu || "").trim().toLowerCase();
+  if (!team && !bu) return null;
+
+  if (/operation\s*admin|accounting|營運行政|會計/i.test(team)) return "Accounting & Admin";
+  if (/ob\s*system|商業系統/i.test(team) || (/\bsystem\b/i.test(team) && /ob|bwt/i.test(team))) {
+    return "System";
+  }
+  if (/^fc\s|fc\s*marketing|\bfc\b/i.test(team)) return "FC";
+  if (/marketing\s*and\s*branding|市場推廣|品牌設計/i.test(team)) {
+    return bu === "wine" || bu.includes("wine") ? "Wine" : "Marketing & Video";
+  }
+  if (bu === "wine" || bu.includes("wine")) return "Wine";
+  if (/bwa|bwf|bw\s*pm|ob\s*&\s*design|project\s*design|3d\s*design|furniture|工程項目/i.test(team)) {
+    return "FC";
+  }
+  return null;
 }
 
 async function fetchAllOtc2Staff(otc2: ReturnType<typeof createClient>): Promise<Otc2Staff[]> {
@@ -196,6 +231,7 @@ Deno.serve(async (req: Request) => {
 
       const active = isActiveStaff(staff);
       const office = resolveOffice(staff);
+      const department = resolveDepartment(staff);
       const entryDate = toDateString(staff.entry_date);
 
       return {
@@ -209,14 +245,14 @@ Deno.serve(async (req: Request) => {
         private_email: staff.private_email || null,
         work_phone: staff.work_phone || staff.direct_phone || staff.login_mobile || null,
         private_phone: staff.private_phone || null,
-        base_location: office,
-        // Confirmed: overwrite office from OTC2 base location; do not touch department.
+        base_location: staff.base_location || staff.o_base_location || null,
         office,
+        department,
         birthday: staff.birthday || null,
         entry_date: entryDate,
         joining_date: entryDate,
         termination_date: toDateString(staff.termination_date),
-        probation_status: staff.o_probation || null,
+        probation_status: resolveProbationStatus(staff),
         al_quota: staff.al_quota != null ? Number(staff.al_quota) : null,
         // Prefer human-readable names for UI filters; fall back to OTC2 reference ids.
         team_id: staff.team_name || staff.n_team || null,
@@ -250,6 +286,31 @@ Deno.serve(async (req: Request) => {
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
       );
+    }
+
+    // Backfill users.office / users.department from synced staff when still empty
+    const backfillRows = upsertData.filter((row) => row.office || row.department);
+    for (const row of backfillRows) {
+      const patch: Record<string, string> = { updated_at: new Date().toISOString() };
+      if (row.office) patch.office = row.office;
+      if (row.department) patch.department = row.department;
+
+      const { error: backfillError } = await supabaseAdmin
+        .from("users")
+        .update(patch)
+        .eq("staff_id", row.bubble_staff_id)
+        .or(
+          [
+            row.office ? "office.is.null" : "",
+            row.department ? "department.is.null" : "",
+          ].filter(Boolean).join(","),
+        );
+
+      if (backfillError) {
+        console.warn(
+          `[sync-otc2-staff] users backfill skipped for ${row.bubble_staff_id}: ${backfillError.message}`,
+        );
+      }
     }
 
     const activeCount = syncable.filter(isActiveStaff).length;

@@ -58,6 +58,13 @@ function isActiveStaff(staff: Otc2Staff): boolean {
   return status === "Active" || status === "Probation";
 }
 
+function resolveProbationStatus(staff: Otc2Staff): string | null {
+  if (staff.o_probation) return staff.o_probation;
+  const status = staff.o_status || staff.o_status_text || "";
+  if (status === "Probation") return "試用期";
+  return null;
+}
+
 function toDateString(value: string | null | undefined): string | null {
   if (!value) return null;
   const d = new Date(value);
@@ -65,9 +72,37 @@ function toDateString(value: string | null | undefined): string | null {
   return d.toISOString().split("T")[0];
 }
 
+function normalizeOffice(baseLocation: string | null | undefined): string | null {
+  const raw = (baseLocation || "").trim().toLowerCase();
+  if (!raw) return null;
+  if (raw.includes("sz") || raw.includes("深圳") || raw.includes("shenzhen")) return "深圳";
+  if (raw.includes("hk") || raw.includes("香港") || raw.includes("hong kong")) return "香港";
+  return null;
+}
+
 function resolveOffice(staff: Otc2Staff): string | null {
-  const loc = (staff.base_location || staff.o_base_location || "").trim();
-  return loc || null;
+  return normalizeOffice(staff.base_location || staff.o_base_location);
+}
+
+/** Map OTC team_name → MPS department (keep in sync with src/lib/staffMapping.ts) */
+function resolveDepartment(staff: Otc2Staff): string | null {
+  const team = (staff.team_name || staff.n_team || "").trim();
+  const bu = (staff.bu_name || staff.n_bu || "").trim().toLowerCase();
+  if (!team && !bu) return null;
+
+  if (/operation\s*admin|accounting|營運行政|會計/i.test(team)) return "Accounting & Admin";
+  if (/ob\s*system|商業系統/i.test(team) || (/\bsystem\b/i.test(team) && /ob|bwt/i.test(team))) {
+    return "System";
+  }
+  if (/^fc\s|fc\s*marketing|\bfc\b/i.test(team)) return "FC";
+  if (/marketing\s*and\s*branding|市場推廣|品牌設計/i.test(team)) {
+    return bu === "wine" || bu.includes("wine") ? "Wine" : "Marketing & Video";
+  }
+  if (bu === "wine" || bu.includes("wine")) return "Wine";
+  if (/bwa|bwf|bw\s*pm|ob\s*&\s*design|project\s*design|3d\s*design|furniture|工程項目/i.test(team)) {
+    return "FC";
+  }
+  return null;
 }
 
 async function fetchAllOtc2Staff(otc2: ReturnType<typeof createClient>): Promise<Otc2Staff[]> {
@@ -216,7 +251,7 @@ Deno.serve(async (req: Request) => {
         entry_date: entryDate,
         joining_date: entryDate,
         termination_date: toDateString(staff.termination_date),
-        probation_status: staff.o_probation || null,
+        probation_status: resolveProbationStatus(staff),
         al_quota: staff.al_quota != null ? Number(staff.al_quota) : null,
         // Prefer human-readable names for UI filters; fall back to OTC2 reference ids.
         team_id: staff.team_name || staff.n_team || null,
