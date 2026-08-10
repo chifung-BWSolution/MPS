@@ -58,8 +58,16 @@ export function StaffDirectory() {
         'Full Name': row.full_name || undefined,
         'Position': row.position || '',
         'O_User Role': row.user_role || '',
-        'O_Status': row.status === 'active' ? 'Active' : 'Inactive',
-        'O_Status_Text': row.status === 'active' ? 'Active' : 'Inactive',
+        'O_Status': row.status === 'active'
+          ? 'Active'
+          : row.probation_status && !row.termination_date
+            ? 'Probation'
+            : 'Inactive',
+        'O_Status_Text': row.status === 'active'
+          ? 'Active'
+          : row.probation_status && !row.termination_date
+            ? 'Probation'
+            : 'Inactive',
         'Work Email': row.work_email || '',
         'Private Email': row.private_email || undefined,
         'Work Phone': row.work_phone ? Number(row.work_phone) || undefined : undefined,
@@ -384,10 +392,9 @@ export function StaffDirectory() {
 
   // Check if a staff member is terminated/inactive
   const isTerminated = (staff: BubbleStaff): boolean => {
-    return (
-      (staff['O_Status'] !== 'Active' && staff['O_Status_Text'] !== 'Active') ||
-      !!staff['Termination Date']
-    );
+    if (staff['Termination Date']) return true;
+    const status = staff['O_Status'] || staff['O_Status_Text'] || '';
+    return status !== 'Active' && status !== 'Probation';
   };
 
   // Helpers - terminated staff auto-assigned to 'disabled' regardless of config

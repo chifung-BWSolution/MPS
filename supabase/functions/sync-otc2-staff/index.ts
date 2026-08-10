@@ -54,7 +54,8 @@ interface Otc2Staff {
 }
 
 function isActiveStaff(staff: Otc2Staff): boolean {
-  return staff.o_status === "Active" || staff.o_status_text === "Active";
+  const status = staff.o_status || staff.o_status_text || "";
+  return status === "Active" || status === "Probation";
 }
 
 function toDateString(value: string | null | undefined): string | null {
