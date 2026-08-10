@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 type SortKey =
   | 'account'
   | 'campaign'
+  | 'website'
   | 'type'
   | 'status'
   | 'impressions'
@@ -36,6 +37,8 @@ function getSortValue(c: GoogleAdsCampaign, key: SortKey): string | number {
       return c.accountName || c.customerId;
     case 'campaign':
       return c.campaignName;
+    case 'website':
+      return c.matchedDomains.join(', ');
     case 'type':
       return c.advertisingChannelType || '';
     case 'status':
@@ -139,6 +142,7 @@ export function GoogleAdsModule() {
   const [search, setSearch] = useState('');
   const [accountFilter, setAccountFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [websiteFilter, setWebsiteFilter] = useState('all');
   const [sortKey, setSortKey] = useState<SortKey>('cost');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
@@ -147,16 +151,33 @@ export function GoogleAdsModule() {
     [accounts],
   );
 
+  const websiteOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of campaigns) {
+      for (const d of c.matchedDomains) set.add(d);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [campaigns]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const rows = campaigns.filter((c) => {
       if (accountFilter !== 'all' && c.customerId !== accountFilter) return false;
       if (statusFilter !== 'all' && c.status.toUpperCase() !== statusFilter) return false;
+      if (websiteFilter === 'none' && c.matchedDomains.length > 0) return false;
+      if (
+        websiteFilter !== 'all' &&
+        websiteFilter !== 'none' &&
+        !c.matchedDomains.includes(websiteFilter)
+      ) {
+        return false;
+      }
       if (!q) return true;
       return (
         c.campaignName.toLowerCase().includes(q) ||
         (c.accountName || '').toLowerCase().includes(q) ||
-        c.customerId.includes(q)
+        c.customerId.includes(q) ||
+        c.matchedDomains.some((d) => d.toLowerCase().includes(q))
       );
     });
 
@@ -169,7 +190,7 @@ export function GoogleAdsModule() {
       }
       return compareText(String(av), String(bv)) * dir;
     });
-  }, [campaigns, search, accountFilter, statusFilter, sortKey, sortDir]);
+  }, [campaigns, search, accountFilter, statusFilter, websiteFilter, sortKey, sortDir]);
 
   const onSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -287,7 +308,7 @@ export function GoogleAdsModule() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜尋 campaign / 帳戶…"
+              placeholder="搜尋 campaign / 帳戶 / 網站…"
               className="pl-8 h-9 text-[13px] bg-white"
             />
           </div>
@@ -315,6 +336,20 @@ export function GoogleAdsModule() {
               <SelectItem value="REMOVED">REMOVED</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={websiteFilter} onValueChange={setWebsiteFilter}>
+            <SelectTrigger className="w-[200px] h-9 text-[13px] bg-white">
+              <SelectValue placeholder="網站" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部網站</SelectItem>
+              <SelectItem value="none">未關聯</SelectItem>
+              {websiteOptions.map((domain) => (
+                <SelectItem key={domain} value={domain}>
+                  {domain}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="text-[12px] text-muted-foreground">
@@ -336,6 +371,7 @@ export function GoogleAdsModule() {
               <tr>
                 <SortableTh label="帳戶" sortKey="account" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortableTh label="Campaign" sortKey="campaign" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SortableTh label="網站" sortKey="website" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortableTh label="類型" sortKey="type" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortableTh label="狀態" sortKey="status" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortableTh label="Impr." sortKey="impressions" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
@@ -347,14 +383,14 @@ export function GoogleAdsModule() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
                     載入中…
                   </td>
                 </tr>
               )}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
                     此日期區間尚無資料。請先到「Google Ads 同步」執行完整歷史回填，或按 Refresh recent。
                   </td>
                 </tr>
@@ -372,6 +408,19 @@ export function GoogleAdsModule() {
                       <div className="text-[11px] text-muted-foreground">{c.customerId}</div>
                     </td>
                     <td className="px-3 py-2.5 font-medium">{c.campaignName}</td>
+                    <td className="px-3 py-2.5 text-teal-700">
+                      {c.matchedDomains.length > 0 ? (
+                        <div className="space-y-0.5">
+                          {c.matchedDomains.map((domain) => (
+                            <div key={domain} className="text-[12px] leading-snug">
+                              {domain}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2.5 text-muted-foreground">
                       {c.advertisingChannelType || '—'}
                     </td>

@@ -25,6 +25,8 @@ export type GoogleAdsCampaign = {
   averageCpcMicros?: number;
   lastSyncedAt?: string;
   accountName?: string;
+  /** Domains from google_ads_campaign_websites.matched_domain */
+  matchedDomains: string[];
 };
 
 export type GoogleAdsSyncRun = {
