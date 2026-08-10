@@ -66,6 +66,9 @@ Deno.serve(async (req) => {
       dateFrom?: string;
       dateTo?: string;
       businessKey?: string;
+      /** Optional sync window override (YYYY-MM-DD). Defaults to last 7 days. */
+      syncDateFrom?: string;
+      syncDateTo?: string;
     };
 
     // Read-only Insights sample for debugging conversion action_type names.
@@ -113,10 +116,13 @@ Deno.serve(async (req) => {
 
     const now = new Date();
     const nowIso = now.toISOString();
-    const end = toIsoDate(now);
-    const startDate = new Date(now);
-    startDate.setUTCDate(startDate.getUTCDate() - (LOOKBACK_DAYS - 1));
-    const start = toIsoDate(startDate);
+    const end = body.syncDateTo || toIsoDate(now);
+    let start = body.syncDateFrom || "";
+    if (!start) {
+      const startDate = new Date(now);
+      startDate.setUTCDate(startDate.getUTCDate() - (LOOKBACK_DAYS - 1));
+      start = toIsoDate(startDate);
+    }
 
     const { credentials, accounts } = await fetchAllAccounts(nowIso);
     const prunedAccounts = await upsertAndPruneAccounts(supabase, accounts);
