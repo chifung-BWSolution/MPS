@@ -184,12 +184,18 @@ export function useGoogleAdsBackfill() {
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      // Progress may have advanced before a timeout/500 — refresh and continue
-      // auto-run when the month cursor moved forward.
+      // Progress may have advanced before a gateway/timeout error — refresh and
+      // keep auto-run when the job is still running.
       const latest = await refreshJob();
-      if (latest && latest.status === 'running' && latest.completedMonths > prevCompleted) {
-        setError(`步驟曾逾時，已繼續（${message}）`);
-        // keep autoRun so the next month is attempted
+      if (latest && latest.status === 'running') {
+        if (latest.completedMonths > prevCompleted) {
+          setError(`步驟曾逾時／閘道錯誤，已繼續（${message}）`);
+        } else {
+          // Same month still pending (e.g. OPTIONS 502) — brief pause then retry.
+          setError(`連線不穩，稍後重試（${message}）`);
+          await new Promise((r) => setTimeout(r, 2500));
+        }
+        // keep autoRun
       } else {
         setError(message);
         setAutoRun(false);
@@ -199,12 +205,12 @@ export function useGoogleAdsBackfill() {
     }
   }, [job, refreshJob]);
 
-  // Auto-chain steps while running
+  // Auto-chain steps while running. Longer gap reduces OPTIONS 502 after a heavy step.
   useEffect(() => {
     if (!autoRun || !job || job.status !== 'running') return;
     const t = setTimeout(() => {
       void stepOnce();
-    }, 300);
+    }, 1500);
     return () => clearTimeout(t);
   }, [autoRun, job?.id, job?.status, job?.completedMonths, stepOnce]);
 

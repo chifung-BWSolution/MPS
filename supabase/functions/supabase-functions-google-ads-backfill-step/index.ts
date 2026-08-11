@@ -10,7 +10,6 @@ import {
   monthEnd,
   monthStart,
   addMonths,
-  syncBreakdownDailyMetrics,
   toIsoDate,
 } from "../_shared/google-ads.ts";
 
@@ -38,8 +37,15 @@ type JobRow = {
 };
 
 Deno.serve(async (req) => {
+  // Keep preflight cheap and reliable — never do work on OPTIONS.
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/plain",
+      },
+    });
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -253,8 +259,10 @@ Deno.serve(async (req) => {
       if (error) throw new Error(`Daily upsert: ${error.message}`);
     }
 
-    // Advance campaign progress FIRST so a later breakdown timeout cannot
-    // leave the job stuck at 0% with a 500 response.
+    // Campaign metrics only in monthly backfill.
+    // Ad groups / keywords / search terms are synced by the daily incremental
+    // job — including them here overloads the Edge Function and causes 502s
+    // on the next CORS preflight after denser months (~2020+).
     const nextMonth = addMonths(cursor, 1);
     const completedMonths = job.completed_months + 1;
     const done = nextMonth > endBound;
@@ -263,7 +271,7 @@ Deno.serve(async (req) => {
       ? (prevMeta.recent_errors as string[])
       : [];
 
-    const { data: progressed, error: progErr } = await supabase
+    const { data: updated, error: upErr } = await supabase
       .from("google_ads_backfill_jobs")
       .update({
         cursor_month: toIsoDate(nextMonth > endBound ? endBound : nextMonth),
@@ -280,88 +288,21 @@ Deno.serve(async (req) => {
           enabled_customer_ids: customerIds,
           last_month: `${rangeFrom}..${rangeTo}`,
           last_month_rows: daily.length,
+          breakdown_sync: "deferred_to_incremental",
           recent_errors: [...errors, ...prevErrors].slice(0, 30),
         },
       })
       .eq("id", job.id)
       .select("*")
       .single();
-    if (progErr) throw new Error(progErr.message);
-
-    // Best-effort breakdown sync (ad groups / keywords / search terms).
-    // Never fail the month step for these — they are heavier and can timeout.
-    let breakdown = {
-      adGroupRows: 0,
-      keywordRows: 0,
-      searchTermRows: 0,
-      errors: [] as string[],
-    };
-    try {
-      // Skip search terms in monthly backfill (too heavy / easy to timeout).
-      // Search terms are filled by the daily incremental sync (last 7 days).
-      breakdown = await syncBreakdownDailyMetrics(
-        supabase,
-        accessToken,
-        customerIds,
-        rangeFrom,
-        rangeTo,
-        nowIso,
-        { sequential: true, includeSearchTerms: false },
-      );
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      breakdown.errors.push(`breakdown: ${msg}`.slice(0, 200));
-    }
-
-    const allErrors = [...errors, ...breakdown.errors];
-    const breakdownRows =
-      breakdown.adGroupRows + breakdown.keywordRows + breakdown.searchTermRows;
-    const progressedMeta = (progressed?.meta || {}) as Record<string, unknown>;
-
-    const { data: updated, error: upErr } = await supabase
-      .from("google_ads_backfill_jobs")
-      .update({
-        rows_upserted: Number(progressed?.rows_upserted || 0) + breakdownRows,
-        error_count: Number(progressed?.error_count || 0) + breakdown.errors.length,
-        last_error: allErrors[0] || progressed?.last_error || null,
-        updated_at: new Date().toISOString(),
-        meta: {
-          ...progressedMeta,
-          last_month_ad_group_rows: breakdown.adGroupRows,
-          last_month_keyword_rows: breakdown.keywordRows,
-          last_month_search_term_rows: breakdown.searchTermRows,
-          recent_errors: [...allErrors, ...prevErrors].slice(0, 30),
-        },
-      })
-      .eq("id", job.id)
-      .select("*")
-      .single();
-    if (upErr) {
-      // Progress already saved; return that rather than failing the step.
-      console.error("[google-ads-backfill-step] breakdown meta update:", upErr.message);
-      return json({
-        success: true,
-        action: "step",
-        month: `${rangeFrom}..${rangeTo}`,
-        rows: daily.length,
-        ad_group_rows: breakdown.adGroupRows,
-        keyword_rows: breakdown.keywordRows,
-        search_term_rows: breakdown.searchTermRows,
-        errors: allErrors.slice(0, 10),
-        job: progressed,
-        breakdown_meta_error: upErr.message,
-      });
-    }
+    if (upErr) throw new Error(upErr.message);
 
     return json({
       success: true,
       action: "step",
       month: `${rangeFrom}..${rangeTo}`,
       rows: daily.length,
-      ad_group_rows: breakdown.adGroupRows,
-      keyword_rows: breakdown.keywordRows,
-      search_term_rows: breakdown.searchTermRows,
-      errors: allErrors.slice(0, 10),
+      errors: errors.slice(0, 10),
       job: updated,
     });
   } catch (error) {
