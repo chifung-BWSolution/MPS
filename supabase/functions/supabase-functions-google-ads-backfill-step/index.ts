@@ -43,10 +43,12 @@ Deno.serve(async (req) => {
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  let requestJobId = "";
 
   try {
     const body = await req.json().catch(() => ({}));
     const action = String(body.action || "step");
+    requestJobId = String(body.jobId || "");
 
     if (action === "start") {
       const { data: active } = await supabase
@@ -251,18 +253,8 @@ Deno.serve(async (req) => {
       if (error) throw new Error(`Daily upsert: ${error.message}`);
     }
 
-    const breakdown = await syncBreakdownDailyMetrics(
-      supabase,
-      accessToken,
-      customerIds,
-      rangeFrom,
-      rangeTo,
-      nowIso,
-    );
-    const allErrors = [...errors, ...breakdown.errors];
-    const breakdownRows =
-      breakdown.adGroupRows + breakdown.keywordRows + breakdown.searchTermRows;
-
+    // Advance campaign progress FIRST so a later breakdown timeout cannot
+    // leave the job stuck at 0% with a 500 response.
     const nextMonth = addMonths(cursor, 1);
     const completedMonths = job.completed_months + 1;
     const done = nextMonth > endBound;
@@ -271,15 +263,15 @@ Deno.serve(async (req) => {
       ? (prevMeta.recent_errors as string[])
       : [];
 
-    const { data: updated, error: upErr } = await supabase
+    const { data: progressed, error: progErr } = await supabase
       .from("google_ads_backfill_jobs")
       .update({
         cursor_month: toIsoDate(nextMonth > endBound ? endBound : nextMonth),
         completed_months: completedMonths,
-        rows_upserted: job.rows_upserted + daily.length + breakdownRows,
+        rows_upserted: job.rows_upserted + daily.length,
         accounts_targeted: customerIds.length,
-        error_count: job.error_count + allErrors.length,
-        last_error: allErrors[0] || job.last_error,
+        error_count: job.error_count + errors.length,
+        last_error: errors[0] || job.last_error,
         status: done ? "completed" : "running",
         finished_at: done ? nowIso : null,
         updated_at: nowIso,
@@ -288,6 +280,53 @@ Deno.serve(async (req) => {
           enabled_customer_ids: customerIds,
           last_month: `${rangeFrom}..${rangeTo}`,
           last_month_rows: daily.length,
+          recent_errors: [...errors, ...prevErrors].slice(0, 30),
+        },
+      })
+      .eq("id", job.id)
+      .select("*")
+      .single();
+    if (progErr) throw new Error(progErr.message);
+
+    // Best-effort breakdown sync (ad groups / keywords / search terms).
+    // Never fail the month step for these — they are heavier and can timeout.
+    let breakdown = {
+      adGroupRows: 0,
+      keywordRows: 0,
+      searchTermRows: 0,
+      errors: [] as string[],
+    };
+    try {
+      // Skip search terms in monthly backfill (too heavy / easy to timeout).
+      // Search terms are filled by the daily incremental sync (last 7 days).
+      breakdown = await syncBreakdownDailyMetrics(
+        supabase,
+        accessToken,
+        customerIds,
+        rangeFrom,
+        rangeTo,
+        nowIso,
+        { sequential: true, includeSearchTerms: false },
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      breakdown.errors.push(`breakdown: ${msg}`.slice(0, 200));
+    }
+
+    const allErrors = [...errors, ...breakdown.errors];
+    const breakdownRows =
+      breakdown.adGroupRows + breakdown.keywordRows + breakdown.searchTermRows;
+    const progressedMeta = (progressed?.meta || {}) as Record<string, unknown>;
+
+    const { data: updated, error: upErr } = await supabase
+      .from("google_ads_backfill_jobs")
+      .update({
+        rows_upserted: Number(progressed?.rows_upserted || 0) + breakdownRows,
+        error_count: Number(progressed?.error_count || 0) + breakdown.errors.length,
+        last_error: allErrors[0] || progressed?.last_error || null,
+        updated_at: new Date().toISOString(),
+        meta: {
+          ...progressedMeta,
           last_month_ad_group_rows: breakdown.adGroupRows,
           last_month_keyword_rows: breakdown.keywordRows,
           last_month_search_term_rows: breakdown.searchTermRows,
@@ -297,7 +336,22 @@ Deno.serve(async (req) => {
       .eq("id", job.id)
       .select("*")
       .single();
-    if (upErr) throw new Error(upErr.message);
+    if (upErr) {
+      // Progress already saved; return that rather than failing the step.
+      console.error("[google-ads-backfill-step] breakdown meta update:", upErr.message);
+      return json({
+        success: true,
+        action: "step",
+        month: `${rangeFrom}..${rangeTo}`,
+        rows: daily.length,
+        ad_group_rows: breakdown.adGroupRows,
+        keyword_rows: breakdown.keywordRows,
+        search_term_rows: breakdown.searchTermRows,
+        errors: allErrors.slice(0, 10),
+        job: progressed,
+        breakdown_meta_error: upErr.message,
+      });
+    }
 
     return json({
       success: true,
@@ -313,6 +367,21 @@ Deno.serve(async (req) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[google-ads-backfill-step]", message);
+    // Persist the error so the UI shows why progress stopped (do not wipe meta).
+    if (requestJobId) {
+      try {
+        await supabase
+          .from("google_ads_backfill_jobs")
+          .update({
+            last_error: message.slice(0, 500),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", requestJobId)
+          .eq("status", "running");
+      } catch {
+        // ignore secondary failure
+      }
+    }
     return json({ error: message }, 500);
   }
 });

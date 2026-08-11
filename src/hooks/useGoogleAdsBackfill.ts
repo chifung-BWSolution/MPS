@@ -173,21 +173,31 @@ export function useGoogleAdsBackfill() {
     const current = job;
     if (!current || current.status !== 'running') return;
     steppingRef.current = true;
+    const prevCompleted = current.completedMonths;
     try {
       const res = await invokeGoogleAdsBackfill('step', current.id);
       if (res.job) {
         const mapped = mapJobFromApi(res.job);
         setJob(mapped);
+        setError(null);
         if (mapped.status !== 'running') setAutoRun(false);
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      setError(message);
-      setAutoRun(false);
+      // Progress may have advanced before a timeout/500 — refresh and continue
+      // auto-run when the month cursor moved forward.
+      const latest = await refreshJob();
+      if (latest && latest.status === 'running' && latest.completedMonths > prevCompleted) {
+        setError(`步驟曾逾時，已繼續（${message}）`);
+        // keep autoRun so the next month is attempted
+      } else {
+        setError(message);
+        setAutoRun(false);
+      }
     } finally {
       steppingRef.current = false;
     }
-  }, [job]);
+  }, [job, refreshJob]);
 
   // Auto-chain steps while running
   useEffect(() => {

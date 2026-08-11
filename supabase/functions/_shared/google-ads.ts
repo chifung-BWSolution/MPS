@@ -543,9 +543,12 @@ export async function fetchSearchTermDailyMetricsForRange(
       for (const row of result) {
         const campaignId = String(nestGet(row, "campaign.id") ?? "");
         const adGroupId = String(nestGet(row, "adGroup.id") ?? "");
+        // Truncate to stay under btree index key limits on the PK.
         const searchTerm = String(
           nestGet(row, "searchTermView.searchTerm") ?? "",
-        ).trim();
+        )
+          .trim()
+          .slice(0, 512);
         const metricDate = String(nestGet(row, "segments.date") ?? "");
         if (!campaignId || !adGroupId || !searchTerm || !metricDate) continue;
         rows.push({
@@ -582,6 +585,33 @@ export async function fetchSearchTermDailyMetricsForRange(
   return { rows, errors };
 }
 
+export type SyncBreakdownOptions = {
+  /** Prefer sequential fetches during backfill to avoid edge timeouts. */
+  sequential?: boolean;
+  includeSearchTerms?: boolean;
+};
+
+async function upsertChunks(
+  supabase: SupabaseClient,
+  table: string,
+  rows: Record<string, unknown>[],
+  onConflict: string,
+  label: string,
+  errors: string[],
+): Promise<number> {
+  let upserted = 0;
+  for (let i = 0; i < rows.length; i += 500) {
+    const chunk = rows.slice(i, i + 500);
+    const { error } = await supabase.from(table).upsert(chunk, { onConflict });
+    if (error) {
+      errors.push(`${label} upsert: ${error.message}`.slice(0, 200));
+      continue;
+    }
+    upserted += chunk.length;
+  }
+  return upserted;
+}
+
 /** Fetch + upsert ad group / keyword / search term daily metrics for a date range. */
 export async function syncBreakdownDailyMetrics(
   supabase: SupabaseClient,
@@ -590,78 +620,121 @@ export async function syncBreakdownDailyMetrics(
   dateFrom: string,
   dateTo: string,
   nowIso: string,
+  options: SyncBreakdownOptions = {},
 ): Promise<{
   adGroupRows: number;
   keywordRows: number;
   searchTermRows: number;
   errors: string[];
 }> {
-  const [adGroups, keywords, searchTerms] = await Promise.all([
-    fetchAdGroupDailyMetricsForRange(
-      accessToken,
-      customerIds,
-      dateFrom,
-      dateTo,
-      nowIso,
-    ),
-    fetchKeywordDailyMetricsForRange(
-      accessToken,
-      customerIds,
-      dateFrom,
-      dateTo,
-      nowIso,
-    ),
-    fetchSearchTermDailyMetricsForRange(
-      accessToken,
-      customerIds,
-      dateFrom,
-      dateTo,
-      nowIso,
-    ),
-  ]);
+  const sequential = options.sequential ?? false;
+  const includeSearchTerms = options.includeSearchTerms ?? true;
+  const errors: string[] = [];
 
-  const errors = [
-    ...adGroups.errors,
-    ...keywords.errors,
-    ...searchTerms.errors,
-  ];
+  let adGroups: { rows: AdGroupDailyRow[]; errors: string[] };
+  let keywords: { rows: KeywordDailyRow[]; errors: string[] };
+  let searchTerms: { rows: SearchTermDailyRow[]; errors: string[] } = {
+    rows: [],
+    errors: [],
+  };
 
-  for (let i = 0; i < adGroups.rows.length; i += 500) {
-    const chunk = adGroups.rows.slice(i, i + 500);
-    const { error } = await supabase
-      .from("google_ads_ad_group_daily_metrics")
-      .upsert(chunk, {
-        onConflict: "customer_id,campaign_id,ad_group_id,metric_date",
-      });
-    if (error) throw new Error(`Ad group daily upsert: ${error.message}`);
+  try {
+    if (sequential) {
+      adGroups = await fetchAdGroupDailyMetricsForRange(
+        accessToken,
+        customerIds,
+        dateFrom,
+        dateTo,
+        nowIso,
+      );
+      keywords = await fetchKeywordDailyMetricsForRange(
+        accessToken,
+        customerIds,
+        dateFrom,
+        dateTo,
+        nowIso,
+      );
+      if (includeSearchTerms) {
+        searchTerms = await fetchSearchTermDailyMetricsForRange(
+          accessToken,
+          customerIds,
+          dateFrom,
+          dateTo,
+          nowIso,
+        );
+      }
+    } else {
+      const results = await Promise.all([
+        fetchAdGroupDailyMetricsForRange(
+          accessToken,
+          customerIds,
+          dateFrom,
+          dateTo,
+          nowIso,
+        ),
+        fetchKeywordDailyMetricsForRange(
+          accessToken,
+          customerIds,
+          dateFrom,
+          dateTo,
+          nowIso,
+        ),
+        includeSearchTerms
+          ? fetchSearchTermDailyMetricsForRange(
+            accessToken,
+            customerIds,
+            dateFrom,
+            dateTo,
+            nowIso,
+          )
+          : Promise.resolve({ rows: [] as SearchTermDailyRow[], errors: [] }),
+      ]);
+      adGroups = results[0];
+      keywords = results[1];
+      searchTerms = results[2];
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    errors.push(`breakdown fetch: ${msg}`.slice(0, 200));
+    return {
+      adGroupRows: 0,
+      keywordRows: 0,
+      searchTermRows: 0,
+      errors,
+    };
   }
 
-  for (let i = 0; i < keywords.rows.length; i += 500) {
-    const chunk = keywords.rows.slice(i, i + 500);
-    const { error } = await supabase
-      .from("google_ads_keyword_daily_metrics")
-      .upsert(chunk, {
-        onConflict:
-          "customer_id,campaign_id,ad_group_id,criterion_id,metric_date",
-      });
-    if (error) throw new Error(`Keyword daily upsert: ${error.message}`);
-  }
+  errors.push(...adGroups.errors, ...keywords.errors, ...searchTerms.errors);
 
-  for (let i = 0; i < searchTerms.rows.length; i += 500) {
-    const chunk = searchTerms.rows.slice(i, i + 500);
-    const { error } = await supabase
-      .from("google_ads_search_term_daily_metrics")
-      .upsert(chunk, {
-        onConflict:
-          "customer_id,campaign_id,ad_group_id,search_term,metric_date",
-      });
-    if (error) throw new Error(`Search term daily upsert: ${error.message}`);
-  }
+  const adGroupRows = await upsertChunks(
+    supabase,
+    "google_ads_ad_group_daily_metrics",
+    adGroups.rows as unknown as Record<string, unknown>[],
+    "customer_id,campaign_id,ad_group_id,metric_date",
+    "Ad group daily",
+    errors,
+  );
+  const keywordRows = await upsertChunks(
+    supabase,
+    "google_ads_keyword_daily_metrics",
+    keywords.rows as unknown as Record<string, unknown>[],
+    "customer_id,campaign_id,ad_group_id,criterion_id,metric_date",
+    "Keyword daily",
+    errors,
+  );
+  const searchTermRows = await upsertChunks(
+    supabase,
+    "google_ads_search_term_daily_metrics",
+    searchTerms.rows as unknown as Record<string, unknown>[],
+    "customer_id,campaign_id,ad_group_id,search_term,metric_date",
+    "Search term daily",
+    errors,
+  );
 
   return {
-    adGroupRows: adGroups.rows.length,
-    keywordRows: keywords.rows.length,
-    searchTermRows: searchTerms.rows.length,
+    adGroupRows,
+    keywordRows,
+    searchTermRows,
     errors,
   };
 }
