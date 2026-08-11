@@ -711,6 +711,7 @@ export async function fetchLiveCampaignAssetGroups(
       metrics.conversions
     FROM asset_group
     WHERE campaign.id = ${campaignId}
+      AND asset_group.status != 'REMOVED'
       AND segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
   `;
   const result = await gaqlQuery(accessToken, customerId, query);
@@ -741,6 +742,13 @@ export async function fetchLiveCampaignAssetGroups(
   return rows;
 }
 
+function assetIdFromResourceName(resourceName: unknown): string {
+  const raw = String(resourceName ?? "");
+  if (!raw) return "";
+  const parts = raw.split("/");
+  return parts[parts.length - 1] || "";
+}
+
 /** Performance Max assets via asset_group_asset. */
 export async function fetchLiveCampaignPMaxAssets(
   accessToken: string,
@@ -750,16 +758,21 @@ export async function fetchLiveCampaignPMaxAssets(
   dateTo: string,
   limit = 150,
 ): Promise<LiveAssetRow[]> {
-  const query = `
+  // Keep SELECT close to Google's documented PMax asset report.
+  // Prefer asset.name when selectable; fall back to resource-name parsing.
+  const attempts = [
+    `
     SELECT
       asset_group.id,
       asset_group.name,
       asset.id,
       asset.name,
       asset.type,
+      asset.text_asset.text,
+      asset.youtube_video_asset.youtube_video_title,
       asset_group_asset.field_type,
       asset_group_asset.status,
-      asset_group_asset.performance_label,
+      asset_group_asset.primary_status,
       metrics.impressions,
       metrics.clicks,
       metrics.cost_micros,
@@ -768,26 +781,66 @@ export async function fetchLiveCampaignPMaxAssets(
     WHERE campaign.id = ${campaignId}
       AND asset_group_asset.status != 'REMOVED'
       AND segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
-  `;
-  const result = await gaqlQuery(accessToken, customerId, query);
+    `,
+    `
+    SELECT
+      asset_group.id,
+      asset_group.name,
+      asset_group_asset.asset,
+      asset_group_asset.field_type,
+      asset_group_asset.status,
+      asset_group_asset.primary_status,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions
+    FROM asset_group_asset
+    WHERE campaign.id = ${campaignId}
+      AND asset_group_asset.status != 'REMOVED'
+      AND segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
+    `,
+  ];
+
+  let result: GaqlRow[] = [];
+  let lastError: unknown;
+  for (const query of attempts) {
+    try {
+      result = await gaqlQuery(accessToken, customerId, query);
+      lastError = null;
+      break;
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  if (lastError) throw lastError;
+
   const rows: LiveAssetRow[] = [];
   for (const row of result) {
-    const assetId = String(nestGet(row, "asset.id") ?? "");
+    const assetId =
+      String(nestGet(row, "asset.id") ?? "") ||
+      assetIdFromResourceName(nestGet(row, "assetGroupAsset.asset"));
     if (!assetId) continue;
     const impressions = asInt(nestGet(row, "metrics.impressions"));
     const clicks = asInt(nestGet(row, "metrics.clicks"));
     const fieldType =
       String(nestGet(row, "assetGroupAsset.fieldType") ?? "") || undefined;
+    const primaryStatus =
+      String(nestGet(row, "assetGroupAsset.primaryStatus") ?? "") || undefined;
+    const assetName =
+      String(nestGet(row, "asset.name") ?? "") ||
+      String(nestGet(row, "asset.textAsset.text") ?? "") ||
+      String(nestGet(row, "asset.youtubeVideoAsset.youtubeVideoTitle") ?? "") ||
+      undefined;
+    const assetType = String(nestGet(row, "asset.type") ?? "") || undefined;
     rows.push({
       assetId,
-      assetName: String(nestGet(row, "asset.name") ?? "") || undefined,
-      assetType: String(nestGet(row, "asset.type") ?? "") || undefined,
+      assetName: assetName || (fieldType ? `${fieldType} · ${assetId}` : assetId),
+      assetType,
       fieldType,
-      performanceLabel:
-        String(nestGet(row, "assetGroupAsset.performanceLabel") ?? "") ||
-        undefined,
       status:
-        String(nestGet(row, "assetGroupAsset.status") ?? "") || undefined,
+        primaryStatus ||
+        String(nestGet(row, "assetGroupAsset.status") ?? "") ||
+        undefined,
       assetGroupId: String(nestGet(row, "assetGroup.id") ?? "") || undefined,
       assetGroupName:
         String(nestGet(row, "assetGroup.name") ?? "") || undefined,
@@ -862,7 +915,9 @@ export async function fetchLiveCampaignDemandGenAssets(
   dateTo: string,
   limit = 150,
 ): Promise<LiveAssetRow[]> {
-  const query = `
+  // Prefer richer metrics; fall back if cost/clicks are incompatible for this view.
+  const attempts = [
+    `
     SELECT
       ad_group.id,
       ad_group_ad.ad.id,
@@ -878,21 +933,50 @@ export async function fetchLiveCampaignDemandGenAssets(
     FROM ad_group_ad_asset_view
     WHERE campaign.id = ${campaignId}
       AND segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
-  `;
-  const result = await gaqlQuery(accessToken, customerId, query);
+    `,
+    `
+    SELECT
+      ad_group.id,
+      ad_group_ad.ad.id,
+      asset.id,
+      asset.name,
+      asset.type,
+      ad_group_ad_asset_view.field_type,
+      ad_group_ad_asset_view.performance_label,
+      metrics.impressions
+    FROM ad_group_ad_asset_view
+    WHERE campaign.id = ${campaignId}
+      AND segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
+    `,
+  ];
+
+  let result: GaqlRow[] = [];
+  let lastError: unknown;
+  for (const query of attempts) {
+    try {
+      result = await gaqlQuery(accessToken, customerId, query);
+      lastError = null;
+      break;
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  if (lastError) throw lastError;
+
   const rows: LiveAssetRow[] = [];
   for (const row of result) {
     const assetId = String(nestGet(row, "asset.id") ?? "");
     if (!assetId) continue;
     const impressions = asInt(nestGet(row, "metrics.impressions"));
     const clicks = asInt(nestGet(row, "metrics.clicks"));
+    const fieldType =
+      String(nestGet(row, "adGroupAdAssetView.fieldType") ?? "") || undefined;
+    const assetName = String(nestGet(row, "asset.name") ?? "") || undefined;
     rows.push({
       assetId,
-      assetName: String(nestGet(row, "asset.name") ?? "") || undefined,
+      assetName: assetName || fieldType || assetId,
       assetType: String(nestGet(row, "asset.type") ?? "") || undefined,
-      fieldType:
-        String(nestGet(row, "adGroupAdAssetView.fieldType") ?? "") ||
-        undefined,
+      fieldType,
       performanceLabel:
         String(nestGet(row, "adGroupAdAssetView.performanceLabel") ?? "") ||
         undefined,
