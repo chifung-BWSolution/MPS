@@ -34,9 +34,14 @@ export type AdsPlaceholderSection = {
 };
 
 export type AdsBreakdownTablesProps = {
+  channelType?: string | null;
+  supported: boolean;
   adGroups: import('@/types/googleAds').GoogleAdsAdGroupRow[];
   keywords: import('@/types/googleAds').GoogleAdsKeywordRow[];
   searchTerms: import('@/types/googleAds').GoogleAdsSearchTermRow[];
+  assetGroups: import('@/types/googleAds').GoogleAdsAssetGroupRow[];
+  ads: import('@/types/googleAds').GoogleAdsAdRow[];
+  assets: import('@/types/googleAds').GoogleAdsAssetRow[];
   loading: boolean;
   error?: string | null;
 };

@@ -158,9 +158,14 @@ export function GoogleAdsCampaignDetail({
   );
 
   const {
+    channelType: breakdownChannelType,
+    supported: breakdownsSupported,
     adGroups,
     keywords,
     searchTerms,
+    assetGroups,
+    ads,
+    assets,
     loading: breakdownsLoading,
     error: breakdownsError,
   } = useGoogleAdsCampaignBreakdowns(
@@ -168,13 +173,19 @@ export function GoogleAdsCampaignDetail({
     parsed?.campaignId ?? null,
     range.from,
     range.to,
+    detail?.advertisingChannelType ?? null,
   );
 
   const model: AdsCampaignDetailViewModel = useMemo(() => {
     const breakdowns = {
+      channelType: breakdownChannelType ?? detail?.advertisingChannelType ?? null,
+      supported: breakdownsSupported,
       adGroups,
       keywords,
       searchTerms,
+      assetGroups,
+      ads,
+      assets,
       loading: breakdownsLoading,
       error: breakdownsError,
     };
@@ -239,9 +250,14 @@ export function GoogleAdsCampaignDetail({
     detail,
     parsed,
     campaignKey,
+    breakdownChannelType,
+    breakdownsSupported,
     adGroups,
     keywords,
     searchTerms,
+    assetGroups,
+    ads,
+    assets,
     breakdownsLoading,
     breakdownsError,
   ]);

@@ -10,11 +10,8 @@ import { AdsDonutChart } from './AdsDonutChart';
 import { AdsDayOfWeekChart } from './AdsDayOfWeekChart';
 import { AdsDailyMetricsTable } from './AdsDailyMetricsTable';
 import { AdsPlaceholderPanel } from './AdsPlaceholderPanel';
-import {
-  AdsAdGroupsTable,
-  AdsKeywordsTable,
-  AdsSearchTermsTable,
-} from './AdsBreakdownTables';
+import { AdsChannelBreakdownGrid } from './AdsBreakdownTables';
+import { normalizeGoogleAdsBreakdownChannel } from '@/types/googleAds';
 import type { AdsCampaignDetailShellProps } from './types';
 
 function statusBadge(status: string) {
@@ -173,33 +170,41 @@ export function AdsCampaignDetailShell({
             <AdsDailyMetricsTable series={model.series} />
           </div>
 
-          {model.breakdowns ? (
-            <div className="space-y-2">
-              {model.breakdowns.error ? (
-                <div className="text-[12px] text-red-600">{model.breakdowns.error}</div>
-              ) : null}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <AdsAdGroupsTable
-                  rows={model.breakdowns.adGroups}
-                  loading={model.breakdowns.loading}
-                />
-                <AdsKeywordsTable
-                  rows={model.breakdowns.keywords}
-                  loading={model.breakdowns.loading}
-                />
-                <AdsSearchTermsTable
-                  rows={model.breakdowns.searchTerms}
-                  loading={model.breakdowns.loading}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {(model.placeholders ?? []).map((section) => (
-                <AdsPlaceholderPanel key={section.id} section={section} />
-              ))}
-            </div>
-          )}
+          {(() => {
+            const breakdowns = model.breakdowns;
+            const channel = normalizeGoogleAdsBreakdownChannel(
+              breakdowns?.channelType || model.channelOrObjective,
+            );
+            if (breakdowns && breakdowns.supported && channel) {
+              return (
+                <div className="space-y-2">
+                  {breakdowns.error ? (
+                    <div className="text-[12px] text-red-600">{breakdowns.error}</div>
+                  ) : null}
+                  <AdsChannelBreakdownGrid
+                    channel={channel}
+                    loading={breakdowns.loading}
+                    adGroups={breakdowns.adGroups}
+                    keywords={breakdowns.keywords}
+                    searchTerms={breakdowns.searchTerms}
+                    assetGroups={breakdowns.assetGroups}
+                    ads={breakdowns.ads}
+                    assets={breakdowns.assets}
+                  />
+                </div>
+              );
+            }
+            if ((model.placeholders ?? []).length > 0) {
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {(model.placeholders ?? []).map((section) => (
+                    <AdsPlaceholderPanel key={section.id} section={section} />
+                  ))}
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
       )}
     </div>

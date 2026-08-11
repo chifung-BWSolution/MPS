@@ -309,6 +309,9 @@ export async function fetchDailyMetricsForRange(
 /** Max inclusive day span for live campaign breakdown fetches. */
 export const LIVE_BREAKDOWN_MAX_DAYS = 92;
 
+/** Channel types that expose live breakdown panels in the UI. */
+export type LiveBreakdownChannel = "SEARCH" | "DEMAND_GEN" | "PERFORMANCE_MAX";
+
 export type LiveAdGroupRow = {
   adGroupId: string;
   adGroupName: string;
@@ -336,7 +339,8 @@ export type LiveKeywordRow = {
 };
 
 export type LiveSearchTermRow = {
-  adGroupId: string;
+  /** Empty for Performance Max campaign_search_term_view rows. */
+  adGroupId?: string;
   searchTerm: string;
   keywordText?: string;
   matchType?: string;
@@ -348,6 +352,108 @@ export type LiveSearchTermRow = {
   conversions: number;
   ctr: number;
 };
+
+export type LiveAssetGroupRow = {
+  assetGroupId: string;
+  assetGroupName: string;
+  status?: string;
+  primaryStatus?: string;
+  adStrength?: string;
+  impressions: number;
+  clicks: number;
+  costMicros: number;
+  conversions: number;
+  ctr: number;
+};
+
+export type LiveAdRow = {
+  adGroupId: string;
+  adGroupName?: string;
+  adId: string;
+  adName?: string;
+  adType?: string;
+  status?: string;
+  impressions: number;
+  clicks: number;
+  costMicros: number;
+  conversions: number;
+  ctr: number;
+};
+
+export type LiveAssetRow = {
+  assetId: string;
+  assetName?: string;
+  assetType?: string;
+  fieldType?: string;
+  performanceLabel?: string;
+  status?: string;
+  assetGroupId?: string;
+  assetGroupName?: string;
+  adGroupId?: string;
+  adId?: string;
+  impressions: number;
+  clicks: number;
+  costMicros: number;
+  conversions: number;
+  ctr: number;
+};
+
+export type LiveCampaignBreakdownsResult = {
+  channelType: string;
+  supported: boolean;
+  adGroups: LiveAdGroupRow[];
+  keywords: LiveKeywordRow[];
+  searchTerms: LiveSearchTermRow[];
+  assetGroups: LiveAssetGroupRow[];
+  ads: LiveAdRow[];
+  assets: LiveAssetRow[];
+  errors: string[];
+};
+
+export function normalizeLiveBreakdownChannel(
+  raw?: string | null,
+): LiveBreakdownChannel | null {
+  const t = String(raw || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+  if (t === "SEARCH") return "SEARCH";
+  if (t === "DEMAND_GEN") return "DEMAND_GEN";
+  if (t === "PERFORMANCE_MAX") return "PERFORMANCE_MAX";
+  return null;
+}
+
+export async function fetchCampaignAdvertisingChannelType(
+  accessToken: string,
+  customerId: string,
+  campaignId: string,
+): Promise<string | null> {
+  const query = `
+    SELECT campaign.id, campaign.advertising_channel_type
+    FROM campaign
+    WHERE campaign.id = ${campaignId}
+    LIMIT 1
+  `;
+  const rows = await gaqlQuery(accessToken, customerId, query);
+  const value = nestGet(rows[0] || {}, "campaign.advertisingChannelType");
+  return value == null || value === "" ? null : String(value);
+}
+
+async function settleBreakdown<T>(
+  label: string,
+  promise: Promise<T>,
+  fallback: T,
+  errors: string[],
+): Promise<T> {
+  try {
+    return await promise;
+  } catch (e) {
+    errors.push(
+      `${label}: ${(e instanceof Error ? e.message : String(e)).slice(0, 160)}`,
+    );
+    return fallback;
+  }
+}
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -482,7 +588,7 @@ export async function fetchLiveCampaignKeywords(
   return rows;
 }
 
-/** Period-aggregated search terms for one campaign (top N by cost). */
+/** Period-aggregated search terms for Search campaigns (top N by cost). */
 export async function fetchLiveCampaignSearchTerms(
   accessToken: string,
   customerId: string,
@@ -540,60 +646,468 @@ export async function fetchLiveCampaignSearchTerms(
   return rows.slice(0, Math.max(limit, 1));
 }
 
+/** Performance Max / campaign-level search terms (no ad group). */
+export async function fetchLiveCampaignSearchTermsPMax(
+  accessToken: string,
+  customerId: string,
+  campaignId: string,
+  dateFrom: string,
+  dateTo: string,
+  limit = 100,
+): Promise<LiveSearchTermRow[]> {
+  const query = `
+    SELECT
+      campaign_search_term_view.search_term,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions
+    FROM campaign_search_term_view
+    WHERE campaign.id = ${campaignId}
+      AND segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
+  `;
+  const result = await gaqlQuery(accessToken, customerId, query);
+  const rows: LiveSearchTermRow[] = [];
+  for (const row of result) {
+    const searchTerm = String(
+      nestGet(row, "campaignSearchTermView.searchTerm") ?? "",
+    )
+      .trim()
+      .slice(0, 512);
+    if (!searchTerm) continue;
+    const impressions = asInt(nestGet(row, "metrics.impressions"));
+    const clicks = asInt(nestGet(row, "metrics.clicks"));
+    rows.push({
+      searchTerm,
+      impressions,
+      clicks,
+      costMicros: asInt(nestGet(row, "metrics.costMicros")),
+      conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
+      ctr: withCtr(impressions, clicks),
+    });
+  }
+  rows.sort((a, b) => b.costMicros - a.costMicros);
+  return rows.slice(0, Math.max(limit, 1));
+}
+
+/** Performance Max asset groups. */
+export async function fetchLiveCampaignAssetGroups(
+  accessToken: string,
+  customerId: string,
+  campaignId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<LiveAssetGroupRow[]> {
+  const query = `
+    SELECT
+      asset_group.id,
+      asset_group.name,
+      asset_group.status,
+      asset_group.primary_status,
+      asset_group.ad_strength,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions
+    FROM asset_group
+    WHERE campaign.id = ${campaignId}
+      AND segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
+  `;
+  const result = await gaqlQuery(accessToken, customerId, query);
+  const rows: LiveAssetGroupRow[] = [];
+  for (const row of result) {
+    const assetGroupId = String(nestGet(row, "assetGroup.id") ?? "");
+    if (!assetGroupId) continue;
+    const impressions = asInt(nestGet(row, "metrics.impressions"));
+    const clicks = asInt(nestGet(row, "metrics.clicks"));
+    rows.push({
+      assetGroupId,
+      assetGroupName: String(
+        nestGet(row, "assetGroup.name") ?? assetGroupId,
+      ),
+      status: String(nestGet(row, "assetGroup.status") ?? "") || undefined,
+      primaryStatus:
+        String(nestGet(row, "assetGroup.primaryStatus") ?? "") || undefined,
+      adStrength:
+        String(nestGet(row, "assetGroup.adStrength") ?? "") || undefined,
+      impressions,
+      clicks,
+      costMicros: asInt(nestGet(row, "metrics.costMicros")),
+      conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
+      ctr: withCtr(impressions, clicks),
+    });
+  }
+  rows.sort((a, b) => b.costMicros - a.costMicros);
+  return rows;
+}
+
+/** Performance Max assets via asset_group_asset. */
+export async function fetchLiveCampaignPMaxAssets(
+  accessToken: string,
+  customerId: string,
+  campaignId: string,
+  dateFrom: string,
+  dateTo: string,
+  limit = 150,
+): Promise<LiveAssetRow[]> {
+  const query = `
+    SELECT
+      asset_group.id,
+      asset_group.name,
+      asset.id,
+      asset.name,
+      asset.type,
+      asset_group_asset.field_type,
+      asset_group_asset.status,
+      asset_group_asset.performance_label,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions
+    FROM asset_group_asset
+    WHERE campaign.id = ${campaignId}
+      AND asset_group_asset.status != 'REMOVED'
+      AND segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
+  `;
+  const result = await gaqlQuery(accessToken, customerId, query);
+  const rows: LiveAssetRow[] = [];
+  for (const row of result) {
+    const assetId = String(nestGet(row, "asset.id") ?? "");
+    if (!assetId) continue;
+    const impressions = asInt(nestGet(row, "metrics.impressions"));
+    const clicks = asInt(nestGet(row, "metrics.clicks"));
+    const fieldType =
+      String(nestGet(row, "assetGroupAsset.fieldType") ?? "") || undefined;
+    rows.push({
+      assetId,
+      assetName: String(nestGet(row, "asset.name") ?? "") || undefined,
+      assetType: String(nestGet(row, "asset.type") ?? "") || undefined,
+      fieldType,
+      performanceLabel:
+        String(nestGet(row, "assetGroupAsset.performanceLabel") ?? "") ||
+        undefined,
+      status:
+        String(nestGet(row, "assetGroupAsset.status") ?? "") || undefined,
+      assetGroupId: String(nestGet(row, "assetGroup.id") ?? "") || undefined,
+      assetGroupName:
+        String(nestGet(row, "assetGroup.name") ?? "") || undefined,
+      impressions,
+      clicks,
+      costMicros: asInt(nestGet(row, "metrics.costMicros")),
+      conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
+      ctr: withCtr(impressions, clicks),
+    });
+  }
+  rows.sort((a, b) => b.costMicros - a.costMicros || b.impressions - a.impressions);
+  return rows.slice(0, Math.max(limit, 1));
+}
+
+/** Demand Gen / Search-style ads via ad_group_ad. */
+export async function fetchLiveCampaignAds(
+  accessToken: string,
+  customerId: string,
+  campaignId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<LiveAdRow[]> {
+  const query = `
+    SELECT
+      ad_group.id,
+      ad_group.name,
+      ad_group_ad.ad.id,
+      ad_group_ad.ad.name,
+      ad_group_ad.ad.type,
+      ad_group_ad.status,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions
+    FROM ad_group_ad
+    WHERE campaign.id = ${campaignId}
+      AND ad_group_ad.status != 'REMOVED'
+      AND segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
+  `;
+  const result = await gaqlQuery(accessToken, customerId, query);
+  const rows: LiveAdRow[] = [];
+  for (const row of result) {
+    const adGroupId = String(nestGet(row, "adGroup.id") ?? "");
+    const adId = String(nestGet(row, "adGroupAd.ad.id") ?? "");
+    if (!adGroupId || !adId) continue;
+    const impressions = asInt(nestGet(row, "metrics.impressions"));
+    const clicks = asInt(nestGet(row, "metrics.clicks"));
+    rows.push({
+      adGroupId,
+      adGroupName: String(nestGet(row, "adGroup.name") ?? "") || undefined,
+      adId,
+      adName: String(nestGet(row, "adGroupAd.ad.name") ?? "") || undefined,
+      adType: String(nestGet(row, "adGroupAd.ad.type") ?? "") || undefined,
+      status: String(nestGet(row, "adGroupAd.status") ?? "") || undefined,
+      impressions,
+      clicks,
+      costMicros: asInt(nestGet(row, "metrics.costMicros")),
+      conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
+      ctr: withCtr(impressions, clicks),
+    });
+  }
+  rows.sort((a, b) => b.costMicros - a.costMicros);
+  return rows;
+}
+
+/** Demand Gen assets via ad_group_ad_asset_view. */
+export async function fetchLiveCampaignDemandGenAssets(
+  accessToken: string,
+  customerId: string,
+  campaignId: string,
+  dateFrom: string,
+  dateTo: string,
+  limit = 150,
+): Promise<LiveAssetRow[]> {
+  const query = `
+    SELECT
+      ad_group.id,
+      ad_group_ad.ad.id,
+      asset.id,
+      asset.name,
+      asset.type,
+      ad_group_ad_asset_view.field_type,
+      ad_group_ad_asset_view.performance_label,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions
+    FROM ad_group_ad_asset_view
+    WHERE campaign.id = ${campaignId}
+      AND segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
+  `;
+  const result = await gaqlQuery(accessToken, customerId, query);
+  const rows: LiveAssetRow[] = [];
+  for (const row of result) {
+    const assetId = String(nestGet(row, "asset.id") ?? "");
+    if (!assetId) continue;
+    const impressions = asInt(nestGet(row, "metrics.impressions"));
+    const clicks = asInt(nestGet(row, "metrics.clicks"));
+    rows.push({
+      assetId,
+      assetName: String(nestGet(row, "asset.name") ?? "") || undefined,
+      assetType: String(nestGet(row, "asset.type") ?? "") || undefined,
+      fieldType:
+        String(nestGet(row, "adGroupAdAssetView.fieldType") ?? "") ||
+        undefined,
+      performanceLabel:
+        String(nestGet(row, "adGroupAdAssetView.performanceLabel") ?? "") ||
+        undefined,
+      adGroupId: String(nestGet(row, "adGroup.id") ?? "") || undefined,
+      adId: String(nestGet(row, "adGroupAd.ad.id") ?? "") || undefined,
+      impressions,
+      clicks,
+      costMicros: asInt(nestGet(row, "metrics.costMicros")),
+      conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
+      ctr: withCtr(impressions, clicks),
+    });
+  }
+  rows.sort((a, b) => b.costMicros - a.costMicros || b.impressions - a.impressions);
+  return rows.slice(0, Math.max(limit, 1));
+}
+
 export async function fetchLiveCampaignBreakdowns(
   accessToken: string,
   customerId: string,
   campaignId: string,
   dateFrom: string,
   dateTo: string,
-): Promise<{
-  adGroups: LiveAdGroupRow[];
-  keywords: LiveKeywordRow[];
-  searchTerms: LiveSearchTermRow[];
-  errors: string[];
-}> {
+  channelTypeHint?: string | null,
+): Promise<LiveCampaignBreakdownsResult> {
   const errors: string[] = [];
-  const [adGroups, keywords, searchTerms] = await Promise.all([
-    fetchLiveCampaignAdGroups(
-      accessToken,
-      customerId,
-      campaignId,
-      dateFrom,
-      dateTo,
-    ).catch((e) => {
-      errors.push(
-        `ad_group: ${(e instanceof Error ? e.message : String(e)).slice(0, 160)}`,
-      );
-      return [] as LiveAdGroupRow[];
-    }),
-    fetchLiveCampaignKeywords(
-      accessToken,
-      customerId,
-      campaignId,
-      dateFrom,
-      dateTo,
-    ).catch((e) => {
-      errors.push(
-        `keyword: ${(e instanceof Error ? e.message : String(e)).slice(0, 160)}`,
-      );
-      return [] as LiveKeywordRow[];
-    }),
-    fetchLiveCampaignSearchTerms(
-      accessToken,
-      customerId,
-      campaignId,
-      dateFrom,
-      dateTo,
-      100,
-    ).catch((e) => {
-      errors.push(
-        `search_term: ${(e instanceof Error ? e.message : String(e)).slice(0, 160)}`,
-      );
-      return [] as LiveSearchTermRow[];
-    }),
-  ]);
+  let channelRaw = channelTypeHint?.trim() || "";
+  if (!normalizeLiveBreakdownChannel(channelRaw)) {
+    channelRaw =
+      (await settleBreakdown(
+        "campaign.channel",
+        fetchCampaignAdvertisingChannelType(
+          accessToken,
+          customerId,
+          campaignId,
+        ),
+        null,
+        errors,
+      )) || "";
+  }
 
-  return { adGroups, keywords, searchTerms, errors };
+  const channel = normalizeLiveBreakdownChannel(channelRaw);
+  const empty: LiveCampaignBreakdownsResult = {
+    channelType: channelRaw || "UNKNOWN",
+    supported: false,
+    adGroups: [],
+    keywords: [],
+    searchTerms: [],
+    assetGroups: [],
+    ads: [],
+    assets: [],
+    errors,
+  };
+
+  if (!channel) {
+    return empty;
+  }
+
+  if (channel === "SEARCH") {
+    const [adGroups, keywords, searchTerms] = await Promise.all([
+      settleBreakdown(
+        "ad_group",
+        fetchLiveCampaignAdGroups(
+          accessToken,
+          customerId,
+          campaignId,
+          dateFrom,
+          dateTo,
+        ),
+        [] as LiveAdGroupRow[],
+        errors,
+      ),
+      settleBreakdown(
+        "keyword",
+        fetchLiveCampaignKeywords(
+          accessToken,
+          customerId,
+          campaignId,
+          dateFrom,
+          dateTo,
+        ),
+        [] as LiveKeywordRow[],
+        errors,
+      ),
+      settleBreakdown(
+        "search_term",
+        fetchLiveCampaignSearchTerms(
+          accessToken,
+          customerId,
+          campaignId,
+          dateFrom,
+          dateTo,
+          100,
+        ),
+        [] as LiveSearchTermRow[],
+        errors,
+      ),
+    ]);
+    return {
+      channelType: channel,
+      supported: true,
+      adGroups,
+      keywords,
+      searchTerms,
+      assetGroups: [],
+      ads: [],
+      assets: [],
+      errors,
+    };
+  }
+
+  if (channel === "DEMAND_GEN") {
+    const [adGroups, ads, assets] = await Promise.all([
+      settleBreakdown(
+        "ad_group",
+        fetchLiveCampaignAdGroups(
+          accessToken,
+          customerId,
+          campaignId,
+          dateFrom,
+          dateTo,
+        ),
+        [] as LiveAdGroupRow[],
+        errors,
+      ),
+      settleBreakdown(
+        "ad_group_ad",
+        fetchLiveCampaignAds(
+          accessToken,
+          customerId,
+          campaignId,
+          dateFrom,
+          dateTo,
+        ),
+        [] as LiveAdRow[],
+        errors,
+      ),
+      settleBreakdown(
+        "ad_group_ad_asset_view",
+        fetchLiveCampaignDemandGenAssets(
+          accessToken,
+          customerId,
+          campaignId,
+          dateFrom,
+          dateTo,
+          150,
+        ),
+        [] as LiveAssetRow[],
+        errors,
+      ),
+    ]);
+    return {
+      channelType: channel,
+      supported: true,
+      adGroups,
+      keywords: [],
+      searchTerms: [],
+      assetGroups: [],
+      ads,
+      assets,
+      errors,
+    };
+  }
+
+  // PERFORMANCE_MAX
+  const [assetGroups, assets, searchTerms] = await Promise.all([
+    settleBreakdown(
+      "asset_group",
+      fetchLiveCampaignAssetGroups(
+        accessToken,
+        customerId,
+        campaignId,
+        dateFrom,
+        dateTo,
+      ),
+      [] as LiveAssetGroupRow[],
+      errors,
+    ),
+    settleBreakdown(
+      "asset_group_asset",
+      fetchLiveCampaignPMaxAssets(
+        accessToken,
+        customerId,
+        campaignId,
+        dateFrom,
+        dateTo,
+        150,
+      ),
+      [] as LiveAssetRow[],
+      errors,
+    ),
+    settleBreakdown(
+      "campaign_search_term_view",
+      fetchLiveCampaignSearchTermsPMax(
+        accessToken,
+        customerId,
+        campaignId,
+        dateFrom,
+        dateTo,
+        100,
+      ),
+      [] as LiveSearchTermRow[],
+      errors,
+    ),
+  ]);
+  return {
+    channelType: channel,
+    supported: true,
+    adGroups: [],
+    keywords: [],
+    searchTerms,
+    assetGroups,
+    ads: [],
+    assets,
+    errors,
+  };
 }
 
 export function monthStart(d: Date): Date {

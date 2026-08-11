@@ -4,6 +4,10 @@ export {
   AdsAdGroupsTable,
   AdsKeywordsTable,
   AdsSearchTermsTable,
+  AdsAssetGroupsTable,
+  AdsAdsTable,
+  AdsAssetsTable,
+  AdsChannelBreakdownGrid,
 } from './AdsBreakdownTables';
 export type {
   AdsBreakdownTablesProps,

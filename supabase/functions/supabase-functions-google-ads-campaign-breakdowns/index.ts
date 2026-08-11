@@ -21,6 +21,7 @@ Deno.serve(async (req) => {
     const campaignId = String(body.campaignId || "").trim();
     const dateFrom = String(body.from || "").trim();
     const dateTo = String(body.to || "").trim();
+    const channelTypeHint = String(body.channelType || "").trim() || null;
 
     if (!customerId || !campaignId) {
       return json({ error: "customerId and campaignId are required" }, 400);
@@ -43,14 +44,14 @@ Deno.serve(async (req) => {
     }
 
     const accessToken = await getAccessToken();
-    const { adGroups, keywords, searchTerms, errors } =
-      await fetchLiveCampaignBreakdowns(
-        accessToken,
-        customerId,
-        campaignId,
-        dateFrom,
-        dateTo,
-      );
+    const result = await fetchLiveCampaignBreakdowns(
+      accessToken,
+      customerId,
+      campaignId,
+      dateFrom,
+      dateTo,
+      channelTypeHint,
+    );
 
     return json({
       success: true,
@@ -59,10 +60,15 @@ Deno.serve(async (req) => {
       from: dateFrom,
       to: dateTo,
       fetchedAt: new Date().toISOString(),
-      adGroups,
-      keywords,
-      searchTerms,
-      errors: errors.slice(0, 10),
+      channelType: result.channelType,
+      supported: result.supported,
+      adGroups: result.adGroups,
+      keywords: result.keywords,
+      searchTerms: result.searchTerms,
+      assetGroups: result.assetGroups,
+      ads: result.ads,
+      assets: result.assets,
+      errors: result.errors.slice(0, 10),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

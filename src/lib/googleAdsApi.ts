@@ -112,9 +112,14 @@ export type LiveCampaignBreakdownsResponse = {
   from?: string;
   to?: string;
   fetchedAt?: string;
+  channelType?: string;
+  supported?: boolean;
   adGroups?: import('@/types/googleAds').GoogleAdsAdGroupRow[];
   keywords?: import('@/types/googleAds').GoogleAdsKeywordRow[];
   searchTerms?: import('@/types/googleAds').GoogleAdsSearchTermRow[];
+  assetGroups?: import('@/types/googleAds').GoogleAdsAssetGroupRow[];
+  ads?: import('@/types/googleAds').GoogleAdsAdRow[];
+  assets?: import('@/types/googleAds').GoogleAdsAssetRow[];
   errors?: string[];
   error?: string;
   max_days?: number;
@@ -126,6 +131,7 @@ export function invokeGoogleAdsCampaignBreakdowns(
     campaignId: string;
     from: string;
     to: string;
+    channelType?: string | null;
   },
   signal?: AbortSignal,
 ) {
@@ -136,6 +142,7 @@ export function invokeGoogleAdsCampaignBreakdowns(
       campaignId: opts.campaignId,
       from: opts.from,
       to: opts.to,
+      ...(opts.channelType ? { channelType: opts.channelType } : {}),
     },
     { retries: 1, signal },
   );

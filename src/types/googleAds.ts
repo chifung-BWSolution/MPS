@@ -108,6 +108,12 @@ export type GoogleAdsCampaignDetail = {
   previousTotals: GoogleAdsMetricTotals;
 };
 
+/** Channel types that show live breakdown panels on campaign detail. */
+export type GoogleAdsBreakdownChannel =
+  | 'SEARCH'
+  | 'DEMAND_GEN'
+  | 'PERFORMANCE_MAX';
+
 export type GoogleAdsAdGroupRow = {
   adGroupId: string;
   adGroupName: string;
@@ -135,7 +141,8 @@ export type GoogleAdsKeywordRow = {
 };
 
 export type GoogleAdsSearchTermRow = {
-  adGroupId: string;
+  /** Empty / omitted for Performance Max campaign_search_term_view rows. */
+  adGroupId?: string;
   searchTerm: string;
   keywordText?: string;
   matchType?: string;
@@ -147,3 +154,61 @@ export type GoogleAdsSearchTermRow = {
   conversions: number;
   ctr: number;
 };
+
+export type GoogleAdsAssetGroupRow = {
+  assetGroupId: string;
+  assetGroupName: string;
+  status?: string;
+  primaryStatus?: string;
+  adStrength?: string;
+  impressions: number;
+  clicks: number;
+  costMicros: number;
+  conversions: number;
+  ctr: number;
+};
+
+export type GoogleAdsAdRow = {
+  adGroupId: string;
+  adGroupName?: string;
+  adId: string;
+  adName?: string;
+  adType?: string;
+  status?: string;
+  impressions: number;
+  clicks: number;
+  costMicros: number;
+  conversions: number;
+  ctr: number;
+};
+
+export type GoogleAdsAssetRow = {
+  assetId: string;
+  assetName?: string;
+  assetType?: string;
+  fieldType?: string;
+  performanceLabel?: string;
+  status?: string;
+  assetGroupId?: string;
+  assetGroupName?: string;
+  adGroupId?: string;
+  adId?: string;
+  impressions: number;
+  clicks: number;
+  costMicros: number;
+  conversions: number;
+  ctr: number;
+};
+
+export function normalizeGoogleAdsBreakdownChannel(
+  raw?: string | null,
+): GoogleAdsBreakdownChannel | null {
+  const t = String(raw || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '_');
+  if (t === 'SEARCH') return 'SEARCH';
+  if (t === 'DEMAND_GEN') return 'DEMAND_GEN';
+  if (t === 'PERFORMANCE_MAX') return 'PERFORMANCE_MAX';
+  return null;
+}
