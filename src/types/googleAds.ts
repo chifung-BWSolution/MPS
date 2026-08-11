@@ -107,3 +107,43 @@ export type GoogleAdsCampaignDetail = {
   totals: GoogleAdsMetricTotals;
   previousTotals: GoogleAdsMetricTotals;
 };
+
+export type GoogleAdsAdGroupRow = {
+  adGroupId: string;
+  adGroupName: string;
+  status?: string;
+  adGroupType?: string;
+  impressions: number;
+  clicks: number;
+  costMicros: number;
+  conversions: number;
+  ctr: number;
+};
+
+export type GoogleAdsKeywordRow = {
+  adGroupId: string;
+  criterionId: string;
+  keywordText: string;
+  matchType?: string;
+  status?: string;
+  qualityScore?: number | null;
+  impressions: number;
+  clicks: number;
+  costMicros: number;
+  conversions: number;
+  ctr: number;
+};
+
+export type GoogleAdsSearchTermRow = {
+  adGroupId: string;
+  searchTerm: string;
+  keywordText?: string;
+  matchType?: string;
+  searchTermStatus?: string;
+  searchTermMatchType?: string;
+  impressions: number;
+  clicks: number;
+  costMicros: number;
+  conversions: number;
+  ctr: number;
+};

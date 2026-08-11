@@ -10,6 +10,7 @@ import {
   monthEnd,
   monthStart,
   addMonths,
+  syncBreakdownDailyMetrics,
   toIsoDate,
 } from "../_shared/google-ads.ts";
 
@@ -250,6 +251,18 @@ Deno.serve(async (req) => {
       if (error) throw new Error(`Daily upsert: ${error.message}`);
     }
 
+    const breakdown = await syncBreakdownDailyMetrics(
+      supabase,
+      accessToken,
+      customerIds,
+      rangeFrom,
+      rangeTo,
+      nowIso,
+    );
+    const allErrors = [...errors, ...breakdown.errors];
+    const breakdownRows =
+      breakdown.adGroupRows + breakdown.keywordRows + breakdown.searchTermRows;
+
     const nextMonth = addMonths(cursor, 1);
     const completedMonths = job.completed_months + 1;
     const done = nextMonth > endBound;
@@ -263,10 +276,10 @@ Deno.serve(async (req) => {
       .update({
         cursor_month: toIsoDate(nextMonth > endBound ? endBound : nextMonth),
         completed_months: completedMonths,
-        rows_upserted: job.rows_upserted + daily.length,
+        rows_upserted: job.rows_upserted + daily.length + breakdownRows,
         accounts_targeted: customerIds.length,
-        error_count: job.error_count + errors.length,
-        last_error: errors[0] || job.last_error,
+        error_count: job.error_count + allErrors.length,
+        last_error: allErrors[0] || job.last_error,
         status: done ? "completed" : "running",
         finished_at: done ? nowIso : null,
         updated_at: nowIso,
@@ -275,7 +288,10 @@ Deno.serve(async (req) => {
           enabled_customer_ids: customerIds,
           last_month: `${rangeFrom}..${rangeTo}`,
           last_month_rows: daily.length,
-          recent_errors: [...errors, ...prevErrors].slice(0, 30),
+          last_month_ad_group_rows: breakdown.adGroupRows,
+          last_month_keyword_rows: breakdown.keywordRows,
+          last_month_search_term_rows: breakdown.searchTermRows,
+          recent_errors: [...allErrors, ...prevErrors].slice(0, 30),
         },
       })
       .eq("id", job.id)
@@ -288,7 +304,10 @@ Deno.serve(async (req) => {
       action: "step",
       month: `${rangeFrom}..${rangeTo}`,
       rows: daily.length,
-      errors: errors.slice(0, 10),
+      ad_group_rows: breakdown.adGroupRows,
+      keyword_rows: breakdown.keywordRows,
+      search_term_rows: breakdown.searchTermRows,
+      errors: allErrors.slice(0, 10),
       job: updated,
     });
   } catch (error) {

@@ -306,6 +306,366 @@ export async function fetchDailyMetricsForRange(
   return { daily, campaigns: [...campaignMap.values()], errors };
 }
 
+export type AdGroupDailyRow = {
+  customer_id: string;
+  campaign_id: string;
+  ad_group_id: string;
+  ad_group_name: string;
+  status: string | null;
+  ad_group_type: string | null;
+  metric_date: string;
+  impressions: number;
+  clicks: number;
+  cost_micros: number;
+  conversions: number;
+  ctr: number;
+  average_cpc_micros: number;
+  last_synced_at: string;
+  updated_at: string;
+};
+
+export type KeywordDailyRow = {
+  customer_id: string;
+  campaign_id: string;
+  ad_group_id: string;
+  criterion_id: string;
+  keyword_text: string;
+  match_type: string | null;
+  status: string | null;
+  metric_date: string;
+  impressions: number;
+  clicks: number;
+  cost_micros: number;
+  conversions: number;
+  quality_score: number | null;
+  normalized_keyword: string;
+  last_synced_at: string;
+  updated_at: string;
+};
+
+export type SearchTermDailyRow = {
+  customer_id: string;
+  campaign_id: string;
+  ad_group_id: string;
+  search_term: string;
+  metric_date: string;
+  keyword_text: string | null;
+  match_type: string | null;
+  search_term_status: string | null;
+  search_term_match_type: string | null;
+  impressions: number;
+  clicks: number;
+  cost_micros: number;
+  conversions: number;
+  ctr: number;
+  average_cpc_micros: number;
+  last_synced_at: string;
+  updated_at: string;
+};
+
+function normalizeKeyword(text: string): string {
+  return text.trim().toLowerCase();
+}
+
+export async function fetchAdGroupDailyMetricsForRange(
+  accessToken: string,
+  customerIds: string[],
+  dateFrom: string,
+  dateTo: string,
+  nowIso: string,
+): Promise<{ rows: AdGroupDailyRow[]; errors: string[] }> {
+  const query = `
+    SELECT
+      segments.date,
+      campaign.id,
+      ad_group.id,
+      ad_group.name,
+      ad_group.status,
+      ad_group.type,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions,
+      metrics.ctr,
+      metrics.average_cpc
+    FROM ad_group
+    WHERE segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
+  `;
+
+  const rows: AdGroupDailyRow[] = [];
+  const errors: string[] = [];
+
+  await mapPool(customerIds, ACCOUNT_CONCURRENCY, async (customerId) => {
+    try {
+      const result = await gaqlQuery(accessToken, customerId, query);
+      for (const row of result) {
+        const campaignId = String(nestGet(row, "campaign.id") ?? "");
+        const adGroupId = String(nestGet(row, "adGroup.id") ?? "");
+        const metricDate = String(nestGet(row, "segments.date") ?? "");
+        if (!campaignId || !adGroupId || !metricDate) continue;
+        rows.push({
+          customer_id: customerId,
+          campaign_id: campaignId,
+          ad_group_id: adGroupId,
+          ad_group_name: String(nestGet(row, "adGroup.name") ?? ""),
+          status: String(nestGet(row, "adGroup.status") ?? "") || null,
+          ad_group_type: String(nestGet(row, "adGroup.type") ?? "") || null,
+          metric_date: metricDate,
+          impressions: asInt(nestGet(row, "metrics.impressions")),
+          clicks: asInt(nestGet(row, "metrics.clicks")),
+          cost_micros: asInt(nestGet(row, "metrics.costMicros")),
+          conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
+          ctr: Number(nestGet(row, "metrics.ctr") ?? 0) || 0,
+          average_cpc_micros: asInt(nestGet(row, "metrics.averageCpc")),
+          last_synced_at: nowIso,
+          updated_at: nowIso,
+        });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push(`ad_group ${customerId}: ${msg.slice(0, 160)}`);
+    }
+  });
+
+  return { rows, errors };
+}
+
+export async function fetchKeywordDailyMetricsForRange(
+  accessToken: string,
+  customerIds: string[],
+  dateFrom: string,
+  dateTo: string,
+  nowIso: string,
+): Promise<{ rows: KeywordDailyRow[]; errors: string[] }> {
+  const query = `
+    SELECT
+      segments.date,
+      campaign.id,
+      ad_group.id,
+      ad_group_criterion.criterion_id,
+      ad_group_criterion.keyword.text,
+      ad_group_criterion.keyword.match_type,
+      ad_group_criterion.status,
+      ad_group_criterion.quality_info.quality_score,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions
+    FROM keyword_view
+    WHERE segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
+  `;
+
+  const rows: KeywordDailyRow[] = [];
+  const errors: string[] = [];
+
+  await mapPool(customerIds, ACCOUNT_CONCURRENCY, async (customerId) => {
+    try {
+      const result = await gaqlQuery(accessToken, customerId, query);
+      for (const row of result) {
+        const campaignId = String(nestGet(row, "campaign.id") ?? "");
+        const adGroupId = String(nestGet(row, "adGroup.id") ?? "");
+        const criterionId = String(
+          nestGet(row, "adGroupCriterion.criterionId") ?? "",
+        );
+        const metricDate = String(nestGet(row, "segments.date") ?? "");
+        const keywordText = String(
+          nestGet(row, "adGroupCriterion.keyword.text") ?? "",
+        );
+        if (!campaignId || !adGroupId || !criterionId || !metricDate) continue;
+        const qsRaw = nestGet(row, "adGroupCriterion.qualityInfo.qualityScore");
+        rows.push({
+          customer_id: customerId,
+          campaign_id: campaignId,
+          ad_group_id: adGroupId,
+          criterion_id: criterionId,
+          keyword_text: keywordText,
+          match_type:
+            String(nestGet(row, "adGroupCriterion.keyword.matchType") ?? "") ||
+            null,
+          status:
+            String(nestGet(row, "adGroupCriterion.status") ?? "") || null,
+          metric_date: metricDate,
+          impressions: asInt(nestGet(row, "metrics.impressions")),
+          clicks: asInt(nestGet(row, "metrics.clicks")),
+          cost_micros: asInt(nestGet(row, "metrics.costMicros")),
+          conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
+          quality_score:
+            qsRaw === undefined || qsRaw === null || qsRaw === ""
+              ? null
+              : asInt(qsRaw),
+          normalized_keyword: normalizeKeyword(keywordText),
+          last_synced_at: nowIso,
+          updated_at: nowIso,
+        });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push(`keyword ${customerId}: ${msg.slice(0, 160)}`);
+    }
+  });
+
+  return { rows, errors };
+}
+
+export async function fetchSearchTermDailyMetricsForRange(
+  accessToken: string,
+  customerIds: string[],
+  dateFrom: string,
+  dateTo: string,
+  nowIso: string,
+): Promise<{ rows: SearchTermDailyRow[]; errors: string[] }> {
+  const query = `
+    SELECT
+      segments.date,
+      campaign.id,
+      ad_group.id,
+      search_term_view.search_term,
+      search_term_view.status,
+      segments.keyword.info.text,
+      segments.keyword.info.match_type,
+      segments.search_term_match_type,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions,
+      metrics.ctr,
+      metrics.average_cpc
+    FROM search_term_view
+    WHERE segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
+  `;
+
+  const rows: SearchTermDailyRow[] = [];
+  const errors: string[] = [];
+
+  await mapPool(customerIds, ACCOUNT_CONCURRENCY, async (customerId) => {
+    try {
+      const result = await gaqlQuery(accessToken, customerId, query);
+      for (const row of result) {
+        const campaignId = String(nestGet(row, "campaign.id") ?? "");
+        const adGroupId = String(nestGet(row, "adGroup.id") ?? "");
+        const searchTerm = String(
+          nestGet(row, "searchTermView.searchTerm") ?? "",
+        ).trim();
+        const metricDate = String(nestGet(row, "segments.date") ?? "");
+        if (!campaignId || !adGroupId || !searchTerm || !metricDate) continue;
+        rows.push({
+          customer_id: customerId,
+          campaign_id: campaignId,
+          ad_group_id: adGroupId,
+          search_term: searchTerm,
+          metric_date: metricDate,
+          keyword_text:
+            String(nestGet(row, "segments.keyword.info.text") ?? "") || null,
+          match_type:
+            String(nestGet(row, "segments.keyword.info.matchType") ?? "") ||
+            null,
+          search_term_status:
+            String(nestGet(row, "searchTermView.status") ?? "") || null,
+          search_term_match_type:
+            String(nestGet(row, "segments.searchTermMatchType") ?? "") || null,
+          impressions: asInt(nestGet(row, "metrics.impressions")),
+          clicks: asInt(nestGet(row, "metrics.clicks")),
+          cost_micros: asInt(nestGet(row, "metrics.costMicros")),
+          conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
+          ctr: Number(nestGet(row, "metrics.ctr") ?? 0) || 0,
+          average_cpc_micros: asInt(nestGet(row, "metrics.averageCpc")),
+          last_synced_at: nowIso,
+          updated_at: nowIso,
+        });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push(`search_term ${customerId}: ${msg.slice(0, 160)}`);
+    }
+  });
+
+  return { rows, errors };
+}
+
+/** Fetch + upsert ad group / keyword / search term daily metrics for a date range. */
+export async function syncBreakdownDailyMetrics(
+  supabase: SupabaseClient,
+  accessToken: string,
+  customerIds: string[],
+  dateFrom: string,
+  dateTo: string,
+  nowIso: string,
+): Promise<{
+  adGroupRows: number;
+  keywordRows: number;
+  searchTermRows: number;
+  errors: string[];
+}> {
+  const [adGroups, keywords, searchTerms] = await Promise.all([
+    fetchAdGroupDailyMetricsForRange(
+      accessToken,
+      customerIds,
+      dateFrom,
+      dateTo,
+      nowIso,
+    ),
+    fetchKeywordDailyMetricsForRange(
+      accessToken,
+      customerIds,
+      dateFrom,
+      dateTo,
+      nowIso,
+    ),
+    fetchSearchTermDailyMetricsForRange(
+      accessToken,
+      customerIds,
+      dateFrom,
+      dateTo,
+      nowIso,
+    ),
+  ]);
+
+  const errors = [
+    ...adGroups.errors,
+    ...keywords.errors,
+    ...searchTerms.errors,
+  ];
+
+  for (let i = 0; i < adGroups.rows.length; i += 500) {
+    const chunk = adGroups.rows.slice(i, i + 500);
+    const { error } = await supabase
+      .from("google_ads_ad_group_daily_metrics")
+      .upsert(chunk, {
+        onConflict: "customer_id,campaign_id,ad_group_id,metric_date",
+      });
+    if (error) throw new Error(`Ad group daily upsert: ${error.message}`);
+  }
+
+  for (let i = 0; i < keywords.rows.length; i += 500) {
+    const chunk = keywords.rows.slice(i, i + 500);
+    const { error } = await supabase
+      .from("google_ads_keyword_daily_metrics")
+      .upsert(chunk, {
+        onConflict:
+          "customer_id,campaign_id,ad_group_id,criterion_id,metric_date",
+      });
+    if (error) throw new Error(`Keyword daily upsert: ${error.message}`);
+  }
+
+  for (let i = 0; i < searchTerms.rows.length; i += 500) {
+    const chunk = searchTerms.rows.slice(i, i + 500);
+    const { error } = await supabase
+      .from("google_ads_search_term_daily_metrics")
+      .upsert(chunk, {
+        onConflict:
+          "customer_id,campaign_id,ad_group_id,search_term,metric_date",
+      });
+    if (error) throw new Error(`Search term daily upsert: ${error.message}`);
+  }
+
+  return {
+    adGroupRows: adGroups.rows.length,
+    keywordRows: keywords.rows.length,
+    searchTermRows: searchTerms.rows.length,
+    errors,
+  };
+}
+
 export function monthStart(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
 }

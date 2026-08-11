@@ -33,6 +33,14 @@ export type AdsPlaceholderSection = {
   description: string;
 };
 
+export type AdsBreakdownTablesProps = {
+  adGroups: import('@/types/googleAds').GoogleAdsAdGroupRow[];
+  keywords: import('@/types/googleAds').GoogleAdsKeywordRow[];
+  searchTerms: import('@/types/googleAds').GoogleAdsSearchTermRow[];
+  loading: boolean;
+  error?: string | null;
+};
+
 export type AdsCampaignDetailViewModel = {
   platform: AdsCampaignPlatform;
   platformLabel: string;
@@ -44,7 +52,9 @@ export type AdsCampaignDetailViewModel = {
   websites: AdsLinkedWebsite[];
   series: AdsDailySeriesPoint[];
   kpis: AdsKpiItem[];
-  placeholders: AdsPlaceholderSection[];
+  /** @deprecated Prefer breakdowns for Google; kept for optional empty-state fallback */
+  placeholders?: AdsPlaceholderSection[];
+  breakdowns?: AdsBreakdownTablesProps;
 };
 
 export type AdsDateRangeControls = {

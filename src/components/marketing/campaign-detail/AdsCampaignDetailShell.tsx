@@ -10,6 +10,11 @@ import { AdsDonutChart } from './AdsDonutChart';
 import { AdsDayOfWeekChart } from './AdsDayOfWeekChart';
 import { AdsDailyMetricsTable } from './AdsDailyMetricsTable';
 import { AdsPlaceholderPanel } from './AdsPlaceholderPanel';
+import {
+  AdsAdGroupsTable,
+  AdsKeywordsTable,
+  AdsSearchTermsTable,
+} from './AdsBreakdownTables';
 import type { AdsCampaignDetailShellProps } from './types';
 
 function statusBadge(status: string) {
@@ -168,11 +173,33 @@ export function AdsCampaignDetailShell({
             <AdsDailyMetricsTable series={model.series} />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {model.placeholders.map((section) => (
-              <AdsPlaceholderPanel key={section.id} section={section} />
-            ))}
-          </div>
+          {model.breakdowns ? (
+            <div className="space-y-2">
+              {model.breakdowns.error ? (
+                <div className="text-[12px] text-red-600">{model.breakdowns.error}</div>
+              ) : null}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <AdsAdGroupsTable
+                  rows={model.breakdowns.adGroups}
+                  loading={model.breakdowns.loading}
+                />
+                <AdsKeywordsTable
+                  rows={model.breakdowns.keywords}
+                  loading={model.breakdowns.loading}
+                />
+                <AdsSearchTermsTable
+                  rows={model.breakdowns.searchTerms}
+                  loading={model.breakdowns.loading}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {(model.placeholders ?? []).map((section) => (
+                <AdsPlaceholderPanel key={section.id} section={section} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -1,6 +1,12 @@
 export { AdsCampaignDetailShell } from './AdsCampaignDetailShell';
 export { GoogleAdsCampaignDetail } from './GoogleAdsCampaignDetail';
+export {
+  AdsAdGroupsTable,
+  AdsKeywordsTable,
+  AdsSearchTermsTable,
+} from './AdsBreakdownTables';
 export type {
+  AdsBreakdownTablesProps,
   AdsCampaignDetailShellProps,
   AdsCampaignDetailViewModel,
   AdsCampaignPlatform,

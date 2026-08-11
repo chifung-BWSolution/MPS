@@ -7,6 +7,7 @@ import {
   getAccessToken,
   linkGoogleCampaignWebsites,
   LOGIN_CUSTOMER_ID,
+  syncBreakdownDailyMetrics,
   toIsoDate,
 } from "../_shared/google-ads.ts";
 
@@ -98,22 +99,35 @@ Deno.serve(async (req) => {
       if (error) throw new Error(`Daily upsert failed: ${error.message}`);
     }
 
+    const breakdown = await syncBreakdownDailyMetrics(
+      supabase,
+      accessToken,
+      enabledIds,
+      start,
+      end,
+      nowIso,
+    );
+    const allErrors = [...errors, ...breakdown.errors];
+
     const durationMs = Date.now() - startedMs;
     await supabase
       .from("google_ads_sync_runs")
       .update({
-        status: errors.length && daily.length === 0 ? "error" : "success",
+        status: allErrors.length && daily.length === 0 ? "error" : "success",
         finished_at: new Date().toISOString(),
         accounts_synced: accounts.length,
         campaigns_synced: campaigns.length,
-        error_message: errors.length ? errors.slice(0, 10).join(" | ") : null,
+        error_message: allErrors.length ? allErrors.slice(0, 10).join(" | ") : null,
         meta: {
           login_customer_id: LOGIN_CUSTOMER_ID,
           date_from: start,
           date_to: end,
           daily_rows: daily.length,
+          ad_group_rows: breakdown.adGroupRows,
+          keyword_rows: breakdown.keywordRows,
+          search_term_rows: breakdown.searchTermRows,
           duration_ms: durationMs,
-          error_count: errors.length,
+          error_count: allErrors.length,
           mode: "incremental_7d",
           websites_linked: linkSummary.websites_linked,
           domains_discovered: linkSummary.domains_discovered,
@@ -132,10 +146,13 @@ Deno.serve(async (req) => {
         leaf_accounts: enabledIds.length,
         campaigns_synced: campaigns.length,
         daily_rows: daily.length,
+        ad_group_rows: breakdown.adGroupRows,
+        keyword_rows: breakdown.keywordRows,
+        search_term_rows: breakdown.searchTermRows,
         date_from: start,
         date_to: end,
         duration_ms: durationMs,
-        errors: errors.slice(0, 20),
+        errors: allErrors.slice(0, 20),
         synced_at: nowIso,
         websites_linked: linkSummary.websites_linked,
         domains_discovered: linkSummary.domains_discovered,

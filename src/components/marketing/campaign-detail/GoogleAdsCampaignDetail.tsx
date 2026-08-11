@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { resolveDateRange } from '@/hooks/useGoogleAdsData';
 import { useGoogleAdsCampaignDetail } from '@/hooks/useGoogleAdsCampaignDetail';
+import { useGoogleAdsCampaignBreakdowns } from '@/hooks/useGoogleAdsCampaignBreakdowns';
 import {
   parseCampaignKey,
   setGoogleAdsCampaignHash,
@@ -10,24 +11,6 @@ import { openWebsiteDetail } from '@/lib/websiteNavigation';
 import type { DateRangePreset, GoogleAdsMetricTotals } from '@/types/googleAds';
 import { AdsCampaignDetailShell } from './AdsCampaignDetailShell';
 import type { AdsCampaignDetailViewModel, AdsKpiItem } from './types';
-
-const PLACEHOLDERS = [
-  {
-    id: 'ad-groups',
-    title: 'Ad Groups',
-    description: '各廣告群組成效與狀態（尚未同步）',
-  },
-  {
-    id: 'keywords',
-    title: 'Keywords',
-    description: '關鍵字曝光、點擊與品質相關指標（尚未同步）',
-  },
-  {
-    id: 'search-terms',
-    title: 'Search Terms',
-    description: '實際搜尋字詞與轉換表現（尚未同步）',
-  },
-];
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -174,10 +157,31 @@ export function GoogleAdsCampaignDetail({
     range.to,
   );
 
+  const {
+    adGroups,
+    keywords,
+    searchTerms,
+    loading: breakdownsLoading,
+    error: breakdownsError,
+  } = useGoogleAdsCampaignBreakdowns(
+    parsed?.customerId ?? null,
+    parsed?.campaignId ?? null,
+    range.from,
+    range.to,
+  );
+
   const model: AdsCampaignDetailViewModel = useMemo(() => {
+    const breakdowns = {
+      adGroups,
+      keywords,
+      searchTerms,
+      loading: breakdownsLoading,
+      error: breakdownsError,
+    };
+
     if (!detail) {
       return {
-        platform: 'google',
+        platform: 'google' as const,
         platformLabel: 'Google Ads',
         campaignName: parsed?.campaignId || campaignKey,
         status: '—',
@@ -206,12 +210,12 @@ export function GoogleAdsCampaignDetail({
           },
           [],
         ),
-        placeholders: PLACEHOLDERS,
+        breakdowns,
       };
     }
 
     return {
-      platform: 'google',
+      platform: 'google' as const,
       platformLabel: 'Google Ads',
       campaignName: detail.campaignName,
       status: detail.status,
@@ -229,9 +233,18 @@ export function GoogleAdsCampaignDetail({
         cpc: p.averageCpcMicros / 1_000_000,
       })),
       kpis: buildKpis(detail.totals, detail.previousTotals, detail.series),
-      placeholders: PLACEHOLDERS,
+      breakdowns,
     };
-  }, [detail, parsed, campaignKey]);
+  }, [
+    detail,
+    parsed,
+    campaignKey,
+    adGroups,
+    keywords,
+    searchTerms,
+    breakdownsLoading,
+    breakdownsError,
+  ]);
 
   const onBack = () => {
     setGoogleAdsCampaignHash({
