@@ -25,8 +25,8 @@
   - 繼承列表的日期區間，詳情頁可再調整；變更會寫回 hash（可重新整理／分享）。
   - 資料來源：`google_ads_campaign_daily_metrics`（campaign 每日指標）。
   - 區塊：KPI（含前期比較與 sparkline）、Performance 趨勢圖、Traffic efficiency donut、Day-of-week、Daily metrics 表。
-  - 細項：Ad Groups / Keywords / Search Terms（由每日倉庫彙總；Search Terms 顯示 Cost Top 100）。
-  - 倉庫表：`google_ads_ad_group_daily_metrics`、`google_ads_keyword_daily_metrics`、`google_ads_search_term_daily_metrics`；增量同步近 7 日，歷史回填按月。
+  - 細項：Ad Groups / Keywords / Search Terms 為**即時 Google Ads API**（依詳情頁日期區間；Search Terms Top 100 by Cost）。不落倉庫。
+  - 即時細項日期上限 92 日（`7d/14d/30d/90d` 可用；`ytd` / `all` / 過長自訂區間會顯示提示，不呼叫 API）。
   - 共用 shell（`AdsCampaignDetailShell`）供後續 Facebook Ads 詳情複用。
 
 ---

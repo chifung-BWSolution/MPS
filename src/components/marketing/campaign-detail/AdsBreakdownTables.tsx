@@ -76,10 +76,10 @@ export function AdsAdGroupsTable({
   return (
     <PanelShell
       title="Ad Groups"
-      subtitle="各廣告群組成效與狀態"
+      subtitle="即時從 Google Ads 拉取 · 各廣告群組成效"
       count={rows.length}
       loading={loading}
-      emptyHint="此期間尚無 Ad Group 資料。請執行「Refresh recent」或歷史回填。"
+      emptyHint="此期間尚無 Ad Group 資料（或日期區間超過 92 日上限）。"
     >
       <table className="w-full text-[11px]">
         <thead className="bg-slate-50 sticky top-0 z-10 text-muted-foreground">
@@ -126,10 +126,10 @@ export function AdsKeywordsTable({
   return (
     <PanelShell
       title="Keywords"
-      subtitle="關鍵字曝光、點擊與品質分數"
+      subtitle="即時從 Google Ads 拉取 · 關鍵字與品質分數"
       count={rows.length}
       loading={loading}
-      emptyHint="此期間尚無 Keyword 資料。請執行「Refresh recent」或歷史回填。"
+      emptyHint="此期間尚無 Keyword 資料（或日期區間超過 92 日上限）。"
     >
       <table className="w-full text-[11px]">
         <thead className="bg-slate-50 sticky top-0 z-10 text-muted-foreground">
@@ -176,10 +176,10 @@ export function AdsSearchTermsTable({
   return (
     <PanelShell
       title="Search Terms"
-      subtitle="實際搜尋字詞與轉換（Top 100 by Cost）"
+      subtitle="即時從 Google Ads 拉取 · Top 100 by Cost"
       count={rows.length}
       loading={loading}
-      emptyHint="此期間尚無 Search Term 資料。請執行「Refresh recent」或歷史回填。"
+      emptyHint="此期間尚無 Search Term 資料（或日期區間超過 92 日上限）。"
     >
       <table className="w-full text-[11px]">
         <thead className="bg-slate-50 sticky top-0 z-10 text-muted-foreground">

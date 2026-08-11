@@ -306,78 +306,87 @@ export async function fetchDailyMetricsForRange(
   return { daily, campaigns: [...campaignMap.values()], errors };
 }
 
-export type AdGroupDailyRow = {
-  customer_id: string;
-  campaign_id: string;
-  ad_group_id: string;
-  ad_group_name: string;
-  status: string | null;
-  ad_group_type: string | null;
-  metric_date: string;
+/** Max inclusive day span for live campaign breakdown fetches. */
+export const LIVE_BREAKDOWN_MAX_DAYS = 92;
+
+export type LiveAdGroupRow = {
+  adGroupId: string;
+  adGroupName: string;
+  status?: string;
+  adGroupType?: string;
   impressions: number;
   clicks: number;
-  cost_micros: number;
+  costMicros: number;
   conversions: number;
   ctr: number;
-  average_cpc_micros: number;
-  last_synced_at: string;
-  updated_at: string;
 };
 
-export type KeywordDailyRow = {
-  customer_id: string;
-  campaign_id: string;
-  ad_group_id: string;
-  criterion_id: string;
-  keyword_text: string;
-  match_type: string | null;
-  status: string | null;
-  metric_date: string;
+export type LiveKeywordRow = {
+  adGroupId: string;
+  criterionId: string;
+  keywordText: string;
+  matchType?: string;
+  status?: string;
+  qualityScore?: number | null;
   impressions: number;
   clicks: number;
-  cost_micros: number;
-  conversions: number;
-  quality_score: number | null;
-  normalized_keyword: string;
-  last_synced_at: string;
-  updated_at: string;
-};
-
-export type SearchTermDailyRow = {
-  customer_id: string;
-  campaign_id: string;
-  ad_group_id: string;
-  search_term: string;
-  metric_date: string;
-  keyword_text: string | null;
-  match_type: string | null;
-  search_term_status: string | null;
-  search_term_match_type: string | null;
-  impressions: number;
-  clicks: number;
-  cost_micros: number;
+  costMicros: number;
   conversions: number;
   ctr: number;
-  average_cpc_micros: number;
-  last_synced_at: string;
-  updated_at: string;
 };
 
-function normalizeKeyword(text: string): string {
-  return text.trim().toLowerCase();
-}
+export type LiveSearchTermRow = {
+  adGroupId: string;
+  searchTerm: string;
+  keywordText?: string;
+  matchType?: string;
+  searchTermStatus?: string;
+  searchTermMatchType?: string;
+  impressions: number;
+  clicks: number;
+  costMicros: number;
+  conversions: number;
+  ctr: number;
+};
 
-export async function fetchAdGroupDailyMetricsForRange(
-  accessToken: string,
-  customerIds: string[],
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export function validateLiveBreakdownRange(
   dateFrom: string,
   dateTo: string,
-  nowIso: string,
-): Promise<{ rows: AdGroupDailyRow[]; errors: string[] }> {
+): { ok: true; days: number } | { ok: false; error: string } {
+  if (!ISO_DATE_RE.test(dateFrom) || !ISO_DATE_RE.test(dateTo)) {
+    return { ok: false, error: "日期格式無效（需 YYYY-MM-DD）" };
+  }
+  if (dateFrom > dateTo) {
+    return { ok: false, error: "開始日期不可晚於結束日期" };
+  }
+  const fromMs = Date.parse(`${dateFrom}T00:00:00Z`);
+  const toMs = Date.parse(`${dateTo}T00:00:00Z`);
+  const days = Math.round((toMs - fromMs) / 86_400_000) + 1;
+  if (days > LIVE_BREAKDOWN_MAX_DAYS) {
+    return {
+      ok: false,
+      error: `日期區間過長，即時細項最多 ${LIVE_BREAKDOWN_MAX_DAYS} 日`,
+    };
+  }
+  return { ok: true, days };
+}
+
+function withCtr(impressions: number, clicks: number): number {
+  return impressions > 0 ? clicks / impressions : 0;
+}
+
+/** Period-aggregated ad groups for one campaign (no segments.date). */
+export async function fetchLiveCampaignAdGroups(
+  accessToken: string,
+  customerId: string,
+  campaignId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<LiveAdGroupRow[]> {
   const query = `
     SELECT
-      segments.date,
-      campaign.id,
       ad_group.id,
       ad_group.name,
       ad_group.status,
@@ -385,62 +394,44 @@ export async function fetchAdGroupDailyMetricsForRange(
       metrics.impressions,
       metrics.clicks,
       metrics.cost_micros,
-      metrics.conversions,
-      metrics.ctr,
-      metrics.average_cpc
+      metrics.conversions
     FROM ad_group
-    WHERE segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
+    WHERE campaign.id = ${campaignId}
+      AND segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
   `;
-
-  const rows: AdGroupDailyRow[] = [];
-  const errors: string[] = [];
-
-  await mapPool(customerIds, ACCOUNT_CONCURRENCY, async (customerId) => {
-    try {
-      const result = await gaqlQuery(accessToken, customerId, query);
-      for (const row of result) {
-        const campaignId = String(nestGet(row, "campaign.id") ?? "");
-        const adGroupId = String(nestGet(row, "adGroup.id") ?? "");
-        const metricDate = String(nestGet(row, "segments.date") ?? "");
-        if (!campaignId || !adGroupId || !metricDate) continue;
-        rows.push({
-          customer_id: customerId,
-          campaign_id: campaignId,
-          ad_group_id: adGroupId,
-          ad_group_name: String(nestGet(row, "adGroup.name") ?? ""),
-          status: String(nestGet(row, "adGroup.status") ?? "") || null,
-          ad_group_type: String(nestGet(row, "adGroup.type") ?? "") || null,
-          metric_date: metricDate,
-          impressions: asInt(nestGet(row, "metrics.impressions")),
-          clicks: asInt(nestGet(row, "metrics.clicks")),
-          cost_micros: asInt(nestGet(row, "metrics.costMicros")),
-          conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
-          ctr: Number(nestGet(row, "metrics.ctr") ?? 0) || 0,
-          average_cpc_micros: asInt(nestGet(row, "metrics.averageCpc")),
-          last_synced_at: nowIso,
-          updated_at: nowIso,
-        });
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      errors.push(`ad_group ${customerId}: ${msg.slice(0, 160)}`);
-    }
-  });
-
-  return { rows, errors };
+  const result = await gaqlQuery(accessToken, customerId, query);
+  const rows: LiveAdGroupRow[] = [];
+  for (const row of result) {
+    const adGroupId = String(nestGet(row, "adGroup.id") ?? "");
+    if (!adGroupId) continue;
+    const impressions = asInt(nestGet(row, "metrics.impressions"));
+    const clicks = asInt(nestGet(row, "metrics.clicks"));
+    rows.push({
+      adGroupId,
+      adGroupName: String(nestGet(row, "adGroup.name") ?? adGroupId),
+      status: String(nestGet(row, "adGroup.status") ?? "") || undefined,
+      adGroupType: String(nestGet(row, "adGroup.type") ?? "") || undefined,
+      impressions,
+      clicks,
+      costMicros: asInt(nestGet(row, "metrics.costMicros")),
+      conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
+      ctr: withCtr(impressions, clicks),
+    });
+  }
+  rows.sort((a, b) => b.costMicros - a.costMicros);
+  return rows;
 }
 
-export async function fetchKeywordDailyMetricsForRange(
+/** Period-aggregated keywords for one campaign. */
+export async function fetchLiveCampaignKeywords(
   accessToken: string,
-  customerIds: string[],
+  customerId: string,
+  campaignId: string,
   dateFrom: string,
   dateTo: string,
-  nowIso: string,
-): Promise<{ rows: KeywordDailyRow[]; errors: string[] }> {
+): Promise<LiveKeywordRow[]> {
   const query = `
     SELECT
-      segments.date,
-      campaign.id,
       ad_group.id,
       ad_group_criterion.criterion_id,
       ad_group_criterion.keyword.text,
@@ -452,72 +443,56 @@ export async function fetchKeywordDailyMetricsForRange(
       metrics.cost_micros,
       metrics.conversions
     FROM keyword_view
-    WHERE segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
+    WHERE campaign.id = ${campaignId}
+      AND segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
   `;
-
-  const rows: KeywordDailyRow[] = [];
-  const errors: string[] = [];
-
-  await mapPool(customerIds, ACCOUNT_CONCURRENCY, async (customerId) => {
-    try {
-      const result = await gaqlQuery(accessToken, customerId, query);
-      for (const row of result) {
-        const campaignId = String(nestGet(row, "campaign.id") ?? "");
-        const adGroupId = String(nestGet(row, "adGroup.id") ?? "");
-        const criterionId = String(
-          nestGet(row, "adGroupCriterion.criterionId") ?? "",
-        );
-        const metricDate = String(nestGet(row, "segments.date") ?? "");
-        const keywordText = String(
-          nestGet(row, "adGroupCriterion.keyword.text") ?? "",
-        );
-        if (!campaignId || !adGroupId || !criterionId || !metricDate) continue;
-        const qsRaw = nestGet(row, "adGroupCriterion.qualityInfo.qualityScore");
-        rows.push({
-          customer_id: customerId,
-          campaign_id: campaignId,
-          ad_group_id: adGroupId,
-          criterion_id: criterionId,
-          keyword_text: keywordText,
-          match_type:
-            String(nestGet(row, "adGroupCriterion.keyword.matchType") ?? "") ||
-            null,
-          status:
-            String(nestGet(row, "adGroupCriterion.status") ?? "") || null,
-          metric_date: metricDate,
-          impressions: asInt(nestGet(row, "metrics.impressions")),
-          clicks: asInt(nestGet(row, "metrics.clicks")),
-          cost_micros: asInt(nestGet(row, "metrics.costMicros")),
-          conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
-          quality_score:
-            qsRaw === undefined || qsRaw === null || qsRaw === ""
-              ? null
-              : asInt(qsRaw),
-          normalized_keyword: normalizeKeyword(keywordText),
-          last_synced_at: nowIso,
-          updated_at: nowIso,
-        });
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      errors.push(`keyword ${customerId}: ${msg.slice(0, 160)}`);
-    }
-  });
-
-  return { rows, errors };
+  const result = await gaqlQuery(accessToken, customerId, query);
+  const rows: LiveKeywordRow[] = [];
+  for (const row of result) {
+    const adGroupId = String(nestGet(row, "adGroup.id") ?? "");
+    const criterionId = String(
+      nestGet(row, "adGroupCriterion.criterionId") ?? "",
+    );
+    if (!adGroupId || !criterionId) continue;
+    const impressions = asInt(nestGet(row, "metrics.impressions"));
+    const clicks = asInt(nestGet(row, "metrics.clicks"));
+    const qsRaw = nestGet(row, "adGroupCriterion.qualityInfo.qualityScore");
+    rows.push({
+      adGroupId,
+      criterionId,
+      keywordText: String(
+        nestGet(row, "adGroupCriterion.keyword.text") ?? criterionId,
+      ),
+      matchType:
+        String(nestGet(row, "adGroupCriterion.keyword.matchType") ?? "") ||
+        undefined,
+      status: String(nestGet(row, "adGroupCriterion.status") ?? "") || undefined,
+      qualityScore:
+        qsRaw === undefined || qsRaw === null || qsRaw === ""
+          ? null
+          : asInt(qsRaw),
+      impressions,
+      clicks,
+      costMicros: asInt(nestGet(row, "metrics.costMicros")),
+      conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
+      ctr: withCtr(impressions, clicks),
+    });
+  }
+  rows.sort((a, b) => b.costMicros - a.costMicros);
+  return rows;
 }
 
-export async function fetchSearchTermDailyMetricsForRange(
+/** Period-aggregated search terms for one campaign (top N by cost). */
+export async function fetchLiveCampaignSearchTerms(
   accessToken: string,
-  customerIds: string[],
+  customerId: string,
+  campaignId: string,
   dateFrom: string,
   dateTo: string,
-  nowIso: string,
-): Promise<{ rows: SearchTermDailyRow[]; errors: string[] }> {
+  limit = 100,
+): Promise<LiveSearchTermRow[]> {
   const query = `
     SELECT
-      segments.date,
-      campaign.id,
       ad_group.id,
       search_term_view.search_term,
       search_term_view.status,
@@ -527,216 +502,98 @@ export async function fetchSearchTermDailyMetricsForRange(
       metrics.impressions,
       metrics.clicks,
       metrics.cost_micros,
-      metrics.conversions,
-      metrics.ctr,
-      metrics.average_cpc
+      metrics.conversions
     FROM search_term_view
-    WHERE segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
+    WHERE campaign.id = ${campaignId}
+      AND segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
   `;
-
-  const rows: SearchTermDailyRow[] = [];
-  const errors: string[] = [];
-
-  await mapPool(customerIds, ACCOUNT_CONCURRENCY, async (customerId) => {
-    try {
-      const result = await gaqlQuery(accessToken, customerId, query);
-      for (const row of result) {
-        const campaignId = String(nestGet(row, "campaign.id") ?? "");
-        const adGroupId = String(nestGet(row, "adGroup.id") ?? "");
-        // Truncate to stay under btree index key limits on the PK.
-        const searchTerm = String(
-          nestGet(row, "searchTermView.searchTerm") ?? "",
-        )
-          .trim()
-          .slice(0, 512);
-        const metricDate = String(nestGet(row, "segments.date") ?? "");
-        if (!campaignId || !adGroupId || !searchTerm || !metricDate) continue;
-        rows.push({
-          customer_id: customerId,
-          campaign_id: campaignId,
-          ad_group_id: adGroupId,
-          search_term: searchTerm,
-          metric_date: metricDate,
-          keyword_text:
-            String(nestGet(row, "segments.keyword.info.text") ?? "") || null,
-          match_type:
-            String(nestGet(row, "segments.keyword.info.matchType") ?? "") ||
-            null,
-          search_term_status:
-            String(nestGet(row, "searchTermView.status") ?? "") || null,
-          search_term_match_type:
-            String(nestGet(row, "segments.searchTermMatchType") ?? "") || null,
-          impressions: asInt(nestGet(row, "metrics.impressions")),
-          clicks: asInt(nestGet(row, "metrics.clicks")),
-          cost_micros: asInt(nestGet(row, "metrics.costMicros")),
-          conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
-          ctr: Number(nestGet(row, "metrics.ctr") ?? 0) || 0,
-          average_cpc_micros: asInt(nestGet(row, "metrics.averageCpc")),
-          last_synced_at: nowIso,
-          updated_at: nowIso,
-        });
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      errors.push(`search_term ${customerId}: ${msg.slice(0, 160)}`);
-    }
-  });
-
-  return { rows, errors };
-}
-
-export type SyncBreakdownOptions = {
-  /** Prefer sequential fetches during backfill to avoid edge timeouts. */
-  sequential?: boolean;
-  includeSearchTerms?: boolean;
-};
-
-async function upsertChunks(
-  supabase: SupabaseClient,
-  table: string,
-  rows: Record<string, unknown>[],
-  onConflict: string,
-  label: string,
-  errors: string[],
-): Promise<number> {
-  let upserted = 0;
-  for (let i = 0; i < rows.length; i += 500) {
-    const chunk = rows.slice(i, i + 500);
-    const { error } = await supabase.from(table).upsert(chunk, { onConflict });
-    if (error) {
-      errors.push(`${label} upsert: ${error.message}`.slice(0, 200));
-      continue;
-    }
-    upserted += chunk.length;
+  const result = await gaqlQuery(accessToken, customerId, query);
+  const rows: LiveSearchTermRow[] = [];
+  for (const row of result) {
+    const adGroupId = String(nestGet(row, "adGroup.id") ?? "");
+    const searchTerm = String(nestGet(row, "searchTermView.searchTerm") ?? "")
+      .trim()
+      .slice(0, 512);
+    if (!adGroupId || !searchTerm) continue;
+    const impressions = asInt(nestGet(row, "metrics.impressions"));
+    const clicks = asInt(nestGet(row, "metrics.clicks"));
+    rows.push({
+      adGroupId,
+      searchTerm,
+      keywordText:
+        String(nestGet(row, "segments.keyword.info.text") ?? "") || undefined,
+      matchType:
+        String(nestGet(row, "segments.keyword.info.matchType") ?? "") ||
+        undefined,
+      searchTermStatus:
+        String(nestGet(row, "searchTermView.status") ?? "") || undefined,
+      searchTermMatchType:
+        String(nestGet(row, "segments.searchTermMatchType") ?? "") || undefined,
+      impressions,
+      clicks,
+      costMicros: asInt(nestGet(row, "metrics.costMicros")),
+      conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
+      ctr: withCtr(impressions, clicks),
+    });
   }
-  return upserted;
+  rows.sort((a, b) => b.costMicros - a.costMicros);
+  return rows.slice(0, Math.max(limit, 1));
 }
 
-/** Fetch + upsert ad group / keyword / search term daily metrics for a date range. */
-export async function syncBreakdownDailyMetrics(
-  supabase: SupabaseClient,
+export async function fetchLiveCampaignBreakdowns(
   accessToken: string,
-  customerIds: string[],
+  customerId: string,
+  campaignId: string,
   dateFrom: string,
   dateTo: string,
-  nowIso: string,
-  options: SyncBreakdownOptions = {},
 ): Promise<{
-  adGroupRows: number;
-  keywordRows: number;
-  searchTermRows: number;
+  adGroups: LiveAdGroupRow[];
+  keywords: LiveKeywordRow[];
+  searchTerms: LiveSearchTermRow[];
   errors: string[];
 }> {
-  const sequential = options.sequential ?? false;
-  const includeSearchTerms = options.includeSearchTerms ?? true;
   const errors: string[] = [];
-
-  let adGroups: { rows: AdGroupDailyRow[]; errors: string[] };
-  let keywords: { rows: KeywordDailyRow[]; errors: string[] };
-  let searchTerms: { rows: SearchTermDailyRow[]; errors: string[] } = {
-    rows: [],
-    errors: [],
-  };
-
-  try {
-    if (sequential) {
-      adGroups = await fetchAdGroupDailyMetricsForRange(
-        accessToken,
-        customerIds,
-        dateFrom,
-        dateTo,
-        nowIso,
+  const [adGroups, keywords, searchTerms] = await Promise.all([
+    fetchLiveCampaignAdGroups(
+      accessToken,
+      customerId,
+      campaignId,
+      dateFrom,
+      dateTo,
+    ).catch((e) => {
+      errors.push(
+        `ad_group: ${(e instanceof Error ? e.message : String(e)).slice(0, 160)}`,
       );
-      keywords = await fetchKeywordDailyMetricsForRange(
-        accessToken,
-        customerIds,
-        dateFrom,
-        dateTo,
-        nowIso,
+      return [] as LiveAdGroupRow[];
+    }),
+    fetchLiveCampaignKeywords(
+      accessToken,
+      customerId,
+      campaignId,
+      dateFrom,
+      dateTo,
+    ).catch((e) => {
+      errors.push(
+        `keyword: ${(e instanceof Error ? e.message : String(e)).slice(0, 160)}`,
       );
-      if (includeSearchTerms) {
-        searchTerms = await fetchSearchTermDailyMetricsForRange(
-          accessToken,
-          customerIds,
-          dateFrom,
-          dateTo,
-          nowIso,
-        );
-      }
-    } else {
-      const results = await Promise.all([
-        fetchAdGroupDailyMetricsForRange(
-          accessToken,
-          customerIds,
-          dateFrom,
-          dateTo,
-          nowIso,
-        ),
-        fetchKeywordDailyMetricsForRange(
-          accessToken,
-          customerIds,
-          dateFrom,
-          dateTo,
-          nowIso,
-        ),
-        includeSearchTerms
-          ? fetchSearchTermDailyMetricsForRange(
-            accessToken,
-            customerIds,
-            dateFrom,
-            dateTo,
-            nowIso,
-          )
-          : Promise.resolve({ rows: [] as SearchTermDailyRow[], errors: [] }),
-      ]);
-      adGroups = results[0];
-      keywords = results[1];
-      searchTerms = results[2];
-    }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    errors.push(`breakdown fetch: ${msg}`.slice(0, 200));
-    return {
-      adGroupRows: 0,
-      keywordRows: 0,
-      searchTermRows: 0,
-      errors,
-    };
-  }
+      return [] as LiveKeywordRow[];
+    }),
+    fetchLiveCampaignSearchTerms(
+      accessToken,
+      customerId,
+      campaignId,
+      dateFrom,
+      dateTo,
+      100,
+    ).catch((e) => {
+      errors.push(
+        `search_term: ${(e instanceof Error ? e.message : String(e)).slice(0, 160)}`,
+      );
+      return [] as LiveSearchTermRow[];
+    }),
+  ]);
 
-  errors.push(...adGroups.errors, ...keywords.errors, ...searchTerms.errors);
-
-  const adGroupRows = await upsertChunks(
-    supabase,
-    "google_ads_ad_group_daily_metrics",
-    adGroups.rows as unknown as Record<string, unknown>[],
-    "customer_id,campaign_id,ad_group_id,metric_date",
-    "Ad group daily",
-    errors,
-  );
-  const keywordRows = await upsertChunks(
-    supabase,
-    "google_ads_keyword_daily_metrics",
-    keywords.rows as unknown as Record<string, unknown>[],
-    "customer_id,campaign_id,ad_group_id,criterion_id,metric_date",
-    "Keyword daily",
-    errors,
-  );
-  const searchTermRows = await upsertChunks(
-    supabase,
-    "google_ads_search_term_daily_metrics",
-    searchTerms.rows as unknown as Record<string, unknown>[],
-    "customer_id,campaign_id,ad_group_id,search_term,metric_date",
-    "Search term daily",
-    errors,
-  );
-
-  return {
-    adGroupRows,
-    keywordRows,
-    searchTermRows,
-    errors,
-  };
+  return { adGroups, keywords, searchTerms, errors };
 }
 
 export function monthStart(d: Date): Date {

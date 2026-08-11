@@ -21,7 +21,7 @@ function isRetryableInvokeError(status: number, message: string): boolean {
 async function invokeFunction<T = Record<string, unknown>>(
   slug: string,
   body: Record<string, unknown>,
-  opts?: { retries?: number },
+  opts?: { retries?: number; signal?: AbortSignal },
 ): Promise<T> {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -32,6 +32,9 @@ async function invokeFunction<T = Record<string, unknown>>(
 
   let lastError: Error | null = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
+    if (opts?.signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -41,6 +44,7 @@ async function invokeFunction<T = Record<string, unknown>>(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
+        signal: opts?.signal,
       });
       const json = (await res.json().catch(() => ({}))) as T & { error?: string };
       if (!res.ok || json.error) {
@@ -54,6 +58,7 @@ async function invokeFunction<T = Record<string, unknown>>(
       }
       return json;
     } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') throw e;
       const message = e instanceof Error ? e.message : String(e);
       lastError = e instanceof Error ? e : new Error(message);
       if (attempt < retries && isRetryableInvokeError(0, message)) {
@@ -95,5 +100,43 @@ export function invokeGoogleAdsBackfill(action: string, jobId?: string) {
       ...(jobId ? { jobId } : {}),
     },
     { retries },
+  );
+}
+
+export const LIVE_BREAKDOWN_MAX_DAYS = 92;
+
+export type LiveCampaignBreakdownsResponse = {
+  success?: boolean;
+  customerId?: string;
+  campaignId?: string;
+  from?: string;
+  to?: string;
+  fetchedAt?: string;
+  adGroups?: import('@/types/googleAds').GoogleAdsAdGroupRow[];
+  keywords?: import('@/types/googleAds').GoogleAdsKeywordRow[];
+  searchTerms?: import('@/types/googleAds').GoogleAdsSearchTermRow[];
+  errors?: string[];
+  error?: string;
+  max_days?: number;
+};
+
+export function invokeGoogleAdsCampaignBreakdowns(
+  opts: {
+    customerId: string;
+    campaignId: string;
+    from: string;
+    to: string;
+  },
+  signal?: AbortSignal,
+) {
+  return invokeFunction<LiveCampaignBreakdownsResponse>(
+    'supabase-functions-google-ads-campaign-breakdowns',
+    {
+      customerId: opts.customerId,
+      campaignId: opts.campaignId,
+      from: opts.from,
+      to: opts.to,
+    },
+    { retries: 1, signal },
   );
 }
