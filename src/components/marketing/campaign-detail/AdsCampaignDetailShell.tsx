@@ -190,6 +190,8 @@ export function AdsCampaignDetailShell({
                     assetGroups={breakdowns.assetGroups}
                     ads={breakdowns.ads}
                     assets={breakdowns.assets}
+                    productGroups={breakdowns.productGroups}
+                    products={breakdowns.products}
                   />
                 </div>
               );

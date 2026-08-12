@@ -10,6 +10,8 @@ import type {
   GoogleAdsAssetRow,
   GoogleAdsBreakdownChannel,
   GoogleAdsKeywordRow,
+  GoogleAdsProductGroupRow,
+  GoogleAdsProductRow,
   GoogleAdsSearchTermRow,
 } from '@/types/googleAds';
 import { normalizeGoogleAdsBreakdownChannel } from '@/types/googleAds';
@@ -33,6 +35,8 @@ function emptyState() {
     assetGroups: [] as GoogleAdsAssetGroupRow[],
     ads: [] as GoogleAdsAdRow[],
     assets: [] as GoogleAdsAssetRow[],
+    productGroups: [] as GoogleAdsProductGroupRow[],
+    products: [] as GoogleAdsProductRow[],
   };
 }
 
@@ -49,6 +53,8 @@ export function useGoogleAdsCampaignBreakdowns(
   const [assetGroups, setAssetGroups] = useState<GoogleAdsAssetGroupRow[]>([]);
   const [ads, setAds] = useState<GoogleAdsAdRow[]>([]);
   const [assets, setAssets] = useState<GoogleAdsAssetRow[]>([]);
+  const [productGroups, setProductGroups] = useState<GoogleAdsProductGroupRow[]>([]);
+  const [products, setProducts] = useState<GoogleAdsProductRow[]>([]);
   const [channelType, setChannelType] = useState<string | null>(
     channelTypeHint ?? null,
   );
@@ -71,6 +77,8 @@ export function useGoogleAdsCampaignBreakdowns(
       setAssetGroups(empty.assetGroups);
       setAds(empty.ads);
       setAssets(empty.assets);
+      setProductGroups(empty.productGroups);
+      setProducts(empty.products);
     };
 
     if (!customerId || !campaignId || !dateFrom || !dateTo) {
@@ -163,6 +171,8 @@ export function useGoogleAdsCampaignBreakdowns(
           setAssetGroups(res.assetGroups ?? []);
           setAds(res.ads ?? []);
           setAssets(res.assets ?? []);
+          setProductGroups(res.productGroups ?? []);
+          setProducts(res.products ?? []);
           const partial = (res.errors || []).filter(Boolean);
           setError(partial.length ? partial.slice(0, 2).join(' · ') : null);
         } catch (e) {
@@ -191,6 +201,8 @@ export function useGoogleAdsCampaignBreakdowns(
     assetGroups,
     ads,
     assets,
+    productGroups,
+    products,
     loading,
     error,
   };

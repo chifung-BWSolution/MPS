@@ -98,6 +98,7 @@ export async function gaqlQuery(
     return rows;
   }
 
+  const streamErr = await streamRes.text();
   const searchUrl =
     `https://googleads.googleapis.com/${ADS_API_VERSION}/customers/${customerId}/googleAds:search`;
   const rows: GaqlRow[] = [];
@@ -111,8 +112,9 @@ export async function gaqlQuery(
       body: JSON.stringify(body),
     });
     if (!res.ok) {
+      const searchErr = await res.text();
       throw new Error(
-        `GAQL failed for ${customerId} (${res.status}): ${(await res.text()).slice(0, 400)}`,
+        `GAQL failed for ${customerId} (${res.status}): ${(searchErr || streamErr).slice(0, 1800)}`,
       );
     }
     const json = await res.json();
@@ -310,7 +312,11 @@ export async function fetchDailyMetricsForRange(
 export const LIVE_BREAKDOWN_MAX_DAYS = 92;
 
 /** Channel types that expose live breakdown panels in the UI. */
-export type LiveBreakdownChannel = "SEARCH" | "DEMAND_GEN" | "PERFORMANCE_MAX";
+export type LiveBreakdownChannel =
+  | "SEARCH"
+  | "DEMAND_GEN"
+  | "PERFORMANCE_MAX"
+  | "SHOPPING";
 
 export type LiveAdGroupRow = {
   adGroupId: string;
@@ -398,6 +404,31 @@ export type LiveAssetRow = {
   ctr: number;
 };
 
+export type LiveProductGroupRow = {
+  adGroupId: string;
+  adGroupName?: string;
+  criterionId: string;
+  productGroupLabel: string;
+  listingGroupType?: string;
+  status?: string;
+  impressions: number;
+  clicks: number;
+  costMicros: number;
+  conversions: number;
+  ctr: number;
+};
+
+export type LiveProductRow = {
+  productItemId: string;
+  productTitle?: string;
+  productBrand?: string;
+  impressions: number;
+  clicks: number;
+  costMicros: number;
+  conversions: number;
+  ctr: number;
+};
+
 export type LiveCampaignBreakdownsResult = {
   channelType: string;
   supported: boolean;
@@ -407,6 +438,8 @@ export type LiveCampaignBreakdownsResult = {
   assetGroups: LiveAssetGroupRow[];
   ads: LiveAdRow[];
   assets: LiveAssetRow[];
+  productGroups: LiveProductGroupRow[];
+  products: LiveProductRow[];
   errors: string[];
 };
 
@@ -420,6 +453,7 @@ export function normalizeLiveBreakdownChannel(
   if (t === "SEARCH") return "SEARCH";
   if (t === "DEMAND_GEN") return "DEMAND_GEN";
   if (t === "PERFORMANCE_MAX") return "PERFORMANCE_MAX";
+  if (t === "SHOPPING") return "SHOPPING";
   return null;
 }
 
@@ -449,7 +483,7 @@ async function settleBreakdown<T>(
     return await promise;
   } catch (e) {
     errors.push(
-      `${label}: ${(e instanceof Error ? e.message : String(e)).slice(0, 160)}`,
+      `${label}: ${(e instanceof Error ? e.message : String(e)).slice(0, 700)}`,
     );
     return fallback;
   }
@@ -993,6 +1027,226 @@ export async function fetchLiveCampaignDemandGenAssets(
   return rows.slice(0, Math.max(limit, 1));
 }
 
+function listingGroupLabel(row: GaqlRow, criterionId: string): string {
+  const caseValue = nestGet(row, "adGroupCriterion.listingGroup.caseValue");
+  const cv =
+    caseValue && typeof caseValue === "object"
+      ? (caseValue as Record<string, unknown>)
+      : {};
+  const candidates = [
+    nestGet(cv, "productItemId.value"),
+    nestGet(cv, "productBrand.value"),
+    nestGet(cv, "productType.value"),
+    nestGet(cv, "productCustomAttribute.value"),
+    nestGet(cv, "productChannel.channel"),
+    nestGet(cv, "productCondition.condition"),
+    nestGet(row, "adGroupCriterion.listingGroup.caseValue.productItemId.value"),
+    nestGet(row, "adGroupCriterion.listingGroup.caseValue.productBrand.value"),
+    nestGet(row, "adGroupCriterion.listingGroup.caseValue.productType.value"),
+    nestGet(
+      row,
+      "adGroupCriterion.listingGroup.caseValue.productCustomAttribute.value",
+    ),
+    nestGet(
+      row,
+      "adGroupCriterion.listingGroup.caseValue.productChannel.channel",
+    ),
+    nestGet(
+      row,
+      "adGroupCriterion.listingGroup.caseValue.productCondition.condition",
+    ),
+  ]
+    .map((v) => String(v ?? "").trim())
+    .filter(Boolean);
+  if (candidates.length) return candidates[0];
+  const listingType = String(
+    nestGet(row, "adGroupCriterion.listingGroup.type") ?? "",
+  );
+  if (listingType === "SUBDIVISION") return "All products (subdivision)";
+  if (listingType === "UNIT") return "Everything else";
+  return criterionId;
+}
+
+/** Shopping listing / product groups via product_group_view. */
+export async function fetchLiveCampaignProductGroups(
+  accessToken: string,
+  customerId: string,
+  campaignId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<LiveProductGroupRow[]> {
+  const query = `
+    SELECT
+      ad_group.id,
+      ad_group.name,
+      ad_group_criterion.criterion_id,
+      ad_group_criterion.status,
+      ad_group_criterion.listing_group.type,
+      ad_group_criterion.listing_group.case_value.product_brand.value,
+      ad_group_criterion.listing_group.case_value.product_item_id.value,
+      ad_group_criterion.listing_group.case_value.product_type.value,
+      ad_group_criterion.listing_group.case_value.product_custom_attribute.value,
+      ad_group_criterion.listing_group.case_value.product_channel.channel,
+      ad_group_criterion.listing_group.case_value.product_condition.condition,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions
+    FROM product_group_view
+    WHERE campaign.id = ${campaignId}
+      AND segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
+  `;
+  const result = await gaqlQuery(accessToken, customerId, query);
+  const rows: LiveProductGroupRow[] = [];
+  for (const row of result) {
+    const adGroupId = String(nestGet(row, "adGroup.id") ?? "");
+    const criterionId = String(
+      nestGet(row, "adGroupCriterion.criterionId") ?? "",
+    );
+    if (!adGroupId || !criterionId) continue;
+    const impressions = asInt(nestGet(row, "metrics.impressions"));
+    const clicks = asInt(nestGet(row, "metrics.clicks"));
+    rows.push({
+      adGroupId,
+      adGroupName: String(nestGet(row, "adGroup.name") ?? "") || undefined,
+      criterionId,
+      productGroupLabel: listingGroupLabel(row, criterionId),
+      listingGroupType:
+        String(nestGet(row, "adGroupCriterion.listingGroup.type") ?? "") ||
+        undefined,
+      status:
+        String(nestGet(row, "adGroupCriterion.status") ?? "") || undefined,
+      impressions,
+      clicks,
+      costMicros: asInt(nestGet(row, "metrics.costMicros")),
+      conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
+      ctr: withCtr(impressions, clicks),
+    });
+  }
+  rows.sort((a, b) => b.costMicros - a.costMicros);
+  return rows;
+}
+
+/** Shopping products via shopping_performance_view / shopping_product (top N by cost). */
+export async function fetchLiveCampaignShoppingProducts(
+  accessToken: string,
+  customerId: string,
+  campaignId: string,
+  dateFrom: string,
+  dateTo: string,
+  limit = 100,
+): Promise<LiveProductRow[]> {
+  const campaignResource =
+    `customers/${customerId}/campaigns/${campaignId}`;
+  const attempts = [
+    `
+    SELECT
+      campaign.id,
+      segments.product_item_id,
+      segments.product_title,
+      segments.product_brand,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions
+    FROM shopping_performance_view
+    WHERE campaign.id = ${campaignId}
+      AND segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
+    `,
+    `
+    SELECT
+      segments.product_item_id,
+      segments.product_title,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions
+    FROM shopping_performance_view
+    WHERE campaign.id = ${campaignId}
+      AND segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
+    `,
+    `
+    SELECT
+      shopping_product.item_id,
+      shopping_product.title,
+      shopping_product.brand,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions
+    FROM shopping_product
+    WHERE shopping_product.campaign = '${campaignResource}'
+      AND segments.date BETWEEN '${dateFrom}' AND '${dateTo}'
+    `,
+  ];
+
+  let result: GaqlRow[] = [];
+  let lastError: unknown;
+  for (const query of attempts) {
+    try {
+      result = await gaqlQuery(accessToken, customerId, query);
+      lastError = null;
+      break;
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  if (lastError) throw lastError;
+
+  const rows: LiveProductRow[] = [];
+  for (const row of result) {
+    const productItemId = String(
+      nestGet(row, "segments.productItemId") ??
+        nestGet(row, "shoppingProduct.itemId") ??
+        "",
+    ).trim();
+    if (!productItemId) continue;
+    const impressions = asInt(nestGet(row, "metrics.impressions"));
+    const clicks = asInt(nestGet(row, "metrics.clicks"));
+    rows.push({
+      productItemId,
+      productTitle:
+        String(
+          nestGet(row, "segments.productTitle") ??
+            nestGet(row, "shoppingProduct.title") ??
+            "",
+        ) || undefined,
+      productBrand:
+        String(
+          nestGet(row, "segments.productBrand") ??
+            nestGet(row, "shoppingProduct.brand") ??
+            "",
+        ) || undefined,
+      impressions,
+      clicks,
+      costMicros: asInt(nestGet(row, "metrics.costMicros")),
+      conversions: Number(nestGet(row, "metrics.conversions") ?? 0) || 0,
+      ctr: withCtr(impressions, clicks),
+    });
+  }
+  rows.sort((a, b) => b.costMicros - a.costMicros || b.impressions - a.impressions);
+  return rows.slice(0, Math.max(limit, 1));
+}
+
+function emptyBreakdownResult(
+  channelType: string,
+  errors: string[],
+): LiveCampaignBreakdownsResult {
+  return {
+    channelType,
+    supported: false,
+    adGroups: [],
+    keywords: [],
+    searchTerms: [],
+    assetGroups: [],
+    ads: [],
+    assets: [],
+    productGroups: [],
+    products: [],
+    errors,
+  };
+}
+
 export async function fetchLiveCampaignBreakdowns(
   accessToken: string,
   customerId: string,
@@ -1018,20 +1272,8 @@ export async function fetchLiveCampaignBreakdowns(
   }
 
   const channel = normalizeLiveBreakdownChannel(channelRaw);
-  const empty: LiveCampaignBreakdownsResult = {
-    channelType: channelRaw || "UNKNOWN",
-    supported: false,
-    adGroups: [],
-    keywords: [],
-    searchTerms: [],
-    assetGroups: [],
-    ads: [],
-    assets: [],
-    errors,
-  };
-
   if (!channel) {
-    return empty;
+    return emptyBreakdownResult(channelRaw || "UNKNOWN", errors);
   }
 
   if (channel === "SEARCH") {
@@ -1083,6 +1325,8 @@ export async function fetchLiveCampaignBreakdowns(
       assetGroups: [],
       ads: [],
       assets: [],
+      productGroups: [],
+      products: [],
       errors,
     };
   }
@@ -1136,6 +1380,63 @@ export async function fetchLiveCampaignBreakdowns(
       assetGroups: [],
       ads,
       assets,
+      productGroups: [],
+      products: [],
+      errors,
+    };
+  }
+
+  if (channel === "SHOPPING") {
+    const [adGroups, productGroups, products] = await Promise.all([
+      settleBreakdown(
+        "ad_group",
+        fetchLiveCampaignAdGroups(
+          accessToken,
+          customerId,
+          campaignId,
+          dateFrom,
+          dateTo,
+        ),
+        [] as LiveAdGroupRow[],
+        errors,
+      ),
+      settleBreakdown(
+        "product_group_view",
+        fetchLiveCampaignProductGroups(
+          accessToken,
+          customerId,
+          campaignId,
+          dateFrom,
+          dateTo,
+        ),
+        [] as LiveProductGroupRow[],
+        errors,
+      ),
+      settleBreakdown(
+        "shopping_performance_view",
+        fetchLiveCampaignShoppingProducts(
+          accessToken,
+          customerId,
+          campaignId,
+          dateFrom,
+          dateTo,
+          100,
+        ),
+        [] as LiveProductRow[],
+        errors,
+      ),
+    ]);
+    return {
+      channelType: channel,
+      supported: true,
+      adGroups,
+      keywords: [],
+      searchTerms: [],
+      assetGroups: [],
+      ads: [],
+      assets: [],
+      productGroups,
+      products,
       errors,
     };
   }
@@ -1190,6 +1491,8 @@ export async function fetchLiveCampaignBreakdowns(
     assetGroups,
     ads: [],
     assets,
+    productGroups: [],
+    products: [],
     errors,
   };
 }

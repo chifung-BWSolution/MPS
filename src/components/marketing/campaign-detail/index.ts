@@ -7,6 +7,8 @@ export {
   AdsAssetGroupsTable,
   AdsAdsTable,
   AdsAssetsTable,
+  AdsProductGroupsTable,
+  AdsProductsTable,
   AdsChannelBreakdownGrid,
 } from './AdsBreakdownTables';
 export type {

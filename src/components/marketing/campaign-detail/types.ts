@@ -42,6 +42,8 @@ export type AdsBreakdownTablesProps = {
   assetGroups: import('@/types/googleAds').GoogleAdsAssetGroupRow[];
   ads: import('@/types/googleAds').GoogleAdsAdRow[];
   assets: import('@/types/googleAds').GoogleAdsAssetRow[];
+  productGroups: import('@/types/googleAds').GoogleAdsProductGroupRow[];
+  products: import('@/types/googleAds').GoogleAdsProductRow[];
   loading: boolean;
   error?: string | null;
 };

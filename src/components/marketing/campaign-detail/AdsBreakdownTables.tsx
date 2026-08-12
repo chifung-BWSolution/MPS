@@ -7,6 +7,8 @@ import type {
   GoogleAdsAssetRow,
   GoogleAdsBreakdownChannel,
   GoogleAdsKeywordRow,
+  GoogleAdsProductGroupRow,
+  GoogleAdsProductRow,
   GoogleAdsSearchTermRow,
 } from '@/types/googleAds';
 
@@ -411,6 +413,113 @@ export function AdsAssetsTable({
   );
 }
 
+export function AdsProductGroupsTable({
+  rows,
+  loading,
+}: {
+  rows: GoogleAdsProductGroupRow[];
+  loading: boolean;
+}) {
+  return (
+    <PanelShell
+      title="Product Groups"
+      subtitle="即時從 Google Ads 拉取 · Shopping 商品分組"
+      count={rows.length}
+      loading={loading}
+      emptyHint="此期間尚無 Product Group 成效資料。"
+    >
+      <table className="w-full text-[11px]">
+        <thead className="bg-slate-50 sticky top-0 z-10 text-muted-foreground">
+          <tr>
+            <th className="text-left font-medium px-3 py-2">Product group</th>
+            <th className="text-left font-medium px-2 py-2">Status</th>
+            <th className="text-right font-medium px-2 py-2">Clicks</th>
+            <th className="text-right font-medium px-2 py-2">Cost</th>
+            <th className="text-right font-medium px-3 py-2">Conv.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr
+              key={`${r.adGroupId}:${r.criterionId}`}
+              className="border-t border-slate-100"
+            >
+              <td className="px-3 py-1.5">
+                <div className="font-medium line-clamp-2">{r.productGroupLabel}</div>
+                <div className="text-[10px] text-muted-foreground">
+                  {[r.listingGroupType, r.adGroupName].filter(Boolean).join(' · ')}
+                </div>
+              </td>
+              <td className="px-2 py-1.5">{statusBadge(r.status)}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums">{r.clicks.toLocaleString()}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums">
+                {formatMoneyFromMicros(r.costMicros)}
+              </td>
+              <td className="px-3 py-1.5 text-right tabular-nums">
+                {r.conversions.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </PanelShell>
+  );
+}
+
+export function AdsProductsTable({
+  rows,
+  loading,
+}: {
+  rows: GoogleAdsProductRow[];
+  loading: boolean;
+}) {
+  return (
+    <PanelShell
+      title="Products"
+      subtitle="即時從 Google Ads 拉取 · Top 100 by Cost"
+      count={rows.length}
+      loading={loading}
+      emptyHint="此期間尚無 Product 成效資料。"
+    >
+      <table className="w-full text-[11px]">
+        <thead className="bg-slate-50 sticky top-0 z-10 text-muted-foreground">
+          <tr>
+            <th className="text-left font-medium px-3 py-2">Product</th>
+            <th className="text-left font-medium px-2 py-2">Brand</th>
+            <th className="text-right font-medium px-2 py-2">Clicks</th>
+            <th className="text-right font-medium px-2 py-2">Cost</th>
+            <th className="text-right font-medium px-3 py-2">Conv.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.productItemId} className="border-t border-slate-100">
+              <td className="px-3 py-1.5">
+                <div className="font-medium line-clamp-2">
+                  {r.productTitle || r.productItemId}
+                </div>
+                <div className="text-[10px] text-muted-foreground font-mono">
+                  {r.productItemId}
+                </div>
+              </td>
+              <td className="px-2 py-1.5 text-muted-foreground">
+                <div className="line-clamp-2">{r.productBrand || '—'}</div>
+              </td>
+              <td className="px-2 py-1.5 text-right tabular-nums">{r.clicks.toLocaleString()}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums">
+                {formatMoneyFromMicros(r.costMicros)}
+              </td>
+              <td className="px-3 py-1.5 text-right tabular-nums">
+                {r.conversions.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </PanelShell>
+  );
+}
+
 export function AdsChannelBreakdownGrid({
   channel,
   loading,
@@ -420,6 +529,8 @@ export function AdsChannelBreakdownGrid({
   assetGroups,
   ads,
   assets,
+  productGroups,
+  products,
 }: {
   channel: GoogleAdsBreakdownChannel;
   loading: boolean;
@@ -429,6 +540,8 @@ export function AdsChannelBreakdownGrid({
   assetGroups: GoogleAdsAssetGroupRow[];
   ads: GoogleAdsAdRow[];
   assets: GoogleAdsAssetRow[];
+  productGroups: GoogleAdsProductGroupRow[];
+  products: GoogleAdsProductRow[];
 }) {
   if (channel === 'SEARCH') {
     return (
@@ -446,6 +559,16 @@ export function AdsChannelBreakdownGrid({
         <AdsAdGroupsTable rows={adGroups} loading={loading} />
         <AdsAdsTable rows={ads} loading={loading} />
         <AdsAssetsTable rows={assets} loading={loading} variant="demand_gen" />
+      </div>
+    );
+  }
+
+  if (channel === 'SHOPPING') {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <AdsAdGroupsTable rows={adGroups} loading={loading} />
+        <AdsProductGroupsTable rows={productGroups} loading={loading} />
+        <AdsProductsTable rows={products} loading={loading} />
       </div>
     );
   }

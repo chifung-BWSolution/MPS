@@ -166,6 +166,8 @@ export function GoogleAdsCampaignDetail({
     assetGroups,
     ads,
     assets,
+    productGroups,
+    products,
     loading: breakdownsLoading,
     error: breakdownsError,
   } = useGoogleAdsCampaignBreakdowns(
@@ -186,6 +188,8 @@ export function GoogleAdsCampaignDetail({
       assetGroups,
       ads,
       assets,
+      productGroups,
+      products,
       loading: breakdownsLoading,
       error: breakdownsError,
     };
@@ -258,6 +262,8 @@ export function GoogleAdsCampaignDetail({
     assetGroups,
     ads,
     assets,
+    productGroups,
+    products,
     breakdownsLoading,
     breakdownsError,
   ]);

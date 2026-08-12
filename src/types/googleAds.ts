@@ -112,7 +112,8 @@ export type GoogleAdsCampaignDetail = {
 export type GoogleAdsBreakdownChannel =
   | 'SEARCH'
   | 'DEMAND_GEN'
-  | 'PERFORMANCE_MAX';
+  | 'PERFORMANCE_MAX'
+  | 'SHOPPING';
 
 export type GoogleAdsAdGroupRow = {
   adGroupId: string;
@@ -200,6 +201,31 @@ export type GoogleAdsAssetRow = {
   ctr: number;
 };
 
+export type GoogleAdsProductGroupRow = {
+  adGroupId: string;
+  adGroupName?: string;
+  criterionId: string;
+  productGroupLabel: string;
+  listingGroupType?: string;
+  status?: string;
+  impressions: number;
+  clicks: number;
+  costMicros: number;
+  conversions: number;
+  ctr: number;
+};
+
+export type GoogleAdsProductRow = {
+  productItemId: string;
+  productTitle?: string;
+  productBrand?: string;
+  impressions: number;
+  clicks: number;
+  costMicros: number;
+  conversions: number;
+  ctr: number;
+};
+
 export function normalizeGoogleAdsBreakdownChannel(
   raw?: string | null,
 ): GoogleAdsBreakdownChannel | null {
@@ -210,5 +236,6 @@ export function normalizeGoogleAdsBreakdownChannel(
   if (t === 'SEARCH') return 'SEARCH';
   if (t === 'DEMAND_GEN') return 'DEMAND_GEN';
   if (t === 'PERFORMANCE_MAX') return 'PERFORMANCE_MAX';
+  if (t === 'SHOPPING') return 'SHOPPING';
   return null;
 }

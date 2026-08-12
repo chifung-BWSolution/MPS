@@ -68,6 +68,8 @@ Deno.serve(async (req) => {
       assetGroups: result.assetGroups,
       ads: result.ads,
       assets: result.assets,
+      productGroups: result.productGroups,
+      products: result.products,
       errors: result.errors.slice(0, 10),
     });
   } catch (error) {
