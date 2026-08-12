@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { SocialPostsModule } from './SocialPostsModule';
-import { EdmManagementModule } from './EdmManagementModule';
 import { GoogleAdsModule } from './GoogleAdsModule';
 import { GoogleAdsSyncModule } from './GoogleAdsSyncModule';
 import { FacebookAdsModule } from './FacebookAdsModule';
@@ -34,7 +33,6 @@ export function MarketingModule({ subModule }: { subModule?: string }) {
     switch (activeTab) {
       case 'calendar': return { title: '行銷日曆', subtitle: '綜覽各渠道行銷活動排期與進度。' };
       case 'social': return { title: '社交媒體', subtitle: '管理各平台社交媒體帖文及排期。' };
-      case 'edm': return { title: 'EDM 管理', subtitle: '電郵及短訊營銷活動管理。' };
       case 'google-ads': return { title: 'Google Ads', subtitle: '依日期區間檢視 MCC Campaign 成效（每日指標彙總）。' };
       case 'google-ads-sync': return { title: 'Google Ads 同步', subtitle: '觸發並監控完整歷史回填，以及日常增量同步狀態。' };
       case 'facebook-ads': return { title: 'Facebook Ads', subtitle: '依日期區間檢視 Meta Campaign 成效（多 Business · 每日指標彙總）。' };
@@ -62,7 +60,6 @@ export function MarketingModule({ subModule }: { subModule?: string }) {
 
       {activeTab === 'calendar' && <MarketingCalendar />}
       {activeTab === 'social' && <SocialPostsModule />}
-      {activeTab === 'edm' && <EdmManagementModule />}
       {activeTab === 'google-ads' && <GoogleAdsModule />}
       {activeTab === 'google-ads-sync' && <GoogleAdsSyncModule />}
       {activeTab === 'facebook-ads' && <FacebookAdsModule />}

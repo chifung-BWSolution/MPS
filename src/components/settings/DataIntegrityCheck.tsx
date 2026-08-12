@@ -217,37 +217,7 @@ export function DataIntegrityCheck() {
         totalCount: websites.length,
       });
 
-      // ===== 5. EDM Checks =====
-      const { edmCampaigns } = dataStore;
-      const edmWebsiteOrphans = Object.keys(edmCampaigns).filter(wsId => !websites.find(w => w.id === wsId));
-      allChecks.push({
-        id: 'edm-website-fk',
-        module: 'EDM 管理',
-        checkName: 'EDM→網站 外鍵關聯',
-        severity: edmWebsiteOrphans.length > 0 ? 'warning' : 'pass',
-        message: edmWebsiteOrphans.length > 0
-          ? `${edmWebsiteOrphans.length} 個網站 ID 下的 EDM 找不到對應網站`
-          : '所有 EDM 活動的網站關聯正確',
-        affectedCount: edmWebsiteOrphans.length,
-        totalCount: Object.keys(edmCampaigns).length,
-      });
-
-      // ===== 10. Supplier Checks =====
-      const { suppliers } = dataStore;
-      const suppliersMissingFields = suppliers.filter(s => !s.name || !s.category);
-      allChecks.push({
-        id: 'supplier-required-fields',
-        module: '供應商',
-        checkName: '必填欄位完整性',
-        severity: suppliersMissingFields.length > 0 ? 'warning' : 'pass',
-        message: suppliersMissingFields.length > 0
-          ? `${suppliersMissingFields.length} 個供應商缺少必填欄位`
-          : '所有供應商資料完整',
-        affectedCount: suppliersMissingFields.length,
-        totalCount: suppliers.length,
-      });
-
-      // ===== 11. 工作匯報 → 網站 Cross Check =====
+      // ===== 5. 工作匯報 → 網站 Cross Check =====
       const allDayReportEntries = dailyReports.flatMap(r => r.entries);
       const allDayReportEntriesV2 = dailyReportsV2.flatMap(r => r.entries);
 
@@ -596,21 +566,6 @@ export function DataIntegrityCheck() {
         totalCount: brands.length,
       });
 
-      // Check: Data chain completeness (Company → Brand → Project → Website → EDM)
-      const websitesWithoutContent = websites.filter(w => !Object.keys(edmCampaigns).includes(w.id));
-      allChecks.push({
-        id: 'website-no-content',
-        module: '跨模組一致性',
-        checkName: '網站內容關聯覆蓋',
-        severity: websitesWithoutContent.length > 0 ? 'warning' : 'pass',
-        message: websitesWithoutContent.length > 0
-          ? `${websitesWithoutContent.length} 個網站尚未關聯任何 EDM 活動（DataStore 剩餘模擬內容）`
-          : '所有網站均有關聯 EDM 內容',
-        details: websitesWithoutContent.slice(0, 20).map(w => `${w.websiteName} (${w.id}) — 無 EDM 記錄`),
-        affectedCount: websitesWithoutContent.length,
-        totalCount: websites.length,
-      });
-
       // ===== 18. 網站→項目→公司 全鏈一致性 =====
       const fullChainErrors = websites.filter(w => {
         if (!w.projectId || !w.companyId) return false;
@@ -828,8 +783,6 @@ export function DataIntegrityCheck() {
             <ChainNode label="項目" count={mockProjects.length} />
             <ArrowRight className="w-4 h-4 text-gray-400" />
             <ChainNode label="網站" count={dataStore.websites.length} />
-            <ArrowRight className="w-4 h-4 text-gray-400" />
-            <ChainNode label="EDM" count={Object.keys(dataStore.edmCampaigns).length} />
           </div>
           {/* Cross-module connections */}
           <div className="border-t border-gray-100 pt-3 mt-3">

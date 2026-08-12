@@ -97,7 +97,6 @@ export const mainMenuItems: MainMenuItem[] = [
     subMenus: [
       { id: 'calendar', label: '行銷日曆' },
       { id: 'social', label: '社交媒體' },
-      { id: 'edm', label: 'EDM 管理' },
       { id: 'google-ads', label: 'Google Ads' },
       { id: 'google-ads-sync', label: 'Google Ads 同步' },
       { id: 'facebook-ads', label: 'Facebook Ads' },
@@ -140,8 +139,6 @@ export const mainMenuItems: MainMenuItem[] = [
     id: 'supplier',
     label: '供應商',
     subMenus: [
-      { id: 'list', label: '供應商列表' },
-      { id: 'reviews', label: '供應商評價' },
       { id: 'web-suppliers', label: '網頁供應商' },
     ],
   },

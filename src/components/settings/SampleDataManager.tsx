@@ -27,8 +27,6 @@ export function SampleDataManager() {
 
   const moduleLabels: Record<string, string> = {
     websites: '網站',
-    edmCampaigns: 'EDM 活動',
-    suppliers: '供應商',
   };
 
   return (
