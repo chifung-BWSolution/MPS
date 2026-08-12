@@ -6,8 +6,6 @@ import { BrandManagementSettings } from './BrandManagementSettings';
 import { TermsConditionsSettings } from './TermsConditionsSettings';
 import { StaffDirectory } from './StaffDirectory';
 import { UserManagement } from './UserManagement';
-import { DataIntegrityCheck } from './DataIntegrityCheck';
-import { SampleDataManager } from './SampleDataManager';
 import { TalentApplicationForm } from './TalentApplicationForm';
 import { companies, brands } from '@/data/mockData';
 import { useAuth } from '@/context/AuthContext';
@@ -53,8 +51,6 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
       case 'terms-conditions': return { title: '條款及細則管理', subtitle: '管理各報價類型的條款範本，報價時可選擇或編輯。' };
       case 'staff-directory': return { title: '員工列表', subtitle: '查看所有員工資料，資料來源：OTC2 Staff（同步至 staffs）。' };
       case 'login-logs': return { title: '登入紀錄', subtitle: '查看用戶登入歷史記錄。' };
-      case 'data-integrity': return { title: '資料完整性檢查', subtitle: '檢查每一個頁面的資料完整性，確保各模組之間資料一致性。' };
-      case 'sample-data': return { title: '模擬數據管理', subtitle: '管理系統中的模擬數據，準備切換至真實數據時使用。' };
       default: return { title: '個人設定', subtitle: '管理個人資料及安全設定。' };
     }
   };
@@ -84,12 +80,6 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
         <StaffDirectory />
       ) : activeTab === 'users' ? (
         <UserManagement />
-      ) : activeTab === 'data-integrity' ? (
-        <DataIntegrityCheck />
-      ) : activeTab === 'sample-data' ? (
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6">
-          <SampleDataManager />
-        </div>
       ) : (
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6">
           {activeTab === 'profile' && <ProfileSection />}

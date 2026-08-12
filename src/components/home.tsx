@@ -1,5 +1,4 @@
 import { AppProvider, useApp } from '@/context/AppContext';
-import { DataStoreProvider } from '@/context/DataStore';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { DashboardModule } from '@/components/dashboard/DashboardModule';
 import { DayReportModule } from '@/components/day-report/DayReportModule';
@@ -59,11 +58,9 @@ function ModuleRouter() {
 function Home() {
   return (
     <AppProvider>
-      <DataStoreProvider>
-        <AppLayout>
-          <ModuleRouter />
-        </AppLayout>
-      </DataStoreProvider>
+      <AppLayout>
+        <ModuleRouter />
+      </AppLayout>
     </AppProvider>
   );
 }

@@ -20,7 +20,6 @@ import { useBrands } from '@/hooks/useBrands';
 import { useSystemOptions } from '@/hooks/useSystemOptions';
 import { projects as allProjectsData } from '@/data/mockData';
 import { ProjectCategoryBadge, getProjectCategory } from '@/components/ui/project-category-badge';
-import { useDataStore } from '@/context/DataStore';
 import { adsStatusLabel, useAdsWebsiteLinks } from '@/hooks/useAdsWebsiteLinks';
 import type { AdsAppliedStatus, AdsDiscoveredDomain } from '@/types/adsWebsiteLink';
 import {
@@ -1329,7 +1328,6 @@ function WebsiteFormModal({
 
 // ===== Website List =====
 function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site: WebsiteProfileFull) => void; profileTypeFilter?: 'all' | 'website' | 'system' }) {
-  const { addWebsiteWithId: addWebsiteToStore, updateWebsite: updateWebsiteInStore } = useDataStore();
   const { profiles: websiteProfiles, loading: profilesLoading, addProfile, updateProfile } = useWebsiteProfiles();
   const {
     statusByWebsiteId,
@@ -1414,7 +1412,6 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       toast.error('新增失敗', { description: err.message });
       return;
     }
-    addWebsiteToStore(newSite);
     toast.success(data.profileType === 'system' ? '系統已新增' : '網站已新增');
     setShowAddModal(false);
     setPendingCreateDomain(null);
@@ -1475,7 +1472,6 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       systemType: data.systemType,
     };
     await updateProfile(editingSite.id, updates);
-    updateWebsiteInStore(editingSite.id, updates);
     setEditingSite(null);
   };
 

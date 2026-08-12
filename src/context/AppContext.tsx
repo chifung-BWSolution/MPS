@@ -182,8 +182,6 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'terms-conditions', label: '條款及細則管理' },
       { id: 'users', label: '用戶管理' },
       { id: 'login-logs', label: '登入紀錄' },
-      { id: 'data-integrity', label: '資料完整性檢查' },
-      { id: 'sample-data', label: '模擬數據管理' },
     ],
   },
 ];
