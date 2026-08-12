@@ -7,8 +7,6 @@
 |------|-------|-------------|
 | `/dashboard/overview` | 儀表板 | 主要KPI + 統計面板 |
 | `/dashboard/my-projects` | 我的項目 | 用戶相關項目列表 |
-| `/dashboard/messages` | 項目消息 | 跨項目訊息/通知 |
-| `/dashboard/results-update` | 成果更新 | 近期產出匯總 |
 
 ---
 
@@ -97,9 +95,7 @@ DashboardModule.tsx
 ├── NotificationCenter.tsx    // 通知待辦
 ├── QuickActions.tsx          // 快捷操作
 ├── RecentActivity.tsx        // 時間線
-├── OutputUpdates.tsx         // 成果更新
-├── MyProjects.tsx            // 我的項目
-└── ProjectMessages.tsx       // 消息
+└── MyProjects.tsx            // 我的項目
 ```
 
 ---

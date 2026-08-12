@@ -20,8 +20,6 @@ export const mainMenuItems: MainMenuItem[] = [
     subMenus: [
       { id: 'overview', label: '儀表板' },
       { id: 'my-projects', label: '我的項目' },
-      { id: 'messages', label: '項目消息' },
-      { id: 'updates', label: '成果更新' },
     ],
   },
   {

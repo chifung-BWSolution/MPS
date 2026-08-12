@@ -3,8 +3,6 @@ import { ProjectProgressPanel } from './ProjectProgressPanel';
 import { QuickActions } from './QuickActions';
 import { RecentActivity } from './RecentActivity';
 import { MyProjects } from './MyProjects';
-import { ProjectMessages } from './ProjectMessages';
-import { OutputUpdates } from './OutputUpdates';
 import { useApp } from '@/context/AppContext';
 
 interface DashboardModuleProps {
@@ -43,10 +41,6 @@ export function DashboardModule({ subModule }: DashboardModuleProps) {
   switch (subModule) {
     case 'my-projects':
       return <MyProjects />;
-    case 'messages':
-      return <ProjectMessages />;
-    case 'updates':
-      return <OutputUpdates />;
     case 'overview':
     default:
       return <DashboardOverview />;

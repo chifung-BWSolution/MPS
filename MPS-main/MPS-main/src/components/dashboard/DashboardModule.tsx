@@ -4,8 +4,6 @@ import { NotificationCenter } from './NotificationCenter';
 import { QuickActions } from './QuickActions';
 import { RecentActivity } from './RecentActivity';
 import { MyProjects } from './MyProjects';
-import { ProjectMessages } from './ProjectMessages';
-import { OutputUpdates } from './OutputUpdates';
 
 interface DashboardModuleProps {
   subModule?: string;
@@ -48,10 +46,6 @@ export function DashboardModule({ subModule }: DashboardModuleProps) {
   switch (subModule) {
     case 'my-projects':
       return <MyProjects />;
-    case 'messages':
-      return <ProjectMessages />;
-    case 'updates':
-      return <OutputUpdates />;
     case 'overview':
     default:
       return <DashboardOverview />;
