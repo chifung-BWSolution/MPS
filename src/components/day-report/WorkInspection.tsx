@@ -13,6 +13,7 @@ import {
   fetchStaffIdsByDepartment,
   isValidDepartment,
 } from '@/components/day-report/departmentLookup';
+import { resolveStaffUuid } from '@/services/reportLinkService';
 
 // ============================
 // Types
@@ -303,10 +304,12 @@ export function WorkInspection() {
   useEffect(() => {
     const detect = async () => {
       if (!systemUser) return;
+      const staffUuid = await resolveStaffUuid(systemUser);
+      if (!staffUuid) return;
       let dept = systemUser.department || null;
       if (!dept) {
         try {
-          dept = await fetchDepartmentByStaffId(systemUser.staff_id);
+          dept = await fetchDepartmentByStaffId(staffUuid);
         } catch {
           dept = null;
         }
@@ -329,6 +332,8 @@ export function WorkInspection() {
 
   const fetchData = useCallback(async () => {
     if (!systemUser || selectedDepartment === null) return;
+    const selfStaffUuid = await resolveStaffUuid(systemUser);
+    if (!selfStaffUuid) return;
 
     try {
       let allowedStaffIds: string[] | null = null;
@@ -337,7 +342,7 @@ export function WorkInspection() {
       if (!isAdmin) {
         allowedStaffIds = ownDepartment
           ? await fetchStaffIdsByDepartment(ownDepartment)
-          : [systemUser.staff_id];
+          : [selfStaffUuid];
       } else if (selectedDepartment === UNASSIGNED_DEPT) {
         filterUnassignedOnly = true;
         allowedStaffIds = null;

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getSiteOrigin } from '@/lib/siteUrl';
+import { isStaffUuid, resolveStaffUuid } from '@/services/reportLinkService';
 import type { User as SupabaseUser, Session } from '@supabase/supabase-js';
 
 interface SystemUserProfile {
@@ -318,6 +319,58 @@ function bootstrapSystemUserFromUserInfo(
 
 const DEV_BYPASS_STORAGE_KEY = 'mps_dev_bypass_session';
 
+function normalizeRestoredSystemUser(raw: any): SystemUserProfile | null {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const staffIdRaw = typeof raw.staff_id === 'string' ? raw.staff_id.trim() : '';
+  const bubbleRaw = typeof raw.bubble_staff_id === 'string' ? raw.bubble_staff_id.trim() : '';
+
+  // Legacy sessions stored Bubble text in staff_id / omitted staff_id entirely.
+  let staff_id = isStaffUuid(staffIdRaw) ? staffIdRaw : '';
+  let bubble_staff_id = bubbleRaw;
+
+  if (!bubble_staff_id && staffIdRaw && !isStaffUuid(staffIdRaw)) {
+    bubble_staff_id = staffIdRaw;
+  }
+
+  if (!staff_id && (bubble_staff_id === 'manual_super_admin_lowell' || staffIdRaw === 'manual_super_admin_lowell')) {
+    staff_id = MANUAL_SUPER_ADMIN_STAFF_UUID;
+    bubble_staff_id = 'manual_super_admin_lowell';
+  }
+
+  if (!staff_id && !bubble_staff_id) return null;
+
+  return {
+    id: raw.id || `ui-bootstrap-${staff_id || bubble_staff_id}`,
+    auth_user_id: raw.auth_user_id ?? null,
+    staff_id,
+    bubble_staff_id,
+    display_name: raw.display_name || raw.email || 'User',
+    email: raw.email || '',
+    role: raw.role || 'staff',
+    department: raw.department ?? null,
+    position: raw.position ?? null,
+    phone: raw.phone ?? null,
+    profile_pic_url: raw.profile_pic_url ?? null,
+    is_active: raw.is_active ?? true,
+    google_email: raw.google_email ?? null,
+  };
+}
+
+function normalizeRestoredUserInfo(raw: any, staffUuid: string): UserInfoProfile | null {
+  if (!raw || typeof raw !== 'object') return null;
+  return {
+    id: raw.id || 'fallback-user-info',
+    staff_id: isStaffUuid(raw.staff_id) ? raw.staff_id : staffUuid,
+    role_tag: raw.role_tag ?? null,
+    system_status: raw.system_status || 'active',
+    classification: raw.classification || 'staff',
+    display_name: raw.display_name ?? null,
+    email: raw.email ?? null,
+    google_email: raw.google_email ?? null,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<SupabaseUser | null>(null);
@@ -326,7 +379,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const raw = localStorage.getItem(DEV_BYPASS_STORAGE_KEY);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
-      return parsed.systemUser ?? null;
+      return normalizeRestoredSystemUser(parsed.systemUser);
     } catch { return null; }
   });
   const [userInfo, setUserInfo] = useState<UserInfoProfile | null>(() => {
@@ -334,7 +387,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const raw = localStorage.getItem(DEV_BYPASS_STORAGE_KEY);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
-      return parsed.userInfo ?? null;
+      const normalized = normalizeRestoredSystemUser(parsed.systemUser);
+      return normalizeRestoredUserInfo(parsed.userInfo, normalized?.staff_id || '');
     } catch { return null; }
   });
   const [loading, setLoading] = useState(true);
@@ -342,6 +396,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const verifyInProgressRef = useRef(false);
   // Track whether we've already successfully authenticated to prevent state clearing
   const authSucceededRef = useRef(typeof window !== 'undefined' && !!localStorage.getItem(DEV_BYPASS_STORAGE_KEY));
+  const staffUuidMigrateRef = useRef(false);
 
   useEffect(() => {
     let subscription: { unsubscribe: () => void } | null = null;
@@ -463,6 +518,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
   }, []);
+
+  // Migrate stale sessions where staff_id is missing / still a Bubble text id.
+  useEffect(() => {
+    if (!systemUser || staffUuidMigrateRef.current) return;
+    if (isStaffUuid(systemUser.staff_id)) return;
+    staffUuidMigrateRef.current = true;
+
+    let cancelled = false;
+    (async () => {
+      const uuid = await resolveStaffUuid({
+        staff_id: undefined,
+        bubble_staff_id: systemUser.bubble_staff_id,
+        email: systemUser.email || systemUser.google_email || undefined,
+      });
+      if (cancelled || !uuid) return;
+      setSystemUser(prev => (prev ? { ...prev, staff_id: uuid } : prev));
+      setUserInfo(prev => (prev ? { ...prev, staff_id: uuid } : prev));
+    })();
+
+    return () => { cancelled = true; };
+  }, [systemUser]);
 
   const verifyAndFetchUser = async (email?: string | null, authUserId?: string) => {
     if (!email) {

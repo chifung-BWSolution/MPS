@@ -17,6 +17,7 @@ import {
   fetchStaffIdsByDepartment,
   isValidDepartment,
 } from '@/components/day-report/departmentLookup';
+import { resolveStaffUuid } from '@/services/reportLinkService';
 import { Calendar as DayPickerCalendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { SearchableProjectSelect } from '@/components/day-report/SearchableProjectSelect';
@@ -449,10 +450,12 @@ export function TeamDashboard() {
   useEffect(() => {
     const detect = async () => {
       if (!systemUser) return;
+      const staffUuid = await resolveStaffUuid(systemUser);
+      if (!staffUuid) return;
       let dept = systemUser.department || null;
       if (!dept) {
         try {
-          dept = await fetchDepartmentByStaffId(systemUser.staff_id);
+          dept = await fetchDepartmentByStaffId(staffUuid);
         } catch {
           dept = null;
         }
@@ -464,7 +467,7 @@ export function TeamDashboard() {
       } else {
         setSelectedDepartment(valid);
       }
-      setSelectedStaffId((prev) => prev ?? systemUser.staff_id);
+      setSelectedStaffId((prev) => prev ?? staffUuid);
     };
     detect();
   }, [systemUser, isAdmin]);
@@ -500,17 +503,19 @@ export function TeamDashboard() {
 
   const fetchData = useCallback(async () => {
     if (!systemUser || selectedDepartment === null || !selectedStaffId) return;
+    const selfStaffUuid = await resolveStaffUuid(systemUser);
+    if (!selfStaffUuid) return;
 
     try {
       // --- Picker staff (personal mode dropdown) ---
       let pickerIds: string[] | null = null;
       if (!isAdmin) {
         if (!ownDepartment) {
-          pickerIds = [systemUser.staff_id];
+          pickerIds = [selfStaffUuid];
         } else {
           pickerIds = await fetchStaffIdsByDepartment(ownDepartment);
-          if (!pickerIds.includes(systemUser.staff_id)) {
-            pickerIds = [...pickerIds, systemUser.staff_id];
+          if (!pickerIds.includes(selfStaffUuid)) {
+            pickerIds = [...pickerIds, selfStaffUuid];
           }
         }
       }
@@ -529,7 +534,7 @@ export function TeamDashboard() {
       const allowedPickerIds = new Set(cleanedPicker.map((s) => s.id));
       let effectiveStaffId = selectedStaffId;
       if (!allowedPickerIds.has(effectiveStaffId)) {
-        effectiveStaffId = systemUser.staff_id;
+        effectiveStaffId = selfStaffUuid;
         setSelectedStaffId(effectiveStaffId);
       }
 
@@ -543,7 +548,7 @@ export function TeamDashboard() {
       } else if (!isAdmin) {
         allowedStaffIds = ownDepartment
           ? await fetchStaffIdsByDepartment(ownDepartment)
-          : [systemUser.staff_id];
+          : [selfStaffUuid];
       } else if (selectedDepartment === UNASSIGNED_DEPT) {
         filterUnassignedOnly = true;
         allowedStaffIds = null;

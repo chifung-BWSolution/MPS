@@ -18,8 +18,13 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- ---------------------------------------------------------------------------
 -- 0) Ensure orphan Bubble IDs used as staff relations exist in staffs
 -- ---------------------------------------------------------------------------
-INSERT INTO public.staffs (bubble_staff_id, display_name, status)
-VALUES ('manual_super_admin_lowell', 'Lowell Lo (manual)', 'active')
+INSERT INTO public.staffs (id, bubble_staff_id, display_name, status)
+VALUES (
+  'd88d2465-42d1-4205-8a9b-8495083c3691',
+  'manual_super_admin_lowell',
+  'Lowell Lo (manual)',
+  'active'
+)
 ON CONFLICT (bubble_staff_id) DO NOTHING;
 
 -- ---------------------------------------------------------------------------

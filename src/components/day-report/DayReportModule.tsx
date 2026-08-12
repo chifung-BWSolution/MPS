@@ -2410,10 +2410,12 @@ function WorkCalendar() {
   useEffect(() => {
     let aborted = false;
     async function resolveDept() {
-      if (!systemUser?.staff_id) return;
+      if (!systemUser) return;
+      const staffUuid = await resolveStaffUuid(systemUser);
+      if (!staffUuid || aborted) return;
       let dept: string | null = systemUser.department || null;
       if (!dept) {
-        dept = await fetchDepartmentByStaffId(systemUser.staff_id);
+        dept = await fetchDepartmentByStaffId(staffUuid);
       }
       if (aborted) return;
       setOwnDepartment(dept);
@@ -2427,7 +2429,7 @@ function WorkCalendar() {
     }
     resolveDept();
     return () => { aborted = true; };
-  }, [systemUser?.staff_id, systemUser?.department, isSuperAdmin]);
+  }, [systemUser?.staff_id, systemUser?.bubble_staff_id, systemUser?.department, isSuperAdmin]);
 
   // Build available departments list for super_admin dropdown from DB (distinct)
   useEffect(() => {
@@ -2444,7 +2446,9 @@ function WorkCalendar() {
   useEffect(() => {
     let aborted = false;
     async function load() {
-      if (!systemUser?.staff_id) return;
+      if (!systemUser) return;
+      const staffUuid = await resolveStaffUuid(systemUser);
+      if (!staffUuid || aborted) return;
       // For super-admins, default to __ALL__ when no selection yet so the calendar isn't blank.
       // For non-super-admins, wait until ownDepartment resolves.
       if (!isSuperAdmin && !ownDepartment) return;
@@ -2558,7 +2562,7 @@ function WorkCalendar() {
     }
     load();
     return () => { aborted = true; };
-  }, [systemUser?.staff_id, ownDepartment, selectedDepartment, isSuperAdmin, monthStr, year, month, daysInMonth]);
+  }, [systemUser?.staff_id, systemUser?.bubble_staff_id, ownDepartment, selectedDepartment, isSuperAdmin, monthStr, year, month, daysInMonth]);
 
   const reportsByDate = useMemo(() => {
     const m: Record<string, WCReport[]> = {};

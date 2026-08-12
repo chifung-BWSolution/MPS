@@ -131,7 +131,7 @@ type Props = {
   open: boolean;
   video: VideoWorkflowMock | null;
   channels: Vchannel[];
-  staffOptions: { staffId: string; displayName: string }[];
+  staffOptions: { staffId: string; displayName: string; bubbleStaffId?: string }[];
   talentOptions: TalentOption[];
   onClose: () => void;
   onSave: (payload: Partial<VideoWorkflowMock>, isNew: boolean) => Promise<{ error: string | null; id?: string }>;

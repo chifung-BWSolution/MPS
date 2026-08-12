@@ -156,7 +156,14 @@ export function validateWorkLogDrafts(drafts: VideoWorkLogDraft[]): string | nul
   return null;
 }
 
-export async function fetchStaffDirectoryOptions(): Promise<{ staffId: string; displayName: string }[]> {
+export type StaffDirectoryOption = {
+  staffId: string;
+  displayName: string;
+  /** Legacy Bubble external id — used to remap old schedule JSON userIds. */
+  bubbleStaffId?: string;
+};
+
+export async function fetchStaffDirectoryOptions(): Promise<StaffDirectoryOption[]> {
   const { data, error } = await supabase
     .from('staffs')
     .select('id, display_name, bubble_staff_id')
@@ -170,5 +177,17 @@ export async function fetchStaffDirectoryOptions(): Promise<{ staffId: string; d
     .map(r => ({
       staffId: r.id as string,
       displayName: (r.display_name as string) || (r.bubble_staff_id as string) || (r.id as string),
+      bubbleStaffId: (r.bubble_staff_id as string) || undefined,
     }));
+}
+
+/** Map a stored staff key (uuid or legacy Bubble id) onto staffs.id. */
+export function resolveStaffOptionId(
+  storedId: string | null | undefined,
+  staffOptions: StaffDirectoryOption[],
+): string {
+  if (!storedId) return '';
+  if (staffOptions.some(s => s.staffId === storedId)) return storedId;
+  const byBubble = staffOptions.find(s => s.bubbleStaffId === storedId);
+  return byBubble?.staffId ?? storedId;
 }

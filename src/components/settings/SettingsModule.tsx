@@ -150,12 +150,36 @@ function ProfileSection() {
       let department = authDepartment;
       let displayName = authName;
 
-      console.log('[Settings:loadProfile] Starting. authEmail:', authEmail, '| systemUser.phone:', systemUser?.phone, '| bubble_staff_id:', systemUser?.bubble_staff_id);
+      console.log('[Settings:loadProfile] Starting. authEmail:', authEmail, '| systemUser.phone:', systemUser?.phone, '| staff_id:', systemUser?.staff_id, '| bubble_staff_id:', systemUser?.bubble_staff_id);
 
-      // === Step 1: Try staffs by bubble_staff_id ===
+      // === Step 1: Prefer staffs.id (uuid FK), then bubble_staff_id ===
       const PROFILE_TIMEOUT = 5000;
-      
-      if (systemUser?.bubble_staff_id) {
+
+      if (systemUser?.staff_id) {
+        try {
+          const result = await Promise.race([
+            supabase
+              .from('staffs')
+              .select('display_name, full_name, position, work_phone, private_phone, base_location, business_unit')
+              .eq('id', systemUser.staff_id)
+              .maybeSingle(),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('staffs id lookup timeout')), PROFILE_TIMEOUT))
+          ]);
+
+          const { data: staffRow } = result as any;
+          console.log('[Settings:loadProfile] staffs by id:', staffRow ? { work_phone: staffRow.work_phone, private_phone: staffRow.private_phone } : 'not found');
+          if (staffRow) {
+            displayName = staffRow.full_name || staffRow.display_name || authName;
+            position = staffRow.position || position;
+            if (!phone) phone = staffRow.work_phone || staffRow.private_phone || '';
+            department = staffRow.business_unit || department;
+          }
+        } catch (err) {
+          console.warn('[Settings] Failed to fetch staffs by id:', err);
+        }
+      }
+
+      if ((!phone || !displayName) && systemUser?.bubble_staff_id) {
         try {
           const result = await Promise.race([
             supabase
@@ -296,6 +320,12 @@ function ProfileSection() {
             .update({ work_phone: profile.phone, updated_at: new Date().toISOString() })
             .eq('id', staffMatch.id);
           console.log('[Settings] Saved phone to staff_directory:', profile.phone);
+        } else if (systemUser?.staff_id) {
+          await supabase
+            .from('staffs')
+            .update({ work_phone: profile.phone, updated_at: new Date().toISOString() })
+            .eq('id', systemUser.staff_id);
+          console.log('[Settings] Saved phone to staffs via staff_id:', profile.phone);
         } else if (systemUser?.bubble_staff_id) {
           await supabase
             .from('staffs')

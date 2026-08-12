@@ -68,7 +68,16 @@ type SystemUserLike = {
   staff_id?: string;
   bubble_staff_id?: string;
   email?: string;
+  google_email?: string;
 } | null;
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** True when value is a UUID (staffs.id / FK shape). */
+export function isStaffUuid(value: string | null | undefined): boolean {
+  return !!value && UUID_RE.test(value.trim());
+}
 
 export function localDateString(d = new Date()): string {
   const year = d.getFullYear();
@@ -77,16 +86,14 @@ export function localDateString(d = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
-/** Resolve staffs.id (uuid) for FK writes. Prefers systemUser.staff_id. */
+/** Resolve staffs.id (uuid) for FK writes. Prefers systemUser.staff_id when it is a UUID. */
 export async function resolveStaffUuid(systemUser: SystemUserLike): Promise<string | null> {
   if (!systemUser) return null;
 
-  const staffUuid = (systemUser.staff_id || '').trim();
-  if (staffUuid && !staffUuid.startsWith('manual_') && !staffUuid.startsWith('ui_')) {
-    return staffUuid;
-  }
+  const staffIdRaw = (systemUser.staff_id || '').trim();
+  if (isStaffUuid(staffIdRaw)) return staffIdRaw;
 
-  const email = (systemUser.email || '').toLowerCase().trim();
+  const email = (systemUser.email || systemUser.google_email || '').toLowerCase().trim();
   if (email) {
     const { data } = await supabase
       .from('staffs')
@@ -97,7 +104,9 @@ export async function resolveStaffUuid(systemUser: SystemUserLike): Promise<stri
     if (data?.id) return data.id;
   }
 
-  const bubbleId = (systemUser.bubble_staff_id || '').trim();
+  // Prefer explicit bubble id; also accept legacy sessions that stuffed Bubble text into staff_id.
+  const bubbleId = (systemUser.bubble_staff_id || '').trim()
+    || (!isStaffUuid(staffIdRaw) ? staffIdRaw : '');
   if (bubbleId) {
     const { data } = await supabase
       .from('staffs')
@@ -108,7 +117,7 @@ export async function resolveStaffUuid(systemUser: SystemUserLike): Promise<stri
     if (data?.id) return data.id;
   }
 
-  return staffUuid || null;
+  return null;
 }
 
 /** @deprecated Use resolveStaffUuid — FK columns now store staffs.id (uuid). */
