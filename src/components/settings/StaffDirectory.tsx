@@ -34,6 +34,9 @@ export function StaffDirectory() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // bubble_staff_id → staffs.id (uuid) for users.staff_id writes
+  const [staffUuidByBubbleId, setStaffUuidByBubbleId] = useState<Record<string, string>>({});
+
   // Fetch staff from Supabase staff_directory table
   const fetchFromSupabase = useCallback(async () => {
     setLoading(true);
@@ -52,6 +55,13 @@ export function StaffDirectory() {
       }
 
       const rows = data || [];
+      const uuidByBubble: Record<string, string> = {};
+      rows.forEach((row: any) => {
+        if (row.bubble_staff_id && row.id) {
+          uuidByBubble[row.bubble_staff_id] = row.id;
+        }
+      });
+      setStaffUuidByBubbleId(uuidByBubble);
       // Convert Supabase records back to BubbleStaff format for rendering
       const converted: BubbleStaff[] = rows.map((row: any) => ({
         _id: row.bubble_staff_id,
@@ -165,12 +175,16 @@ export function StaffDirectory() {
     loadSystemUsersCache();
   }, [loadSystemUsersCache]);
 
+  const resolveStaffUuid = useCallback((bubbleStaffId: string): string | undefined => {
+    return staffUuidByBubbleId[bubbleStaffId];
+  }, [staffUuidByBubbleId]);
+
   // Load user_info from Supabase on mount
   const loadUserInfo = useCallback(async () => {
     try {
       const { data, error: fetchErr } = await supabase
         .from('users')
-        .select('*');
+        .select('*, staffs(bubble_staff_id)');
 
       if (fetchErr) {
         console.warn('[StaffDirectory] user_info fetch error:', fetchErr.message);
@@ -178,28 +192,34 @@ export function StaffDirectory() {
       }
 
       if (data && data.length > 0) {
-        const configs: StaffUserConfig[] = data.map((row: any) => ({
-          bubbleId: row.staff_id,
-          classification: (row.classification || 'other_staff') as StaffClassification,
-          roleTag: row.role_tag || undefined,
-        }));
+        const configs: StaffUserConfig[] = data.map((row: any) => {
+          const bubbleId = row.staffs?.bubble_staff_id ?? row.staff_id;
+          return {
+            bubbleId,
+            classification: (row.classification || 'other_staff') as StaffClassification,
+            roleTag: row.role_tag || undefined,
+          };
+        });
         setUserConfigs(configs);
 
-        // Populate googleEmailMap from existing user_info records
+        // Populate googleEmailMap from existing user_info records (keyed by bubble id)
         const emailMap: Record<string, string> = {};
         data.forEach((row: any) => {
-          if (row.staff_id && row.google_email) {
-            emailMap[row.staff_id] = row.google_email;
+          const bubbleId = row.staffs?.bubble_staff_id;
+          if (bubbleId && row.google_email) {
+            emailMap[bubbleId] = row.google_email;
           }
         });
         setGoogleEmailMap(prev => ({ ...prev, ...emailMap }));
 
-        // Populate officeMap and departmentMap from user_info records
+        // Populate officeMap and departmentMap from user_info records (keyed by bubble id)
         const officeData: Record<string, string> = {};
         const deptData: Record<string, string> = {};
         data.forEach((row: any) => {
-          if (row.staff_id && row.office) officeData[row.staff_id] = row.office;
-          if (row.staff_id && row.department) deptData[row.staff_id] = row.department;
+          const bubbleId = row.staffs?.bubble_staff_id;
+          if (!bubbleId) return;
+          if (row.office) officeData[bubbleId] = row.office;
+          if (row.department) deptData[bubbleId] = row.department;
         });
         setOfficeMap(prev => ({ ...prev, ...officeData }));
         setDepartmentMap(prev => ({ ...prev, ...deptData }));
@@ -246,18 +266,23 @@ export function StaffDirectory() {
       const records = userConfigs
         .filter(c => c.classification === 'system_user' || c.classification === 'disabled')
         .map(c => {
+          const staffUuid = resolveStaffUuid(c.bubbleId);
+          if (!staffUuid) {
+            console.warn(`[StaffDirectory] No staffs.id for bubble ${c.bubbleId}, skipping upsert`);
+            return null;
+          }
           // Find the staff entry to get display_name, email, google_email
           const staffEntry = staffList.find(s => s._id === c.bubbleId);
           const displayName = staffEntry?.['Display Name'] || staffEntry?.['Full Name'] || null;
           const workEmail = staffEntry?.['Work Email'] || null;
           // Look up google_email from googleEmailMap first, then system_users cache, then fallback to workEmail
-          const sysUser = systemUsersCache.find(su => su.staff_id === c.bubbleId);
+          const sysUser = systemUsersCache.find(su => su.staff_id === staffUuid);
           const googleEmail = googleEmailMap[c.bubbleId] || sysUser?.google_email || workEmail;
 
           const synced = getSyncedOfficeDepartment(c.bubbleId);
 
           return {
-            staff_id: c.bubbleId,
+            staff_id: staffUuid,
             role_tag: c.roleTag || null,
             classification: c.classification,
             system_status: c.classification === 'system_user' ? 'active' : 'inactive',
@@ -268,19 +293,21 @@ export function StaffDirectory() {
             department: departmentMap[c.bubbleId] || synced.department || null,
             updated_at: new Date().toISOString(),
           };
-        });
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
 
       // Also remove records that were previously saved but are now "other_staff"
-      const otherStaffIds = userConfigs
+      const otherStaffUuids = userConfigs
         .filter(c => c.classification === 'other_staff')
-        .map(c => c.bubbleId);
+        .map(c => resolveStaffUuid(c.bubbleId))
+        .filter((id): id is string => !!id);
 
       // Delete records that are back to "other_staff"
-      if (otherStaffIds.length > 0) {
+      if (otherStaffUuids.length > 0) {
         const { error: deleteErr } = await supabase
           .from('users')
           .delete()
-          .in('staff_id', otherStaffIds);
+          .in('staff_id', otherStaffUuids);
 
         if (deleteErr) {
           console.warn('[StaffDirectory] Delete other_staff error:', deleteErr.message);
@@ -319,29 +346,31 @@ export function StaffDirectory() {
     setHasUnsavedChanges(true);
   };
 
-  // Handle office change for a staff member
-  const handleOfficeChange = async (staffId: string, office: string) => {
-    setOfficeMap(prev => ({ ...prev, [staffId]: office }));
+  // Handle office change for a staff member (bubbleStaffId = bubble_staff_id for UI)
+  const handleOfficeChange = async (bubbleStaffId: string, office: string) => {
+    setOfficeMap(prev => ({ ...prev, [bubbleStaffId]: office }));
     setHasUnsavedChanges(true);
-    // Persist immediately to staff_directory
+    // Persist immediately to staff_directory (keyed by bubble_staff_id)
     try {
       await supabase
         .from('staffs')
         .update({ office, updated_at: new Date().toISOString() })
-        .eq('bubble_staff_id', staffId);
+        .eq('bubble_staff_id', bubbleStaffId);
     } catch (err) {
       console.warn('[StaffDirectory] Office save to staff_directory error:', err);
     }
-    // Also persist to user_info table
+    // Also persist to user_info table (staff_id = staffs.id uuid)
+    const staffUuid = resolveStaffUuid(bubbleStaffId);
+    if (!staffUuid) return;
     try {
       const { error } = await supabase
         .from('users')
         .update({ office, updated_at: new Date().toISOString() })
-        .eq('staff_id', staffId);
+        .eq('staff_id', staffUuid);
       if (error) {
         console.warn('[StaffDirectory] Office save to user_info error:', error.message);
       } else {
-        console.log(`[StaffDirectory] ✅ Office updated to "${office}" for staff ${staffId} in user_info`);
+        console.log(`[StaffDirectory] ✅ Office updated to "${office}" for staff ${bubbleStaffId} in user_info`);
       }
     } catch (err) {
       console.warn('[StaffDirectory] Office save to user_info error:', err);
@@ -349,18 +378,20 @@ export function StaffDirectory() {
   };
 
   // Handle department change for a staff member (persist to user_info only)
-  const handleDepartmentChange = async (staffId: string, department: string) => {
-    setDepartmentMap(prev => ({ ...prev, [staffId]: department }));
+  const handleDepartmentChange = async (bubbleStaffId: string, department: string) => {
+    setDepartmentMap(prev => ({ ...prev, [bubbleStaffId]: department }));
     setHasUnsavedChanges(true);
+    const staffUuid = resolveStaffUuid(bubbleStaffId);
+    if (!staffUuid) return;
     try {
       const { error } = await supabase
         .from('users')
         .update({ department, updated_at: new Date().toISOString() })
-        .eq('staff_id', staffId);
+        .eq('staff_id', staffUuid);
       if (error) {
         console.warn('[StaffDirectory] Department save to user_info error:', error.message);
       } else {
-        console.log(`[StaffDirectory] ✅ Department updated to "${department}" for staff ${staffId} in user_info`);
+        console.log(`[StaffDirectory] ✅ Department updated to "${department}" for staff ${bubbleStaffId} in user_info`);
       }
     } catch (err) {
       console.warn('[StaffDirectory] Department save to user_info error:', err);

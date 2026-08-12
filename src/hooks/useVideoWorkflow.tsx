@@ -26,7 +26,7 @@ import {
 import { inferProjectCategory } from '@/lib/videoOutputUtils';
 import { fetchWorkLogsByVideoId, saveWorkLogsForVideo } from '@/services/videoOutputWorkLogService';
 import { mergeProductionProgressWorkLogs } from '@/services/productionProgressWorkLogService';
-import { resolveBubbleStaffId } from '@/services/reportLinkService';
+import { resolveStaffUuid } from '@/services/reportLinkService';
 
 const SELECT_QUERY = `
   *,
@@ -295,18 +295,18 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
 
     if (!patch.productionProgress) return null;
 
-    const bubbleStaffId = staffId ?? (await resolveBubbleStaffId(systemUser)) ?? undefined;
-    if (!bubbleStaffId) return null;
+    const staffUuid = staffId ?? (await resolveStaffUuid(systemUser)) ?? undefined;
+    if (!staffUuid) return null;
 
     try {
       const existingLogs = await fetchWorkLogsByVideoId(id);
       const merged = mergeProductionProgressWorkLogs(
         existingLogs,
         patch.productionProgress,
-        bubbleStaffId,
+        staffUuid,
         staffName,
       );
-      await saveWorkLogsForVideo(id, merged, bubbleStaffId);
+      await saveWorkLogsForVideo(id, merged, staffUuid);
     } catch (e) {
       return e instanceof Error ? e.message : '工時同步失敗';
     }

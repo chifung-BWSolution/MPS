@@ -26,10 +26,14 @@ const ROLE_OPTIONS: { value: string; label: string; color: string }[] = [
 
 const DEPT_OPTIONS = ['Management', 'PM Team', 'Design', 'Video', 'Content', 'Marketing', 'Finance'];
 
+/** Staff row from picker — BubbleStaff fields plus staffs.id for FK writes. */
+type StaffPickerItem = BubbleStaff & { staffUuid: string };
+
 /** UI shape for whitelist users (backed by public.users). */
 interface SystemUser {
   id: string;
-  bubble_staff_id: string; // maps to users.staff_id
+  staff_id: string; // users.staff_id → staffs.id (uuid)
+  bubble_staff_id: string | null; // from staffs.bubble_staff_id (display only)
   display_name: string;
   email: string;
   role: string; // maps to users.role_tag
@@ -44,10 +48,12 @@ interface SystemUser {
 }
 
 function mapUsersRow(row: any): SystemUser {
+  const bubbleStaffId = row.staffs?.bubble_staff_id ?? null;
   return {
     id: row.id,
-    bubble_staff_id: row.staff_id,
-    display_name: row.display_name || row.email || row.staff_id || '',
+    staff_id: row.staff_id,
+    bubble_staff_id: bubbleStaffId,
+    display_name: row.display_name || row.email || bubbleStaffId || row.staff_id || '',
     email: row.email || '',
     role: row.role_tag || 'staff',
     department: row.department || null,
@@ -79,7 +85,7 @@ export function UserManagement() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('*')
+        .select('*, staffs(bubble_staff_id)')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -97,7 +103,7 @@ export function UserManagement() {
   }, [fetchSystemUsers]);
 
   // Add staff as system user
-  const handleAddStaff = async (staff: BubbleStaff, role: string, googleEmail?: string) => {
+  const handleAddStaff = async (staff: StaffPickerItem, role: string, googleEmail?: string) => {
     try {
       const displayName = staff['Display Name'] || staff['Full Name'] || '';
       const workEmail = staff['Work Email'] || '';
@@ -111,7 +117,7 @@ export function UserManagement() {
       const { data, error } = await supabase
         .from('users')
         .upsert({
-          staff_id: staff._id,
+          staff_id: staff.staffUuid,
           display_name: displayName,
           email: workEmail,
           role_tag: role,
@@ -122,13 +128,13 @@ export function UserManagement() {
           system_status: 'active',
           updated_at: new Date().toISOString(),
         }, { onConflict: 'staff_id' })
-        .select()
+        .select('*, staffs(bubble_staff_id)')
         .single();
 
       if (error) throw error;
       const mapped = mapUsersRow(data);
       setSystemUsers(prev => {
-        const without = prev.filter(u => u.bubble_staff_id !== mapped.bubble_staff_id);
+        const without = prev.filter(u => u.staff_id !== mapped.staff_id);
         return [mapped, ...without];
       });
       toast.success(`已加入「${displayName}」為系統使用者`, {
@@ -162,7 +168,7 @@ export function UserManagement() {
         .from('users')
         .update(dbUpdates)
         .eq('id', userId)
-        .select()
+        .select('*, staffs(bubble_staff_id)')
         .single();
 
       if (error) throw error;
@@ -501,13 +507,13 @@ function StaffPickerModal({
   onClose,
 }: {
   existingUsers: SystemUser[];
-  onAdd: (staff: BubbleStaff, role: string, googleEmail?: string) => void;
+  onAdd: (staff: StaffPickerItem, role: string, googleEmail?: string) => void;
   onClose: () => void;
 }) {
-  const [staffList, setStaffList] = useState<BubbleStaff[]>([]);
+  const [staffList, setStaffList] = useState<StaffPickerItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStaff, setSelectedStaff] = useState<BubbleStaff | null>(null);
+  const [selectedStaff, setSelectedStaff] = useState<StaffPickerItem | null>(null);
   const [selectedRole, setSelectedRole] = useState('designer');
   const [googleEmail, setGoogleEmail] = useState('');
 
@@ -525,7 +531,8 @@ function StaffPickerModal({
         if (error) throw error;
         if (cancelled) return;
 
-        const converted: BubbleStaff[] = (data || []).map((row: any) => ({
+        const converted: StaffPickerItem[] = (data || []).map((row: any) => ({
+          staffUuid: row.id,
           _id: row.bubble_staff_id,
           'Display Name': row.display_name || '',
           'Full Name': row.full_name || undefined,
@@ -556,10 +563,10 @@ function StaffPickerModal({
     return () => { cancelled = true; };
   }, []);
 
-  // Filter out already-added staff
-  const existingBubbleIds = new Set(existingUsers.map(u => u.bubble_staff_id));
+  // Filter out already-added staff (dedupe by staffs.id uuid)
+  const existingStaffUuids = new Set(existingUsers.map(u => u.staff_id));
   const availableStaff = staffList.filter(s => {
-    if (existingBubbleIds.has(s._id)) return false;
+    if (existingStaffUuids.has(s.staffUuid)) return false;
     // Search
     if (searchTerm) {
       const term = searchTerm.toLowerCase();

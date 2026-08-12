@@ -28,7 +28,7 @@ import {
 } from '@/components/video/workflow/workflowListLayout';
 import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
-import { resolveBubbleStaffId } from '@/services/reportLinkService';
+import { resolveStaffUuid } from '@/services/reportLinkService';
 
 function ProductionListRow({
   video,
@@ -133,7 +133,7 @@ export function VideoProductionModule() {
     plannedPublishDate?: string;
   }): Promise<string | null> => {
     if (!editingId) return '找不到影片';
-    const staffId = await resolveBubbleStaffId(systemUser);
+    const staffId = await resolveStaffUuid(systemUser);
     return saveProductionWithWorkLogs(
       editingId,
       {

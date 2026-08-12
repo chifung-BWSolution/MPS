@@ -12,7 +12,7 @@ import {
   fetchWorkLogsByVideoId,
   validateWorkLogDrafts,
 } from '@/services/videoOutputWorkLogService';
-import { resolveBubbleStaffId } from '@/services/reportLinkService';
+import { resolveStaffUuid } from '@/services/reportLinkService';
 import { syncVideoPendingReport } from '@/services/videoReportLinkService';
 import { useAuth } from '@/context/AuthContext';
 
@@ -79,7 +79,7 @@ export function VideoEditModal({ video, channels, onClose, onSave }: Props) {
         const [staffList, logs, staffId] = await Promise.all([
           fetchStaffDirectoryOptions(),
           fetchWorkLogsByVideoId(video.id),
-          resolveBubbleStaffId(systemUser),
+          resolveStaffUuid(systemUser),
         ]);
         if (cancelled) return;
         setStaffOptions(staffList);
@@ -144,7 +144,7 @@ export function VideoEditModal({ video, channels, onClose, onSave }: Props) {
         return;
       }
 
-      const staffId = await resolveBubbleStaffId(systemUser);
+      const staffId = await resolveStaffUuid(systemUser);
       if (staffId) {
         const ch = channels.find(c => c.id === (input.vchannelId ?? video.vchannelId));
         const updatedVideo: VideoOutput = {

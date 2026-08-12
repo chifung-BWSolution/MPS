@@ -80,6 +80,13 @@ export type Database = {
             referencedRelation: "day_reports"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "day_report_entries_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staffs"
+            referencedColumns: ["id"]
+          },
         ]
       }
       day_reports: {
@@ -146,7 +153,22 @@ export type Database = {
           under_hours_reason?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "day_reports_reviewer_id_fkey"
+            columns: ["reviewer_id"]
+            isOneToOne: false
+            referencedRelation: "staffs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "day_reports_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staffs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       login_logs: {
         Row: {
@@ -323,7 +345,15 @@ export type Database = {
           system_status?: string
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "users_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: true
+            referencedRelation: "staffs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

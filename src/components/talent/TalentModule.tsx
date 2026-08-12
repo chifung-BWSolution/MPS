@@ -13,7 +13,7 @@ import { updateArtistApplyV2, type ArtistApplyV2Form } from '@/lib/artist-apply-
 import {
   createPendingReportItem,
   localDateString,
-  resolveBubbleStaffId,
+  resolveStaffUuid,
   updatePendingReportHours,
 } from '@/services/reportLinkService';
 import { VolunteerRecruitmentModule } from '@/components/marketing/VolunteerRecruitmentModule';
@@ -2987,7 +2987,7 @@ function TalentInterviews() {
             onCancel={() => setEditing(null)}
             onSave={async (rating, notes, scheduledAt, reportHours, mediaUrl) => {
               try {
-                const staffId = await resolveBubbleStaffId(systemUser);
+                const staffId = await resolveStaffUuid(systemUser);
                 if (!staffId) {
                   alert('無法識別當前用戶，請確認員工資料已同步。');
                   return;

@@ -14,7 +14,7 @@ import { CrudModal } from '@/components/ui/crud-modal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { fetchWorkLogsByVideoId, saveWorkLogsForVideo } from '@/services/videoOutputWorkLogService';
-import { resolveBubbleStaffId, localDateString } from '@/services/reportLinkService';
+import { resolveStaffUuid, localDateString } from '@/services/reportLinkService';
 import { syncVideoPendingReport } from '@/services/videoReportLinkService';
 import { useAuth } from '@/context/AuthContext';
 import type { VideoWorkLogDraft } from '@/types/videoOutputWorkLog';
@@ -83,7 +83,7 @@ export function PlatformPublishModal({ video, onClose, onSave }: Props) {
         return;
       }
 
-      const staffId = await resolveBubbleStaffId(systemUser);
+      const staffId = await resolveStaffUuid(systemUser);
       if (hoursNum > 0 && staffId) {
         const existingLogs = await fetchWorkLogsByVideoId(video.id);
         const publishLog: VideoWorkLogDraft = {
