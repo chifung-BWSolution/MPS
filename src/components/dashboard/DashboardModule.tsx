@@ -20,7 +20,7 @@ function DashboardOverview() {
       <div>
         <h1 className="text-[32px] font-bold tracking-tight">儀表板</h1>
         <p className="text-[14px] text-muted-foreground mt-1">
-          歡迎回來，{user.name}。以下是您的專案總覽。
+          歡迎回來，{user.name}
         </p>
       </div>
 
