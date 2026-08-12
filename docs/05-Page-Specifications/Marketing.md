@@ -7,7 +7,6 @@
 |------|-------|-------------|
 | `/marketing/calendar` | 行銷日曆 | 全渠道排期日曆 |
 | `/marketing/social` | 社交媒體 | Social Posts 管理 |
-| `/marketing/edm` | EDM 管理 | 電郵/短訊營銷 |
 | `/marketing/google-ads` | Google Ads | MCC Campaign 成效（每日指標彙總） |
 | `/marketing/google-ads-sync` | Google Ads 同步 | 歷史回填 / 增量同步 |
 | `/marketing/facebook-ads` | Facebook Ads | Meta Campaign 成效（多 Business） |
@@ -33,7 +32,7 @@
 
 ## Google Business
 
-> 前端 DataStore；後續再落 Supabase 表。登記已建立的 Google Business 檔案。亦於「網站+系統 → 網站詳情 → Google Business」Tab 顯示該站紀錄。
+> Supabase（`useGoogleBusinessRegistrations`）。登記已建立的 Google Business 檔案。亦於「網站+系統 → 網站詳情 → Google Business」Tab 顯示該站紀錄。
 
 ### 欄位
 
@@ -48,7 +47,7 @@
 
 ## Backlink (反向連結)
 
-> 前端 DataStore；後續再落 Supabase 表。網站／供應商來自「供應商 → 網頁供應商」。
+> Supabase（`useBacklinkPurchases`）。網站來自 `useWebsiteProfiles`；供應商來自「供應商 → 網頁供應商」。
 
 ### 欄位
 
@@ -121,28 +120,6 @@
 | 關聯影片 | Select | ❌ |
 | 標籤 | Tag Input | ❌ |
 | 工時 | Number | ❌ |
-
----
-
-## EDM Sub-page
-
-### Campaign 列表
-
-| 欄位 | 說明 |
-|------|------|
-| 類型 | email / sms badge |
-| 主題 | subject |
-| 模板 | template_name |
-| 收件人數 | recipient_count |
-| 發送日期 | send_date |
-| 狀態 | status badge |
-| 開信率 | open_rate (bar) |
-| 點擊率 | click_rate (bar) |
-
-### 模板管理
-- 按公司分類的模板列表
-- 預覽模板內容
-- 可直接從模板建立新Campaign
 
 ---
 
@@ -221,14 +198,11 @@
 MarketingModule.tsx
 ├── MarketingCalendar.tsx       // 行銷日曆
 ├── SocialPostsModule.tsx       // 社交媒體
-│   ├── SocialPostsList.tsx     // 帖文列表
-│   └── SocialPostForm.tsx      // 新增/編輯
-├── EdmModule.tsx               // EDM
-│   ├── EdmManagementModule.tsx // Campaign 列表
-│   └── EdmTemplates.tsx        // 模板
-├── PaidAdsModule.tsx           // 付費廣告
-│   └── PaidAdsList.tsx         // 廣告列表
+├── GoogleAdsModule.tsx         // Google Ads
+├── FacebookAdsModule.tsx       // Facebook Ads
 ├── SeoKeywordsModule.tsx       // SEO 關鍵字
-│   └── SeoKeywordsList.tsx     // 關鍵字列表
-└── SeoUpgradeModule.tsx        // SEO 升級
+├── SeoUpgradeModule.tsx        // SEO 升級
+├── GraphicDesignModule.tsx     // 平面設計
+├── BacklinkModule.tsx          // 反向連結
+└── GoogleBusinessModule.tsx    // Google Business
 ```

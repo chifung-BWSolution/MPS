@@ -36,7 +36,7 @@ src/
 ├── vite-env.d.ts                    # Vite type declarations
 │
 ├── components/
-│   ├── home.tsx                     # Main shell: AppProvider + DataStoreProvider + AppLayout + ModuleRouter
+│   ├── home.tsx                     # Main shell: AppProvider + AppLayout + ModuleRouter
 │   ├── layout/
 │   │   └── AppLayout.tsx            # Global Shell (Sidebar + TopNav + Content Area)
 │   │
@@ -46,9 +46,9 @@ src/
 │   ├── project/                     # 專案策劃 Module
 │   ├── website/                     # 網站管理 Module
 │   ├── articles/                    # 文章管理 Module
-│   ├── marketing/                   # 行銷管理 Module (Social, EDM, Paid Ads, SEO)
+│   ├── marketing/                   # 行銷管理 Module (Social, Ads, SEO, Backlink, …)
 │   ├── video/                       # 影片製作 Module
-│   ├── supplier/                    # 供應商 Module
+│   ├── supplier/                    # 供應商 Module (網頁供應商)
 │   ├── report/                      # 報表分析 Module
 │   ├── tools-center/                # 工具中心 Module (AI + Training)
 │   ├── finance/                     # 財務管理 Module
@@ -58,20 +58,23 @@ src/
 │
 ├── context/
 │   ├── AppContext.tsx               # Global state: user, navigation, company/brand filter
-│   └── DataStore.tsx                # Centralized data layer with CRUD operations
+│   └── AuthContext.tsx              # Supabase auth session / system user
 │
 ├── data/
-│   ├── mockData.ts                  # Mock: projects, companies, brands
-│   ├── websiteData.ts              # Mock: websiteProfiles
-│   ├── websiteDetailData.ts        # Mock: videos, social, ads, SEO per website
-│   └── marketingData.ts            # Mock: marketing calendar data
+│   ├── mockData.ts                  # Legacy mock helpers (falling back where hooks need them)
+│   ├── websiteData.ts              # Static website fallback for useWebsiteProfiles
+│   ├── websiteDetailData.ts        # Legacy per-website mock content helpers
+│   └── marketingData.ts            # Marketing calendar helper data
 │
 ├── types/
 │   ├── app.ts                       # All TypeScript interfaces & type definitions
 │   └── supabase.ts                  # Auto-generated Supabase types (from CLI)
 │
 ├── hooks/
-│   └── use-mobile.tsx               # Responsive breakpoint hook
+│   ├── use-mobile.tsx               # Responsive breakpoint hook
+│   ├── useWebsiteProfiles.ts        # Supabase website/system profiles
+│   ├── useSocialPosts.ts            # Supabase social posts
+│   └── …                            # Other domain hooks (Ads, SEO, backlinks, etc.)
 │
 ├── lib/
 │   └── utils.ts                     # Utility functions (cn, formatters)
@@ -91,21 +94,20 @@ The app uses a **single-page context-based router** pattern:
 App.tsx
   └── Route "/" → Home
         └── AppProvider (context)
-            └── DataStoreProvider (data layer)
-                └── AppLayout (sidebar + topnav)
-                    └── ModuleRouter (switch on currentModule)
-                        ├── case 'dashboard'     → <DashboardModule />
-                        ├── case 'day-report'    → <DayReportModule />
-                        ├── case 'quotation'     → <QuotationModule />
-                        ├── case 'project'       → <ProjectModule />
-                        ├── case 'website'       → <WebsiteModule />
-                        ├── case 'marketing'     → <MarketingModule />
-                        ├── case 'video'         → <VideoModule />
-                        ├── case 'supplier'      → <SupplierModule />
-                        ├── case 'report'        → <ReportModule />
-                        ├── case 'tools-center'  → <ToolsCenterModule />
-                        ├── case 'finance'       → <FinanceModule />
-                        └── case 'settings'      → <SettingsModule />
+            └── AppLayout (sidebar + topnav)
+                └── ModuleRouter (switch on currentModule)
+                    ├── case 'dashboard'     → <DashboardModule />
+                    ├── case 'day-report'    → <DayReportModule />
+                    ├── case 'quotation'     → <QuotationModule />
+                    ├── case 'project'       → <ProjectModule />
+                    ├── case 'website'       → <WebsiteModule />
+                    ├── case 'marketing'     → <MarketingModule />
+                    ├── case 'video'         → <VideoModule />
+                    ├── case 'supplier'      → <SupplierModule />
+                    ├── case 'report'        → <ReportModule />
+                    ├── case 'tools-center'  → <ToolsCenterModule />
+                    ├── case 'finance'       → <FinanceModule />
+                    └── case 'settings'      → <SettingsModule />
 ```
 
 ### 3.2 Target: React Router v6 Nested Routes (Migration Plan)
@@ -141,16 +143,17 @@ App.tsx
 ├── /marketing
 │   ├── /calendar
 │   ├── /social
-│   ├── /edm
-│   └── /paid-ads
+│   ├── /google-ads
+│   ├── /seo
+│   ├── /backlink
+│   └── /google-business
 ├── /video
 │   ├── /list
 │   ├── /channels
 │   ├── /schedule
 │   └── /distribution
 ├── /supplier
-│   ├── /list
-│   └── /:id
+│   └── /web-suppliers
 ├── /report
 │   ├── /performance
 │   ├── /manhours
@@ -205,41 +208,23 @@ interface AppContextType {
 }
 ```
 
-### 4.2 DataStore Context (Centralized CRUD)
+### 4.2 Domain Hooks (Supabase data layer)
 
-```typescript
-interface DataStoreContextType {
-  // Projects CRUD
-  projects: Project[];
-  addProject / updateProject / deleteProject / getProjectById
+The former in-memory `DataStore` context has been removed. Modules load and mutate
+domain data through focused hooks that talk to Supabase (with occasional static
+fallback only when a query fails or returns empty).
 
-  // Websites CRUD
-  websites: WebsiteProfileFull[];
-  addWebsite / updateWebsite / deleteWebsite / getWebsiteById
+Examples:
 
-  // Videos CRUD (keyed by websiteId)
-  videos: Record<string, Video[]>;
-  allVideosList: Video[];
-  addVideo / updateVideo / deleteVideo
-
-  // Video Channels CRUD
-  videoChannels: VideoChannel[];
-  addVideoChannel / updateVideoChannel / deleteVideoChannel
-
-  // Social Posts CRUD (keyed by websiteId)
-  socialPosts: Record<string, SocialPost[]>;
-  addSocialPost / updateSocialPost / deleteSocialPost
-
-  // Paid Ads, SEO Keywords, EDM Campaigns (keyed by websiteId)
-  paidAds / seoKeywords / edmCampaigns
-
-  // Suppliers
-  suppliers: SupplierData[];
-  addSupplier / updateSupplier / deleteSupplier
-
-  // Integrity checks before delete
-}
-```
+| Hook | Domain |
+|------|--------|
+| `useWebsiteProfiles` | 網站+系統 profiles (`webandsystem_list`) |
+| `useSocialPosts` | 社交媒體帖文 |
+| `useSeoKeywords` | SEO 關鍵字 / GSC |
+| `useWebPageSuppliers` | 網頁供應商 |
+| `useBacklinkPurchases` | 反向連結購買紀錄 |
+| `useGoogleBusinessRegistrations` | Google Business 登記 |
+| `useCompanies` / `useBrands` / `useProjects` | 公司／品牌／專案 |
 
 ### 4.3 Data Flow Diagram
 
@@ -254,18 +239,17 @@ interface DataStoreContextType {
         │              │                    │
         ▼              ▼                    ▼
 ┌─────────────────────────────────────────────────────────┐
-│              AppContext (Navigation State)                │
+│         AppContext + AuthContext (nav / session)          │
 │  user, currentModule, selectedCompanyId, selectedBrandId │
 └──────────────────────────┬──────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────┐
-│              DataStore Context (Data Layer)               │
-│  projects[], websites[], videos{}, socialPosts{}, etc.   │
-│  CRUD operations with integrity checks                   │
+│              Domain hooks (per feature)                   │
+│  useWebsiteProfiles, useSocialPosts, useSeoKeywords, …   │
 └──────────────────────────┬──────────────────────────────┘
                            │
-                           ▼ (Future: Supabase)
+                           ▼
 ┌─────────────────────────────────────────────────────────┐
 │              Supabase Backend                             │
 │  ┌───────────┐  ┌─────────┐  ┌─────────┐  ┌────────┐  │

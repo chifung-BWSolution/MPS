@@ -5,16 +5,15 @@
 ### Sub-routes
 | Path | Label | Description |
 |------|-------|-------------|
-| `/supplier/list` | 供應商列表 | 全部供應商 |
-| `/supplier/reviews` | 供應商評價 | 績效評價 |
 | `/supplier/web-suppliers` | 網頁供應商 | 反向連結可購買網站主檔 |
-| `/supplier/:id` | 供應商詳情 | 個別供應商 |
+
+> 一般「供應商列表／評價」模擬頁面已移除。目前僅保留使用 Supabase 的網頁供應商。
 
 ---
 
 ## Web Page Suppliers (網頁供應商)
 
-> 前端 DataStore；獨立於一般供應商列表。供「行銷管理 → 反向連結」選取。
+> Supabase 表 `web_page_suppliers`（`useWebPageSuppliers`）。供「行銷管理 → 反向連結」選取。
 
 ### 欄位
 
@@ -31,90 +30,18 @@
 
 ---
 
-## Supplier List
-
-### 列表視圖
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ 篩選: [公司▼] [分類▼] [合約狀態▼]    [搜尋...]    [+新增]    │
-├─────────────────────────────────────────────────────────────────┤
-│ 名稱          │ 分類   │ 聯絡人 │ 合約  │ 評分   │ 推薦│ 花費  │
-│───────────────┼────────┼────────┼───────┼────────┼─────┼───────│
-│ SEO Expert HK │ SEO    │ 陳先生 │ 🟢活躍│ ⭐4.5  │ ✅  │$45,000│
-│ PrintMax      │ 印刷   │ 王小姐 │ 🟢活躍│ ⭐3.8  │ ❌  │$12,000│
-│ VideoStudio   │ 攝像   │ 李先生 │ 🟡待定│ ⭐4.2  │ ✅  │$28,000│
-│ LinkBuilder   │ 外鏈   │ 張先生 │ 🔴過期│ ⭐2.5  │ ❌  │$8,000 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Supplier Detail (/supplier/:id)
-
-### Profile Card
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ 🏢 SEO Expert HK                              🟢 Active        │
-│ 分類: SEO | 合約: 活躍                                          │
-│ 聯絡人: 陳先生 | 📧 chen@seoexpert.hk | 📞 2345-6789          │
-│ 🌐 https://seoexpert.hk                                        │
-│ 所屬公司: BWDesign (或 共用供應商)                               │
-│                                                                   │
-│ 總花費: HKD $45,000 | 評分: ⭐⭐⭐⭐½ (4.5/5) | ✅ 推薦      │
-├─────────────────────────────────────────────────────────────────┤
-│ Tab: [評價紀錄] [採購記錄] [合約文件]                           │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 評價表單 (5維度)
-
-| 維度 | 評分 | 說明 |
-|------|------|------|
-| 品質 (quality_score) | 1-5 星 | 工作品質 |
-| 準時 (timeliness_score) | 1-5 星 | 按時交付 |
-| 溝通 (communication_score) | 1-5 星 | 溝通配合度 |
-| 價格 (price_score) | 1-5 星 | 性價比 |
-| 可靠 (reliability_score) | 1-5 星 | 整體可靠度 |
-
-### 評價列表
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ 👤 陳小華 | 2025-01-10 | 整體: ⭐4.5                           │
-│ 品質⭐5 | 準時⭐4 | 溝通⭐5 | 價格⭐4 | 可靠⭐5              │
-│ "服務非常專業，SEO排名提升明顯，推薦使用。"                    │
-├─────────────────────────────────────────────────────────────────┤
-│ 👤 朴賢俊 | 2024-12-05 | 整體: ⭐4.0                           │
-│ 品質⭐4 | 準時⭐4 | 溝通⭐4 | 價格⭐4 | 可靠⭐4              │
-│ "溝通順暢，報告詳細，建議繼續合作。"                           │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
 ## 組件結構
 
 ```
 SupplierModule.tsx
-├── SupplierList.tsx
-├── SupplierDetail.tsx
-│   ├── SupplierProfile.tsx
-│   ├── SupplierReviews.tsx
-│   └── SupplierPurchases.tsx
-└── SupplierReviewForm.tsx
+└── WebPageSupplierModule.tsx
 ```
 
 ---
 
 ## 數據交互
 
-| 操作 | Table |
-|------|-------|
-| 列表 | suppliers LEFT JOIN companies |
-| 詳情 | suppliers WHERE id |
-| 評價列表 | supplier_reviews WHERE supplier_id JOIN users |
-| 新增評價 | INSERT supplier_reviews |
-| 更新供應商 | UPDATE suppliers |
-| 計算平均分 | AVG(supplier_reviews.overall_score) → suppliers.average_rating |
+| 操作 | Source |
+|------|--------|
+| 列表 / CRUD | `web_page_suppliers` via `useWebPageSuppliers` |
+| 刪除前引用檢查 | `backlink_purchases` via `useBacklinkPurchases` |
