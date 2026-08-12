@@ -3,7 +3,7 @@ import { Plus, Search, ExternalLink, Globe, Facebook, Instagram, BookOpen, X, Ey
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { SocialPost } from '@/types/app';
-import { useDataStore } from '@/context/DataStore';
+import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
 import { useSocialPosts } from '@/hooks/useSocialPosts';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Input } from '@/components/ui/input';
@@ -52,7 +52,7 @@ function getPostProjectCategory(websiteName: string) {
 
 // Social Post Detail Page with Tabs
 function SocialPostDetail({ post, onBack }: { post: any; onBack: () => void }) {
-  const { websites } = useDataStore();
+  const { profiles: websites } = useWebsiteProfiles();
   const [activeTab, setActiveTab] = useState<'info' | 'websites' | 'projects' | 'performance'>('info');
   const [linkedWebsites, setLinkedWebsites] = useState<string[]>(
     post.websiteName ? [post.websiteName] : []
@@ -366,7 +366,7 @@ function toDateOnly(value?: string): string | undefined {
 
 // Main Social Posts Module
 export function SocialPostsModule() {
-  const { websites } = useDataStore();
+  const { profiles: websites } = useWebsiteProfiles();
   const { posts, addPost, updatePost, deletePost } = useSocialPosts();
   const [filterPlatform, setFilterPlatform] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');

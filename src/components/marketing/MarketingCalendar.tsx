@@ -17,7 +17,7 @@ import { useBacklinkPurchases } from '@/hooks/useBacklinkPurchases';
 import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
 import { useGoogleBusinessRegistrations } from '@/hooks/useGoogleBusinessRegistrations';
 import { useRecentDayReports } from '@/hooks/useRecentDayReports';
-import { useDataStore } from '@/context/DataStore';
+import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
 import { socialPostFinalDate } from '@/types/marketingOps';
 import {
   deriveVideoOutputStatus,
@@ -262,7 +262,7 @@ export function MarketingCalendar() {
   } = useUpcomingEvents();
   const { videos } = useVideoOutput();
   const { channels } = useVchannels();
-  const { websites } = useDataStore();
+  const { profiles: websites } = useWebsiteProfiles();
   const { posts: socialPosts } = useSocialPosts();
   const { purchases: backlinkPurchases } = useBacklinkPurchases();
   const { suppliers: webPageSuppliers } = useWebPageSuppliers();

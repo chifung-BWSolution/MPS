@@ -217,85 +217,7 @@ export function DataIntegrityCheck() {
         totalCount: websites.length,
       });
 
-      // ===== 5. Video Checks =====
-      const { videos, videoChannels } = dataStore;
-      const allVideos = Object.entries(videos).flatMap(([wsId, vids]) => vids.map(v => ({ ...v, _websiteId: wsId })));
-
-      // Check: Videos in valid websites
-      const videoWebsiteOrphans = Object.keys(videos).filter(wsId => !websites.find(w => w.id === wsId));
-      allChecks.push({
-        id: 'video-website-fk',
-        module: '影片管理',
-        checkName: '影片→網站 外鍵關聯',
-        severity: videoWebsiteOrphans.length > 0 ? 'warning' : 'pass',
-        message: videoWebsiteOrphans.length > 0
-          ? `${videoWebsiteOrphans.length} 個網站 ID 下的影片找不到對應網站`
-          : '所有影片的網站關聯正確',
-        details: videoWebsiteOrphans.map(wsId => `網站 ID: ${wsId} [不存在] — 含 ${videos[wsId]?.length || 0} 部影片`),
-        affectedCount: videoWebsiteOrphans.length,
-        totalCount: Object.keys(videos).length,
-      });
-
-      // Check: Video channel references
-      const videosWithInvalidChannel = allVideos.filter(v => v.videoChannelId && !videoChannels.find(vc => vc.id === v.videoChannelId));
-      allChecks.push({
-        id: 'video-channel-fk',
-        module: '影片管理',
-        checkName: '影片→頻道 外鍵關聯',
-        severity: videosWithInvalidChannel.length > 0 ? 'warning' : 'pass',
-        message: videosWithInvalidChannel.length > 0
-          ? `${videosWithInvalidChannel.length} 部影片引用了不存在的頻道`
-          : '所有影片頻道關聯正確',
-        affectedCount: videosWithInvalidChannel.length,
-        totalCount: allVideos.length,
-      });
-
-      // ===== 6. Social Posts Checks =====
-      const { socialPosts } = dataStore;
-      const socialPostWebsiteOrphans = Object.keys(socialPosts).filter(wsId => !websites.find(w => w.id === wsId));
-      allChecks.push({
-        id: 'social-website-fk',
-        module: '社交媒體',
-        checkName: '社交帖文→網站 外鍵關聯',
-        severity: socialPostWebsiteOrphans.length > 0 ? 'warning' : 'pass',
-        message: socialPostWebsiteOrphans.length > 0
-          ? `${socialPostWebsiteOrphans.length} 個網站 ID 下的帖文找不到對應網站`
-          : '所有社交帖文的網站關聯正確',
-        affectedCount: socialPostWebsiteOrphans.length,
-        totalCount: Object.keys(socialPosts).length,
-      });
-
-      // ===== 7. Paid Ads Checks =====
-      const { paidAds } = dataStore;
-      const adsWebsiteOrphans = Object.keys(paidAds).filter(wsId => !websites.find(w => w.id === wsId));
-      allChecks.push({
-        id: 'ads-website-fk',
-        module: '付費廣告',
-        checkName: '廣告→網站 外鍵關聯',
-        severity: adsWebsiteOrphans.length > 0 ? 'warning' : 'pass',
-        message: adsWebsiteOrphans.length > 0
-          ? `${adsWebsiteOrphans.length} 個網站 ID 下的廣告找不到對應網站`
-          : '所有廣告的網站關聯正確',
-        affectedCount: adsWebsiteOrphans.length,
-        totalCount: Object.keys(paidAds).length,
-      });
-
-      // ===== 8. SEO Keywords Checks =====
-      const { seoKeywords } = dataStore;
-      const seoWebsiteOrphans = Object.keys(seoKeywords).filter(wsId => !websites.find(w => w.id === wsId));
-      allChecks.push({
-        id: 'seo-website-fk',
-        module: 'SEO 關鍵字',
-        checkName: '關鍵字→網站 外鍵關聯',
-        severity: seoWebsiteOrphans.length > 0 ? 'warning' : 'pass',
-        message: seoWebsiteOrphans.length > 0
-          ? `${seoWebsiteOrphans.length} 個網站 ID 下的關鍵字找不到對應網站`
-          : '所有 SEO 關鍵字的網站關聯正確',
-        affectedCount: seoWebsiteOrphans.length,
-        totalCount: Object.keys(seoKeywords).length,
-      });
-
-      // ===== 9. EDM Checks =====
+      // ===== 5. EDM Checks =====
       const { edmCampaigns } = dataStore;
       const edmWebsiteOrphans = Object.keys(edmCampaigns).filter(wsId => !websites.find(w => w.id === wsId));
       allChecks.push({
@@ -514,78 +436,7 @@ export function DataIntegrityCheck() {
         totalCount: yearPlans.length,
       });
 
-      // ===== 14. 行銷管理 → 網站 Content Counts Sync =====
-      // Check: Website articlesCount vs actual articles linked
-      const socialPostTotalPerWebsite = websites.map(w => {
-        const actualSocial = socialPosts[w.id]?.length || 0;
-        return { ws: w, actual: actualSocial, stored: w.socialPostsCount || 0 };
-      }).filter(x => x.stored !== x.actual && x.stored > 0);
-      allChecks.push({
-        id: 'marketing-social-count-sync',
-        module: '行銷管理',
-        checkName: '網站社交帖文計數同步',
-        severity: socialPostTotalPerWebsite.length > 0 ? 'warning' : 'pass',
-        message: socialPostTotalPerWebsite.length > 0
-          ? `${socialPostTotalPerWebsite.length} 個網站的社交帖文計數與實際不一致`
-          : '所有網站社交帖文計數正確',
-        details: socialPostTotalPerWebsite.map(x => `${x.ws.websiteName}: 顯示 ${x.stored} 篇, 實際 ${x.actual} 篇`),
-        affectedCount: socialPostTotalPerWebsite.length,
-        totalCount: websites.length,
-      });
-
-      // Check: Social posts platform field consistency
-      const allSocialFlat = Object.values(socialPosts).flat();
-      const socialMissingPlatforms = allSocialFlat.filter(p => !p.platforms || p.platforms.length === 0);
-      allChecks.push({
-        id: 'marketing-social-platforms',
-        module: '行銷管理',
-        checkName: '社交帖文平台欄位完整性',
-        severity: socialMissingPlatforms.length > 0 ? 'warning' : 'pass',
-        message: socialMissingPlatforms.length > 0
-          ? `${socialMissingPlatforms.length} 條社交帖文缺少平台選擇`
-          : '所有社交帖文均指定了投放平台',
-        affectedCount: socialMissingPlatforms.length,
-        totalCount: allSocialFlat.length,
-      });
-
-      // ===== 15. 影片製作 → 網站/頻道 Cross Check =====
-      // Videos per website count sync
-      const videoCountPerWebsite = websites.map(w => {
-        const actualVideos = videos[w.id]?.length || 0;
-        return { ws: w, actual: actualVideos, stored: w.videosCount || 0 };
-      }).filter(x => x.stored !== x.actual && x.stored > 0);
-      allChecks.push({
-        id: 'video-count-sync',
-        module: '影片製作',
-        checkName: '網站影片計數同步',
-        severity: videoCountPerWebsite.length > 0 ? 'warning' : 'pass',
-        message: videoCountPerWebsite.length > 0
-          ? `${videoCountPerWebsite.length} 個網站的影片計數與實際不一致`
-          : '所有網站影片計數正確',
-        details: videoCountPerWebsite.map(x => `${x.ws.websiteName}: 顯示 ${x.stored} 部, 實際 ${x.actual} 部`),
-        affectedCount: videoCountPerWebsite.length,
-        totalCount: websites.length,
-      });
-
-      // Video channel brand references
-      const videoChannelBrandOrphans = videoChannels.filter(vc => {
-        if (!vc.brand) return false;
-        return !brands.find(b => b.brandCode === vc.brand);
-      });
-      allChecks.push({
-        id: 'video-channel-brand',
-        module: '影片製作',
-        checkName: '影片頻道品牌代碼一致性',
-        severity: videoChannelBrandOrphans.length > 0 ? 'warning' : 'pass',
-        message: videoChannelBrandOrphans.length > 0
-          ? `${videoChannelBrandOrphans.length} 個影片頻道引用了不存在的品牌代碼`
-          : '所有影片頻道品牌代碼正確',
-        details: videoChannelBrandOrphans.map(vc => `${vc.internalName} → 品牌代碼: "${vc.brand}" [不存在]`),
-        affectedCount: videoChannelBrandOrphans.length,
-        totalCount: videoChannels.length,
-      });
-
-      // ===== 16. 網站→公司/品牌 FK Consistency =====
+      // ===== 14. 網站→公司/品牌 FK Consistency =====
       const websiteCompanyOrphans = websites.filter(w => w.companyId && !companies.find(c => c.uuid === w.companyId || c.id === w.companyId));
       allChecks.push({
         id: 'website-company-fk',
@@ -745,24 +596,17 @@ export function DataIntegrityCheck() {
         totalCount: brands.length,
       });
 
-      // Check: Data chain completeness (Company → Brand → Project → Website → Content)
-      const websitesWithoutContent = websites.filter(w => {
-        const hasVideos = Object.keys(videos).includes(w.id);
-        const hasSocial = Object.keys(socialPosts).includes(w.id);
-        const hasAds = Object.keys(paidAds).includes(w.id);
-        const hasSeo = Object.keys(seoKeywords).includes(w.id);
-        const hasEdm = Object.keys(edmCampaigns).includes(w.id);
-        return !hasVideos && !hasSocial && !hasAds && !hasSeo && !hasEdm;
-      });
+      // Check: Data chain completeness (Company → Brand → Project → Website → EDM)
+      const websitesWithoutContent = websites.filter(w => !Object.keys(edmCampaigns).includes(w.id));
       allChecks.push({
         id: 'website-no-content',
         module: '跨模組一致性',
         checkName: '網站內容關聯覆蓋',
         severity: websitesWithoutContent.length > 0 ? 'warning' : 'pass',
         message: websitesWithoutContent.length > 0
-          ? `${websitesWithoutContent.length} 個網站尚未關聯任何內容模組（影片/社交/廣告/SEO/EDM）`
-          : '所有網站均有關聯內容',
-        details: websitesWithoutContent.slice(0, 20).map(w => `${w.websiteName} (${w.id}) — 無任何內容模組記錄`),
+          ? `${websitesWithoutContent.length} 個網站尚未關聯任何 EDM 活動（DataStore 剩餘模擬內容）`
+          : '所有網站均有關聯 EDM 內容',
+        details: websitesWithoutContent.slice(0, 20).map(w => `${w.websiteName} (${w.id}) — 無 EDM 記錄`),
         affectedCount: websitesWithoutContent.length,
         totalCount: websites.length,
       });
@@ -985,7 +829,7 @@ export function DataIntegrityCheck() {
             <ArrowRight className="w-4 h-4 text-gray-400" />
             <ChainNode label="網站" count={dataStore.websites.length} />
             <ArrowRight className="w-4 h-4 text-gray-400" />
-            <ChainNode label="內容模組" count={Object.keys(dataStore.videos).length + Object.keys(dataStore.socialPosts).length + Object.keys(dataStore.paidAds).length} />
+            <ChainNode label="EDM" count={Object.keys(dataStore.edmCampaigns).length} />
           </div>
           {/* Cross-module connections */}
           <div className="border-t border-gray-100 pt-3 mt-3">

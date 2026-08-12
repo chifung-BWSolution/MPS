@@ -27,11 +27,6 @@ export function SampleDataManager() {
 
   const moduleLabels: Record<string, string> = {
     websites: '網站',
-    videos: '影片',
-    videoChannels: '影片頻道',
-    socialPosts: '社交媒體帖文',
-    paidAds: '付費廣告',
-    seoKeywords: 'SEO 關鍵字',
     edmCampaigns: 'EDM 活動',
     suppliers: '供應商',
   };

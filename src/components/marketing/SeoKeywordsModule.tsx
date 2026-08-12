@@ -6,7 +6,7 @@ import { websiteProfiles } from '@/data/websiteData';
 import { projects as allProjectsData } from '@/data/mockData';
 import { getProjectCategory } from '@/components/ui/project-category-badge';
 import { Button } from '@/components/ui/button';
-import { useDataStore } from '@/context/DataStore';
+import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
 import { useSeoKeywords } from '@/hooks/useSeoKeywords';
 import type { SeoKeywordRow } from '@/types/seo';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
@@ -372,7 +372,7 @@ function SeoKeywordDetail({
 }
 
 export function SeoKeywordsModule() {
-  const { websites } = useDataStore();
+  const { profiles: websites } = useWebsiteProfiles();
   const {
     keywords,
     loading,

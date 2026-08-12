@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Plus, Search, Edit, Trash2, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
-import { useDataStore } from '@/context/DataStore';
+import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
 import { useGoogleBusinessRegistrations } from '@/hooks/useGoogleBusinessRegistrations';
 import type { GoogleBusinessRegistration } from '@/types/marketingOps';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
@@ -29,7 +29,7 @@ function truncate(text: string, max = 80) {
 }
 
 export function GoogleBusinessModule() {
-  const { websites } = useDataStore();
+  const { profiles: websites } = useWebsiteProfiles();
   const {
     registrations: googleBusinessRegistrations,
     addRegistration,
