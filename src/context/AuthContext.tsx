@@ -6,6 +6,7 @@ import type { User as SupabaseUser, Session } from '@supabase/supabase-js';
 interface SystemUserProfile {
   id: string;
   auth_user_id: string | null;
+  staff_id: string;
   bubble_staff_id: string;
   display_name: string;
   email: string;
@@ -46,6 +47,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 type StaffDirectoryLite = {
+  id: string;
   bubble_staff_id: string;
   display_name: string | null;
   full_name: string | null;
@@ -53,6 +55,8 @@ type StaffDirectoryLite = {
   position: string | null;
   work_email: string | null;
 };
+
+const MANUAL_SUPER_ADMIN_STAFF_UUID = 'd88d2465-42d1-4205-8a9b-8495083c3691';
 
 function dedupeById<T extends { id?: string }>(rows: T[]): T[] {
   const seen = new Set<string>();
@@ -72,7 +76,7 @@ function isStaffActive(status: string | null | undefined): boolean {
 
 /**
  * Flexible whitelist lookup against public.users (email / google_email),
- * enriched by public.staffs (staff_id = bubble_staff_id).
+ * enriched by public.staffs (users.staff_id → staffs.id; bubble_staff_id is Bubble external id).
  *
  * When the same email matches multiple people (shared work mailbox), prefer the row
  * linked to staffs.status = 'active'. Falls back to inactive only if no active match exists.
@@ -122,7 +126,7 @@ async function findSystemUserByEmail(email: string): Promise<{ data: SystemUserP
     const queries: PromiseLike<any>[] = [
       supabase
         .from('staffs')
-        .select('bubble_staff_id, display_name, full_name, status, position, work_email')
+        .select('id, bubble_staff_id, display_name, full_name, status, position, work_email')
         .ilike('work_email', normalizedEmail),
     ];
 
@@ -130,15 +134,15 @@ async function findSystemUserByEmail(email: string): Promise<{ data: SystemUserP
       queries.push(
         supabase
           .from('staffs')
-          .select('bubble_staff_id, display_name, full_name, status, position, work_email')
-          .in('bubble_staff_id', uniqueIds)
+          .select('id, bubble_staff_id, display_name, full_name, status, position, work_email')
+          .in('id', uniqueIds)
       );
     }
 
     const results = await Promise.all(queries);
     for (const result of results) {
       for (const row of (result.data || []) as StaffDirectoryLite[]) {
-        if (row?.bubble_staff_id) map.set(row.bubble_staff_id, row);
+        if (row?.id) map.set(row.id, row);
       }
     }
     return map;
@@ -296,9 +300,10 @@ function bootstrapSystemUserFromUserInfo(
   });
 
   return {
-    id: `ui-bootstrap-${uiRecord.id || uiRecord.staff_id}`,
+    id: uiRecord.id || `ui-bootstrap-${uiRecord.staff_id}`,
     auth_user_id: null,
-    bubble_staff_id: uiRecord.staff_id || `ui_${uiRecord.id}`,
+    staff_id: uiRecord.staff_id,
+    bubble_staff_id: staff?.bubble_staff_id || '',
     display_name: displayName,
     email: uiRecord.email || email,
     role: role,
@@ -523,7 +528,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             (async () => {
               try {
                 let phone: string | null = null;
-                if (sysUser.bubble_staff_id) {
+                if (sysUser.staff_id) {
+                  const { data: staffRow } = await supabase
+                    .from('staffs')
+                    .select('work_phone, private_phone')
+                    .eq('id', sysUser.staff_id)
+                    .maybeSingle();
+                  if (staffRow) phone = staffRow.work_phone || staffRow.private_phone || null;
+                }
+                if (!phone && sysUser.bubble_staff_id) {
                   const { data: staffRow } = await supabase
                     .from('staffs')
                     .select('work_phone, private_phone')
@@ -551,7 +564,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const { data: uInfo } = await supabase
                 .from('users')
                 .select('*')
-                .eq('staff_id', sysUser.bubble_staff_id)
+                .eq('staff_id', sysUser.staff_id)
                 .limit(1)
                 .maybeSingle();
               setUserInfo(uInfo || null);
@@ -573,6 +586,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const fallbackUser: SystemUserProfile = {
             id: 'fallback-super-admin',
             auth_user_id: authUserId || null,
+            staff_id: MANUAL_SUPER_ADMIN_STAFF_UUID,
             bubble_staff_id: 'manual_super_admin_lowell',
             display_name: 'Lowell Lo',
             email: SUPER_ADMIN_EMAIL,
@@ -590,7 +604,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           const fallbackUserInfo: UserInfoProfile = {
             id: 'fallback-user-info',
-            staff_id: 'manual_super_admin_lowell',
+            staff_id: MANUAL_SUPER_ADMIN_STAFF_UUID,
             role_tag: 'Administrator',
             system_status: 'active',
             classification: 'management',
@@ -632,8 +646,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         (async () => {
           try {
             let phone: string | null = null;
-            // Try by bubble_staff_id first
-            if (sysUser.bubble_staff_id) {
+            // Prefer staffs.id (users.staff_id FK), then bubble_staff_id
+            if (sysUser.staff_id) {
+              const { data: staffRow } = await supabase
+                .from('staffs')
+                .select('work_phone, private_phone')
+                .eq('id', sysUser.staff_id)
+                .maybeSingle();
+              if (staffRow) {
+                phone = staffRow.work_phone || staffRow.private_phone || null;
+              }
+            }
+            if (!phone && sysUser.bubble_staff_id) {
               const { data: staffRow } = await supabase
                 .from('staffs')
                 .select('work_phone, private_phone')
@@ -664,12 +688,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         })();
 
-        // Step 2: Fetch users row for role_tag (joined via staff_id = bubble_staff_id, NO status filter)
+        // Step 2: Fetch users row for role_tag (joined via users.staff_id → staffs.id, NO status filter)
         try {
           const { data: uInfo } = await supabase
             .from('users')
             .select('*')
-            .eq('staff_id', sysUser.bubble_staff_id)
+            .eq('staff_id', sysUser.staff_id)
             .limit(1)
             .maybeSingle();
 
@@ -807,7 +831,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             (async () => {
               try {
                 let phone: string | null = null;
-                if (sysUser.bubble_staff_id) {
+                if (sysUser.staff_id) {
+                  const { data: staffRow } = await supabase
+                    .from('staffs')
+                    .select('work_phone, private_phone')
+                    .eq('id', sysUser.staff_id)
+                    .maybeSingle();
+                  if (staffRow) phone = staffRow.work_phone || staffRow.private_phone || null;
+                }
+                if (!phone && sysUser.bubble_staff_id) {
                   const { data: staffRow } = await supabase
                     .from('staffs')
                     .select('work_phone, private_phone')
@@ -835,7 +867,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const { data: uInfo } = await supabase
                 .from('users')
                 .select('*')
-                .eq('staff_id', sysUser.bubble_staff_id)
+                .eq('staff_id', sysUser.staff_id)
                 .limit(1)
                 .maybeSingle();
               setUserInfo(uInfo || null);
@@ -852,6 +884,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const fallbackUser: SystemUserProfile = {
               id: 'fallback-super-admin',
               auth_user_id: null,
+              staff_id: MANUAL_SUPER_ADMIN_STAFF_UUID,
               bubble_staff_id: 'manual_super_admin_lowell',
               display_name: 'Lowell Lo',
               email: SUPER_ADMIN_EMAIL,
@@ -869,7 +902,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             const fallbackUserInfo: UserInfoProfile = {
               id: 'fallback-user-info',
-              staff_id: 'manual_super_admin_lowell',
+              staff_id: MANUAL_SUPER_ADMIN_STAFF_UUID,
               role_tag: 'Administrator',
               system_status: 'active',
               classification: 'management',
@@ -915,7 +948,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         (async () => {
           try {
             let phone: string | null = null;
-            if (sysUser.bubble_staff_id) {
+            if (sysUser.staff_id) {
+              const { data: staffRow } = await supabase
+                .from('staffs')
+                .select('work_phone, private_phone')
+                .eq('id', sysUser.staff_id)
+                .maybeSingle();
+              if (staffRow) {
+                phone = staffRow.work_phone || staffRow.private_phone || null;
+              }
+            }
+            if (!phone && sysUser.bubble_staff_id) {
               const { data: staffRow } = await supabase
                 .from('staffs')
                 .select('work_phone, private_phone')
@@ -950,7 +993,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const { data: uInfo } = await supabase
             .from('users')
             .select('*')
-            .eq('staff_id', sysUser.bubble_staff_id)
+            .eq('staff_id', sysUser.staff_id)
             .limit(1)
             .maybeSingle();
 
@@ -1000,6 +1043,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const fallbackUser: SystemUserProfile = {
             id: 'fallback-super-admin',
             auth_user_id: null,
+            staff_id: MANUAL_SUPER_ADMIN_STAFF_UUID,
             bubble_staff_id: 'manual_super_admin_lowell',
             display_name: 'Lowell Lo',
             email: SUPER_ADMIN_EMAIL,

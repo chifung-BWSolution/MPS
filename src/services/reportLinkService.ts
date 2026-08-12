@@ -65,6 +65,7 @@ export type ReportFormEntry = {
 };
 
 type SystemUserLike = {
+  staff_id?: string;
   bubble_staff_id?: string;
   email?: string;
 } | null;
@@ -76,23 +77,43 @@ export function localDateString(d = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
-export async function resolveBubbleStaffId(systemUser: SystemUserLike): Promise<string | null> {
+/** Resolve staffs.id (uuid) for FK writes. Prefers systemUser.staff_id. */
+export async function resolveStaffUuid(systemUser: SystemUserLike): Promise<string | null> {
   if (!systemUser) return null;
-  const id = systemUser.bubble_staff_id || '';
-  const looksPlaceholder = !id || id.startsWith('manual_') || id.startsWith('ui_');
-  if (!looksPlaceholder) return id;
+
+  const staffUuid = (systemUser.staff_id || '').trim();
+  if (staffUuid && !staffUuid.startsWith('manual_') && !staffUuid.startsWith('ui_')) {
+    return staffUuid;
+  }
 
   const email = (systemUser.email || '').toLowerCase().trim();
-  if (!email) return id || null;
+  if (email) {
+    const { data } = await supabase
+      .from('staffs')
+      .select('id')
+      .ilike('work_email', email)
+      .limit(1)
+      .maybeSingle();
+    if (data?.id) return data.id;
+  }
 
-  const { data } = await supabase
-    .from('staffs')
-    .select('bubble_staff_id')
-    .ilike('work_email', email)
-    .limit(1)
-    .maybeSingle();
+  const bubbleId = (systemUser.bubble_staff_id || '').trim();
+  if (bubbleId) {
+    const { data } = await supabase
+      .from('staffs')
+      .select('id')
+      .eq('bubble_staff_id', bubbleId)
+      .limit(1)
+      .maybeSingle();
+    if (data?.id) return data.id;
+  }
 
-  return data?.bubble_staff_id || id || null;
+  return staffUuid || null;
+}
+
+/** @deprecated Use resolveStaffUuid — FK columns now store staffs.id (uuid). */
+export async function resolveBubbleStaffId(systemUser: SystemUserLike): Promise<string | null> {
+  return resolveStaffUuid(systemUser);
 }
 
 export async function createPendingReportItem(

@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 
-/** Resolve display names: staff_directory first, then user_info fallback. */
+/** Resolve display names keyed by staffs.id (uuid). */
 export async function fetchStaffNameMap(staffIds: string[]): Promise<Record<string, string>> {
   const nameMap: Record<string, string> = {};
   const unique = [...new Set(staffIds.filter(Boolean))];
@@ -9,8 +9,8 @@ export async function fetchStaffNameMap(staffIds: string[]): Promise<Record<stri
   const [{ data: sdRows }, { data: uiRows }] = await Promise.all([
     supabase
       .from('staffs')
-      .select('bubble_staff_id, display_name')
-      .in('bubble_staff_id', unique),
+      .select('id, display_name')
+      .in('id', unique),
     supabase
       .from('users')
       .select('staff_id, display_name')
@@ -19,7 +19,7 @@ export async function fetchStaffNameMap(staffIds: string[]): Promise<Record<stri
 
   (sdRows || []).forEach((r) => {
     const name = (r.display_name || '').trim();
-    if (r.bubble_staff_id && name) nameMap[r.bubble_staff_id] = name;
+    if (r.id && name) nameMap[r.id] = name;
   });
 
   (uiRows || []).forEach((r) => {

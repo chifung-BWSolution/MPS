@@ -159,16 +159,16 @@ export function validateWorkLogDrafts(drafts: VideoWorkLogDraft[]): string | nul
 export async function fetchStaffDirectoryOptions(): Promise<{ staffId: string; displayName: string }[]> {
   const { data, error } = await supabase
     .from('staffs')
-    .select('bubble_staff_id, display_name')
-    .not('bubble_staff_id', 'is', null)
+    .select('id, display_name, bubble_staff_id')
+    .not('id', 'is', null)
     .order('display_name');
 
   if (error) throw error;
 
   return (data ?? [])
-    .filter(r => r.bubble_staff_id)
+    .filter(r => r.id)
     .map(r => ({
-      staffId: r.bubble_staff_id as string,
-      displayName: (r.display_name as string) || r.bubble_staff_id as string,
+      staffId: r.id as string,
+      displayName: (r.display_name as string) || (r.bubble_staff_id as string) || (r.id as string),
     }));
 }
