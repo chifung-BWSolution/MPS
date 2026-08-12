@@ -1,6 +1,12 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type {
   GoogleAdsAdGroupRow,
   GoogleAdsAdRow,
@@ -117,22 +123,30 @@ function SortableTh({
       )}
       aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
     >
-      <button
-        type="button"
-        onClick={() => onSort(sortKey)}
-        className={cn(
-          'inline-flex items-center gap-0.5 max-w-full rounded px-0.5 -mx-0.5 hover:text-foreground transition-colors',
-          align === 'right' && 'flex-row-reverse',
-          active ? 'text-foreground' : 'text-muted-foreground',
-        )}
-      >
-        <span className="truncate">{label}</span>
-        <Icon
-          size={11}
-          className={cn('shrink-0 opacity-70', active && 'opacity-100')}
-          aria-hidden
-        />
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={() => onSort(sortKey)}
+            aria-label={`Sort by ${label}`}
+            className={cn(
+              'inline-flex items-center gap-0.5 max-w-full rounded px-0.5 -mx-0.5 hover:text-foreground transition-colors',
+              align === 'right' && 'flex-row-reverse',
+              active ? 'text-foreground' : 'text-muted-foreground',
+            )}
+          >
+            <span className="truncate">{label}</span>
+            <Icon
+              size={11}
+              className={cn('shrink-0 opacity-70', active && 'opacity-100')}
+              aria-hidden
+            />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-[11px] font-medium">
+          {label}
+        </TooltipContent>
+      </Tooltip>
     </th>
   );
 }
@@ -167,7 +181,7 @@ function PanelShell({
             {loading ? '載入中…' : emptyHint}
           </div>
         ) : (
-          children
+          <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
         )}
       </div>
     </div>
