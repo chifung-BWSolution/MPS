@@ -106,7 +106,8 @@ DashboardModule.tsx
 |------|----------|--------|
 | KPI Cards | website_profiles, articles, videos, day_report_entries | company_id, brand_id |
 | Staff Hours | day_reports, users | report_date = today |
-| Project Progress | projects | status IN ('active', 'planning') |
+| Project Progress | day_report_entries, projects | 進度條 = 個人工時 / 項目總工時（staff_id = 目前用戶 staffs.id UUID） |
+| My Projects | day_report_entries, projects | staff_id = 目前用戶；依 related_id 聚合，並顯示團隊總工時 |
 | Notifications | notifications | user_id, is_read = false |
 | Quick Actions | — | Static links |
 | Recent Records | articles, videos, social_posts, website_profiles | ORDER BY created_at DESC LIMIT 5 |

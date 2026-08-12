@@ -1,153 +1,205 @@
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Folder } from 'lucide-react';
-import { useDataStore } from '@/context/DataStore';
+import { Folder, Clock, Loader2 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { useMemo } from 'react';
-import { companies, brands } from '@/data/mockData';
+import { cn } from '@/lib/utils';
+import {
+  useMyProjectsFromDayReports,
+  type MyProjectRow,
+} from '@/hooks/useMyProjectsFromDayReports';
+import { relatedTypeLabels, type ProjectRelatedType } from '@/hooks/useProjects';
 
-const statusConfig: Record<string, { label: string; color: string }> = {
-  active: { label: '進行中', color: 'bg-teal-100 text-teal-700' },
-  on_hold: { label: '暫停', color: 'bg-amber-100 text-amber-700' },
-  completed: { label: '已完成', color: 'bg-slate-100 text-slate-600' },
-  planning: { label: '規劃中', color: 'bg-blue-100 text-blue-700' },
-  cancelled: { label: '已取消', color: 'bg-rose-100 text-rose-600' },
-};
+const SELECTED_PROJECT_KEY = 'mps_selected_project_id';
 
-const typeLabels: Record<string, string> = {
-  web_design: '網站設計',
-  marketing: '市場推廣',
-  system: '系統開發',
-  video: '影片製作',
-  seo_upgrade: 'SEO 升級',
-  event: '活動策劃',
-  branding: '品牌設計',
-  graphic_design: '平面設計',
-  social_media: '社交媒體',
-  edm: 'EDM',
-  paid_ads: '付費廣告',
-  wine: '葡萄酒',
-  other: '其他',
-};
+function writeSelectedProject(projectId: string) {
+  try {
+    sessionStorage.setItem(SELECTED_PROJECT_KEY, projectId);
+  } catch {
+    /* ignore */
+  }
+}
 
-export function MyProjects() {
-  const { projects } = useDataStore();
-  const { navigateTo } = useApp();
+function HoursShareBar({ myHours, teamHours }: { myHours: number; teamHours: number }) {
+  const pct = teamHours > 0 ? Math.min(100, Math.round((myHours / teamHours) * 100)) : 0;
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-[12px]">
+        <span className="text-muted-foreground">
+          我的工時 {myHours}h / 項目總工時 {teamHours}h
+        </span>
+        <span className="font-medium tabular-nums">{pct}%</span>
+      </div>
+      <div className="h-2 bg-muted rounded-full overflow-hidden">
+        <div
+          className="h-full bg-teal-600 rounded-full transition-all duration-500"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
-  const activeProjects = useMemo(() => projects.filter(p => p.status === 'active'), [projects]);
-  const planningProjects = useMemo(() => projects.filter(p => p.status === 'planning'), [projects]);
-  const onHoldProjects = useMemo(() => projects.filter(p => p.status === 'on_hold'), [projects]);
-  const completedProjects = useMemo(() => projects.filter(p => p.status === 'completed'), [projects]);
-
-  const displayProjects = useMemo(() => {
-    return projects.filter(p => p.status !== 'cancelled').slice(0, 6);
-  }, [projects]);
+function ProjectCard({
+  project,
+  onOpen,
+}: {
+  project: MyProjectRow;
+  onOpen: (id: string) => void;
+}) {
+  const meta = [project.brandName || project.companyName, project.clientName]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-[32px] font-bold tracking-tight">我的項目</h1>
-        <p className="text-[14px] text-muted-foreground mt-1">
-          查看您目前負責及參與的所有項目進度
-        </p>
-      </div>
+    <Card
+      className="hover:shadow-md transition-shadow duration-200 cursor-pointer"
+      onClick={() => onOpen(project.id)}
+    >
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded bg-teal-50 flex items-center justify-center shrink-0">
+              <Folder className="w-5 h-5 text-teal-600" />
+            </div>
+            <div className="min-w-0">
+              <CardTitle className="text-[15px] font-semibold leading-tight truncate">
+                {project.name}
+              </CardTitle>
+              <p className="text-[12px] text-muted-foreground mt-0.5 truncate">
+                {meta || '—'}
+              </p>
+            </div>
+          </div>
+          <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-sm bg-teal-50 text-teal-700 shrink-0">
+            {project.relatedTypeLabel}
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0 space-y-3">
+        <HoursShareBar myHours={project.myHours} teamHours={project.teamHours} />
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+          <span>{project.contributorCount} 人參與 · {project.myEntryCount} 筆我的紀錄</span>
+          <span className="flex items-center gap-1 shrink-0">
+            <Clock size={11} />
+            最近匯報：
+            {project.myLastReportDate
+              ? new Date(project.myLastReportDate).toLocaleDateString('zh-HK')
+              : '—'}
+          </span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
-      {/* Stats Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-[13px] text-muted-foreground">進行中</div>
-            <div className="text-[28px] font-bold text-teal-600 mt-1">{activeProjects.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-[13px] text-muted-foreground">規劃中</div>
-            <div className="text-[28px] font-bold text-blue-600 mt-1">{planningProjects.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-[13px] text-muted-foreground">暫停</div>
-            <div className="text-[28px] font-bold text-amber-600 mt-1">{onHoldProjects.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-[13px] text-muted-foreground">已完成</div>
-            <div className="text-[28px] font-bold text-slate-600 mt-1">{completedProjects.length}</div>
-          </CardContent>
-        </Card>
-      </div>
+export function MyProjects() {
+  const { navigateTo, selectedCompanyId, selectedBrandId } = useApp();
+  const { projects, loading, error, stats } = useMyProjectsFromDayReports();
+  const [typeFilter, setTypeFilter] = useState<'all' | ProjectRelatedType>('all');
 
-      {/* Project Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {displayProjects.map((project) => {
-          const brand = brands.find(b => b.id === project.brandId);
-          const company = companies.find(c => c.id === project.companyId);
-          return (
-            <Card
-              key={project.id}
-              className="hover:shadow-md transition-shadow duration-200 cursor-pointer"
-              onClick={() => navigateTo('project', 'focus')}
+  const displayProjects = useMemo(() => {
+    return projects.filter((p) => {
+      if (typeFilter !== 'all' && p.relatedType !== typeFilter) return false;
+      if (selectedCompanyId && p.companyListId !== selectedCompanyId) return false;
+      if (selectedBrandId && p.brandListId !== selectedBrandId) return false;
+      return true;
+    });
+  }, [projects, typeFilter, selectedCompanyId, selectedBrandId]);
+
+  const openProject = (projectId: string) => {
+    writeSelectedProject(projectId);
+    navigateTo('project', 'detail');
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-1 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
+        <div>
+          <h1 className="text-[32px] font-bold tracking-tight">我的項目</h1>
+          <p className="text-[14px] text-muted-foreground mt-1">
+            依日報工時顯示您參與的項目，並對比個人與項目總工時
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {(['all', 'webandsystem', 'quotation_client', 'vchannel'] as const).map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setTypeFilter(cat)}
+              className={cn(
+                'px-3 py-1.5 rounded text-[12px] font-medium transition-colors',
+                typeFilter === cat
+                  ? 'bg-teal-600 text-white'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80',
+              )}
             >
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded bg-teal-50 flex items-center justify-center">
-                      <Folder className="w-5 h-5 text-teal-600" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-[15px] font-semibold leading-tight">
-                        {project.name}
-                      </CardTitle>
-                      <p className="text-[12px] text-muted-foreground mt-0.5">
-                        {brand?.displayName || company?.companyNameZh || project.clientName || '—'}
-                      </p>
-                    </div>
-                  </div>
-                  <Badge
-                    variant="secondary"
-                    className={`text-[11px] ${(statusConfig[project.status] || statusConfig.active).color}`}
-                  >
-                    {(statusConfig[project.status] || statusConfig.active).label}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-[12px]">
-                    <span className="text-muted-foreground">
-                      {typeLabels[project.projectType] || project.projectType}
-                    </span>
-                    <span className="text-muted-foreground">
-                      預算: HK${project.budgetUsed.toLocaleString()} / ${project.budgetTotal.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[12px]">
-                      <span className="text-muted-foreground">完成度</span>
-                      <span className="font-medium">{project.progress}%</span>
-                    </div>
-                    <Progress value={project.progress} className="h-2" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+              {cat === 'all' ? '全部' : relatedTypeLabels[cat]}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Card>
+            <CardContent className="p-3">
+              <div className="text-[12px] text-muted-foreground">參與項目</div>
+              <div className="text-[24px] font-bold text-teal-600 mt-0.5 tabular-nums">
+                {stats.projectCount}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3">
+              <div className="text-[12px] text-muted-foreground">我的總工時</div>
+              <div className="text-[24px] font-bold text-foreground mt-0.5 tabular-nums">
+                {stats.myTotalHours}h
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3">
+              <div className="text-[12px] text-muted-foreground">項目總工時</div>
+              <div className="text-[24px] font-bold text-foreground mt-0.5 tabular-nums">
+                {stats.teamTotalHours}h
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3">
+              <div className="text-[12px] text-muted-foreground">近 30 天我的工時</div>
+              <div className="text-[24px] font-bold text-teal-700 mt-0.5 tabular-nums">
+                {stats.myRecentHours}h
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
-      {displayProjects.length === 0 && (
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-[13px] text-muted-foreground gap-2">
+          <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
+          載入我的項目工時中…
+        </div>
+      ) : error ? (
+        <div className="text-center py-12 text-[13px] text-rose-600">
+          載入失敗：{error}
+        </div>
+      ) : displayProjects.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground text-[14px]">
-          暫無項目。
+          尚無日報工時關聯的項目。
           <button
-            onClick={() => navigateTo('project', 'new')}
+            type="button"
+            onClick={() => navigateTo('day-report', 'submit')}
             className="ml-2 text-teal-600 font-medium hover:underline"
           >
-            立即新增
+            前往提交日報
           </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {displayProjects.map((project) => (
+            <ProjectCard key={project.id} project={project} onOpen={openProject} />
+          ))}
         </div>
       )}
     </div>

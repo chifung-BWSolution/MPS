@@ -19,21 +19,24 @@ export function ProjectProgressPanel() {
       })
       .map((p) => {
         const stat = hoursMap[p.id];
+        const teamHours = Math.round((stat?.totalHours ?? 0) * 10) / 10;
+        const myHours = Math.round((stat?.myHours ?? 0) * 10) / 10;
         return {
           ...p,
-          totalHours: Math.round(stat?.totalHours ?? 0),
+          teamHours,
+          myHours,
           growthHours: Math.round(stat?.growthHours ?? 0),
+          mySharePct: teamHours > 0 ? Math.round((myHours / teamHours) * 100) : 0,
           lastUpdate: stat?.lastUpdate
             ? new Date(stat.lastUpdate).toLocaleDateString('zh-HK')
             : '—',
         };
       })
-      .filter((p) => p.totalHours > 0)
-      .sort((a, b) => b.totalHours - a.totalHours)
+      .filter((p) => p.teamHours > 0)
+      .sort((a, b) => b.teamHours - a.teamHours)
       .slice(0, 6);
   }, [projects, hoursMap, selectedCompanyId, selectedBrandId]);
 
-  const maxHours = Math.max(...rows.map((r) => r.totalHours), 1);
   const loading = projectsLoading || hoursLoading;
 
   return (
@@ -54,7 +57,6 @@ export function ProjectProgressPanel() {
       ) : (
         <div className="space-y-4">
           {rows.map((project) => {
-            const barPct = Math.max(4, Math.round((project.totalHours / maxHours) * 100));
             const meta = [relatedTypeLabels[project.relatedType], project.brandName || project.companyName]
               .filter(Boolean)
               .join(' · ');
@@ -73,25 +75,26 @@ export function ProjectProgressPanel() {
                       有工時
                     </span>
                   </div>
-                  <span className="text-[12px] font-semibold text-foreground shrink-0">
-                    {project.totalHours}h
+                  <span className="text-[12px] font-semibold text-foreground shrink-0 tabular-nums">
+                    {project.mySharePct}%
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
                     <div
                       className={cn('h-full rounded-full transition-all duration-500 bg-teal-600')}
-                      style={{ width: `${barPct}%` }}
+                      style={{ width: `${project.mySharePct}%` }}
                     />
                   </div>
-                  <span className="text-[11px] text-teal-600 w-16 text-right shrink-0">
-                    +{project.growthHours}h / 30天
+                  <span className="text-[11px] text-teal-600 w-[7.5rem] text-right shrink-0 tabular-nums">
+                    {project.myHours}h / {project.teamHours}h
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                   <span className="truncate">{meta || '—'}</span>
                   <span className="flex items-center gap-1 shrink-0">
                     <Clock size={11} /> 最近匯報：{project.lastUpdate}
+                    {project.growthHours > 0 ? ` · +${project.growthHours}h / 30天` : ''}
                   </span>
                 </div>
               </div>

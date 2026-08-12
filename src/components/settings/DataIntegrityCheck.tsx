@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { useDataStore } from '@/context/DataStore';
-import { companies, brands, yearPlans } from '@/data/mockData';
+import { companies, brands, yearPlans, projects as mockProjects } from '@/data/mockData';
 import { dailyReports } from '@/data/dayReportData';
 import { dailyReportsV2 } from '@/data/dayReportDataV2';
 import { quotationEntries, clientProjects as quotClientProjects } from '@/data/quotationData';
@@ -113,8 +113,9 @@ export function DataIntegrityCheck() {
       });
 
       // ===== 3. Project Checks =====
-      const { projects } = dataStore;
-      
+      // Mock projects remain in mockData for legacy integrity checks; live projects use Supabase.
+      const projects = mockProjects;
+
       // Check: Projects reference valid company
       const projectCompanyOrphans = projects.filter(p => !companies.find(c => c.id === p.companyId));
       allChecks.push({
@@ -980,7 +981,7 @@ export function DataIntegrityCheck() {
             <ArrowRight className="w-4 h-4 text-gray-400" />
             <ChainNode label="品牌" count={brands.length} />
             <ArrowRight className="w-4 h-4 text-gray-400" />
-            <ChainNode label="項目" count={dataStore.projects.length} />
+            <ChainNode label="項目" count={mockProjects.length} />
             <ArrowRight className="w-4 h-4 text-gray-400" />
             <ChainNode label="網站" count={dataStore.websites.length} />
             <ArrowRight className="w-4 h-4 text-gray-400" />

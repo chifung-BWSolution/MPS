@@ -26,7 +26,6 @@ export function SampleDataManager() {
   const { totalSample, totalReal, breakdown } = sampleDataSummary;
 
   const moduleLabels: Record<string, string> = {
-    projects: '項目',
     websites: '網站',
     videos: '影片',
     videoChannels: '影片頻道',

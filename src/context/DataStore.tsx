@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
-import { Project, WebsiteProfileFull, SocialPost, PaidAd, SeoKeyword, EdmCampaign, Video, VideoChannel } from '@/types/app';
-import { projects as initialProjects, companies, brands } from '@/data/mockData';
+import { WebsiteProfileFull, SocialPost, PaidAd, SeoKeyword, EdmCampaign, Video, VideoChannel } from '@/types/app';
 import { websiteProfiles as initialWebsites } from '@/data/websiteData';
 import {
   websiteVideos as initialWebsiteVideos,
@@ -9,7 +8,7 @@ import {
   websiteSeoKeywords as initialWebsiteSeoKeywords,
   websiteEdmCampaigns as initialWebsiteEdmCampaigns,
 } from '@/data/websiteDetailData';
-import { isSampleData, filterOutSampleData, getSampleDataSummary } from '@/data/sampleDataRegistry';
+import { filterOutSampleData, getSampleDataSummary } from '@/data/sampleDataRegistry';
 
 // ===== Supplier type =====
 export interface SupplierData {
@@ -72,13 +71,6 @@ export interface IntegrityCheck {
 
 // ===== Data Store Context =====
 interface DataStoreContextType {
-  // Projects
-  projects: Project[];
-  addProject: (project: Omit<Project, 'id'>) => Project;
-  updateProject: (id: string, data: Partial<Project>) => void;
-  deleteProject: (id: string) => IntegrityCheck;
-  getProjectById: (id: string) => Project | undefined;
-
   // Websites
   websites: WebsiteProfileFull[];
   addWebsite: (website: Omit<WebsiteProfileFull, 'id'>) => WebsiteProfileFull;
@@ -228,7 +220,6 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // State
-  const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [websites, setWebsites] = useState<WebsiteProfileFull[]>(initialWebsites);
   const [videos, setVideos] = useState<Record<string, Video[]>>(initialWebsiteVideos);
   const [videoChannels, setVideoChannels] = useState<VideoChannel[]>(initialVideoChannels);
@@ -257,7 +248,6 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
   }, [sampleDataEnabled]);
 
   // Exposed filtered data
-  const filteredProjects = useMemo(() => filterIfNeeded(projects), [projects, filterIfNeeded]);
   const filteredWebsites = useMemo(() => filterIfNeeded(websites), [websites, filterIfNeeded]);
   const filteredVideos = useMemo(() => filterRecordIfNeeded(videos), [videos, filterRecordIfNeeded]);
   const filteredVideoChannels = useMemo(() => filterIfNeeded(videoChannels), [videoChannels, filterIfNeeded]);
@@ -275,7 +265,6 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
 
   // Clear all sample data permanently
   const clearAllSampleData = useCallback(() => {
-    setProjects(prev => filterOutSampleData(prev));
     setWebsites(prev => filterOutSampleData(prev));
     setVideoChannels(prev => filterOutSampleData(prev));
     setSuppliers(prev => filterOutSampleData(prev));
@@ -327,7 +316,6 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
 
   // Restore sample data (reload initial data)
   const restoreSampleData = useCallback(() => {
-    setProjects(initialProjects);
     setWebsites(initialWebsites);
     setVideos(initialWebsiteVideos);
     setVideoChannels(initialVideoChannels);
@@ -350,7 +338,6 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
     const allKwsFlat = Object.values(seoKeywords).flat();
     const allEdmFlat = Object.values(edmCampaigns).flat();
     return getSampleDataSummary({
-      projects,
       websites,
       videos: allVideosFlat,
       videoChannels,
@@ -363,7 +350,7 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
       backlinkPurchases,
       googleBusinessRegistrations,
     });
-  }, [projects, websites, videos, videoChannels, socialPosts, paidAds, seoKeywords, edmCampaigns, suppliers, webPageSuppliers, backlinkPurchases, googleBusinessRegistrations]);
+  }, [websites, videos, videoChannels, socialPosts, paidAds, seoKeywords, edmCampaigns, suppliers, webPageSuppliers, backlinkPurchases, googleBusinessRegistrations]);
 
   // ===== Helper: get website info for flattening =====
   const getWebsiteInfo = useCallback((wsId: string) => {
@@ -400,31 +387,6 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
     const info = getWebsiteInfo(wsId);
     return camps.map(c => ({ ...c, ...info }));
   });
-
-  // ===== PROJECT CRUD =====
-  const addProject = useCallback((data: Omit<Project, 'id'>): Project => {
-    const newProject: Project = { ...data, id: generateId('p') };
-    setProjects(prev => [...prev, newProject]);
-    return newProject;
-  }, []);
-
-  const updateProject = useCallback((id: string, data: Partial<Project>) => {
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
-  }, []);
-
-  const deleteProject = useCallback((id: string): IntegrityCheck => {
-    const linkedWebsites = websites.filter(w => w.projectId === id);
-    if (linkedWebsites.length > 0) {
-      return {
-        canDelete: false,
-        reasons: [`此項目關聯了 ${linkedWebsites.length} 個網站（${linkedWebsites.map(w => w.websiteName).join(', ')}），請先移除或重新分配網站後再刪除項目。`],
-      };
-    }
-    setProjects(prev => prev.filter(p => p.id !== id));
-    return { canDelete: true, reasons: [] };
-  }, [websites]);
-
-  const getProjectById = useCallback((id: string) => filteredProjects.find(p => p.id === id), [filteredProjects]);
 
   // ===== WEBSITE CRUD =====
   const addWebsite = useCallback((data: Omit<WebsiteProfileFull, 'id'>): WebsiteProfileFull => {
@@ -717,7 +679,6 @@ export function DataStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value: DataStoreContextType = {
-    projects: filteredProjects, addProject, updateProject, deleteProject, getProjectById,
     websites: filteredWebsites, addWebsite, addWebsiteWithId, updateWebsite, deleteWebsite, getWebsiteById,
     videos: filteredVideos, allVideosList, addVideo, updateVideo, deleteVideo,
     videoChannels: filteredVideoChannels, addVideoChannel, updateVideoChannel, deleteVideoChannel,

@@ -21,20 +21,22 @@ export function ProjectProgress({ onSelectProject }: { onSelectProject?: (projec
       .filter((p) => typeFilter === 'all' || p.relatedType === typeFilter)
       .map((p) => {
         const stat = hoursMap[p.id];
+        const teamHours = Math.round((stat?.totalHours ?? 0) * 10) / 10;
+        const myHours = Math.round((stat?.myHours ?? 0) * 10) / 10;
         return {
           ...p,
-          totalHours: Math.round(stat?.totalHours ?? 0),
+          teamHours,
+          myHours,
           growthHours: Math.round(stat?.growthHours ?? 0),
+          mySharePct: teamHours > 0 ? Math.round((myHours / teamHours) * 100) : 0,
           lastUpdate: stat?.lastUpdate
             ? new Date(stat.lastUpdate).toLocaleDateString('zh-HK')
             : '—',
         };
       })
-      .filter((p) => p.totalHours > 0)
-      .sort((a, b) => b.totalHours - a.totalHours);
+      .filter((p) => p.teamHours > 0)
+      .sort((a, b) => b.teamHours - a.teamHours);
   }, [projects, hoursMap, typeFilter]);
-
-  const maxHours = Math.max(...rows.map((r) => r.totalHours), 1);
 
   if (loading || hoursLoading) {
     return (
@@ -89,18 +91,25 @@ export function ProjectProgress({ onSelectProject }: { onSelectProject?: (projec
                 </div>
               </div>
               <div className="text-right shrink-0">
-                <div className="text-[14px] font-bold">{p.totalHours}h</div>
-                <div className="text-[11px] text-teal-600">+{p.growthHours}h / 30天</div>
+                <div className="text-[14px] font-bold tabular-nums">{p.mySharePct}%</div>
+                <div className="text-[11px] text-teal-600 tabular-nums">
+                  {p.myHours}h / {p.teamHours}h
+                </div>
               </div>
             </div>
             <div className="h-2 bg-muted rounded-full overflow-hidden">
               <div
                 className="h-full bg-teal-600 rounded-full transition-all"
-                style={{ width: `${Math.max(4, Math.round((p.totalHours / maxHours) * 100))}%` }}
+                style={{ width: `${p.mySharePct}%` }}
               />
             </div>
-            <div className="mt-1.5 text-[11px] text-muted-foreground flex items-center gap-1">
-              <Clock size={11} /> 最近匯報：{p.lastUpdate}
+            <div className="mt-1.5 text-[11px] text-muted-foreground flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1">
+                <Clock size={11} /> 最近匯報：{p.lastUpdate}
+              </span>
+              {p.growthHours > 0 && (
+                <span className="text-teal-600 tabular-nums">+{p.growthHours}h / 30天</span>
+              )}
             </div>
           </button>
         ))}
