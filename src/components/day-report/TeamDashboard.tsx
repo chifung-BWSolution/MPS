@@ -452,7 +452,7 @@ export function TeamDashboard() {
       let dept = systemUser.department || null;
       if (!dept) {
         try {
-          dept = await fetchDepartmentByStaffId(systemUser.bubble_staff_id);
+          dept = await fetchDepartmentByStaffId(systemUser.staff_id);
         } catch {
           dept = null;
         }
@@ -464,7 +464,7 @@ export function TeamDashboard() {
       } else {
         setSelectedDepartment(valid);
       }
-      setSelectedStaffId((prev) => prev ?? systemUser.bubble_staff_id);
+      setSelectedStaffId((prev) => prev ?? systemUser.staff_id);
     };
     detect();
   }, [systemUser, isAdmin]);
@@ -477,13 +477,13 @@ export function TeamDashboard() {
 
   const cleanStaffRows = useCallback(async (rawStaffData: Omit<StaffMember, 'department'>[]): Promise<StaffMember[]> => {
     const deptMap = await fetchDepartmentMap(
-      rawStaffData.map((s) => s.bubble_staff_id).filter(Boolean),
+      rawStaffData.map((s) => s.id).filter(Boolean),
     );
     const EXCLUDED_POSITIONS = ['director', 'director / management'];
     const EXCLUDED_DEPARTMENTS = ['management'];
     const cleaned = rawStaffData.map((s) => ({
       ...s,
-      department: deptMap[s.bubble_staff_id] || null,
+      department: deptMap[s.id] || null,
     })).filter((s) => {
       const pos = (s.position || '').toLowerCase().trim();
       const dept = (s.department || '').toLowerCase().trim();
@@ -492,8 +492,8 @@ export function TeamDashboard() {
 
     const seen = new Set<string>();
     return cleaned.filter((s) => {
-      if (!s.bubble_staff_id || seen.has(s.bubble_staff_id)) return false;
-      seen.add(s.bubble_staff_id);
+      if (!s.id || seen.has(s.id)) return false;
+      seen.add(s.id);
       return true;
     });
   }, []);
@@ -506,11 +506,11 @@ export function TeamDashboard() {
       let pickerIds: string[] | null = null;
       if (!isAdmin) {
         if (!ownDepartment) {
-          pickerIds = [systemUser.bubble_staff_id];
+          pickerIds = [systemUser.staff_id];
         } else {
           pickerIds = await fetchStaffIdsByDepartment(ownDepartment);
-          if (!pickerIds.includes(systemUser.bubble_staff_id)) {
-            pickerIds = [...pickerIds, systemUser.bubble_staff_id];
+          if (!pickerIds.includes(systemUser.staff_id)) {
+            pickerIds = [...pickerIds, systemUser.staff_id];
           }
         }
       }
@@ -520,16 +520,16 @@ export function TeamDashboard() {
         .select('id, bubble_staff_id, display_name, position, user_role, status, base_location, team_id, business_unit, profile_pic_url')
         .eq('status', 'active')
         .neq('position', 'Director');
-      if (pickerIds !== null) pickerQuery = pickerQuery.in('bubble_staff_id', pickerIds);
+      if (pickerIds !== null) pickerQuery = pickerQuery.in('id', pickerIds);
       const { data: rawPicker } = await pickerQuery;
       const cleanedPicker = await cleanStaffRows(rawPicker || []);
       setPickerStaff(cleanedPicker);
 
       // Ensure selected staff is visible under permission
-      const allowedPickerIds = new Set(cleanedPicker.map((s) => s.bubble_staff_id));
+      const allowedPickerIds = new Set(cleanedPicker.map((s) => s.id));
       let effectiveStaffId = selectedStaffId;
       if (!allowedPickerIds.has(effectiveStaffId)) {
-        effectiveStaffId = systemUser.bubble_staff_id;
+        effectiveStaffId = systemUser.staff_id;
         setSelectedStaffId(effectiveStaffId);
       }
 
@@ -543,7 +543,7 @@ export function TeamDashboard() {
       } else if (!isAdmin) {
         allowedStaffIds = ownDepartment
           ? await fetchStaffIdsByDepartment(ownDepartment)
-          : [systemUser.bubble_staff_id];
+          : [systemUser.staff_id];
       } else if (selectedDepartment === UNASSIGNED_DEPT) {
         filterUnassignedOnly = true;
         allowedStaffIds = null;
@@ -564,13 +564,13 @@ export function TeamDashboard() {
         .select('id, bubble_staff_id, display_name, position, user_role, status, base_location, team_id, business_unit, profile_pic_url')
         .eq('status', 'active')
         .neq('position', 'Director');
-      if (allowedStaffIds !== null) staffQuery = staffQuery.in('bubble_staff_id', allowedStaffIds);
+      if (allowedStaffIds !== null) staffQuery = staffQuery.in('id', allowedStaffIds);
       const { data: rawStaff } = await staffQuery;
       let staffData = await cleanStaffRows(rawStaff || []);
 
       if (filterUnassignedOnly) {
         staffData = staffData.filter((s) => !s.department);
-        allowedStaffIds = staffData.map((s) => s.bubble_staff_id);
+        allowedStaffIds = staffData.map((s) => s.id);
         if (allowedStaffIds.length === 0) {
           setStaff([]);
           setStaffNameById({});
@@ -605,8 +605,8 @@ export function TeamDashboard() {
 
       const nameIds = [
         ...new Set([
-          ...staffData.map((s) => s.bubble_staff_id),
-          ...cleanedPicker.map((s) => s.bubble_staff_id),
+          ...staffData.map((s) => s.id),
+          ...cleanedPicker.map((s) => s.id),
           ...(reportData || []).map((r) => r.staff_id),
         ].filter(Boolean)),
       ];
@@ -720,20 +720,20 @@ export function TeamDashboard() {
 
   const getStaffName = useCallback((staffId: string): string => {
     return staffNameById[staffId]
-      || staff.find((s) => s.bubble_staff_id === staffId)?.display_name
-      || pickerStaff.find((s) => s.bubble_staff_id === staffId)?.display_name
+      || staff.find((s) => s.id === staffId)?.display_name
+      || pickerStaff.find((s) => s.id === staffId)?.display_name
       || staffId;
   }, [staffNameById, staff, pickerStaff]);
 
   const pickerStaffItems = useMemo(
     () => pickerStaff
       .slice()
-      .sort((a, b) => getStaffName(a.bubble_staff_id).localeCompare(getStaffName(b.bubble_staff_id), 'zh-Hant'))
+      .sort((a, b) => getStaffName(a.id).localeCompare(getStaffName(b.id), 'zh-Hant'))
       .map((s) => ({
-        id: s.bubble_staff_id,
+        id: s.id,
         name: s.department
-          ? `${getStaffName(s.bubble_staff_id)} · ${s.department}`
-          : getStaffName(s.bubble_staff_id),
+          ? `${getStaffName(s.id)} · ${s.department}`
+          : getStaffName(s.id),
       })),
     [pickerStaff, getStaffName],
   );
@@ -749,7 +749,7 @@ export function TeamDashboard() {
       }
       return map.get(staffId)!;
     };
-    staff.forEach((s) => ensure(s.bubble_staff_id));
+    staff.forEach((s) => ensure(s.id));
     entries.forEach((e) => {
       const row = ensure(e.staff_id);
       row[e.category] = (row[e.category] || 0) + (Number(e.hours) || 0);
@@ -759,7 +759,7 @@ export function TeamDashboard() {
 
   const teamGroups = useMemo(() => {
     const groups = new Map<string, StaffMember[]>();
-    const sorted = [...staff].sort((a, b) => getStaffName(a.bubble_staff_id).localeCompare(getStaffName(b.bubble_staff_id), 'zh-Hant'));
+    const sorted = [...staff].sort((a, b) => getStaffName(a.id).localeCompare(getStaffName(b.id), 'zh-Hant'));
     const hideUnassignedInAll = selectedDepartment === '__ALL__';
     const staffWithReports = new Set(reports.map((r) => r.staff_id));
 
@@ -774,8 +774,8 @@ export function TeamDashboard() {
     return Array.from(groups.entries()).sort(([a, aMembers], [b, bMembers]) => {
       if (a === UNASSIGNED_LABEL) return 1;
       if (b === UNASSIGNED_LABEL) return -1;
-      const aCount = aMembers.reduce((n, m) => n + (staffWithReports.has(m.bubble_staff_id) ? 1 : 0), 0);
-      const bCount = bMembers.reduce((n, m) => n + (staffWithReports.has(m.bubble_staff_id) ? 1 : 0), 0);
+      const aCount = aMembers.reduce((n, m) => n + (staffWithReports.has(m.id) ? 1 : 0), 0);
+      const bCount = bMembers.reduce((n, m) => n + (staffWithReports.has(m.id) ? 1 : 0), 0);
       if (bCount !== aCount) return bCount - aCount;
       return a.localeCompare(b, 'zh-Hant');
     });
@@ -786,8 +786,8 @@ export function TeamDashboard() {
     const map = new Map<string, PersonalDayData>();
     if (mode !== 'personal' || !selectedStaffId) return map;
 
-    const person = pickerStaff.find((s) => s.bubble_staff_id === selectedStaffId)
-      || staff.find((s) => s.bubble_staff_id === selectedStaffId);
+    const person = pickerStaff.find((s) => s.id === selectedStaffId)
+      || staff.find((s) => s.id === selectedStaffId);
     const office = resolveOffice(person?.base_location);
 
     const dates = periodType === 'week'
@@ -1103,7 +1103,7 @@ export function TeamDashboard() {
               </div>
             ) : (
               <span className="ml-auto text-[12px] text-muted-foreground">
-                {getStaffName(selectedStaffId || systemUser?.bubble_staff_id || '')}
+                {getStaffName(selectedStaffId || systemUser?.staff_id || '')}
               </span>
             )
           )}
@@ -1141,14 +1141,14 @@ export function TeamDashboard() {
                           : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3',
                       )}>
                         {members.map((member) => {
-                          const hoursByCategory = staffCategoryHours.get(member.bubble_staff_id) || {};
+                          const hoursByCategory = staffCategoryHours.get(member.id) || {};
                           const totalHours = Object.values(hoursByCategory).reduce((s, h) => s + h, 0);
-                          const selected = isDetailSelected(member.bubble_staff_id);
+                          const selected = isDetailSelected(member.id);
                           return (
                             <button
                               type="button"
-                              key={member.bubble_staff_id}
-                              onClick={() => openStaffDetail(member.bubble_staff_id)}
+                              key={member.id}
+                              onClick={() => openStaffDetail(member.id)}
                               className={cn(
                                 'bg-white rounded-lg border shadow-sm p-4 space-y-3 text-left w-full transition-colors cursor-pointer',
                                 selected
@@ -1161,12 +1161,12 @@ export function TeamDashboard() {
                                   <div className="flex items-center gap-2">
                                     <div className="w-7 h-7 rounded-full bg-teal-100 flex items-center justify-center shrink-0">
                                       <span className="text-[11px] font-bold text-teal-700">
-                                        {getStaffName(member.bubble_staff_id).charAt(0)}
+                                        {getStaffName(member.id).charAt(0)}
                                       </span>
                                     </div>
                                     <div className="min-w-0">
                                       <p className="text-[13px] font-semibold truncate">
-                                        {getStaffName(member.bubble_staff_id)}
+                                        {getStaffName(member.id)}
                                       </p>
                                       <p className="text-[11px] text-muted-foreground truncate">
                                         {member.department || UNASSIGNED_LABEL}

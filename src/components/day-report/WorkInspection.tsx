@@ -22,6 +22,7 @@ type OfficeLocation = 'hk' | 'sz';
 type DayStatus = 'filled' | 'draft' | 'leave' | 'rest' | 'holiday' | 'missing' | 'future' | 'empty';
 
 interface StaffMember {
+  id: string;
   bubble_staff_id: string;
   display_name: string;
   base_location: string | null;
@@ -305,7 +306,7 @@ export function WorkInspection() {
       let dept = systemUser.department || null;
       if (!dept) {
         try {
-          dept = await fetchDepartmentByStaffId(systemUser.bubble_staff_id);
+          dept = await fetchDepartmentByStaffId(systemUser.staff_id);
         } catch {
           dept = null;
         }
@@ -336,7 +337,7 @@ export function WorkInspection() {
       if (!isAdmin) {
         allowedStaffIds = ownDepartment
           ? await fetchStaffIdsByDepartment(ownDepartment)
-          : [systemUser.bubble_staff_id];
+          : [systemUser.staff_id];
       } else if (selectedDepartment === UNASSIGNED_DEPT) {
         filterUnassignedOnly = true;
         allowedStaffIds = null;
@@ -346,23 +347,24 @@ export function WorkInspection() {
 
       let staffQuery = supabase
         .from('staffs')
-        .select('bubble_staff_id, display_name, base_location, team_id, position, status')
+        .select('id, bubble_staff_id, display_name, base_location, team_id, position, status')
         .eq('status', 'active')
         .neq('position', 'Director');
-      if (allowedStaffIds !== null) staffQuery = staffQuery.in('bubble_staff_id', allowedStaffIds);
+      if (allowedStaffIds !== null) staffQuery = staffQuery.in('id', allowedStaffIds);
       const { data: rawStaff } = await staffQuery;
 
       const deptMap = await fetchDepartmentMap(
-        (rawStaff || []).map((s) => s.bubble_staff_id).filter(Boolean),
+        (rawStaff || []).map((s) => s.id).filter(Boolean),
       );
 
       let staffData: StaffMember[] = (rawStaff || []).map((s) => ({
+        id: s.id,
         bubble_staff_id: s.bubble_staff_id,
         display_name: s.display_name,
         base_location: s.base_location,
         team_id: s.team_id,
         position: s.position,
-        department: deptMap[s.bubble_staff_id] || null,
+        department: deptMap[s.id] || null,
       }));
 
       // Dedupe + exclude management-like positions
@@ -370,8 +372,8 @@ export function WorkInspection() {
       const EXCLUDED_DEPARTMENTS = ['management'];
       const seen = new Set<string>();
       staffData = staffData.filter((s) => {
-        if (!s.bubble_staff_id || seen.has(s.bubble_staff_id)) return false;
-        seen.add(s.bubble_staff_id);
+        if (!s.id || seen.has(s.id)) return false;
+        seen.add(s.id);
         const pos = (s.position || '').toLowerCase().trim();
         const dept = (s.department || '').toLowerCase().trim();
         return !EXCLUDED_POSITIONS.includes(pos) && !EXCLUDED_DEPARTMENTS.includes(dept);
@@ -381,7 +383,7 @@ export function WorkInspection() {
         staffData = staffData.filter((s) => !s.department);
       }
 
-      const staffIds = staffData.map((s) => s.bubble_staff_id);
+      const staffIds = staffData.map((s) => s.id);
       let reportData: DayReportLite[] = [];
       if (staffIds.length > 0) {
         const chunkSize = 100;
@@ -448,7 +450,7 @@ export function WorkInspection() {
 
   const getStaffName = useCallback((staffId: string) => {
     return staffNameById[staffId]
-      || staff.find((s) => s.bubble_staff_id === staffId)?.display_name
+      || staff.find((s) => s.id === staffId)?.display_name
       || staffId;
   }, [staffNameById, staff]);
 
@@ -458,7 +460,7 @@ export function WorkInspection() {
   );
 
   const countReportedMembers = useCallback((members: StaffMember[]) => (
-    members.reduce((n, m) => n + (staffWithReports.has(m.bubble_staff_id) ? 1 : 0), 0)
+    members.reduce((n, m) => n + (staffWithReports.has(m.id) ? 1 : 0), 0)
   ), [staffWithReports]);
 
   const teamOptions = useMemo(() => {
@@ -493,12 +495,12 @@ export function WorkInspection() {
         if (selectedTeam === UNASSIGNED_TEAM) return !(s.team_id || '').trim();
         if (selectedTeam !== '__ALL__' && (s.team_id || '').trim() !== selectedTeam) return false;
         if (!q) return true;
-        const name = getStaffName(s.bubble_staff_id).toLowerCase();
+        const name = getStaffName(s.id).toLowerCase();
         const dept = (s.department || '').toLowerCase();
         const team = (s.team_id || '').toLowerCase();
         return name.includes(q) || dept.includes(q) || team.includes(q);
       })
-      .sort((a, b) => getStaffName(a.bubble_staff_id).localeCompare(getStaffName(b.bubble_staff_id), 'zh-Hant'));
+      .sort((a, b) => getStaffName(a.id).localeCompare(getStaffName(b.id), 'zh-Hant'));
   }, [staff, selectedTeam, nameQuery, getStaffName]);
 
   const staffMissingCount = useCallback((member: StaffMember) => {
@@ -510,7 +512,7 @@ export function WorkInspection() {
     let missing = 0;
     dates.forEach((dateStr) => {
       if (dateStr > todayStr) return;
-      const report = reportByStaffDate.get(`${member.bubble_staff_id}__${dateStr}`);
+      const report = reportByStaffDate.get(`${member.id}__${dateStr}`);
       const status = resolveDayStatus(dateStr, report, office, todayStr);
       // Draft is incomplete — still count toward missing for inspection
       if (status === 'missing' || status === 'draft') missing += 1;
@@ -537,12 +539,12 @@ export function WorkInspection() {
   const renderPersonCard = (member: StaffMember) => {
     const office = resolveOffice(member.base_location);
     const missing = staffMissingCount(member);
-    const name = getStaffName(member.bubble_staff_id);
+    const name = getStaffName(member.id);
     const rows: (string | null)[][] = periodType === 'week' ? [weekDates] : monthWeekRows;
 
     return (
       <div
-        key={member.bubble_staff_id}
+        key={member.id}
         className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm overflow-hidden"
       >
         <div className="flex items-start justify-between gap-2 px-3.5 py-3 border-b border-[rgba(13,26,45,0.06)]">
@@ -577,14 +579,14 @@ export function WorkInspection() {
           </div>
 
           {rows.map((row, rowIndex) => (
-            <div key={`row-${member.bubble_staff_id}-${rowIndex}`} className="grid grid-cols-[36px_repeat(7,minmax(0,1fr))] gap-1">
+            <div key={`row-${member.id}-${rowIndex}`} className="grid grid-cols-[36px_repeat(7,minmax(0,1fr))] gap-1">
               <div className="text-[10px] text-muted-foreground flex items-center">
                 {periodType === 'month' ? `第${rowIndex + 1}週` : '本週'}
               </div>
               {row.map((dateStr, colIndex) => {
                 const key = dateStr || `empty-${rowIndex}-${colIndex}`;
                 const report = dateStr
-                  ? reportByStaffDate.get(`${member.bubble_staff_id}__${dateStr}`)
+                  ? reportByStaffDate.get(`${member.id}__${dateStr}`)
                   : undefined;
                 const dayOffice = resolveOffice(member.base_location, report?.office_location);
                 const status = resolveDayStatus(dateStr, report, dayOffice || office, todayStr);

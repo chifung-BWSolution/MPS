@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
 
 export type RecentActivityItem = {
   id: string;
@@ -70,26 +71,16 @@ export function useRecentActivity() {
       const staffIds = Array.from(
         new Set((dayReportsRes.data ?? []).map(r => r.staff_id).filter(Boolean) as string[]),
       );
-      let staffNameById = new Map<string, string>();
-      if (staffIds.length > 0) {
-        const { data: staffRows } = await supabase
-          .from('staffs')
-          .select('bubble_staff_id, display_name, full_name')
-          .in('bubble_staff_id', staffIds);
-        staffNameById = new Map(
-          (staffRows ?? []).map(s => [
-            s.bubble_staff_id as string,
-            (s.display_name as string)?.trim() || (s.full_name as string)?.trim() || (s.bubble_staff_id as string),
-          ]),
-        );
-      }
+      const staffNameById = staffIds.length > 0
+        ? await fetchStaffNameMap(staffIds)
+        : {};
 
       const merged: RecentActivityItem[] = [];
 
       (dayReportsRes.data ?? []).forEach(r => {
         const ts = (r.submitted_at as string) || '';
         if (!ts) return;
-        const user = staffNameById.get(r.staff_id as string) || (r.staff_id as string) || '同事';
+        const user = staffNameById[r.staff_id as string] || (r.staff_id as string) || '同事';
         const action = r.status === 'approved' ? `提交的日報已核准（${r.report_date}）` : `提交了日報（${r.report_date}）`;
         merged.push({
           id: `dr-${r.id}`,

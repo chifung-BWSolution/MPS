@@ -556,13 +556,11 @@ function WebsiteDetail({
 
       const staffIds = Object.keys(hoursMap);
 
-      // Try staff_directory first (bubble_staff_id = the long Bubble ID)
       const { data: dirData } = await supabase
         .from('staffs')
-        .select('bubble_staff_id, display_name, full_name')
-        .in('bubble_staff_id', staffIds);
+        .select('id, display_name, full_name')
+        .in('id', staffIds);
 
-      // Also try user_info (staff_id = same Bubble ID, display_name synced from StaffDirectory)
       const { data: uiData } = await supabase
         .from('users')
         .select('staff_id, display_name')
@@ -575,7 +573,7 @@ function WebsiteDetail({
       });
       (dirData || []).forEach((s: any) => {
         const n = (s.display_name || s.full_name || '').trim();
-        if (n) nameById[s.bubble_staff_id] = n;
+        if (n) nameById[s.id] = n;
       });
 
       const list = staffIds

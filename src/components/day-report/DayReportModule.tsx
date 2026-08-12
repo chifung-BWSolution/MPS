@@ -25,6 +25,7 @@ import {
   consumePendingItems,
   dismissPendingItem,
   mergePendingIntoReportEntries,
+  resolveStaffUuid,
   type ReportFormEntry,
 } from '@/services/reportLinkService';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
@@ -291,8 +292,7 @@ function SubmitReportPage() {
   const [dbReports, setDbReports] = useState<Array<{ report_date: string; total_hours: number; status: string }>>([]);
   const [isLoadingDbReports, setIsLoadingDbReports] = useState(true);
 
-  // Set current staff from authenticated user. If bubble_staff_id is a placeholder
-  // (e.g. 'manual_super_admin_*' fallback), resolve the real ID from staff_directory by email.
+  // Set current staff from authenticated user (staffs.id uuid). Falls back to email/bubble lookup.
   useEffect(() => {
     let aborted = false;
     async function resolveStaffId() {
@@ -301,33 +301,9 @@ function SubmitReportPage() {
         return;
       }
       setCurrentStaffName(systemUser.display_name);
-      const id = systemUser.bubble_staff_id || '';
-      const looksPlaceholder = !id || id.startsWith('manual_') || id.startsWith('ui_');
-      if (!looksPlaceholder) {
-        if (!aborted) {
-          setCurrentStaffId(id);
-          setStaffIdResolved(true);
-        }
-        return;
-      }
-      // Try email-based lookup in staff_directory
-      const email = (systemUser.email || '').toLowerCase().trim();
-      if (!email) {
-        if (!aborted) {
-          setCurrentStaffId(id || null);
-          setStaffIdResolved(true);
-        }
-        return;
-      }
-      const { data } = await supabase
-        .from('staffs')
-        .select('bubble_staff_id')
-        .ilike('work_email', email)
-        .limit(1)
-        .maybeSingle();
+      const realId = await resolveStaffUuid(systemUser);
       if (aborted) return;
-      const realId = data?.bubble_staff_id || id || null;
-      console.log('[SubmitReport] resolved staff_id:', realId, '(was placeholder:', id, ')');
+      console.log('[SubmitReport] resolved staff_id:', realId);
       setCurrentStaffId(realId);
       setStaffIdResolved(true);
     }
@@ -338,13 +314,15 @@ function SubmitReportPage() {
   // Fetch user's office from staff_directory to auto-set office location & target hours
   useEffect(() => {
     async function initOfficeFromProfile() {
-      if (!systemUser?.bubble_staff_id) return;
+      if (!systemUser?.staff_id && !systemUser?.bubble_staff_id) return;
       try {
-        const { data: staffRow, error } = await supabase
-          .from('staffs')
-          .select('office')
-          .eq('bubble_staff_id', systemUser.bubble_staff_id)
-          .maybeSingle();
+        let staffQuery = supabase.from('staffs').select('office');
+        if (systemUser.staff_id) {
+          staffQuery = staffQuery.eq('id', systemUser.staff_id);
+        } else {
+          staffQuery = staffQuery.eq('bubble_staff_id', systemUser.bubble_staff_id);
+        }
+        const { data: staffRow, error } = await staffQuery.maybeSingle();
 
         if (error) {
           console.error('[SubmitReport] Error fetching staff office:', error);
@@ -374,7 +352,7 @@ function SubmitReportPage() {
     }
 
     initOfficeFromProfile();
-  }, [systemUser?.bubble_staff_id]);
+  }, [systemUser?.staff_id, systemUser?.bubble_staff_id]);
 
   // Load existing day_reports for this staff in the 14-day window
   const loadDbReports = useCallback(async () => {
@@ -2102,14 +2080,14 @@ function TodayTeamReports() {
           console.error('[TodayTeamReports] Staff query error:', staffErr);
         }
 
-        const staffIds = (staffData || []).map(s => s.bubble_staff_id).filter(Boolean);
+        const staffIds = (staffData || []).map(s => s.id).filter(Boolean);
         const deptMap = await fetchDepartmentMap(staffIds);
 
         // Post-fetch: attach user_info department and exclude legacy Director / Management rows
         const EXCLUDED_POSITIONS = ['director', 'director / management'];
         const EXCLUDED_DEPARTMENTS = ['management'];
         const staff = (staffData || [])
-          .map(s => ({ ...s, department: deptMap[s.bubble_staff_id] || '' }))
+          .map(s => ({ ...s, department: deptMap[s.id] || '' }))
           .filter(s => {
             const pos = (s.position || '').toLowerCase().trim();
             const dept = (s.department || '').toLowerCase().trim();
@@ -2158,7 +2136,7 @@ function TodayTeamReports() {
 
         // 5. Resolve display names for all staff in today's reports (not only dept-filtered staff)
         const reportStaffIds = reports.map(r => r.staff_id).filter(Boolean);
-        const scopeStaffIds = staff.map(s => s.bubble_staff_id).filter(Boolean);
+        const scopeStaffIds = staff.map(s => s.id).filter(Boolean);
         const nameLookupIds = [...new Set([...reportStaffIds, ...scopeStaffIds])];
         const nameMap = await fetchStaffNameMap(nameLookupIds);
         setStaffNameById(nameMap);
@@ -2181,7 +2159,7 @@ function TodayTeamReports() {
     return dbStaff.filter(s => s.department === activeDept);
   }, [dbStaff, activeDept]);
 
-  const filteredStaffIds = useMemo(() => new Set(filteredStaff.map(s => s.bubble_staff_id)), [filteredStaff]);
+  const filteredStaffIds = useMemo(() => new Set(filteredStaff.map(s => s.id)), [filteredStaff]);
 
   // Filter reports to only those belonging to staff in the selected department
   const todayReports = useMemo(() => {
@@ -2199,7 +2177,7 @@ function TodayTeamReports() {
     return map;
   }, [dbEntries]);
 
-  // Build staff name lookup (bubble_staff_id -> display_name)
+  // Build staff name lookup (staffs.id uuid -> display_name)
   const resolveStaffName = useCallback((staffId: string) => {
     return staffNameById[staffId] || staffId;
   }, [staffNameById]);
@@ -2223,7 +2201,7 @@ function TodayTeamReports() {
   // Staff who haven't formally submitted today (draft-only still counts as not submitted)
   const notSubmittedStaff = useMemo(() => {
     const submittedStaffIds = new Set(formalReports.map(r => r.staff_id));
-    return filteredStaff.filter(s => !submittedStaffIds.has(s.bubble_staff_id));
+    return filteredStaff.filter(s => !submittedStaffIds.has(s.id));
   }, [filteredStaff, formalReports]);
 
   return (
@@ -2389,7 +2367,7 @@ function TodayTeamReports() {
 // ============================
 // Work Calendar
 // ============================
-interface WCStaff { bubble_staff_id: string; display_name: string; department: string | null; }
+interface WCStaff { id: string; display_name: string; department: string | null; }
 interface WCReport { id: string; staff_id: string; report_date: string; total_hours: number; ot_hours: number; is_leave: boolean; status: string; }
 interface WCEntry { id: string; day_report_id: string; category: string; title: string | null; hours: number; outcome_url: string | null; growth_experience: string | null; is_ai_assisted: boolean | null; related_name: string | null; }
 
@@ -2432,10 +2410,10 @@ function WorkCalendar() {
   useEffect(() => {
     let aborted = false;
     async function resolveDept() {
-      if (!systemUser?.bubble_staff_id) return;
+      if (!systemUser?.staff_id) return;
       let dept: string | null = systemUser.department || null;
       if (!dept) {
-        dept = await fetchDepartmentByStaffId(systemUser.bubble_staff_id);
+        dept = await fetchDepartmentByStaffId(systemUser.staff_id);
       }
       if (aborted) return;
       setOwnDepartment(dept);
@@ -2449,7 +2427,7 @@ function WorkCalendar() {
     }
     resolveDept();
     return () => { aborted = true; };
-  }, [systemUser?.bubble_staff_id, systemUser?.department, isSuperAdmin]);
+  }, [systemUser?.staff_id, systemUser?.department, isSuperAdmin]);
 
   // Build available departments list for super_admin dropdown from DB (distinct)
   useEffect(() => {
@@ -2466,7 +2444,7 @@ function WorkCalendar() {
   useEffect(() => {
     let aborted = false;
     async function load() {
-      if (!systemUser?.bubble_staff_id) return;
+      if (!systemUser?.staff_id) return;
       // For super-admins, default to __ALL__ when no selection yet so the calendar isn't blank.
       // For non-super-admins, wait until ownDepartment resolves.
       if (!isSuperAdmin && !ownDepartment) return;
@@ -2492,29 +2470,29 @@ function WorkCalendar() {
 
         let staffQuery = supabase
           .from('staffs')
-          .select('bubble_staff_id, display_name')
+          .select('id, display_name')
           .eq('status', 'active')
           .neq('position', 'Director');
-        if (allowedStaffIds) staffQuery = staffQuery.in('bubble_staff_id', allowedStaffIds);
+        if (allowedStaffIds) staffQuery = staffQuery.in('id', allowedStaffIds);
 
         const { data: staffData } = await staffQuery;
-        const scopeIds = (staffData || []).map((s: any) => s.bubble_staff_id).filter(Boolean);
+        const scopeIds = (staffData || []).map((s: any) => s.id).filter(Boolean);
         const deptMap = await fetchDepartmentMap(scopeIds);
 
         const seen = new Set<string>();
         const dedupStaff = (staffData || []).filter((s: any) => {
-          if (!s.bubble_staff_id || seen.has(s.bubble_staff_id)) return false;
-          seen.add(s.bubble_staff_id);
+          if (!s.id || seen.has(s.id)) return false;
+          seen.add(s.id);
           return true;
         }).map((s: any) => ({
-          bubble_staff_id: s.bubble_staff_id,
+          id: s.id,
           display_name: s.display_name,
-          department: deptMap[s.bubble_staff_id] || null,
+          department: deptMap[s.id] || null,
         })) as WCStaff[];
         if (aborted) return;
         setStaffList(dedupStaff);
 
-        const allowed = activeDept ? dedupStaff.map(s => s.bubble_staff_id) : [];
+        const allowed = activeDept ? dedupStaff.map(s => s.id) : [];
         if (activeDept && allowed.length === 0) {
           setReports([]);
           setEntries([]);
@@ -2552,7 +2530,7 @@ function WorkCalendar() {
 
         // Resolve display names for everyone in loaded reports (not only dept-filtered staff)
         const reportStaffIds = normalizedReports.map(r => r.staff_id).filter(Boolean);
-        const scopeStaffIds = dedupStaff.map(s => s.bubble_staff_id).filter(Boolean);
+        const scopeStaffIds = dedupStaff.map(s => s.id).filter(Boolean);
         const nameMap = await fetchStaffNameMap([...new Set([...reportStaffIds, ...scopeStaffIds])]);
         if (aborted) return;
         setStaffNameById(nameMap);
@@ -2580,7 +2558,7 @@ function WorkCalendar() {
     }
     load();
     return () => { aborted = true; };
-  }, [systemUser?.bubble_staff_id, ownDepartment, selectedDepartment, isSuperAdmin, monthStr, year, month, daysInMonth]);
+  }, [systemUser?.staff_id, ownDepartment, selectedDepartment, isSuperAdmin, monthStr, year, month, daysInMonth]);
 
   const reportsByDate = useMemo(() => {
     const m: Record<string, WCReport[]> = {};
