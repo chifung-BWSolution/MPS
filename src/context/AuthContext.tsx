@@ -58,6 +58,85 @@ type StaffDirectoryLite = {
 };
 
 const MANUAL_SUPER_ADMIN_STAFF_UUID = 'd88d2465-42d1-4205-8a9b-8495083c3691';
+const MANUAL_DEV_BYPASS_LEO_STAFF_UUID = '6ddee578-cfe2-4e27-b758-affb02fa02ae';
+
+type HardcodedBypassProfile = {
+  staff_id: string;
+  bubble_staff_id: string;
+  display_name: string;
+  role: string;
+  role_tag: string;
+  classification: string;
+  position: string;
+  department: string;
+  login_method: 'dev_bypass_super_admin' | 'dev_bypass_developer';
+};
+
+/** Hardcoded Developer Bypass Login allowlist. Works even if DB lookup times out. */
+const HARDCODED_BYPASS_USERS: Record<string, HardcodedBypassProfile> = {
+  'brandingworks.ebiz@gmail.com': {
+    staff_id: MANUAL_SUPER_ADMIN_STAFF_UUID,
+    bubble_staff_id: 'manual_super_admin_lowell',
+    display_name: 'Lowell Lo',
+    role: 'management',
+    role_tag: 'Administrator',
+    classification: 'management',
+    position: 'Super Admin',
+    department: 'Management',
+    login_method: 'dev_bypass_super_admin',
+  },
+  'brandingworks.online@gmail.com': {
+    staff_id: MANUAL_DEV_BYPASS_LEO_STAFF_UUID,
+    bubble_staff_id: '1730356521386x105918728272347140',
+    display_name: 'Leo Tse',
+    role: 'system_dev',
+    role_tag: 'system_dev',
+    classification: 'system_user',
+    position: 'IT System Officer / 技術系統主任',
+    department: 'System',
+    login_method: 'dev_bypass_developer',
+  },
+};
+
+function lookupHardcodedBypass(email: string): { email: string; profile: HardcodedBypassProfile } | null {
+  const normalized = email.toLowerCase().trim();
+  const profile = HARDCODED_BYPASS_USERS[normalized];
+  return profile ? { email: normalized, profile } : null;
+}
+
+function fallbackFromHardcoded(
+  email: string,
+  profile: HardcodedBypassProfile,
+  authUserId: string | null = null
+): { systemUser: SystemUserProfile; userInfo: UserInfoProfile } {
+  return {
+    systemUser: {
+      id: `fallback-${profile.bubble_staff_id}`,
+      auth_user_id: authUserId,
+      staff_id: profile.staff_id,
+      bubble_staff_id: profile.bubble_staff_id,
+      display_name: profile.display_name,
+      email,
+      role: profile.role,
+      department: profile.department,
+      position: profile.position,
+      phone: null,
+      profile_pic_url: null,
+      is_active: true,
+      google_email: email,
+    },
+    userInfo: {
+      id: `fallback-user-info-${profile.bubble_staff_id}`,
+      staff_id: profile.staff_id,
+      role_tag: profile.role_tag,
+      system_status: 'active',
+      classification: profile.classification,
+      display_name: profile.display_name,
+      email,
+      google_email: email,
+    },
+  };
+}
 
 function dedupeById<T extends { id?: string }>(rows: T[]): T[] {
   const seen = new Set<string>();
@@ -224,6 +303,11 @@ function mapRoleToInternal(roleTag: string | null | undefined, classification?: 
   if (!roleTag && !classification) return 'staff';
   
   const raw = (roleTag || classification || '').toLowerCase().trim();
+
+  // System developer (must run before the generic "system" / "admin" checks)
+  if (raw === 'system_dev' || raw.includes('系統開發')) {
+    return 'system_dev';
+  }
   
   // Management / Admin mappings
   if (raw.includes('admin') || raw.includes('管理') || raw === 'super admin' || raw === 'management') {
@@ -268,6 +352,7 @@ function mapRoleTagDisplay(roleTag: string | null | undefined, classification?: 
   const internalRole = mapRoleToInternal(roleTag, classification);
   const roleTagMap: Record<string, string> = {
     'management': 'Administrator',
+    'system_dev': '系統開發',
     'project_manager': 'Project Manager',
     'designer': 'Designer',
     'accountant': 'Accountant',
@@ -333,9 +418,14 @@ function normalizeRestoredSystemUser(raw: any): SystemUserProfile | null {
     bubble_staff_id = staffIdRaw;
   }
 
-  if (!staff_id && (bubble_staff_id === 'manual_super_admin_lowell' || staffIdRaw === 'manual_super_admin_lowell')) {
-    staff_id = MANUAL_SUPER_ADMIN_STAFF_UUID;
-    bubble_staff_id = 'manual_super_admin_lowell';
+  if (!staff_id) {
+    const hardcoded = Object.values(HARDCODED_BYPASS_USERS).find(
+      (p) => p.bubble_staff_id === bubble_staff_id || p.bubble_staff_id === staffIdRaw
+    );
+    if (hardcoded) {
+      staff_id = hardcoded.staff_id;
+      bubble_staff_id = hardcoded.bubble_staff_id;
+    }
   }
 
   if (!staff_id && !bubble_staff_id) return null;
@@ -583,9 +673,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // ====== MASTER BYPASS: Hardcoded super admin for OAuth troubleshooting ======
-      const SUPER_ADMIN_EMAIL = 'brandingworks.ebiz@gmail.com';
-      if (normalizedEmail === SUPER_ADMIN_EMAIL) {
+      // ====== MASTER BYPASS: Hardcoded developer/super-admin for OAuth troubleshooting ======
+      const oauthBypass = lookupHardcodedBypass(normalizedEmail);
+      if (oauthBypass) {
         console.log('[Auth] 🔑🔑 MASTER BYPASS triggered in verifyAndFetchUser for:', normalizedEmail);
         
         // Try DB lookup first, but don't block on failure
@@ -658,37 +748,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // If DB lookup failed, use hardcoded fallback
         if (!foundInDB) {
-          console.warn('[Auth] 🔑 Master bypass: DB lookup failed. Using HARDCODED fallback for Lowell Lo.');
-          const fallbackUser: SystemUserProfile = {
-            id: 'fallback-super-admin',
-            auth_user_id: authUserId || null,
-            staff_id: MANUAL_SUPER_ADMIN_STAFF_UUID,
-            bubble_staff_id: 'manual_super_admin_lowell',
-            display_name: 'Lowell Lo',
-            email: SUPER_ADMIN_EMAIL,
-            role: 'management',
-            department: 'Management',
-            position: 'Super Admin',
-            phone: null,
-            profile_pic_url: null,
-            is_active: true,
-            google_email: SUPER_ADMIN_EMAIL,
-          };
-          setSystemUser(fallbackUser);
+          console.warn('[Auth] 🔑 Master bypass: DB lookup failed. Using HARDCODED fallback for', oauthBypass.profile.display_name);
+          const fallback = fallbackFromHardcoded(oauthBypass.email, oauthBypass.profile, authUserId || null);
+          setSystemUser(fallback.systemUser);
+          setUserInfo(fallback.userInfo);
           setAuthError(null);
           authSucceededRef.current = true;
-
-          const fallbackUserInfo: UserInfoProfile = {
-            id: 'fallback-user-info',
-            staff_id: MANUAL_SUPER_ADMIN_STAFF_UUID,
-            role_tag: 'Administrator',
-            system_status: 'active',
-            classification: 'management',
-            display_name: 'Lowell Lo',
-            email: SUPER_ADMIN_EMAIL,
-            google_email: SUPER_ADMIN_EMAIL,
-          };
-          setUserInfo(fallbackUserInfo);
         }
 
         logLoginEvent(normalizedEmail, true);
@@ -874,7 +939,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthError(null);
     authSucceededRef.current = false; // Reset before attempting
 
-    const SUPER_ADMIN_EMAIL = 'brandingworks.ebiz@gmail.com';
+    const hardcodedBypass = lookupHardcodedBypass(email);
     const DEV_BYPASS_TIMEOUT = 8000; // 8s hard timeout for the entire devBypassLogin
 
     // Wrap the entire login in a timeout guard
@@ -884,9 +949,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const loginLogic = async (): Promise<'done'> => {
       try {
-        // ====== FAILSAFE: Hardcoded super admin bypass ======
-        if (email.toLowerCase().trim() === SUPER_ADMIN_EMAIL) {
-          console.log('[Auth] 🔑 Super Admin failsafe triggered for:', email);
+        // ====== FAILSAFE: Hardcoded developer / super-admin bypass ======
+        if (hardcodedBypass) {
+          console.log('[Auth] 🔑 Hardcoded bypass failsafe triggered for:', hardcodedBypass.email);
           
           // Try DB lookup first, but don't block on failure
           let sysUser: SystemUserProfile | null = null;
@@ -895,7 +960,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             sysUser = result.data;
             console.log('[Auth] DB lookup result:', { found: !!sysUser, error: result.error?.message });
           } catch (lookupErr) {
-            console.warn('[Auth] 🔑 Super admin DB lookup threw:', lookupErr);
+            console.warn('[Auth] 🔑 Hardcoded bypass DB lookup threw:', lookupErr);
           }
 
           if (sysUser) {
@@ -927,7 +992,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   const { data: staffByEmail } = await supabase
                     .from('staffs')
                     .select('work_phone, private_phone')
-                    .ilike('work_email', email.toLowerCase().trim())
+                    .ilike('work_email', hardcodedBypass.email)
                     .limit(1)
                     .maybeSingle();
                   if (staffByEmail) phone = staffByEmail.work_phone || staffByEmail.private_phone || null;
@@ -956,43 +1021,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           } else {
             // DB lookup failed — use hardcoded fallback immediately
-            console.warn('[Auth] ⚠️ DB lookup failed for super admin, using hardcoded fallback.');
-            const fallbackUser: SystemUserProfile = {
-              id: 'fallback-super-admin',
-              auth_user_id: null,
-              staff_id: MANUAL_SUPER_ADMIN_STAFF_UUID,
-              bubble_staff_id: 'manual_super_admin_lowell',
-              display_name: 'Lowell Lo',
-              email: SUPER_ADMIN_EMAIL,
-              role: 'management',
-              department: 'Management',
-              position: 'Super Admin',
-              phone: null,
-              profile_pic_url: null,
-              is_active: true,
-              google_email: SUPER_ADMIN_EMAIL,
-            };
-            setSystemUser(fallbackUser);
+            console.warn('[Auth] ⚠️ DB lookup failed for hardcoded bypass, using fallback for', hardcodedBypass.profile.display_name);
+            const fallback = fallbackFromHardcoded(hardcodedBypass.email, hardcodedBypass.profile);
+            setSystemUser(fallback.systemUser);
+            setUserInfo(fallback.userInfo);
             setAuthError(null);
             authSucceededRef.current = true;
-
-            const fallbackUserInfo: UserInfoProfile = {
-              id: 'fallback-user-info',
-              staff_id: MANUAL_SUPER_ADMIN_STAFF_UUID,
-              role_tag: 'Administrator',
-              system_status: 'active',
-              classification: 'management',
-              display_name: 'Lowell Lo',
-              email: SUPER_ADMIN_EMAIL,
-              google_email: SUPER_ADMIN_EMAIL,
-            };
-            setUserInfo(fallbackUserInfo);
           }
 
           // Log — fire and forget
           supabase.from('login_logs').insert({
             email,
-            login_method: 'dev_bypass_super_admin',
+            login_method: hardcodedBypass.profile.login_method,
             user_agent: navigator.userAgent,
             success: true,
           }).then(() => {}).catch(() => {});
@@ -1113,25 +1153,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (result === 'timeout') {
       console.error('[Auth] ⏰ devBypassLogin: 8s hard timeout reached.');
       if (!authSucceededRef.current) {
-        // Use hardcoded fallback for super admin on timeout
-        if (email.toLowerCase().trim() === SUPER_ADMIN_EMAIL) {
-          console.warn('[Auth] Timeout fallback: Using hardcoded super admin profile.');
-          const fallbackUser: SystemUserProfile = {
-            id: 'fallback-super-admin',
-            auth_user_id: null,
-            staff_id: MANUAL_SUPER_ADMIN_STAFF_UUID,
-            bubble_staff_id: 'manual_super_admin_lowell',
-            display_name: 'Lowell Lo',
-            email: SUPER_ADMIN_EMAIL,
-            role: 'management',
-            department: 'Management',
-            position: 'Super Admin',
-            phone: null,
-            profile_pic_url: null,
-            is_active: true,
-            google_email: SUPER_ADMIN_EMAIL,
-          };
-          setSystemUser(fallbackUser);
+        // Use hardcoded fallback for developer / super-admin on timeout
+        if (hardcodedBypass) {
+          console.warn('[Auth] Timeout fallback: Using hardcoded profile for', hardcodedBypass.profile.display_name);
+          const fallback = fallbackFromHardcoded(hardcodedBypass.email, hardcodedBypass.profile);
+          setSystemUser(fallback.systemUser);
+          setUserInfo(fallback.userInfo);
           setAuthError(null);
           authSucceededRef.current = true;
         } else {
