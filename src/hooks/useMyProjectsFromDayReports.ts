@@ -77,7 +77,7 @@ function chunkIds(ids: string[]): string[][] {
 }
 
 function relatedTypeOf(raw: string | null | undefined): ProjectRelatedType | 'unknown' {
-  if (raw === 'quotation_client' || raw === 'webandsystem' || raw === 'vchannel') return raw;
+  if (raw === 'quotation_client' || raw === 'webandsystem' || raw === 'vchannel' || raw === 'manual') return raw;
   return 'unknown';
 }
 

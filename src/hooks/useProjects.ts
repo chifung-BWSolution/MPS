@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 
-export type ProjectRelatedType = 'quotation_client' | 'webandsystem' | 'vchannel';
+export type ProjectRelatedType = 'quotation_client' | 'webandsystem' | 'vchannel' | 'manual';
+export type ProjectCategory = 'internal' | 'client';
+export type ProjectLevel = 1 | 2 | 3 | 4 | 5;
+export type ProjectKind = 'website' | 'system' | 'quotation_client' | 'vchannel' | 'manual';
 
 export type MasterProject = {
   id: string;
@@ -19,6 +22,21 @@ export type MasterProject = {
   meta: Record<string, unknown>;
   createdAt?: string;
   updatedAt?: string;
+};
+
+export type ProjectWriteInput = {
+  name: string;
+  clientName?: string | null;
+  status: string;
+  companyListId?: string | null;
+  brandListId?: string | null;
+  companyName?: string | null;
+  brandName?: string | null;
+  projectCategory?: ProjectCategory;
+  level?: ProjectLevel | null;
+  notes?: string | null;
+  description?: string | null;
+  profileType?: 'website' | 'system';
 };
 
 type DbRow = {
@@ -42,12 +60,25 @@ const validRelatedTypes = new Set<ProjectRelatedType>([
   'quotation_client',
   'webandsystem',
   'vchannel',
+  'manual',
 ]);
+
+const INACTIVE_STATUSES = new Set([
+  'cancelled',
+  'completed',
+  'archived',
+  'closed',
+  'paused',
+]);
+
+function metaObject(meta: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  return meta && typeof meta === 'object' ? meta : {};
+}
 
 function mapRow(row: DbRow): MasterProject {
   const relatedType = validRelatedTypes.has(row.related_type as ProjectRelatedType)
     ? (row.related_type as ProjectRelatedType)
-    : 'webandsystem';
+    : 'manual';
   return {
     id: row.id,
     relatedId: row.related_id,
@@ -60,9 +91,63 @@ function mapRow(row: DbRow): MasterProject {
     companyName: row.company_name ?? undefined,
     brandName: row.brand_name ?? undefined,
     clientName: row.client_name ?? undefined,
-    meta: (row.meta && typeof row.meta === 'object') ? row.meta : {},
+    meta: metaObject(row.meta),
     createdAt: row.created_at ?? undefined,
     updatedAt: row.updated_at ?? undefined,
+  };
+}
+
+export function projectCategoryOf(project: MasterProject): ProjectCategory {
+  if (project.relatedType === 'quotation_client') return 'client';
+  return project.meta.project_category === 'client' ? 'client' : 'internal';
+}
+
+export function projectLevelOf(project: MasterProject): ProjectLevel | undefined {
+  const level = project.meta.level;
+  if (typeof level === 'number' && level >= 1 && level <= 5) return level as ProjectLevel;
+  const importance = project.meta.importance;
+  if (typeof importance === 'string' && /^A[1-5]$/.test(importance)) {
+    return Number(importance.slice(1)) as ProjectLevel;
+  }
+  return undefined;
+}
+
+export function projectSubtitleOf(project: MasterProject): string {
+  const domain = typeof project.meta.domain_url === 'string' ? project.meta.domain_url.trim() : '';
+  if (domain) return domain;
+  if (project.clientName) return project.clientName;
+  const publicName = typeof project.meta.public_name === 'string' ? project.meta.public_name.trim() : '';
+  return publicName;
+}
+
+export function projectKindOf(project: MasterProject): ProjectKind {
+  if (project.relatedType === 'webandsystem') {
+    return project.meta.profile_type === 'system' ? 'system' : 'website';
+  }
+  return project.relatedType;
+}
+
+export function projectKindLabel(kind: ProjectKind): string {
+  switch (kind) {
+    case 'website': return '網站';
+    case 'system': return '系統';
+    case 'quotation_client': return '客戶項目';
+    case 'vchannel': return '影片頻道';
+    case 'manual': return '自訂';
+  }
+}
+
+function isActiveStatus(status: string): boolean {
+  return !INACTIVE_STATUSES.has(status);
+}
+
+function buildManualMeta(input: ProjectWriteInput, previous: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    ...previous,
+    project_category: input.projectCategory ?? previous.project_category ?? 'internal',
+    level: input.level ?? previous.level ?? 3,
+    notes: input.notes ?? previous.notes ?? '',
+    description: input.description ?? previous.description ?? '',
   };
 }
 
@@ -128,6 +213,142 @@ export function useProjects(options: UseProjectsOptions = {}) {
     [projects],
   );
 
+  const addProject = useCallback(async (input: ProjectWriteInput) => {
+    const name = input.name.trim();
+    if (!name) return { error: { message: '請輸入項目名稱' } };
+
+    const row = {
+      related_id: crypto.randomUUID(),
+      related_type: 'manual' as const,
+      name,
+      status: input.status || 'planning',
+      is_active: isActiveStatus(input.status || 'planning'),
+      company_list_id: input.companyListId || null,
+      brand_list_id: input.brandListId || null,
+      company_name: input.companyName || null,
+      brand_name: input.brandName || null,
+      client_name: input.clientName?.trim() || null,
+      meta: buildManualMeta(input),
+    };
+
+    const { data, error: insertError } = await supabase
+      .from('projects')
+      .insert(row)
+      .select('*')
+      .single();
+
+    if (insertError) return { error: insertError };
+    if (data) setProjects(prev => [...prev, mapRow(data as DbRow)].sort((a, b) => a.name.localeCompare(b.name, 'zh-HK')));
+    return { error: null };
+  }, []);
+
+  const updateProject = useCallback(async (project: MasterProject, input: ProjectWriteInput) => {
+    const name = input.name.trim();
+    if (!name) return { error: { message: '請輸入項目名稱' } };
+
+    let writeError: { message: string } | null = null;
+
+    if (project.relatedType === 'webandsystem') {
+      const patch: Record<string, unknown> = {
+        website_name: name,
+        status: input.status,
+        company_list_id: input.companyListId || null,
+        brand_list_id: input.brandListId || null,
+        company: input.companyName || null,
+        brand: input.brandName || null,
+        project_category: input.projectCategory ?? projectCategoryOf(project),
+        updated_at: new Date().toISOString(),
+      };
+      if (input.level != null) patch.level = input.level;
+      if (input.notes !== undefined) patch.notes = input.notes || null;
+      if (input.profileType) patch.profile_type = input.profileType;
+      const { error: sourceError } = await supabase
+        .from('webandsystem_list')
+        .update(patch)
+        .eq('id', project.relatedId);
+      writeError = sourceError;
+    } else if (project.relatedType === 'quotation_client') {
+      const { error: sourceError } = await supabase
+        .from('quotation_client_project')
+        .update({
+          display_name: name,
+          client_name: input.clientName?.trim() || null,
+          status: input.status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', project.relatedId);
+      writeError = sourceError;
+    } else if (project.relatedType === 'vchannel') {
+      const patch: Record<string, unknown> = {
+        internal_name: name,
+        status: input.status,
+        brand_list_id: input.brandListId || null,
+        updated_at: new Date().toISOString(),
+      };
+      if (input.level != null) patch.importance = `A${input.level}`;
+      const { error: sourceError } = await supabase
+        .from('vchannels')
+        .update(patch)
+        .eq('id', project.relatedId);
+      writeError = sourceError;
+    } else {
+      const { error: sourceError } = await supabase
+        .from('projects')
+        .update({
+          name,
+          status: input.status,
+          is_active: isActiveStatus(input.status),
+          company_list_id: input.companyListId || null,
+          brand_list_id: input.brandListId || null,
+          company_name: input.companyName || null,
+          brand_name: input.brandName || null,
+          client_name: input.clientName?.trim() || null,
+          meta: buildManualMeta(input, project.meta),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', project.id);
+      writeError = sourceError;
+    }
+
+    if (writeError) return { error: writeError };
+    await reload();
+    return { error: null };
+  }, [reload]);
+
+  const deleteProject = useCallback(async (project: MasterProject) => {
+    let writeError: { message: string } | null = null;
+
+    if (project.relatedType === 'webandsystem') {
+      const { error: sourceError } = await supabase
+        .from('webandsystem_list')
+        .delete()
+        .eq('id', project.relatedId);
+      writeError = sourceError;
+    } else if (project.relatedType === 'quotation_client') {
+      const { error: sourceError } = await supabase
+        .from('quotation_client_project')
+        .delete()
+        .eq('id', project.relatedId);
+      writeError = sourceError;
+    } else if (project.relatedType === 'vchannel') {
+      const { error: sourceError } = await supabase
+        .from('vchannels')
+        .delete()
+        .eq('id', project.relatedId);
+      writeError = sourceError;
+    } else {
+      const { error: sourceError } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', project.id);
+      writeError = sourceError;
+    }
+
+    if (writeError) return { error: writeError };
+    setProjects(prev => prev.filter(p => p.id !== project.id));
+    return { error: null };
+  }, []);
+
   return {
     projects,
     loading,
@@ -135,6 +356,9 @@ export function useProjects(options: UseProjectsOptions = {}) {
     reload,
     getById,
     asSelectItems,
+    addProject,
+    updateProject,
+    deleteProject,
   };
 }
 
@@ -142,4 +366,12 @@ export const relatedTypeLabels: Record<ProjectRelatedType, string> = {
   webandsystem: '網站/系統',
   quotation_client: '客戶項目',
   vchannel: '影片頻道',
+  manual: '自訂',
+};
+
+export const relatedTypeBadgeClass: Record<ProjectRelatedType, string> = {
+  webandsystem: 'bg-blue-50 text-blue-700 border-blue-200',
+  quotation_client: 'bg-amber-50 text-amber-700 border-amber-200',
+  vchannel: 'bg-purple-50 text-purple-700 border-purple-200',
+  manual: 'bg-slate-100 text-slate-700 border-slate-200',
 };

@@ -51,9 +51,10 @@ interface DeleteConfirmModalProps {
   itemName: string;
   canDelete: boolean;
   reasons?: string[];
+  description?: string;
 }
 
-export function DeleteConfirmModal({ isOpen, onClose, onConfirm, itemName, canDelete, reasons = [] }: DeleteConfirmModalProps) {
+export function DeleteConfirmModal({ isOpen, onClose, onConfirm, itemName, canDelete, reasons = [], description }: DeleteConfirmModalProps) {
   if (!isOpen) return null;
 
   return (
@@ -73,7 +74,11 @@ export function DeleteConfirmModal({ isOpen, onClose, onConfirm, itemName, canDe
 
           {canDelete ? (
             <p className="text-[13px] text-muted-foreground mb-6">
-              確定要刪除 <span className="font-medium text-foreground">「{itemName}」</span> 嗎？此操作無法撤銷。
+              {description || (
+                <>
+                  確定要刪除 <span className="font-medium text-foreground">「{itemName}」</span> 嗎？此操作無法撤銷。
+                </>
+              )}
             </p>
           ) : (
             <div className="space-y-2 mb-6">

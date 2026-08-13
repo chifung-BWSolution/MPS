@@ -5,6 +5,7 @@ import { ProjectDetail } from './ProjectDetail';
 import { ProjectProgress } from './ProjectProgress';
 import { ProjectInternalList } from './ProjectInternalList';
 import { ProjectClientList } from './ProjectClientList';
+import { ProjectOverview } from './ProjectOverview';
 
 const SELECTED_PROJECT_KEY = 'mps_selected_project_id';
 const PREVIOUS_LIST_KEY = 'mps_previous_list_submodule';
@@ -22,7 +23,7 @@ const writeSession = (key: string, value: string | null) => {
 export function ProjectModule({ subModule }: { subModule?: string }) {
   const { navigateTo } = useApp();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(() => readSession(SELECTED_PROJECT_KEY));
-  const [previousListSubModule, setPreviousListSubModule] = useState<string>(() => readSession(PREVIOUS_LIST_KEY) || 'focus');
+  const [previousListSubModule, setPreviousListSubModule] = useState<string>(() => readSession(PREVIOUS_LIST_KEY) || 'overview');
 
   useEffect(() => { writeSession(SELECTED_PROJECT_KEY, selectedProjectId); }, [selectedProjectId]);
   useEffect(() => { writeSession(PREVIOUS_LIST_KEY, previousListSubModule); }, [previousListSubModule]);
@@ -31,7 +32,8 @@ export function ProjectModule({ subModule }: { subModule?: string }) {
     if (subModule === 'internal') setPreviousListSubModule('internal');
     else if (subModule === 'client') setPreviousListSubModule('client');
     else if (subModule === 'progress') setPreviousListSubModule('progress');
-    else setPreviousListSubModule('focus');
+    else if (subModule === 'focus') setPreviousListSubModule('focus');
+    else setPreviousListSubModule('overview');
     setSelectedProjectId(projectId);
     navigateTo('project', 'detail');
   };
@@ -43,17 +45,20 @@ export function ProjectModule({ subModule }: { subModule?: string }) {
 
   const renderContent = () => {
     switch (subModule) {
+      case 'overview':
+        return <ProjectOverview onSelectProject={handleSelectProject} />;
       case 'focus':
         return <ProjectFocus onSelectProject={handleSelectProject} />;
       case 'new':
       case 'new-client':
         return (
           <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] p-6 space-y-3 max-w-xl">
-            <h2 className="text-[16px] font-bold">項目由來源模組維護</h2>
+            <h2 className="text-[16px] font-bold">請到項目總覽新增</h2>
             <p className="text-[13px] text-muted-foreground leading-relaxed">
-              `projects` 主表為自動同步投影，請到對應模組新增或更新來源資料：
+              請使用「項目總覽」頁面新增、編輯或刪除項目。網站/系統、客戶報價與影片頻道仍可在來源模組維護，並會同步到此列表。
             </p>
             <ul className="text-[13px] space-y-1.5 list-disc pl-5 text-muted-foreground">
+              <li>自訂項目 → 專案策劃／項目總覽</li>
               <li>網站/系統 → 網站+系統模組（webandsystem_list）</li>
               <li>客戶項目 → 客戶報價模組（quotation_client_project）</li>
               <li>影片頻道 → 影片頻道模組（vchannels）</li>
@@ -78,12 +83,13 @@ export function ProjectModule({ subModule }: { subModule?: string }) {
       case 'detail':
         return <ProjectDetail projectId={selectedProjectId || undefined} onBack={handleBackToList} />;
       default:
-        return <ProjectFocus onSelectProject={handleSelectProject} />;
+        return <ProjectOverview onSelectProject={handleSelectProject} />;
     }
   };
 
   const getTitle = () => {
     switch (subModule) {
+      case 'overview': return { title: '項目總覽', subtitle: '所有項目的統一管理。' };
       case 'focus': return { title: '近期焦點', subtitle: '依 day report 工時增長排序，快速掌握活躍項目。' };
       case 'new':
       case 'new-client': return { title: '新增項目', subtitle: '請至來源模組建立；此處僅顯示同步後的 projects。' };
@@ -92,7 +98,7 @@ export function ProjectModule({ subModule }: { subModule?: string }) {
       case 'progress': return { title: '項目進度', subtitle: '以 day report 工時檢視各項目進度。' };
       case 'planning': return { title: '年度計劃', subtitle: '改以近期焦點檢視工時活躍項目。' };
       case 'detail': return { title: '項目詳情', subtitle: '工時活動與團隊貢獻（來自 day_report_entries）。' };
-      default: return { title: '近期焦點', subtitle: '依 day report 工時增長排序，快速掌握活躍項目。' };
+      default: return { title: '項目總覽', subtitle: '所有項目的統一管理。' };
     }
   };
 
@@ -100,7 +106,7 @@ export function ProjectModule({ subModule }: { subModule?: string }) {
 
   return (
     <div className="space-y-6">
-      {subModule !== 'detail' && (
+      {subModule !== 'detail' && subModule !== 'overview' && (
         <div>
           <h1 className="text-[32px] font-bold tracking-tight">{title}</h1>
           <p className="text-[14px] text-muted-foreground mt-1">{subtitle}</p>

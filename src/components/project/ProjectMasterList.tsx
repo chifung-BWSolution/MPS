@@ -157,6 +157,7 @@ function TypeBadge({ type }: { type: ProjectRelatedType }) {
     webandsystem: 'bg-blue-50 text-blue-700',
     quotation_client: 'bg-amber-50 text-amber-700',
     vchannel: 'bg-purple-50 text-purple-700',
+    manual: 'bg-slate-100 text-slate-700',
   };
   return (
     <span className={cn('text-[11px] px-2 py-0.5 rounded font-medium', styles[type])}>
