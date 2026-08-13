@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { invokeGoogleAdsIncrementalSync } from '@/lib/googleAdsApi';
+import { mergeWebsitesByDomain } from '@/lib/adsWebsiteDisplay';
 import type {
   DateRangePreset,
   GoogleAdsAccount,
@@ -62,6 +63,7 @@ type WebsiteBrandRow = {
   id: string;
   brand_list_id: string | null;
   brand_id: string | null;
+  status: string | null;
 };
 
 function mapAccount(row: AccountRow): GoogleAdsAccount {
@@ -162,7 +164,7 @@ export function useGoogleAdsData(
       supabase
         .from('google_ads_campaign_websites')
         .select('customer_id,campaign_id,campaign_row_id,matched_domain,website_profile_id'),
-      supabase.from('webandsystem_list').select('id, brand_list_id, brand_id'),
+      supabase.from('webandsystem_list').select('id, brand_list_id, brand_id, status'),
     ]);
 
     if (accRes.error || campRes.error || aggRes.error) {
@@ -184,9 +186,11 @@ export function useGoogleAdsData(
     const nameById = new Map(mappedAccounts.map((a) => [a.customerId, a.descriptiveName]));
 
     const brandByWebsiteId = new Map<string, string>();
+    const statusByWebsiteId = new Map<string, string>();
     for (const row of (websiteBrandRes.data as WebsiteBrandRow[] | null) ?? []) {
       const brandId = (row.brand_list_id || row.brand_id || '').trim();
       if (brandId) brandByWebsiteId.set(row.id, brandId);
+      if (row.status) statusByWebsiteId.set(row.id, row.status.toLowerCase());
     }
 
     const websitesByCampaign = new Map<
@@ -200,18 +204,23 @@ export function useGoogleAdsData(
       const websiteProfileId = (link.website_profile_id || '').trim();
       if (!domain || !websiteProfileId) continue;
       const existing = websitesByCampaign.get(key) ?? [];
-      if (!existing.some((w) => w.websiteProfileId === websiteProfileId && w.domain === domain)) {
-        existing.push({
-          domain,
-          websiteProfileId,
-          brandListId: brandByWebsiteId.get(websiteProfileId) ?? null,
-        });
-      }
+      existing.push({
+        domain,
+        websiteProfileId,
+        brandListId: brandByWebsiteId.get(websiteProfileId) ?? null,
+      });
       websitesByCampaign.set(key, existing);
     }
-    for (const websites of websitesByCampaign.values()) {
-      websites.sort((a, b) =>
-        a.domain.localeCompare(b.domain, undefined, { sensitivity: 'base' }),
+    for (const [key, websites] of websitesByCampaign) {
+      websitesByCampaign.set(
+        key,
+        mergeWebsitesByDomain(websites, (candidate, current) => {
+          const candidateLive = statusByWebsiteId.get(candidate.websiteProfileId) === 'live';
+          const currentLive = statusByWebsiteId.get(current.websiteProfileId) === 'live';
+          if (candidateLive !== currentLive) return candidateLive;
+          if (!!candidate.brandListId !== !!current.brandListId) return !!candidate.brandListId;
+          return false;
+        }),
       );
     }
 

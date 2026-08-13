@@ -4,6 +4,7 @@ export type WebsiteRow = {
   id: string;
   domain_url: string | null;
   website_name: string | null;
+  status?: string | null;
   google_ads_customer_id?: string | null;
 };
 
@@ -145,8 +146,8 @@ export function matchDomainsToWebsites(
   domains: string[],
   websites: WebsiteRow[],
 ): DomainMatch[] {
-  const matches: DomainMatch[] = [];
-  const seenWebsite = new Set<string>();
+  type Candidate = DomainMatch & { exact: boolean; live: boolean };
+  const byWebsite = new Map<string, Candidate>();
 
   for (const raw of domains) {
     const key = normalizeDomain(raw);
@@ -154,14 +155,39 @@ export function matchDomainsToWebsites(
     for (const w of websites) {
       const d = normalizeDomain(w.domain_url);
       if (!d) continue;
-      if (d === key || d.endsWith("." + key) || key.endsWith("." + d)) {
-        if (seenWebsite.has(w.id)) continue;
-        seenWebsite.add(w.id);
-        matches.push({ website_profile_id: w.id, matched_domain: d });
+      const exact = d === key;
+      const related = d.endsWith("." + key) || key.endsWith("." + d);
+      if (!exact && !related) continue;
+      const cand: Candidate = {
+        website_profile_id: w.id,
+        matched_domain: d,
+        exact,
+        live: String(w.status || "").toLowerCase() === "live",
+      };
+      const prev = byWebsite.get(w.id);
+      if (!prev || (cand.exact && !prev.exact)) {
+        byWebsite.set(w.id, cand);
       }
     }
   }
-  return matches;
+
+  const byDomain = new Map<string, Candidate>();
+  for (const cand of byWebsite.values()) {
+    const domainKey = normalizeDomain(cand.matched_domain);
+    const prev = byDomain.get(domainKey);
+    if (!prev) {
+      byDomain.set(domainKey, cand);
+      continue;
+    }
+    const prevScore = (prev.exact ? 2 : 0) + (prev.live ? 1 : 0);
+    const nextScore = (cand.exact ? 2 : 0) + (cand.live ? 1 : 0);
+    if (nextScore > prevScore) byDomain.set(domainKey, cand);
+  }
+
+  return [...byDomain.values()].map(({ website_profile_id, matched_domain }) => ({
+    website_profile_id,
+    matched_domain,
+  }));
 }
 
 /** Pick first sample URL whose host matches the normalized domain. */
@@ -207,7 +233,7 @@ export async function loadWebsiteRows(supabase: {
   // were not applied yet.
   const { data, error } = await supabase
     .from("webandsystem_list")
-    .select("id, domain_url, website_name");
+    .select("id, domain_url, website_name, status");
   if (error) throw new Error(`Load websites failed: ${error.message}`);
   return ((data as WebsiteRow[] | null) ?? []).filter((w) => w?.id);
 }

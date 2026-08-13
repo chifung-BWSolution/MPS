@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { mergeWebsitesByDomain } from '@/lib/adsWebsiteDisplay';
 import type {
   GoogleAdsCampaignDetail,
   GoogleAdsDailyMetricPoint,
@@ -210,21 +211,13 @@ export function useGoogleAdsCampaignDetail(
       const meta = metaRes.data as CampaignMetaRow | null;
       const account = accountRes.data as AccountRow | null;
 
-      const matchedWebsites: GoogleAdsMatchedWebsite[] = [];
-      for (const link of (websiteRes.data as WebsiteRow[] | null) ?? []) {
-        const domain = (link.matched_domain || '').trim();
-        const websiteProfileId = (link.website_profile_id || '').trim();
-        if (!domain || !websiteProfileId) continue;
-        if (
-          !matchedWebsites.some(
-            (w) => w.websiteProfileId === websiteProfileId && w.domain === domain,
-          )
-        ) {
-          matchedWebsites.push({ domain, websiteProfileId });
-        }
-      }
-      matchedWebsites.sort((a, b) =>
-        a.domain.localeCompare(b.domain, undefined, { sensitivity: 'base' }),
+      const matchedWebsites = mergeWebsitesByDomain(
+        ((websiteRes.data as WebsiteRow[] | null) ?? [])
+          .map((link) => ({
+            domain: (link.matched_domain || '').trim(),
+            websiteProfileId: (link.website_profile_id || '').trim(),
+          }))
+          .filter((w) => w.domain && w.websiteProfileId),
       );
 
       const series = fillSeries(dateFrom, dateTo, currentRows);
