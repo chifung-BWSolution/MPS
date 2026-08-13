@@ -20,6 +20,7 @@ import {
   BookOpen,
   Target,
   Users,
+  Palette,
 } from 'lucide-react';
 
 const moduleIcons: Record<string, React.ElementType> = {
@@ -32,6 +33,7 @@ const moduleIcons: Record<string, React.ElementType> = {
   'articles': BookOpen,
   'marketing': Megaphone,
   'video': Video,
+  'graphic-design': Palette,
   'talent': Users,
   'supplier': Truck,
   'report': BarChart3,

@@ -10,9 +10,10 @@
 | `/marketing/facebook-ads` | Facebook Ads | Meta Campaign 成效（多 Business） |
 | `/marketing/facebook-ads-sync` | Facebook Ads 同步 | 歷史回填（約 37 個月） / 增量同步 |
 | `/marketing/ads-comparison` | 廣告比較圖表 | 三欄並排比較 Google / Facebook Campaign 每日成效 |
-| `/marketing/graphic-design` | 平面設計 | 平面設計製作追蹤 |
 | `/marketing/backlink` | 反向連結 | 反向連結購買紀錄 |
 | `/marketing/ads-tags` | 廣告標籤 | 管理 `ads_tags` 標籤目錄（含 `is_active`） |
+
+平面設計已移至頂部導航（影片製作之後），路由為 `#graphic-design/list`。舊網址 `#marketing/graphic-design` 會自動導向新位置。
 
 ### Google Ads — Campaign 詳情
 
@@ -120,6 +121,5 @@ MarketingModule.tsx
 ├── FacebookAdsModule.tsx       // Facebook Ads
 ├── FacebookAdsSyncModule.tsx   // Facebook Ads 同步
 ├── AdsComparisonModule.tsx     // 廣告比較圖表
-├── GraphicDesignModule.tsx     // 平面設計
 └── BacklinkModule.tsx          // 反向連結
 ```

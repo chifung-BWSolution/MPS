@@ -17,6 +17,8 @@ import {
   Home,
   BookOpen,
   Target,
+  Users,
+  Palette,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -30,6 +32,8 @@ const moduleIcons: Record<string, React.ElementType> = {
   'articles': BookOpen,
   'marketing': Megaphone,
   'video': Video,
+  'graphic-design': Palette,
+  'talent': Users,
   'supplier': Truck,
   'report': BarChart3,
   'tools-center': Wrench,

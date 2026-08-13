@@ -145,7 +145,6 @@ App.tsx
 │   ├── /facebook-ads
 │   ├── /facebook-ads-sync
 │   ├── /ads-comparison
-│   ├── /graphic-design
 │   ├── /backlink
 │   └── /ads-tags
 ├── /video
@@ -153,6 +152,8 @@ App.tsx
 │   ├── /channels
 │   ├── /schedule
 │   └── /distribution
+├── /graphic-design
+│   └── /list
 ├── /supplier
 │   └── /web-suppliers
 ├── /report

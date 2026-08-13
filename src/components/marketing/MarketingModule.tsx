@@ -4,7 +4,6 @@ import { GoogleAdsSyncModule } from './GoogleAdsSyncModule';
 import { FacebookAdsModule } from './FacebookAdsModule';
 import { FacebookAdsSyncModule } from './FacebookAdsSyncModule';
 import { AdsComparisonModule } from './AdsComparisonModule';
-import { GraphicDesignModule } from './GraphicDesignModule';
 import { BacklinkModule } from './BacklinkModule';
 import { AdsTagsSettingsModule } from './AdsTagsSettingsModule';
 import { parseAdsCampaignHashQuery } from '@/lib/adsCampaignNavigation';
@@ -36,7 +35,6 @@ export function MarketingModule({ subModule }: { subModule?: string }) {
       case 'facebook-ads': return { title: 'Facebook Ads', subtitle: '依日期區間檢視 Meta Campaign 成效（多 Business · 每日指標彙總）。' };
       case 'facebook-ads-sync': return { title: 'Facebook Ads 同步', subtitle: '觸發並監控完整歷史回填（約 37 個月），以及日常增量同步狀態。' };
       case 'ads-comparison': return { title: '廣告比較圖表', subtitle: '並排比較最多三個 Campaign 的每日成效（Google Ads / Facebook Ads）。' };
-      case 'graphic-design': return { title: '平面設計', subtitle: '管理各平台平面設計製作及成果追蹤。' };
       case 'backlink': return { title: '反向連結 Backlinks', subtitle: '記錄各平台反向連結購買及費用。' };
       case 'ads-tags': return { title: '廣告標籤', subtitle: '管理 Google Ads / Facebook Ads Campaign 共用標籤，並以啟用狀態控制是否可套用。' };
       default: return { title: 'Google Ads', subtitle: '依日期區間檢視 MCC Campaign 成效（每日指標彙總）。' };
@@ -60,7 +58,6 @@ export function MarketingModule({ subModule }: { subModule?: string }) {
       {activeTab === 'facebook-ads' && <FacebookAdsModule />}
       {activeTab === 'facebook-ads-sync' && <FacebookAdsSyncModule />}
       {activeTab === 'ads-comparison' && <AdsComparisonModule />}
-      {activeTab === 'graphic-design' && <GraphicDesignModule />}
       {activeTab === 'backlink' && <BacklinkModule />}
       {activeTab === 'ads-tags' && <AdsTagsSettingsModule />}
     </div>

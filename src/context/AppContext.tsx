@@ -18,6 +18,15 @@ export function resolveSubModule(module: string, sub?: string): string {
   return menuItem?.subMenus.some(s => s.id === sub) ? sub : defaultSub;
 }
 
+/** Resolve module + submenu, including hashes that moved to another top-level item. */
+export function resolveRoute(module: string, sub?: string): { module: string; subModule: string } {
+  // Legacy: 平面設計 was under 行銷管理 (#marketing/graphic-design)
+  if (module === 'marketing' && sub === 'graphic-design') {
+    return { module: 'graphic-design', subModule: resolveSubModule('graphic-design') };
+  }
+  return { module, subModule: resolveSubModule(module, sub) };
+}
+
 export interface MainMenuItem {
   id: string;
   label: string;
@@ -100,7 +109,6 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'facebook-ads', label: 'Facebook Ads', section: '廣告' },
       { id: 'facebook-ads-sync', label: 'Facebook Ads 同步', section: '廣告' },
       { id: 'ads-comparison', label: '廣告比較圖表', section: '廣告' },
-      { id: 'graphic-design', label: '平面設計', section: '內容' },
       { id: 'backlink', label: '反向連結 Backlinks', section: '內容' },
       { id: 'ads-tags', label: '廣告標籤', section: '設定' },
     ],
@@ -115,6 +123,13 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'review', label: '影片審核', section: '製作流程' },
       { id: 'publish', label: '影片發佈', section: '製作流程' },
       { id: 'channels', label: '頻道設定', section: '設定' },
+    ],
+  },
+  {
+    id: 'graphic-design',
+    label: '平面設計',
+    subMenus: [
+      { id: 'list', label: '平面設計' },
     ],
   },
   {
@@ -224,22 +239,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return { mod: mod || 'dashboard', sub: sub || '' };
   };
 
-  const [currentModule, setCurrentModule] = useState(() => parseHash().mod);
+  const [currentModule, setCurrentModule] = useState(() => {
+    const { mod, sub } = parseHash();
+    return resolveRoute(mod, sub || undefined).module;
+  });
   const [currentSubModule, setCurrentSubModule] = useState(() => {
     const { mod, sub } = parseHash();
-    return resolveSubModule(mod, sub || undefined);
+    return resolveRoute(mod, sub || undefined).subModule;
   });
 
-  // Normalize hash if it points to a hidden/invalid sub-module.
+  // Normalize hash if it points to a hidden/invalid/legacy sub-module.
   // Preserve any query string (e.g. campaign detail params).
   useEffect(() => {
     const { mod, sub } = parseHash();
-    const resolved = resolveSubModule(mod, sub || undefined);
+    const resolved = resolveRoute(mod, sub || undefined);
     const raw = window.location.hash.replace(/^#/, '');
     const qIndex = raw.indexOf('?');
     const query = qIndex >= 0 ? raw.slice(qIndex) : '';
     const path = qIndex >= 0 ? raw.slice(0, qIndex) : raw;
-    const expectedPath = `${mod}/${resolved}`;
+    const expectedPath = `${resolved.module}/${resolved.subModule}`;
     if (path !== expectedPath) {
       window.location.replace(`#${expectedPath}${query}`);
     }
@@ -249,8 +267,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onHashChange = () => {
       const { mod, sub } = parseHash();
-      setCurrentModule(mod);
-      setCurrentSubModule(resolveSubModule(mod, sub || undefined));
+      const resolved = resolveRoute(mod, sub || undefined);
+      setCurrentModule(resolved.module);
+      setCurrentSubModule(resolved.subModule);
+      const raw = window.location.hash.replace(/^#/, '');
+      const qIndex = raw.indexOf('?');
+      const query = qIndex >= 0 ? raw.slice(qIndex) : '';
+      const path = qIndex >= 0 ? raw.slice(0, qIndex) : raw;
+      const expectedPath = `${resolved.module}/${resolved.subModule}`;
+      if (path !== expectedPath) {
+        window.location.replace(`#${expectedPath}${query}`);
+      }
     };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
@@ -280,19 +307,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [systemUser, session]);
 
   const navigateTo = useCallback((module: string, subModule?: string) => {
-    const resolvedSub = resolveSubModule(module, subModule);
-    setCurrentModule(module);
-    setCurrentSubModule(resolvedSub);
+    const resolved = resolveRoute(module, subModule);
+    setCurrentModule(resolved.module);
+    setCurrentSubModule(resolved.subModule);
     // Update the URL hash so refresh restores the same page
-    window.location.hash = `${module}/${resolvedSub}`;
+    window.location.hash = `${resolved.module}/${resolved.subModule}`;
   }, []);
 
   // Hash-aware wrappers so any direct setCurrentModule/setCurrentSubModule call also updates the URL
   const setModuleWithHash = useCallback((module: string) => {
-    setCurrentModule(module);
-    const sub = resolveSubModule(module);
-    setCurrentSubModule(sub);
-    window.location.hash = `${module}/${sub}`;
+    const resolved = resolveRoute(module);
+    setCurrentModule(resolved.module);
+    setCurrentSubModule(resolved.subModule);
+    window.location.hash = `${resolved.module}/${resolved.subModule}`;
   }, []);
 
   const setSubModuleWithHash = useCallback((subModule: string) => {
