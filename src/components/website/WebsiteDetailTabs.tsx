@@ -13,7 +13,14 @@ import {
 } from '@/data/websiteDetailData';
 import { useSeoKeywords } from '@/hooks/useSeoKeywords';
 import { useWebsitePaidAds } from '@/hooks/useWebsitePaidAds';
+import {
+  buildFacebookAdsCampaignHash,
+  buildGoogleAdsCampaignHash,
+  setFacebookAdsCampaignHash,
+  setGoogleAdsCampaignHash,
+} from '@/lib/adsCampaignNavigation';
 import type { DateRangePreset } from '@/types/googleAds';
+import type { WebsiteFacebookAdCampaign, WebsiteGoogleAdCampaign } from '@/types/websitePaidAds';
 import type { VideoOutput } from '@/types/videoOutput';
 import {
   VIDEO_OUTPUT_STATUS_COLORS,
@@ -620,17 +627,36 @@ export function WebsiteAdsTab({ site }: { site: WebsiteProfileFull }) {
   const [preset, setPreset] = useState<DateRangePreset>('30d');
   const {
     googleCampaigns,
+    facebookCampaigns,
     loading,
     error,
     dateFrom,
     dateTo,
-  } = useWebsitePaidAds(site.id, preset);
+  } = useWebsitePaidAds(site.id, preset, site.brandId);
 
-  const totalItems = googleCampaigns.length;
-  const totalSpendMicros = googleCampaigns.reduce((sum, c) => sum + c.spendMicros, 0);
-  const totalImpressions = googleCampaigns.reduce((sum, c) => sum + c.impressions, 0);
-  const totalClicks = googleCampaigns.reduce((sum, c) => sum + c.clicks, 0);
-  const totalConversions = googleCampaigns.reduce((sum, c) => sum + c.conversions, 0);
+  const dateQuery = { preset, from: dateFrom, to: dateTo };
+
+  const openGoogleCampaign = (c: WebsiteGoogleAdCampaign) => {
+    setGoogleAdsCampaignHash({ campaignKey: c.key, ...dateQuery });
+  };
+
+  const openFacebookCampaign = (c: WebsiteFacebookAdCampaign) => {
+    setFacebookAdsCampaignHash({ campaignKey: c.key, ...dateQuery });
+  };
+
+  const totalItems = googleCampaigns.length + facebookCampaigns.length;
+  const totalSpendMicros =
+    googleCampaigns.reduce((sum, c) => sum + c.spendMicros, 0) +
+    facebookCampaigns.reduce((sum, c) => sum + c.spendMicros, 0);
+  const totalImpressions =
+    googleCampaigns.reduce((sum, c) => sum + c.impressions, 0) +
+    facebookCampaigns.reduce((sum, c) => sum + c.impressions, 0);
+  const totalClicks =
+    googleCampaigns.reduce((sum, c) => sum + c.clicks, 0) +
+    facebookCampaigns.reduce((sum, c) => sum + c.clicks, 0);
+  const totalConversions =
+    googleCampaigns.reduce((sum, c) => sum + c.conversions, 0) +
+    facebookCampaigns.reduce((sum, c) => sum + c.conversions, 0);
 
   return (
     <div className="space-y-4">
@@ -638,11 +664,11 @@ export function WebsiteAdsTab({ site }: { site: WebsiteProfileFull }) {
         <div>
           <h4 className="text-[15px] font-bold">付費廣告</h4>
           <p className="text-[12px] text-muted-foreground mt-0.5">
-            Google 廣告活動 {googleCampaigns.length}
+            Google {googleCampaigns.length} · Facebook {facebookCampaigns.length}
             <span className="ml-2">· 指標區間 {dateFrom} → {dateTo}</span>
           </p>
           <p className="text-[11px] text-muted-foreground mt-1">
-            資料由 Google Ads API 同步自動關聯（Facebook Ads 改對應 Vchannel 帳號），無法手動新增或編輯。
+            Google Ads 依網域自動關聯；Facebook Ads 依網站品牌對應。點擊活動列可開啟詳情。無法手動新增或編輯。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -680,7 +706,7 @@ export function WebsiteAdsTab({ site }: { site: WebsiteProfileFull }) {
           <Megaphone size={32} className="text-muted-foreground mx-auto mb-3" />
           <p className="text-[14px] font-medium text-muted-foreground">尚未關聯任何付費廣告</p>
           <p className="text-[12px] text-muted-foreground mt-1">
-            請先於網站列表執行「同步廣告網域」，或完成 Google Ads 同步後自動匹配。
+            請先於網站列表執行「同步廣告網域」，完成 Google Ads 同步，或為 Facebook Ads 活動指定此網站品牌。
           </p>
         </div>
       ) : (
@@ -712,7 +738,7 @@ export function WebsiteAdsTab({ site }: { site: WebsiteProfileFull }) {
             </div>
           </div>
 
-          {googleCampaigns.length > 0 && (
+                          {googleCampaigns.length > 0 && (
             <div className="space-y-2">
               <h5 className="text-[13px] font-semibold">Google Ads 活動</h5>
               <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] overflow-hidden">
@@ -733,9 +759,33 @@ export function WebsiteAdsTab({ site }: { site: WebsiteProfileFull }) {
                     </thead>
                     <tbody>
                       {googleCampaigns.map((c) => (
-                        <tr key={c.key} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                        <tr
+                          key={c.key}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openGoogleCampaign(c)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              openGoogleCampaign(c);
+                            }
+                          }}
+                          className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer"
+                          title="開啟 Google Ads 活動詳情"
+                        >
                           <td className="px-4 py-3">
-                            <div className="text-[13px] font-medium">{c.campaignName}</div>
+                            <a
+                              href={`#${buildGoogleAdsCampaignHash({
+                                campaignKey: c.key,
+                                preset,
+                                from: dateFrom,
+                                to: dateTo,
+                              })}`}
+                              className="text-[13px] font-medium text-teal-800 hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {c.campaignName}
+                            </a>
                             <div className="text-[11px] text-muted-foreground font-mono">{c.campaignId}</div>
                           </td>
                           <td className="px-4 py-3 text-[12px] text-muted-foreground">
@@ -752,12 +802,86 @@ export function WebsiteAdsTab({ site }: { site: WebsiteProfileFull }) {
                                 href={c.sampleFinalUrl}
                                 target="_blank"
                                 rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
                                 className="text-[11px] text-teal-700 hover:underline inline-flex items-center gap-0.5 max-w-[200px] truncate"
                               >
                                 {c.sampleFinalUrl}
                                 <ExternalLink size={10} />
                               </a>
                             )}
+                          </td>
+                          <td className="px-4 py-3 text-[12px] text-right tabular-nums">{c.impressions.toLocaleString()}</td>
+                          <td className="px-4 py-3 text-[12px] text-right tabular-nums">{c.clicks.toLocaleString()}</td>
+                          <td className="px-4 py-3 text-[13px] text-right tabular-nums font-medium">{formatMoneyFromMicros(c.spendMicros)}</td>
+                          <td className="px-4 py-3 text-[12px] text-right tabular-nums">
+                            {c.conversions.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-4 py-3">{adsApiStatusBadge(c.status)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {facebookCampaigns.length > 0 && (
+            <div className="space-y-2">
+              <h5 className="text-[13px] font-semibold">Facebook Ads 活動</h5>
+              <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[800px]">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/30">
+                        <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">活動名稱</th>
+                        <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">帳戶</th>
+                        <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">目標</th>
+                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">曝光</th>
+                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">點擊</th>
+                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">花費</th>
+                        <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">轉換</th>
+                        <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {facebookCampaigns.map((c) => (
+                        <tr
+                          key={c.key}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openFacebookCampaign(c)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              openFacebookCampaign(c);
+                            }
+                          }}
+                          className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer"
+                          title="開啟 Facebook Ads 活動詳情"
+                        >
+                          <td className="px-4 py-3">
+                            <a
+                              href={`#${buildFacebookAdsCampaignHash({
+                                campaignKey: c.key,
+                                ...dateQuery,
+                              })}`}
+                              className="text-[13px] font-medium text-teal-800 hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {c.campaignName}
+                            </a>
+                            <div className="text-[11px] text-muted-foreground font-mono">{c.campaignId}</div>
+                          </td>
+                          <td className="px-4 py-3 text-[12px] text-muted-foreground">
+                            <div>{c.accountName || c.adAccountId}</div>
+                            <div className="text-[11px] font-mono">
+                              {c.businessName ? `${c.businessName} · ` : ''}
+                              {c.adAccountId}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-[12px] text-muted-foreground whitespace-nowrap">
+                            {c.objective || '—'}
                           </td>
                           <td className="px-4 py-3 text-[12px] text-right tabular-nums">{c.impressions.toLocaleString()}</td>
                           <td className="px-4 py-3 text-[12px] text-right tabular-nums">{c.clicks.toLocaleString()}</td>

@@ -15,11 +15,12 @@ function daysAgoIso(n: number) {
   return d.toISOString().slice(0, 10);
 }
 
-const EMPTY: WebsitePaidAdsData = { googleCampaigns: [] };
+const EMPTY: WebsitePaidAdsData = { googleCampaigns: [], facebookCampaigns: [] };
 
 export function useWebsitePaidAds(
   websiteProfileId: string,
   preset: DateRangePreset = '30d',
+  brandListId?: string | null,
 ) {
   const { session } = useAuth();
   const [data, setData] = useState<WebsitePaidAdsData>(EMPTY);
@@ -37,7 +38,12 @@ export function useWebsitePaidAds(
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchWebsitePaidAds(websiteProfileId, range.from, range.to);
+      const result = await fetchWebsitePaidAds(
+        websiteProfileId,
+        range.from,
+        range.to,
+        brandListId,
+      );
       setData(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : '載入付費廣告失敗');
@@ -45,7 +51,7 @@ export function useWebsitePaidAds(
     } finally {
       setLoading(false);
     }
-  }, [websiteProfileId, range.from, range.to]);
+  }, [websiteProfileId, brandListId, range.from, range.to]);
 
   useEffect(() => {
     void refresh();
@@ -53,6 +59,7 @@ export function useWebsitePaidAds(
 
   return {
     googleCampaigns: data.googleCampaigns,
+    facebookCampaigns: data.facebookCampaigns,
     loading,
     error,
     dateFrom: range.from,
