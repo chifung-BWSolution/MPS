@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
-import { Globe, Plus, Search, ExternalLink, FileText, Video, Share2, Mail, TrendingUp, Puzzle, Link2, Calendar, X, Check, Trash2, LayoutGrid, List, ArrowLeft, Megaphone, Star, Sparkles, ChevronDown, Pencil, Monitor, Server, MapPin, RefreshCw } from 'lucide-react';
+import { Globe, Plus, Search, ExternalLink, FileText, Video, Share2, Mail, TrendingUp, Puzzle, Link2, Calendar, X, Check, Trash2, LayoutGrid, List, ArrowLeft, Megaphone, Star, Sparkles, ChevronDown, Pencil, Monitor, Server, MapPin, RefreshCw, Building2, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { WebsiteProfileFull, Article, WebsiteLevel, ProfileType, SystemType } from '@/types/app';
+import { WebsiteProfileFull, Article, WebsiteLevel, ProfileType, SystemType, ProjectCategory } from '@/types/app';
 import {
   allArticles,
   getArticlesForWebsite,
@@ -19,7 +19,7 @@ import { useCompanies } from '@/hooks/useCompanies';
 import { useBrands } from '@/hooks/useBrands';
 import { useSystemOptions } from '@/hooks/useSystemOptions';
 import { projects as allProjectsData } from '@/data/mockData';
-import { ProjectCategoryBadge, getProjectCategory } from '@/components/ui/project-category-badge';
+import { ProjectCategoryBadge, getProjectCategory, type ProjectCategoryType } from '@/components/ui/project-category-badge';
 import { adsStatusLabel, useAdsWebsiteLinks } from '@/hooks/useAdsWebsiteLinks';
 import type { AdsAppliedStatus, AdsDiscoveredDomain } from '@/types/adsWebsiteLink';
 import {
@@ -100,10 +100,17 @@ function ProfileTypeBadge({ profileType, size = 'default' }: { profileType?: Pro
   );
 }
 
+function resolveWebsiteProjectCategory(site: WebsiteProfileFull): { category: ProjectCategoryType; clientName?: string } {
+  if (site.projectCategory === 'internal' || site.projectCategory === 'client') {
+    return { category: site.projectCategory };
+  }
+  return getProjectCategory(site.projectId, allProjectsData);
+}
+
 // ===== Website Card =====
 function WebsiteCard({ site, onClick }: { site: WebsiteProfileFull; onClick: () => void }) {
   const config = statusConfig[site.status];
-  const { category, clientName } = getProjectCategory(site.projectId, allProjectsData);
+  const { category, clientName } = resolveWebsiteProjectCategory(site);
 
   return (
     <div onClick={onClick} className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] p-5 hover:shadow-[0_4px_12px_rgba(0,20,40,0.1)] transition-all duration-200 cursor-pointer">
@@ -173,7 +180,7 @@ function WebsiteCard({ site, onClick }: { site: WebsiteProfileFull; onClick: () 
 // ===== Website Table Row =====
 function WebsiteTableRow({ site, onClick }: { site: WebsiteProfileFull; onClick: () => void }) {
   const config = statusConfig[site.status];
-  const { category, clientName } = getProjectCategory(site.projectId, allProjectsData);
+  const { category, clientName } = resolveWebsiteProjectCategory(site);
   return (
     <tr onClick={onClick} className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer">
       <td className="px-4 py-3">
@@ -614,6 +621,7 @@ function WebsiteDetail({
             <div className="flex items-center gap-3">
               <h2 className="text-[20px] font-bold">{site.websiteName}</h2>
               <ProfileTypeBadge profileType={site.profileType} />
+              <ProjectCategoryBadge category={resolveWebsiteProjectCategory(site).category} size="sm" />
               {/* Level Badge with Dropdown */}
               <div className="relative">
                 <button
@@ -843,6 +851,7 @@ interface WebsiteFormData {
   status: 'development' | 'live' | 'maintenance' | 'archived';
   notes: string;
   profileType: ProfileType;
+  projectCategory: ProjectCategory;
   systemType?: SystemType;
   techStack?: string[];
   deploymentEnv?: string;
@@ -861,6 +870,7 @@ const emptyFormData: WebsiteFormData = {
   status: 'development',
   notes: '',
   profileType: 'website',
+  projectCategory: 'internal',
   systemType: undefined,
   techStack: [],
   deploymentEnv: '',
@@ -1104,6 +1114,27 @@ function WebsiteFormModal({
                 className={cn('flex items-center gap-1.5 px-3 py-2 rounded-md border text-[13px] font-medium transition-all', form.profileType === 'system' ? 'border-purple-600 bg-purple-50 text-purple-700' : 'border-border text-muted-foreground hover:bg-muted/50')}
               >
                 <Server size={13} /> 系統
+              </button>
+            </div>
+          </div>
+
+          {/* Project Category */}
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">項目類型 *</label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleChange('projectCategory', 'internal')}
+                className={cn('flex items-center gap-1.5 px-3 py-2 rounded-md border text-[13px] font-medium transition-all', form.projectCategory === 'internal' ? 'border-teal-600 bg-teal-50 text-teal-700' : 'border-border text-muted-foreground hover:bg-muted/50')}
+              >
+                <Building2 size={13} /> 內部項目
+              </button>
+              <button
+                type="button"
+                onClick={() => handleChange('projectCategory', 'client')}
+                className={cn('flex items-center gap-1.5 px-3 py-2 rounded-md border text-[13px] font-medium transition-all', form.projectCategory === 'client' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-border text-muted-foreground hover:bg-muted/50')}
+              >
+                <Users size={13} /> 客戶項目
               </button>
             </div>
           </div>
@@ -1373,7 +1404,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
     setLevelFilter(prev => prev.includes(lvl) ? prev.filter(l => l !== lvl) : [...prev, lvl]);
   };
 
-  const getWebsiteProjectCategory = (ws: WebsiteProfileFull) => getProjectCategory(ws.projectId, allProjectsData);
+  const getWebsiteProjectCategory = (ws: WebsiteProfileFull) => resolveWebsiteProjectCategory(ws);
 
   const handleAddWebsite = async (data: WebsiteFormData) => {
     // Capture before modal onClose clears pending (form modal calls onSave then onClose sync)
@@ -1402,6 +1433,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       pluginsCount: 0,
       totalHours: 0,
       profileType: data.profileType,
+      projectCategory: data.projectCategory,
       systemType: data.systemType,
       techStack: data.techStack,
       deploymentEnv: data.deploymentEnv || undefined,
@@ -1469,6 +1501,8 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       level: data.level,
       status: data.status,
       notes: data.notes || undefined,
+      profileType: data.profileType,
+      projectCategory: data.projectCategory,
       systemType: data.systemType,
     };
     await updateProfile(editingSite.id, updates);
@@ -1487,6 +1521,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
     status: site.status,
     notes: site.notes || '',
     profileType: site.profileType || 'website',
+    projectCategory: site.projectCategory === 'client' ? 'client' : 'internal',
     systemType: site.systemType,
     techStack: site.techStack || [],
     deploymentEnv: site.deploymentEnv || '',
@@ -1686,7 +1721,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
           <tbody>
             {filtered.map(site => {
               const config = statusConfig[site.status];
-              const { category, clientName } = getProjectCategory(site.projectId, allProjectsData);
+              const { category, clientName } = resolveWebsiteProjectCategory(site);
               return (
                 <tr key={site.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer">
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3">

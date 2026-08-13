@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { WebsiteProfileFull, WebsiteLevel, ProfileType } from '@/types/app';
+import { WebsiteProfileFull, WebsiteLevel, ProfileType, ProjectCategory } from '@/types/app';
 import { useAuth } from '@/context/AuthContext';
 import { websiteProfiles as staticWebsiteProfiles } from '@/data/websiteData';
 
@@ -52,6 +52,7 @@ function mapRow(row: DbRow): WebsiteProfileFull {
     pluginsCount: 0,
     totalHours: row.total_hours,
     profileType: (row.profile_type as ProfileType) ?? 'website',
+    projectCategory: (row.project_category === 'client' ? 'client' : 'internal') as ProjectCategory,
     notes: row.notes ?? undefined,
     assignedStaff: [],
     externalLinks: [],
@@ -89,7 +90,7 @@ export function useWebsiteProfiles() {
       website_name: site.websiteName,
       domain_url: site.domainUrl ?? null,
       profile_type: site.profileType ?? 'website',
-      project_category: 'internal',
+      project_category: site.projectCategory ?? 'internal',
       level: site.level,
       platform: site.platform,
       brand: site.brand,
@@ -119,6 +120,7 @@ export function useWebsiteProfiles() {
     if (updates.websiteName !== undefined) row.website_name = updates.websiteName;
     if (updates.domainUrl !== undefined) row.domain_url = updates.domainUrl;
     if (updates.profileType !== undefined) row.profile_type = updates.profileType;
+    if (updates.projectCategory !== undefined) row.project_category = updates.projectCategory;
     if (updates.level !== undefined) row.level = updates.level;
     if (updates.platform !== undefined) row.platform = updates.platform;
     if (updates.brand !== undefined) row.brand = updates.brand;
