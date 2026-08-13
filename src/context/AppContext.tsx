@@ -79,7 +79,6 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'ai-efficiency', label: 'AI 效率對比' },
       { id: 'sales-gp', label: '銷售 & GP 目標' },
       { id: 'team-reports', label: '團隊匯報' },
-      { id: 'dev-plans', label: '開發計劃' },
     ],
   },
   {
