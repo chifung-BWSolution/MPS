@@ -290,6 +290,8 @@ export interface WebsiteProfileFull {
   budgetUsed?: number;
   // v2.3: Profile type (website or system)
   profileType?: ProfileType;
+  /** 項目類型: 內部項目 | 客戶項目 */
+  projectCategory?: ProjectCategory;
   // System-specific fields
   systemType?: SystemType;
   techStack?: string[];
