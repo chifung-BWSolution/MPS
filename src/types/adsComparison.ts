@@ -1,4 +1,5 @@
 import type { AdsDailySeriesPoint, AdsKpiItem } from '@/components/marketing/campaign-detail/types';
+import type { DateRangePreset } from '@/types/googleAds';
 
 export type AdsComparePlatform = 'google' | 'facebook';
 
@@ -44,3 +45,12 @@ export type AdsCompareTotals = {
 };
 
 export type AdsCompareKpiItem = AdsKpiItem;
+
+export type AdsCompareColumnFilters = {
+  platform: AdsComparePlatform;
+  campaignKey: string;
+  metric: AdsCompareMetric;
+  preset: DateRangePreset;
+  customFrom: string;
+  customTo: string;
+};

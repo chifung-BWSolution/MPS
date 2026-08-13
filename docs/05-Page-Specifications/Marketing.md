@@ -37,6 +37,7 @@
   - 平台：Google Ads / Facebook Ads
   - Campaign 搜尋下拉（依平台動態載入）
   - 指標：Impr. / Clicks / Cost / Conv.（另含 CTR、Avg. CPC，與詳情頁 KPI 卡片對應）
+  - 篩選下方可「從欄位 N 複製」，套用其他欄的日期／平台／Campaign／指標
 - **圖表：** 所選指標的每日折線圖（資料來自 `google_ads_campaign_daily_metrics` / `facebook_ads_campaign_daily_metrics`）。
 - **Conv.：** 與列表頁同一欄位（Google `metrics.conversions` 倉庫值；Facebook 倉庫 `conversions`，即 sync 時 `sumConversions` 結果），勿另算 actions。
 - **KPI 卡片：** 每欄圖表下方顯示與 Campaign 詳情相同的六張卡片（含前期比較與 sparkline）。點擊卡片會把該欄指標篩選切到對應 metric。

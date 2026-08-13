@@ -1,8 +1,40 @@
+import { useState } from 'react';
 import { AdsComparisonColumn } from './ads-comparison/AdsComparisonColumn';
 import { useAdsCampaignCatalog } from '@/hooks/useAdsCampaignCatalog';
+import { daysAgoIso, todayIso } from '@/lib/adsDailySeries';
+import type { AdsCompareColumnFilters, AdsComparePlatform } from '@/types/adsComparison';
+
+const COLUMN_COUNT = 3;
+const DEFAULT_PLATFORMS: AdsComparePlatform[] = ['google', 'facebook', 'google'];
+
+function defaultFilters(index: number): AdsCompareColumnFilters {
+  return {
+    platform: DEFAULT_PLATFORMS[index] ?? 'google',
+    campaignKey: '',
+    metric: 'clicks',
+    preset: '30d',
+    customFrom: daysAgoIso(30),
+    customTo: todayIso(),
+  };
+}
 
 export function AdsComparisonModule() {
   const { catalog, loading, error } = useAdsCampaignCatalog();
+  const [columns, setColumns] = useState<AdsCompareColumnFilters[]>(() =>
+    Array.from({ length: COLUMN_COUNT }, (_, index) => defaultFilters(index)),
+  );
+
+  const updateColumn = (index: number, patch: Partial<AdsCompareColumnFilters>) => {
+    setColumns((prev) => prev.map((column, i) => (i === index ? { ...column, ...patch } : column)));
+  };
+
+  const copyFrom = (targetIndex: number, sourceIndex: number) => {
+    setColumns((prev) => {
+      const source = prev[sourceIndex];
+      if (!source) return prev;
+      return prev.map((column, i) => (i === targetIndex ? { ...source } : column));
+    });
+  };
 
   return (
     <div className="space-y-0">
@@ -14,7 +46,7 @@ export function AdsComparisonModule() {
           </p>
         </div>
         <p className="text-[12px] text-muted-foreground">
-          每欄可獨立選擇日期、平台與 Campaign。Conv. 與 Google Ads / Facebook Ads 列表同一欄位；點擊下方指標卡片可快速切換折線圖指標。
+          每欄可獨立選擇日期、平台與 Campaign。可用「從欄位 N 複製」套用其他欄的全部篩選。Conv. 與 Google Ads / Facebook Ads 列表同一欄位；點擊下方指標卡片可快速切換折線圖指標。
         </p>
         {error ? <p className="text-[12px] text-red-600">{error}</p> : null}
         {!loading && !error ? (
@@ -33,12 +65,19 @@ export function AdsComparisonModule() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">
-        {[0, 1, 2].map((index) => (
+        {columns.map((filters, index) => (
           <AdsComparisonColumn
             key={index}
             index={index}
             catalog={catalog}
             catalogLoading={loading}
+            filters={filters}
+            onChange={(patch) => updateColumn(index, patch)}
+            copySources={columns
+              .map((_, sourceIndex) => sourceIndex)
+              .filter((sourceIndex) => sourceIndex !== index)
+              .map((sourceIndex) => ({ index: sourceIndex }))}
+            onCopyFrom={(sourceIndex) => copyFrom(index, sourceIndex)}
           />
         ))}
       </div>
