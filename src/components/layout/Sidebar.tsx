@@ -61,7 +61,7 @@ export function Sidebar() {
   // Get the current module's menu item
   const currentMenuData = mainMenuItems.find(m => m.id === currentModule);
   const ModuleIcon = moduleIcons[currentModule] || LayoutDashboard;
-  const hasSubMenus = currentMenuData && currentMenuData.subMenus.length > 1;
+  const hasSubMenus = currentMenuData && currentMenuData.subMenus.length > 0;
 
   return (
     <aside
