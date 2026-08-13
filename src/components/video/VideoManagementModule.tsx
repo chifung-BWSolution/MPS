@@ -220,7 +220,7 @@ export function VideoManagementModule() {
   const { videos, loading, error, updateVideo } = useVideoOutput();
   const { channels } = useVchannels();
 
-  const [view, setView] = useState<CoordinationView>('status');
+  const [view, setView] = useState<CoordinationView>('list');
   const [vchannelFilter, setVchannelFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [yearFilter, setYearFilter] = useState(getCurrentProductionYear);
@@ -352,8 +352,8 @@ export function VideoManagementModule() {
             >
               {(
                 [
-                  { id: 'status' as const, label: '狀態視圖' },
                   { id: 'list' as const, label: '列表視圖' },
+                  { id: 'status' as const, label: '狀態視圖' },
                 ] as const
               ).map((tab, index) => (
                 <span key={tab.id} className="contents">
