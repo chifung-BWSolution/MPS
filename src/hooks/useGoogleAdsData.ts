@@ -58,6 +58,12 @@ type CampaignWebsiteRow = {
   website_profile_id: string;
 };
 
+type WebsiteBrandRow = {
+  id: string;
+  brand_list_id: string | null;
+  brand_id: string | null;
+};
+
 function mapAccount(row: AccountRow): GoogleAdsAccount {
   return {
     customerId: row.customer_id,
@@ -122,7 +128,8 @@ export function useGoogleAdsData(
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const [accRes, campRes, syncRes, minRes, maxRes, aggRes, websiteRes] = await Promise.all([
+    const [accRes, campRes, syncRes, minRes, maxRes, aggRes, websiteRes, websiteBrandRes] =
+      await Promise.all([
       supabase
         .from('google_ads_accounts')
         .select('*')
@@ -155,6 +162,7 @@ export function useGoogleAdsData(
       supabase
         .from('google_ads_campaign_websites')
         .select('customer_id,campaign_id,campaign_row_id,matched_domain,website_profile_id'),
+      supabase.from('webandsystem_list').select('id, brand_list_id, brand_id'),
     ]);
 
     if (accRes.error || campRes.error || aggRes.error) {
@@ -175,9 +183,15 @@ export function useGoogleAdsData(
     setAccounts(mappedAccounts);
     const nameById = new Map(mappedAccounts.map((a) => [a.customerId, a.descriptiveName]));
 
+    const brandByWebsiteId = new Map<string, string>();
+    for (const row of (websiteBrandRes.data as WebsiteBrandRow[] | null) ?? []) {
+      const brandId = (row.brand_list_id || row.brand_id || '').trim();
+      if (brandId) brandByWebsiteId.set(row.id, brandId);
+    }
+
     const websitesByCampaign = new Map<
       string,
-      { domain: string; websiteProfileId: string }[]
+      { domain: string; websiteProfileId: string; brandListId: string | null }[]
     >();
     for (const link of (websiteRes.data as CampaignWebsiteRow[] | null) ?? []) {
       const key =
@@ -187,7 +201,11 @@ export function useGoogleAdsData(
       if (!domain || !websiteProfileId) continue;
       const existing = websitesByCampaign.get(key) ?? [];
       if (!existing.some((w) => w.websiteProfileId === websiteProfileId && w.domain === domain)) {
-        existing.push({ domain, websiteProfileId });
+        existing.push({
+          domain,
+          websiteProfileId,
+          brandListId: brandByWebsiteId.get(websiteProfileId) ?? null,
+        });
       }
       websitesByCampaign.set(key, existing);
     }
@@ -222,6 +240,13 @@ export function useGoogleAdsData(
           lastSyncedAt: meta?.last_synced_at ?? undefined,
           accountName: nameById.get(row.customer_id),
           matchedWebsites: websitesByCampaign.get(id) ?? [],
+          brandListIds: [
+            ...new Set(
+              (websitesByCampaign.get(id) ?? [])
+                .map((w) => w.brandListId)
+                .filter((brandId): brandId is string => !!brandId),
+            ),
+          ],
         };
       })
       .sort((a, b) => b.costMicros - a.costMicros);

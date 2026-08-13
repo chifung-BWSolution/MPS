@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, RefreshCw, Search } from 'lucide-react
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { resolveDateRange, useGoogleAdsData } from '@/hooks/useGoogleAdsData';
+import { useBrands } from '@/hooks/useBrands';
 import type { DateRangePreset, GoogleAdsCampaign } from '@/types/googleAds';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -176,11 +177,19 @@ export function GoogleAdsModule() {
   }, [hashQuery.campaign, hashQuery.preset, hashQuery.from, hashQuery.to]);
 
   const [search, setSearch] = useState('');
+  const [brandFilter, setBrandFilter] = useState('all');
   const [accountFilter, setAccountFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [websiteFilter, setWebsiteFilter] = useState('all');
   const [sortKey, setSortKey] = useState<SortKey>('cost');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  const { brands } = useBrands();
+  const activeBrands = useMemo(
+    () => brands.filter((b) => b.isActive).sort((a, b) => a.brandCode.localeCompare(b.brandCode)),
+    [brands],
+  );
+  const brandById = useMemo(() => new Map(brands.map((b) => [b.id, b])), [brands]);
 
   const clientAccounts = useMemo(
     () => accounts.filter((a) => !a.isManager),
@@ -198,6 +207,10 @@ export function GoogleAdsModule() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const rows = campaigns.filter((c) => {
+      if (brandFilter === 'none' && c.brandListIds.length > 0) return false;
+      if (brandFilter !== 'all' && brandFilter !== 'none' && !c.brandListIds.includes(brandFilter)) {
+        return false;
+      }
       if (accountFilter !== 'all' && c.customerId !== accountFilter) return false;
       if (statusFilter !== 'all' && c.status.toUpperCase() !== statusFilter) return false;
       if (websiteFilter === 'none' && c.matchedWebsites.length > 0) return false;
@@ -213,7 +226,15 @@ export function GoogleAdsModule() {
         c.campaignName.toLowerCase().includes(q) ||
         (c.accountName || '').toLowerCase().includes(q) ||
         c.customerId.includes(q) ||
-        c.matchedWebsites.some((w) => w.domain.toLowerCase().includes(q))
+        c.matchedWebsites.some((w) => w.domain.toLowerCase().includes(q)) ||
+        c.brandListIds.some((id) => {
+          const brand = brandById.get(id);
+          if (!brand) return false;
+          return (
+            brand.brandCode.toLowerCase().includes(q) ||
+            brand.displayName.toLowerCase().includes(q)
+          );
+        })
       );
     });
 
@@ -226,7 +247,7 @@ export function GoogleAdsModule() {
       }
       return compareText(String(av), String(bv)) * dir;
     });
-  }, [campaigns, search, accountFilter, statusFilter, websiteFilter, sortKey, sortDir]);
+  }, [campaigns, search, brandFilter, accountFilter, statusFilter, websiteFilter, sortKey, sortDir, brandById]);
 
   const onSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -366,10 +387,25 @@ export function GoogleAdsModule() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜尋 campaign / 帳戶 / 網站…"
+              placeholder="搜尋 campaign / 帳戶 / 網站 / 品牌…"
               className="pl-8 h-9 text-[13px] bg-white"
             />
           </div>
+          <Select value={brandFilter} onValueChange={setBrandFilter}>
+            <SelectTrigger className="w-[170px] h-9 text-[13px] bg-white">
+              <SelectValue placeholder="品牌" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部品牌</SelectItem>
+              <SelectItem value="none">未設定品牌</SelectItem>
+              {activeBrands.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.brandCode}
+                  {b.displayName !== b.brandCode ? ` — ${b.displayName}` : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={accountFilter} onValueChange={setAccountFilter}>
             <SelectTrigger className="w-[200px] h-9 text-[13px] bg-white">
               <SelectValue placeholder="帳戶" />

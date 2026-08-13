@@ -13,6 +13,8 @@ export type GoogleAdsAccount = {
 export type GoogleAdsMatchedWebsite = {
   domain: string;
   websiteProfileId: string;
+  /** FK → brand_list.id from the matched website profile */
+  brandListId?: string | null;
 };
 
 export type GoogleAdsCampaign = {
@@ -32,6 +34,8 @@ export type GoogleAdsCampaign = {
   accountName?: string;
   /** Links from google_ads_campaign_websites (matched_domain + website_profile_id) */
   matchedWebsites: GoogleAdsMatchedWebsite[];
+  /** Distinct brand_list ids from matched website profiles */
+  brandListIds: string[];
 };
 
 export type GoogleAdsSyncRun = {
