@@ -1,5 +1,6 @@
 export { AdsCampaignDetailShell } from './AdsCampaignDetailShell';
 export { GoogleAdsCampaignDetail } from './GoogleAdsCampaignDetail';
+export { FacebookAdsCampaignDetail } from './FacebookAdsCampaignDetail';
 export {
   AdsAdGroupsTable,
   AdsKeywordsTable,
@@ -11,6 +12,12 @@ export {
   AdsProductsTable,
   AdsChannelBreakdownGrid,
 } from './AdsBreakdownTables';
+export {
+  FacebookAdSetsTable,
+  FacebookAdsTable,
+  FacebookPlacementsTable,
+  FacebookAdsBreakdownGrid,
+} from './FacebookAdsBreakdownTables';
 export type {
   AdsBreakdownTablesProps,
   AdsCampaignDetailShellProps,
@@ -21,4 +28,5 @@ export type {
   AdsKpiItem,
   AdsLinkedWebsite,
   AdsPlaceholderSection,
+  FacebookAdsBreakdownTablesProps,
 } from './types';

@@ -81,3 +81,31 @@ export function setGoogleAdsCampaignHash(opts: {
     window.location.hash = next;
   }
 }
+
+export function buildFacebookAdsCampaignHash(opts: {
+  campaignKey?: string | null;
+  preset?: DateRangePreset | null;
+  from?: string | null;
+  to?: string | null;
+}): string {
+  const params = new URLSearchParams();
+  if (opts.campaignKey) params.set('campaign', opts.campaignKey);
+  if (opts.preset) params.set('preset', opts.preset);
+  if (opts.from) params.set('from', opts.from);
+  if (opts.to) params.set('to', opts.to);
+  const qs = params.toString();
+  return qs ? `marketing/facebook-ads?${qs}` : 'marketing/facebook-ads';
+}
+
+export function setFacebookAdsCampaignHash(opts: {
+  campaignKey?: string | null;
+  preset?: DateRangePreset | null;
+  from?: string | null;
+  to?: string | null;
+}): void {
+  const next = buildFacebookAdsCampaignHash(opts);
+  const current = window.location.hash.replace(/^#/, '');
+  if (current !== next) {
+    window.location.hash = next;
+  }
+}

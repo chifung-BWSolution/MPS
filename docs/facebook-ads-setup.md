@@ -124,6 +124,7 @@ where jobname like '%ads-incremental%';
 |------|------|
 | `supabase-functions-sync-facebook-ads` | 最近 7 日增量 + 帳戶 prune（手動 + 每日 cron） |
 | `supabase-functions-facebook-ads-backfill-step` | 歷史回填（`start` / `pause` / `resume` / `cancel` / `step`） |
+| `supabase-functions-facebook-ads-campaign-breakdowns` | Campaign 詳情即時細項（Ad Sets / Ads / Placements；不落倉庫） |
 | `supabase-functions-sync-ads-website-links` | 網站列表「同步廣告網域」：**僅 Google** 目的地 URL 發現與連結 |
 
 部署：
@@ -131,6 +132,7 @@ where jobname like '%ads-incremental%';
 ```bash
 npx supabase functions deploy supabase-functions-sync-facebook-ads --project-ref kwcevjcmdjadhrygjyfp
 npx supabase functions deploy supabase-functions-facebook-ads-backfill-step --project-ref kwcevjcmdjadhrygjyfp
+npx supabase functions deploy supabase-functions-facebook-ads-campaign-breakdowns --project-ref kwcevjcmdjadhrygjyfp
 npx supabase functions deploy supabase-functions-sync-ads-website-links --project-ref kwcevjcmdjadhrygjyfp
 npx supabase functions deploy supabase-functions-sync-google-ads --project-ref kwcevjcmdjadhrygjyfp
 npx supabase functions deploy supabase-functions-google-ads-backfill-step --project-ref kwcevjcmdjadhrygjyfp
@@ -154,7 +156,8 @@ Also apply:
 
 | Hash | 說明 |
 |------|------|
-| `/#marketing/facebook-ads` | Campaign 報表；手動設定品牌 |
+| `/#marketing/facebook-ads` | Campaign 報表；點擊列開啟詳情；手動設定品牌 |
+| `/#marketing/facebook-ads?campaign={adAccountId}:{campaignId}` | Campaign 詳情（KPI / 圖表 / 即時 Ad Sets·Ads·Placements） |
 | `/#marketing/facebook-ads-sync` | 完整歷史回填控制台 |
 | `/#website/list` | 網站列表：Google 廣告狀態欄、同步廣告網域、未連結網域建立提示 |
 
@@ -168,3 +171,4 @@ Business 篩選與 KPI 由 warehouse 動態產生，**不需改前端**即可支
 4. Functions 已部署
 5. 在報表頁按 **Refresh recent (7d)**，應看到 4 Business / 對應帳戶數
 6. 舊憑證留下的帳戶會在增量同步時被自動移除
+7. 點擊 campaign 列應開啟詳情（`#marketing/facebook-ads?campaign=act_…:…`）；KPI / 圖表來自 warehouse，Ad Sets / Ads / Placements 來自即時 Meta API

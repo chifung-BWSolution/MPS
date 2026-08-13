@@ -48,6 +48,15 @@ export type AdsBreakdownTablesProps = {
   error?: string | null;
 };
 
+export type FacebookAdsBreakdownTablesProps = {
+  supported: boolean;
+  adSets: import('@/types/facebookAds').FacebookAdsAdSetRow[];
+  ads: import('@/types/facebookAds').FacebookAdsAdRow[];
+  placements: import('@/types/facebookAds').FacebookAdsPlacementRow[];
+  loading: boolean;
+  error?: string | null;
+};
+
 export type AdsCampaignDetailViewModel = {
   platform: AdsCampaignPlatform;
   platformLabel: string;
@@ -57,11 +66,14 @@ export type AdsCampaignDetailViewModel = {
   accountId: string;
   channelOrObjective?: string;
   websites: AdsLinkedWebsite[];
+  businessLabel?: string;
+  brandLabel?: string;
   series: AdsDailySeriesPoint[];
   kpis: AdsKpiItem[];
   /** @deprecated Prefer breakdowns for Google; kept for optional empty-state fallback */
   placeholders?: AdsPlaceholderSection[];
   breakdowns?: AdsBreakdownTablesProps;
+  facebookBreakdowns?: FacebookAdsBreakdownTablesProps;
 };
 
 export type AdsDateRangeControls = {

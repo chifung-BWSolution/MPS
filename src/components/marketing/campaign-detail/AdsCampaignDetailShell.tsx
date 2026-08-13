@@ -11,6 +11,7 @@ import { AdsDayOfWeekChart } from './AdsDayOfWeekChart';
 import { AdsDailyMetricsTable } from './AdsDailyMetricsTable';
 import { AdsPlaceholderPanel } from './AdsPlaceholderPanel';
 import { AdsChannelBreakdownGrid } from './AdsBreakdownTables';
+import { FacebookAdsBreakdownGrid } from './FacebookAdsBreakdownTables';
 import { normalizeGoogleAdsBreakdownChannel } from '@/types/googleAds';
 import type { AdsCampaignDetailShellProps } from './types';
 
@@ -76,7 +77,16 @@ export function AdsCampaignDetailShell({
                 {model.accountLabel}
                 <span className="ml-1 font-mono text-[11px]">{model.accountId}</span>
               </span>
-              {model.websites.length > 0 ? (
+              {model.platform === 'facebook' ? (
+                <>
+                  {model.businessLabel ? <span>{model.businessLabel}</span> : null}
+                  {model.brandLabel ? (
+                    <span className="text-teal-700">{model.brandLabel}</span>
+                  ) : (
+                    <span>未設定品牌</span>
+                  )}
+                </>
+              ) : model.websites.length > 0 ? (
                 <span className="flex flex-wrap items-center gap-2">
                   {model.websites.map((w) =>
                     onOpenWebsite ? (
@@ -171,6 +181,22 @@ export function AdsCampaignDetailShell({
           </div>
 
           {(() => {
+            const fb = model.facebookBreakdowns;
+            if (model.platform === 'facebook' && fb) {
+              return (
+                <div className="space-y-2">
+                  {fb.error ? (
+                    <div className="text-[12px] text-red-600">{fb.error}</div>
+                  ) : null}
+                  <FacebookAdsBreakdownGrid
+                    loading={fb.loading}
+                    adSets={fb.adSets}
+                    ads={fb.ads}
+                    placements={fb.placements}
+                  />
+                </div>
+              );
+            }
             const breakdowns = model.breakdowns;
             const channel = normalizeGoogleAdsBreakdownChannel(
               breakdowns?.channelType || model.channelOrObjective,

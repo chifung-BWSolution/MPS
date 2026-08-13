@@ -793,3 +793,402 @@ export function metaHistoryStartDate(now = new Date()): string {
   const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   return toIsoDate(addMonths(d, -(META_INSIGHTS_MAX_MONTHS - 1)));
 }
+
+/** Max inclusive day span for live campaign breakdown fetches (same as Google Ads). */
+export const LIVE_BREAKDOWN_MAX_DAYS = 92;
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export function validateLiveBreakdownRange(
+  dateFrom: string,
+  dateTo: string,
+): { ok: true; days: number } | { ok: false; error: string } {
+  if (!ISO_DATE_RE.test(dateFrom) || !ISO_DATE_RE.test(dateTo)) {
+    return { ok: false, error: "日期格式無效（需 YYYY-MM-DD）" };
+  }
+  if (dateFrom > dateTo) {
+    return { ok: false, error: "開始日期不可晚於結束日期" };
+  }
+  const fromMs = Date.parse(`${dateFrom}T00:00:00Z`);
+  const toMs = Date.parse(`${dateTo}T00:00:00Z`);
+  const days = Math.round((toMs - fromMs) / 86_400_000) + 1;
+  if (days > LIVE_BREAKDOWN_MAX_DAYS) {
+    return {
+      ok: false,
+      error: `日期區間過長，即時細項最多 ${LIVE_BREAKDOWN_MAX_DAYS} 日`,
+    };
+  }
+  return { ok: true, days };
+}
+
+export type LiveAdSetRow = {
+  adSetId: string;
+  adSetName: string;
+  status?: string;
+  optimizationGoal?: string;
+  impressions: number;
+  clicks: number;
+  spendMicros: number;
+  conversions: number;
+  ctr: number;
+};
+
+export type LiveAdRow = {
+  adId: string;
+  adName: string;
+  adSetId?: string;
+  adSetName?: string;
+  status?: string;
+  impressions: number;
+  clicks: number;
+  spendMicros: number;
+  conversions: number;
+  ctr: number;
+};
+
+export type LivePlacementRow = {
+  publisherPlatform: string;
+  publisherPlatformLabel: string;
+  impressions: number;
+  clicks: number;
+  spendMicros: number;
+  conversions: number;
+  ctr: number;
+};
+
+export type LiveFacebookCampaignBreakdownsResult = {
+  adSets: LiveAdSetRow[];
+  ads: LiveAdRow[];
+  placements: LivePlacementRow[];
+  errors: string[];
+};
+
+const INSIGHTS_METRIC_FIELDS =
+  "impressions,clicks,spend,cpc,ctr,actions,conversions,results,objective_results";
+
+const PUBLISHER_PLATFORM_LABELS: Record<string, string> = {
+  facebook: "Facebook",
+  instagram: "Instagram",
+  messenger: "Messenger",
+  audience_network: "Audience Network",
+  threads: "Threads",
+  unknown: "Unknown",
+};
+
+function formatPublisherPlatform(raw: string): string {
+  const key = raw.trim().toLowerCase();
+  return PUBLISHER_PLATFORM_LABELS[key] || raw || "Unknown";
+}
+
+function parseInsightMetrics(row: Record<string, unknown>): {
+  impressions: number;
+  clicks: number;
+  spendMicros: number;
+  conversions: number;
+  ctr: number;
+} {
+  const impressions = asInt(row.impressions);
+  const clicks = asInt(row.clicks);
+  const spendMicros = spendToMicros(row.spend);
+  const conversions = sumConversions(row);
+  const ctr =
+    Number(row.ctr ?? 0) || (impressions > 0 ? clicks / impressions : 0);
+  return { impressions, clicks, spendMicros, conversions, ctr };
+}
+
+async function settleBreakdown<T>(
+  label: string,
+  promise: Promise<T>,
+  fallback: T,
+  errors: string[],
+): Promise<T> {
+  try {
+    return await promise;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    errors.push(`${label}: ${msg.slice(0, 180)}`);
+    return fallback;
+  }
+}
+
+function insightsBaseParams(dateFrom: string, dateTo: string): Record<string, string> {
+  return {
+    time_increment: "all_days",
+    time_range: JSON.stringify({ since: dateFrom, until: dateTo }),
+    use_unified_attribution_setting: "true",
+    limit: "200",
+  };
+}
+
+async function fetchCampaignScopedInsights(
+  cred: MetaCredential,
+  adAccountId: string,
+  campaignId: string,
+  params: Record<string, string>,
+): Promise<Record<string, unknown>[]> {
+  try {
+    return await graphGetAll(cred, `/${campaignId}/insights`, params, 20);
+  } catch (first) {
+    const filtering = JSON.stringify([
+      { field: "campaign.id", operator: "EQUAL", value: campaignId },
+    ]);
+    try {
+      return await graphGetAll(
+        cred,
+        `/${adAccountId}/insights`,
+        { ...params, filtering },
+        20,
+      );
+    } catch {
+      throw first;
+    }
+  }
+}
+
+async function fetchAdSetMeta(
+  cred: MetaCredential,
+  campaignId: string,
+): Promise<Map<string, { name: string; status: string; optimizationGoal?: string }>> {
+  const rows = await graphGetAll(cred, `/${campaignId}/adsets`, {
+    fields: "id,name,status,effective_status,optimization_goal",
+    limit: "200",
+  });
+  const map = new Map<string, { name: string; status: string; optimizationGoal?: string }>();
+  for (const row of rows) {
+    const id = String(row.id || "");
+    if (!id) continue;
+    map.set(id, {
+      name: String(row.name || id),
+      status: mapCampaignStatus(row.effective_status, row.status),
+      optimizationGoal: row.optimization_goal
+        ? String(row.optimization_goal)
+        : undefined,
+    });
+  }
+  return map;
+}
+
+async function fetchAdMeta(
+  cred: MetaCredential,
+  campaignId: string,
+): Promise<Map<string, { name: string; status: string; adSetId?: string; adSetName?: string }>> {
+  const rows = await graphGetAll(cred, `/${campaignId}/ads`, {
+    fields: "id,name,status,effective_status,adset_id,adset{id,name}",
+    limit: "200",
+  });
+  const map = new Map<
+    string,
+    { name: string; status: string; adSetId?: string; adSetName?: string }
+  >();
+  for (const row of rows) {
+    const id = String(row.id || "");
+    if (!id) continue;
+    const nested = (row.adset && typeof row.adset === "object"
+      ? row.adset
+      : null) as { id?: unknown; name?: unknown } | null;
+    map.set(id, {
+      name: String(row.name || id),
+      status: mapCampaignStatus(row.effective_status, row.status),
+      adSetId: nested?.id != null ? String(nested.id) : row.adset_id
+        ? String(row.adset_id)
+        : undefined,
+      adSetName: nested?.name != null ? String(nested.name) : undefined,
+    });
+  }
+  return map;
+}
+
+async function fetchLiveAdSets(
+  cred: MetaCredential,
+  adAccountId: string,
+  campaignId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<LiveAdSetRow[]> {
+  const [insights, meta] = await Promise.all([
+    fetchCampaignScopedInsights(cred, adAccountId, campaignId, {
+      ...insightsBaseParams(dateFrom, dateTo),
+      level: "adset",
+      fields: `adset_id,adset_name,${INSIGHTS_METRIC_FIELDS}`,
+    }),
+    fetchAdSetMeta(cred, campaignId).catch(() => new Map()),
+  ]);
+
+  const byId = new Map<string, LiveAdSetRow>();
+  for (const row of insights) {
+    const adSetId = String(row.adset_id || "");
+    if (!adSetId) continue;
+    const metrics = parseInsightMetrics(row);
+    const info = meta.get(adSetId);
+    byId.set(adSetId, {
+      adSetId,
+      adSetName: info?.name || String(row.adset_name || adSetId),
+      status: info?.status,
+      optimizationGoal: info?.optimizationGoal,
+      ...metrics,
+    });
+  }
+  // Include ad sets with zero delivery so the panel matches Ads Manager structure.
+  for (const [adSetId, info] of meta) {
+    if (byId.has(adSetId)) continue;
+    byId.set(adSetId, {
+      adSetId,
+      adSetName: info.name,
+      status: info.status,
+      optimizationGoal: info.optimizationGoal,
+      impressions: 0,
+      clicks: 0,
+      spendMicros: 0,
+      conversions: 0,
+      ctr: 0,
+    });
+  }
+  return [...byId.values()].sort((a, b) => b.spendMicros - a.spendMicros);
+}
+
+async function fetchLiveAds(
+  cred: MetaCredential,
+  adAccountId: string,
+  campaignId: string,
+  dateFrom: string,
+  dateTo: string,
+  limit = 150,
+): Promise<LiveAdRow[]> {
+  const [insights, meta] = await Promise.all([
+    fetchCampaignScopedInsights(cred, adAccountId, campaignId, {
+      ...insightsBaseParams(dateFrom, dateTo),
+      level: "ad",
+      fields: `ad_id,ad_name,adset_id,adset_name,${INSIGHTS_METRIC_FIELDS}`,
+    }),
+    fetchAdMeta(cred, campaignId).catch(() => new Map()),
+  ]);
+
+  const byId = new Map<string, LiveAdRow>();
+  for (const row of insights) {
+    const adId = String(row.ad_id || "");
+    if (!adId) continue;
+    const metrics = parseInsightMetrics(row);
+    const info = meta.get(adId);
+    byId.set(adId, {
+      adId,
+      adName: info?.name || String(row.ad_name || adId),
+      adSetId: info?.adSetId || (row.adset_id ? String(row.adset_id) : undefined),
+      adSetName: info?.adSetName || (row.adset_name ? String(row.adset_name) : undefined),
+      status: info?.status,
+      ...metrics,
+    });
+  }
+  for (const [adId, info] of meta) {
+    if (byId.has(adId)) continue;
+    byId.set(adId, {
+      adId,
+      adName: info.name,
+      adSetId: info.adSetId,
+      adSetName: info.adSetName,
+      status: info.status,
+      impressions: 0,
+      clicks: 0,
+      spendMicros: 0,
+      conversions: 0,
+      ctr: 0,
+    });
+  }
+  return [...byId.values()]
+    .sort((a, b) => b.spendMicros - a.spendMicros)
+    .slice(0, limit);
+}
+
+async function fetchLivePlacements(
+  cred: MetaCredential,
+  adAccountId: string,
+  campaignId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<LivePlacementRow[]> {
+  const rows = await fetchCampaignScopedInsights(cred, adAccountId, campaignId, {
+    ...insightsBaseParams(dateFrom, dateTo),
+    level: "campaign",
+    breakdowns: "publisher_platform",
+    fields: INSIGHTS_METRIC_FIELDS,
+  });
+  const byPlatform = new Map<string, LivePlacementRow>();
+  for (const row of rows) {
+    const publisherPlatform = String(row.publisher_platform || "unknown");
+    const metrics = parseInsightMetrics(row);
+    const existing = byPlatform.get(publisherPlatform);
+    if (existing) {
+      existing.impressions += metrics.impressions;
+      existing.clicks += metrics.clicks;
+      existing.spendMicros += metrics.spendMicros;
+      existing.conversions += metrics.conversions;
+      existing.ctr =
+        existing.impressions > 0 ? existing.clicks / existing.impressions : 0;
+    } else {
+      byPlatform.set(publisherPlatform, {
+        publisherPlatform,
+        publisherPlatformLabel: formatPublisherPlatform(publisherPlatform),
+        ...metrics,
+      });
+    }
+  }
+  return [...byPlatform.values()].sort((a, b) => b.spendMicros - a.spendMicros);
+}
+
+/** Find a Meta credential that can read this campaign (prefer warehouse business_key). */
+export async function resolveCredentialForCampaign(
+  credentials: MetaCredential[],
+  campaignId: string,
+  preferredId?: string | null,
+): Promise<MetaCredential> {
+  const ordered = [
+    ...credentials.filter((c) => preferredId && c.id === preferredId),
+    ...credentials.filter((c) => !preferredId || c.id !== preferredId),
+  ];
+  const errors: string[] = [];
+  for (const cred of ordered) {
+    try {
+      await graphGet(cred, `/${campaignId}`, { fields: "id" });
+      return cred;
+    } catch (e) {
+      errors.push(
+        `${cred.id}: ${e instanceof Error ? e.message : String(e)}`.slice(0, 160),
+      );
+    }
+  }
+  throw new Error(
+    `No Meta credential can access campaign ${campaignId}${
+      errors.length ? ` (${errors[0]})` : ""
+    }`,
+  );
+}
+
+export async function fetchLiveFacebookCampaignBreakdowns(
+  cred: MetaCredential,
+  adAccountId: string,
+  campaignId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<LiveFacebookCampaignBreakdownsResult> {
+  const errors: string[] = [];
+  const [adSets, ads, placements] = await Promise.all([
+    settleBreakdown(
+      "adset",
+      fetchLiveAdSets(cred, adAccountId, campaignId, dateFrom, dateTo),
+      [] as LiveAdSetRow[],
+      errors,
+    ),
+    settleBreakdown(
+      "ad",
+      fetchLiveAds(cred, adAccountId, campaignId, dateFrom, dateTo),
+      [] as LiveAdRow[],
+      errors,
+    ),
+    settleBreakdown(
+      "placement",
+      fetchLivePlacements(cred, adAccountId, campaignId, dateFrom, dateTo),
+      [] as LivePlacementRow[],
+      errors,
+    ),
+  ]);
+  return { adSets, ads, placements, errors };
+}

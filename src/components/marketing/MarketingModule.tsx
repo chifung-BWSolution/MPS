@@ -15,13 +15,16 @@ import { parseAdsCampaignHashQuery } from '@/lib/adsCampaignNavigation';
 export function MarketingModule({ subModule }: { subModule?: string }) {
   const activeTab = subModule || 'calendar';
   const [adsDetailOpen, setAdsDetailOpen] = useState(
-    () => activeTab === 'google-ads' && !!parseAdsCampaignHashQuery().campaign,
+    () =>
+      (activeTab === 'google-ads' || activeTab === 'facebook-ads') &&
+      !!parseAdsCampaignHashQuery().campaign,
   );
 
   useEffect(() => {
     const sync = () => {
       setAdsDetailOpen(
-        activeTab === 'google-ads' && !!parseAdsCampaignHashQuery().campaign,
+        (activeTab === 'google-ads' || activeTab === 'facebook-ads') &&
+          !!parseAdsCampaignHashQuery().campaign,
       );
     };
     sync();

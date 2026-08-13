@@ -26,7 +26,17 @@
   - 區塊：KPI（含前期比較與 sparkline）、Performance 趨勢圖、Traffic efficiency donut、Day-of-week、Daily metrics 表。
   - 細項：Ad Groups / Keywords / Search Terms 為**即時 Google Ads API**（依詳情頁日期區間；Search Terms Top 100 by Cost）。不落倉庫。
   - 即時細項日期上限 92 日（`7d/14d/30d/90d` 可用；`ytd` / `all` / 過長自訂區間會顯示提示，不呼叫 API）。
-  - 共用 shell（`AdsCampaignDetailShell`）供後續 Facebook Ads 詳情複用。
+  - 共用 shell（`AdsCampaignDetailShell`）供 Google / Facebook Ads 詳情複用。
+
+### Facebook Ads — Campaign 詳情
+
+- **列表：** `#marketing/facebook-ads` — Meta campaign 成效表；點擊列開啟詳情（品牌按鈕仍只開設定 dialog）。
+- **詳情：** `#marketing/facebook-ads?campaign={adAccountId}:{campaignId}&preset=30d&from=YYYY-MM-DD&to=YYYY-MM-DD`
+  - 版面與 Google Ads 詳情相同（同一 `AdsCampaignDetailShell`）：KPI、趨勢圖、donut、Day-of-week、Daily metrics。
+  - 每日指標來源：`facebook_ads_campaign_daily_metrics`。
+  - 細項：Ad Sets / Ads / Placements 為**即時 Meta Marketing API**（Insights；Ads Top 150 by Cost）。不落倉庫。
+  - 即時細項日期上限 92 日（與 Google 相同）。
+  - Header 顯示帳戶、Business、品牌（手動 `brand_list`），無 Google 網站連結。
 
 ---
 

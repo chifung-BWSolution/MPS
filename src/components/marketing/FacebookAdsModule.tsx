@@ -9,6 +9,11 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CrudModal } from '@/components/ui/crud-modal';
 import { cn } from '@/lib/utils';
+import {
+  parseAdsCampaignHashQuery,
+  setFacebookAdsCampaignHash,
+} from '@/lib/adsCampaignNavigation';
+import { FacebookAdsCampaignDetail } from './campaign-detail/FacebookAdsCampaignDetail';
 
 type SortKey =
   | 'account'
@@ -116,13 +121,33 @@ function daysAgoIso(n: number) {
   return d.toISOString().slice(0, 10);
 }
 
+function readInitialListRange() {
+  const q = parseAdsCampaignHashQuery();
+  const preset = q.preset || '30d';
+  const customFrom = q.from || daysAgoIso(30);
+  const customTo = q.to || todayIso();
+  return {
+    preset: preset as DateRangePreset,
+    customFrom,
+    customTo,
+    range: resolveDateRange(preset, customFrom, customTo),
+  };
+}
+
 export function FacebookAdsModule() {
-  const [preset, setPreset] = useState<DateRangePreset>('30d');
-  const [customFrom, setCustomFrom] = useState(daysAgoIso(30));
-  const [customTo, setCustomTo] = useState(todayIso());
-  const [range, setRange] = useState(() =>
-    resolveDateRange('30d', daysAgoIso(30), todayIso()),
-  );
+  const [hashQuery, setHashQuery] = useState(() => parseAdsCampaignHashQuery());
+
+  useEffect(() => {
+    const onHashChange = () => setHashQuery(parseAdsCampaignHashQuery());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  const initial = useMemo(() => readInitialListRange(), []);
+  const [preset, setPreset] = useState<DateRangePreset>(initial.preset);
+  const [customFrom, setCustomFrom] = useState(initial.customFrom);
+  const [customTo, setCustomTo] = useState(initial.customTo);
+  const [range, setRange] = useState(() => initial.range);
 
   const {
     accounts,
@@ -142,6 +167,14 @@ export function FacebookAdsModule() {
   useEffect(() => {
     setRange(resolveDateRange(preset, customFrom, customTo, dataMinDate, dataMaxDate));
   }, [preset, customFrom, customTo, dataMinDate, dataMaxDate]);
+
+  // When returning from detail (campaign cleared), restore range from hash if present.
+  useEffect(() => {
+    if (hashQuery.campaign) return;
+    if (hashQuery.preset) setPreset(hashQuery.preset);
+    if (hashQuery.from) setCustomFrom(hashQuery.from);
+    if (hashQuery.to) setCustomTo(hashQuery.to);
+  }, [hashQuery.campaign, hashQuery.preset, hashQuery.from, hashQuery.to]);
 
   const [search, setSearch] = useState('');
   const [accountFilter, setAccountFilter] = useState('all');
@@ -254,11 +287,14 @@ export function FacebookAdsModule() {
           : '';
       const rows =
         typeof result.dailyRows === 'number' ? ` · ${result.dailyRows} daily rows` : '';
+      const credentialCount =
+        typeof result.credentialsCount === 'number' ? result.credentialsCount : undefined;
+      const businessCount = result.businesses?.length;
       const biz =
-        typeof result.credentialsCount === 'number'
-          ? ` · ${result.credentialsCount} Business`
-          : result.businesses?.length
-            ? ` · ${result.businesses.length} Business`
+        credentialCount != null
+          ? ` · ${credentialCount} Business`
+          : businessCount
+            ? ` · ${businessCount} Business`
             : '';
       toast.success(`最近 7 日資料已更新${secs}${rows}${biz}`);
     } else toast.error(result.error || '同步失敗');
@@ -282,6 +318,28 @@ export function FacebookAdsModule() {
     toast.success('已更新 Campaign 品牌');
     setBrandEditCampaign(null);
   };
+
+  const openCampaign = (c: FacebookAdsCampaign) => {
+    setFacebookAdsCampaignHash({
+      campaignKey: c.id,
+      preset,
+      from: range.from,
+      to: range.to,
+    });
+  };
+
+  if (hashQuery.campaign) {
+    return (
+      <FacebookAdsCampaignDetail
+        campaignKey={hashQuery.campaign}
+        initialPreset={hashQuery.preset || preset}
+        initialFrom={hashQuery.from || range.from}
+        initialTo={hashQuery.to || range.to}
+        dataMinDate={dataMinDate}
+        dataMaxDate={dataMaxDate}
+      />
+    );
+  }
 
   return (
     <div className="space-y-0">
@@ -427,7 +485,7 @@ export function FacebookAdsModule() {
           {businesses.length
             ? `（${businesses.map((b) => b.name).join('、')}）`
             : ''}
-          {' · '}報表由每日指標彙總
+          {' · '}報表由每日指標彙總 · 點擊列可開啟 Campaign 詳情
           {dataMinDate && dataMaxDate
             ? ` · 已同步資料 ${dataMinDate} ~ ${dataMaxDate}`
             : ' · 尚無每日指標（請至「Facebook Ads 同步」執行歷史回填）'}
@@ -473,7 +531,16 @@ export function FacebookAdsModule() {
                 filtered.map((c) => (
                   <tr
                     key={c.id}
-                    className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openCampaign(c)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openCampaign(c);
+                      }
+                    }}
+                    className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors cursor-pointer"
                   >
                     <td className="px-3 py-2.5">
                       <div className="font-medium text-foreground">
@@ -484,11 +551,14 @@ export function FacebookAdsModule() {
                         {c.adAccountId}
                       </div>
                     </td>
-                    <td className="px-3 py-2.5 font-medium">{c.campaignName}</td>
+                    <td className="px-3 py-2.5 font-medium text-teal-800">{c.campaignName}</td>
                     <td className="px-3 py-2.5">
                       <button
                         type="button"
-                        onClick={() => openBrandDialog(c)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openBrandDialog(c);
+                        }}
                         className={cn(
                           'text-left text-[12px] rounded px-1.5 py-0.5 -mx-1.5 transition-colors',
                           c.brandListId
