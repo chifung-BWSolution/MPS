@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, RefreshCw, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Pencil, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { resolveDateRange, useFacebookAdsData } from '@/hooks/useFacebookAdsData';
 import { useBrands } from '@/hooks/useBrands';
@@ -14,6 +14,9 @@ import {
   setFacebookAdsCampaignHash,
 } from '@/lib/adsCampaignNavigation';
 import { FacebookAdsCampaignDetail } from './campaign-detail/FacebookAdsCampaignDetail';
+import { AdsCampaignTagsModal } from './ads-tags/AdsCampaignTagsModal';
+import { AdsTagPills } from './ads-tags/AdsTagPills';
+import { useAdsCampaignTags } from '@/hooks/useAdsTags';
 
 type SortKey =
   | 'account'
@@ -186,6 +189,19 @@ export function FacebookAdsModule() {
   const [brandEditCampaign, setBrandEditCampaign] = useState<FacebookAdsCampaign | null>(null);
   const [brandDraft, setBrandDraft] = useState<string>('__none__');
   const [savingBrand, setSavingBrand] = useState(false);
+  const [tagFilter, setTagFilter] = useState('all');
+  const [tagEditCampaign, setTagEditCampaign] = useState<FacebookAdsCampaign | null>(null);
+  const [savingTags, setSavingTags] = useState(false);
+
+  const {
+    tags: adsTags,
+    tagsByCampaignId,
+    setCampaignTags,
+  } = useAdsCampaignTags('facebook');
+  const activeAdsTags = useMemo(
+    () => adsTags.filter((tag) => tag.isActive),
+    [adsTags],
+  );
 
   const activeBrands = useMemo(
     () => brands.filter((b) => b.isActive).sort((a, b) => a.brandCode.localeCompare(b.brandCode)),
@@ -220,6 +236,11 @@ export function FacebookAdsModule() {
       if (brandFilter !== 'all' && brandFilter !== 'none' && c.brandListId !== brandFilter) {
         return false;
       }
+      const campaignTags = tagsByCampaignId.get(c.id) ?? [];
+      if (tagFilter === 'none' && campaignTags.length > 0) return false;
+      if (tagFilter !== 'all' && tagFilter !== 'none' && !campaignTags.some((tag) => tag.id === tagFilter)) {
+        return false;
+      }
       if (!q) return true;
       return (
         c.campaignName.toLowerCase().includes(q) ||
@@ -227,6 +248,7 @@ export function FacebookAdsModule() {
         (c.businessName || '').toLowerCase().includes(q) ||
         (c.brandCode || '').toLowerCase().includes(q) ||
         (c.brandDisplayName || '').toLowerCase().includes(q) ||
+        campaignTags.some((tag) => tag.name.toLowerCase().includes(q)) ||
         c.adAccountId.includes(q)
       );
     });
@@ -247,6 +269,8 @@ export function FacebookAdsModule() {
     statusFilter,
     businessFilter,
     brandFilter,
+    tagFilter,
+    tagsByCampaignId,
     accounts,
     sortKey,
     sortDir,
@@ -317,6 +341,18 @@ export function FacebookAdsModule() {
     }
     toast.success('已更新 Campaign 品牌');
     setBrandEditCampaign(null);
+  };
+
+  const openTagDialog = (campaign: FacebookAdsCampaign) => {
+    setTagEditCampaign(campaign);
+  };
+
+  const saveCampaignTags = async (tagIds: string[]) => {
+    if (!tagEditCampaign) return { ok: false as const, error: '沒有選取 Campaign' };
+    setSavingTags(true);
+    const result = await setCampaignTags(tagEditCampaign.id, tagIds);
+    setSavingTags(false);
+    return result;
   };
 
   const openCampaign = (c: FacebookAdsCampaign) => {
@@ -478,6 +514,20 @@ export function FacebookAdsModule() {
               <SelectItem value="REMOVED">REMOVED</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={tagFilter} onValueChange={setTagFilter}>
+            <SelectTrigger className="w-[160px] h-9 text-[13px] bg-white">
+              <SelectValue placeholder="標籤" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部標籤</SelectItem>
+              <SelectItem value="none">未設定標籤</SelectItem>
+              {activeAdsTags.map((tag) => (
+                <SelectItem key={tag.id} value={tag.id}>
+                  {tag.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="text-[12px] text-muted-foreground">
@@ -510,19 +560,20 @@ export function FacebookAdsModule() {
                 <SortableTh label="Clicks" sortKey="clicks" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
                 <SortableTh label="Spend" sortKey="spend" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
                 <SortableTh label="Conv." sortKey="conversions" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
+                <th className="font-medium px-3 py-2.5 text-center w-[64px]">編輯</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
                     載入中…
                   </td>
                 </tr>
               )}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
                     此日期區間尚無資料。請先到「Facebook Ads 同步」執行完整歷史回填，或按 Refresh recent。
                   </td>
                 </tr>
@@ -551,7 +602,12 @@ export function FacebookAdsModule() {
                         {c.adAccountId}
                       </div>
                     </td>
-                    <td className="px-3 py-2.5 font-medium text-teal-800">{c.campaignName}</td>
+                    <td className="px-3 py-2.5">
+                      <div className="font-medium text-teal-800">{c.campaignName}</div>
+                      <div className="mt-1">
+                        <AdsTagPills tags={tagsByCampaignId.get(c.id) ?? []} empty="" />
+                      </div>
+                    </td>
                     <td className="px-3 py-2.5">
                       <button
                         type="button"
@@ -590,6 +646,19 @@ export function FacebookAdsModule() {
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums">
                       {c.conversions.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openTagDialog(c);
+                        }}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-teal-50 hover:text-teal-700"
+                        title="編輯標籤"
+                      >
+                        <Pencil size={14} />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -653,6 +722,24 @@ export function FacebookAdsModule() {
           </div>
         ) : null}
       </CrudModal>
+
+      <AdsCampaignTagsModal
+        campaign={
+          tagEditCampaign
+            ? {
+                id: tagEditCampaign.id,
+                campaignName: tagEditCampaign.campaignName,
+                accountLabel: tagEditCampaign.accountName || tagEditCampaign.adAccountId,
+                campaignId: tagEditCampaign.campaignId,
+              }
+            : null
+        }
+        allTags={adsTags}
+        assignedTags={tagEditCampaign ? tagsByCampaignId.get(tagEditCampaign.id) ?? [] : []}
+        saving={savingTags}
+        onClose={() => !savingTags && setTagEditCampaign(null)}
+        onSave={saveCampaignTags}
+      />
     </div>
   );
 }

@@ -12,10 +12,11 @@
 | `/marketing/ads-comparison` | 廣告比較圖表 | 三欄並排比較 Google / Facebook Campaign 每日成效 |
 | `/marketing/graphic-design` | 平面設計 | 平面設計製作追蹤 |
 | `/marketing/backlink` | 反向連結 | 反向連結購買紀錄 |
+| `/marketing/ads-tags` | 廣告標籤 | 管理 `ads_tags` 標籤目錄（含 `is_active`） |
 
 ### Google Ads — Campaign 詳情
 
-- **列表：** `#marketing/google-ads` — MCC campaign 成效表；點擊列開啟詳情。
+- **列表：** `#marketing/google-ads` — MCC campaign 成效表；點擊列開啟詳情。編輯欄鉛筆圖示開啟標籤 popup（寫入 `ads_campaign_tags`）。
 - **詳情：** `#marketing/google-ads?campaign={customerId}:{campaignId}&preset=30d&from=YYYY-MM-DD&to=YYYY-MM-DD`
   - 繼承列表的日期區間，詳情頁可再調整；變更會寫回 hash（可重新整理／分享）。
   - 資料來源：`google_ads_campaign_daily_metrics`（campaign 每日指標）。
@@ -26,7 +27,7 @@
 
 ### Facebook Ads — Campaign 詳情
 
-- **列表：** `#marketing/facebook-ads` — Meta campaign 成效表；點擊列開啟詳情（品牌按鈕仍只開設定 dialog）。
+- **列表：** `#marketing/facebook-ads` — Meta campaign 成效表；點擊列開啟詳情（品牌按鈕仍只開設定 dialog；編輯欄鉛筆圖示開啟標籤 popup）。
 - **詳情：** `#marketing/facebook-ads?campaign={adAccountId}:{campaignId}&preset=30d&from=YYYY-MM-DD&to=YYYY-MM-DD`
   - 版面與 Google Ads 詳情相同（同一 `AdsCampaignDetailShell`）：KPI、趨勢圖、donut、Day-of-week、Daily metrics。
   - 每日指標來源：`facebook_ads_campaign_daily_metrics`。
@@ -46,6 +47,13 @@
 - **圖表：** 所選指標的每日折線圖（資料來自 `google_ads_campaign_daily_metrics` / `facebook_ads_campaign_daily_metrics`）。
 - **Conv.：** 與列表頁同一欄位（Google `metrics.conversions` 倉庫值；Facebook 倉庫 `conversions`，即 sync 時 `sumConversions` 結果），勿另算 actions。
 - **KPI 卡片：** 每欄圖表下方顯示與 Campaign 詳情相同的六張卡片（含前期比較與 sparkline）。點擊卡片會把該欄指標篩選切到對應 metric。
+
+### 廣告標籤
+
+- **路由：** `#marketing/ads-tags`（行銷管理 → 設定）
+- **目錄表：** `ads_tags`（`name`、`color`、`sort_order`、**`is_active`**）。停用後不會出現在 Campaign 標籤選單，已套用的仍會顯示。
+- **關聯表：** `ads_campaign_tags`（`tag_id` + `platform` `google|facebook` + `campaign_row_id`）。
+- **列表操作：** Google Ads / Facebook Ads 列表「編輯」欄鉛筆按鈕開啟 popup，可勾選多個標籤。
 
 ---
 

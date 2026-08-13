@@ -146,6 +146,7 @@ Also apply:
 
 - `facebook_ads_campaigns.brand_list_id` → `brand_list.id`（uuid，可空）
 - 在 `/#marketing/facebook-ads` 點「品牌」欄開啟 dialog 手動設定；Ads sync **不會**覆寫此欄位
+- Campaign 標籤：列表「編輯」欄 → `ads_campaign_tags`（標籤目錄為 `ads_tags`，於 `/#marketing/ads-tags` 管理）
 
 ## 網站自動連結（Google only）
 
@@ -156,7 +157,7 @@ Also apply:
 
 | Hash | 說明 |
 |------|------|
-| `/#marketing/facebook-ads` | Campaign 報表；點擊列開啟詳情；手動設定品牌 |
+| `/#marketing/facebook-ads` | Campaign 報表；點擊列開啟詳情；手動設定品牌；編輯欄設定標籤 |
 | `/#marketing/facebook-ads?campaign={adAccountId}:{campaignId}` | Campaign 詳情（KPI / 圖表 / 即時 Ad Sets·Ads·Placements） |
 | `/#marketing/facebook-ads-sync` | 完整歷史回填控制台 |
 | `/#website/list` | 網站列表：Google 廣告狀態欄、同步廣告網域、未連結網域建立提示 |
