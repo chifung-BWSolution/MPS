@@ -426,6 +426,21 @@ export function FacebookAdsModule() {
               className="pl-8 h-9 text-[13px] bg-white"
             />
           </div>
+          <Select value={brandFilter} onValueChange={setBrandFilter}>
+            <SelectTrigger className="w-[170px] h-9 text-[13px] bg-white">
+              <SelectValue placeholder="品牌" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部品牌</SelectItem>
+              <SelectItem value="none">未設定品牌</SelectItem>
+              {activeBrands.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.brandCode}
+                  {b.displayName !== b.brandCode ? ` — ${b.displayName}` : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={businessFilter} onValueChange={setBusinessFilter}>
             <SelectTrigger className="w-[180px] h-9 text-[13px] bg-white">
               <SelectValue placeholder="Business" />
@@ -461,21 +476,6 @@ export function FacebookAdsModule() {
               <SelectItem value="ENABLED">ENABLED</SelectItem>
               <SelectItem value="PAUSED">PAUSED</SelectItem>
               <SelectItem value="REMOVED">REMOVED</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={brandFilter} onValueChange={setBrandFilter}>
-            <SelectTrigger className="w-[170px] h-9 text-[13px] bg-white">
-              <SelectValue placeholder="品牌" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部品牌</SelectItem>
-              <SelectItem value="none">未設定品牌</SelectItem>
-              {activeBrands.map((b) => (
-                <SelectItem key={b.id} value={b.id}>
-                  {b.brandCode}
-                  {b.displayName !== b.brandCode ? ` — ${b.displayName}` : ''}
-                </SelectItem>
-              ))}
             </SelectContent>
           </Select>
         </div>
