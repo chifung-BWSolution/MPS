@@ -1,0 +1,18 @@
+#!/bin/sh
+# Reject pushes of any branch except main.
+# Enable with: git config core.hooksPath .githooks
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  remote_branch="${remote_ref#refs/heads/}"
+  case "$remote_ref" in
+    refs/heads/main|refs/tags/*) ;;
+    *)
+      echo "error: this repo only allows pushing to main (got ${remote_branch:-$remote_ref})."
+      echo "Move commits onto main and run: git push origin main"
+      echo "Do not push cursor/* or other feature branches."
+      exit 1
+      ;;
+  esac
+done
+
+exit 0

@@ -24,7 +24,9 @@ dist-ssr
 **/tempobook/dynamic/
 **/tempobook/storyboards/
 core
-.github/
+.github/*
+!.github/workflows/
+!.github/workflows/land-cursor-prs.yml
 .env
 .env.*
 **/tempobook/**

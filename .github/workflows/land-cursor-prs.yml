@@ -1,0 +1,31 @@
+name: Land cursor/* PRs onto main
+
+# Cloud Agents ignore repo rules and still open cursor/* branches + draft PRs
+# (Cursor harness). This workflow is the mechanical override: merge them into
+# main and delete the branch so work does not stay off main.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: land-cursor-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  land:
+    if: startsWith(github.head_ref, 'cursor/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Merge cursor/* PR into main and delete branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh pr ready "$PR" || true
+          gh pr merge "$PR" --merge --delete-branch \
+            --body "Auto-landed onto main. This repository does not keep Cloud Agent feature branches."
