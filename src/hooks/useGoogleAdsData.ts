@@ -3,12 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { invokeGoogleAdsIncrementalSync } from '@/lib/googleAdsApi';
 import { mergeWebsitesByDomain } from '@/lib/adsWebsiteDisplay';
-import type {
-  DateRangePreset,
-  GoogleAdsAccount,
-  GoogleAdsCampaign,
-  GoogleAdsSyncRun,
-} from '@/types/googleAds';
+import { normalizeGoogleAdsObjectives, type DateRangePreset, type GoogleAdsAccount, type GoogleAdsCampaign, type GoogleAdsSyncRun } from '@/types/googleAds';
 
 type AccountRow = {
   customer_id: string;
@@ -29,6 +24,7 @@ type CampaignMetaRow = {
   campaign_name: string;
   status: string;
   advertising_channel_type: string | null;
+  objectives?: string[] | null;
   last_synced_at: string | null;
 };
 
@@ -137,7 +133,7 @@ export function useGoogleAdsData(
         .select('*')
         .order('descriptive_name', { ascending: true }),
       supabase.from('google_ads_campaigns').select(
-        'id,customer_id,campaign_id,campaign_name,status,advertising_channel_type,last_synced_at',
+        'id,customer_id,campaign_id,campaign_name,status,advertising_channel_type,objectives,last_synced_at',
       ),
       supabase
         .from('google_ads_sync_runs')
@@ -241,6 +237,7 @@ export function useGoogleAdsData(
           campaignName: meta?.campaign_name || row.campaign_id,
           status: meta?.status || 'UNKNOWN',
           advertisingChannelType: meta?.advertising_channel_type ?? undefined,
+          objectives: normalizeGoogleAdsObjectives(meta?.objectives),
           impressions,
           clicks,
           costMicros: Number(row.cost_micros) || 0,

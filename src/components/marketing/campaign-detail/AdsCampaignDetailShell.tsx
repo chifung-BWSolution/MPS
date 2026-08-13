@@ -71,6 +71,14 @@ export function AdsCampaignDetailShell({
                   {model.channelOrObjective}
                 </span>
               ) : null}
+              {(model.objectives ?? []).map((objective) => (
+                <span
+                  key={objective}
+                  className="text-[11px] px-2 py-0.5 rounded border border-slate-200 bg-white text-muted-foreground"
+                >
+                  {objective}
+                </span>
+              ))}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
               <span>

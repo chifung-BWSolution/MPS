@@ -7,6 +7,7 @@ import {
   getAccessToken,
   linkGoogleCampaignWebsites,
   LOGIN_CUSTOMER_ID,
+  syncCampaignObjectives,
   toIsoDate,
 } from "../_shared/google-ads.ts";
 
@@ -90,6 +91,13 @@ Deno.serve(async (req) => {
       nowIso,
     );
 
+    const objectiveSummary = await syncCampaignObjectives(
+      supabase,
+      accessToken,
+      enabledIds,
+      errors,
+    );
+
     for (let i = 0; i < daily.length; i += 500) {
       const chunk = daily.slice(i, i + 500);
       const { error } = await supabase
@@ -120,6 +128,8 @@ Deno.serve(async (req) => {
           domains_unmatched: linkSummary.domains_unmatched,
           campaigns_with_links: linkSummary.campaigns_with_links,
           link_errors: linkSummary.link_errors,
+          objectives_campaigns: objectiveSummary.campaigns,
+          objectives_updated: objectiveSummary.updated,
         },
       })
       .eq("id", runId);
@@ -142,6 +152,8 @@ Deno.serve(async (req) => {
         domains_unmatched: linkSummary.domains_unmatched,
         campaigns_with_links: linkSummary.campaigns_with_links,
         link_errors: linkSummary.link_errors,
+        objectives_campaigns: objectiveSummary.campaigns,
+        objectives_updated: objectiveSummary.updated,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

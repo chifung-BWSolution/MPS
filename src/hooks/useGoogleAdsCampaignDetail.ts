@@ -2,12 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { mergeWebsitesByDomain } from '@/lib/adsWebsiteDisplay';
-import type {
-  GoogleAdsCampaignDetail,
-  GoogleAdsDailyMetricPoint,
-  GoogleAdsMatchedWebsite,
-  GoogleAdsMetricTotals,
-} from '@/types/googleAds';
+import { normalizeGoogleAdsObjectives, type GoogleAdsCampaignDetail, type GoogleAdsDailyMetricPoint, type GoogleAdsMatchedWebsite, type GoogleAdsMetricTotals } from '@/types/googleAds';
 
 type CampaignMetaRow = {
   id: string;
@@ -16,6 +11,7 @@ type CampaignMetaRow = {
   campaign_name: string;
   status: string;
   advertising_channel_type: string | null;
+  objectives?: string[] | null;
 };
 
 type AccountRow = {
@@ -186,7 +182,7 @@ export function useGoogleAdsCampaignDetail(
           supabase
             .from('google_ads_campaigns')
             .select(
-              'id,customer_id,campaign_id,campaign_name,status,advertising_channel_type',
+              'id,customer_id,campaign_id,campaign_name,status,advertising_channel_type,objectives',
             )
             .eq('id', campaignKey)
             .maybeSingle(),
@@ -230,6 +226,7 @@ export function useGoogleAdsCampaignDetail(
         campaignName: meta?.campaign_name || campaignId,
         status: meta?.status || 'UNKNOWN',
         advertisingChannelType: meta?.advertising_channel_type ?? undefined,
+        objectives: normalizeGoogleAdsObjectives(meta?.objectives),
         accountName: account?.descriptive_name || undefined,
         currencyCode: account?.currency_code ?? undefined,
         matchedWebsites,

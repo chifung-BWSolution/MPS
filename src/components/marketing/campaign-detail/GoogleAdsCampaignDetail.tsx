@@ -237,6 +237,7 @@ export function GoogleAdsCampaignDetail({
       accountLabel: detail.accountName || detail.customerId,
       accountId: detail.customerId,
       channelOrObjective: detail.advertisingChannelType,
+      objectives: detail.objectives,
       websites: detail.matchedWebsites,
       series: detail.series.map((p) => ({
         date: p.date,

@@ -308,6 +308,171 @@ export async function fetchDailyMetricsForRange(
   return { daily, campaigns: [...campaignMap.values()], errors };
 }
 
+const SKIP_OBJECTIVE_TOKENS = new Set(["", "UNSPECIFIED", "UNKNOWN", "DEFAULT"]);
+
+function asEnumName(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "string") return v.trim();
+  if (typeof v === "object" && "name" in (v as object)) {
+    return String((v as { name?: unknown }).name ?? "").trim();
+  }
+  return String(v).trim();
+}
+
+function collectEnumNames(v: unknown): string[] {
+  if (v == null || v === "") return [];
+  if (Array.isArray(v)) return v.map(asEnumName).filter(Boolean);
+  const name = asEnumName(v);
+  return name ? [name] : [];
+}
+
+function isBiddable(v: unknown): boolean {
+  return v === true || v === "true" || v === "TRUE";
+}
+
+function normalizeObjectiveTokens(values: Iterable<string>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of values) {
+    const v = String(raw || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[\s-]+/g, "_");
+    if (!v || SKIP_OBJECTIVE_TOKENS.has(v) || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+  }
+  return out.sort((a, b) => a.localeCompare(b));
+}
+
+function addObjectiveTokens(
+  bag: Map<string, Set<string>>,
+  campaignKey: string,
+  tokens: string[],
+) {
+  if (!campaignKey) return;
+  let set = bag.get(campaignKey);
+  if (!set) {
+    set = new Set<string>();
+    bag.set(campaignKey, set);
+  }
+  for (const token of tokens) set.add(token);
+}
+
+/**
+ * Fetch conversion-goal categories and campaign optimization goals per campaign.
+ * Keys are `{customerId}:{campaignId}`.
+ */
+export async function fetchCampaignObjectives(
+  accessToken: string,
+  customerIds: string[],
+  errors: string[],
+): Promise<Map<string, string[]>> {
+  const bag = new Map<string, Set<string>>();
+  const campaignQuery = `
+    SELECT
+      campaign.id,
+      campaign.app_campaign_setting.bidding_strategy_goal_type,
+      campaign.optimization_goal_setting.optimization_goal_types
+    FROM campaign
+    WHERE campaign.status != REMOVED
+  `;
+  const goalQuery = `
+    SELECT
+      campaign.id,
+      campaign_conversion_goal.category,
+      campaign_conversion_goal.biddable
+    FROM campaign_conversion_goal
+    WHERE campaign.status != REMOVED
+  `;
+
+  await mapPool(customerIds, ACCOUNT_CONCURRENCY, async (customerId) => {
+    try {
+      const rows = await gaqlQuery(accessToken, customerId, campaignQuery);
+      for (const row of rows) {
+        const campaignId = String(nestGet(row, "campaign.id") ?? "");
+        if (!campaignId) continue;
+        const key = `${customerId}:${campaignId}`;
+        addObjectiveTokens(bag, key, [
+          ...collectEnumNames(
+            nestGet(row, "campaign.appCampaignSetting.biddingStrategyGoalType"),
+          ),
+          ...collectEnumNames(
+            nestGet(row, "campaign.optimizationGoalSetting.optimizationGoalTypes"),
+          ),
+        ]);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push(`${customerId} campaign goals: ${msg.slice(0, 160)}`);
+    }
+
+    try {
+      const rows = await gaqlQuery(accessToken, customerId, goalQuery);
+      for (const row of rows) {
+        if (!isBiddable(nestGet(row, "campaignConversionGoal.biddable"))) continue;
+        const campaignId = String(nestGet(row, "campaign.id") ?? "");
+        if (!campaignId) continue;
+        addObjectiveTokens(
+          bag,
+          `${customerId}:${campaignId}`,
+          collectEnumNames(nestGet(row, "campaignConversionGoal.category")),
+        );
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push(`${customerId} conversion goals: ${msg.slice(0, 160)}`);
+    }
+  });
+
+  const out = new Map<string, string[]>();
+  for (const [key, tokens] of bag) {
+    out.set(key, normalizeObjectiveTokens(tokens));
+  }
+  return out;
+}
+
+/** Write fetched objectives onto existing google_ads_campaigns rows. */
+export async function applyCampaignObjectives(
+  supabase: SupabaseClient,
+  objectivesById: Map<string, string[]>,
+  errors: string[],
+): Promise<number> {
+  const entries = [...objectivesById.entries()];
+  let updated = 0;
+  for (let i = 0; i < entries.length; i += 40) {
+    const chunk = entries.slice(i, i + 40);
+    const results = await Promise.all(
+      chunk.map(([id, objectives]) =>
+        supabase.from("google_ads_campaigns").update({ objectives }).eq("id", id),
+      ),
+    );
+    for (const result of results) {
+      if (result.error) {
+        errors.push(`objectives upsert: ${result.error.message}`.slice(0, 160));
+      } else {
+        updated += 1;
+      }
+    }
+  }
+  return updated;
+}
+
+export async function syncCampaignObjectives(
+  supabase: SupabaseClient,
+  accessToken: string,
+  customerIds: string[],
+  errors: string[],
+): Promise<{ campaigns: number; updated: number }> {
+  const objectivesById = await fetchCampaignObjectives(
+    accessToken,
+    customerIds,
+    errors,
+  );
+  const updated = await applyCampaignObjectives(supabase, objectivesById, errors);
+  return { campaigns: objectivesById.size, updated };
+}
+
 /** Max inclusive day span for live campaign breakdown fetches. */
 export const LIVE_BREAKDOWN_MAX_DAYS = 92;
 

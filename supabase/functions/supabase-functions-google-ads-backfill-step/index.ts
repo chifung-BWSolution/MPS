@@ -10,6 +10,7 @@ import {
   monthEnd,
   monthStart,
   addMonths,
+  syncCampaignObjectives,
   toIsoDate,
 } from "../_shared/google-ads.ts";
 
@@ -297,12 +298,39 @@ Deno.serve(async (req) => {
       .single();
     if (upErr) throw new Error(upErr.message);
 
+    let objectiveSummary: { campaigns: number; updated: number } | undefined;
+    if (done) {
+      const objectiveErrors: string[] = [];
+      objectiveSummary = await syncCampaignObjectives(
+        supabase,
+        accessToken,
+        customerIds,
+        objectiveErrors,
+      );
+      errors.push(...objectiveErrors);
+      await supabase
+        .from("google_ads_backfill_jobs")
+        .update({
+          last_error: objectiveErrors[0] || updated?.last_error,
+          error_count: (updated?.error_count ?? job.error_count) + objectiveErrors.length,
+          meta: {
+            ...((updated?.meta || prevMeta) as Record<string, unknown>),
+            objectives_campaigns: objectiveSummary.campaigns,
+            objectives_updated: objectiveSummary.updated,
+            recent_errors: [...errors, ...prevErrors].slice(0, 30),
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", job.id);
+    }
+
     return json({
       success: true,
       action: "step",
       month: `${rangeFrom}..${rangeTo}`,
       rows: daily.length,
       errors: errors.slice(0, 10),
+      objectives: objectiveSummary,
       job: updated,
     });
   } catch (error) {

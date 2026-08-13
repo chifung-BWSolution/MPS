@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { resolveDateRange, useGoogleAdsData } from '@/hooks/useGoogleAdsData';
 import { useBrands } from '@/hooks/useBrands';
-import type { DateRangePreset, GoogleAdsCampaign } from '@/types/googleAds';
+import { normalizeGoogleAdsObjectives, type DateRangePreset, type GoogleAdsCampaign } from '@/types/googleAds';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -24,6 +24,7 @@ type SortKey =
   | 'campaign'
   | 'website'
   | 'type'
+  | 'objectives'
   | 'status'
   | 'impressions'
   | 'clicks'
@@ -36,6 +37,11 @@ function formatMoneyFromMicros(micros: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+function formatObjectives(raw?: string[] | null): string {
+  const objectives = normalizeGoogleAdsObjectives(raw);
+  return objectives.length > 0 ? objectives.join(', ') : '—';
 }
 
 function compareText(a: string, b: string): number {
@@ -52,6 +58,8 @@ function getSortValue(c: GoogleAdsCampaign, key: SortKey): string | number {
       return c.matchedWebsites.map((w) => w.domain).join(', ');
     case 'type':
       return c.advertisingChannelType || '';
+    case 'objectives':
+      return (c.objectives ?? []).join(', ');
     case 'status':
       return c.status;
     case 'impressions':
@@ -248,6 +256,8 @@ export function GoogleAdsModule() {
         (c.accountName || '').toLowerCase().includes(q) ||
         c.customerId.includes(q) ||
         c.matchedWebsites.some((w) => w.domain.toLowerCase().includes(q)) ||
+        (c.advertisingChannelType || '').toLowerCase().includes(q) ||
+        (c.objectives ?? []).some((objective) => objective.toLowerCase().includes(q)) ||
         campaignTags.some((tag) => tag.name.toLowerCase().includes(q)) ||
         c.brandListIds.some((id) => {
           const brand = brandById.get(id);
@@ -433,7 +443,7 @@ export function GoogleAdsModule() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜尋 campaign / 帳戶 / 網站 / 品牌…"
+              placeholder="搜尋 campaign / 帳戶 / 網站 / 品牌 / 目標…"
               className="pl-8 h-9 text-[13px] bg-white"
             />
           </div>
@@ -527,6 +537,7 @@ export function GoogleAdsModule() {
                 <SortableTh label="Campaign" sortKey="campaign" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortableTh label="網站" sortKey="website" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortableTh label="類型" sortKey="type" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SortableTh label="目標" sortKey="objectives" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortableTh label="狀態" sortKey="status" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortableTh label="Impr." sortKey="impressions" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
                 <SortableTh label="Clicks" sortKey="clicks" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
@@ -538,14 +549,14 @@ export function GoogleAdsModule() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">
                     載入中…
                   </td>
                 </tr>
               )}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">
                     此日期區間尚無資料。請先到「Google Ads 同步」執行完整歷史回填，或按 Refresh recent。
                   </td>
                 </tr>
@@ -601,6 +612,9 @@ export function GoogleAdsModule() {
                     </td>
                     <td className="px-3 py-2.5 text-muted-foreground">
                       {c.advertisingChannelType || '—'}
+                    </td>
+                    <td className="px-3 py-2.5 text-muted-foreground max-w-[240px] whitespace-normal leading-snug">
+                      {formatObjectives(c.objectives)}
                     </td>
                     <td className="px-3 py-2.5">{statusBadge(c.status)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">

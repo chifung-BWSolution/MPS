@@ -65,6 +65,8 @@ export type AdsCampaignDetailViewModel = {
   accountLabel: string;
   accountId: string;
   channelOrObjective?: string;
+  /** Google Ads conversion / optimization goals, shown after the type badge. */
+  objectives?: string[];
   websites: AdsLinkedWebsite[];
   businessLabel?: string;
   brandLabel?: string;

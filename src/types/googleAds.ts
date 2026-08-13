@@ -24,6 +24,8 @@ export type GoogleAdsCampaign = {
   campaignName: string;
   status: string;
   advertisingChannelType?: string;
+  /** Biddable conversion-goal categories and campaign optimization goals. */
+  objectives?: string[];
   impressions: number;
   clicks: number;
   costMicros: number;
@@ -104,6 +106,8 @@ export type GoogleAdsCampaignDetail = {
   campaignName: string;
   status: string;
   advertisingChannelType?: string;
+  /** Biddable conversion-goal categories and campaign optimization goals. */
+  objectives?: string[];
   accountName?: string;
   currencyCode?: string;
   matchedWebsites: GoogleAdsMatchedWebsite[];
@@ -229,6 +233,24 @@ export type GoogleAdsProductRow = {
   conversions: number;
   ctr: number;
 };
+
+const SKIP_OBJECTIVE_TOKENS = new Set(['', 'UNSPECIFIED', 'UNKNOWN', 'DEFAULT']);
+
+/** Deduplicate and sort Google Ads objective / conversion-goal enum names. */
+export function normalizeGoogleAdsObjectives(raw?: string[] | null): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw ?? []) {
+    const v = String(item || '')
+      .trim()
+      .toUpperCase()
+      .replace(/[\s-]+/g, '_');
+    if (!v || SKIP_OBJECTIVE_TOKENS.has(v) || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+  }
+  return out.sort((a, b) => a.localeCompare(b));
+}
 
 export function normalizeGoogleAdsBreakdownChannel(
   raw?: string | null,
