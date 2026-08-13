@@ -8,6 +8,7 @@ import {
   type MyProjectRow,
 } from '@/hooks/useMyProjectsFromDayReports';
 import { relatedTypeLabels, type ProjectRelatedType } from '@/hooks/useProjects';
+import { useProjectOrgLabels } from '@/hooks/useProjectOrgLabels';
 
 const SELECTED_PROJECT_KEY = 'mps_selected_project_id';
 
@@ -46,7 +47,8 @@ function ProjectCard({
   project: MyProjectRow;
   onOpen: (id: string) => void;
 }) {
-  const meta = [project.brandName || project.companyName, project.clientName]
+  const { orgLine } = useProjectOrgLabels();
+  const meta = [orgLine(project.companyListId, project.brandListId), project.clientName]
     .filter(Boolean)
     .join(' · ');
 

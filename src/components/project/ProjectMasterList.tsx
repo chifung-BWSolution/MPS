@@ -3,6 +3,7 @@ import { Clock, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useProjects, relatedTypeLabels, type ProjectRelatedType, type MasterProject } from '@/hooks/useProjects';
 import { useProjectHours } from '@/hooks/useProjectHours';
+import { useProjectOrgLabels } from '@/hooks/useProjectOrgLabels';
 import { Input } from '@/components/ui/input';
 
 type Props = {
@@ -14,6 +15,7 @@ type Props = {
 export function ProjectMasterList({ relatedTypes, onSelectProject, showTypeFilter = false }: Props) {
   const { projects, loading } = useProjects({ relatedType: relatedTypes });
   const { data: hoursMap } = useProjectHours(30);
+  const { orgLine } = useProjectOrgLabels();
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | ProjectRelatedType>('all');
   const [activeOnly, setActiveOnly] = useState(true);
@@ -121,7 +123,7 @@ export function ProjectMasterList({ relatedTypes, onSelectProject, showTypeFilte
                   <TypeBadge type={p.relatedType} />
                 </td>
                 <td className="px-3 py-2.5 text-[12px] text-muted-foreground">
-                  {[p.companyName, p.brandName].filter(Boolean).join(' · ') || '—'}
+                  {orgLine(p.companyListId, p.brandListId) || '—'}
                 </td>
                 <td className="px-3 py-2.5">
                   <span className={cn(

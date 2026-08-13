@@ -12,8 +12,6 @@ export type MyProjectRow = {
   name: string;
   relatedType: ProjectRelatedType | 'unknown';
   relatedTypeLabel: string;
-  companyName?: string;
-  brandName?: string;
   clientName?: string;
   companyListId?: string;
   brandListId?: string;
@@ -52,8 +50,6 @@ type ProjectDbRow = {
   is_active: boolean | null;
   company_list_id: string | null;
   brand_list_id: string | null;
-  company_name: string | null;
-  brand_name: string | null;
   client_name: string | null;
 };
 
@@ -207,7 +203,7 @@ export function useMyProjectsFromDayReports() {
         const { data: projectRows, error: projectErr } = await supabase
           .from('projects')
           .select(
-            'id, related_type, name, status, is_active, company_list_id, brand_list_id, company_name, brand_name, client_name',
+            'id, related_type, name, status, is_active, company_list_id, brand_list_id, client_name',
           )
           .in('id', chunk);
 
@@ -239,8 +235,6 @@ export function useMyProjectsFromDayReports() {
             relatedType === 'unknown'
               ? '其他'
               : relatedTypeLabels[relatedType as ProjectRelatedType],
-          companyName: master?.company_name ?? undefined,
-          brandName: master?.brand_name ?? undefined,
           clientName: master?.client_name ?? undefined,
           companyListId: master?.company_list_id ?? undefined,
           brandListId: master?.brand_list_id ?? undefined,

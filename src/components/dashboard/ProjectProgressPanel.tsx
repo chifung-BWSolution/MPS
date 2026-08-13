@@ -4,11 +4,13 @@ import { useMemo } from 'react';
 import { Clock } from 'lucide-react';
 import { useProjects, relatedTypeLabels } from '@/hooks/useProjects';
 import { useProjectHours } from '@/hooks/useProjectHours';
+import { useProjectOrgLabels } from '@/hooks/useProjectOrgLabels';
 
 export function ProjectProgressPanel() {
   const { navigateTo, selectedCompanyId, selectedBrandId } = useApp();
   const { projects, loading: projectsLoading } = useProjects({ activeOnly: true });
   const { data: hoursMap, loading: hoursLoading } = useProjectHours(30);
+  const { orgLine } = useProjectOrgLabels();
 
   const rows = useMemo(() => {
     return projects
@@ -57,7 +59,7 @@ export function ProjectProgressPanel() {
       ) : (
         <div className="space-y-4">
           {rows.map((project) => {
-            const meta = [relatedTypeLabels[project.relatedType], project.brandName || project.companyName]
+            const meta = [relatedTypeLabels[project.relatedType], orgLine(project.companyListId, project.brandListId)]
               .filter(Boolean)
               .join(' · ');
             return (

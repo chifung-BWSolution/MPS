@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/lib/supabase';
 import { useProjects, relatedTypeLabels } from '@/hooks/useProjects';
+import { useProjectOrgLabels } from '@/hooks/useProjectOrgLabels';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
 
 type ActivityRow = {
@@ -26,6 +27,7 @@ type TeamMemberAgg = {
 
 export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBack?: () => void }) {
   const { getById, loading: projectsLoading } = useProjects();
+  const { orgLine } = useProjectOrgLabels();
   const project = getById(projectId);
   const [activities, setActivities] = useState<ActivityRow[]>([]);
   const [loadingEntries, setLoadingEntries] = useState(false);
@@ -135,7 +137,7 @@ export function ProjectDetail({ projectId, onBack }: { projectId?: string; onBac
             )}>
               {relatedTypeLabels[project.relatedType]}
             </span>
-            <span>{[project.companyName, project.brandName].filter(Boolean).join(' · ') || '—'}</span>
+            <span>{orgLine(project.companyListId, project.brandListId) || '—'}</span>
             {project.clientName && <span>客戶：{project.clientName}</span>}
             <span className={cn(
               'px-2 py-0.5 rounded font-medium',

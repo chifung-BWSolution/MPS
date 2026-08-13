@@ -3,6 +3,7 @@ import { TrendingUp, Clock, Flame } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useProjects, relatedTypeLabels, type ProjectRelatedType } from '@/hooks/useProjects';
 import { useProjectHours } from '@/hooks/useProjectHours';
+import { useProjectOrgLabels } from '@/hooks/useProjectOrgLabels';
 import {
   Select,
   SelectContent,
@@ -13,6 +14,7 @@ import {
 
 export function ProjectFocus({ onSelectProject }: { onSelectProject?: (projectId: string) => void }) {
   const { projects, loading } = useProjects({ activeOnly: true });
+  const { orgLine } = useProjectOrgLabels();
   const [timeRange, setTimeRange] = useState<string>('14');
   const [typeFilter, setTypeFilter] = useState<'all' | ProjectRelatedType>('all');
   const { data: hoursMap } = useProjectHours(parseInt(timeRange, 10));
@@ -124,7 +126,7 @@ export function ProjectFocus({ onSelectProject }: { onSelectProject?: (projectId
                   )}
                 </div>
                 <div className="flex items-center gap-3 text-[12px] text-muted-foreground flex-wrap">
-                  <span>{[project.companyName, project.brandName].filter(Boolean).join(' · ') || '—'}</span>
+                  <span>{orgLine(project.companyListId, project.brandListId) || '—'}</span>
                   {project.clientName && <span>客戶: {project.clientName}</span>}
                   <span className="flex items-center gap-1">
                     <Clock size={10} />

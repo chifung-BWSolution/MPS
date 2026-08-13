@@ -16,8 +16,6 @@ export type MasterProject = {
   isActive: boolean;
   companyListId?: string;
   brandListId?: string;
-  companyName?: string;
-  brandName?: string;
   clientName?: string;
   meta: Record<string, unknown>;
   createdAt?: string;
@@ -30,8 +28,6 @@ export type ProjectWriteInput = {
   status: string;
   companyListId?: string | null;
   brandListId?: string | null;
-  companyName?: string | null;
-  brandName?: string | null;
   projectCategory?: ProjectCategory;
   level?: ProjectLevel | null;
   notes?: string | null;
@@ -48,8 +44,6 @@ type DbRow = {
   is_active: boolean;
   company_list_id: string | null;
   brand_list_id: string | null;
-  company_name: string | null;
-  brand_name: string | null;
   client_name: string | null;
   meta: Record<string, unknown> | null;
   created_at: string | null;
@@ -88,8 +82,6 @@ function mapRow(row: DbRow): MasterProject {
     isActive: !!row.is_active,
     companyListId: row.company_list_id ?? undefined,
     brandListId: row.brand_list_id ?? undefined,
-    companyName: row.company_name ?? undefined,
-    brandName: row.brand_name ?? undefined,
     clientName: row.client_name ?? undefined,
     meta: metaObject(row.meta),
     createdAt: row.created_at ?? undefined,
@@ -139,6 +131,21 @@ export function projectKindLabel(kind: ProjectKind): string {
 
 function isActiveStatus(status: string): boolean {
   return !INACTIVE_STATUSES.has(status);
+}
+
+async function orgCodesForListIds(companyListId?: string | null, brandListId?: string | null) {
+  const [companyRes, brandRes] = await Promise.all([
+    companyListId
+      ? supabase.from('company_list').select('company_code').eq('uuid', companyListId).maybeSingle()
+      : Promise.resolve({ data: null as { company_code: string } | null }),
+    brandListId
+      ? supabase.from('brand_list').select('brand_code').eq('id', brandListId).maybeSingle()
+      : Promise.resolve({ data: null as { brand_code: string } | null }),
+  ]);
+  return {
+    companyCode: companyRes.data?.company_code || null,
+    brandCode: brandRes.data?.brand_code || null,
+  };
 }
 
 function buildManualMeta(input: ProjectWriteInput, previous: Record<string, unknown> = {}): Record<string, unknown> {
@@ -225,8 +232,6 @@ export function useProjects(options: UseProjectsOptions = {}) {
       is_active: isActiveStatus(input.status || 'planning'),
       company_list_id: input.companyListId || null,
       brand_list_id: input.brandListId || null,
-      company_name: input.companyName || null,
-      brand_name: input.brandName || null,
       client_name: input.clientName?.trim() || null,
       meta: buildManualMeta(input),
     };
@@ -249,13 +254,14 @@ export function useProjects(options: UseProjectsOptions = {}) {
     let writeError: { message: string } | null = null;
 
     if (project.relatedType === 'webandsystem') {
+      const { companyCode, brandCode } = await orgCodesForListIds(input.companyListId, input.brandListId);
       const patch: Record<string, unknown> = {
         website_name: name,
         status: input.status,
         company_list_id: input.companyListId || null,
         brand_list_id: input.brandListId || null,
-        company: input.companyName || null,
-        brand: input.brandName || null,
+        company: companyCode,
+        brand: brandCode,
         project_category: input.projectCategory ?? projectCategoryOf(project),
         updated_at: new Date().toISOString(),
       };
@@ -300,8 +306,6 @@ export function useProjects(options: UseProjectsOptions = {}) {
           is_active: isActiveStatus(input.status),
           company_list_id: input.companyListId || null,
           brand_list_id: input.brandListId || null,
-          company_name: input.companyName || null,
-          brand_name: input.brandName || null,
           client_name: input.clientName?.trim() || null,
           meta: buildManualMeta(input, project.meta),
           updated_at: new Date().toISOString(),

@@ -3,6 +3,7 @@ import { Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useProjects, relatedTypeLabels, type ProjectRelatedType } from '@/hooks/useProjects';
 import { useProjectHours } from '@/hooks/useProjectHours';
+import { useProjectOrgLabels } from '@/hooks/useProjectOrgLabels';
 import {
   Select,
   SelectContent,
@@ -14,6 +15,7 @@ import {
 export function ProjectProgress({ onSelectProject }: { onSelectProject?: (projectId: string) => void }) {
   const { projects, loading } = useProjects({ activeOnly: true });
   const { data: hoursMap, loading: hoursLoading } = useProjectHours(30);
+  const { orgLine } = useProjectOrgLabels();
   const [typeFilter, setTypeFilter] = useState<'all' | ProjectRelatedType>('all');
 
   const rows = useMemo(() => {
@@ -87,7 +89,7 @@ export function ProjectProgress({ onSelectProject }: { onSelectProject?: (projec
               <div className="min-w-0">
                 <div className="text-[13px] font-bold truncate">{p.name}</div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">
-                  {relatedTypeLabels[p.relatedType]} · {[p.companyName, p.brandName].filter(Boolean).join(' · ') || '—'}
+                  {relatedTypeLabels[p.relatedType]} · {orgLine(p.companyListId, p.brandListId) || '—'}
                 </div>
               </div>
               <div className="text-right shrink-0">

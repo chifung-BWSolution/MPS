@@ -8,6 +8,7 @@ import { useApp } from '@/context/AppContext';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useBrands } from '@/hooks/useBrands';
 import { useProjectHours } from '@/hooks/useProjectHours';
+import { useProjectOrgLabels } from '@/hooks/useProjectOrgLabels';
 import {
   useProjects,
   projectCategoryOf,
@@ -342,8 +343,7 @@ function ProjectFormModal({
 export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projectId: string) => void }) {
   const { selectedCompanyId, selectedBrandId } = useApp();
   const { projects, loading, addProject, updateProject, deleteProject } = useProjects();
-  const { companies } = useCompanies();
-  const { brands } = useBrands();
+  const { companies, brands, companyLabel, brandLabel } = useProjectOrgLabels();
   const { data: hoursMap } = useProjectHours(30);
 
   const [kindFilter, setKindFilter] = useState<KindFilter>('all');
@@ -357,14 +357,19 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
   const [editing, setEditing] = useState<MasterProject | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MasterProject | null>(null);
 
-  const uniqueCompanies = useMemo(
-    () => Array.from(new Set(projects.map(p => p.companyName || '').filter(Boolean))).sort(),
-    [projects],
-  );
-  const uniqueBrands = useMemo(
-    () => Array.from(new Set(projects.map(p => p.brandName || '').filter(Boolean))).sort(),
-    [projects],
-  );
+  const uniqueCompanies = useMemo(() => {
+    const ids = new Set(projects.map(p => p.companyListId).filter((id): id is string => !!id));
+    return companies
+      .filter(c => ids.has(c.uuid) || ids.has(c.id))
+      .sort((a, b) => a.companyCode.localeCompare(b.companyCode, 'zh-HK'));
+  }, [projects, companies]);
+  const uniqueBrands = useMemo(() => {
+    const ids = new Set(projects.map(p => p.brandListId).filter((id): id is string => !!id));
+    return brands
+      .filter(b => ids.has(b.id))
+      .filter(b => companyFilter === 'all' || b.companyId === companyFilter)
+      .sort((a, b) => a.brandCode.localeCompare(b.brandCode, 'zh-HK'));
+  }, [projects, brands, companyFilter]);
   const uniqueStatuses = useMemo(
     () => Array.from(new Set(projects.map(p => p.status).filter(Boolean))).sort(),
     [projects],
@@ -376,8 +381,8 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
       if (selectedBrandId && p.brandListId !== selectedBrandId) return false;
       if (kindFilter !== 'all' && projectKindOf(p) !== kindFilter) return false;
       if (categoryFilter !== 'all' && projectCategoryOf(p) !== categoryFilter) return false;
-      if (companyFilter !== 'all' && p.companyName !== companyFilter) return false;
-      if (brandFilter !== 'all' && p.brandName !== brandFilter) return false;
+      if (companyFilter !== 'all' && p.companyListId !== companyFilter) return false;
+      if (brandFilter !== 'all' && p.brandListId !== brandFilter) return false;
       if (statusFilter !== 'all' && p.status !== statusFilter) return false;
       if (levelFilter.length > 0) {
         const level = projectLevelOf(p);
@@ -388,8 +393,8 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
         const subtitle = projectSubtitleOf(p).toLowerCase();
         return p.name.toLowerCase().includes(q)
           || subtitle.includes(q)
-          || (p.brandName || '').toLowerCase().includes(q)
-          || (p.companyName || '').toLowerCase().includes(q)
+          || companyLabel(p.companyListId).toLowerCase().includes(q)
+          || brandLabel(p.brandListId).toLowerCase().includes(q)
           || (p.clientName || '').toLowerCase().includes(q);
       }
       return true;
@@ -398,23 +403,19 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
       const hb = hoursMap[b.id]?.totalHours ?? 0;
       return hb - ha || a.name.localeCompare(b.name, 'zh-HK');
     });
-  }, [projects, hoursMap, kindFilter, categoryFilter, companyFilter, brandFilter, statusFilter, levelFilter, searchQuery, selectedCompanyId, selectedBrandId]);
+  }, [projects, hoursMap, kindFilter, categoryFilter, companyFilter, brandFilter, statusFilter, levelFilter, searchQuery, selectedCompanyId, selectedBrandId, companyLabel, brandLabel]);
 
   const toggleLevelFilter = (lvl: ProjectLevel) => {
     setLevelFilter(prev => prev.includes(lvl) ? prev.filter(x => x !== lvl) : [...prev, lvl]);
   };
 
   const toWriteInput = (form: FormState): ProjectWriteInput => {
-    const company = companies.find(c => c.uuid === form.companyListId || c.id === form.companyListId);
-    const brand = brands.find(b => b.id === form.brandListId);
     return {
       name: form.name,
       clientName: form.clientName || null,
       status: form.status,
       companyListId: form.companyListId || null,
       brandListId: form.brandListId || null,
-      companyName: company?.companyCode || null,
-      brandName: brand?.brandCode || brand?.displayName || null,
       projectCategory: form.projectCategory,
       level: form.level,
       notes: form.notes || null,
@@ -527,8 +528,8 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
             className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white"
           >
             <option value="all">所有公司</option>
-            {uniqueCompanies.map(code => (
-              <option key={code} value={code}>{code}</option>
+            {uniqueCompanies.map(c => (
+              <option key={c.uuid || c.id} value={c.uuid || c.id}>{c.companyCode}</option>
             ))}
           </select>
           <select
@@ -537,8 +538,8 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
             className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white"
           >
             <option value="all">所有品牌</option>
-            {uniqueBrands.map(code => (
-              <option key={code} value={code}>{code}</option>
+            {uniqueBrands.map(b => (
+              <option key={b.id} value={b.id}>{b.brandCode}</option>
             ))}
           </select>
           <select
@@ -632,13 +633,13 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
                         {level ? <LevelBadge level={level} /> : <span className="text-[11px] text-muted-foreground">—</span>}
                       </td>
                       <td className="px-4 py-3 cursor-pointer" onClick={() => onSelectProject?.(project.id)}>
-                        {project.brandName
-                          ? <span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{project.brandName}</span>
+                        {brandLabel(project.brandListId)
+                          ? <span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{brandLabel(project.brandListId)}</span>
                           : <span className="text-[11px] text-muted-foreground">—</span>}
                       </td>
                       <td className="px-4 py-3 cursor-pointer" onClick={() => onSelectProject?.(project.id)}>
-                        {project.companyName
-                          ? <span className="text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{project.companyName}</span>
+                        {companyLabel(project.companyListId)
+                          ? <span className="text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{companyLabel(project.companyListId)}</span>
                           : <span className="text-[11px] text-muted-foreground">—</span>}
                       </td>
                       <td className="px-4 py-3 cursor-pointer" onClick={() => onSelectProject?.(project.id)}>
