@@ -11,6 +11,7 @@
 | `/marketing/google-ads-sync` | Google Ads 同步 | 歷史回填 / 增量同步 |
 | `/marketing/facebook-ads` | Facebook Ads | Meta Campaign 成效（多 Business） |
 | `/marketing/facebook-ads-sync` | Facebook Ads 同步 | 歷史回填（約 37 個月） / 增量同步 |
+| `/marketing/ads-comparison` | 廣告比較圖表 | 三欄並排比較 Google / Facebook Campaign 每日成效 |
 | `/marketing/seo` | SEO 關鍵字 | 全站 SEO 管理 |
 | `/marketing/seo-upgrade` | SEO 升級 | 升級記錄 |
 | `/marketing/graphic-design` | 平面設計 | 平面設計製作追蹤 |
@@ -27,6 +28,18 @@
   - 細項：Ad Groups / Keywords / Search Terms 為**即時 Google Ads API**（依詳情頁日期區間；Search Terms Top 100 by Cost）。不落倉庫。
   - 即時細項日期上限 92 日（`7d/14d/30d/90d` 可用；`ytd` / `all` / 過長自訂區間會顯示提示，不呼叫 API）。
   - 共用 shell（`AdsCampaignDetailShell`）供後續 Facebook Ads 詳情複用。
+
+### 廣告比較圖表
+
+- **路由：** `#marketing/ads-comparison`
+- **版面：** 三欄；每欄獨立篩選：
+  - 日期區間（與 Google Ads 列表相同：近 7/14/30/90 日、今年至今、全部已同步、自訂）
+  - 平台：Google Ads / Facebook Ads
+  - Campaign 搜尋下拉（依平台動態載入）
+  - 指標：Impr. / Clicks / Cost / Conv.（另含 CTR、Avg. CPC，與詳情頁 KPI 卡片對應）
+- **圖表：** 所選指標的每日折線圖（資料來自 `google_ads_campaign_daily_metrics` / `facebook_ads_campaign_daily_metrics`）。
+- **Conv.：** 與列表頁同一欄位（Google `metrics.conversions` 倉庫值；Facebook 倉庫 `conversions`，即 sync 時 `sumConversions` 結果），勿另算 actions。
+- **KPI 卡片：** 每欄圖表下方顯示與 Campaign 詳情相同的六張卡片（含前期比較與 sparkline）。點擊卡片會把該欄指標篩選切到對應 metric。
 
 ---
 

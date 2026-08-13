@@ -100,6 +100,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'google-ads-sync', label: 'Google Ads 同步' },
       { id: 'facebook-ads', label: 'Facebook Ads' },
       { id: 'facebook-ads-sync', label: 'Facebook Ads 同步' },
+      { id: 'ads-comparison', label: '廣告比較圖表' },
       { id: 'seo', label: 'SEO 關鍵字' },
       { id: 'seo-upgrade', label: 'SEO 升級' },
       { id: 'graphic-design', label: '平面設計' },
