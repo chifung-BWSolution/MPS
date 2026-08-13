@@ -94,18 +94,13 @@ export const mainMenuItems: MainMenuItem[] = [
     id: 'marketing',
     label: '行銷管理',
     subMenus: [
-      { id: 'calendar', label: '行銷日曆' },
-      { id: 'social', label: '社交媒體' },
       { id: 'google-ads', label: 'Google Ads' },
       { id: 'google-ads-sync', label: 'Google Ads 同步' },
       { id: 'facebook-ads', label: 'Facebook Ads' },
       { id: 'facebook-ads-sync', label: 'Facebook Ads 同步' },
       { id: 'ads-comparison', label: '廣告比較圖表' },
-      { id: 'seo', label: 'SEO 關鍵字' },
-      { id: 'seo-upgrade', label: 'SEO 升級' },
       { id: 'graphic-design', label: '平面設計' },
       { id: 'backlink', label: '反向連結 Backlinks' },
-      { id: 'google-business', label: 'Google Business' },
     ],
   },
   {

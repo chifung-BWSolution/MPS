@@ -73,7 +73,6 @@ src/
 ├── hooks/
 │   ├── use-mobile.tsx               # Responsive breakpoint hook
 │   ├── useWebsiteProfiles.ts        # Supabase website/system profiles
-│   ├── useSocialPosts.ts            # Supabase social posts
 │   └── …                            # Other domain hooks (Ads, SEO, backlinks, etc.)
 │
 ├── lib/
@@ -141,12 +140,13 @@ App.tsx
 │   ├── /list
 │   └── /:id (hub page with nested tabs)
 ├── /marketing
-│   ├── /calendar
-│   ├── /social
 │   ├── /google-ads
-│   ├── /seo
-│   ├── /backlink
-│   └── /google-business
+│   ├── /google-ads-sync
+│   ├── /facebook-ads
+│   ├── /facebook-ads-sync
+│   ├── /ads-comparison
+│   ├── /graphic-design
+│   └── /backlink
 ├── /video
 │   ├── /list
 │   ├── /channels
@@ -219,7 +219,6 @@ Examples:
 | Hook | Domain |
 |------|--------|
 | `useWebsiteProfiles` | 網站+系統 profiles (`webandsystem_list`) |
-| `useSocialPosts` | 社交媒體帖文 |
 | `useSeoKeywords` | SEO 關鍵字 / GSC |
 | `useWebPageSuppliers` | 網頁供應商 |
 | `useBacklinkPurchases` | 反向連結購買紀錄 |
@@ -246,7 +245,7 @@ Examples:
                            ▼
 ┌─────────────────────────────────────────────────────────┐
 │              Domain hooks (per feature)                   │
-│  useWebsiteProfiles, useSocialPosts, useSeoKeywords, …   │
+│  useWebsiteProfiles, useSeoKeywords, …                   │
 └──────────────────────────┬──────────────────────────────┘
                            │
                            ▼

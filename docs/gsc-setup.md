@@ -1,6 +1,6 @@
 # Google Search Console (GSC) 連接指南
 
-完成下列步驟後，MPS 才能同步真實的關鍵字／平均排名資料到 `#marketing/seo`。
+完成下列步驟後，MPS 才能同步真實的關鍵字／平均排名資料到網站詳情的 SEO 關鍵字 Tab。
 
 > **你需要做的事（人工）在下方 checklist。** 程式碼與 Edge Function 由開發端負責；沒有 refresh token 與 property 授權，同步會是空的。
 
@@ -76,7 +76,7 @@ Scope 使用：
 
 部署 GSC sync function 後：
 
-- [ ] 在 MPS `#marketing/seo` 按 **同步 GSC**，或呼叫 Edge Function `sync-gsc`
+- [ ] 在 MPS 網站詳情 → **SEO 關鍵字** 按 **同步 GSC**，或呼叫 Edge Function `sync-gsc`
 - [ ] 確認 `gsc_sites` 有列出你有權限的 properties
 - [ ] 確認已對應到 `webandsystem_list` 的網站開始有 `gsc_query_daily_metrics` 列
 
@@ -99,6 +99,6 @@ Scope 使用：
 
 - DB migration（`gsc_*`、`seo_keywords`、`seo_upgrades`…）
 - Edge Function：`sync-gsc`（及後續 Ads keyword sync）
-- 前端 `#marketing/seo` / `#marketing/seo-upgrade` 改讀真實資料並清掉 demo
+- 前端網站詳情 SEO 關鍵字 Tab 改讀真實資料並清掉 demo
 
 完成 Checklist **1–5** 後跟開發說一聲，即可跑第一次正式同步。

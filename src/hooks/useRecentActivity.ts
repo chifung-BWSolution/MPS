@@ -131,7 +131,7 @@ export function useRecentActivity() {
           time: formatRelative(ts),
           occurredAt: ts,
           navModule: 'marketing',
-          navSubModule: 'calendar',
+          navSubModule: 'google-ads',
         });
       });
 

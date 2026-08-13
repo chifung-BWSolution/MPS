@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, X, ExternalLink, Video, Share2, Megaphone, TrendingUp, Mail, Puzzle, Link2, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Loader2, Unlink, Search, Edit, Trash2, MapPin } from 'lucide-react';
+import { Plus, X, ExternalLink, Video, Share2, Megaphone, TrendingUp, Mail, Puzzle, Link2, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Loader2, Unlink, Search, Edit, Trash2, MapPin, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WebsiteProfileFull, SocialPost, EdmCampaign } from '@/types/app';
 import {
@@ -785,13 +785,22 @@ export function WebsiteAdsTab({ site }: { site: WebsiteProfileFull }) {
 // SEO KEYWORDS TAB
 // ============================================================
 export function WebsiteSeoTab({ site }: { site: WebsiteProfileFull }) {
-  const { keywords: allKeywords, loading, addKeyword } = useSeoKeywords();
+  const { keywords: allKeywords, loading, addKeyword, syncGsc, syncing } = useSeoKeywords();
   const keywords = useMemo(
     () => allKeywords.filter((k) => k.website_profile_id === site.id),
     [allKeywords, site.id],
   );
   const [showModal, setShowModal] = useState(false);
   const [newKeyword, setNewKeyword] = useState({ keyword: '', level: 'level_2', targetPage: '', targetRanking: '' });
+
+  const handleSyncGsc = async () => {
+    const r = await syncGsc();
+    if (r.ok) {
+      toast.success(`GSC 同步完成：${r.sitesSynced ?? 0} 站、${r.keywordsUpserted ?? 0} 關鍵字`);
+    } else {
+      toast.error(r.error || 'GSC 同步失敗');
+    }
+  };
 
   const level1 = keywords.filter(k => k.level === 'level_1');
   const level2 = keywords.filter(k => k.level === 'level_2');
@@ -804,9 +813,19 @@ export function WebsiteSeoTab({ site }: { site: WebsiteProfileFull }) {
           <h4 className="text-[15px] font-bold">SEO 關鍵字</h4>
           <p className="text-[12px] text-muted-foreground mt-0.5">共 {keywords.length} 個關鍵字 — S1: {level1.length} | S2: {level2.length} | S3: {level3.length}</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-medium hover:bg-teal-700 transition-colors">
-          <Plus size={13} />新增關鍵字
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            disabled={syncing}
+            onClick={handleSyncGsc}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-md text-[12px] font-medium hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            {syncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+            同步 GSC
+          </button>
+          <button onClick={() => setShowModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-medium hover:bg-teal-700 transition-colors">
+            <Plus size={13} />新增關鍵字
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -817,7 +836,7 @@ export function WebsiteSeoTab({ site }: { site: WebsiteProfileFull }) {
         <div className="text-center py-12 border border-dashed border-border rounded-md">
           <TrendingUp size={32} className="text-muted-foreground mx-auto mb-3" />
           <p className="text-[14px] font-medium text-muted-foreground">尚未設定 SEO 關鍵字</p>
-          <p className="text-[12px] text-muted-foreground mt-1">可手動新增，或於行銷 SEO 頁同步 GSC（見 docs/gsc-setup.md）</p>
+          <p className="text-[12px] text-muted-foreground mt-1">可手動新增，或按「同步 GSC」匯入查詢與排名資料（見 docs/gsc-setup.md）</p>
         </div>
       ) : (
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] overflow-hidden">
