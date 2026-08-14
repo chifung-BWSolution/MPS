@@ -1,8 +1,14 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Edit, Trash2, KeyRound, Loader2 } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, KeyRound, Loader2, ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Vchannel, VchannelImportance, VchannelStatus } from '@/types/vchannel';
 import { formatChannelCodes, parseChannelCodes } from '@/types/vchannel';
+import {
+  ACCOUNT_SORT_COLUMNS,
+  sortVchannelAccounts,
+  type AccountSortDir,
+  type AccountSortKey,
+} from '@/lib/vchannelAccountSort';
 import { useVchannels } from '@/hooks/useVchannels';
 import { useVchannelAccounts } from '@/hooks/useVchannelAccounts';
 import { useBrands } from '@/hooks/useBrands';
@@ -42,6 +48,41 @@ function ChannelAccountLabelCell({ label }: { label: string }) {
     <span className="text-[11px] font-medium truncate max-w-[140px] inline-block align-bottom" title={label}>
       {label}
     </span>
+  );
+}
+
+function AccountSortableTh({
+  label,
+  sortKey,
+  activeKey,
+  sortDir,
+  onSort,
+}: {
+  label: string;
+  sortKey: AccountSortKey;
+  activeKey: AccountSortKey;
+  sortDir: AccountSortDir;
+  onSort: (key: AccountSortKey) => void;
+}) {
+  const active = activeKey === sortKey;
+  const Icon = active ? (sortDir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <th
+      className="text-left px-3 py-2 font-medium"
+      aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={cn(
+          'inline-flex items-center gap-1 hover:text-foreground transition-colors',
+          active ? 'text-foreground' : 'text-muted-foreground',
+        )}
+      >
+        <span>{label}</span>
+        <Icon size={12} className={cn(active ? 'text-teal-600' : 'opacity-40')} />
+      </button>
+    </th>
   );
 }
 
@@ -240,6 +281,8 @@ export function VideoChannelsList() {
   const [accountForm, setAccountForm] = useState(emptyAccount);
   const [deleteAccountTarget, setDeleteAccountTarget] = useState<{ id: string; label: string } | null>(null);
   const [channelWorkHours, setChannelWorkHours] = useState<Map<string, number>>(new Map());
+  const [accountSortKey, setAccountSortKey] = useState<AccountSortKey>('vchannel');
+  const [accountSortDir, setAccountSortDir] = useState<AccountSortDir>('asc');
 
   const refreshChannelWorkHours = useCallback(async (channelIds: string[]) => {
     if (channelIds.length === 0) {
@@ -261,6 +304,20 @@ export function VideoChannelsList() {
     }
     void refreshChannelWorkHours(channels.map(ch => ch.id));
   }, [channels, refreshChannelWorkHours]);
+
+  const sortedAccounts = useMemo(
+    () => sortVchannelAccounts(accounts, accountSortKey, accountSortDir),
+    [accounts, accountSortKey, accountSortDir],
+  );
+
+  const onAccountSort = (key: AccountSortKey) => {
+    if (accountSortKey === key) {
+      setAccountSortDir(dir => (dir === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setAccountSortKey(key);
+    setAccountSortDir('asc');
+  };
 
   const brandFilterOptions = useMemo(
     () => [...new Set(channels.map(c => channelBrandLabel(c)).filter(code => code && code !== '—'))].sort(),
@@ -638,17 +695,21 @@ export function VideoChannelsList() {
               <table className="w-full text-[12px] min-w-[800px]">
                 <thead className="bg-muted/30">
                   <tr>
-                    <th className="text-left px-3 py-2">Vchannel</th>
-                    <th className="text-left px-3 py-2">名稱</th>
-                    <th className="text-left px-3 py-2">平台</th>
-                    <th className="text-left px-3 py-2">賬號ID</th>
-                    <th className="text-left px-3 py-2">登入方式</th>
-                    <th className="text-left px-3 py-2">FeedHive</th>
-                    <th className="text-left px-3 py-2">操作</th>
+                    {ACCOUNT_SORT_COLUMNS.map(col => (
+                      <AccountSortableTh
+                        key={col.key}
+                        label={col.label}
+                        sortKey={col.key}
+                        activeKey={accountSortKey}
+                        sortDir={accountSortDir}
+                        onSort={onAccountSort}
+                      />
+                    ))}
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">操作</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {accounts.map(acc => (
+                  {sortedAccounts.map(acc => (
                     <tr key={acc.id} className="border-t border-border/50 hover:bg-muted/10">
                       <td className="px-3 py-2 font-mono font-bold">{formatChannelCodes(acc.vchannelCodes)}</td>
                       <td className="px-3 py-2">{acc.accountLabel}</td>
