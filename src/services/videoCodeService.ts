@@ -1,13 +1,6 @@
 import { supabase } from '@/lib/supabase';
-import type { VchannelDeviceType } from '@/types/vchannel';
 
 export type VideoCodeDeviceSuffix = 'D' | 'M' | null;
-
-export function defaultDeviceSuffixFromVchannel(deviceType: VchannelDeviceType): VideoCodeDeviceSuffix {
-  if (deviceType === 'D') return 'D';
-  if (deviceType === 'M') return 'M';
-  return null;
-}
 
 export function formatVideoCode(
   channelCode: string,

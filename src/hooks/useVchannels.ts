@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import type { Vchannel, VchannelDeviceType, VchannelImportance, VchannelStatus } from '@/types/vchannel';
+import type { Vchannel, VchannelImportance, VchannelStatus } from '@/types/vchannel';
 import { mapVchannelRow, vchannelToDbRow } from '@/lib/vchannelMappers';
 import type { PlatformStatusValue } from '@/lib/vchannelPlatformStatus';
 
@@ -39,17 +39,12 @@ export function useVchannels() {
     internalName: string;
     publicName: string;
     importance: VchannelImportance;
-    deviceType: VchannelDeviceType;
     brandListId: string | null;
     status: VchannelStatus;
     platformStatus: Record<string, PlatformStatusValue>;
     notes?: string;
   }) => {
-    const row = vchannelToDbRow({
-      ...input,
-      videoCount: 0,
-      caseCount: 0,
-    });
+    const row = vchannelToDbRow(input);
     const { data, error: insertError } = await supabase
       .from('vchannels')
       .insert(row)

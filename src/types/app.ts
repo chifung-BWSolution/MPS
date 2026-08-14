@@ -189,10 +189,8 @@ export interface VideoChannel {
   internalName: string;
   publicName: string;
   importance: 'A1' | 'A2' | 'A3' | 'A4' | 'A5';
-  deviceType: 'desktop' | 'mobile' | 'both';
   brand: string;
   status: 'active' | 'paused' | 'archived';
-  videoCount: number;
 }
 
 export interface Video {

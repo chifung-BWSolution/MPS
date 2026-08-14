@@ -12,11 +12,11 @@ const importanceConfig: Record<string, { label: string; color: string; bg: strin
 };
 
 const mockChannels = [
-  { id: 'ch1', channelNumber: 'CH-001', internalName: 'BW 品牌主頻道', publicName: 'BW Wine Official', importance: 'A1', deviceType: 'both', status: 'active', videoCount: 24, company: '志豐企業', brand: 'BW Wine' },
-  { id: 'ch2', channelNumber: 'CH-002', internalName: 'ACI 活動花絮', publicName: 'ACI Events', importance: 'A2', deviceType: 'mobile', status: 'active', videoCount: 15, company: '志豐企業', brand: 'ACI' },
-  { id: 'ch3', channelNumber: 'CH-003', internalName: '品酒教學系列', publicName: 'Wine Education', importance: 'A2', deviceType: 'desktop', status: 'active', videoCount: 8, company: '志豐企業', brand: 'BW Wine' },
-  { id: 'ch4', channelNumber: 'CH-004', internalName: 'FCC 短視頻', publicName: 'FCC Shorts', importance: 'A3', deviceType: 'mobile', status: 'active', videoCount: 30, company: 'FCC', brand: 'FCC' },
-  { id: 'ch5', channelNumber: 'CH-005', internalName: 'BWDesign 作品集', publicName: 'BWDesign Portfolio', importance: 'A3', deviceType: 'both', status: 'paused', videoCount: 5, company: '志豐企業', brand: 'BWDesign' },
+  { id: 'ch1', channelNumber: 'CH-001', internalName: 'BW 品牌主頻道', publicName: 'BW Wine Official', importance: 'A1', status: 'active', company: '志豐企業', brand: 'BW Wine' },
+  { id: 'ch2', channelNumber: 'CH-002', internalName: 'ACI 活動花絮', publicName: 'ACI Events', importance: 'A2', status: 'active', company: '志豐企業', brand: 'ACI' },
+  { id: 'ch3', channelNumber: 'CH-003', internalName: '品酒教學系列', publicName: 'Wine Education', importance: 'A2', status: 'active', company: '志豐企業', brand: 'BW Wine' },
+  { id: 'ch4', channelNumber: 'CH-004', internalName: 'FCC 短視頻', publicName: 'FCC Shorts', importance: 'A3', status: 'active', company: 'FCC', brand: 'FCC' },
+  { id: 'ch5', channelNumber: 'CH-005', internalName: 'BWDesign 作品集', publicName: 'BWDesign Portfolio', importance: 'A3', status: 'paused', company: '志豐企業', brand: 'BWDesign' },
 ];
 
 function ChannelDetail({ channel, onBack }: { channel: any; onBack: () => void }) {
@@ -51,15 +51,7 @@ function ChannelDetail({ channel, onBack }: { channel: any; onBack: () => void }
                 {channel.status === 'active' ? '活躍' : '已暫停'}
               </span>
             </div>
-            <div className="grid grid-cols-3 gap-4 text-[13px]">
-              <div className="text-center bg-muted/20 rounded-md p-3">
-                <p className="text-[20px] font-bold">{channel.videoCount}</p>
-                <span className="text-[11px] text-muted-foreground">影片數量</span>
-              </div>
-              <div className="text-center bg-muted/20 rounded-md p-3">
-                <p className="text-[20px] font-bold">{channel.deviceType === 'both' ? '全平台' : channel.deviceType === 'mobile' ? '手機' : '桌面'}</p>
-                <span className="text-[11px] text-muted-foreground">設備類型</span>
-              </div>
+            <div className="grid grid-cols-1 gap-4 text-[13px]">
               <div className="text-center bg-muted/20 rounded-md p-3">
                 <p className={cn('text-[20px] font-bold', iConfig.color)}>{channel.importance}</p>
                 <span className="text-[11px] text-muted-foreground">重要性</span>
@@ -200,10 +192,6 @@ export function VideoChannelsModule() {
           <span className="text-[11px] text-muted-foreground">活躍頻道</span>
           <p className="text-[18px] font-bold text-teal-600">{mockChannels.filter(c => c.status === 'active').length}</p>
         </div>
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
-          <span className="text-[11px] text-muted-foreground">影片總數</span>
-          <p className="text-[18px] font-bold">{mockChannels.reduce((s, c) => s + c.videoCount, 0)}</p>
-        </div>
         <button className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700 transition-colors duration-200">
           <Plus size={12} /> 新增頻道
         </button>
@@ -232,8 +220,7 @@ export function VideoChannelsModule() {
                 <span className="text-[11px] bg-muted px-2 py-0.5 rounded">{channel.company}</span>
                 <span className="text-[11px] bg-muted px-2 py-0.5 rounded">{channel.brand}</span>
               </div>
-              <div className="flex items-center justify-between text-[12px]">
-                <span className="text-muted-foreground">🎬 {channel.videoCount} 影片</span>
+              <div className="flex items-center justify-end text-[12px]">
                 <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded', channel.status === 'active' ? 'bg-teal-100 text-teal-700' : 'bg-amber-100 text-amber-700')}>
                   {channel.status === 'active' ? '活躍' : '已暫停'}
                 </span>

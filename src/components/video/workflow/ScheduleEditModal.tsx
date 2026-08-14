@@ -4,7 +4,6 @@ import { cn } from '@/lib/utils';
 import type { Vchannel } from '@/types/vchannel';
 import type { ModelAssignment, StaffAssignment, VideoWorkflowDeviceSuffix, VideoWorkflowMock } from '@/types/videoWorkflow';
 import {
-  defaultDeviceSuffixFromVchannel,
   formatVideoCode,
   generateNextVideoCode,
   parseDeviceSuffixFromVideoCode,
@@ -197,18 +196,17 @@ export function ScheduleEditModal({
   const handleVchannelChange = async (vchannelId: string) => {
     const ch = channels.find(c => c.id === vchannelId);
     if (!ch) return;
-    const defaultSuffix = defaultDeviceSuffixFromVchannel(ch.deviceType);
     setCodeLoading(true);
     setFormError(null);
     try {
-      const { seq, year, videoCode } = await generateNextVideoCode(ch.channelCode, defaultSuffix);
+      const { seq, year, videoCode } = await generateNextVideoCode(ch.channelCode, null);
       setDraft(d => ({
         ...d,
         vchannelId: ch.id,
         vchannelCode: ch.channelCode,
         productionYear: year,
         baseSeq: seq,
-        deviceType: defaultSuffix,
+        deviceType: null,
         videoCode,
       }));
     } catch (e) {

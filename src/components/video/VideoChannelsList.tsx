@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Edit, Trash2, KeyRound, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Vchannel, VchannelDeviceType, VchannelImportance, VchannelStatus } from '@/types/vchannel';
+import type { Vchannel, VchannelImportance, VchannelStatus } from '@/types/vchannel';
 import { formatChannelCodes, parseChannelCodes } from '@/types/vchannel';
 import { useVchannels } from '@/hooks/useVchannels';
 import { useVchannelAccounts } from '@/hooks/useVchannelAccounts';
@@ -38,19 +38,11 @@ const importanceConfig = {
   A5: { label: 'A5', color: 'text-gray-600', bg: 'bg-gray-100', description: '最低' },
 };
 
-const deviceLabels: Record<VchannelDeviceType, string> = {
-  M: 'M',
-  D: 'D',
-  DM: 'DM',
-  D_M: 'D/M',
-};
-
 const emptyChannel = {
   channelCode: '',
   internalName: '',
   publicName: '',
   importance: 'A3' as VchannelImportance,
-  deviceType: 'DM' as VchannelDeviceType,
   brandListId: '' as string,
   status: 'active' as VchannelStatus,
   platformStatus: {} as Record<string, PlatformStatusValue>,
@@ -71,10 +63,6 @@ const emptyAccount = {
   notes: '',
   sortOrder: 0,
 };
-
-function deviceLabel(type: VchannelDeviceType) {
-  return deviceLabels[type] ?? type;
-}
 
 function PlatformStatusEditor({
   value,
@@ -169,7 +157,7 @@ function ChannelForm({
         <label className="text-[12px] font-medium text-muted-foreground block mb-1">公開頻道名稱 *</label>
         <Input value={form.publicName} onChange={e => setForm({ ...form, publicName: e.target.value })} className="h-9 text-[13px]" />
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="text-[12px] font-medium text-muted-foreground block mb-1">重要性</label>
           <Select value={form.importance} onValueChange={(val: VchannelImportance) => setForm({ ...form, importance: val })}>
@@ -178,18 +166,6 @@ function ChannelForm({
               {Object.entries(importanceConfig).map(([k, v]) => (
                 <SelectItem key={k} value={k}>{k} - {v.description}</SelectItem>
               ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <label className="text-[12px] font-medium text-muted-foreground block mb-1">D/M</label>
-          <Select value={form.deviceType} onValueChange={(val: VchannelDeviceType) => setForm({ ...form, deviceType: val })}>
-            <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="M">M（Mobile）</SelectItem>
-              <SelectItem value="D">D（Desktop）</SelectItem>
-              <SelectItem value="DM">DM（雙端）</SelectItem>
-              <SelectItem value="D_M">D/M（混合）</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -336,7 +312,6 @@ export function VideoChannelsList() {
       internalName: editForm.internalName,
       publicName: editForm.publicName,
       importance: editForm.importance,
-      deviceType: editForm.deviceType,
       brandListId: editForm.brandListId || null,
       status: editForm.status,
       platformStatus: editForm.platformStatus,
@@ -358,7 +333,6 @@ export function VideoChannelsList() {
       internalName: channel.internalName,
       publicName: channel.publicName,
       importance: channel.importance,
-      deviceType: channel.deviceType,
       brandListId: channel.brandListId ?? '',
       status: channel.status,
       platformStatus: channel.platformStatus,
@@ -535,7 +509,6 @@ export function VideoChannelsList() {
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">公開名稱</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">品牌</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">重要性</th>
-                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">D/M</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">平台</th>
                   <th className="text-right px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap min-w-[76px]">總工時</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">狀態</th>
@@ -565,7 +538,6 @@ export function VideoChannelsList() {
                         <td className="px-3 py-3">
                           <span className={cn('text-[11px] font-bold px-2 py-0.5 rounded', iConfig.bg, iConfig.color)}>{iConfig.label}</span>
                         </td>
-                        <td className="px-3 py-3"><span className="text-[11px] bg-muted px-2 py-0.5 rounded">{deviceLabel(channel.deviceType)}</span></td>
                         <td className="px-3 py-3 text-[11px] text-muted-foreground">{openedPlatformCount(channel)}/8</td>
                         <td className="px-3 py-3 text-right">
                           <ChannelWorkHoursCell hours={channelWorkHours.get(channel.id)} />
@@ -586,7 +558,7 @@ export function VideoChannelsList() {
                       {isExpanded && (
                         <tr className="border-t border-border/50 bg-slate-50/70">
                           <td />
-                          <td colSpan={10} className="px-3 py-3">
+                          <td colSpan={9} className="px-3 py-3">
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                               <div className="rounded-md border border-border bg-white p-3">
                                 <h4 className="text-[12px] font-bold mb-2">平台狀態（summary）</h4>
