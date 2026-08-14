@@ -1,5 +1,5 @@
 import type { Vchannel, VchannelAccount, VchannelImportance, VchannelStatus } from '@/types/vchannel';
-import type { PlatformStatusValue } from '@/lib/vchannelPlatformStatus';
+import { normalizeAccountPlatform, type PlatformStatusValue } from '@/lib/vchannelPlatformStatus';
 
 type DbVchannelRow = {
   id: string;
@@ -56,7 +56,7 @@ export function mapAccountRow(row: DbAccountRow): VchannelAccount {
     vchannelCodes: row.vchannel_codes,
     accountLabel: row.account_label,
     channelIntro: row.channel_intro ?? undefined,
-    platform: row.platform,
+    platform: normalizeAccountPlatform(row.platform) ?? row.platform,
     accountId: row.account_id ?? undefined,
     accountPassword: row.account_password ?? undefined,
     loginMethod: row.login_method ?? undefined,
@@ -88,7 +88,7 @@ export function accountToDbRow(input: Partial<VchannelAccount> & Pick<VchannelAc
     vchannel_codes: input.vchannelCodes,
     account_label: input.accountLabel ?? '',
     channel_intro: input.channelIntro ?? null,
-    platform: input.platform,
+    platform: normalizeAccountPlatform(input.platform) ?? input.platform.trim(),
     account_id: input.accountId ?? null,
     account_password: input.accountPassword ?? null,
     login_method: input.loginMethod ?? null,

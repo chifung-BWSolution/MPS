@@ -15,6 +15,8 @@ import {
   PLATFORM_LABELS,
   STATUS_KIND_COLORS,
   STATUS_KIND_LABELS,
+  accountPlatformLabel,
+  normalizeAccountPlatform,
   type PlatformKey,
   type PlatformStatusKind,
   type PlatformStatusValue,
@@ -372,7 +374,7 @@ export function VideoChannelsList() {
       vchannelCodesRaw: formatChannelCodes(account.vchannelCodes),
       accountLabel: account.accountLabel,
       channelIntro: account.channelIntro ?? '',
-      platform: account.platform,
+      platform: normalizeAccountPlatform(account.platform) ?? account.platform,
       accountId: account.accountId ?? '',
       accountPassword: account.accountPassword ?? '',
       loginMethod: account.loginMethod ?? '',
@@ -386,13 +388,14 @@ export function VideoChannelsList() {
 
   const saveAccount = async () => {
     const codes = parseChannelCodes(accountForm.vchannelCodesRaw || accountForm.vchannelCodes.join('/'));
-    if (!codes.length || !accountForm.platform.trim()) return;
+    const platform = normalizeAccountPlatform(accountForm.platform);
+    if (!codes.length || !platform) return;
     setSaving(true);
     const payload = {
       vchannelCodes: codes,
       accountLabel: accountForm.accountLabel,
       channelIntro: accountForm.channelIntro || undefined,
-      platform: accountForm.platform,
+      platform,
       accountId: accountForm.accountId || undefined,
       accountPassword: accountForm.accountPassword || undefined,
       loginMethod: accountForm.loginMethod || undefined,
@@ -601,7 +604,7 @@ export function VideoChannelsList() {
                                     <tbody>
                                       {linkedAccounts.map(acc => (
                                         <tr key={acc.id} className="border-t border-border/50">
-                                          <td className="px-2 py-1.5">{acc.platform}</td>
+                                          <td className="px-2 py-1.5">{accountPlatformLabel(acc.platform)}</td>
                                           <td className="px-2 py-1.5 font-mono">{acc.accountId || '—'}</td>
                                           <td className="px-2 py-1.5">{acc.loginMethod || '—'}</td>
                                           <td className="px-2 py-1.5">
@@ -660,7 +663,7 @@ export function VideoChannelsList() {
                     <tr key={acc.id} className="border-t border-border/50 hover:bg-muted/10">
                       <td className="px-3 py-2 font-mono font-bold">{formatChannelCodes(acc.vchannelCodes)}</td>
                       <td className="px-3 py-2">{acc.accountLabel}</td>
-                      <td className="px-3 py-2">{acc.platform}</td>
+                      <td className="px-3 py-2">{accountPlatformLabel(acc.platform)}</td>
                       <td className="px-3 py-2 font-mono text-[11px] max-w-[140px] truncate" title={acc.accountId}>{acc.accountId || '—'}</td>
                       <td className="px-3 py-2 font-mono text-muted-foreground">{acc.accountPassword ? '••••••••' : '—'}</td>
                       <td className="px-3 py-2 max-w-[120px] truncate" title={acc.loginMethod}>{acc.loginMethod || '—'}</td>
@@ -669,7 +672,7 @@ export function VideoChannelsList() {
                       <td className="px-3 py-2">
                         <div className="flex gap-2">
                           <button onClick={() => openEditAccount(acc)} className="text-teal-600 hover:underline">編輯</button>
-                          <button onClick={() => setDeleteAccountTarget({ id: acc.id, label: `${formatChannelCodes(acc.vchannelCodes)} / ${acc.platform}` })} className="text-rose-500 hover:underline">刪除</button>
+                          <button onClick={() => setDeleteAccountTarget({ id: acc.id, label: `${formatChannelCodes(acc.vchannelCodes)} / ${accountPlatformLabel(acc.platform)}` })} className="text-rose-500 hover:underline">刪除</button>
                         </div>
                       </td>
                     </tr>
@@ -719,7 +722,17 @@ export function VideoChannelsList() {
             </div>
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1">平台 *</label>
-              <Input value={accountForm.platform} onChange={e => setAccountForm({ ...accountForm, platform: e.target.value })} className="h-9 text-[13px]" placeholder="Instagram" />
+              <Select
+                value={normalizeAccountPlatform(accountForm.platform) ?? ''}
+                onValueChange={(value: PlatformKey) => setAccountForm({ ...accountForm, platform: value })}
+              >
+                <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="選擇平台" /></SelectTrigger>
+                <SelectContent>
+                  {PLATFORM_KEYS.map(key => (
+                    <SelectItem key={key} value={key}>{PLATFORM_LABELS[key]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

@@ -51,6 +51,65 @@ export const EXCEL_PLATFORM_MAP: Record<string, PlatformKey> = {
   Linkedin: 'linkedin',
 };
 
+const PLATFORM_KEY_SET = new Set<string>(PLATFORM_KEYS);
+
+/** Free-text account labels → the same keys as vchannels.platform_status */
+const ACCOUNT_PLATFORM_ALIASES: Record<string, PlatformKey> = {
+  youtube: 'youtube',
+  yt: 'youtube',
+  instagram: 'instagram',
+  ig: 'instagram',
+  'ig page': 'instagram',
+  igpage: 'instagram',
+  facebook: 'facebook',
+  fb: 'facebook',
+  'facebook page': 'facebook',
+  facebookpage: 'facebook',
+  小紅書: 'xiaohongshu',
+  xiaohongshu: 'xiaohongshu',
+  xhs: 'xiaohongshu',
+  微信視頻號: 'wechat_channels',
+  wechat視頻號: 'wechat_channels',
+  視頻號: 'wechat_channels',
+  wechat: 'wechat_channels',
+  wechatchannels: 'wechat_channels',
+  wechat_channels: 'wechat_channels',
+  抖音號: 'douyin',
+  抖音: 'douyin',
+  douyin: 'douyin',
+  threads: 'threads',
+  linkedin: 'linkedin',
+};
+
+export function isPlatformKey(value: string): value is PlatformKey {
+  return PLATFORM_KEY_SET.has(value);
+}
+
+/** Map a vchannel_accounts.platform label to a platform_status key. */
+export function normalizeAccountPlatform(raw: string | null | undefined): PlatformKey | null {
+  const text = (raw ?? '').trim();
+  if (!text) return null;
+  if (isPlatformKey(text)) return text;
+
+  const lower = text.toLowerCase();
+  if (isPlatformKey(lower)) return lower;
+
+  const compact = lower.replace(/[\s_-]+/g, '');
+  return (
+    ACCOUNT_PLATFORM_ALIASES[text] ??
+    ACCOUNT_PLATFORM_ALIASES[lower] ??
+    ACCOUNT_PLATFORM_ALIASES[compact] ??
+    null
+  );
+}
+
+export function accountPlatformLabel(raw: string | null | undefined): string {
+  const key = normalizeAccountPlatform(raw);
+  if (key) return PLATFORM_LABELS[key];
+  const text = (raw ?? '').trim();
+  return text || '—';
+}
+
 export function parsePlatformStatus(raw: string | undefined | null): PlatformStatusValue {
   const text = (raw ?? '').trim();
   if (!text) return { kind: 'pending', raw_text: '' };
