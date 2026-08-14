@@ -7,6 +7,7 @@
 |------|-------|-------------|
 | `/marketing/google-ads` | Google Ads | MCC Campaign 成效（每日指標彙總） |
 | `/marketing/facebook-ads` | Facebook Ads | Meta Campaign 成效（多 Business） |
+| `/marketing/ads-cost-trend` | 廣告成本趨勢 | 以品牌檢視近 180 日 Google / Facebook 成本（每 30 日區間） |
 | `/marketing/ads-comparison` | 廣告比較圖表 | 三欄並排比較 Google / Facebook Campaign 每日成效 |
 | `/marketing/backlink` | 反向連結 | 反向連結購買紀錄 |
 | `/marketing/ads-data-sync` | 廣告數據同步 | Google / Facebook 歷史回填與增量同步（設定） |
@@ -36,6 +37,15 @@
   - 細項：Ad Sets / Ads / Placements 為**即時 Meta Marketing API**（Insights；Ads Top 150 by Cost）。不落倉庫。
   - 即時細項日期上限 92 日（與 Google 相同）。
   - Header 顯示帳戶、Business、品牌（手動 `brand_list`），無 Google 網站連結。
+
+### 廣告成本趨勢
+
+- **路由：** `#marketing/ads-cost-trend`
+- **版面：** 標題／副標、指標卡、篩選＋搜尋、折線圖、品牌成本表（與 Google Ads 列表同一視覺風格）。
+- **欄位：** 品牌 Brand、`<30 Days`、`31-60 Days`、`61-90 Days`、`91-120 Days`、`121-150 Days`、`151-180 Days`、總計 Total。
+- **列：** 僅顯示近 180 日有成本的品牌。點擊品牌列展開其 Campaign；再點擊 Campaign 開啟 Google / Facebook 詳情頁。
+- **篩選：** 廣告平台（全部／Google Ads／Facebook Ads）；目標（僅在選定單一平台時顯示）；標籤；搜尋品牌／Campaign／帳戶。
+- **資料：** 以現有 `google_ads_campaign_metrics_range` / `facebook_ads_campaign_metrics_range` 按 6 個 30 日區間彙總。Google 品牌來自網站對應 `brand_list`；Facebook 品牌來自 campaign `brand_list_id`。
 
 ### 廣告比較圖表
 

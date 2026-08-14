@@ -110,6 +110,7 @@ export const mainMenuItems: MainMenuItem[] = [
     subMenus: [
       { id: 'google-ads', label: 'Google Ads', section: '廣告' },
       { id: 'facebook-ads', label: 'Facebook Ads', section: '廣告' },
+      { id: 'ads-cost-trend', label: '廣告成本趨勢', section: '廣告' },
       { id: 'ads-comparison', label: '廣告比較圖表', section: '廣告' },
       { id: 'backlink', label: '反向連結 Backlinks', section: '內容' },
       { id: 'ads-data-sync', label: '廣告數據同步', section: '設定' },

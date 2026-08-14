@@ -142,6 +142,7 @@ App.tsx
 ├── /marketing
 │   ├── /google-ads
 │   ├── /facebook-ads
+│   ├── /ads-cost-trend
 │   ├── /ads-comparison
 │   ├── /backlink
 │   ├── /ads-data-sync
