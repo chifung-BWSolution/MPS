@@ -6,6 +6,8 @@ import {
   extractDomainsFromUrls,
   loadWebsiteRows,
   matchDomainsToWebsites,
+  matchWebsitesFromText,
+  matchWebsitesFromUniqueNameToken,
   pickSampleUrlForDomain,
   replaceGoogleCampaignWebsiteLinks,
   upsertDiscoveredDomains,
@@ -1699,6 +1701,7 @@ type CampaignUrlAgg = {
   campaignName: string;
   urls: string[];
   urlSource: "final_url" | "landing_page";
+  scanned: boolean;
 };
 
 function asStringArray(v: unknown): string[] {
@@ -1706,9 +1709,66 @@ function asStringArray(v: unknown): string[] {
   return v.filter((x): x is string => typeof x === "string" && !!x);
 }
 
+function ensureCampaignAgg(
+  campaignMap: Map<string, CampaignUrlAgg>,
+  campaignId: string,
+  campaignName: string,
+  scanned = false,
+): CampaignUrlAgg {
+  const existing = campaignMap.get(campaignId);
+  if (!existing) {
+    const created: CampaignUrlAgg = {
+      campaignId,
+      campaignName,
+      urls: [],
+      urlSource: "final_url",
+      scanned,
+    };
+    campaignMap.set(campaignId, created);
+    return created;
+  }
+  if (campaignName && !existing.campaignName) existing.campaignName = campaignName;
+  if (scanned) existing.scanned = true;
+  return existing;
+}
+
+function addCampaignUrls(
+  agg: CampaignUrlAgg,
+  urls: string[],
+  source: "final_url" | "landing_page",
+): void {
+  for (const u of urls) {
+    if (u && !agg.urls.includes(u)) agg.urls.push(u);
+  }
+  if (!urls.length) return;
+  if (source === "final_url" || agg.urls.length === urls.length) {
+    agg.urlSource = source;
+  }
+}
+
+async function seedCampaignsFromWarehouse(
+  supabase: SupabaseClient,
+  customerId: string,
+  campaignMap: Map<string, CampaignUrlAgg>,
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("google_ads_campaigns")
+    .select("campaign_id,campaign_name")
+    .eq("customer_id", customerId);
+  if (error) throw new Error(error.message);
+  for (const row of (data as { campaign_id: string; campaign_name: string | null }[] | null) ?? []) {
+    const campaignId = String(row.campaign_id || "");
+    if (!campaignId) continue;
+    ensureCampaignAgg(campaignMap, campaignId, String(row.campaign_name || ""));
+  }
+}
+
 /**
  * Discover final URLs / landing pages for Google campaigns and link them to
  * webandsystem_list rows by domain (with campaign/account name fallback).
+ *
+ * Performance Max has no ad_group_ad rows, so we also seed warehouse campaigns,
+ * read asset_group.final_urls, and always query landing_page_view.
  */
 export async function linkGoogleCampaignWebsites(
   supabase: SupabaseClient,
@@ -1728,12 +1788,12 @@ export async function linkGoogleCampaignWebsites(
 
   const websites = await loadWebsiteRows(supabase);
   const linkErrors: string[] = [];
-  const allCampaignRowIds: string[] = [];
+  const allReplaceRowIds: string[] = [];
   const allLinkRows: GoogleCampaignWebsiteRow[] = [];
   const discoveredInputs: DiscoveredDomainInput[] = [];
 
   type CustomerResult = {
-    campaignRowIds: string[];
+    replaceRowIds: string[];
     linkRows: GoogleCampaignWebsiteRow[];
     discovered: DiscoveredDomainInput[];
   };
@@ -1742,182 +1802,228 @@ export async function linkGoogleCampaignWebsites(
     customerIds,
     ACCOUNT_CONCURRENCY,
     async (customerId): Promise<CustomerResult | null> => {
+      const campaignMap = new Map<string, CampaignUrlAgg>();
+      const accountName = accountNameByCustomerId.get(customerId) || "";
+
       try {
-        const adRows = await gaqlQuery(
-          accessToken,
-          customerId,
-          `
-          SELECT
-            campaign.id,
-            campaign.name,
-            ad_group_ad.ad.final_urls,
-            ad_group_ad.ad.final_mobile_urls
-          FROM ad_group_ad
-          WHERE campaign.status != 'REMOVED'
-            AND ad_group_ad.status != 'REMOVED'
-          `,
-        );
-
-        const campaignMap = new Map<string, CampaignUrlAgg>();
-        for (const row of adRows) {
-          const campaignId = String(nestGet(row, "campaign.id") ?? "");
-          if (!campaignId) continue;
-          const campaignName = String(nestGet(row, "campaign.name") ?? "");
-          const urls = [
-            ...asStringArray(nestGet(row, "adGroupAd.ad.finalUrls")),
-            ...asStringArray(nestGet(row, "adGroupAd.ad.finalMobileUrls")),
-          ];
-          const existing = campaignMap.get(campaignId);
-          if (!existing) {
-            campaignMap.set(campaignId, {
-              campaignId,
-              campaignName,
-              urls: [...urls],
-              urlSource: "final_url",
-            });
-          } else {
-            if (campaignName && !existing.campaignName) {
-              existing.campaignName = campaignName;
-            }
-            for (const u of urls) {
-              if (!existing.urls.includes(u)) existing.urls.push(u);
-            }
-          }
-        }
-
-        const needsLanding = [...campaignMap.values()].some((c) => c.urls.length === 0);
-        if (needsLanding) {
-          try {
-            const lpRows = await gaqlQuery(
-              accessToken,
-              customerId,
-              `
-              SELECT
-                campaign.id,
-                campaign.name,
-                landing_page_view.unexpanded_final_url
-              FROM landing_page_view
-              WHERE segments.date DURING LAST_30_DAYS
-              `,
-            );
-            for (const row of lpRows) {
-              const campaignId = String(nestGet(row, "campaign.id") ?? "");
-              if (!campaignId) continue;
-              const campaignName = String(nestGet(row, "campaign.name") ?? "");
-              const url = nestGet(row, "landingPageView.unexpandedFinalUrl");
-              const urlStr = typeof url === "string" && url ? url : null;
-              const existing = campaignMap.get(campaignId);
-              if (!existing) {
-                campaignMap.set(campaignId, {
-                  campaignId,
-                  campaignName,
-                  urls: urlStr ? [urlStr] : [],
-                  urlSource: "landing_page",
-                });
-              } else if (existing.urls.length === 0) {
-                if (campaignName && !existing.campaignName) {
-                  existing.campaignName = campaignName;
-                }
-                existing.urlSource = "landing_page";
-                if (urlStr) existing.urls.push(urlStr);
-              } else if (existing.urlSource === "landing_page" && urlStr) {
-                if (!existing.urls.includes(urlStr)) existing.urls.push(urlStr);
-              }
-            }
-          } catch {
-            // Landing page view is optional fallback; ignore per-customer LP failures
-          }
-        }
-
-        const campaignRowIds: string[] = [];
-        const linkRows: GoogleCampaignWebsiteRow[] = [];
-        const discovered: DiscoveredDomainInput[] = [];
-        const accountName = accountNameByCustomerId.get(customerId) || "";
-
-        for (const agg of campaignMap.values()) {
-          const campaignRowId = `${customerId}:${agg.campaignId}`;
-          campaignRowIds.push(campaignRowId);
-
-          const urlDomains = extractDomainsFromUrls(agg.urls);
-          let matchSource: GoogleCampaignWebsiteRow["match_source"] = agg.urlSource;
-          let matches = matchDomainsToWebsites(urlDomains, websites);
-          let domainsForDiscover = [...urlDomains];
-
-          if (!matches.length) {
-            const nameDomains = [
-              ...extractDomainsFromName(agg.campaignName),
-              ...extractDomainsFromName(accountName),
-            ];
-            const uniqueNameDomains = [...new Set(nameDomains)];
-            if (uniqueNameDomains.length) {
-              matches = matchDomainsToWebsites(uniqueNameDomains, websites);
-              if (matches.length) matchSource = "name";
-              for (const d of uniqueNameDomains) {
-                if (!domainsForDiscover.includes(d)) domainsForDiscover.push(d);
-              }
-            }
-          }
-
-          const matchedWebsiteByDomain = new Map<string, string>();
-          for (const m of matches) {
-            matchedWebsiteByDomain.set(m.matched_domain, m.website_profile_id);
-            linkRows.push({
-              customer_id: customerId,
-              campaign_id: agg.campaignId,
-              website_profile_id: m.website_profile_id,
-              campaign_row_id: campaignRowId,
-              matched_domain: m.matched_domain,
-              sample_final_url: pickSampleUrlForDomain(m.matched_domain, agg.urls),
-              match_source: matchSource,
-              last_seen_at: nowIso,
-              updated_at: nowIso,
-            });
-          }
-
-          for (const d of domainsForDiscover) {
-            const websiteId = matchedWebsiteByDomain.get(d) ??
-              matches.find((m) =>
-                m.matched_domain === d ||
-                d.endsWith("." + m.matched_domain) ||
-                m.matched_domain.endsWith("." + d)
-              )?.website_profile_id ??
-              null;
-            discovered.push({
-              normalized_domain: d,
-              sample_url: pickSampleUrlForDomain(d, agg.urls),
-              source: "google",
-              website_profile_id: websiteId,
-              source_ref: {
-                platform: "google",
-                accountId: customerId,
-                accountName: accountName || customerId,
-                campaignId: agg.campaignId,
-                campaignName: agg.campaignName || agg.campaignId,
-              },
-            });
-          }
-        }
-
-        return { campaignRowIds, linkRows, discovered };
+        await seedCampaignsFromWarehouse(supabase, customerId, campaignMap);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        linkErrors.push(`${customerId}: ${msg.slice(0, 160)}`);
-        return null;
+        linkErrors.push(`${customerId} warehouse: ${msg.slice(0, 120)}`);
       }
+
+      const liveQueries: Array<{
+        label: string;
+        query: string;
+        apply: (row: GaqlRow) => void;
+      }> = [
+        {
+          label: "campaigns",
+          query: `
+            SELECT campaign.id, campaign.name
+            FROM campaign
+            WHERE campaign.status != 'REMOVED'
+          `,
+          apply: (row) => {
+            const campaignId = String(nestGet(row, "campaign.id") ?? "");
+            if (!campaignId) return;
+            ensureCampaignAgg(
+              campaignMap,
+              campaignId,
+              String(nestGet(row, "campaign.name") ?? ""),
+            );
+          },
+        },
+        {
+          label: "ads",
+          query: `
+            SELECT
+              campaign.id,
+              campaign.name,
+              ad_group_ad.ad.final_urls,
+              ad_group_ad.ad.final_mobile_urls
+            FROM ad_group_ad
+            WHERE campaign.status != 'REMOVED'
+              AND ad_group_ad.status != 'REMOVED'
+          `,
+          apply: (row) => {
+            const campaignId = String(nestGet(row, "campaign.id") ?? "");
+            if (!campaignId) return;
+            const agg = ensureCampaignAgg(
+              campaignMap,
+              campaignId,
+              String(nestGet(row, "campaign.name") ?? ""),
+              true,
+            );
+            addCampaignUrls(
+              agg,
+              [
+                ...asStringArray(nestGet(row, "adGroupAd.ad.finalUrls")),
+                ...asStringArray(nestGet(row, "adGroupAd.ad.finalMobileUrls")),
+              ],
+              "final_url",
+            );
+          },
+        },
+        {
+          label: "asset_groups",
+          query: `
+            SELECT
+              campaign.id,
+              campaign.name,
+              asset_group.final_urls,
+              asset_group.final_mobile_urls
+            FROM asset_group
+            WHERE campaign.status != 'REMOVED'
+              AND asset_group.status != 'REMOVED'
+          `,
+          apply: (row) => {
+            const campaignId = String(nestGet(row, "campaign.id") ?? "");
+            if (!campaignId) return;
+            const agg = ensureCampaignAgg(
+              campaignMap,
+              campaignId,
+              String(nestGet(row, "campaign.name") ?? ""),
+              true,
+            );
+            addCampaignUrls(
+              agg,
+              [
+                ...asStringArray(nestGet(row, "assetGroup.finalUrls")),
+                ...asStringArray(nestGet(row, "assetGroup.finalMobileUrls")),
+              ],
+              "final_url",
+            );
+          },
+        },
+        {
+          label: "landing_pages",
+          query: `
+            SELECT
+              campaign.id,
+              campaign.name,
+              landing_page_view.unexpanded_final_url
+            FROM landing_page_view
+            WHERE segments.date DURING LAST_30_DAYS
+          `,
+          apply: (row) => {
+            const campaignId = String(nestGet(row, "campaign.id") ?? "");
+            if (!campaignId) return;
+            const agg = ensureCampaignAgg(
+              campaignMap,
+              campaignId,
+              String(nestGet(row, "campaign.name") ?? ""),
+              true,
+            );
+            const url = nestGet(row, "landingPageView.unexpandedFinalUrl");
+            const urlStr = typeof url === "string" && url ? url : "";
+            if (agg.urls.length === 0 && urlStr) {
+              addCampaignUrls(agg, [urlStr], "landing_page");
+            } else if (agg.urlSource === "landing_page" && urlStr) {
+              addCampaignUrls(agg, [urlStr], "landing_page");
+            }
+          },
+        },
+      ];
+
+      for (const live of liveQueries) {
+        try {
+          const rows = await gaqlQuery(accessToken, customerId, live.query);
+          for (const row of rows) live.apply(row);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          linkErrors.push(`${customerId} ${live.label}: ${msg.slice(0, 140)}`);
+        }
+      }
+
+      const replaceRowIds: string[] = [];
+      const linkRows: GoogleCampaignWebsiteRow[] = [];
+      const discovered: DiscoveredDomainInput[] = [];
+
+      for (const agg of campaignMap.values()) {
+        const campaignRowId = `${customerId}:${agg.campaignId}`;
+        if (agg.scanned) replaceRowIds.push(campaignRowId);
+
+        const urlDomains = extractDomainsFromUrls(agg.urls);
+        let matchSource: GoogleCampaignWebsiteRow["match_source"] = agg.urlSource;
+        let matches = matchDomainsToWebsites(urlDomains, websites);
+        let domainsForDiscover = [...urlDomains];
+
+        if (!matches.length) {
+          const nameText = `${agg.campaignName} ${accountName}`;
+          const nameDomains = [
+            ...extractDomainsFromName(agg.campaignName),
+            ...extractDomainsFromName(accountName),
+          ];
+          const uniqueNameDomains = [...new Set(nameDomains)];
+          matches = matchDomainsToWebsites(uniqueNameDomains, websites);
+          if (!matches.length) {
+            matches = matchWebsitesFromText(nameText, websites);
+          }
+          if (!matches.length) {
+            matches = matchWebsitesFromUniqueNameToken(nameText, websites);
+          }
+          if (matches.length) matchSource = "name";
+          for (const d of uniqueNameDomains) {
+            if (!domainsForDiscover.includes(d)) domainsForDiscover.push(d);
+          }
+        }
+
+        const matchedWebsiteByDomain = new Map<string, string>();
+        for (const m of matches) {
+          matchedWebsiteByDomain.set(m.matched_domain, m.website_profile_id);
+          linkRows.push({
+            customer_id: customerId,
+            campaign_id: agg.campaignId,
+            website_profile_id: m.website_profile_id,
+            campaign_row_id: campaignRowId,
+            matched_domain: m.matched_domain,
+            sample_final_url: pickSampleUrlForDomain(m.matched_domain, agg.urls),
+            match_source: matchSource,
+            last_seen_at: nowIso,
+            updated_at: nowIso,
+          });
+        }
+
+        for (const d of domainsForDiscover) {
+          const websiteId = matchedWebsiteByDomain.get(d) ??
+            matches.find((m) =>
+              m.matched_domain === d ||
+              d.endsWith("." + m.matched_domain) ||
+              m.matched_domain.endsWith("." + d)
+            )?.website_profile_id ??
+            null;
+          discovered.push({
+            normalized_domain: d,
+            sample_url: pickSampleUrlForDomain(d, agg.urls),
+            source: "google",
+            website_profile_id: websiteId,
+            source_ref: {
+              platform: "google",
+              accountId: customerId,
+              accountName: accountName || customerId,
+              campaignId: agg.campaignId,
+              campaignName: agg.campaignName || agg.campaignId,
+            },
+          });
+        }
+      }
+
+      return { replaceRowIds, linkRows, discovered };
     },
   );
 
   for (const r of results) {
     if (!r) continue;
-    allCampaignRowIds.push(...r.campaignRowIds);
+    allReplaceRowIds.push(...r.replaceRowIds);
     allLinkRows.push(...r.linkRows);
     discoveredInputs.push(...r.discovered);
   }
 
-  if (allCampaignRowIds.length) {
+  if (allReplaceRowIds.length || allLinkRows.length) {
     await replaceGoogleCampaignWebsiteLinks(
       supabase,
-      allCampaignRowIds,
+      allReplaceRowIds,
       allLinkRows,
     );
   }

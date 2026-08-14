@@ -150,7 +150,7 @@ Also apply:
 
 ## 網站自動連結（Google only）
 
-- Google：**Campaign ↔ 網站**（`google_ads_campaign_websites`），來源為 Final URL / landing page
+- Google：**Campaign ↔ 網站**（`google_ads_campaign_websites`），來源為 Final URL / Performance Max `asset_group` URL / landing page，再以帳戶或 Campaign 名稱中的網域後備
 - 未對應網域寫入 `ads_discovered_domains`；在 `/#website/list` 按「同步廣告網域」可提示建立網站後自動重連
 
 ## 前端路由

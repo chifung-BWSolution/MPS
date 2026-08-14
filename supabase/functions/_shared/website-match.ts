@@ -125,20 +125,104 @@ export function extractDomainsFromUrls(urls: Array<string | null | undefined>): 
   return [...out];
 }
 
+/** Longest multi-part TLDs first so "brandingworks.com.hk" is not truncated to ".com". */
+const MULTI_PART_TLDS = [
+  "com.hk",
+  "com.au",
+  "com.sg",
+  "com.tw",
+  "com.cn",
+  "com.my",
+  "co.uk",
+  "co.jp",
+  "co.nz",
+  "co.za",
+  "co.in",
+  "org.hk",
+  "net.hk",
+  "edu.hk",
+  "gov.hk",
+];
+const SINGLE_TLDS = [
+  "com",
+  "hk",
+  "net",
+  "org",
+  "edu",
+  "gov",
+  "io",
+  "ai",
+  "app",
+  "shop",
+  "asia",
+  "info",
+  "biz",
+  "cc",
+];
+const KNOWN_TLDS = [...MULTI_PART_TLDS, ...SINGLE_TLDS];
+
+function registrableDomainFromHost(host: string): string {
+  const parts = host.split(".").filter(Boolean);
+  if (parts.length < 2) return "";
+  for (let i = 1; i < parts.length; i++) {
+    const suffix = parts.slice(i).join(".");
+    if (KNOWN_TLDS.includes(suffix)) {
+      return parts.slice(i - 1).join(".");
+    }
+  }
+  return "";
+}
+
 /** Extract likely domain tokens from an account/campaign name (fallback only). */
 export function extractDomainsFromName(name: string | null | undefined): string[] {
   if (!name) return [];
   const domains = new Set<string>();
   const matches = String(name)
     .toLowerCase()
-    .match(/[a-z0-9][-a-z0-9]*\.(?:com|com\.hk|hk|net|org|co\.uk|io|ai|app|shop)(?:\.[a-z]{2})?/gi);
+    .match(/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+/gi);
   if (matches) {
     for (const m of matches) {
-      const d = normalizeDomain(m);
+      const host = normalizeDomain(m);
+      const d = registrableDomainFromHost(host);
       if (d) domains.add(d);
     }
   }
   return [...domains];
+}
+
+/** Match known website domains that appear as substrings in account/campaign names. */
+export function matchWebsitesFromText(
+  text: string | null | undefined,
+  websites: WebsiteRow[],
+): DomainMatch[] {
+  const hay = String(text || "").toLowerCase();
+  if (!hay.trim()) return [];
+  const domains: string[] = [];
+  for (const w of websites) {
+    const d = normalizeDomain(w.domain_url);
+    if (d && hay.includes(d)) domains.push(d);
+  }
+  return matchDomainsToWebsites(domains, websites);
+}
+
+/**
+ * Last-resort name match: a long alphanumeric token that appears in exactly one
+ * website domain (e.g. "Beauty100 Magazine" → beauty100-magazine.com).
+ */
+export function matchWebsitesFromUniqueNameToken(
+  text: string | null | undefined,
+  websites: WebsiteRow[],
+): DomainMatch[] {
+  const tokens = [...new Set(String(text || "").toLowerCase().match(/[a-z0-9]{8,}/g) ?? [])];
+  if (!tokens.length) return [];
+  const domains: string[] = [];
+  for (const token of tokens) {
+    const hits = websites
+      .map((w) => normalizeDomain(w.domain_url))
+      .filter((d) => d.includes(token));
+    if (hits.length === 1) domains.push(hits[0]);
+  }
+  return matchDomainsToWebsites(domains, websites);
 }
 
 /** Match candidate domains to webandsystem_list (exact / subdomain either-way). */

@@ -52,7 +52,7 @@ export function AdsDataSyncModule() {
         helpText={
           <>
             完整歷史以「每月一個步驟」推進，避免 Edge Function 逾時。執行中請保持此分頁開啟以自動推進；關閉後可按「繼續」從資料庫游標恢復。
-            啟動時會依廣告 Final URL 自動對應 `webandsystem_list`；未對應網域可到「網站列表」用「同步廣告網域」建立。
+            啟動時會依廣告 Final URL、Performance Max 資產組 URL、landing page，以及帳戶／Campaign 名稱中的網域自動對應 `webandsystem_list`；未對應網域可到「網站列表」用「同步廣告網域」建立。
           </>
         }
       />
