@@ -22,6 +22,8 @@ type VideoLoginMethodRow = {
   updated_at: string;
 };
 
+const TABLE = 'vchannel_login_methods';
+
 const SELECT_COLUMNS =
   'id, login_method, display_name, account_name, phone_number, email, password, two_fa_methods, created_at, updated_at';
 
@@ -66,7 +68,7 @@ export function useVideoLoginMethods() {
   const refresh = useCallback(async () => {
     setLoading(true);
     const { data, error: queryError } = await supabase
-      .from('video_login_methods')
+      .from(TABLE)
       .select(SELECT_COLUMNS)
       .order('updated_at', { ascending: false });
 
@@ -92,7 +94,7 @@ export function useVideoLoginMethods() {
     if (!displayName) return { ok: false as const, error: '請輸入顯示名稱' };
 
     const { data, error: insertError } = await supabase
-      .from('video_login_methods')
+      .from(TABLE)
       .insert(toDbRow({ ...input, displayName }))
       .select(SELECT_COLUMNS)
       .single();
@@ -108,7 +110,7 @@ export function useVideoLoginMethods() {
     if (!displayName) return { ok: false as const, error: '請輸入顯示名稱' };
 
     const { data, error: updateError } = await supabase
-      .from('video_login_methods')
+      .from(TABLE)
       .update(toDbRow({ ...input, displayName }))
       .eq('id', id)
       .select(SELECT_COLUMNS)
@@ -123,7 +125,7 @@ export function useVideoLoginMethods() {
   }, []);
 
   const deleteItem = useCallback(async (id: string) => {
-    const { error: deleteError } = await supabase.from('video_login_methods').delete().eq('id', id);
+    const { error: deleteError } = await supabase.from(TABLE).delete().eq('id', id);
     if (deleteError) return { ok: false as const, error: deleteError.message };
     setItems((prev) => prev.filter((item) => item.id !== id));
     return { ok: true as const };
