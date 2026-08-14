@@ -5,6 +5,7 @@ import { VideoWorkflowProvider } from '@/hooks/useVideoWorkflow';
 import { VideoListModule } from './VideoListModule';
 import { VideoManagementModule } from './VideoManagementModule';
 import { VideoChannelsList } from './VideoChannelsList';
+import { VideoLoginMethodsModule } from './VideoLoginMethodsModule';
 import { DistributionTrackingModule } from './DistributionTrackingModule';
 import { VideoScheduleModule } from './workflow/VideoScheduleModule';
 import { VideoProductionModule } from './workflow/VideoProductionModule';
@@ -70,6 +71,8 @@ function VideoModuleContent({ subModule }: { subModule?: string }) {
         return { title: '影片統籌', subtitle: '全局影片產出時間軸，查看所有狀態的影片記錄。' };
       case 'channels':
         return { title: '頻道設定', subtitle: '管理 Vchannel 基本信息及相應平台信息。' };
+      case 'login-methods':
+        return { title: '登入方式', subtitle: '管理影片製作相關帳號的登入方式、聯絡資料與雙重驗證。' };
       case 'list':
         return { title: '影片列表', subtitle: '管理所有影片及其製作進度。' };
       case 'library':
@@ -84,7 +87,10 @@ function VideoModuleContent({ subModule }: { subModule?: string }) {
   const { title, subtitle } = getTitle();
   const resolvedTab = activeTab === 'management' ? 'coordination' : activeTab;
   // coordination / schedule 自行管理標題與視窗高度佈局
-  const ownsHeader = resolvedTab === 'coordination' || resolvedTab === 'schedule';
+  const ownsHeader =
+    resolvedTab === 'coordination' ||
+    resolvedTab === 'schedule' ||
+    resolvedTab === 'login-methods';
 
   return (
     <div className={ownsHeader ? '' : 'space-y-6'}>
@@ -103,6 +109,7 @@ function VideoModuleContent({ subModule }: { subModule?: string }) {
       {resolvedTab === 'publish' && <VideoPublishModule />}
       {resolvedTab === 'coordination' && <VideoManagementModule />}
       {resolvedTab === 'channels' && <VideoChannelsList />}
+      {resolvedTab === 'login-methods' && <VideoLoginMethodsModule />}
       {resolvedTab === 'list' && <VideoListModule />}
       {resolvedTab === 'library' && <VideoLibrary />}
       {resolvedTab === 'distribution' && <DistributionTrackingModule />}

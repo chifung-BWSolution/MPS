@@ -127,6 +127,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'review', label: '影片審核', section: '製作流程' },
       { id: 'publish', label: '影片發佈', section: '製作流程' },
       { id: 'channels', label: '頻道設定', section: '設定' },
+      { id: 'login-methods', label: '登入方式', section: '設定' },
     ],
   },
   {
