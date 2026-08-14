@@ -74,6 +74,8 @@ export type GoogleAdsBackfillJob = {
     domains_discovered?: number;
     domains_unmatched?: number;
     campaigns_with_links?: number;
+    pmax_campaigns_scanned?: number;
+    pmax_campaigns_with_links?: number;
     link_errors?: string[];
   };
 };

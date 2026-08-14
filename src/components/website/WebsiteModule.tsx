@@ -909,7 +909,7 @@ function UnmatchedAdsDomainsModal({
           <div>
             <h3 className="text-[16px] font-bold">未連結的廣告網域</h3>
             <p className="text-[12px] text-muted-foreground mt-0.5">
-              從 Google Ads 偵測到的目的地網域，尚未對應到網站列表。請建立網站或略過。
+              從 Google Ads 偵測到的目的地網域（含 Search Final URL 與 Performance Max 資產組 URL），尚未對應到網站列表。請建立網站或略過。
             </p>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-muted rounded" disabled={syncing}>
@@ -1467,11 +1467,15 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
     }
     const unmatchedCount = r.result.unmatched?.length ?? 0;
     const g = r.result.google?.websitesLinked ?? 0;
+    const campaigns = r.result.google?.campaignsWithLinks ?? 0;
+    const pmax = r.result.google?.pmaxCampaignsWithLinks ?? 0;
     const errors = [
       ...(r.result.linkErrors || []),
       ...(r.result.google?.linkErrors || []),
     ];
-    toast.success(`廣告網域同步完成（Google 連結 ${g}）`);
+    toast.success(
+      `廣告網域同步完成（Google 連結 ${g} 個網站、${campaigns} 個 Campaign，其中 PMax ${pmax}）`,
+    );
     if (errors.length) {
       toast.error('部分同步錯誤', {
         description: errors.slice(0, 2).join(' '),
@@ -1480,7 +1484,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
     if (unmatchedCount > 0) setShowUnmatchedModal(true);
     else if (!errors.length && g > 0) toast.message('所有偵測到的網域皆已對應或略過');
     else if (!errors.length && g === 0) {
-      toast.message('未發現可連結的廣告目的地網域（請確認 Ads API 權限與廣告 Final URL）');
+      toast.message('未發現可連結的廣告目的地網域（請確認 Ads API 權限、Search Final URL 與 PMax 資產組 URL）');
     }
   };
 

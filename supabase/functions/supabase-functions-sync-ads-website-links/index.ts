@@ -87,6 +87,8 @@ async function runLinkPass(supabase: ReturnType<typeof createClient>) {
     domains_discovered: 0,
     domains_unmatched: 0,
     campaigns_with_links: 0,
+    pmax_campaigns_scanned: 0,
+    pmax_campaigns_with_links: 0,
     link_errors: [] as string[],
   };
 
@@ -121,6 +123,8 @@ async function runLinkPass(supabase: ReturnType<typeof createClient>) {
       domainsDiscovered: googleSummary.domains_discovered,
       domainsUnmatched: googleSummary.domains_unmatched,
       campaignsWithLinks: googleSummary.campaigns_with_links,
+      pmaxCampaignsScanned: googleSummary.pmax_campaigns_scanned,
+      pmaxCampaignsWithLinks: googleSummary.pmax_campaigns_with_links,
       linkErrors: googleSummary.link_errors,
     },
     unmatched,

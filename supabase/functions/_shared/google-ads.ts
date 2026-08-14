@@ -1702,6 +1702,8 @@ type CampaignUrlAgg = {
   urls: string[];
   urlSource: "final_url" | "landing_page";
   scanned: boolean;
+  channelType: string;
+  fromAssetGroup: boolean;
 };
 
 function asStringArray(v: unknown): string[] {
@@ -1714,6 +1716,7 @@ function ensureCampaignAgg(
   campaignId: string,
   campaignName: string,
   scanned = false,
+  channelType = "",
 ): CampaignUrlAgg {
   const existing = campaignMap.get(campaignId);
   if (!existing) {
@@ -1723,11 +1726,14 @@ function ensureCampaignAgg(
       urls: [],
       urlSource: "final_url",
       scanned,
+      channelType: channelType.toUpperCase(),
+      fromAssetGroup: false,
     };
     campaignMap.set(campaignId, created);
     return created;
   }
   if (campaignName && !existing.campaignName) existing.campaignName = campaignName;
+  if (channelType && !existing.channelType) existing.channelType = channelType.toUpperCase();
   if (scanned) existing.scanned = true;
   return existing;
 }
@@ -1753,13 +1759,25 @@ async function seedCampaignsFromWarehouse(
 ): Promise<void> {
   const { data, error } = await supabase
     .from("google_ads_campaigns")
-    .select("campaign_id,campaign_name")
+    .select("campaign_id,campaign_name,advertising_channel_type")
     .eq("customer_id", customerId);
   if (error) throw new Error(error.message);
-  for (const row of (data as { campaign_id: string; campaign_name: string | null }[] | null) ?? []) {
+  for (const row of (
+    data as {
+      campaign_id: string;
+      campaign_name: string | null;
+      advertising_channel_type: string | null;
+    }[] | null
+  ) ?? []) {
     const campaignId = String(row.campaign_id || "");
     if (!campaignId) continue;
-    ensureCampaignAgg(campaignMap, campaignId, String(row.campaign_name || ""));
+    ensureCampaignAgg(
+      campaignMap,
+      campaignId,
+      String(row.campaign_name || ""),
+      false,
+      String(row.advertising_channel_type || ""),
+    );
   }
 }
 
@@ -1782,6 +1800,8 @@ export async function linkGoogleCampaignWebsites(
     domains_discovered: 0,
     domains_unmatched: 0,
     campaigns_with_links: 0,
+    pmax_campaigns_scanned: 0,
+    pmax_campaigns_with_links: 0,
     link_errors: [],
   };
   if (!customerIds.length) return empty;
@@ -1791,11 +1811,15 @@ export async function linkGoogleCampaignWebsites(
   const allReplaceRowIds: string[] = [];
   const allLinkRows: GoogleCampaignWebsiteRow[] = [];
   const discoveredInputs: DiscoveredDomainInput[] = [];
+  let pmaxScanned = 0;
+  let pmaxLinked = 0;
 
   type CustomerResult = {
     replaceRowIds: string[];
     linkRows: GoogleCampaignWebsiteRow[];
     discovered: DiscoveredDomainInput[];
+    pmaxScanned: number;
+    pmaxLinked: number;
   };
 
   const results = await mapPool(
@@ -1820,7 +1844,7 @@ export async function linkGoogleCampaignWebsites(
         {
           label: "campaigns",
           query: `
-            SELECT campaign.id, campaign.name
+            SELECT campaign.id, campaign.name, campaign.advertising_channel_type
             FROM campaign
             WHERE campaign.status != 'REMOVED'
           `,
@@ -1831,6 +1855,8 @@ export async function linkGoogleCampaignWebsites(
               campaignMap,
               campaignId,
               String(nestGet(row, "campaign.name") ?? ""),
+              false,
+              String(nestGet(row, "campaign.advertisingChannelType") ?? ""),
             );
           },
         },
@@ -1886,14 +1912,15 @@ export async function linkGoogleCampaignWebsites(
               String(nestGet(row, "campaign.name") ?? ""),
               true,
             );
-            addCampaignUrls(
-              agg,
-              [
-                ...asStringArray(nestGet(row, "assetGroup.finalUrls")),
-                ...asStringArray(nestGet(row, "assetGroup.finalMobileUrls")),
-              ],
-              "final_url",
-            );
+            const assetUrls = [
+              ...asStringArray(nestGet(row, "assetGroup.finalUrls")),
+              ...asStringArray(nestGet(row, "assetGroup.finalMobileUrls")),
+            ];
+            addCampaignUrls(agg, assetUrls, "final_url");
+            if (assetUrls.length) {
+              agg.fromAssetGroup = true;
+              if (!agg.channelType) agg.channelType = "PERFORMANCE_MAX";
+            }
           },
         },
         {
@@ -2009,7 +2036,17 @@ export async function linkGoogleCampaignWebsites(
         }
       }
 
-      return { replaceRowIds, linkRows, discovered };
+      const pmaxIds = [...campaignMap.values()]
+        .filter((agg) => agg.channelType === "PERFORMANCE_MAX" || agg.fromAssetGroup)
+        .map((agg) => agg.campaignId);
+      const linkedCampaignIds = new Set(linkRows.map((r) => r.campaign_id));
+      return {
+        replaceRowIds,
+        linkRows,
+        discovered,
+        pmaxScanned: pmaxIds.length,
+        pmaxLinked: pmaxIds.filter((id) => linkedCampaignIds.has(id)).length,
+      };
     },
   );
 
@@ -2018,6 +2055,8 @@ export async function linkGoogleCampaignWebsites(
     allReplaceRowIds.push(...r.replaceRowIds);
     allLinkRows.push(...r.linkRows);
     discoveredInputs.push(...r.discovered);
+    pmaxScanned += r.pmaxScanned;
+    pmaxLinked += r.pmaxLinked;
   }
 
   if (allReplaceRowIds.length || allLinkRows.length) {
@@ -2048,6 +2087,8 @@ export async function linkGoogleCampaignWebsites(
     domains_discovered,
     domains_unmatched,
     campaigns_with_links: campaignsWithLinks.size,
+    pmax_campaigns_scanned: pmaxScanned,
+    pmax_campaigns_with_links: pmaxLinked,
     link_errors: linkErrors,
   };
 }

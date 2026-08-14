@@ -121,6 +121,8 @@ Deno.serve(async (req) => {
           domains_discovered: linkSummary.domains_discovered,
           domains_unmatched: linkSummary.domains_unmatched,
           campaigns_with_links: linkSummary.campaigns_with_links,
+          pmax_campaigns_scanned: linkSummary.pmax_campaigns_scanned,
+          pmax_campaigns_with_links: linkSummary.pmax_campaigns_with_links,
           link_errors: linkSummary.link_errors,
         },
       };

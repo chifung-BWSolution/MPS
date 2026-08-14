@@ -44,6 +44,10 @@ export function AdsDataSyncModule() {
               <div className="font-medium">{google.job?.meta?.campaigns_with_links ?? '—'}</div>
             </div>
             <div>
+              <div className="text-muted-foreground text-[11px]">PMax 已連結</div>
+              <div className="font-medium">{google.job?.meta?.pmax_campaigns_with_links ?? '—'}</div>
+            </div>
+            <div>
               <div className="text-muted-foreground text-[11px]">發現網域數</div>
               <div className="font-medium">{google.job?.meta?.domains_discovered ?? '—'}</div>
             </div>

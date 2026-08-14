@@ -32,6 +32,8 @@ export type AdsWebsiteLinkSummary = {
   domainsDiscovered: number;
   domainsUnmatched: number;
   campaignsWithLinks?: number;
+  pmaxCampaignsScanned?: number;
+  pmaxCampaignsWithLinks?: number;
   linkErrors: string[];
 };
 
