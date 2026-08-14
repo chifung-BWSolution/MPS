@@ -32,7 +32,7 @@ export function MarketingModule({ subModule }: { subModule?: string }) {
     switch (activeTab) {
       case 'google-ads': return { title: 'Google Ads', subtitle: '依日期區間檢視 MCC Campaign 成效（每日指標彙總）。' };
       case 'facebook-ads': return { title: 'Facebook Ads', subtitle: '依日期區間檢視 Meta Campaign 成效（多 Business · 每日指標彙總）。' };
-      case 'ads-cost-trend': return { title: '廣告成本趨勢', subtitle: '以品牌檢視近 180 日 Google Ads / Facebook Ads 成本（每 30 日區間）。' };
+      case 'ads-cost-trend': return { title: '廣告成本趨勢', subtitle: '以品牌檢視 Google Ads / Facebook Ads 成本（30 日區間或按月，預設近 6 個月）。' };
       case 'ads-comparison': return { title: '廣告比較圖表', subtitle: '並排比較最多三個 Campaign 的每日成效（Google Ads / Facebook Ads）。' };
       case 'backlink': return { title: '反向連結 Backlinks', subtitle: '記錄各平台反向連結購買及費用。' };
       case 'ads-data-sync': return { title: '廣告數據同步', subtitle: '觸發並監控 Google Ads 與 Facebook Ads 的完整歷史回填，以及日常增量同步狀態。' };

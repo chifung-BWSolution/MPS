@@ -1,34 +1,37 @@
 import {
+  Bar,
   CartesianGrid,
+  ComposedChart,
   Legend,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
-import { ADS_COST_TREND_BUCKETS } from '@/lib/adsCostTrend';
 
-const LINE_COLORS = ['#0d9488', '#2563eb', '#1877F2', '#d97706', '#7c3aed', '#e11d48', '#64748b'];
+const SERIES_COLORS = ['#0d9488', '#2563eb', '#1877F2', '#d97706', '#7c3aed', '#e11d48', '#64748b'];
 
 export function AdsCostTrendChart({
   data,
   seriesKeys,
+  description,
   loading,
 }: {
   data: { label: string; [key: string]: string | number }[];
   seriesKeys: { key: string; label: string }[];
+  description: string;
   loading?: boolean;
 }) {
+  const totalSeries = seriesKeys.filter((series) => series.key === 'total');
+  const lineSeries = seriesKeys.filter((series) => series.key !== 'total');
+
   return (
     <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md shadow-card p-4">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
           <h3 className="text-[14px] font-semibold">廣告成本趨勢</h3>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            依目前篩選，顯示近 180 日每 30 日區間的成本（{ADS_COST_TREND_BUCKETS.map((b) => b.label).join(' / ')}）
-          </p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">{description}</p>
         </div>
       </div>
       <div className="h-[280px]">
@@ -42,7 +45,7 @@ export function AdsCostTrendChart({
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+            <ComposedChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} />
               <YAxis
@@ -63,19 +66,29 @@ export function AdsCostTrendChart({
                 ]}
               />
               <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-              {seriesKeys.map((series, index) => (
+              {totalSeries.map((series) => (
+                <Bar
+                  key={series.key}
+                  dataKey={series.key}
+                  name={series.label}
+                  fill={SERIES_COLORS[0]}
+                  radius={[3, 3, 0, 0]}
+                  maxBarSize={36}
+                />
+              ))}
+              {lineSeries.map((series, index) => (
                 <Line
                   key={series.key}
                   type="monotone"
                   dataKey={series.key}
                   name={series.label}
-                  stroke={LINE_COLORS[index % LINE_COLORS.length]}
-                  strokeWidth={series.key === 'total' ? 2.5 : 1.75}
+                  stroke={SERIES_COLORS[(index + 1) % SERIES_COLORS.length]}
+                  strokeWidth={1.75}
                   dot={{ r: 3 }}
                   activeDot={{ r: 5 }}
                 />
               ))}
-            </LineChart>
+            </ComposedChart>
           </ResponsiveContainer>
         )}
       </div>

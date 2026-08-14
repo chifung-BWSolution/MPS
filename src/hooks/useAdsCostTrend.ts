@@ -5,13 +5,19 @@ import { mergeWebsitesByDomain } from '@/lib/adsWebsiteDisplay';
 import { todayIso } from '@/lib/adsDailySeries';
 import {
   buildCostTrendBucketRanges,
+  buildMonthlyBucketRanges,
   campaignTagMap,
   emptyCostTrendBuckets,
   sumCostTrendBuckets,
 } from '@/lib/adsCostTrend';
 import { normalizeGoogleAdsObjectives } from '@/types/googleAds';
 import type { AdsPlatform, AdsTag } from '@/types/adsTags';
-import type { AdsCostTrendBucketId, AdsCostTrendCampaign } from '@/types/adsCostTrend';
+import type {
+  AdsCostTrendBucketId,
+  AdsCostTrendBucketRange,
+  AdsCostTrendCampaign,
+  AdsCostTrendPeriodMode,
+} from '@/types/adsCostTrend';
 
 type GoogleAggRow = {
   customer_id: string;
@@ -111,27 +117,40 @@ function campaignKey(platform: AdsPlatform, accountId: string, campaignId: strin
   return `${platform}:${accountId}:${campaignId}`;
 }
 
-export function useAdsCostTrend() {
+export function useAdsCostTrend(query: {
+  mode: AdsCostTrendPeriodMode;
+  monthFrom: string;
+  monthTo: string;
+}) {
   const { session } = useAuth();
   const [campaigns, setCampaigns] = useState<AdsCostTrendCampaign[]>([]);
   const [tags, setTags] = useState<AdsTag[]>([]);
   const [asOf, setAsOf] = useState(() => todayIso());
+  const [ranges, setRanges] = useState<AdsCostTrendBucketRange[]>(() =>
+    query.mode === 'monthly'
+      ? buildMonthlyBucketRanges(query.monthFrom, query.monthTo, todayIso())
+      : buildCostTrendBucketRanges(todayIso()),
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     const asOfDate = todayIso();
-    const ranges = buildCostTrendBucketRanges(asOfDate);
+    const nextRanges =
+      query.mode === 'monthly'
+        ? buildMonthlyBucketRanges(query.monthFrom, query.monthTo, asOfDate)
+        : buildCostTrendBucketRanges(asOfDate);
+    const bucketIds = nextRanges.map((range) => range.id);
 
     try {
-      const googleRangeReqs = ranges.map((range) =>
+      const googleRangeReqs = nextRanges.map((range) =>
         supabase.rpc('google_ads_campaign_metrics_range', {
           p_from: range.from,
           p_to: range.to,
         }),
       );
-      const facebookRangeReqs = ranges.map((range) =>
+      const facebookRangeReqs = nextRanges.map((range) =>
         supabase.rpc('facebook_ads_campaign_metrics_range', {
           p_from: range.from,
           p_to: range.to,
@@ -297,19 +316,19 @@ export function useAdsCostTrend() {
           platform,
           accountId,
           campaignId,
-          buckets: emptyCostTrendBuckets(),
+          buckets: emptyCostTrendBuckets(bucketIds),
           impressions: 0,
           clicks: 0,
           conversions: 0,
         };
-        existing.buckets[bucketId] += spendMicros;
+        existing.buckets[bucketId] = (existing.buckets[bucketId] ?? 0) + spendMicros;
         existing.impressions += impressions;
         existing.clicks += clicks;
         existing.conversions += conversions;
         draft.set(key, existing);
       };
 
-      ranges.forEach((range, index) => {
+      nextRanges.forEach((range, index) => {
         for (const row of (googleRangeResults[index]?.data as GoogleAggRow[] | null) ?? []) {
           upsert(
             'google',
@@ -388,6 +407,7 @@ export function useAdsCostTrend() {
       });
 
       setAsOf(asOfDate);
+      setRanges(nextRanges);
       setTags(mappedTags);
       setCampaigns(mapped.filter((campaign) => campaign.totalMicros > 0));
       setError(null);
@@ -397,11 +417,11 @@ export function useAdsCostTrend() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [query.mode, query.monthFrom, query.monthTo]);
 
   useEffect(() => {
     void refresh();
   }, [session, refresh]);
 
-  return { campaigns, tags, asOf, loading, error, refresh };
+  return { campaigns, tags, asOf, ranges, loading, error, refresh };
 }

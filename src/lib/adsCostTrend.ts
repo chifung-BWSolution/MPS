@@ -14,6 +14,8 @@ import {
 } from '@/types/adsCostTrend';
 
 export const UNASSIGNED_BRAND_ID = '__unassigned__';
+export const ADS_COST_TREND_MAX_MONTHS = 6;
+const MONTH_KEY_RE = /^\d{4}-\d{2}$/;
 
 export const ADS_COST_TREND_BUCKETS: {
   id: AdsCostTrendBucketId;
@@ -29,15 +31,15 @@ export const ADS_COST_TREND_BUCKETS: {
   { id: 'd151_180', label: '151-180 Days', fromOffset: 150, toOffset: 179 },
 ];
 
-export function emptyCostTrendBuckets(): AdsCostTrendBuckets {
-  return {
-    d0_30: 0,
-    d31_60: 0,
-    d61_90: 0,
-    d91_120: 0,
-    d121_150: 0,
-    d151_180: 0,
-  };
+export function emptyCostTrendBuckets(
+  ids: readonly string[] = ADS_COST_TREND_BUCKET_IDS,
+): AdsCostTrendBuckets {
+  return Object.fromEntries(ids.map((id) => [id, 0]));
+}
+
+export function bucketIdsFrom(buckets: AdsCostTrendBuckets | undefined): string[] {
+  const ids = buckets ? Object.keys(buckets) : [];
+  return ids.length > 0 ? ids : [...ADS_COST_TREND_BUCKET_IDS];
 }
 
 export function buildCostTrendBucketRanges(asOf: string): AdsCostTrendBucketRange[] {
@@ -48,18 +50,108 @@ export function buildCostTrendBucketRanges(asOf: string): AdsCostTrendBucketRang
   }));
 }
 
+export function isMonthKey(value: string): boolean {
+  return MONTH_KEY_RE.test(value);
+}
+
+export function currentMonthKey(asOf: string): string {
+  return asOf.slice(0, 7);
+}
+
+export function addMonthsToKey(monthKey: string, delta: number): string {
+  const [year, month] = monthKey.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1 + delta, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+export function monthStartIso(monthKey: string): string {
+  return `${monthKey}-01`;
+}
+
+export function monthEndIso(monthKey: string, asOf?: string): string {
+  const [year, month] = monthKey.split('-').map(Number);
+  const end = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+  if (asOf && monthKey === currentMonthKey(asOf) && asOf < end) return asOf;
+  return end;
+}
+
+export function monthsInclusive(fromMonth: string, toMonth: string): string[] {
+  if (!isMonthKey(fromMonth) || !isMonthKey(toMonth) || fromMonth > toMonth) return [];
+  const out: string[] = [];
+  let cursor = fromMonth;
+  while (cursor <= toMonth) {
+    out.push(cursor);
+    cursor = addMonthsToKey(cursor, 1);
+  }
+  return out;
+}
+
+export function monthSpan(fromMonth: string, toMonth: string): number {
+  return monthsInclusive(fromMonth, toMonth).length;
+}
+
+export function formatMonthLabel(monthKey: string): string {
+  const [year, month] = monthKey.split('-');
+  return `${year}年${Number(month)}月`;
+}
+
+export function defaultMonthlyRange(asOf: string): { from: string; to: string } {
+  const to = currentMonthKey(asOf);
+  return { from: addMonthsToKey(to, -(ADS_COST_TREND_MAX_MONTHS - 1)), to };
+}
+
+export function clampSelectedMonthRange(
+  fromMonth: string,
+  toMonth: string,
+  asOf: string,
+  changed: 'from' | 'to',
+): { from: string; to: string } {
+  const maxMonth = currentMonthKey(asOf);
+  let from = isMonthKey(fromMonth) ? fromMonth : defaultMonthlyRange(asOf).from;
+  let to = isMonthKey(toMonth) ? toMonth : defaultMonthlyRange(asOf).to;
+  if (from > maxMonth) from = maxMonth;
+  if (to > maxMonth) to = maxMonth;
+  if (from > to) {
+    if (changed === 'from') to = from;
+    else from = to;
+  }
+  if (monthSpan(from, to) > ADS_COST_TREND_MAX_MONTHS) {
+    if (changed === 'from') {
+      to = addMonthsToKey(from, ADS_COST_TREND_MAX_MONTHS - 1);
+      if (to > maxMonth) to = maxMonth;
+    } else {
+      from = addMonthsToKey(to, -(ADS_COST_TREND_MAX_MONTHS - 1));
+    }
+  }
+  return { from, to };
+}
+
+export function buildMonthlyBucketRanges(
+  fromMonth: string,
+  toMonth: string,
+  asOf: string,
+): AdsCostTrendBucketRange[] {
+  const clamped = clampSelectedMonthRange(fromMonth, toMonth, asOf, 'to');
+  return monthsInclusive(clamped.from, clamped.to).map((id) => ({
+    id,
+    label: formatMonthLabel(id),
+    from: monthStartIso(id),
+    to: monthEndIso(id, asOf),
+  }));
+}
+
 export function addCostTrendBuckets(
   target: AdsCostTrendBuckets,
   source: AdsCostTrendBuckets,
 ): AdsCostTrendBuckets {
-  for (const id of ADS_COST_TREND_BUCKET_IDS) {
-    target[id] += source[id];
+  for (const id of Object.keys(source)) {
+    target[id] = (target[id] ?? 0) + (source[id] ?? 0);
   }
   return target;
 }
 
 export function sumCostTrendBuckets(buckets: AdsCostTrendBuckets): number {
-  return ADS_COST_TREND_BUCKET_IDS.reduce((sum, id) => sum + buckets[id], 0);
+  return Object.values(buckets).reduce((sum, value) => sum + (value ?? 0), 0);
 }
 
 export function formatCostTrendMoney(micros: number): string {
@@ -146,7 +238,7 @@ export function groupCostTrendByBrand(
       brandCode: brand?.brandCode || (brandId === UNASSIGNED_BRAND_ID ? '未設定品牌' : brandId),
       displayName: brand?.displayName || (brandId === UNASSIGNED_BRAND_ID ? '未設定品牌' : brandId),
       campaigns: [],
-      buckets: emptyCostTrendBuckets(),
+      buckets: emptyCostTrendBuckets(bucketIdsFrom(campaigns[0]?.buckets)),
       totalMicros: 0,
     };
     groups.set(brandId, row);
@@ -214,7 +306,7 @@ export function sumUniqueCampaignMetrics(rows: AdsCostTrendBrandRow[]): {
   facebookMicros: number;
 } {
   const campaigns = uniqueCostTrendCampaigns(rows.flatMap((row) => row.campaigns));
-  const buckets = emptyCostTrendBuckets();
+  const buckets = emptyCostTrendBuckets(bucketIdsFrom(campaigns[0]?.buckets));
   let impressions = 0;
   let clicks = 0;
   let conversions = 0;
@@ -241,6 +333,7 @@ export function sumUniqueCampaignMetrics(rows: AdsCostTrendBrandRow[]): {
 }
 
 export function buildCostTrendChartPoints(
+  bucketDefs: { id: string; label: string }[],
   totals: AdsCostTrendBuckets,
   google: AdsCostTrendBuckets,
   facebook: AdsCostTrendBuckets,
@@ -252,15 +345,15 @@ export function buildCostTrendChartPoints(
   facebook: number;
   [brand: string]: string | number;
 }[] {
-  return ADS_COST_TREND_BUCKETS.map((bucket) => {
+  return bucketDefs.map((bucket) => {
     const point: { label: string; total: number; google: number; facebook: number; [brand: string]: string | number } = {
       label: bucket.label,
-      total: totals[bucket.id] / 1_000_000,
-      google: google[bucket.id] / 1_000_000,
-      facebook: facebook[bucket.id] / 1_000_000,
+      total: (totals[bucket.id] ?? 0) / 1_000_000,
+      google: (google[bucket.id] ?? 0) / 1_000_000,
+      facebook: (facebook[bucket.id] ?? 0) / 1_000_000,
     };
     for (const series of brandSeries) {
-      point[series.key] = series.buckets[bucket.id] / 1_000_000;
+      point[series.key] = (series.buckets[bucket.id] ?? 0) / 1_000_000;
     }
     return point;
   });

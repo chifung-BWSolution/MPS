@@ -1,10 +1,20 @@
 import assert from 'node:assert/strict';
 import {
+  ADS_COST_TREND_MAX_MONTHS,
+  addMonthsToKey,
   buildCostTrendBucketRanges,
+  buildCostTrendChartPoints,
+  buildMonthlyBucketRanges,
+  clampSelectedMonthRange,
+  defaultMonthlyRange,
   emptyCostTrendBuckets,
   filterCostTrendCampaigns,
   formatCostTrendMoney,
+  formatMonthLabel,
   groupCostTrendByBrand,
+  monthEndIso,
+  monthSpan,
+  monthStartIso,
   sortCostTrendBrandRows,
   sumUniqueCampaignMetrics,
   UNASSIGNED_BRAND_ID,
@@ -119,5 +129,52 @@ assert.equal(totals.facebookMicros, 3_000_000);
 
 assert.match(formatCostTrendMoney(6_500_000), /^\$/);
 assert.match(formatCostTrendMoney(1_000_000), /^\$/);
+
+const monthlyDefault = defaultMonthlyRange('2026-08-14');
+assert.equal(monthlyDefault.from, '2026-03');
+assert.equal(monthlyDefault.to, '2026-08');
+assert.equal(monthSpan(monthlyDefault.from, monthlyDefault.to), ADS_COST_TREND_MAX_MONTHS);
+assert.equal(addMonthsToKey('2026-01', -1), '2025-12');
+assert.equal(formatMonthLabel('2026-03'), '2026年3月');
+assert.equal(monthStartIso('2026-03'), '2026-03-01');
+assert.equal(monthEndIso('2026-03', '2026-08-14'), '2026-03-31');
+assert.equal(monthEndIso('2026-08', '2026-08-14'), '2026-08-14');
+
+const clampedFrom = clampSelectedMonthRange('2025-10', '2026-08', '2026-08-14', 'from');
+assert.equal(clampedFrom.from, '2025-10');
+assert.equal(clampedFrom.to, '2026-03');
+assert.equal(monthSpan(clampedFrom.from, clampedFrom.to), ADS_COST_TREND_MAX_MONTHS);
+
+const clampedTo = clampSelectedMonthRange('2025-10', '2026-08', '2026-08-14', 'to');
+assert.equal(clampedTo.from, '2026-03');
+assert.equal(clampedTo.to, '2026-08');
+
+const futureClamped = clampSelectedMonthRange('2026-09', '2026-12', '2026-08-14', 'from');
+assert.equal(futureClamped.from, '2026-08');
+assert.equal(futureClamped.to, '2026-08');
+
+const monthlyRanges = buildMonthlyBucketRanges('2026-03', '2026-08', '2026-08-14');
+assert.equal(monthlyRanges.length, 6);
+assert.equal(monthlyRanges[0].id, '2026-03');
+assert.equal(monthlyRanges[0].from, '2026-03-01');
+assert.equal(monthlyRanges[0].to, '2026-03-31');
+assert.equal(monthlyRanges[5].id, '2026-08');
+assert.equal(monthlyRanges[5].from, '2026-08-01');
+assert.equal(monthlyRanges[5].to, '2026-08-14');
+
+const monthlyBuckets = emptyCostTrendBuckets(monthlyRanges.map((range) => range.id));
+monthlyBuckets['2026-03'] = 1_000_000;
+monthlyBuckets['2026-08'] = 2_000_000;
+const chartPoints = buildCostTrendChartPoints(
+  monthlyRanges,
+  monthlyBuckets,
+  emptyCostTrendBuckets(monthlyRanges.map((range) => range.id)),
+  emptyCostTrendBuckets(monthlyRanges.map((range) => range.id)),
+  [],
+);
+assert.equal(chartPoints.length, 6);
+assert.equal(chartPoints[0].label, '2026年3月');
+assert.equal(chartPoints[0].total, 1);
+assert.equal(chartPoints[5].total, 2);
 
 console.log('ads cost trend lib: ok');
