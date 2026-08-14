@@ -568,7 +568,9 @@ export function FacebookAdsModule() {
               {!loading && filtered.length === 0 && (
                 <tr>
                   <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
-                    此日期區間尚無資料。請先到「廣告數據同步」執行完整歷史回填，或按 Refresh recent。
+                    {campaigns.length === 0
+                      ? '此日期區間尚無資料。請先到「廣告數據同步」執行完整歷史回填，或按 Refresh recent。'
+                      : '沒有符合目前篩選的 Campaign。'}
                   </td>
                 </tr>
               )}

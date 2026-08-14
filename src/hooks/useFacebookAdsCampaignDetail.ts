@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { resolveFacebookBrandListId } from '@/lib/facebookAdsBrand';
 import type {
   FacebookAdsCampaignDetail,
   FacebookAdsDailyMetricPoint,
@@ -23,6 +24,7 @@ type AccountRow = {
   currency_code: string | null;
   business_key: string;
   business_name: string;
+  brand_list_id?: string | null;
 };
 
 type BrandRow = {
@@ -194,19 +196,27 @@ export function useFacebookAdsCampaignDetail(
       const meta = metaRes.data as CampaignMetaRow | null;
       const account = accountRes.data as AccountRow | null;
 
-      let brandCode: string | undefined;
-      let brandDisplayName: string | undefined;
-      if (meta?.brand_list_id) {
-        const brandRes = await supabase
-          .from('brand_list')
-          .select('id, brand_code, display_name')
-          .eq('id', meta.brand_list_id)
-          .maybeSingle();
-        if (brandRes.error) throw brandRes.error;
-        const brand = brandRes.data as BrandRow | null;
-        brandCode = brand?.brand_code;
-        brandDisplayName = brand?.display_name;
-      }
+      const brandListRes = await supabase
+        .from('brand_list')
+        .select('id, brand_code, display_name')
+        .eq('is_active', true);
+      if (brandListRes.error) throw brandListRes.error;
+      const brands = (brandListRes.data as BrandRow[] | null) ?? [];
+      const brandIdByCode = new Map(brands.map((b) => [b.brand_code, b.id]));
+      const brandById = new Map(brands.map((b) => [b.id, b]));
+      const brandListId = resolveFacebookBrandListId(
+        meta?.brand_list_id,
+        account?.brand_list_id,
+        {
+          accountName: account?.account_name,
+          businessName: account?.business_name,
+          businessKey: account?.business_key,
+        },
+        brandIdByCode,
+      );
+      const brand = brandListId ? brandById.get(brandListId) : undefined;
+      const brandCode = brand?.brand_code;
+      const brandDisplayName = brand?.display_name;
 
       const series = fillSeries(dateFrom, dateTo, currentRows);
       const prevSeries = fillSeries(prev.from, prev.to, previousRows);
@@ -222,7 +232,7 @@ export function useFacebookAdsCampaignDetail(
         businessName: account?.business_name || undefined,
         businessKey: account?.business_key || undefined,
         currencyCode: account?.currency_code ?? undefined,
-        brandListId: meta?.brand_list_id ?? null,
+        brandListId,
         brandCode,
         brandDisplayName,
         series,

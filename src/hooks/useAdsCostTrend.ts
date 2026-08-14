@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { mergeWebsitesByDomain } from '@/lib/adsWebsiteDisplay';
+import { resolveFacebookBrandListId } from '@/lib/facebookAdsBrand';
 import { todayIso } from '@/lib/adsDailySeries';
 import {
   buildCostTrendBucketRanges,
@@ -64,6 +65,14 @@ type GoogleAccountRow = {
 type FacebookAccountRow = {
   ad_account_id: string;
   account_name: string;
+  business_name?: string | null;
+  business_key?: string | null;
+  brand_list_id?: string | null;
+};
+
+type BrandListRow = {
+  id: string;
+  brand_code: string;
 };
 
 type CampaignWebsiteRow = {
@@ -164,6 +173,7 @@ export function useAdsCostTrend(query: {
         facebookCampRes,
         googleAccRes,
         facebookAccRes,
+        brandListRes,
         websiteRes,
         websiteBrandRes,
         tagRes,
@@ -184,7 +194,8 @@ export function useAdsCostTrend(query: {
             .range(from, to),
         ).then((data) => ({ data, error: null as { message: string } | null })),
         supabase.from('google_ads_accounts').select('customer_id,descriptive_name'),
-        supabase.from('facebook_ads_accounts').select('ad_account_id,account_name'),
+        supabase.from('facebook_ads_accounts').select('ad_account_id,account_name,business_name,business_key'),
+        supabase.from('brand_list').select('id, brand_code').eq('is_active', true),
         fetchAllRows<CampaignWebsiteRow>((from, to) =>
           supabase
             .from('google_ads_campaign_websites')
@@ -220,11 +231,13 @@ export function useAdsCostTrend(query: {
           row.descriptive_name,
         ]),
       );
+      const facebookAccounts = (facebookAccRes.data as FacebookAccountRow[] | null) ?? [];
       const facebookNameById = new Map(
-        ((facebookAccRes.data as FacebookAccountRow[] | null) ?? []).map((row) => [
-          row.ad_account_id,
-          row.account_name,
-        ]),
+        facebookAccounts.map((row) => [row.ad_account_id, row.account_name]),
+      );
+      const facebookAccountById = new Map(facebookAccounts.map((row) => [row.ad_account_id, row]));
+      const brandIdByCode = new Map(
+        ((brandListRes.data as BrandListRow[] | null) ?? []).map((row) => [row.brand_code, row.id]),
       );
 
       const googleMetaById = new Map(
@@ -387,6 +400,17 @@ export function useAdsCostTrend(query: {
 
         const meta = facebookMetaById.get(rowId);
         const objective = (meta?.objective || '').trim();
+        const account = facebookAccountById.get(row.accountId);
+        const brandListId = resolveFacebookBrandListId(
+          meta?.brand_list_id,
+          account?.brand_list_id,
+          {
+            accountName: account?.account_name,
+            businessName: account?.business_name,
+            businessKey: account?.business_key,
+          },
+          brandIdByCode,
+        );
         return {
           key: campaignKey(row.platform, row.accountId, row.campaignId),
           platform: row.platform,
@@ -396,7 +420,7 @@ export function useAdsCostTrend(query: {
           accountName: facebookNameById.get(row.accountId) || row.accountId,
           status: meta?.status || 'UNKNOWN',
           objectives: objective ? [objective] : [],
-          brandListIds: meta?.brand_list_id ? [meta.brand_list_id] : [],
+          brandListIds: brandListId ? [brandListId] : [],
           tags: tagsByCampaign.get(`facebook:${rowId}`) ?? [],
           buckets: row.buckets,
           totalMicros: sumCostTrendBuckets(row.buckets),

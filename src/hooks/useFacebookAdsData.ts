@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { invokeFacebookAdsIncrementalSync } from '@/lib/facebookAdsApi';
+import { resolveFacebookBrandListId } from '@/lib/facebookAdsBrand';
 import type {
   DateRangePreset,
   FacebookAdsAccount,
@@ -18,6 +19,7 @@ type AccountRow = {
   account_status: number | null;
   business_key: string;
   business_name: string;
+  brand_list_id?: string | null;
   last_synced_at: string | null;
 };
 
@@ -71,6 +73,7 @@ function mapAccount(row: AccountRow): FacebookAdsAccount {
     accountStatus: row.account_status ?? undefined,
     businessKey: row.business_key,
     businessName: row.business_name,
+    brandListId: row.brand_list_id ?? null,
     lastSyncedAt: row.last_synced_at ?? undefined,
   };
 }
@@ -181,6 +184,10 @@ export function useFacebookAdsData(dateFrom: string, dateTo: string) {
     const brandById = new Map(
       ((brandRes.data as BrandRow[] | null) ?? []).map((b) => [b.id, b]),
     );
+    const brandIdByCode = new Map(
+      ((brandRes.data as BrandRow[] | null) ?? []).map((b) => [b.brand_code, b.id]),
+    );
+    const accountById = new Map(mappedAccounts.map((a) => [a.adAccountId, a]));
     const metaByKey = new Map(
       ((campRes.data as CampaignMetaRow[] | null) ?? []).map((c) => [c.id, c]),
     );
@@ -189,7 +196,17 @@ export function useFacebookAdsData(dateFrom: string, dateTo: string) {
       .map((row) => {
         const id = `${row.ad_account_id}:${row.campaign_id}`;
         const meta = metaByKey.get(id);
-        const brandId = meta?.brand_list_id ?? null;
+        const account = accountById.get(row.ad_account_id);
+        const brandId = resolveFacebookBrandListId(
+          meta?.brand_list_id,
+          account?.brandListId,
+          {
+            accountName: account?.accountName,
+            businessName: account?.businessName,
+            businessKey: account?.businessKey,
+          },
+          brandIdByCode,
+        );
         const brand = brandId ? brandById.get(brandId) : undefined;
         const impressions = Number(row.impressions) || 0;
         const clicks = Number(row.clicks) || 0;

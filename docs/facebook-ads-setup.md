@@ -144,8 +144,9 @@ Also apply:
 
 ## Campaign ↔ 品牌（手動）
 
-- `facebook_ads_campaigns.brand_list_id` → `brand_list.id`（uuid，可空）
-- 在 `/#marketing/facebook-ads` 點「品牌」欄開啟 dialog 手動設定；Ads sync **不會**覆寫此欄位
+- `facebook_ads_accounts.brand_list_id` → 帳戶預設品牌（依 Business／帳戶名稱推斷：Attitude→BSC、Wine Passions→Wine、Food Channels→FCC、Branding Works→BWA）
+- `facebook_ads_campaigns.brand_list_id` → `brand_list.id`（uuid，可空）；空白時沿用帳戶預設
+- 在 `/#marketing/facebook-ads` 點「品牌」欄可手動覆寫；Ads sync **不會**覆寫已設定的 Campaign 品牌
 - Campaign 標籤：列表「編輯」欄 → `ads_campaign_tags`（標籤目錄為 `ads_tags`，於 `/#marketing/ads-tags` 管理）
 
 ## 網站自動連結（Google only）

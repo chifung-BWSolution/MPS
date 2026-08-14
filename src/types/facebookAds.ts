@@ -7,6 +7,7 @@ export type FacebookAdsAccount = {
   accountStatus?: number;
   businessKey: string;
   businessName: string;
+  brandListId?: string | null;
   lastSyncedAt?: string;
 };
 

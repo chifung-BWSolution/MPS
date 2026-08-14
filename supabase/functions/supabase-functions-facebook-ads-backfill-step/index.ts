@@ -13,6 +13,7 @@ import {
   toIsoDate,
   type AccountRow,
 } from "../_shared/meta-ads.ts";
+import { applyFacebookAccountBrands } from "../_shared/facebook-ads-brand.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY =
@@ -255,6 +256,8 @@ Deno.serve(async (req) => {
         .upsert(chunk, { onConflict: "id" });
       if (error) throw new Error(`Campaign upsert: ${error.message}`);
     }
+
+    await applyFacebookAccountBrands(supabase);
 
     for (let i = 0; i < daily.length; i += 500) {
       const chunk = daily.slice(i, i + 500);
