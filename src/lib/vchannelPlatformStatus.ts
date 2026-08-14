@@ -201,3 +201,24 @@ export const STATUS_KIND_COLORS: Record<PlatformStatusKind, string> = {
   'n/a': 'bg-slate-100 text-slate-500',
   unknown: 'bg-orange-100 text-orange-700',
 };
+
+/** Temporary read-only note for the vchannel dialog. Drop with platform_status later. */
+export function formatPlatformStatusNote(value: Record<string, PlatformStatusValue> | undefined | null): string {
+  const status = value ?? {};
+  if (Object.keys(status).length === 0) return '';
+  const known = new Set<string>(PLATFORM_KEYS);
+  const keys = [
+    ...PLATFORM_KEYS,
+    ...Object.keys(status).filter(key => !known.has(key)),
+  ];
+  return keys
+    .map(key => {
+      const ps = status[key];
+      const label = isPlatformKey(key) ? PLATFORM_LABELS[key] : key;
+      if (!ps) return `${label}：—`;
+      const kind = STATUS_KIND_LABELS[ps.kind] ?? ps.kind;
+      const detail = (ps.kind === 'url' ? (ps.url ?? ps.raw_text) : ps.raw_text)?.trim();
+      return detail && detail !== kind ? `${label}：${kind} — ${detail}` : `${label}：${kind}`;
+    })
+    .join('\n');
+}

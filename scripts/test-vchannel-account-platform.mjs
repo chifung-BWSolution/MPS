@@ -4,6 +4,7 @@ import {
   PLATFORM_KEYS,
   accountLabelForPlatform,
   accountPlatformLabel,
+  formatPlatformStatusNote,
   normalizeAccountPlatform,
 } from '../src/lib/vchannelPlatformStatus.ts';
 
@@ -79,5 +80,18 @@ assert.equal(accountLabelForPlatform(sampleAccounts, 'douyin'), 'Franco 抖音')
 assert.equal(accountLabelForPlatform(sampleAccounts, 'xiaohongshu'), 'Franco 小紅書');
 assert.equal(accountLabelForPlatform(sampleAccounts, 'youtube'), 'Franco YT');
 assert.equal(accountLabelForPlatform(sampleAccounts, 'linkedin'), '');
+
+assert.equal(formatPlatformStatusNote({}), '');
+assert.equal(formatPlatformStatusNote(null), '');
+
+const note = formatPlatformStatusNote({
+  youtube: { kind: 'unknown', raw_text: 'XXX' },
+  instagram: { kind: 'opened', raw_text: '已有個人帳號' },
+  facebook: { kind: 'url', url: 'https://facebook.com/example', raw_text: 'https://facebook.com/example' },
+});
+assert.match(note, /YouTube：未知 — XXX/);
+assert.match(note, /IG Page：已開通 — 已有個人帳號/);
+assert.match(note, /Facebook Page：URL — https:\/\/facebook.com\/example/);
+assert.match(note, /Threads：—/);
 
 console.log('vchannel-account-platform tests passed');

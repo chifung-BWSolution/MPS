@@ -8,6 +8,7 @@ import { useVchannelAccounts } from '@/hooks/useVchannelAccounts';
 import { useBrands } from '@/hooks/useBrands';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -18,11 +19,10 @@ import {
   STATUS_KIND_LABELS,
   accountLabelForPlatform,
   accountPlatformLabel,
+  formatPlatformStatusNote,
   normalizeAccountPlatform,
   type PlatformKey,
-  type PlatformStatusKind,
   type PlatformStatusValue,
-  parsePlatformStatus,
   platformStatusSummary,
 } from '@/lib/vchannelPlatformStatus';
 import { fetchWorkLogTotalsByVchannelIds } from '@/services/videoOutputWorkLogService';
@@ -91,49 +91,16 @@ const emptyAccount = {
   sortOrder: 0,
 };
 
-function PlatformStatusEditor({
-  value,
-  onChange,
-}: {
-  value: Record<string, PlatformStatusValue>;
-  onChange: (next: Record<string, PlatformStatusValue>) => void;
-}) {
-  const update = (key: PlatformKey, patch: Partial<PlatformStatusValue>) => {
-    const current = value[key] ?? { kind: 'pending' as PlatformStatusKind };
-    onChange({ ...value, [key]: { ...current, ...patch } });
-  };
-
+function PlatformStatusNote({ value }: { value: Record<string, PlatformStatusValue> }) {
+  const text = formatPlatformStatusNote(value);
   return (
-    <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-      {PLATFORM_KEYS.map(key => {
-        const ps = value[key] ?? { kind: 'pending' as PlatformStatusKind };
-        return (
-          <div key={key} className="grid grid-cols-[100px_120px_1fr] gap-2 items-start border border-border/50 rounded-md p-2">
-            <span className="text-[12px] font-medium pt-2">{PLATFORM_LABELS[key]}</span>
-            <Select
-              value={ps.kind}
-              onValueChange={(kind: PlatformStatusKind) => update(key, { kind, raw_text: ps.raw_text ?? '' })}
-            >
-              <SelectTrigger className="h-8 text-[11px]"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {(Object.keys(STATUS_KIND_LABELS) as PlatformStatusKind[]).map(k => (
-                  <SelectItem key={k} value={k}>{STATUS_KIND_LABELS[k]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              value={ps.kind === 'url' ? (ps.url ?? ps.raw_text ?? '') : (ps.raw_text ?? '')}
-              onChange={e => {
-                const text = e.target.value;
-                if (ps.kind === 'url') update(key, parsePlatformStatus(text));
-                else update(key, { ...ps, raw_text: text, ...(ps.kind === 'opened' ? parsePlatformStatus(text) : {}) });
-              }}
-              placeholder="URL 或狀態描述"
-              className="h-8 text-[11px]"
-            />
-          </div>
-        );
-      })}
+    <div className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2">
+      <p className="text-[11px] text-muted-foreground mb-1">臨時顯示，稍後會移除</p>
+      {text ? (
+        <pre className="m-0 whitespace-pre-wrap font-sans text-[12px] leading-relaxed text-foreground">{text}</pre>
+      ) : (
+        <p className="text-[12px] text-muted-foreground">暫無平台狀態資料</p>
+      )}
     </div>
   );
 }
@@ -209,8 +176,18 @@ function ChannelForm({
         </div>
       </div>
       <div>
+        <label className="text-[12px] font-medium text-muted-foreground block mb-1">備註</label>
+        <Textarea
+          value={form.notes}
+          onChange={e => setForm({ ...form, notes: e.target.value })}
+          rows={4}
+          className="text-[13px]"
+          placeholder="頻道備註"
+        />
+      </div>
+      <div>
         <label className="text-[12px] font-medium text-muted-foreground block mb-2">平台狀態矩陣</label>
-        <PlatformStatusEditor value={form.platformStatus} onChange={platformStatus => setForm({ ...form, platformStatus })} />
+        <PlatformStatusNote value={form.platformStatus} />
       </div>
     </div>
   );
