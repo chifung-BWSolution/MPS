@@ -110,7 +110,7 @@ function openCampaignDetail(
 export function AdsCostTrendModule() {
   const today = todayIso();
   const initialMonths = defaultMonthlyRange(today);
-  const [periodMode, setPeriodMode] = useState<AdsCostTrendPeriodMode>('monthly');
+  const [periodMode, setPeriodMode] = useState<AdsCostTrendPeriodMode>('rolling30');
   const [monthFrom, setMonthFrom] = useState(initialMonths.from);
   const [monthTo, setMonthTo] = useState(initialMonths.to);
 
@@ -257,7 +257,7 @@ export function AdsCostTrendModule() {
         <div>
           <h1 className="text-[32px] font-bold tracking-tight">廣告成本趨勢</h1>
           <p className="text-[14px] text-muted-foreground mt-1">
-            以品牌檢視 Google Ads / Facebook Ads 成本。可切換 30 日區間或按月檢視（預設近 6 個月，最多選 6 個月）。點擊品牌列展開 Campaign，再點擊 Campaign 開啟詳情。
+            以品牌檢視 Google Ads / Facebook Ads 成本。預設為 30 日區間，可切換按月檢視（最多選 6 個月）。點擊品牌列展開 Campaign，再點擊 Campaign 開啟詳情。
           </p>
         </div>
 
@@ -291,16 +291,6 @@ export function AdsCostTrendModule() {
           <div className="flex gap-1 bg-white rounded-md p-1 border border-[rgba(13,26,45,0.08)]">
             <button
               type="button"
-              onClick={() => setPeriodMode('monthly')}
-              className={cn(
-                'px-3 py-1.5 rounded text-[12px] font-medium transition-colors',
-                periodMode === 'monthly' ? 'bg-teal-600 text-white' : 'text-muted-foreground hover:bg-muted',
-              )}
-            >
-              按月
-            </button>
-            <button
-              type="button"
               onClick={() => setPeriodMode('rolling30')}
               className={cn(
                 'px-3 py-1.5 rounded text-[12px] font-medium transition-colors',
@@ -308,6 +298,16 @@ export function AdsCostTrendModule() {
               )}
             >
               30 日區間
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriodMode('monthly')}
+              className={cn(
+                'px-3 py-1.5 rounded text-[12px] font-medium transition-colors',
+                periodMode === 'monthly' ? 'bg-teal-600 text-white' : 'text-muted-foreground hover:bg-muted',
+              )}
+            >
+              按月
             </button>
           </div>
           {periodMode === 'monthly' && (
