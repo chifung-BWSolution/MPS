@@ -1,10 +1,8 @@
+import { formatMoneyAmount } from '@/lib/formatMoney';
 import type { AdsDailySeriesPoint } from './types';
 
 function formatMoney(n: number): string {
-  return n.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatMoneyAmount(n);
 }
 
 export function AdsDailyMetricsTable({ series }: { series: AdsDailySeriesPoint[] }) {

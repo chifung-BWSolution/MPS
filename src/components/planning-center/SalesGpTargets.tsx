@@ -144,7 +144,7 @@ export function SalesGpTargets() {
               <div key={m.month} className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-medium text-[#0d1a2d]">{m.month}</span>
-                  <span className="text-muted-foreground">${(m.salesActual / 10000).toFixed(0)}萬 / ${(m.salesTarget / 10000).toFixed(0)}萬</span>
+                  <span className="text-muted-foreground">${(m.salesActual / 10000).toFixed(0)}萬 / $${(m.salesTarget / 10000).toFixed(0)}萬</span>
                 </div>
                 <Progress value={pct} className="h-2.5" />
               </div>

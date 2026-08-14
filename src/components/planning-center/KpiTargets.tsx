@@ -49,6 +49,13 @@ const periodLabels: Record<string, string> = {
   annual: '年度',
 };
 
+const MONEY_UNITS = new Set(['HKD', 'USD', 'CNY', '$']);
+
+function formatKpiNumber(value: number, unit: string): string {
+  const formatted = value.toLocaleString();
+  return MONEY_UNITS.has(unit.toUpperCase()) ? `$${formatted}` : formatted;
+}
+
 export function KpiTargets() {
   const [selectedPeriod, setSelectedPeriod] = useState('monthly');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -122,9 +129,9 @@ export function KpiTargets() {
                 <div className="space-y-2 mb-3">
                   <div className="flex items-end justify-between">
                     <span className="text-2xl font-bold text-[#0d1a2d]">
-                      {kpi.current.toLocaleString()}<span className="text-sm font-normal text-muted-foreground ml-1">{kpi.unit}</span>
+                      {formatKpiNumber(kpi.current, kpi.unit)}<span className="text-sm font-normal text-muted-foreground ml-1">{kpi.unit}</span>
                     </span>
-                    <span className="text-xs text-muted-foreground">目標: {kpi.target.toLocaleString()} {kpi.unit}</span>
+                    <span className="text-xs text-muted-foreground">目標: {formatKpiNumber(kpi.target, kpi.unit)} {kpi.unit}</span>
                   </div>
                   <Progress value={Math.min(percentage, 100)} className="h-2" />
                   <div className="flex items-center justify-between text-xs text-muted-foreground">

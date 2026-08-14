@@ -47,18 +47,18 @@ export function AdsCostTrendChart({
               <XAxis dataKey="label" tick={{ fontSize: 11 }} />
               <YAxis
                 tick={{ fontSize: 11 }}
-                width={56}
+                width={64}
                 tickFormatter={(value: number) =>
-                  Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 })
+                  `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
                 }
               />
               <Tooltip
                 contentStyle={{ fontSize: 12 }}
                 formatter={(value: number, name: string) => [
-                  Number(value).toLocaleString(undefined, {
+                  `$${Number(value).toLocaleString(undefined, {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
-                  }),
+                  })}`,
                   name,
                 ]}
               />

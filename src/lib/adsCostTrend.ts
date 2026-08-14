@@ -1,4 +1,5 @@
 import { addDaysIso } from '@/lib/adsDailySeries';
+import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import type { AdsTag } from '@/types/adsTags';
 import {
   ADS_COST_TREND_BUCKET_IDS,
@@ -62,10 +63,7 @@ export function sumCostTrendBuckets(buckets: AdsCostTrendBuckets): number {
 }
 
 export function formatCostTrendMoney(micros: number): string {
-  return (micros / 1_000_000).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatMoneyFromMicros(micros);
 }
 
 function compareText(a: string, b: string): number {

@@ -60,7 +60,7 @@ export function AdsMetricTrendChart({ series }: { series: AdsDailySeriesPoint[] 
                 contentStyle={{ fontSize: 12 }}
                 formatter={(value: number, name: string) => {
                   if (name === 'cost') {
-                    return [value.toLocaleString(undefined, { maximumFractionDigits: 2 }), 'Cost'];
+                    return [`$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`, 'Cost'];
                   }
                   if (name === 'conversions') {
                     return [value.toLocaleString(undefined, { maximumFractionDigits: 2 }), 'Conv.'];

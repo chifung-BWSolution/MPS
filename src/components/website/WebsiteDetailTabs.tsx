@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, X, ExternalLink, Video, Share2, Megaphone, TrendingUp, Mail, Puzzle, Link2, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Loader2, Unlink, Search, Edit, Trash2, MapPin, RefreshCw } from 'lucide-react';
+import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
 import { WebsiteProfileFull, SocialPost, EdmCampaign } from '@/types/app';
 import {
@@ -593,13 +594,6 @@ export function WebsiteSocialTab({ site }: { site: WebsiteProfileFull }) {
 // ============================================================
 // PAID ADS TAB
 // ============================================================
-function formatMoneyFromMicros(micros: number): string {
-  return (micros / 1_000_000).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
 function adsApiStatusBadge(status: string) {
   const s = status.toUpperCase();
   const color =

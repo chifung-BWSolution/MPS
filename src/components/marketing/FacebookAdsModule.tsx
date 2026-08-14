@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CrudModal } from '@/components/ui/crud-modal';
+import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
 import {
   parseAdsCampaignHashQuery,
@@ -29,13 +30,6 @@ type SortKey =
   | 'spend'
   | 'conversions';
 type SortDir = 'asc' | 'desc';
-
-function formatMoneyFromMicros(micros: number): string {
-  return (micros / 1_000_000).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
 
 function compareText(a: string, b: string): number {
   return a.localeCompare(b, 'zh-Hant', { sensitivity: 'base', numeric: true });

@@ -67,12 +67,15 @@ export function AdsComparisonMetricChart({
               <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={20} />
               <YAxis
                 tick={{ fontSize: 10 }}
-                width={metric === 'cost' || metric === 'cpc' || metric === 'ctr' ? 52 : 44}
-                tickFormatter={(v: number) =>
-                  metric === 'ctr' ? `${v}` : metric === 'impressions' || metric === 'clicks'
-                    ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 })
-                    : Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 })
-                }
+                width={metric === 'cost' || metric === 'cpc' || metric === 'ctr' ? 58 : 44}
+                tickFormatter={(v: number) => {
+                  if (metric === 'ctr') return `${v}`;
+                  if (metric === 'impressions' || metric === 'clicks') {
+                    return Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
+                  }
+                  const formatted = Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 });
+                  return metric === 'cost' || metric === 'cpc' ? `$${formatted}` : formatted;
+                }}
               />
               <Tooltip
                 contentStyle={{ fontSize: 12 }}

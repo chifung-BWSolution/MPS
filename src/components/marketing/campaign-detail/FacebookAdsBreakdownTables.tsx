@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
+import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
 import {
   Tooltip,
@@ -14,13 +15,6 @@ import type {
 } from '@/types/facebookAds';
 
 type SortDir = 'asc' | 'desc';
-
-function formatMoneyFromMicros(micros: number): string {
-  return (micros / 1_000_000).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
 
 function statusBadge(status?: string) {
   if (!status) return <span className="text-muted-foreground">—</span>;

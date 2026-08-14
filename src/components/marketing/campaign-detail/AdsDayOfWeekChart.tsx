@@ -51,7 +51,15 @@ export function AdsDayOfWeekChart({ series }: { series: AdsDailySeriesPoint[] })
               <XAxis dataKey="day" tick={{ fontSize: 11 }} />
               <YAxis yAxisId="left" tick={{ fontSize: 11 }} width={40} allowDecimals={false} />
               <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} width={44} />
-              <Tooltip contentStyle={{ fontSize: 12 }} />
+              <Tooltip
+                contentStyle={{ fontSize: 12 }}
+                formatter={(value: number, name: string) => [
+                  name === 'Cost'
+                    ? `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                    : Number(value).toLocaleString(),
+                  name,
+                ]}
+              />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Bar yAxisId="left" dataKey="clicks" name="Clicks" fill="#2563eb" radius={[3, 3, 0, 0]} />
               <Bar yAxisId="right" dataKey="cost" name="Cost" fill="#f59e0b" radius={[3, 3, 0, 0]} />

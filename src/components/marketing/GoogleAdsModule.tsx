@@ -13,6 +13,7 @@ import {
   parseAdsCampaignHashQuery,
   setGoogleAdsCampaignHash,
 } from '@/lib/adsCampaignNavigation';
+import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
 import { GoogleAdsCampaignDetail } from './campaign-detail/GoogleAdsCampaignDetail';
 import { AdsCampaignTagsModal } from './ads-tags/AdsCampaignTagsModal';
@@ -31,13 +32,6 @@ type SortKey =
   | 'cost'
   | 'conversions';
 type SortDir = 'asc' | 'desc';
-
-function formatMoneyFromMicros(micros: number): string {
-  return (micros / 1_000_000).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
 
 function formatObjectives(raw?: string[] | null): string {
   const objectives = normalizeGoogleAdsObjectives(raw);

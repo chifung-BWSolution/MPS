@@ -1,4 +1,5 @@
 import type { AdsKpiItem } from '@/components/marketing/campaign-detail/types';
+import { formatMoneyAmount } from '@/lib/formatMoney';
 import type { AdsCompareMetric, AdsCompareSeriesPoint, AdsCompareTotals } from '@/types/adsComparison';
 
 export const ADS_COMPARE_METRICS: {
@@ -124,10 +125,7 @@ export function sumSeries(series: AdsCompareSeriesPoint[]): AdsCompareTotals {
 }
 
 function formatMoney(amount: number): string {
-  return amount.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatMoneyAmount(amount);
 }
 
 function pctChange(current: number, previous: number): number | null {
@@ -221,9 +219,10 @@ export function formatMetricValue(value: number, metric: AdsCompareMetric): stri
     case 'clicks':
       return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
     case 'conversions':
+      return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     case 'cost':
     case 'cpc':
-      return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return formatMoneyAmount(value);
     case 'ctr':
       return `${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
   }

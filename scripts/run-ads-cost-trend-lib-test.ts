@@ -3,6 +3,7 @@ import {
   buildCostTrendBucketRanges,
   emptyCostTrendBuckets,
   filterCostTrendCampaigns,
+  formatCostTrendMoney,
   groupCostTrendByBrand,
   sortCostTrendBrandRows,
   sumUniqueCampaignMetrics,
@@ -115,5 +116,8 @@ assert.equal(totals.campaigns.length, 3);
 assert.equal(totals.totalMicros, 6_500_000);
 assert.equal(totals.googleMicros, 3_500_000);
 assert.equal(totals.facebookMicros, 3_000_000);
+
+assert.match(formatCostTrendMoney(6_500_000), /^\$/);
+assert.match(formatCostTrendMoney(1_000_000), /^\$/);
 
 console.log('ads cost trend lib: ok');

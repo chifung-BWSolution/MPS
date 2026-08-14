@@ -7,6 +7,7 @@ import {
   parseCampaignKey,
   setGoogleAdsCampaignHash,
 } from '@/lib/adsCampaignNavigation';
+import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import { openWebsiteDetail } from '@/lib/websiteNavigation';
 import type { DateRangePreset, GoogleAdsMetricTotals } from '@/types/googleAds';
 import { AdsCampaignDetailShell } from './AdsCampaignDetailShell';
@@ -20,13 +21,6 @@ function daysAgoIso(n: number) {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() - (n - 1));
   return d.toISOString().slice(0, 10);
-}
-
-function formatMoneyFromMicros(micros: number): string {
-  return (micros / 1_000_000).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
 }
 
 function pctChange(current: number, previous: number): number | null {
