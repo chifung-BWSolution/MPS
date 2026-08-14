@@ -45,6 +45,18 @@ function ChannelAccountLabelCell({ label }: { label: string }) {
   );
 }
 
+function ChannelNameCell({ internalName, publicName }: { internalName: string; publicName: string }) {
+  const subtitle = publicName.trim();
+  return (
+    <div className="min-w-[160px] max-w-[240px]">
+      <div className="font-medium leading-tight truncate" title={internalName}>{internalName}</div>
+      {subtitle ? (
+        <div className="text-[11px] text-muted-foreground leading-tight truncate mt-0.5" title={subtitle}>{subtitle}</div>
+      ) : null}
+    </div>
+  );
+}
+
 const importanceConfig = {
   A1: { label: 'A1', color: 'text-rose-700', bg: 'bg-rose-100', description: '最高重要' },
   A2: { label: 'A2', color: 'text-amber-700', bg: 'bg-amber-100', description: '高重要' },
@@ -510,13 +522,12 @@ export function VideoChannelsList() {
           </div>
 
           <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-x-auto">
-            <table className="w-full text-[13px] min-w-[1280px]">
+            <table className="w-full text-[13px] min-w-[1180px]">
               <thead className="bg-muted/30">
                 <tr>
                   <th className="w-10 px-3 py-2.5" />
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">編號</th>
-                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">內部名稱</th>
-                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">公開名稱</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">頻道名稱</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">品牌</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">重要性</th>
                   {CHANNEL_LIST_ACCOUNT_COLUMNS.map(col => (
@@ -544,8 +555,9 @@ export function VideoChannelsList() {
                           </button>
                         </td>
                         <td className="px-3 py-3 font-mono text-[12px] font-bold">{channel.channelCode}</td>
-                        <td className="px-3 py-3 font-medium max-w-[180px]">{channel.internalName}</td>
-                        <td className="px-3 py-3 text-muted-foreground max-w-[180px]">{channel.publicName}</td>
+                        <td className="px-3 py-3">
+                          <ChannelNameCell internalName={channel.internalName} publicName={channel.publicName} />
+                        </td>
                         <td className="px-3 py-3"><span className="text-[11px] bg-muted px-2 py-0.5 rounded">{channelBrandLabel(channel)}</span></td>
                         <td className="px-3 py-3">
                           <span className={cn('text-[11px] font-bold px-2 py-0.5 rounded', iConfig.bg, iConfig.color)}>{iConfig.label}</span>
@@ -574,7 +586,7 @@ export function VideoChannelsList() {
                       {isExpanded && (
                         <tr className="border-t border-border/50 bg-slate-50/70">
                           <td />
-                          <td colSpan={14} className="px-3 py-3">
+                          <td colSpan={13} className="px-3 py-3">
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                               <div className="rounded-md border border-border bg-white p-3">
                                 <h4 className="text-[12px] font-bold mb-2">平台狀態（summary）</h4>
