@@ -20,15 +20,11 @@ type DbAccountRow = {
   id: string;
   vchannel_codes: string[];
   account_label: string;
-  channel_intro: string | null;
   platform: string;
   account_id: string | null;
-  account_password: string | null;
   login_method: string | null;
-  operator_code: string | null;
   feedhive_managed: boolean;
   notes: string | null;
-  sort_order: number;
   created_at: string;
   updated_at: string;
 };
@@ -55,15 +51,11 @@ export function mapAccountRow(row: DbAccountRow): VchannelAccount {
     id: row.id,
     vchannelCodes: row.vchannel_codes,
     accountLabel: row.account_label,
-    channelIntro: row.channel_intro ?? undefined,
     platform: normalizeAccountPlatform(row.platform) ?? row.platform,
     accountId: row.account_id ?? undefined,
-    accountPassword: row.account_password ?? undefined,
     loginMethod: row.login_method ?? undefined,
-    operatorCode: row.operator_code ?? undefined,
     feedhiveManaged: row.feedhive_managed,
     notes: row.notes ?? undefined,
-    sortOrder: row.sort_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -87,15 +79,11 @@ export function accountToDbRow(input: Partial<VchannelAccount> & Pick<VchannelAc
   return {
     vchannel_codes: input.vchannelCodes,
     account_label: input.accountLabel ?? '',
-    channel_intro: input.channelIntro ?? null,
     platform: normalizeAccountPlatform(input.platform) ?? input.platform.trim(),
     account_id: input.accountId ?? null,
-    account_password: input.accountPassword ?? null,
     login_method: input.loginMethod ?? null,
-    operator_code: input.operatorCode ?? null,
     feedhive_managed: input.feedhiveManaged ?? false,
     notes: input.notes ?? null,
-    sort_order: input.sortOrder ?? 0,
     updated_at: new Date().toISOString(),
   };
 }

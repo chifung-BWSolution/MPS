@@ -29,15 +29,11 @@ export interface VchannelAccount {
   id: string;
   vchannelCodes: string[];
   accountLabel: string;
-  channelIntro?: string;
   platform: string;
   accountId?: string;
-  accountPassword?: string;
   loginMethod?: string;
-  operatorCode?: string;
   feedhiveManaged: boolean;
   notes?: string;
-  sortOrder: number;
   createdAt?: string;
   updatedAt?: string;
 }

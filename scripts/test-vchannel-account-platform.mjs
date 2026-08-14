@@ -7,6 +7,7 @@ import {
   formatPlatformStatusNote,
   normalizeAccountPlatform,
 } from '../src/lib/vchannelPlatformStatus.ts';
+import { accountToDbRow, mapAccountRow } from '../src/lib/vchannelMappers.ts';
 
 const cases = [
   ['YouTube', 'youtube'],
@@ -93,5 +94,48 @@ assert.match(note, /YouTube：未知 — XXX/);
 assert.match(note, /IG Page：已開通 — 已有個人帳號/);
 assert.match(note, /Facebook Page：URL — https:\/\/facebook.com\/example/);
 assert.match(note, /Threads：—/);
+
+const mapped = mapAccountRow({
+  id: 'acc-1',
+  vchannel_codes: ['V12'],
+  account_label: '香港好設計',
+  platform: 'IG',
+  account_id: 'bw_designcentre',
+  login_method: 'feedhive統一管理',
+  feedhive_managed: true,
+  notes: 'ok',
+  created_at: '2026-08-14T00:00:00.000Z',
+  updated_at: '2026-08-14T00:00:00.000Z',
+});
+assert.equal(mapped.platform, 'instagram');
+assert.equal(mapped.accountId, 'bw_designcentre');
+assert.equal('channelIntro' in mapped, false);
+assert.equal('accountPassword' in mapped, false);
+assert.equal('operatorCode' in mapped, false);
+assert.equal('sortOrder' in mapped, false);
+
+const dbRow = accountToDbRow({
+  vchannelCodes: ['V12'],
+  accountLabel: '香港好設計',
+  platform: 'instagram',
+  accountId: 'bw_designcentre',
+  loginMethod: 'feedhive統一管理',
+  feedhiveManaged: true,
+  notes: 'ok',
+});
+assert.deepEqual(Object.keys(dbRow).sort(), [
+  'account_id',
+  'account_label',
+  'feedhive_managed',
+  'login_method',
+  'notes',
+  'platform',
+  'updated_at',
+  'vchannel_codes',
+]);
+assert.equal('channel_intro' in dbRow, false);
+assert.equal('account_password' in dbRow, false);
+assert.equal('operator_code' in dbRow, false);
+assert.equal('sort_order' in dbRow, false);
 
 console.log('vchannel-account-platform tests passed');

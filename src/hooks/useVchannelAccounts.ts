@@ -15,8 +15,8 @@ export function useVchannelAccounts() {
     const { data, error: fetchError } = await supabase
       .from('vchannel_accounts')
       .select('*')
-      .order('sort_order')
-      .order('platform');
+      .order('platform')
+      .order('account_label');
 
     if (fetchError) {
       setError(fetchError.message);

@@ -80,15 +80,11 @@ const emptyAccount = {
   vchannelCodes: [] as string[],
   vchannelCodesRaw: '',
   accountLabel: '',
-  channelIntro: '',
   platform: '',
   accountId: '',
-  accountPassword: '',
   loginMethod: '',
-  operatorCode: '',
   feedhiveManaged: false,
   notes: '',
-  sortOrder: 0,
 };
 
 function PlatformStatusNote({ value }: { value: Record<string, PlatformStatusValue> }) {
@@ -369,15 +365,11 @@ export function VideoChannelsList() {
       vchannelCodes: account.vchannelCodes,
       vchannelCodesRaw: formatChannelCodes(account.vchannelCodes),
       accountLabel: account.accountLabel,
-      channelIntro: account.channelIntro ?? '',
       platform: normalizeAccountPlatform(account.platform) ?? account.platform,
       accountId: account.accountId ?? '',
-      accountPassword: account.accountPassword ?? '',
       loginMethod: account.loginMethod ?? '',
-      operatorCode: account.operatorCode ?? '',
       feedhiveManaged: account.feedhiveManaged,
       notes: account.notes ?? '',
-      sortOrder: account.sortOrder,
     });
     setShowAccountModal(true);
   };
@@ -390,15 +382,11 @@ export function VideoChannelsList() {
     const payload = {
       vchannelCodes: codes,
       accountLabel: accountForm.accountLabel,
-      channelIntro: accountForm.channelIntro || undefined,
       platform,
       accountId: accountForm.accountId || undefined,
-      accountPassword: accountForm.accountPassword || undefined,
       loginMethod: accountForm.loginMethod || undefined,
-      operatorCode: accountForm.operatorCode || undefined,
       feedhiveManaged: accountForm.feedhiveManaged,
       notes: accountForm.notes || undefined,
-      sortOrder: accountForm.sortOrder,
     };
     const err = editingAccountId
       ? await updateAccount(editingAccountId, payload)
@@ -653,9 +641,7 @@ export function VideoChannelsList() {
                     <th className="text-left px-3 py-2">名稱</th>
                     <th className="text-left px-3 py-2">平台</th>
                     <th className="text-left px-3 py-2">賬號ID</th>
-                    <th className="text-left px-3 py-2">密碼</th>
                     <th className="text-left px-3 py-2">登入方式</th>
-                    <th className="text-left px-3 py-2">運營者</th>
                     <th className="text-left px-3 py-2">FeedHive</th>
                     <th className="text-left px-3 py-2">操作</th>
                   </tr>
@@ -667,9 +653,7 @@ export function VideoChannelsList() {
                       <td className="px-3 py-2">{acc.accountLabel}</td>
                       <td className="px-3 py-2">{accountPlatformLabel(acc.platform)}</td>
                       <td className="px-3 py-2 font-mono text-[11px] max-w-[140px] truncate" title={acc.accountId}>{acc.accountId || '—'}</td>
-                      <td className="px-3 py-2 font-mono text-muted-foreground">{acc.accountPassword ? '••••••••' : '—'}</td>
                       <td className="px-3 py-2 max-w-[120px] truncate" title={acc.loginMethod}>{acc.loginMethod || '—'}</td>
-                      <td className="px-3 py-2">{acc.operatorCode || '—'}</td>
                       <td className="px-3 py-2">{acc.feedhiveManaged ? '✓' : '—'}</td>
                       <td className="px-3 py-2">
                         <div className="flex gap-2">
@@ -737,25 +721,13 @@ export function VideoChannelsList() {
               </Select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">賬號 ID</label>
-              <Input value={accountForm.accountId} onChange={e => setAccountForm({ ...accountForm, accountId: e.target.value })} className="h-9 text-[13px]" />
-            </div>
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">賬號密碼</label>
-              <Input type="password" value={accountForm.accountPassword} onChange={e => setAccountForm({ ...accountForm, accountPassword: e.target.value })} className="h-9 text-[13px]" placeholder="加密存儲" />
-            </div>
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">賬號 ID</label>
+            <Input value={accountForm.accountId} onChange={e => setAccountForm({ ...accountForm, accountId: e.target.value })} className="h-9 text-[13px]" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">登入方式</label>
-              <Input value={accountForm.loginMethod} onChange={e => setAccountForm({ ...accountForm, loginMethod: e.target.value })} className="h-9 text-[13px]" />
-            </div>
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">運營者</label>
-              <Input value={accountForm.operatorCode} onChange={e => setAccountForm({ ...accountForm, operatorCode: e.target.value })} className="h-9 text-[13px]" placeholder="M02" />
-            </div>
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">登入方式</label>
+            <Input value={accountForm.loginMethod} onChange={e => setAccountForm({ ...accountForm, loginMethod: e.target.value })} className="h-9 text-[13px]" />
           </div>
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1">備註</label>
