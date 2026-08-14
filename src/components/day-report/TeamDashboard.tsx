@@ -17,7 +17,7 @@ import {
   fetchStaffIdsByDepartment,
   isValidDepartment,
 } from '@/components/day-report/departmentLookup';
-import { resolveStaffUuid } from '@/services/reportLinkService';
+import { isPlaceholderStaff, resolveStaffUuid } from '@/services/reportLinkService';
 import { Calendar as DayPickerCalendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { SearchableProjectSelect } from '@/components/day-report/SearchableProjectSelect';
@@ -90,6 +90,14 @@ const hkPublicHolidays2025 = [
   '2025-10-01',
   '2025-10-07',
   '2025-12-25', '2025-12-26',
+  '2026-01-01',
+  '2026-02-17', '2026-02-18', '2026-02-19',
+  '2026-04-03', '2026-04-04', '2026-04-06',
+  '2026-05-01', '2026-05-25',
+  '2026-07-01',
+  '2026-09-26',
+  '2026-10-01', '2026-10-19',
+  '2026-12-25', '2026-12-26',
 ];
 
 const szPublicHolidays2025 = [
@@ -99,6 +107,12 @@ const szPublicHolidays2025 = [
   '2025-05-01', '2025-05-02', '2025-05-03', '2025-05-04', '2025-05-05',
   '2025-05-31', '2025-06-01', '2025-06-02',
   '2025-10-01', '2025-10-02', '2025-10-03', '2025-10-04', '2025-10-05', '2025-10-06', '2025-10-07',
+  '2026-01-01', '2026-01-02', '2026-01-03',
+  '2026-02-15', '2026-02-16', '2026-02-17', '2026-02-18', '2026-02-19', '2026-02-20', '2026-02-21', '2026-02-22', '2026-02-23',
+  '2026-04-04', '2026-04-05', '2026-04-06',
+  '2026-05-01', '2026-05-02', '2026-05-03', '2026-05-04', '2026-05-05',
+  '2026-06-19', '2026-06-20', '2026-06-21',
+  '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07',
 ];
 
 const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
@@ -490,7 +504,9 @@ export function TeamDashboard() {
     })).filter((s) => {
       const pos = (s.position || '').toLowerCase().trim();
       const dept = (s.department || '').toLowerCase().trim();
-      return !EXCLUDED_POSITIONS.includes(pos) && !EXCLUDED_DEPARTMENTS.includes(dept);
+      return !EXCLUDED_POSITIONS.includes(pos)
+        && !EXCLUDED_DEPARTMENTS.includes(dept)
+        && !isPlaceholderStaff(s);
     });
 
     const seen = new Set<string>();
@@ -589,7 +605,8 @@ export function TeamDashboard() {
         .from('day_reports')
         .select('id, staff_id, report_date, total_hours, is_leave, leave_type, office_location, is_holiday, is_weekend')
         .gte('report_date', dateRange.start)
-        .lte('report_date', dateRange.end);
+        .lte('report_date', dateRange.end)
+        .limit(5000);
       if (allowedStaffIds !== null) reportQuery = reportQuery.in('staff_id', allowedStaffIds);
       const { data: reportData } = await reportQuery;
 

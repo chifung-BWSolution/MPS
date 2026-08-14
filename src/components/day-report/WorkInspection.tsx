@@ -13,7 +13,7 @@ import {
   fetchStaffIdsByDepartment,
   isValidDepartment,
 } from '@/components/day-report/departmentLookup';
-import { resolveStaffUuid } from '@/services/reportLinkService';
+import { isPlaceholderStaff, resolveStaffUuid } from '@/services/reportLinkService';
 
 // ============================
 // Types
@@ -381,7 +381,9 @@ export function WorkInspection() {
         seen.add(s.id);
         const pos = (s.position || '').toLowerCase().trim();
         const dept = (s.department || '').toLowerCase().trim();
-        return !EXCLUDED_POSITIONS.includes(pos) && !EXCLUDED_DEPARTMENTS.includes(dept);
+        return !EXCLUDED_POSITIONS.includes(pos)
+          && !EXCLUDED_DEPARTMENTS.includes(dept)
+          && !isPlaceholderStaff(s);
       });
 
       if (filterUnassignedOnly) {
@@ -399,7 +401,8 @@ export function WorkInspection() {
             .select('id, staff_id, report_date, is_leave, leave_type, is_holiday, is_weekend, office_location, status')
             .in('staff_id', chunk)
             .gte('report_date', dateRange.start)
-            .lte('report_date', dateRange.end);
+            .lte('report_date', dateRange.end)
+            .limit(5000);
           if (data) {
             reportData = reportData.concat(
               data.map((r) => ({

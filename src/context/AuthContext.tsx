@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getSiteOrigin } from '@/lib/siteUrl';
-import { isStaffUuid, resolveStaffUuid } from '@/services/reportLinkService';
+import { isStaffUuid, remapStaleStaffUuid, resolveStaffUuid } from '@/services/reportLinkService';
 import type { User as SupabaseUser, Session } from '@supabase/supabase-js';
 
 interface SystemUserProfile {
@@ -57,7 +57,9 @@ type StaffDirectoryLite = {
   work_email: string | null;
 };
 
-const MANUAL_SUPER_ADMIN_STAFF_UUID = 'd88d2465-42d1-4205-8a9b-8495083c3691';
+// Canonical Bubble staffs.id — not the leftover "Lowell Lo (manual)" placeholder.
+const MANUAL_SUPER_ADMIN_STAFF_UUID = '04102dd8-8d0f-4536-82cd-904cc0769227';
+const MANUAL_SUPER_ADMIN_BUBBLE_STAFF_ID = '1735542321255x135509613378273280';
 const MANUAL_DEV_BYPASS_LEO_STAFF_UUID = '6ddee578-cfe2-4e27-b758-affb02fa02ae';
 
 type HardcodedBypassProfile = {
@@ -76,7 +78,7 @@ type HardcodedBypassProfile = {
 const HARDCODED_BYPASS_USERS: Record<string, HardcodedBypassProfile> = {
   'brandingworks.ebiz@gmail.com': {
     staff_id: MANUAL_SUPER_ADMIN_STAFF_UUID,
-    bubble_staff_id: 'manual_super_admin_lowell',
+    bubble_staff_id: MANUAL_SUPER_ADMIN_BUBBLE_STAFF_ID,
     display_name: 'Lowell Lo',
     role: 'management',
     role_tag: 'Administrator',
@@ -411,8 +413,13 @@ function normalizeRestoredSystemUser(raw: any): SystemUserProfile | null {
   const bubbleRaw = typeof raw.bubble_staff_id === 'string' ? raw.bubble_staff_id.trim() : '';
 
   // Legacy sessions stored Bubble text in staff_id / omitted staff_id entirely.
-  let staff_id = isStaffUuid(staffIdRaw) ? staffIdRaw : '';
+  // Also rewrite the leftover "Lowell Lo (manual)" UUID to the canonical staff row.
+  let staff_id = isStaffUuid(staffIdRaw) ? remapStaleStaffUuid(staffIdRaw) : '';
   let bubble_staff_id = bubbleRaw;
+  if (bubble_staff_id === 'manual_super_admin_lowell') {
+    bubble_staff_id = MANUAL_SUPER_ADMIN_BUBBLE_STAFF_ID;
+    if (!staff_id) staff_id = MANUAL_SUPER_ADMIN_STAFF_UUID;
+  }
 
   if (!bubble_staff_id && staffIdRaw && !isStaffUuid(staffIdRaw)) {
     bubble_staff_id = staffIdRaw;
@@ -451,7 +458,7 @@ function normalizeRestoredUserInfo(raw: any, staffUuid: string): UserInfoProfile
   if (!raw || typeof raw !== 'object') return null;
   return {
     id: raw.id || 'fallback-user-info',
-    staff_id: isStaffUuid(raw.staff_id) ? raw.staff_id : staffUuid,
+    staff_id: isStaffUuid(raw.staff_id) ? remapStaleStaffUuid(raw.staff_id) : staffUuid,
     role_tag: raw.role_tag ?? null,
     system_status: raw.system_status || 'active',
     classification: raw.classification || 'staff',
@@ -609,20 +616,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Migrate stale sessions where staff_id is missing / still a Bubble text id.
+  // Migrate stale sessions: Bubble text id, leftover manual UUID, or email mismatch.
   useEffect(() => {
     if (!systemUser || staffUuidMigrateRef.current) return;
-    if (isStaffUuid(systemUser.staff_id)) return;
     staffUuidMigrateRef.current = true;
 
     let cancelled = false;
     (async () => {
       const uuid = await resolveStaffUuid({
-        staff_id: undefined,
+        staff_id: systemUser.staff_id,
         bubble_staff_id: systemUser.bubble_staff_id,
         email: systemUser.email || systemUser.google_email || undefined,
       });
-      if (cancelled || !uuid) return;
+      if (cancelled || !uuid || uuid === systemUser.staff_id) return;
       setSystemUser(prev => (prev ? { ...prev, staff_id: uuid } : prev));
       setUserInfo(prev => (prev ? { ...prev, staff_id: uuid } : prev));
     })();

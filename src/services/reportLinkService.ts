@@ -74,9 +74,35 @@ type SystemUserLike = {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/**
+ * Leftover placeholder staffs.id values created for the UUID FK migration.
+ * Map them to the canonical Bubble staff row so submit / team-view share one identity.
+ */
+const STALE_MANUAL_STAFF_UUIDS: Record<string, string> = {
+  // Lowell Lo (manual) → Lowell Lo (Bubble / BWT OB System)
+  'd88d2465-42d1-4205-8a9b-8495083c3691': '04102dd8-8d0f-4536-82cd-904cc0769227',
+};
+
 /** True when value is a UUID (staffs.id / FK shape). */
 export function isStaffUuid(value: string | null | undefined): boolean {
   return !!value && UUID_RE.test(value.trim());
+}
+
+/** True for leftover `manual_*` / "(manual)" staff rows that must not own live reports. */
+export function isPlaceholderStaff(row: {
+  bubble_staff_id?: string | null;
+  display_name?: string | null;
+} | null | undefined): boolean {
+  if (!row) return false;
+  const bubble = (row.bubble_staff_id || '').trim().toLowerCase();
+  const name = (row.display_name || '').trim().toLowerCase();
+  return bubble.startsWith('manual_') || name.includes('(manual)');
+}
+
+/** Rewrite a known leftover manual staff UUID to the canonical staffs.id. */
+export function remapStaleStaffUuid(value: string | null | undefined): string {
+  const raw = (value || '').trim();
+  return STALE_MANUAL_STAFF_UUIDS[raw] || raw;
 }
 
 export function localDateString(d = new Date()): string {
@@ -86,38 +112,42 @@ export function localDateString(d = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
-/** Resolve staffs.id (uuid) for FK writes. Prefers systemUser.staff_id when it is a UUID. */
+/**
+ * Resolve staffs.id (uuid) for FK writes.
+ * Prefer work_email (canonical person) over a leftover manual UUID from bypass/fallback sessions.
+ */
 export async function resolveStaffUuid(systemUser: SystemUserLike): Promise<string | null> {
   if (!systemUser) return null;
 
-  const staffIdRaw = (systemUser.staff_id || '').trim();
-  if (isStaffUuid(staffIdRaw)) return staffIdRaw;
-
+  const staffIdRaw = remapStaleStaffUuid(systemUser.staff_id);
   const email = (systemUser.email || systemUser.google_email || '').toLowerCase().trim();
+
   if (email) {
     const { data } = await supabase
       .from('staffs')
-      .select('id')
+      .select('id, bubble_staff_id, display_name')
       .ilike('work_email', email)
-      .limit(1)
-      .maybeSingle();
-    if (data?.id) return data.id;
+      .eq('status', 'active');
+    const match = (data || []).find((row) => !isPlaceholderStaff(row));
+    if (match?.id) return match.id;
   }
+
+  if (isStaffUuid(staffIdRaw)) return staffIdRaw;
 
   // Prefer explicit bubble id; also accept legacy sessions that stuffed Bubble text into staff_id.
   const bubbleId = (systemUser.bubble_staff_id || '').trim()
     || (!isStaffUuid(staffIdRaw) ? staffIdRaw : '');
-  if (bubbleId) {
+  if (bubbleId && !bubbleId.toLowerCase().startsWith('manual_')) {
     const { data } = await supabase
       .from('staffs')
-      .select('id')
+      .select('id, bubble_staff_id, display_name')
       .eq('bubble_staff_id', bubbleId)
       .limit(1)
       .maybeSingle();
-    if (data?.id) return data.id;
+    if (data?.id && !isPlaceholderStaff(data)) return data.id;
   }
 
-  return null;
+  return isStaffUuid(staffIdRaw) ? staffIdRaw : null;
 }
 
 /** @deprecated Use resolveStaffUuid — FK columns now store staffs.id (uuid). */

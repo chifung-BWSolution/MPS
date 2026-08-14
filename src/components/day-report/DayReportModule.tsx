@@ -24,6 +24,7 @@ import { usePendingReportItems } from '@/hooks/usePendingReportItems';
 import {
   consumePendingItems,
   dismissPendingItem,
+  isPlaceholderStaff,
   mergePendingIntoReportEntries,
   resolveStaffUuid,
   type ReportFormEntry,
@@ -54,7 +55,7 @@ function inferHoursPreset(hours: number, office: OfficeLocation): HoursPreset {
   return 'custom';
 }
 
-// HK Public Holidays 2025 (key dates)
+// HK Public Holidays (must stay in sync with WorkInspection)
 const hkPublicHolidays2025 = [
   '2025-01-01', // New Year
   '2025-01-29', '2025-01-30', '2025-01-31', '2025-02-01', // CNY
@@ -68,9 +69,18 @@ const hkPublicHolidays2025 = [
   '2025-10-01', // National Day
   '2025-10-07', // Chung Yeung
   '2025-12-25', '2025-12-26', // Christmas
+  // 2026
+  '2026-01-01',
+  '2026-02-17', '2026-02-18', '2026-02-19',
+  '2026-04-03', '2026-04-04', '2026-04-06',
+  '2026-05-01', '2026-05-25',
+  '2026-07-01',
+  '2026-09-26',
+  '2026-10-01', '2026-10-19',
+  '2026-12-25', '2026-12-26',
 ];
 
-// Shenzhen/China Public Holidays 2025 (key dates)
+// Shenzhen/China Public Holidays (must stay in sync with WorkInspection)
 const szPublicHolidays2025 = [
   '2025-01-01', // New Year
   '2025-01-28', '2025-01-29', '2025-01-30', '2025-01-31', '2025-02-01', '2025-02-02', '2025-02-03', '2025-02-04', // CNY extended
@@ -78,6 +88,13 @@ const szPublicHolidays2025 = [
   '2025-05-01', '2025-05-02', '2025-05-03', '2025-05-04', '2025-05-05', // Labour Day extended
   '2025-05-31', '2025-06-01', '2025-06-02', // Dragon Boat
   '2025-10-01', '2025-10-02', '2025-10-03', '2025-10-04', '2025-10-05', '2025-10-06', '2025-10-07', // National Day
+  // 2026
+  '2026-01-01', '2026-01-02', '2026-01-03',
+  '2026-02-15', '2026-02-16', '2026-02-17', '2026-02-18', '2026-02-19', '2026-02-20', '2026-02-21', '2026-02-22', '2026-02-23',
+  '2026-04-04', '2026-04-05', '2026-04-06',
+  '2026-05-01', '2026-05-02', '2026-05-03', '2026-05-04', '2026-05-05',
+  '2026-06-19', '2026-06-20', '2026-06-21',
+  '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07',
 ];
 
 function getPublicHolidays(office: OfficeLocation): string[] {
@@ -88,24 +105,28 @@ function isPublicHoliday(dateStr: string, office: OfficeLocation): boolean {
   return getPublicHolidays(office).includes(dateStr);
 }
 
+function parseLocalDateStr(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function isWeekend(dateStr: string): boolean {
-  const d = new Date(dateStr);
-  return d.getDay() === 0 || d.getDay() === 6;
+  const day = parseLocalDateStr(dateStr).getDay();
+  return day === 0 || day === 6;
 }
 
 function isSaturday(dateStr: string): boolean {
-  return new Date(dateStr).getDay() === 6;
+  return parseLocalDateStr(dateStr).getDay() === 6;
 }
 
 function formatDateShort(dateStr: string): string {
-  const d = new Date(dateStr);
+  const d = parseLocalDateStr(dateStr);
   const days = ['日', '一', '二', '三', '四', '五', '六'];
   return `${d.getMonth() + 1}/${d.getDate()} (${days[d.getDay()]})`;
 }
 
 function formatDateFull(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' });
+  return parseLocalDateStr(dateStr).toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 function getDateRange(startDate: string, endDate: string): string[] {
@@ -2093,7 +2114,8 @@ function TodayTeamReports() {
             const dept = (s.department || '').toLowerCase().trim();
             return !EXCLUDED_POSITIONS.includes(pos)
               && !!dept
-              && !EXCLUDED_DEPARTMENTS.includes(dept);
+              && !EXCLUDED_DEPARTMENTS.includes(dept)
+              && !isPlaceholderStaff(s);
           });
         setDbStaff(staff);
 
