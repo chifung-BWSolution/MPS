@@ -4,6 +4,8 @@ import { useAuth } from '@/context/AuthContext';
 import type { VchannelAccount } from '@/types/vchannel';
 import { accountToDbRow, mapAccountRow } from '@/lib/vchannelMappers';
 
+const ACCOUNT_SELECT = 'id, vchannel_codes, account_label, platform, account_id, login_method, feedhive_managed, notes, created_at, updated_at';
+
 export function useVchannelAccounts() {
   const { session } = useAuth();
   const [accounts, setAccounts] = useState<VchannelAccount[]>([]);
@@ -12,11 +14,17 @@ export function useVchannelAccounts() {
 
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
-    const { data, error: fetchError } = await supabase
+    let { data, error: fetchError } = await supabase
       .from('vchannel_accounts')
-      .select('*')
+      .select(ACCOUNT_SELECT)
       .order('platform')
       .order('account_label');
+
+    if (fetchError) {
+      const retry = await supabase.from('vchannel_accounts').select(ACCOUNT_SELECT);
+      data = retry.data;
+      fetchError = retry.error;
+    }
 
     if (fetchError) {
       setError(fetchError.message);
@@ -37,7 +45,7 @@ export function useVchannelAccounts() {
     const { data, error: insertError } = await supabase
       .from('vchannel_accounts')
       .insert(row)
-      .select('*')
+      .select(ACCOUNT_SELECT)
       .single();
 
     if (insertError) return insertError;
@@ -54,7 +62,7 @@ export function useVchannelAccounts() {
       .from('vchannel_accounts')
       .update(row)
       .eq('id', id)
-      .select('*')
+      .select(ACCOUNT_SELECT)
       .single();
 
     if (updateError) return updateError;
@@ -70,7 +78,7 @@ export function useVchannelAccounts() {
 
   const accountsForChannel = useCallback((channelCode: string) => {
     const code = channelCode.toUpperCase();
-    return accounts.filter(a => a.vchannelCodes.some(c => c.toUpperCase() === code));
+    return accounts.filter(a => Array.isArray(a.vchannelCodes) && a.vchannelCodes.some(c => c.toUpperCase() === code));
   }, [accounts]);
 
   return { accounts, loading, error, fetchAccounts, addAccount, updateAccount, deleteAccount, accountsForChannel };

@@ -49,7 +49,7 @@ export function mapVchannelRow(row: DbVchannelRow): Vchannel {
 export function mapAccountRow(row: DbAccountRow): VchannelAccount {
   return {
     id: row.id,
-    vchannelCodes: row.vchannel_codes,
+    vchannelCodes: Array.isArray(row.vchannel_codes) ? row.vchannel_codes : [],
     accountLabel: row.account_label,
     platform: normalizeAccountPlatform(row.platform) ?? row.platform,
     accountId: row.account_id ?? undefined,

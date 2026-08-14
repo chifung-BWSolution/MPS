@@ -109,6 +109,18 @@ const mapped = mapAccountRow({
 });
 assert.equal(mapped.platform, 'instagram');
 assert.equal(mapped.accountId, 'bw_designcentre');
+assert.deepEqual(mapAccountRow({
+  id: 'acc-2',
+  vchannel_codes: null,
+  account_label: 'x',
+  platform: 'facebook',
+  account_id: null,
+  login_method: null,
+  feedhive_managed: false,
+  notes: null,
+  created_at: '2026-08-14T00:00:00.000Z',
+  updated_at: '2026-08-14T00:00:00.000Z',
+}).vchannelCodes, []);
 assert.equal('channelIntro' in mapped, false);
 assert.equal('accountPassword' in mapped, false);
 assert.equal('operatorCode' in mapped, false);

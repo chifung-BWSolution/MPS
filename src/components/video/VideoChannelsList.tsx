@@ -195,6 +195,7 @@ export function VideoChannelsList() {
   const {
     accounts,
     loading: accountsLoading,
+    error: accountsError,
     addAccount,
     updateAccount,
     deleteAccount,
@@ -416,9 +417,9 @@ export function VideoChannelsList() {
 
   return (
     <div className="space-y-5">
-      {error && (
+      {(error || accountsError) && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
-          無法載入 Supabase 資料：{error}
+          無法載入 Supabase 資料：{error || accountsError}
         </div>
       )}
 
