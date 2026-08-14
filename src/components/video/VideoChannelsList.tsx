@@ -11,10 +11,12 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
+  CHANNEL_LIST_ACCOUNT_COLUMNS,
   PLATFORM_KEYS,
   PLATFORM_LABELS,
   STATUS_KIND_COLORS,
   STATUS_KIND_LABELS,
+  accountLabelForPlatform,
   accountPlatformLabel,
   normalizeAccountPlatform,
   type PlatformKey,
@@ -30,6 +32,17 @@ function ChannelWorkHoursCell({ hours }: { hours?: number }) {
     return <span className="text-muted-foreground">—</span>;
   }
   return <span className="font-medium text-teal-700 whitespace-nowrap">{hours.toFixed(1)}h</span>;
+}
+
+function ChannelAccountLabelCell({ label }: { label: string }) {
+  if (!label) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  return (
+    <span className="text-[11px] font-medium truncate max-w-[140px] inline-block align-bottom" title={label}>
+      {label}
+    </span>
+  );
 }
 
 const importanceConfig = {
@@ -284,12 +297,6 @@ export function VideoChannelsList() {
     });
   }, [channels, searchQuery, importanceFilter, brandFilter, channelBrandLabel]);
 
-  const openedPlatformCount = (ch: Vchannel) =>
-    PLATFORM_KEYS.filter(k => {
-      const ps = ch.platformStatus[k];
-      return ps && ps.kind !== 'pending' && ps.kind !== 'n/a';
-    }).length;
-
   const handleAdd = async () => {
     if (!newChannel.channelCode.trim() || !newChannel.internalName.trim() || !newChannel.brandListId) return;
     setSaving(true);
@@ -503,7 +510,7 @@ export function VideoChannelsList() {
           </div>
 
           <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-x-auto">
-            <table className="w-full text-[13px] min-w-[900px]">
+            <table className="w-full text-[13px] min-w-[1280px]">
               <thead className="bg-muted/30">
                 <tr>
                   <th className="w-10 px-3 py-2.5" />
@@ -512,7 +519,9 @@ export function VideoChannelsList() {
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">公開名稱</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">品牌</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">重要性</th>
-                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">平台</th>
+                  {CHANNEL_LIST_ACCOUNT_COLUMNS.map(col => (
+                    <th key={col.key} className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">{col.label}</th>
+                  ))}
                   <th className="text-right px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap min-w-[76px]">總工時</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">狀態</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground">操作</th>
@@ -541,7 +550,11 @@ export function VideoChannelsList() {
                         <td className="px-3 py-3">
                           <span className={cn('text-[11px] font-bold px-2 py-0.5 rounded', iConfig.bg, iConfig.color)}>{iConfig.label}</span>
                         </td>
-                        <td className="px-3 py-3 text-[11px] text-muted-foreground">{openedPlatformCount(channel)}/8</td>
+                        {CHANNEL_LIST_ACCOUNT_COLUMNS.map(col => (
+                          <td key={col.key} className="px-3 py-3">
+                            <ChannelAccountLabelCell label={accountLabelForPlatform(linkedAccounts, col.key)} />
+                          </td>
+                        ))}
                         <td className="px-3 py-3 text-right">
                           <ChannelWorkHoursCell hours={channelWorkHours.get(channel.id)} />
                         </td>
@@ -561,7 +574,7 @@ export function VideoChannelsList() {
                       {isExpanded && (
                         <tr className="border-t border-border/50 bg-slate-50/70">
                           <td />
-                          <td colSpan={9} className="px-3 py-3">
+                          <td colSpan={14} className="px-3 py-3">
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                               <div className="rounded-md border border-border bg-white p-3">
                                 <h4 className="text-[12px] font-bold mb-2">平台狀態（summary）</h4>

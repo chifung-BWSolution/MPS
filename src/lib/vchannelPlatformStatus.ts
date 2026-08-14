@@ -110,6 +110,33 @@ export function accountPlatformLabel(raw: string | null | undefined): string {
   return text || '—';
 }
 
+/** Channel list columns that show vchannel_accounts.account_label */
+export const CHANNEL_LIST_ACCOUNT_COLUMNS: { key: PlatformKey; label: string }[] = [
+  { key: 'facebook', label: 'FB' },
+  { key: 'instagram', label: 'IG' },
+  { key: 'threads', label: 'Threads' },
+  { key: 'wechat_channels', label: '微信' },
+  { key: 'douyin', label: '抖音' },
+  { key: 'xiaohongshu', label: '小紅書' },
+];
+
+export function accountLabelsForPlatform(
+  accounts: { platform: string; accountLabel?: string | null }[],
+  platform: PlatformKey,
+): string[] {
+  return accounts
+    .filter(a => normalizeAccountPlatform(a.platform) === platform)
+    .map(a => (a.accountLabel ?? '').trim())
+    .filter(Boolean);
+}
+
+export function accountLabelForPlatform(
+  accounts: { platform: string; accountLabel?: string | null }[],
+  platform: PlatformKey,
+): string {
+  return accountLabelsForPlatform(accounts, platform).join(' / ');
+}
+
 export function parsePlatformStatus(raw: string | undefined | null): PlatformStatusValue {
   const text = (raw ?? '').trim();
   if (!text) return { kind: 'pending', raw_text: '' };
