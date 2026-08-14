@@ -141,11 +141,10 @@ App.tsx
 │   └── /:id (hub page with nested tabs)
 ├── /marketing
 │   ├── /google-ads
-│   ├── /google-ads-sync
 │   ├── /facebook-ads
-│   ├── /facebook-ads-sync
 │   ├── /ads-comparison
 │   ├── /backlink
+│   ├── /ads-data-sync
 │   └── /ads-tags
 ├── /video
 │   ├── /list

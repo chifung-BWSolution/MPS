@@ -1,8 +1,47 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Pause, Play, RefreshCw, Square, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useGoogleAdsBackfill } from '@/hooks/useGoogleAdsBackfill';
 import { Button } from '@/components/ui/button';
+
+export type AdsSyncJobStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+
+export type AdsSyncJobLike = {
+  status: AdsSyncJobStatus;
+  historyStartDate: string;
+  historyEndDate: string;
+  cursorMonth: string;
+  totalMonths: number;
+  completedMonths: number;
+  rowsUpserted: number;
+  accountsTargeted: number;
+  errorCount: number;
+  lastError?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  updatedAt: string;
+  meta?: {
+    last_month?: string;
+    recent_errors?: string[];
+  };
+};
+
+export type AdsSyncActionResult = { ok: boolean; error?: string };
+
+type AdsSyncPanelProps = {
+  title: string;
+  job: AdsSyncJobLike | null;
+  loading: boolean;
+  working: boolean;
+  error: string | null;
+  autoRun: boolean;
+  extraStats?: ReactNode;
+  helpText: ReactNode;
+  start: () => Promise<AdsSyncActionResult>;
+  pause: () => Promise<AdsSyncActionResult>;
+  resume: () => Promise<AdsSyncActionResult>;
+  cancel: () => Promise<AdsSyncActionResult>;
+  refreshJob: () => unknown;
+};
 
 function statusLabel(status?: string) {
   switch (status) {
@@ -21,20 +60,21 @@ function statusLabel(status?: string) {
   }
 }
 
-export function GoogleAdsSyncModule() {
-  const {
-    job,
-    loading,
-    working,
-    error,
-    autoRun,
-    start,
-    pause,
-    resume,
-    cancel,
-    refreshJob,
-  } = useGoogleAdsBackfill();
-
+export function AdsSyncPanel({
+  title,
+  job,
+  loading,
+  working,
+  error,
+  autoRun,
+  extraStats,
+  helpText,
+  start,
+  pause,
+  resume,
+  cancel,
+  refreshJob,
+}: AdsSyncPanelProps) {
   const pct = useMemo(() => {
     if (!job || !job.totalMonths) return 0;
     return Math.min(100, Math.round((job.completedMonths / job.totalMonths) * 100));
@@ -44,79 +84,78 @@ export function GoogleAdsSyncModule() {
   const recentErrors = job?.meta?.recent_errors ?? [];
 
   return (
-    <div className="space-y-0">
-      <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className={`inline-flex px-2.5 py-1 rounded border text-[12px] font-medium ${status.className}`}>
-              {status.text}
-            </span>
-            {autoRun && job?.status === 'running' ? (
-              <span className="text-[12px] text-emerald-700">自動推進中…請保持此分頁開啟</span>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => void refreshJob()} disabled={loading}>
-              <RefreshCw size={14} className="mr-1.5" /> 重新整理
-            </Button>
-            {!job || ['completed', 'cancelled'].includes(job.status) ? (
-              <Button
-                size="sm"
-                disabled={working}
-                onClick={async () => {
-                  const r = await start();
-                  if (r.ok) toast.success('已開始完整歷史同步');
-                  else toast.error(r.error || '啟動失敗');
-                }}
-              >
-                開始完整歷史同步
-              </Button>
-            ) : null}
-            {job?.status === 'running' ? (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={working}
-                onClick={async () => {
-                  const r = await pause();
-                  if (r.ok) toast.message('已暫停');
-                  else toast.error(r.error || '暫停失敗');
-                }}
-              >
-                <Pause size={14} className="mr-1.5" /> 暫停
-              </Button>
-            ) : null}
-            {job && ['paused', 'failed'].includes(job.status) ? (
-              <Button
-                size="sm"
-                disabled={working}
-                onClick={async () => {
-                  const r = await resume();
-                  if (r.ok) toast.success('已繼續同步');
-                  else toast.error(r.error || '繼續失敗');
-                }}
-              >
-                <Play size={14} className="mr-1.5" /> 繼續
-              </Button>
-            ) : null}
-            {job && ['running', 'paused', 'failed', 'pending'].includes(job.status) ? (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={working}
-                onClick={async () => {
-                  const r = await cancel();
-                  if (r.ok) toast.message('已取消');
-                  else toast.error(r.error || '取消失敗');
-                }}
-              >
-                <Square size={14} className="mr-1.5" /> 取消
-              </Button>
-            ) : null}
-          </div>
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-[16px] font-bold tracking-tight">{title}</h2>
+          <span className={`inline-flex px-2.5 py-1 rounded border text-[12px] font-medium ${status.className}`}>
+            {status.text}
+          </span>
+          {autoRun && job?.status === 'running' ? (
+            <span className="text-[12px] text-emerald-700">自動推進中…請保持此分頁開啟</span>
+          ) : null}
         </div>
-        {error ? <div className="text-[12px] text-red-600">{error}</div> : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => void refreshJob()} disabled={loading}>
+            <RefreshCw size={14} className="mr-1.5" /> 重新整理
+          </Button>
+          {!job || ['completed', 'cancelled'].includes(job.status) ? (
+            <Button
+              size="sm"
+              disabled={working}
+              onClick={async () => {
+                const r = await start();
+                if (r.ok) toast.success('已開始完整歷史同步');
+                else toast.error(r.error || '啟動失敗');
+              }}
+            >
+              開始完整歷史同步
+            </Button>
+          ) : null}
+          {job?.status === 'running' ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={working}
+              onClick={async () => {
+                const r = await pause();
+                if (r.ok) toast.message('已暫停');
+                else toast.error(r.error || '暫停失敗');
+              }}
+            >
+              <Pause size={14} className="mr-1.5" /> 暫停
+            </Button>
+          ) : null}
+          {job && ['paused', 'failed'].includes(job.status) ? (
+            <Button
+              size="sm"
+              disabled={working}
+              onClick={async () => {
+                const r = await resume();
+                if (r.ok) toast.success('已繼續同步');
+                else toast.error(r.error || '繼續失敗');
+              }}
+            >
+              <Play size={14} className="mr-1.5" /> 繼續
+            </Button>
+          ) : null}
+          {job && ['running', 'paused', 'failed', 'pending'].includes(job.status) ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={working}
+              onClick={async () => {
+                const r = await cancel();
+                if (r.ok) toast.message('已取消');
+                else toast.error(r.error || '取消失敗');
+              }}
+            >
+              <Square size={14} className="mr-1.5" /> 取消
+            </Button>
+          ) : null}
+        </div>
       </div>
+      {error ? <div className="text-[12px] text-red-600">{error}</div> : null}
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md shadow-card p-5 space-y-4">
@@ -159,27 +198,9 @@ export function GoogleAdsSyncModule() {
               <div className="text-muted-foreground text-[11px]">錯誤數</div>
               <div className="font-medium">{job?.errorCount ?? 0}</div>
             </div>
-            <div>
-              <div className="text-muted-foreground text-[11px]">網站連結數</div>
-              <div className="font-medium">{job?.meta?.websites_linked ?? '—'}</div>
-            </div>
-            <div>
-              <div className="text-muted-foreground text-[11px]">未對應網域</div>
-              <div className="font-medium">{job?.meta?.domains_unmatched ?? '—'}</div>
-            </div>
-            <div>
-              <div className="text-muted-foreground text-[11px]">有連結的 Campaign</div>
-              <div className="font-medium">{job?.meta?.campaigns_with_links ?? '—'}</div>
-            </div>
-            <div>
-              <div className="text-muted-foreground text-[11px]">發現網域數</div>
-              <div className="font-medium">{job?.meta?.domains_discovered ?? '—'}</div>
-            </div>
+            {extraStats}
           </div>
-          <p className="text-[12px] text-muted-foreground leading-relaxed">
-            完整歷史以「每月一個步驟」推進，避免 Edge Function 逾時。執行中請保持此分頁開啟以自動推進；關閉後可按「繼續」從資料庫游標恢復。
-            啟動時會依廣告 Final URL 自動對應 `webandsystem_list`；未對應網域可到「網站列表」用「同步廣告網域」建立。
-          </p>
+          <p className="text-[12px] text-muted-foreground leading-relaxed">{helpText}</p>
         </div>
 
         <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md shadow-card p-5 space-y-3">
@@ -213,6 +234,6 @@ export function GoogleAdsSyncModule() {
           ) : null}
         </div>
       </div>
-    </div>
+    </section>
   );
 }

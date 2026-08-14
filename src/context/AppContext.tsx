@@ -15,6 +15,10 @@ export function resolveSubModule(module: string, sub?: string): string {
   if (!sub) return defaultSub;
   // Legacy alias: 影片管理 → 影片統籌
   if (module === 'video' && sub === 'management') return 'coordination';
+  // Legacy alias: Google / Facebook Ads 同步 → 廣告數據同步
+  if (module === 'marketing' && (sub === 'google-ads-sync' || sub === 'facebook-ads-sync')) {
+    return 'ads-data-sync';
+  }
   return menuItem?.subMenus.some(s => s.id === sub) ? sub : defaultSub;
 }
 
@@ -105,11 +109,10 @@ export const mainMenuItems: MainMenuItem[] = [
     label: '行銷管理',
     subMenus: [
       { id: 'google-ads', label: 'Google Ads', section: '廣告' },
-      { id: 'google-ads-sync', label: 'Google Ads 同步', section: '廣告' },
       { id: 'facebook-ads', label: 'Facebook Ads', section: '廣告' },
-      { id: 'facebook-ads-sync', label: 'Facebook Ads 同步', section: '廣告' },
       { id: 'ads-comparison', label: '廣告比較圖表', section: '廣告' },
       { id: 'backlink', label: '反向連結 Backlinks', section: '內容' },
+      { id: 'ads-data-sync', label: '廣告數據同步', section: '設定' },
       { id: 'ads-tags', label: '廣告標籤', section: '設定' },
     ],
   },

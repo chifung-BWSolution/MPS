@@ -1,6 +1,6 @@
 # Facebook / Meta Ads 連接指南
 
-完成後，MPS 可在 `#marketing/facebook-ads` 檢視多 Business 的 Campaign 成效，並在 `#marketing/facebook-ads-sync` 做歷史回填。
+完成後，MPS 可在 `#marketing/facebook-ads` 檢視多 Business 的 Campaign 成效，並在 `#marketing/ads-data-sync` 做歷史回填。
 
 ## 架構
 
@@ -159,7 +159,7 @@ Also apply:
 |------|------|
 | `/#marketing/facebook-ads` | Campaign 報表；點擊列開啟詳情；手動設定品牌；編輯欄設定標籤 |
 | `/#marketing/facebook-ads?campaign={adAccountId}:{campaignId}` | Campaign 詳情（KPI / 圖表 / 即時 Ad Sets·Ads·Placements） |
-| `/#marketing/facebook-ads-sync` | 完整歷史回填控制台 |
+| `/#marketing/ads-data-sync` | 廣告數據同步（含 Facebook 完整歷史回填） |
 | `/#website/list` | 網站列表：Google 廣告狀態欄、同步廣告網域、未連結網域建立提示 |
 
 Business 篩選與 KPI 由 warehouse 動態產生，**不需改前端**即可支援新增憑證。

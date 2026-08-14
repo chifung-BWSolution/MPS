@@ -520,7 +520,7 @@ export function GoogleAdsModule() {
           MCC 564-140-4438 · 報表由每日指標彙總 · 點擊列可開啟 Campaign 詳情
           {dataMinDate && dataMaxDate
             ? ` · 已同步資料 ${dataMinDate} ~ ${dataMaxDate}`
-            : ' · 尚無每日指標（請至「Google Ads 同步」執行歷史回填）'}
+            : ' · 尚無每日指標（請至「廣告數據同步」執行歷史回填）'}
           {lastSync?.finishedAt
             ? ` · 最近增量 ${new Date(lastSync.finishedAt).toLocaleString()} (${lastSync.status})`
             : ''}
@@ -557,7 +557,7 @@ export function GoogleAdsModule() {
               {!loading && filtered.length === 0 && (
                 <tr>
                   <td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">
-                    此日期區間尚無資料。請先到「Google Ads 同步」執行完整歷史回填，或按 Refresh recent。
+                    此日期區間尚無資料。請先到「廣告數據同步」執行完整歷史回填，或按 Refresh recent。
                   </td>
                 </tr>
               )}
