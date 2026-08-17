@@ -9,12 +9,15 @@ import {
   videoLoginMethodLabel,
   videoTwoFaLabel,
   type VideoLoginMethod,
+  type VideoLoginMethodInput,
   type VideoLoginMethodKind,
   type VideoTwoFaMethod,
 } from '@/types/videoLoginMethod';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
@@ -27,6 +30,8 @@ type LoginMethodForm = {
   email: string;
   password: string;
   twoFaMethods: VideoTwoFaMethod[];
+  note: string;
+  isActive: boolean;
 };
 
 const emptyForm = (): LoginMethodForm => ({
@@ -37,6 +42,8 @@ const emptyForm = (): LoginMethodForm => ({
   email: '',
   password: '',
   twoFaMethods: [],
+  note: '',
+  isActive: true,
 });
 
 function formFromItem(item: VideoLoginMethod): LoginMethodForm {
@@ -48,6 +55,23 @@ function formFromItem(item: VideoLoginMethod): LoginMethodForm {
     email: item.email,
     password: item.password,
     twoFaMethods: item.twoFaMethods,
+    note: item.note,
+    isActive: item.isActive,
+  };
+}
+
+function toInput(item: VideoLoginMethod, overrides: Partial<VideoLoginMethodInput> = {}): VideoLoginMethodInput {
+  return {
+    loginMethod: item.loginMethod,
+    displayName: item.displayName,
+    accountName: item.accountName,
+    phoneNumber: item.phoneNumber,
+    email: item.email,
+    password: item.password,
+    twoFaMethods: item.twoFaMethods,
+    note: item.note,
+    isActive: item.isActive,
+    ...overrides,
   };
 }
 
@@ -75,6 +99,7 @@ export function VideoLoginMethodsModule() {
         item.accountName,
         item.phoneNumber,
         item.email,
+        item.note,
         item.twoFaMethods.map(videoTwoFaLabel).join(' '),
       ]
         .join(' ')
@@ -125,6 +150,8 @@ export function VideoLoginMethodsModule() {
       email: form.email,
       password: form.password,
       twoFaMethods: form.twoFaMethods,
+      note: form.note,
+      isActive: form.isActive,
     };
     const result = editing
       ? await updateItem(editing.id, payload)
@@ -139,6 +166,15 @@ export function VideoLoginMethodsModule() {
     toast.success(editing ? '已更新登入方式' : '已新增登入方式');
     setModalOpen(false);
     setEditing(null);
+  };
+
+  const handleToggleActive = async (item: VideoLoginMethod) => {
+    const result = await updateItem(item.id, toInput(item, { isActive: !item.isActive }));
+    if (!result.ok) {
+      toast.error('更新狀態失敗', { description: result.error });
+      return;
+    }
+    toast.success(item.isActive ? '已停用登入方式' : '已啟用登入方式');
   };
 
   const handleConfirmDelete = async () => {
@@ -158,7 +194,7 @@ export function VideoLoginMethodsModule() {
         <div>
           <h1 className="text-[32px] font-bold tracking-tight">登入方式</h1>
           <p className="text-[14px] text-muted-foreground mt-1">
-            管理影片製作相關帳號的登入方式、聯絡資料與雙重驗證。
+            管理影片製作相關帳號的登入方式、聯絡資料、雙重驗證、備註與啟用狀態。
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -167,7 +203,7 @@ export function VideoLoginMethodsModule() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜尋顯示名稱、帳號、電郵或電話…"
+              placeholder="搜尋顯示名稱、帳號、電郵、電話或備註…"
               className="pl-8 h-9 text-[13px] bg-white"
             />
           </div>
@@ -184,7 +220,7 @@ export function VideoLoginMethodsModule() {
 
       <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md shadow-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-[13px] min-w-[860px]">
+          <table className="w-full text-[13px] min-w-[1020px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-muted-foreground">
               <tr>
                 <th className="font-medium px-3 py-2.5 text-left">顯示名稱</th>
@@ -194,27 +230,35 @@ export function VideoLoginMethodsModule() {
                 <th className="font-medium px-3 py-2.5 text-left">電郵</th>
                 <th className="font-medium px-3 py-2.5 text-left">密碼</th>
                 <th className="font-medium px-3 py-2.5 text-left">雙重驗證</th>
+                <th className="font-medium px-3 py-2.5 text-left">備註</th>
+                <th className="font-medium px-3 py-2.5 text-left">狀態</th>
                 <th className="font-medium px-3 py-2.5 text-right">操作</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
                     載入中…
                   </td>
                 </tr>
               )}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
                     {search.trim() ? '沒有符合的登入方式。' : '尚未建立登入方式。請按「新增登入方式」。'}
                   </td>
                 </tr>
               )}
               {!loading &&
                 filtered.map((item) => (
-                  <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50/80">
+                  <tr
+                    key={item.id}
+                    className={cn(
+                      'border-b border-slate-100 hover:bg-slate-50/80',
+                      !item.isActive && 'opacity-60',
+                    )}
+                  >
                     <td className="px-3 py-2.5 font-medium">{item.displayName}</td>
                     <td className="px-3 py-2.5">
                       <span className="inline-flex items-center rounded border border-teal-200 bg-teal-50 px-2 py-0.5 text-[12px] font-medium text-teal-700">
@@ -240,6 +284,31 @@ export function VideoLoginMethodsModule() {
                           ))}
                         </div>
                       )}
+                    </td>
+                    <td className="px-3 py-2.5 max-w-[220px]">
+                      {item.note ? (
+                        <span className="block truncate text-muted-foreground" title={item.note}>
+                          {item.note}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={item.isActive}
+                          onCheckedChange={() => void handleToggleActive(item)}
+                        />
+                        <span
+                          className={cn(
+                            'text-[12px]',
+                            item.isActive ? 'text-teal-700' : 'text-amber-700',
+                          )}
+                        >
+                          {item.isActive ? '啟用' : '停用'}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center justify-end gap-1">
@@ -395,6 +464,29 @@ export function VideoLoginMethodsModule() {
                 );
               })}
             </div>
+          </div>
+
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">
+              備註
+            </label>
+            <Textarea
+              value={form.note}
+              onChange={(e) => setForm((prev) => ({ ...prev, note: e.target.value }))}
+              placeholder="補充說明、注意事項…"
+              className="min-h-[72px] text-[13px]"
+            />
+          </div>
+
+          <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+            <div>
+              <div className="text-[13px] font-medium">啟用</div>
+              <div className="text-[11px] text-muted-foreground">停用後此登入方式會標示為停用</div>
+            </div>
+            <Switch
+              checked={form.isActive}
+              onCheckedChange={(checked) => setForm((prev) => ({ ...prev, isActive: checked }))}
+            />
           </div>
 
           <div className="flex justify-end gap-2 pt-2 border-t border-border">

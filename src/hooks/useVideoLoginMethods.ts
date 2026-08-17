@@ -18,6 +18,8 @@ type VideoLoginMethodRow = {
   email: string | null;
   password: string | null;
   two_fa_methods: string[] | null;
+  note: string | null;
+  is_active: boolean | null;
   created_at: string;
   updated_at: string;
 };
@@ -25,7 +27,7 @@ type VideoLoginMethodRow = {
 const TABLE = 'vchannel_login_methods';
 
 const SELECT_COLUMNS =
-  'id, login_method, display_name, account_name, phone_number, email, password, two_fa_methods, created_at, updated_at';
+  'id, login_method, display_name, account_name, phone_number, email, password, two_fa_methods, note, is_active, created_at, updated_at';
 
 function mapRow(row: VideoLoginMethodRow): VideoLoginMethod {
   const loginMethod: VideoLoginMethodKind = isVideoLoginMethodKind(row.login_method)
@@ -41,6 +43,8 @@ function mapRow(row: VideoLoginMethodRow): VideoLoginMethod {
     email: row.email ?? '',
     password: row.password ?? '',
     twoFaMethods: normalizeTwoFaMethods(row.two_fa_methods ?? []),
+    note: row.note ?? '',
+    isActive: row.is_active !== false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -55,6 +59,8 @@ function toDbRow(input: VideoLoginMethodInput) {
     email: input.email?.trim() || null,
     password: input.password || null,
     two_fa_methods: normalizeTwoFaMethods(input.twoFaMethods ?? []),
+    note: input.note?.trim() || null,
+    is_active: input.isActive ?? true,
     updated_at: new Date().toISOString(),
   };
 }

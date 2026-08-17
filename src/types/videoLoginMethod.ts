@@ -27,6 +27,8 @@ export type VideoLoginMethod = {
   email: string;
   password: string;
   twoFaMethods: VideoTwoFaMethod[];
+  note: string;
+  isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -39,6 +41,8 @@ export type VideoLoginMethodInput = {
   email?: string;
   password?: string;
   twoFaMethods?: VideoTwoFaMethod[];
+  note?: string;
+  isActive?: boolean;
 };
 
 const LOGIN_METHOD_IDS = new Set<string>(VIDEO_LOGIN_METHOD_OPTIONS.map((option) => option.id));
