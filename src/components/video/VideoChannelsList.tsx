@@ -1,7 +1,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Edit, Trash2, KeyRound, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatLinkedLoginMethods, type Vchannel, type VchannelImportance, type VchannelStatus } from '@/types/vchannel';
+import { supabase } from '@/lib/supabase';
+import { formatLinkedLoginMethods, type Vchannel, type VchannelAccount, type VchannelImportance, type VchannelStatus } from '@/types/vchannel';
 import { useVchannels } from '@/hooks/useVchannels';
 import { useVchannelAccounts } from '@/hooks/useVchannelAccounts';
 import { useBrands } from '@/hooks/useBrands';
@@ -11,6 +12,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
+  accountLinkFingerprint,
+  planAccountChannelLinkPatches,
+  type AccountLinkPatch,
+} from '@/lib/vchannelAccountLink';
+import { ChannelAccountPicker } from './ChannelAccountPicker';
+import {
   CHANNEL_LIST_ACCOUNT_COLUMNS,
   PLATFORM_KEYS,
   PLATFORM_LABELS,
@@ -19,7 +26,6 @@ import {
   accountLabelForPlatform,
   accountPlatformLabel,
   formatPlatformStatusNote,
-  type PlatformKey,
   type PlatformStatusValue,
   platformStatusSummary,
 } from '@/lib/vchannelPlatformStatus';
@@ -94,14 +100,36 @@ function PlatformStatusNote({ value }: { value: Record<string, PlatformStatusVal
   );
 }
 
+async function applyAccountLinkPatches(patches: AccountLinkPatch[]) {
+  for (const patch of patches) {
+    const { error } = await supabase
+      .from('vchannel_accounts')
+      .update({
+        vchannel_codes: patch.vchannelCodes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', patch.id);
+    if (error) return error;
+  }
+  return null;
+}
+
 function ChannelForm({
   form,
   setForm,
   brandOptions,
+  accounts,
+  selectedAccountIds,
+  onSelectedAccountIdsChange,
+  onAddAccount,
 }: {
   form: typeof emptyChannel;
   setForm: React.Dispatch<React.SetStateAction<typeof emptyChannel>>;
   brandOptions: { id: string; brandCode: string; displayName: string }[];
+  accounts: VchannelAccount[];
+  selectedAccountIds: string[];
+  onSelectedAccountIdsChange: (ids: string[]) => void;
+  onAddAccount: () => void;
 }) {
   return (
     <div className="space-y-4">
@@ -174,6 +202,14 @@ function ChannelForm({
           placeholder="頻道備註"
         />
       </div>
+      <ChannelAccountPicker
+        accounts={accounts}
+        selectedIds={selectedAccountIds}
+        onChange={onSelectedAccountIdsChange}
+        onAddAccount={onAddAccount}
+        disabled={!form.channelCode.trim()}
+        disabledReason="請先填寫頻道編號，才能搜尋或新增關聯的平台帳戶"
+      />
       <div>
         <label className="text-[12px] font-medium text-muted-foreground block mb-2">平台狀態矩陣</label>
         <PlatformStatusNote value={form.platformStatus} />
@@ -190,6 +226,7 @@ export function VideoChannelsList() {
     error: accountsError,
     addAccount,
     updateAccount,
+    fetchAccounts,
     accountsForChannel,
   } = useVchannelAccounts();
 
@@ -228,6 +265,12 @@ export function VideoChannelsList() {
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [accountForm, setAccountForm] = useState(emptyAccountForm);
+  const [savingAccount, setSavingAccount] = useState(false);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
+  const [initialLinkedAccountIds, setInitialLinkedAccountIds] = useState<string[]>([]);
+  const [linkedDuringSessionIds, setLinkedDuringSessionIds] = useState<string[]>([]);
+  const [initialChannelCode, setInitialChannelCode] = useState('');
+  const [pendingCreatedFingerprint, setPendingCreatedFingerprint] = useState<string | null>(null);
   const [channelWorkHours, setChannelWorkHours] = useState<Map<string, number>>(new Map());
 
   const refreshChannelWorkHours = useCallback(async (channelIds: string[]) => {
@@ -251,6 +294,18 @@ export function VideoChannelsList() {
     void refreshChannelWorkHours(channels.map(ch => ch.id));
   }, [channels, refreshChannelWorkHours]);
 
+  useEffect(() => {
+    if (!pendingCreatedFingerprint) return;
+    const created = accounts.find(account => (
+      accountLinkFingerprint(account) === pendingCreatedFingerprint
+      && !selectedAccountIds.includes(account.id)
+    ));
+    if (!created) return;
+    setSelectedAccountIds(ids => (ids.includes(created.id) ? ids : [...ids, created.id]));
+    setLinkedDuringSessionIds(ids => (ids.includes(created.id) ? ids : [...ids, created.id]));
+    setPendingCreatedFingerprint(null);
+  }, [accounts, pendingCreatedFingerprint, selectedAccountIds]);
+
   const brandFilterOptions = useMemo(
     () => [...new Set(channels.map(c => channelBrandLabel(c)).filter(code => code && code !== '—'))].sort(),
     [channels, channelBrandLabel],
@@ -272,6 +327,28 @@ export function VideoChannelsList() {
     });
   }, [channels, searchQuery, importanceFilter, brandFilter, channelBrandLabel]);
 
+  const resetAccountLinkState = () => {
+    setSelectedAccountIds([]);
+    setInitialLinkedAccountIds([]);
+    setLinkedDuringSessionIds([]);
+    setInitialChannelCode('');
+    setPendingCreatedFingerprint(null);
+  };
+
+  const syncSelectedAccountLinks = async (channelCode: string, previousChannelCode?: string) => {
+    const patches = planAccountChannelLinkPatches({
+      accounts,
+      selectedIds: selectedAccountIds,
+      initialLinkedIds: [...initialLinkedAccountIds, ...linkedDuringSessionIds],
+      channelCode,
+      previousChannelCode,
+    });
+    if (patches.length === 0) return null;
+    const linkError = await applyAccountLinkPatches(patches);
+    if (!linkError) await fetchAccounts();
+    return linkError;
+  };
+
   const handleAdd = async () => {
     if (!newChannel.channelCode.trim() || !newChannel.internalName.trim() || !newChannel.brandListId) return;
     setSaving(true);
@@ -279,12 +356,18 @@ export function VideoChannelsList() {
       ...newChannel,
       brandListId: newChannel.brandListId || null,
     });
-    setSaving(false);
     if (err) {
+      setSaving(false);
       alert(typeof err === 'object' && 'message' in err ? err.message : String(err));
       return;
     }
+    const linkError = await syncSelectedAccountLinks(newChannel.channelCode);
+    setSaving(false);
+    if (linkError) {
+      alert(`頻道已儲存，但平台帳戶關聯失敗：${linkError.message}`);
+    }
     setNewChannel(emptyChannel);
+    resetAccountLinkState();
     setShowAddModal(false);
   };
 
@@ -301,16 +384,30 @@ export function VideoChannelsList() {
       platformStatus: editForm.platformStatus,
       notes: editForm.notes,
     });
-    setSaving(false);
     if (err) {
+      setSaving(false);
       alert(typeof err === 'object' && 'message' in err ? err.message : String(err));
       return;
     }
+    const linkError = await syncSelectedAccountLinks(editForm.channelCode, initialChannelCode);
+    setSaving(false);
+    if (linkError) {
+      alert(`頻道已儲存，但平台帳戶關聯失敗：${linkError.message}`);
+    }
+    resetAccountLinkState();
     setShowEditModal(false);
     setEditingChannelId(null);
   };
 
+  const openAddChannel = () => {
+    setNewChannel(emptyChannel);
+    resetAccountLinkState();
+    setShowAddModal(true);
+  };
+
   const openEditChannel = (channel: Vchannel) => {
+    const linked = accountsForChannel(channel.channelCode);
+    const linkedIds = linked.map(account => account.id);
     setEditingChannelId(channel.id);
     setEditForm({
       channelCode: channel.channelCode,
@@ -322,6 +419,11 @@ export function VideoChannelsList() {
       platformStatus: channel.platformStatus,
       notes: channel.notes ?? '',
     });
+    setSelectedAccountIds(linkedIds);
+    setInitialLinkedAccountIds(linkedIds);
+    setLinkedDuringSessionIds([]);
+    setInitialChannelCode(channel.channelCode);
+    setPendingCreatedFingerprint(null);
     setShowEditModal(true);
   };
 
@@ -353,6 +455,15 @@ export function VideoChannelsList() {
     setShowAccountModal(true);
   };
 
+  const openAddAccountFromChannel = () => {
+    const code = (showEditModal ? editForm.channelCode : newChannel.channelCode).trim().toUpperCase();
+    if (!code) {
+      alert('請先填寫頻道編號');
+      return;
+    }
+    openAddAccount(code);
+  };
+
   const openEditAccount = (account: typeof accounts[0]) => {
     setEditingAccountId(account.id);
     setAccountForm(accountToForm(account));
@@ -362,14 +473,17 @@ export function VideoChannelsList() {
   const saveAccount = async () => {
     const payload = formToAccountPayload(accountForm);
     if (!payload) return;
-    setSaving(true);
+    setSavingAccount(true);
     const err = editingAccountId
       ? await updateAccount(editingAccountId, payload)
       : await addAccount(payload);
-    setSaving(false);
+    setSavingAccount(false);
     if (err) {
       alert(typeof err === 'object' && 'message' in err ? err.message : String(err));
       return;
+    }
+    if (!editingAccountId && (showAddModal || showEditModal)) {
+      setPendingCreatedFingerprint(accountLinkFingerprint(payload));
     }
     setShowAccountModal(false);
   };
@@ -431,7 +545,7 @@ export function VideoChannelsList() {
               </SelectContent>
             </Select>
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={openAddChannel}
               className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700"
             >
               <Plus size={12} /> 新增頻道
@@ -578,19 +692,45 @@ export function VideoChannelsList() {
             )}
           </div>
 
-      <CrudModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="新增 Vchannel">
-        <ChannelForm form={newChannel} setForm={setNewChannel} brandOptions={activeBrandOptions} />
+      <CrudModal
+        isOpen={showAddModal}
+        onClose={() => { setShowAddModal(false); resetAccountLinkState(); }}
+        title="新增 Vchannel"
+        size="lg"
+      >
+        <ChannelForm
+          form={newChannel}
+          setForm={setNewChannel}
+          brandOptions={activeBrandOptions}
+          accounts={accounts}
+          selectedAccountIds={selectedAccountIds}
+          onSelectedAccountIdsChange={setSelectedAccountIds}
+          onAddAccount={openAddAccountFromChannel}
+        />
         <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
-          <Button variant="secondary" onClick={() => setShowAddModal(false)}>取消</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleAdd} disabled={saving}>{saving ? '儲存中...' : '新增'}</Button>
+          <Button variant="secondary" onClick={() => { setShowAddModal(false); resetAccountLinkState(); }}>取消</Button>
+          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleAdd} disabled={saving || savingAccount}>{saving ? '儲存中...' : '新增'}</Button>
         </div>
       </CrudModal>
 
-      <CrudModal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title={`編輯 ${editForm.channelCode}`}>
-        <ChannelForm form={editForm} setForm={setEditForm} brandOptions={activeBrandOptions} />
+      <CrudModal
+        isOpen={showEditModal}
+        onClose={() => { setShowEditModal(false); resetAccountLinkState(); }}
+        title={`編輯 ${editForm.channelCode}`}
+        size="lg"
+      >
+        <ChannelForm
+          form={editForm}
+          setForm={setEditForm}
+          brandOptions={activeBrandOptions}
+          accounts={accounts}
+          selectedAccountIds={selectedAccountIds}
+          onSelectedAccountIdsChange={setSelectedAccountIds}
+          onAddAccount={openAddAccountFromChannel}
+        />
         <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
-          <Button variant="secondary" onClick={() => setShowEditModal(false)}>取消</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSaveEdit} disabled={saving}>{saving ? '儲存中...' : '儲存'}</Button>
+          <Button variant="secondary" onClick={() => { setShowEditModal(false); resetAccountLinkState(); }}>取消</Button>
+          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSaveEdit} disabled={saving || savingAccount}>{saving ? '儲存中...' : '儲存'}</Button>
         </div>
       </CrudModal>
 
@@ -609,7 +749,7 @@ export function VideoChannelsList() {
         editing={!!editingAccountId}
         form={accountForm}
         setForm={setAccountForm}
-        saving={saving}
+        saving={savingAccount}
         onSave={saveAccount}
       />
     </div>

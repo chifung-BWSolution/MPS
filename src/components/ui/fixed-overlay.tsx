@@ -19,8 +19,14 @@ export function FixedOverlay({ className, children, ...props }: FixedOverlayProp
 
   if (!mounted) return null;
 
+  const stacked = document.querySelectorAll('[data-fixed-overlay]').length > 0;
+
   return createPortal(
-    <div className={cn('fixed inset-0 z-[100] m-0', className)} {...props}>
+    <div
+      data-fixed-overlay=""
+      className={cn('fixed inset-0 m-0', stacked ? 'z-[110]' : 'z-[100]', className)}
+      {...props}
+    >
       {children}
     </div>,
     document.body
