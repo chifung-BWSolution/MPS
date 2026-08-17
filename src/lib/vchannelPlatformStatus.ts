@@ -114,7 +114,7 @@ export function accountPlatformLabel(raw: string | null | undefined): string {
 export const CHANNEL_LIST_ACCOUNT_COLUMNS: { key: PlatformKey; label: string }[] = [
   { key: 'facebook', label: 'FB' },
   { key: 'instagram', label: 'IG' },
-  { key: 'threads', label: 'Threads' },
+  { key: 'youtube', label: 'YouTube' },
   { key: 'wechat_channels', label: '微信' },
   { key: 'douyin', label: '抖音' },
   { key: 'xiaohongshu', label: '小紅書' },

@@ -54,7 +54,7 @@ assert.deepEqual(
   [
     ['facebook', 'FB'],
     ['instagram', 'IG'],
-    ['threads', 'Threads'],
+    ['youtube', 'YouTube'],
     ['wechat_channels', '微信'],
     ['douyin', '抖音'],
     ['xiaohongshu', '小紅書'],
