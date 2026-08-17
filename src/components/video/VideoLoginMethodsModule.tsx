@@ -13,6 +13,7 @@ import {
   type VideoLoginMethodKind,
   type VideoTwoFaMethod,
 } from '@/types/videoLoginMethod';
+import { filterVideoLoginMethods, loginMethodListMetrics } from '@/lib/videoLoginMethodList';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -82,6 +83,8 @@ function maskPassword(password: string) {
 export function VideoLoginMethodsModule() {
   const { items, loading, error, addItem, updateItem, deleteItem } = useVideoLoginMethods();
   const [search, setSearch] = useState('');
+  const [methodFilter, setMethodFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<VideoLoginMethod | null>(null);
   const [form, setForm] = useState<LoginMethodForm>(emptyForm());
@@ -89,24 +92,11 @@ export function VideoLoginMethodsModule() {
   const [showPassword, setShowPassword] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<VideoLoginMethod | null>(null);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((item) => {
-      const haystack = [
-        item.displayName,
-        videoLoginMethodLabel(item.loginMethod),
-        item.accountName,
-        item.phoneNumber,
-        item.email,
-        item.note,
-        item.twoFaMethods.map(videoTwoFaLabel).join(' '),
-      ]
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [items, search]);
+  const loginMethodMetrics = useMemo(() => loginMethodListMetrics(items), [items]);
+  const filtered = useMemo(
+    () => filterVideoLoginMethods(items, { search, methodFilter, statusFilter }),
+    [items, search, methodFilter, statusFilter],
+  );
 
   const openCreate = () => {
     setEditing(null);
@@ -194,28 +184,60 @@ export function VideoLoginMethodsModule() {
         <div>
           <h1 className="text-[32px] font-bold tracking-tight">登入方式</h1>
           <p className="text-[14px] text-muted-foreground mt-1">
-            管理影片製作相關帳號的登入方式、聯絡資料、雙重驗證、備註與啟用狀態。
+            管理影片製作相關帳號的登入方式、聯絡資料與雙重驗證。
           </p>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="relative flex-1 min-w-[180px] max-w-sm">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
+            <span className="text-[11px] text-muted-foreground">登入方式總數</span>
+            <p className="text-[18px] font-bold">{loginMethodMetrics.total}</p>
+          </div>
+          <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
+            <span className="text-[11px] text-muted-foreground">啟用</span>
+            <p className="text-[18px] font-bold text-teal-600">{loginMethodMetrics.active}</p>
+          </div>
+          <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
+            <span className="text-[11px] text-muted-foreground">雙重驗證</span>
+            <p className="text-[18px] font-bold">{loginMethodMetrics.twoFa}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[200px] max-w-[300px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜尋顯示名稱、帳號、電郵、電話或備註…"
-              className="pl-8 h-9 text-[13px] bg-white"
+              placeholder="搜尋名稱、帳號、電郵或電話..."
+              className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
             />
           </div>
-          <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white" onClick={openCreate}>
+          <Select value={methodFilter} onValueChange={setMethodFilter}>
+            <SelectTrigger className="w-[140px] h-9 text-[12px]"><SelectValue placeholder="登入方式" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部登入方式</SelectItem>
+              {VIDEO_LOGIN_METHOD_OPTIONS.map(option => (
+                <SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[120px] h-9 text-[12px]"><SelectValue placeholder="狀態" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部狀態</SelectItem>
+              <SelectItem value="active">啟用</SelectItem>
+              <SelectItem value="inactive">停用</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button size="sm" className="ml-auto bg-teal-600 hover:bg-teal-700 text-white" onClick={openCreate}>
             <Plus size={14} className="mr-1.5" />
             新增登入方式
           </Button>
         </div>
-        <div className="text-[12px] text-muted-foreground">
-          共 {filtered.length} 筆
-          {error ? <span className="text-red-600 ml-2">{error}</span> : null}
-        </div>
+        {error ? (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+            無法載入 Supabase 資料：{error}
+          </div>
+        ) : null}
       </div>
 
       <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md shadow-card overflow-hidden">

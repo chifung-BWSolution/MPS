@@ -93,6 +93,7 @@ function VideoModuleContent({ subModule }: { subModule?: string }) {
   const ownsHeader =
     resolvedTab === 'coordination' ||
     resolvedTab === 'schedule' ||
+    resolvedTab === 'channels' ||
     resolvedTab === 'accounts' ||
     resolvedTab === 'login-methods';
 

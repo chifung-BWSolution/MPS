@@ -29,10 +29,15 @@ const checks = [
       && !channelsSrc.includes("activeTab === 'accounts'"),
   },
   {
-    name: 'accounts page renders 平台帳號 heading and sortable table',
+    name: 'accounts page renders 平台帳號 heading, metrics, search/filter and sortable table',
     ok: accountsSrc.includes('平台帳號')
       && accountsSrc.includes('ACCOUNT_SORT_COLUMNS')
-      && accountsSrc.includes('共 {accounts.length} 條平台帳號'),
+      && accountsSrc.includes('帳號總數')
+      && accountsSrc.includes('啟用帳號')
+      && accountsSrc.includes('關聯頻道')
+      && accountsSrc.includes('搜尋編號、名稱或平台...')
+      && accountsSrc.includes('全部平台')
+      && accountsSrc.includes('全部狀態'),
   },
   {
     name: 'legacy 登入方式 stays a text field labeled as reference',

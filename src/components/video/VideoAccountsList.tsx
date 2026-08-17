@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Plus, Loader2, ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
+import { Plus, Loader2, ArrowDown, ArrowUp, ArrowUpDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatChannelCodes, formatLinkedLoginMethods } from '@/types/vchannel';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   ACCOUNT_SORT_COLUMNS,
   sortVchannelAccounts,
@@ -11,6 +12,11 @@ import {
 } from '@/lib/vchannelAccountSort';
 import { useVchannelAccounts } from '@/hooks/useVchannelAccounts';
 import { accountPlatformLabel } from '@/lib/vchannelPlatformStatus';
+import {
+  accountListMetrics,
+  accountPlatformOptions,
+  filterVchannelAccounts,
+} from '@/lib/vchannelAccountList';
 import {
   VchannelAccountDeleteModal,
   VchannelAccountFormModal,
@@ -71,10 +77,20 @@ export function VideoAccountsList() {
   const [deleteAccountTarget, setDeleteAccountTarget] = useState<{ id: string; label: string } | null>(null);
   const [accountSortKey, setAccountSortKey] = useState<AccountSortKey>('vchannel');
   const [accountSortDir, setAccountSortDir] = useState<AccountSortDir>('asc');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [platformFilter, setPlatformFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  const accountMetrics = useMemo(() => accountListMetrics(accounts), [accounts]);
+  const platformOptions = useMemo(() => accountPlatformOptions(accounts), [accounts]);
+  const filteredAccounts = useMemo(
+    () => filterVchannelAccounts(accounts, { searchQuery, platformFilter, statusFilter }),
+    [accounts, searchQuery, platformFilter, statusFilter],
+  );
 
   const sortedAccounts = useMemo(
-    () => sortVchannelAccounts(accounts, accountSortKey, accountSortDir),
-    [accounts, accountSortKey, accountSortDir],
+    () => sortVchannelAccounts(filteredAccounts, accountSortKey, accountSortDir),
+    [filteredAccounts, accountSortKey, accountSortDir],
   );
 
   const onAccountSort = (key: AccountSortKey) => {
@@ -135,11 +151,50 @@ export function VideoAccountsList() {
             管理 Vchannel 對應的平台帳號（Login），支援 V12/V14 等多頻道共用。
           </p>
         </div>
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <p className="text-[13px] text-muted-foreground">共 {accounts.length} 條平台帳號</p>
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
+            <span className="text-[11px] text-muted-foreground">帳號總數</span>
+            <p className="text-[18px] font-bold">{accountMetrics.total}</p>
+          </div>
+          <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
+            <span className="text-[11px] text-muted-foreground">啟用帳號</span>
+            <p className="text-[18px] font-bold text-teal-600">{accountMetrics.active}</p>
+          </div>
+          <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
+            <span className="text-[11px] text-muted-foreground">關聯頻道</span>
+            <p className="text-[18px] font-bold">{accountMetrics.channels}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[200px] max-w-[300px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="搜尋編號、名稱或平台..."
+              className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
+            />
+          </div>
+          <Select value={platformFilter} onValueChange={setPlatformFilter}>
+            <SelectTrigger className="w-[140px] h-9 text-[12px]"><SelectValue placeholder="平台" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部平台</SelectItem>
+              {platformOptions.map(([key, label]) => (
+                <SelectItem key={key} value={key}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[120px] h-9 text-[12px]"><SelectValue placeholder="狀態" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部狀態</SelectItem>
+              <SelectItem value="active">啟用</SelectItem>
+              <SelectItem value="inactive">停用</SelectItem>
+            </SelectContent>
+          </Select>
           <button
             onClick={openAddAccount}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700"
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700"
           >
             <Plus size={12} /> 新增帳號
           </button>
@@ -234,6 +289,9 @@ export function VideoAccountsList() {
               })}
             </tbody>
           </table>
+          {sortedAccounts.length === 0 && (
+            <div className="text-center py-8 text-[13px] text-muted-foreground">沒有符合條件的平台帳號</div>
+          )}
         </div>
       )}
 

@@ -490,70 +490,73 @@ export function VideoChannelsList() {
     setShowAccountModal(false);
   };
 
-  if (loading && channels.length === 0) {
-    return (
-      <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
-        <Loader2 className="animate-spin" size={18} />
-        <span className="text-[13px]">載入頻道資料...</span>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-5">
-      {(error || accountsError) && (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
-          無法載入 Supabase 資料：{error || accountsError}
+    <div className="space-y-0">
+      <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
+        <div>
+          <h1 className="text-[32px] font-bold tracking-tight">頻道設定</h1>
+          <p className="text-[14px] text-muted-foreground mt-1">
+            管理 Vchannel 基本信息及相應平台信息。
+          </p>
         </div>
-      )}
-
-      <div className="flex items-center gap-4 flex-wrap">
-            <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
-              <span className="text-[11px] text-muted-foreground">頻道總數</span>
-              <p className="text-[18px] font-bold">{channels.length}</p>
-            </div>
-            <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
-              <span className="text-[11px] text-muted-foreground">活躍頻道</span>
-              <p className="text-[18px] font-bold text-teal-600">{channels.filter(c => c.status === 'active').length}</p>
-            </div>
-            <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
-              <span className="text-[11px] text-muted-foreground">平台帳號</span>
-              <p className="text-[18px] font-bold">{accounts.length}</p>
-            </div>
+        {(error || accountsError) && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+            無法載入 Supabase 資料：{error || accountsError}
           </div>
-
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="relative flex-1 min-w-[200px] max-w-[300px]">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="搜尋編號、名稱或品牌..."
-                className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-              />
-            </div>
-            <Select value={importanceFilter} onValueChange={setImportanceFilter}>
-              <SelectTrigger className="w-[120px] h-9 text-[12px]"><SelectValue placeholder="重要性" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部重要性</SelectItem>
-                {Object.keys(importanceConfig).map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={brandFilter} onValueChange={setBrandFilter}>
-              <SelectTrigger className="w-[140px] h-9 text-[12px]"><SelectValue placeholder="品牌" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部品牌</SelectItem>
-                {brandFilterOptions.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <button
-              onClick={openAddChannel}
-              className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700"
-            >
-              <Plus size={12} /> 新增頻道
-            </button>
+        )}
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
+            <span className="text-[11px] text-muted-foreground">頻道總數</span>
+            <p className="text-[18px] font-bold">{channels.length}</p>
           </div>
+          <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
+            <span className="text-[11px] text-muted-foreground">活躍頻道</span>
+            <p className="text-[18px] font-bold text-teal-600">{channels.filter(c => c.status === 'active').length}</p>
+          </div>
+          <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
+            <span className="text-[11px] text-muted-foreground">平台帳號</span>
+            <p className="text-[18px] font-bold">{accounts.length}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[200px] max-w-[300px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="搜尋編號、名稱或品牌..."
+              className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
+            />
+          </div>
+          <Select value={importanceFilter} onValueChange={setImportanceFilter}>
+            <SelectTrigger className="w-[120px] h-9 text-[12px]"><SelectValue placeholder="重要性" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部重要性</SelectItem>
+              {Object.keys(importanceConfig).map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={brandFilter} onValueChange={setBrandFilter}>
+            <SelectTrigger className="w-[140px] h-9 text-[12px]"><SelectValue placeholder="品牌" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部品牌</SelectItem>
+              {brandFilterOptions.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <button
+            onClick={openAddChannel}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700"
+          >
+            <Plus size={12} /> 新增頻道
+          </button>
+        </div>
+      </div>
 
+      {loading && channels.length === 0 ? (
+        <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
+          <Loader2 className="animate-spin" size={18} />
+          <span className="text-[13px]">載入頻道資料...</span>
+        </div>
+      ) : (
           <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-x-auto">
             <table className="w-full text-[13px] min-w-[1180px]">
               <thead className="bg-muted/30">
@@ -693,6 +696,7 @@ export function VideoChannelsList() {
               <div className="text-center py-8 text-[13px] text-muted-foreground">沒有符合條件的頻道</div>
             )}
           </div>
+      )}
 
       <CrudModal
         isOpen={showAddModal}
