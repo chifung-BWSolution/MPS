@@ -26,6 +26,7 @@ import {
   readSelectedWebsiteId,
   writeSelectedWebsiteId,
 } from '@/lib/websiteNavigation';
+import { toExternalHref } from '@/lib/externalUrl';
 import {
   WebsiteVideosTab,
   WebsiteSocialTab,
@@ -649,7 +650,7 @@ function WebsiteDetail({
             </div>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               {site.profileType === 'system' ? <Monitor size={12} className="text-purple-500" /> : <Globe size={12} className="text-muted-foreground" />}
-              <a href={`https://${site.domainUrl}`} className="text-[13px] text-teal-600 hover:underline">{site.domainUrl}</a>
+              <a href={toExternalHref(site.domainUrl)} target="_blank" rel="noopener noreferrer" className="text-[13px] text-teal-600 hover:underline">{site.domainUrl}</a>
               <span className="text-[11px] bg-muted px-1.5 py-0.5 rounded">{site.platform}</span>
               {site.profileType === 'system' && site.systemType && (
                 <span className="text-[11px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200">{systemTypeLabels[site.systemType]}</span>
@@ -1847,7 +1848,7 @@ function FeaturedWebsiteCard({ site, onClick }: { site: WebsiteProfileFull; onCl
           </div>
           <div className="flex items-center gap-1.5 mt-0.5">
             <Globe size={11} className="text-muted-foreground shrink-0" />
-            <a href={`https://${site.domainUrl}`} onClick={e => e.stopPropagation()} className="text-[12px] text-teal-600 hover:underline truncate">{site.domainUrl}</a>
+            <a href={toExternalHref(site.domainUrl)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[12px] text-teal-600 hover:underline truncate">{site.domainUrl}</a>
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0 ml-2">
