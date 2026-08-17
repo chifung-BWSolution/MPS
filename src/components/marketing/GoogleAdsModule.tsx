@@ -42,6 +42,10 @@ function compareText(a: string, b: string): number {
   return a.localeCompare(b, 'zh-Hant', { sensitivity: 'base', numeric: true });
 }
 
+function countUniqueAccounts(rows: { customerId: string }[]): number {
+  return new Set(rows.map((row) => row.customerId)).size;
+}
+
 function getSortValue(c: GoogleAdsCampaign, key: SortKey): string | number {
   switch (key) {
     case 'account':
@@ -313,6 +317,8 @@ export function GoogleAdsModule() {
     );
   }, [filtered]);
 
+  const visibleAccountCount = useMemo(() => countUniqueAccounts(filtered), [filtered]);
+
   const onSync = async () => {
     const result = await triggerSync();
     if (result.ok) {
@@ -367,7 +373,7 @@ export function GoogleAdsModule() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1 min-w-[280px]">
             <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md px-3 py-2">
               <div className="text-[11px] text-muted-foreground">帳戶</div>
-              <div className="text-[18px] font-bold">{clientAccounts.length}</div>
+              <div className="text-[18px] font-bold">{visibleAccountCount}</div>
             </div>
             <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md px-3 py-2">
               <div className="text-[11px] text-muted-foreground">Campaigns</div>
