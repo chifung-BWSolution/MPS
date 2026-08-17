@@ -108,6 +108,24 @@ function resolveWebsiteProjectCategory(site: WebsiteProfileFull): { category: Pr
   return getProjectCategory(site.projectId, allProjectsData);
 }
 
+function OpenWebsiteUrlButton({ domainUrl }: { domainUrl?: string }) {
+  const raw = domainUrl?.trim();
+  if (!raw) return null;
+  const href = toExternalHref(raw);
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className="p-1.5 hover:bg-muted rounded-md transition-colors inline-flex"
+      title="開啟網站"
+    >
+      <ExternalLink size={13} className="text-muted-foreground" />
+    </a>
+  );
+}
+
 // ===== Website Card =====
 function WebsiteCard({ site, onClick }: { site: WebsiteProfileFull; onClick: () => void }) {
   const config = statusConfig[site.status];
@@ -1749,13 +1767,16 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3 text-[13px]">{site.videosCount}</td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3 text-[13px] font-medium">{site.totalHours}h</td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setEditingSite(site); }}
-                      className="p-1.5 hover:bg-muted rounded-md transition-colors"
-                      title="編輯網站"
-                    >
-                      <Pencil size={13} className="text-muted-foreground" />
-                    </button>
+                    <div className="flex items-center gap-0.5">
+                      <OpenWebsiteUrlButton domainUrl={site.domainUrl} />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setEditingSite(site); }}
+                        className="p-1.5 hover:bg-muted rounded-md transition-colors"
+                        title="編輯網站"
+                      >
+                        <Pencil size={13} className="text-muted-foreground" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
