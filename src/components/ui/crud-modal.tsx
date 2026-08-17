@@ -7,7 +7,7 @@ interface CrudModalProps {
   onClose: () => void;
   title: string;
   children: ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   headerActions?: ReactNode;
 }
 
@@ -21,7 +21,9 @@ export function CrudModal({ isOpen, onClose, title, children, size = 'md', heade
         ? 'max-w-[700px] max-h-[85vh]'
         : size === 'xl'
           ? 'max-w-[780px] max-h-[92vh] min-h-[min(720px,92vh)]'
-          : 'max-w-[550px] max-h-[85vh]';
+          : size === '2xl'
+            ? 'max-w-[960px] max-h-[92vh]'
+            : 'max-w-[550px] max-h-[85vh]';
 
   return (
     <FixedOverlay className="flex items-center justify-center">

@@ -5,6 +5,8 @@ import { useVideoLoginMethods } from '@/hooks/useVideoLoginMethods';
 import {
   VIDEO_LOGIN_METHOD_OPTIONS,
   videoLoginMethodLabel,
+  type VideoLoginMethod,
+  type VideoLoginMethodInput,
   type VideoLoginMethodKind,
 } from '@/types/videoLoginMethod';
 import { Button } from '@/components/ui/button';
@@ -35,14 +37,24 @@ const emptyQuickCreate = (displayName = ''): QuickCreateForm => ({
   email: '',
 });
 
+type AddLoginMethod = (input: VideoLoginMethodInput) => Promise<
+  { ok: true; item: VideoLoginMethod } | { ok: false; error: string }
+>;
+
 export function VchannelLoginMethodPicker({
   value,
   onChange,
+  items: itemsProp,
+  addItem: addItemProp,
 }: {
   value: string[];
   onChange: (ids: string[]) => void;
+  items?: VideoLoginMethod[];
+  addItem?: AddLoginMethod;
 }) {
-  const { items, addItem } = useVideoLoginMethods();
+  const hook = useVideoLoginMethods();
+  const items = itemsProp ?? hook.items;
+  const addItem = addItemProp ?? hook.addItem;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
@@ -90,7 +102,7 @@ export function VchannelLoginMethodPicker({
     });
     setCreating(false);
 
-    if (!result.ok) {
+    if (result.ok === false) {
       toast.error('新增登入方式失敗', { description: result.error });
       return;
     }

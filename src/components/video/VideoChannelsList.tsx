@@ -36,6 +36,7 @@ import {
   emptyAccountForm,
   formToAccountPayload,
 } from './VchannelAccountFormModal';
+import { VchannelAccountLoginMethodsDialog } from './VchannelAccountLoginMethodsDialog';
 
 function ChannelWorkHoursCell({ hours }: { hours?: number }) {
   if (hours == null || hours <= 0) {
@@ -263,6 +264,7 @@ export function VideoChannelsList() {
   const [saving, setSaving] = useState(false);
 
   const [showAccountModal, setShowAccountModal] = useState(false);
+  const [loginMethodsChannel, setLoginMethodsChannel] = useState<Vchannel | null>(null);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [accountForm, setAccountForm] = useState(emptyAccountForm);
   const [savingAccount, setSavingAccount] = useState(false);
@@ -609,7 +611,7 @@ export function VideoChannelsList() {
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1">
                             <button onClick={() => openEditChannel(channel)} className="p-1 hover:bg-muted rounded" title="編輯"><Edit size={12} className="text-teal-600" /></button>
-                            <button onClick={() => openAddAccount(channel.channelCode)} className="p-1 hover:bg-muted rounded" title="新增帳號"><KeyRound size={12} className="text-blue-600" /></button>
+                            <button onClick={() => setLoginMethodsChannel(channel)} className="p-1 hover:bg-muted rounded" title="帳戶登入方式"><KeyRound size={12} className="text-blue-600" /></button>
                             <button onClick={() => handleDeleteClick(channel)} className="p-1 hover:bg-muted rounded" title="刪除"><Trash2 size={12} className="text-rose-500" /></button>
                           </div>
                         </td>
@@ -751,6 +753,15 @@ export function VideoChannelsList() {
         setForm={setAccountForm}
         saving={savingAccount}
         onSave={saveAccount}
+      />
+
+      <VchannelAccountLoginMethodsDialog
+        isOpen={!!loginMethodsChannel}
+        onClose={() => setLoginMethodsChannel(null)}
+        channel={loginMethodsChannel}
+        accounts={loginMethodsChannel ? accountsForChannel(loginMethodsChannel.channelCode) : []}
+        allAccounts={accounts}
+        updateAccount={updateAccount}
       />
     </div>
   );
