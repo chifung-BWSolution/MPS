@@ -1,4 +1,4 @@
-import { formatChannelCodes, type VchannelAccount } from '../types/vchannel';
+import { formatChannelCodes, formatLinkedLoginMethods, type VchannelAccount } from '../types/vchannel';
 import { accountPlatformLabel } from './vchannelPlatformStatus';
 
 export type AccountSortKey =
@@ -7,7 +7,8 @@ export type AccountSortKey =
   | 'platform'
   | 'accountId'
   | 'loginMethod'
-  | 'feedhive';
+  | 'feedhive'
+  | 'isActive';
 
 export type AccountSortDir = 'asc' | 'desc';
 
@@ -18,6 +19,7 @@ export const ACCOUNT_SORT_COLUMNS: { key: AccountSortKey; label: string }[] = [
   { key: 'accountId', label: '賬號ID' },
   { key: 'loginMethod', label: '登入方式' },
   { key: 'feedhive', label: 'FeedHive' },
+  { key: 'isActive', label: '狀態' },
 ];
 
 export function accountSortValue(account: VchannelAccount, key: AccountSortKey): string | number {
@@ -31,9 +33,11 @@ export function accountSortValue(account: VchannelAccount, key: AccountSortKey):
     case 'accountId':
       return account.accountId ?? '';
     case 'loginMethod':
-      return account.loginMethod ?? '';
+      return formatLinkedLoginMethods(account);
     case 'feedhive':
       return account.feedhiveManaged ? 1 : 0;
+    case 'isActive':
+      return account.isActive ? 1 : 0;
   }
 }
 

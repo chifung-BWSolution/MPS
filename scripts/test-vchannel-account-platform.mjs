@@ -104,11 +104,15 @@ const mapped = mapAccountRow({
   login_method: 'feedhive統一管理',
   feedhive_managed: true,
   notes: 'ok',
+  is_active: true,
   created_at: '2026-08-14T00:00:00.000Z',
   updated_at: '2026-08-14T00:00:00.000Z',
-});
+}, [{ id: 'lm-1', displayName: 'CFB M03', loginMethod: 'email_password', isActive: true }]);
 assert.equal(mapped.platform, 'instagram');
 assert.equal(mapped.accountId, 'bw_designcentre');
+assert.equal(mapped.isActive, true);
+assert.deepEqual(mapped.loginMethodIds, ['lm-1']);
+assert.equal(mapped.linkedLoginMethods[0].displayName, 'CFB M03');
 assert.deepEqual(mapAccountRow({
   id: 'acc-2',
   vchannel_codes: null,
@@ -125,6 +129,19 @@ assert.equal('channelIntro' in mapped, false);
 assert.equal('accountPassword' in mapped, false);
 assert.equal('operatorCode' in mapped, false);
 assert.equal('sortOrder' in mapped, false);
+assert.equal(mapAccountRow({
+  id: 'acc-3',
+  vchannel_codes: ['V01'],
+  account_label: 'x',
+  platform: 'facebook',
+  account_id: null,
+  login_method: null,
+  feedhive_managed: false,
+  notes: null,
+  is_active: false,
+  created_at: '2026-08-14T00:00:00.000Z',
+  updated_at: '2026-08-14T00:00:00.000Z',
+}).isActive, false);
 
 const dbRow = accountToDbRow({
   vchannelCodes: ['V12'],
@@ -134,17 +151,20 @@ const dbRow = accountToDbRow({
   loginMethod: 'feedhive統一管理',
   feedhiveManaged: true,
   notes: 'ok',
+  isActive: false,
 });
 assert.deepEqual(Object.keys(dbRow).sort(), [
   'account_id',
   'account_label',
   'feedhive_managed',
+  'is_active',
   'login_method',
   'notes',
   'platform',
   'updated_at',
   'vchannel_codes',
 ]);
+assert.equal(dbRow.is_active, false);
 assert.equal('channel_intro' in dbRow, false);
 assert.equal('account_password' in dbRow, false);
 assert.equal('operator_code' in dbRow, false);

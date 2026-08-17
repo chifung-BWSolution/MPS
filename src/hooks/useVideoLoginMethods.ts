@@ -106,8 +106,10 @@ export function useVideoLoginMethods() {
       .single();
 
     if (insertError) return { ok: false as const, error: insertError.message };
-    if (data) setItems((prev) => [mapRow(data as VideoLoginMethodRow), ...prev]);
-    return { ok: true as const };
+    if (!data) return { ok: false as const, error: '新增登入方式失敗' };
+    const item = mapRow(data as VideoLoginMethodRow);
+    setItems((prev) => [item, ...prev]);
+    return { ok: true as const, item };
   }, []);
 
   const updateItem = useCallback(async (id: string, input: VideoLoginMethodInput) => {

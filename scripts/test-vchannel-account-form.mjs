@@ -7,6 +7,10 @@ const contextSrc = readFileSync(path.join(root, 'src/context/AppContext.tsx'), '
 const videoModuleSrc = readFileSync(path.join(root, 'src/components/video/VideoModule.tsx'), 'utf8');
 const channelsSrc = readFileSync(path.join(root, 'src/components/video/VideoChannelsList.tsx'), 'utf8');
 const accountsSrc = readFileSync(path.join(root, 'src/components/video/VideoAccountsList.tsx'), 'utf8');
+const formModalSrc = readFileSync(path.join(root, 'src/components/video/VchannelAccountFormModal.tsx'), 'utf8');
+const pickerSrc = readFileSync(path.join(root, 'src/components/video/VchannelLoginMethodPicker.tsx'), 'utf8');
+const formLibSrc = readFileSync(path.join(root, 'src/lib/vchannelAccountForm.ts'), 'utf8');
+const migrationSrc = readFileSync(path.join(root, 'supabase/migrations/20260817020000_vchannel_accounts_login_methods_join_is_active.sql'), 'utf8');
 
 const checks = [
   {
@@ -29,6 +33,40 @@ const checks = [
     ok: accountsSrc.includes('平台帳號')
       && accountsSrc.includes('ACCOUNT_SORT_COLUMNS')
       && accountsSrc.includes('共 {accounts.length} 條平台帳號'),
+  },
+  {
+    name: 'legacy 登入方式 stays a text field labeled as reference',
+    ok: formModalSrc.includes('登入方式（參考）')
+      && formModalSrc.includes('form.loginMethod')
+      && !/<input type="checkbox"/.test(formModalSrc),
+  },
+  {
+    name: 'real 登入方式 picker sits before 備註 and supports search plus quick create',
+    ok: /登入方式[\s\S]*VchannelLoginMethodPicker[\s\S]*備註/.test(formModalSrc)
+      && pickerSrc.includes('搜尋並選擇登入方式')
+      && pickerSrc.includes('快速新增登入方式')
+      && pickerSrc.includes('新增並選取'),
+  },
+  {
+    name: '備註 is a textarea and FeedHive / is_active use Switch',
+    ok: formModalSrc.includes('<Textarea')
+      && formModalSrc.includes('FeedHive 統一管理')
+      && formModalSrc.includes('<Switch')
+      && formModalSrc.includes('form.isActive')
+      && !formModalSrc.includes('type="checkbox"'),
+  },
+  {
+    name: 'listing shows linked login methods and is_active toggle',
+    ok: accountsSrc.includes('linkedLoginMethods')
+      && accountsSrc.includes('toggleAccountActive')
+      && accountsSrc.includes('acc.isActive ? \'啟用\' : \'停用\''),
+  },
+  {
+    name: 'form payload and join-table migration cover login methods and is_active',
+    ok: formLibSrc.includes('loginMethodIds')
+      && formLibSrc.includes('isActive: true')
+      && migrationSrc.includes('vchannel_account_login_methods')
+      && migrationSrc.includes('is_active'),
   },
 ];
 

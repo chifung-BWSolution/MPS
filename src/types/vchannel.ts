@@ -25,17 +25,35 @@ export interface Vchannel {
   updatedAt?: string;
 }
 
+export type VchannelAccountLinkedLoginMethod = {
+  id: string;
+  displayName: string;
+  loginMethod: string;
+  isActive: boolean;
+};
+
 export interface VchannelAccount {
   id: string;
   vchannelCodes: string[];
   accountLabel: string;
   platform: string;
   accountId?: string;
+  /** Legacy free-text login hint; kept as reference until dropped. */
   loginMethod?: string;
+  loginMethodIds: string[];
+  linkedLoginMethods: VchannelAccountLinkedLoginMethod[];
   feedhiveManaged: boolean;
   notes?: string;
+  isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export function formatLinkedLoginMethods(account: Pick<VchannelAccount, 'linkedLoginMethods' | 'loginMethod'>): string {
+  if (account.linkedLoginMethods?.length) {
+    return account.linkedLoginMethods.map(method => method.displayName).join('、');
+  }
+  return account.loginMethod ?? '';
 }
 
 export function parseChannelCodes(raw: string): string[] {

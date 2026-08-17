@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Edit, Trash2, KeyRound, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Vchannel, VchannelImportance, VchannelStatus } from '@/types/vchannel';
+import { formatLinkedLoginMethods, type Vchannel, type VchannelImportance, type VchannelStatus } from '@/types/vchannel';
 import { useVchannels } from '@/hooks/useVchannels';
 import { useVchannelAccounts } from '@/hooks/useVchannelAccounts';
 import { useBrands } from '@/hooks/useBrands';
@@ -540,6 +540,7 @@ export function VideoChannelsList() {
                                         <th className="text-left px-2 py-1.5">平台</th>
                                         <th className="text-left px-2 py-1.5">賬號ID</th>
                                         <th className="text-left px-2 py-1.5">登入方式</th>
+                                        <th className="text-left px-2 py-1.5">狀態</th>
                                         <th className="text-left px-2 py-1.5">操作</th>
                                       </tr>
                                     </thead>
@@ -548,7 +549,12 @@ export function VideoChannelsList() {
                                         <tr key={acc.id} className="border-t border-border/50">
                                           <td className="px-2 py-1.5">{accountPlatformLabel(acc.platform)}</td>
                                           <td className="px-2 py-1.5 font-mono">{acc.accountId || '—'}</td>
-                                          <td className="px-2 py-1.5">{acc.loginMethod || '—'}</td>
+                                          <td className="px-2 py-1.5">{formatLinkedLoginMethods(acc) || '—'}</td>
+                                          <td className="px-2 py-1.5">
+                                            <span className={acc.isActive ? 'text-teal-700' : 'text-amber-700'}>
+                                              {acc.isActive ? '啟用' : '停用'}
+                                            </span>
+                                          </td>
                                           <td className="px-2 py-1.5">
                                             <button onClick={() => openEditAccount(acc)} className="text-teal-600 hover:underline">編輯</button>
                                           </td>

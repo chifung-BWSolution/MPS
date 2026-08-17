@@ -9,7 +9,10 @@ function account(partial) {
     platform: partial.platform ?? 'facebook',
     accountId: partial.accountId,
     loginMethod: partial.loginMethod,
+    loginMethodIds: partial.loginMethodIds ?? [],
+    linkedLoginMethods: partial.linkedLoginMethods ?? [],
     feedhiveManaged: partial.feedhiveManaged ?? false,
+    isActive: partial.isActive ?? true,
   };
 }
 
@@ -55,5 +58,27 @@ const facebookTieBreak = sortVchannelAccounts(
   'asc',
 ).map(r => r.id);
 assert.deepEqual(facebookTieBreak, ['2', '5'], 'same platform ties break by Vchannel (V01 before V12)');
+
+const withLinked = [
+  account({
+    id: 'a',
+    vchannelCodes: ['V02'],
+    linkedLoginMethods: [{ id: 'm2', displayName: 'Beta 帳號', loginMethod: 'email_password', isActive: true }],
+    isActive: false,
+  }),
+  account({
+    id: 'b',
+    vchannelCodes: ['V01'],
+    loginMethod: 'legacy-text',
+    linkedLoginMethods: [{ id: 'm1', displayName: 'Alpha 帳號', loginMethod: 'google', isActive: true }],
+    isActive: true,
+  }),
+];
+
+const byLinkedLogin = sortVchannelAccounts(withLinked, 'loginMethod', 'asc').map(r => r.id);
+assert.deepEqual(byLinkedLogin, ['b', 'a'], 'loginMethod sort uses linked display names');
+
+const byActiveDesc = sortVchannelAccounts(withLinked, 'isActive', 'desc').map(r => r.id);
+assert.deepEqual(byActiveDesc, ['b', 'a'], 'isActive desc puts enabled accounts first');
 
 console.log('vchannel account sort tests passed');

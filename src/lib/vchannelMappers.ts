@@ -1,4 +1,10 @@
-import type { Vchannel, VchannelAccount, VchannelImportance, VchannelStatus } from '@/types/vchannel';
+import type {
+  Vchannel,
+  VchannelAccount,
+  VchannelAccountLinkedLoginMethod,
+  VchannelImportance,
+  VchannelStatus,
+} from '@/types/vchannel';
 import { normalizeAccountPlatform, type PlatformStatusValue } from '@/lib/vchannelPlatformStatus';
 
 type DbVchannelRow = {
@@ -25,6 +31,7 @@ type DbAccountRow = {
   login_method: string | null;
   feedhive_managed: boolean;
   notes: string | null;
+  is_active?: boolean | null;
   created_at: string;
   updated_at: string;
 };
@@ -46,7 +53,10 @@ export function mapVchannelRow(row: DbVchannelRow): Vchannel {
   };
 }
 
-export function mapAccountRow(row: DbAccountRow): VchannelAccount {
+export function mapAccountRow(
+  row: DbAccountRow,
+  linked: VchannelAccountLinkedLoginMethod[] = [],
+): VchannelAccount {
   return {
     id: row.id,
     vchannelCodes: Array.isArray(row.vchannel_codes) ? row.vchannel_codes : [],
@@ -54,8 +64,11 @@ export function mapAccountRow(row: DbAccountRow): VchannelAccount {
     platform: normalizeAccountPlatform(row.platform) ?? row.platform,
     accountId: row.account_id ?? undefined,
     loginMethod: row.login_method ?? undefined,
+    loginMethodIds: linked.map(method => method.id),
+    linkedLoginMethods: linked,
     feedhiveManaged: row.feedhive_managed,
     notes: row.notes ?? undefined,
+    isActive: row.is_active !== false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -84,6 +97,7 @@ export function accountToDbRow(input: Partial<VchannelAccount> & Pick<VchannelAc
     login_method: input.loginMethod ?? null,
     feedhive_managed: input.feedhiveManaged ?? false,
     notes: input.notes ?? null,
+    is_active: input.isActive ?? true,
     updated_at: new Date().toISOString(),
   };
 }

@@ -2,6 +2,8 @@ import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import {
   PLATFORM_KEYS,
   PLATFORM_LABELS,
@@ -9,6 +11,7 @@ import {
   type PlatformKey,
 } from '@/lib/vchannelPlatformStatus';
 import type { AccountFormState } from '@/lib/vchannelAccountForm';
+import { VchannelLoginMethodPicker } from './VchannelLoginMethodPicker';
 
 export type { AccountFormState } from '@/lib/vchannelAccountForm';
 export { accountToForm, emptyAccountForm, formToAccountPayload } from '@/lib/vchannelAccountForm';
@@ -31,7 +34,7 @@ export function VchannelAccountFormModal({
   onSave: () => void;
 }) {
   return (
-    <CrudModal isOpen={isOpen} onClose={onClose} title={editing ? '編輯平台帳號' : '新增平台帳號'}>
+    <CrudModal isOpen={isOpen} onClose={onClose} title={editing ? '編輯平台帳號' : '新增平台帳號'} size="lg">
       <div className="space-y-3">
         <div>
           <label className="text-[12px] font-medium text-muted-foreground block mb-1">Vchannel *（可多選，如 V12/V14）</label>
@@ -62,17 +65,43 @@ export function VchannelAccountFormModal({
           <Input value={form.accountId} onChange={e => setForm({ ...form, accountId: e.target.value })} className="h-9 text-[13px]" />
         </div>
         <div>
-          <label className="text-[12px] font-medium text-muted-foreground block mb-1">登入方式</label>
+          <label className="text-[12px] font-medium text-muted-foreground block mb-1">登入方式（參考）</label>
           <Input value={form.loginMethod} onChange={e => setForm({ ...form, loginMethod: e.target.value })} className="h-9 text-[13px]" />
+          <p className="text-[11px] text-muted-foreground mt-1">暫時保留作文字參考，之後會移除。</p>
+        </div>
+        <div>
+          <label className="text-[12px] font-medium text-muted-foreground block mb-1">登入方式</label>
+          <VchannelLoginMethodPicker
+            value={form.loginMethodIds}
+            onChange={loginMethodIds => setForm({ ...form, loginMethodIds })}
+          />
         </div>
         <div>
           <label className="text-[12px] font-medium text-muted-foreground block mb-1">備註</label>
-          <Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="h-9 text-[13px]" />
+          <Textarea
+            value={form.notes}
+            onChange={e => setForm({ ...form, notes: e.target.value })}
+            placeholder="補充說明、注意事項…"
+            className="min-h-[72px] text-[13px]"
+          />
         </div>
-        <label className="flex items-center gap-2 text-[12px]">
-          <input type="checkbox" checked={form.feedhiveManaged} onChange={e => setForm({ ...form, feedhiveManaged: e.target.checked })} />
-          FeedHive 統一管理
-        </label>
+        <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+          <div className="text-[13px] font-medium">FeedHive 統一管理</div>
+          <Switch
+            checked={form.feedhiveManaged}
+            onCheckedChange={checked => setForm({ ...form, feedhiveManaged: checked })}
+          />
+        </div>
+        <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+          <div>
+            <div className="text-[13px] font-medium">啟用</div>
+            <div className="text-[11px] text-muted-foreground">停用後此帳號會標示為停用</div>
+          </div>
+          <Switch
+            checked={form.isActive}
+            onCheckedChange={checked => setForm({ ...form, isActive: checked })}
+          />
+        </div>
       </div>
       <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
         <Button variant="secondary" onClick={onClose}>取消</Button>

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Plus, Loader2, ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatChannelCodes } from '@/types/vchannel';
+import { formatChannelCodes, formatLinkedLoginMethods } from '@/types/vchannel';
+import { Switch } from '@/components/ui/switch';
 import {
   ACCOUNT_SORT_COLUMNS,
   sortVchannelAccounts,
@@ -118,6 +119,13 @@ export function VideoAccountsList() {
     setDeleteAccountTarget(null);
   };
 
+  const toggleAccountActive = async (account: typeof accounts[0]) => {
+    const err = await updateAccount(account.id, { isActive: !account.isActive });
+    if (err) {
+      alert(typeof err === 'object' && 'message' in err ? err.message : String(err));
+    }
+  };
+
   return (
     <div className="space-y-0">
       <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
@@ -166,14 +174,47 @@ export function VideoAccountsList() {
               </tr>
             </thead>
             <tbody>
-              {sortedAccounts.map(acc => (
-                <tr key={acc.id} className="border-t border-border/50 hover:bg-muted/10">
+              {sortedAccounts.map(acc => {
+                const loginLabel = formatLinkedLoginMethods(acc);
+                return (
+                <tr key={acc.id} className={cn('border-t border-border/50 hover:bg-muted/10', !acc.isActive && 'opacity-60')}>
                   <td className="px-3 py-2 font-mono font-bold">{formatChannelCodes(acc.vchannelCodes)}</td>
                   <td className="px-3 py-2">{acc.accountLabel}</td>
                   <td className="px-3 py-2">{accountPlatformLabel(acc.platform)}</td>
                   <td className="px-3 py-2 font-mono text-[11px] max-w-[140px] truncate" title={acc.accountId}>{acc.accountId || '—'}</td>
-                  <td className="px-3 py-2 max-w-[120px] truncate" title={acc.loginMethod}>{acc.loginMethod || '—'}</td>
+                  <td className="px-3 py-2 max-w-[180px]">
+                    {acc.linkedLoginMethods.length > 0 ? (
+                      <div className="flex flex-wrap gap-1" title={loginLabel}>
+                        {acc.linkedLoginMethods.map(method => (
+                          <span
+                            key={method.id}
+                            className={cn(
+                              'inline-flex items-center rounded border px-1.5 py-0.5 text-[11px]',
+                              method.isActive
+                                ? 'border-teal-200 bg-teal-50 text-teal-800'
+                                : 'border-slate-200 bg-slate-50 text-slate-600',
+                            )}
+                          >
+                            {method.displayName}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="truncate block text-muted-foreground" title={acc.loginMethod}>{acc.loginMethod || '—'}</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">{acc.feedhiveManaged ? '✓' : '—'}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={acc.isActive}
+                        onCheckedChange={() => void toggleAccountActive(acc)}
+                      />
+                      <span className={cn('text-[12px]', acc.isActive ? 'text-teal-700' : 'text-amber-700')}>
+                        {acc.isActive ? '啟用' : '停用'}
+                      </span>
+                    </div>
+                  </td>
                   <td className="px-3 py-2">
                     <div className="flex gap-2">
                       <button onClick={() => openEditAccount(acc)} className="text-teal-600 hover:underline">編輯</button>
@@ -189,7 +230,8 @@ export function VideoAccountsList() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
