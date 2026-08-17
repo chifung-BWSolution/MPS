@@ -5,6 +5,7 @@ import { VideoWorkflowProvider } from '@/hooks/useVideoWorkflow';
 import { VideoListModule } from './VideoListModule';
 import { VideoManagementModule } from './VideoManagementModule';
 import { VideoChannelsList } from './VideoChannelsList';
+import { VideoAccountsList } from './VideoAccountsList';
 import { VideoLoginMethodsModule } from './VideoLoginMethodsModule';
 import { DistributionTrackingModule } from './DistributionTrackingModule';
 import { VideoScheduleModule } from './workflow/VideoScheduleModule';
@@ -71,6 +72,8 @@ function VideoModuleContent({ subModule }: { subModule?: string }) {
         return { title: '影片統籌', subtitle: '全局影片產出時間軸，查看所有狀態的影片記錄。' };
       case 'channels':
         return { title: '頻道設定', subtitle: '管理 Vchannel 基本信息及相應平台信息。' };
+      case 'accounts':
+        return { title: '平台帳號', subtitle: '管理 Vchannel 對應的平台帳號（Login），支援多頻道共用。' };
       case 'login-methods':
         return { title: '登入方式', subtitle: '管理影片製作相關帳號的登入方式、聯絡資料與雙重驗證。' };
       case 'list':
@@ -90,6 +93,7 @@ function VideoModuleContent({ subModule }: { subModule?: string }) {
   const ownsHeader =
     resolvedTab === 'coordination' ||
     resolvedTab === 'schedule' ||
+    resolvedTab === 'accounts' ||
     resolvedTab === 'login-methods';
 
   return (
@@ -109,6 +113,7 @@ function VideoModuleContent({ subModule }: { subModule?: string }) {
       {resolvedTab === 'publish' && <VideoPublishModule />}
       {resolvedTab === 'coordination' && <VideoManagementModule />}
       {resolvedTab === 'channels' && <VideoChannelsList />}
+      {resolvedTab === 'accounts' && <VideoAccountsList />}
       {resolvedTab === 'login-methods' && <VideoLoginMethodsModule />}
       {resolvedTab === 'list' && <VideoListModule />}
       {resolvedTab === 'library' && <VideoLibrary />}

@@ -1,14 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Edit, Trash2, KeyRound, Loader2, ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, KeyRound, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Vchannel, VchannelImportance, VchannelStatus } from '@/types/vchannel';
-import { formatChannelCodes, parseChannelCodes } from '@/types/vchannel';
-import {
-  ACCOUNT_SORT_COLUMNS,
-  sortVchannelAccounts,
-  type AccountSortDir,
-  type AccountSortKey,
-} from '@/lib/vchannelAccountSort';
 import { useVchannels } from '@/hooks/useVchannels';
 import { useVchannelAccounts } from '@/hooks/useVchannelAccounts';
 import { useBrands } from '@/hooks/useBrands';
@@ -26,12 +19,17 @@ import {
   accountLabelForPlatform,
   accountPlatformLabel,
   formatPlatformStatusNote,
-  normalizeAccountPlatform,
   type PlatformKey,
   type PlatformStatusValue,
   platformStatusSummary,
 } from '@/lib/vchannelPlatformStatus';
 import { fetchWorkLogTotalsByVchannelIds } from '@/services/videoOutputWorkLogService';
+import {
+  VchannelAccountFormModal,
+  accountToForm,
+  emptyAccountForm,
+  formToAccountPayload,
+} from './VchannelAccountFormModal';
 
 function ChannelWorkHoursCell({ hours }: { hours?: number }) {
   if (hours == null || hours <= 0) {
@@ -48,41 +46,6 @@ function ChannelAccountLabelCell({ label }: { label: string }) {
     <span className="text-[11px] font-medium truncate max-w-[140px] inline-block align-bottom" title={label}>
       {label}
     </span>
-  );
-}
-
-function AccountSortableTh({
-  label,
-  sortKey,
-  activeKey,
-  sortDir,
-  onSort,
-}: {
-  label: string;
-  sortKey: AccountSortKey;
-  activeKey: AccountSortKey;
-  sortDir: AccountSortDir;
-  onSort: (key: AccountSortKey) => void;
-}) {
-  const active = activeKey === sortKey;
-  const Icon = active ? (sortDir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
-  return (
-    <th
-      className="text-left px-3 py-2 font-medium"
-      aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
-    >
-      <button
-        type="button"
-        onClick={() => onSort(sortKey)}
-        className={cn(
-          'inline-flex items-center gap-1 hover:text-foreground transition-colors',
-          active ? 'text-foreground' : 'text-muted-foreground',
-        )}
-      >
-        <span>{label}</span>
-        <Icon size={12} className={cn(active ? 'text-teal-600' : 'opacity-40')} />
-      </button>
-    </th>
   );
 }
 
@@ -114,17 +77,6 @@ const emptyChannel = {
   brandListId: '' as string,
   status: 'active' as VchannelStatus,
   platformStatus: {} as Record<string, PlatformStatusValue>,
-  notes: '',
-};
-
-const emptyAccount = {
-  vchannelCodes: [] as string[],
-  vchannelCodesRaw: '',
-  accountLabel: '',
-  platform: '',
-  accountId: '',
-  loginMethod: '',
-  feedhiveManaged: false,
   notes: '',
 };
 
@@ -235,11 +187,9 @@ export function VideoChannelsList() {
   const { brands } = useBrands();
   const {
     accounts,
-    loading: accountsLoading,
     error: accountsError,
     addAccount,
     updateAccount,
-    deleteAccount,
     accountsForChannel,
   } = useVchannelAccounts();
 
@@ -260,7 +210,6 @@ export function VideoChannelsList() {
     return '—';
   }, [brandCodeById]);
 
-  const [activeTab, setActiveTab] = useState<'channels' | 'accounts'>('channels');
   const [searchQuery, setSearchQuery] = useState('');
   const [importanceFilter, setImportanceFilter] = useState<string>('all');
   const [brandFilter, setBrandFilter] = useState<string>('all');
@@ -278,11 +227,8 @@ export function VideoChannelsList() {
 
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
-  const [accountForm, setAccountForm] = useState(emptyAccount);
-  const [deleteAccountTarget, setDeleteAccountTarget] = useState<{ id: string; label: string } | null>(null);
+  const [accountForm, setAccountForm] = useState(emptyAccountForm);
   const [channelWorkHours, setChannelWorkHours] = useState<Map<string, number>>(new Map());
-  const [accountSortKey, setAccountSortKey] = useState<AccountSortKey>('vchannel');
-  const [accountSortDir, setAccountSortDir] = useState<AccountSortDir>('asc');
 
   const refreshChannelWorkHours = useCallback(async (channelIds: string[]) => {
     if (channelIds.length === 0) {
@@ -304,20 +250,6 @@ export function VideoChannelsList() {
     }
     void refreshChannelWorkHours(channels.map(ch => ch.id));
   }, [channels, refreshChannelWorkHours]);
-
-  const sortedAccounts = useMemo(
-    () => sortVchannelAccounts(accounts, accountSortKey, accountSortDir),
-    [accounts, accountSortKey, accountSortDir],
-  );
-
-  const onAccountSort = (key: AccountSortKey) => {
-    if (accountSortKey === key) {
-      setAccountSortDir(dir => (dir === 'asc' ? 'desc' : 'asc'));
-      return;
-    }
-    setAccountSortKey(key);
-    setAccountSortDir('asc');
-  };
 
   const brandFilterOptions = useMemo(
     () => [...new Set(channels.map(c => channelBrandLabel(c)).filter(code => code && code !== '—'))].sort(),
@@ -413,39 +345,24 @@ export function VideoChannelsList() {
 
   const openAddAccount = (prefillCode?: string) => {
     setEditingAccountId(null);
-    setAccountForm({ ...emptyAccount, vchannelCodesRaw: prefillCode ?? '', vchannelCodes: prefillCode ? [prefillCode] : [] });
+    setAccountForm({
+      ...emptyAccountForm,
+      vchannelCodesRaw: prefillCode ?? '',
+      vchannelCodes: prefillCode ? [prefillCode] : [],
+    });
     setShowAccountModal(true);
   };
 
   const openEditAccount = (account: typeof accounts[0]) => {
     setEditingAccountId(account.id);
-    setAccountForm({
-      vchannelCodes: account.vchannelCodes,
-      vchannelCodesRaw: formatChannelCodes(account.vchannelCodes),
-      accountLabel: account.accountLabel,
-      platform: normalizeAccountPlatform(account.platform) ?? account.platform,
-      accountId: account.accountId ?? '',
-      loginMethod: account.loginMethod ?? '',
-      feedhiveManaged: account.feedhiveManaged,
-      notes: account.notes ?? '',
-    });
+    setAccountForm(accountToForm(account));
     setShowAccountModal(true);
   };
 
   const saveAccount = async () => {
-    const codes = parseChannelCodes(accountForm.vchannelCodesRaw || accountForm.vchannelCodes.join('/'));
-    const platform = normalizeAccountPlatform(accountForm.platform);
-    if (!codes.length || !platform) return;
+    const payload = formToAccountPayload(accountForm);
+    if (!payload) return;
     setSaving(true);
-    const payload = {
-      vchannelCodes: codes,
-      accountLabel: accountForm.accountLabel,
-      platform,
-      accountId: accountForm.accountId || undefined,
-      loginMethod: accountForm.loginMethod || undefined,
-      feedhiveManaged: accountForm.feedhiveManaged,
-      notes: accountForm.notes || undefined,
-    };
     const err = editingAccountId
       ? await updateAccount(editingAccountId, payload)
       : await addAccount(payload);
@@ -455,12 +372,6 @@ export function VideoChannelsList() {
       return;
     }
     setShowAccountModal(false);
-  };
-
-  const confirmDeleteAccount = async () => {
-    if (!deleteAccountTarget) return;
-    await deleteAccount(deleteAccountTarget.id);
-    setDeleteAccountTarget(null);
   };
 
   if (loading && channels.length === 0) {
@@ -480,24 +391,7 @@ export function VideoChannelsList() {
         </div>
       )}
 
-      <div className="flex items-center gap-2 border-b border-border">
-        {(['channels', 'accounts'] as const).map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={cn(
-              'px-4 py-2 text-[13px] font-medium border-b-2 -mb-px transition-colors',
-              activeTab === tab ? 'border-teal-600 text-teal-700' : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {tab === 'channels' ? '頻道主檔' : '平台帳號 (Login)'}
-          </button>
-        ))}
-      </div>
-
-      {activeTab === 'channels' && (
-        <>
-          <div className="flex items-center gap-4 flex-wrap">
+      <div className="flex items-center gap-4 flex-wrap">
             <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
               <span className="text-[11px] text-muted-foreground">頻道總數</span>
               <p className="text-[18px] font-bold">{channels.length}</p>
@@ -677,60 +571,6 @@ export function VideoChannelsList() {
               <div className="text-center py-8 text-[13px] text-muted-foreground">沒有符合條件的頻道</div>
             )}
           </div>
-        </>
-      )}
-
-      {activeTab === 'accounts' && (
-        <>
-          <div className="flex items-center justify-between">
-            <p className="text-[13px] text-muted-foreground">共 {accounts.length} 條平台帳號（支援 V12/V14 等多頻道共用）</p>
-            <button onClick={() => openAddAccount()} className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700">
-              <Plus size={12} /> 新增帳號
-            </button>
-          </div>
-          {accountsLoading ? (
-            <div className="flex items-center gap-2 py-8 text-muted-foreground justify-center"><Loader2 className="animate-spin" size={16} /> 載入中...</div>
-          ) : (
-            <div className="bg-white rounded-md border shadow-card overflow-x-auto">
-              <table className="w-full text-[12px] min-w-[800px]">
-                <thead className="bg-muted/30">
-                  <tr>
-                    {ACCOUNT_SORT_COLUMNS.map(col => (
-                      <AccountSortableTh
-                        key={col.key}
-                        label={col.label}
-                        sortKey={col.key}
-                        activeKey={accountSortKey}
-                        sortDir={accountSortDir}
-                        onSort={onAccountSort}
-                      />
-                    ))}
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedAccounts.map(acc => (
-                    <tr key={acc.id} className="border-t border-border/50 hover:bg-muted/10">
-                      <td className="px-3 py-2 font-mono font-bold">{formatChannelCodes(acc.vchannelCodes)}</td>
-                      <td className="px-3 py-2">{acc.accountLabel}</td>
-                      <td className="px-3 py-2">{accountPlatformLabel(acc.platform)}</td>
-                      <td className="px-3 py-2 font-mono text-[11px] max-w-[140px] truncate" title={acc.accountId}>{acc.accountId || '—'}</td>
-                      <td className="px-3 py-2 max-w-[120px] truncate" title={acc.loginMethod}>{acc.loginMethod || '—'}</td>
-                      <td className="px-3 py-2">{acc.feedhiveManaged ? '✓' : '—'}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex gap-2">
-                          <button onClick={() => openEditAccount(acc)} className="text-teal-600 hover:underline">編輯</button>
-                          <button onClick={() => setDeleteAccountTarget({ id: acc.id, label: `${formatChannelCodes(acc.vchannelCodes)} / ${accountPlatformLabel(acc.platform)}` })} className="text-rose-500 hover:underline">刪除</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
 
       <CrudModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="新增 Vchannel">
         <ChannelForm form={newChannel} setForm={setNewChannel} brandOptions={activeBrandOptions} />
@@ -757,62 +597,14 @@ export function VideoChannelsList() {
         reasons={deleteReasons}
       />
 
-      <CrudModal isOpen={showAccountModal} onClose={() => setShowAccountModal(false)} title={editingAccountId ? '編輯平台帳號' : '新增平台帳號'}>
-        <div className="space-y-3">
-          <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">Vchannel *（可多選，如 V12/V14）</label>
-            <Input value={accountForm.vchannelCodesRaw} onChange={e => setAccountForm({ ...accountForm, vchannelCodesRaw: e.target.value })} className="h-9 text-[13px]" placeholder="V11 或 V12/V14" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">名稱</label>
-              <Input value={accountForm.accountLabel} onChange={e => setAccountForm({ ...accountForm, accountLabel: e.target.value })} className="h-9 text-[13px]" />
-            </div>
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">平台 *</label>
-              <Select
-                value={normalizeAccountPlatform(accountForm.platform) ?? ''}
-                onValueChange={(value: PlatformKey) => setAccountForm({ ...accountForm, platform: value })}
-              >
-                <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="選擇平台" /></SelectTrigger>
-                <SelectContent>
-                  {PLATFORM_KEYS.map(key => (
-                    <SelectItem key={key} value={key}>{PLATFORM_LABELS[key]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">賬號 ID</label>
-            <Input value={accountForm.accountId} onChange={e => setAccountForm({ ...accountForm, accountId: e.target.value })} className="h-9 text-[13px]" />
-          </div>
-          <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">登入方式</label>
-            <Input value={accountForm.loginMethod} onChange={e => setAccountForm({ ...accountForm, loginMethod: e.target.value })} className="h-9 text-[13px]" />
-          </div>
-          <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">備註</label>
-            <Input value={accountForm.notes} onChange={e => setAccountForm({ ...accountForm, notes: e.target.value })} className="h-9 text-[13px]" />
-          </div>
-          <label className="flex items-center gap-2 text-[12px]">
-            <input type="checkbox" checked={accountForm.feedhiveManaged} onChange={e => setAccountForm({ ...accountForm, feedhiveManaged: e.target.checked })} />
-            FeedHive 統一管理
-          </label>
-        </div>
-        <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
-          <Button variant="secondary" onClick={() => setShowAccountModal(false)}>取消</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={saveAccount} disabled={saving}>{saving ? '儲存中...' : '儲存'}</Button>
-        </div>
-      </CrudModal>
-
-      <DeleteConfirmModal
-        isOpen={!!deleteAccountTarget}
-        onClose={() => setDeleteAccountTarget(null)}
-        onConfirm={confirmDeleteAccount}
-        itemName={deleteAccountTarget?.label || ''}
-        canDelete={true}
-        reasons={[]}
+      <VchannelAccountFormModal
+        isOpen={showAccountModal}
+        onClose={() => setShowAccountModal(false)}
+        editing={!!editingAccountId}
+        form={accountForm}
+        setForm={setAccountForm}
+        saving={saving}
+        onSave={saveAccount}
       />
     </div>
   );
