@@ -20,8 +20,15 @@ import { useBrands } from '@/hooks/useBrands';
 import { useSystemOptions } from '@/hooks/useSystemOptions';
 import { projects as allProjectsData } from '@/data/mockData';
 import { ProjectCategoryBadge, getProjectCategory, type ProjectCategoryType } from '@/components/ui/project-category-badge';
-import { adsStatusLabel, useAdsWebsiteLinks } from '@/hooks/useAdsWebsiteLinks';
-import type { AdsAppliedStatus, AdsDiscoveredDomain } from '@/types/adsWebsiteLink';
+import { useAdsWebsiteLinks } from '@/hooks/useAdsWebsiteLinks';
+import { useWebsiteConnectionStatus } from '@/hooks/useWebsiteConnectionStatus';
+import type { AdsDiscoveredDomain } from '@/types/adsWebsiteLink';
+import {
+  ga4ConnectionLabel,
+  googleAdsConnectionLabel,
+  type Ga4ConnectionStatus,
+  type GoogleAdsConnectionStatus,
+} from '@/lib/websiteConnectionStatus';
 import {
   adsPlatformSourceLabel,
   domainSourceOrigin,
@@ -906,15 +913,39 @@ const emptyFormData: WebsiteFormData = {
   apiDocUrl: '',
 };
 
-function AdsAppliedBadge({ status }: { status?: AdsAppliedStatus }) {
-  const label = adsStatusLabel(status);
-  if (!status || status === 'none') {
-    return <span className="text-[11px] text-muted-foreground">—</span>;
-  }
+function ConnectionStatusBadge({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: 'active' | 'paused' | 'linked' | 'unlinked';
+}) {
+  const toneClass =
+    tone === 'active'
+      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      : tone === 'paused'
+        ? 'bg-amber-50 text-amber-700 border-amber-200'
+        : tone === 'linked'
+          ? 'bg-teal-50 text-teal-700 border-teal-200'
+          : 'bg-slate-50 text-slate-500 border-slate-200';
   return (
-    <span className="text-[11px] font-medium px-1.5 py-0.5 rounded border bg-amber-50 text-amber-800 border-amber-200">
+    <span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded border', toneClass)}>
       {label}
     </span>
+  );
+}
+
+function GoogleAdsConnectionBadge({ status }: { status: GoogleAdsConnectionStatus }) {
+  const tone = status === 'active' ? 'active' : status === 'paused' ? 'paused' : 'unlinked';
+  return <ConnectionStatusBadge label={googleAdsConnectionLabel(status)} tone={tone} />;
+}
+
+function Ga4ConnectionBadge({ status }: { status: Ga4ConnectionStatus }) {
+  return (
+    <ConnectionStatusBadge
+      label={ga4ConnectionLabel(status)}
+      tone={status === 'linked' ? 'linked' : 'unlinked'}
+    />
   );
 }
 
@@ -1416,13 +1447,17 @@ function WebsiteFormModal({
 function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site: WebsiteProfileFull) => void; profileTypeFilter?: 'all' | 'website' | 'system' }) {
   const { profiles: websiteProfiles, loading: profilesLoading, addProfile, updateProfile } = useWebsiteProfiles();
   const {
-    statusByWebsiteId,
     unmatched,
     syncing: adsSyncing,
     syncDomains,
     dismissDomain,
     markLinkedAndRelink,
   } = useAdsWebsiteLinks();
+  const {
+    googleAdsByWebsiteId,
+    ga4StatusFor,
+    refresh: refreshConnectionStatus,
+  } = useWebsiteConnectionStatus();
   const { companies } = useCompanies();
   const { brands } = useBrands();
   const [searchQuery, setSearchQuery] = useState('');
@@ -1515,6 +1550,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
         }
       }
       const linkRes = await markLinkedAndRelink(domainToLink.normalizedDomain, newSite.id);
+      await refreshConnectionStatus();
       if (linkRes.ok) {
         toast.success('已重新連結廣告網域');
         setShowUnmatchedModal((linkRes.result?.unmatched?.length ?? 0) > 0);
@@ -1530,6 +1566,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       toast.error('同步廣告網域失敗', { description: r.error });
       return;
     }
+    await refreshConnectionStatus();
     const unmatchedCount = r.result.unmatched?.length ?? 0;
     const g = r.result.google?.websitesLinked ?? 0;
     const campaigns = r.result.google?.campaignsWithLinks ?? 0;
@@ -1605,9 +1642,9 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       const wsType = ws.profileType || 'website';
       if (wsType !== typeFilter) return false;
     }
-    const adsStatus = statusByWebsiteId[ws.id] || 'none';
-    if (adsFilter === 'with' && adsStatus === 'none') return false;
-    if (adsFilter === 'without' && adsStatus !== 'none') return false;
+    const adsStatus = googleAdsByWebsiteId[ws.id] || 'unlinked';
+    if (adsFilter === 'with' && adsStatus === 'unlinked') return false;
+    if (adsFilter === 'without' && adsStatus !== 'unlinked') return false;
     if (companyFilter !== 'all' && (ws.company || '') !== companyFilter) return false;
     if (brandFilter !== 'all') {
       const matchingIds = brandIdsByCode.get(brandFilter);
@@ -1728,9 +1765,9 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
           onChange={(e) => setAdsFilter(e.target.value as 'all' | 'with' | 'without')}
           className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white"
         >
-          <option value="all">廣告：全部</option>
-          <option value="with">有廣告連結</option>
-          <option value="without">無廣告連結</option>
+          <option value="all">Google Ads：全部</option>
+          <option value="with">已連接</option>
+          <option value="without">未連接</option>
         </select>
       </div>
 
@@ -1775,17 +1812,16 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
         <table className="w-full" style={{ display: profilesLoading ? 'none' : undefined }}>
           <thead>
             <tr className="border-b border-border bg-muted/30">
+              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">名稱</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">類型</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">項目類型</th>
-              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">名稱</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">LEVEL</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">平台</th>
-              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">品牌</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">公司</th>
+              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">品牌</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
-              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">廣告</th>
-              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">文章</th>
-              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">影片</th>
+              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Google Ads</th>
+              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Google Analytics</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">工時</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">操作</th>
             </tr>
@@ -1796,24 +1832,25 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
               const { category, clientName } = resolveWebsiteProjectCategory(site);
               return (
                 <tr key={site.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer">
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><ProfileTypeBadge profileType={site.profileType} size="small" /></td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><ProjectCategoryBadge category={category} clientName={clientName} size="sm" /></td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3">
                     <div>
                       <span className="text-[13px] font-medium block">{site.websiteName}</span>
                       <span className="text-[11px] text-teal-600">{site.domainUrl}</span>
                     </div>
                   </td>
+                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><ProfileTypeBadge profileType={site.profileType} size="small" /></td>
+                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><ProjectCategoryBadge category={category} clientName={clientName} size="sm" /></td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3"><WebsiteLevelBadge level={site.level} size="small" /></td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3"><span className="text-[11px] bg-muted px-1.5 py-0.5 rounded">{site.platform}</span></td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{site.brand}</span></td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3"><span className="text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{site.company}</span></td>
+                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{site.brand}</span></td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3"><span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', config.bgColor, config.color)}>{config.label}</span></td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3">
-                    <AdsAppliedBadge status={statusByWebsiteId[site.id]} />
+                    <GoogleAdsConnectionBadge status={googleAdsByWebsiteId[site.id] || 'unlinked'} />
                   </td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3 text-[13px]">{site.articlesCount}</td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3 text-[13px]">{site.videosCount}</td>
+                  <td onClick={() => onSelectSite(site)} className="px-4 py-3">
+                    <Ga4ConnectionBadge status={ga4StatusFor(site.id)} />
+                  </td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3 text-[13px] font-medium">{site.totalHours}h</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-0.5">
