@@ -1775,9 +1775,9 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
         <table className="w-full" style={{ display: profilesLoading ? 'none' : undefined }}>
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">名稱</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">類型</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">項目類型</th>
+              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">名稱</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">LEVEL</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">平台</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">品牌</th>
@@ -1796,14 +1796,14 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
               const { category, clientName } = resolveWebsiteProjectCategory(site);
               return (
                 <tr key={site.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer">
+                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><ProfileTypeBadge profileType={site.profileType} size="small" /></td>
+                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><ProjectCategoryBadge category={category} clientName={clientName} size="sm" /></td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3">
                     <div>
                       <span className="text-[13px] font-medium block">{site.websiteName}</span>
                       <span className="text-[11px] text-teal-600">{site.domainUrl}</span>
                     </div>
                   </td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><ProfileTypeBadge profileType={site.profileType} size="small" /></td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><ProjectCategoryBadge category={category} clientName={clientName} size="sm" /></td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3"><WebsiteLevelBadge level={site.level} size="small" /></td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3"><span className="text-[11px] bg-muted px-1.5 py-0.5 rounded">{site.platform}</span></td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3"><span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{site.brand}</span></td>
