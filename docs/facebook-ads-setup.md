@@ -125,7 +125,7 @@ where jobname like '%ads-incremental%';
 | `supabase-functions-sync-facebook-ads` | 最近 7 日增量 + 帳戶 prune（手動 + 每日 cron） |
 | `supabase-functions-facebook-ads-backfill-step` | 歷史回填（`start` / `pause` / `resume` / `cancel` / `step`） |
 | `supabase-functions-facebook-ads-campaign-breakdowns` | Campaign 詳情即時細項（Ad Sets / Ads / Placements；不落倉庫） |
-| `supabase-functions-sync-ads-website-links` | 網站列表「同步廣告網域」：**僅 Google** 目的地 URL 發現與連結 |
+| `supabase-functions-sync-ads-website-links` | 網站列表「同步廣告網域」：Google Ads 目的地 URL + GA4 Property 資料串流網域發現與連結 |
 
 部署：
 
@@ -149,10 +149,11 @@ Also apply:
 - 在 `/#marketing/facebook-ads` 點「品牌」欄可手動覆寫；Ads sync **不會**覆寫已設定的 Campaign 品牌
 - Campaign 標籤：列表「編輯」欄 → `ads_campaign_tags`（標籤目錄為 `ads_tags`，於 `/#marketing/ads-tags` 管理）
 
-## 網站自動連結（Google only）
+## 網站自動連結（Google Ads + GA4）
 
-- Google：**Campaign ↔ 網站**（`google_ads_campaign_websites`），來源為 Final URL / Performance Max `asset_group` URL / landing page，再以帳戶或 Campaign 名稱中的網域後備
-- 未對應網域寫入 `ads_discovered_domains`；在 `/#website/list` 按「同步廣告網域」可提示建立網站後自動重連
+- Google Ads：**Campaign ↔ 網站**（`google_ads_campaign_websites`），來源為 Final URL / Performance Max `asset_group` URL / landing page，再以帳戶或 Campaign 名稱中的網域後備
+- Google Analytics：GA4 Property 資料串流 `defaultUri`（及 Property 名稱中的網域）對應 `webandsystem_list`，並更新 `ga4_properties`
+- 未對應網域寫入 `ads_discovered_domains`（`sources` 為 `google` / `ga4`，或兩者）；在 `/#website/list` 按「同步廣告網域」可提示建立網站後自動重連，對話框會標示來源為 Google Ads、Google Analytics 或兩者
 
 ## 前端路由
 
@@ -161,7 +162,7 @@ Also apply:
 | `/#marketing/facebook-ads` | Campaign 報表；點擊列開啟詳情；手動設定品牌；編輯欄設定標籤 |
 | `/#marketing/facebook-ads?campaign={adAccountId}:{campaignId}` | Campaign 詳情（KPI / 圖表 / 即時 Ad Sets·Ads·Placements） |
 | `/#marketing/ads-data-sync` | 廣告數據同步（Google / Facebook / GA4 完整歷史回填） |
-| `/#website/list` | 網站列表：Google 廣告狀態欄、同步廣告網域、未連結網域建立提示 |
+| `/#website/list` | 網站列表：Google 廣告狀態欄、同步廣告網域（Ads + GA4）、未連結網域建立提示 |
 
 Business 篩選與 KPI 由 warehouse 動態產生，**不需改前端**即可支援新增憑證。
 

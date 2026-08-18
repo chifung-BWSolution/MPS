@@ -224,12 +224,16 @@ export function matchWebsiteForGa4Property(
     };
   }
 
+  const nameTokens = String(property.displayName || '')
+    .toLowerCase()
+    .match(/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+/gi) ?? [];
   const candidates = [
     ...(property.streamUris || []),
     property.displayName || '',
+    ...nameTokens,
   ]
     .map((v) => normalizeDomain(v))
-    .filter(Boolean);
+    .filter((d) => d && !d.includes(' '));
 
   for (const key of candidates) {
     for (const w of websites) {

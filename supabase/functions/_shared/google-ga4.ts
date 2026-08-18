@@ -1,6 +1,13 @@
 /** Shared Google Analytics 4 helpers for Edge Functions */
 
-import { matchDomainsToWebsites, normalizeDomain } from "./website-match.ts";
+import {
+  extractDomainsFromName,
+  ga4PropertyToDiscoveredInputs,
+  matchDomainsToWebsites,
+  normalizeDomain,
+  upsertDiscoveredDomains,
+  type DiscoveredDomainInput,
+} from "./website-match.ts";
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -668,8 +675,12 @@ export function matchWebsiteForGa4Property(
   if (streamMatches[0]) return streamMatches[0];
 
   const nameAsDomain = normalizeDomain(property.displayName);
-  if (nameAsDomain) {
-    const nameMatches = matchDomainsToWebsites([nameAsDomain], websites);
+  const nameDomains = [
+    ...extractDomainsFromName(property.displayName),
+    ...(nameAsDomain && !nameAsDomain.includes(" ") ? [nameAsDomain] : []),
+  ];
+  if (nameDomains.length) {
+    const nameMatches = matchDomainsToWebsites(nameDomains, websites);
     if (nameMatches[0]) return nameMatches[0];
   }
 
@@ -689,4 +700,141 @@ export function matchWebsiteForGa4Property(
   }
 
   return null;
+}
+
+export type Ga4WebsiteLinkSummary = {
+  websites_linked: number;
+  properties_listed: number;
+  domains_discovered: number;
+  domains_unmatched: number;
+  link_errors: string[];
+};
+
+type Ga4LinkStore = {
+  from: (table: string) => {
+    select: (cols: string) => PromiseLike<{ data: unknown; error: { message: string } | null }> & {
+      eq: (
+        col: string,
+        val: string,
+      ) => {
+        maybeSingle: () => PromiseLike<{
+          data: { refresh_token?: string } | null;
+          error: { message: string } | null;
+        }>;
+      };
+    };
+    upsert: (
+      row: Record<string, unknown> | Record<string, unknown>[],
+      opts?: { onConflict?: string },
+    ) => PromiseLike<{ error: { message: string } | null }>;
+  };
+};
+
+/**
+ * List GA4 properties, match web stream domains to webandsystem_list, and
+ * upsert unmatched hosts into ads_discovered_domains (source = ga4).
+ */
+export async function linkGa4PropertyWebsites(
+  supabase: Ga4LinkStore,
+  nowIso: string,
+): Promise<Ga4WebsiteLinkSummary> {
+  const empty: Ga4WebsiteLinkSummary = {
+    websites_linked: 0,
+    properties_listed: 0,
+    domains_discovered: 0,
+    domains_unmatched: 0,
+    link_errors: [],
+  };
+
+  const accessToken = await getGa4AccessToken(supabase as Ga4TokenStore);
+  const properties = await listGa4Properties(accessToken);
+  if (!properties.length) return empty;
+
+  const { data: websiteRows, error: wsErr } = await supabase
+    .from("webandsystem_list")
+    .select("id, domain_url, website_name, ga4_property_id, status");
+  if (wsErr) throw new Error(`Load websites failed: ${wsErr.message}`);
+  const websites = ((websiteRows as Ga4WebsiteRow[] | null) ?? []).filter((w) => w?.id);
+
+  const discoveredInputs: DiscoveredDomainInput[] = [];
+  const linkedWebsiteIds = new Set<string>();
+  const linkErrors: string[] = [];
+
+  await mapPool(properties, GA4_PROPERTY_CONCURRENCY, async (property) => {
+    let uris: string[] = [];
+    let streamUri: string | null = null;
+    let measurementId: string | null = null;
+    try {
+      const stream = await fetchPropertyStreamMeta(accessToken, property.propertyId);
+      streamUri = stream.streamUri;
+      measurementId = stream.measurementId;
+      uris = stream.uris;
+    } catch (err) {
+      linkErrors.push(
+        `${property.propertyId} streams: ${
+          err instanceof Error ? err.message : String(err)
+        }`.slice(0, 180),
+      );
+    }
+
+    const match = matchWebsiteForGa4Property(
+      {
+        propertyId: property.propertyId,
+        displayName: property.displayName,
+        streamUris: uris,
+      },
+      websites,
+    );
+    if (match?.website_profile_id) linkedWebsiteIds.add(match.website_profile_id);
+
+    const { error: propErr } = await supabase.from("ga4_properties").upsert(
+      {
+        property_id: property.propertyId,
+        account_id: property.accountId,
+        account_name: property.accountName,
+        display_name: property.displayName,
+        stream_uri: streamUri,
+        measurement_id: measurementId,
+        website_profile_id: match?.website_profile_id || null,
+        matched_domain: match?.matched_domain || null,
+        updated_at: nowIso,
+      },
+      { onConflict: "property_id" },
+    );
+    if (propErr) {
+      linkErrors.push(`${property.propertyId}: property upsert ${propErr.message}`.slice(0, 180));
+    }
+
+    discoveredInputs.push(
+      ...ga4PropertyToDiscoveredInputs({
+        propertyId: property.propertyId,
+        accountId: property.accountId,
+        accountName: property.accountName,
+        displayName: property.displayName,
+        streamUris: uris,
+        websiteProfileId: match?.website_profile_id || null,
+        matchedDomain: match?.matched_domain || null,
+      }),
+    );
+  });
+
+  let domains_discovered = 0;
+  let domains_unmatched = 0;
+  if (discoveredInputs.length) {
+    const upserted = await upsertDiscoveredDomains(
+      supabase as Parameters<typeof upsertDiscoveredDomains>[0],
+      discoveredInputs,
+      nowIso,
+    );
+    domains_discovered = upserted.discovered;
+    domains_unmatched = upserted.unmatched;
+  }
+
+  return {
+    websites_linked: linkedWebsiteIds.size,
+    properties_listed: properties.length,
+    domains_discovered,
+    domains_unmatched,
+    link_errors: linkErrors,
+  };
 }

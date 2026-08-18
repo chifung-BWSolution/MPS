@@ -9,7 +9,13 @@ function mapSourceRefs(raw: unknown): AdsSourceRef[] {
     .map((item) => {
       if (!item || typeof item !== 'object') return null;
       const r = item as Record<string, unknown>;
-      const platform = r.platform === 'facebook' ? 'facebook' : r.platform === 'google' ? 'google' : null;
+      const platform = r.platform === 'facebook'
+        ? 'facebook'
+        : r.platform === 'ga4'
+        ? 'ga4'
+        : r.platform === 'google'
+        ? 'google'
+        : null;
       const accountId = String(r.accountId || '').trim();
       if (!platform || !accountId) return null;
       return {

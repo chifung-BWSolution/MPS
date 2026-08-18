@@ -65,6 +65,12 @@ const stream = matchWebsiteForGa4Property(
 assert.equal(stream?.websiteProfileId, 'ws1');
 assert.equal(stream?.matchedDomain, 'bwdesign.hk');
 
+const nameInTitle = matchWebsiteForGa4Property(
+  { propertyId: '222', displayName: 'BW bwdesign.hk', streamUris: ['https://www.brokenhost'] },
+  websites,
+);
+assert.equal(nameInTitle?.websiteProfileId, 'ws1');
+
 const rangeOk = validateLiveGa4Range('2026-07-01', '2026-08-01');
 assert.equal(rangeOk.ok, true);
 const rangeLong = validateLiveGa4Range('2026-01-01', '2026-08-01');

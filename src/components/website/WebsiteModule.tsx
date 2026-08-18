@@ -23,6 +23,12 @@ import { ProjectCategoryBadge, getProjectCategory, type ProjectCategoryType } fr
 import { adsStatusLabel, useAdsWebsiteLinks } from '@/hooks/useAdsWebsiteLinks';
 import type { AdsAppliedStatus, AdsDiscoveredDomain } from '@/types/adsWebsiteLink';
 import {
+  adsPlatformSourceLabel,
+  domainSourceOrigin,
+  domainSourceOriginLabel,
+  originSortRank,
+} from '@/lib/adsWebsiteDisplay';
+import {
   readSelectedWebsiteId,
   writeSelectedWebsiteId,
 } from '@/lib/websiteNavigation';
@@ -932,7 +938,7 @@ function UnmatchedAdsDomainsModal({
           <div>
             <h3 className="text-[16px] font-bold">未連結的廣告網域</h3>
             <p className="text-[12px] text-muted-foreground mt-0.5">
-              從 Google Ads 偵測到的目的地網域（含 Search Final URL 與 Performance Max 資產組 URL），尚未對應到網站列表。請建立網站或略過。
+              從 Google Ads（廣告目的地網域）與 Google Analytics（GA4 Property 資料串流）偵測到、尚未對應到網站列表的網域。每個網域會標示來源為 Google Ads、Google Analytics，或兩者皆有。請建立網站或略過。
             </p>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-muted rounded" disabled={syncing}>
@@ -943,10 +949,19 @@ function UnmatchedAdsDomainsModal({
           {domains.length === 0 ? (
             <div className="text-[13px] text-muted-foreground py-8 text-center">沒有待處理網域</div>
           ) : (
-            domains.map((d) => {
+            [...domains]
+              .sort((a, b) => {
+                const originDiff = originSortRank(domainSourceOrigin(a.sources)) -
+                  originSortRank(domainSourceOrigin(b.sources));
+                if (originDiff !== 0) return originDiff;
+                return a.normalizedDomain.localeCompare(b.normalizedDomain, 'en');
+              })
+              .map((d) => {
               const refs = d.sourceRefs || [];
               const shown = refs.slice(0, 4);
               const extra = Math.max(0, refs.length - shown.length);
+              const origin = domainSourceOrigin(d.sources);
+              const originLabel = domainSourceOriginLabel(origin);
               return (
                 <div
                   key={d.normalizedDomain}
@@ -957,13 +972,26 @@ function UnmatchedAdsDomainsModal({
                     {d.sampleUrl ? (
                       <div className="text-[11px] text-muted-foreground truncate max-w-[520px]">{d.sampleUrl}</div>
                     ) : null}
-                    <div className="flex gap-1 mt-1.5 flex-wrap">
+                    <div className="flex gap-1.5 mt-1.5 flex-wrap items-center">
+                      <span className="text-[11px] text-muted-foreground">來源</span>
+                      <span
+                        className={cn(
+                          'text-[11px] font-semibold px-1.5 py-0.5 rounded border',
+                          origin === 'both' && 'bg-teal-50 text-teal-800 border-teal-200',
+                          origin === 'ads' && 'bg-amber-50 text-amber-800 border-amber-200',
+                          origin === 'analytics' && 'bg-orange-50 text-orange-800 border-orange-200',
+                          origin === 'facebook' && 'bg-blue-50 text-blue-800 border-blue-200',
+                          origin === 'unknown' && 'bg-muted text-muted-foreground border-border',
+                        )}
+                      >
+                        {originLabel}
+                      </span>
                       {(d.sources || []).map((s) => (
                         <span
                           key={s}
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase"
+                          className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground"
                         >
-                          {s}
+                          {adsPlatformSourceLabel(s)}
                         </span>
                       ))}
                     </div>
@@ -977,13 +1005,15 @@ function UnmatchedAdsDomainsModal({
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span
                                 className={cn(
-                                  'uppercase text-[10px] font-semibold px-1 py-0.5 rounded',
+                                  'text-[10px] font-semibold px-1 py-0.5 rounded',
                                   ref.platform === 'google'
                                     ? 'bg-amber-100 text-amber-800'
+                                    : ref.platform === 'ga4'
+                                    ? 'bg-orange-100 text-orange-800'
                                     : 'bg-blue-100 text-blue-800',
                                 )}
                               >
-                                {ref.platform}
+                                {adsPlatformSourceLabel(ref.platform)}
                               </span>
                               <span className="text-muted-foreground">帳戶</span>
                               <span className="font-medium text-foreground truncate max-w-[280px]">
@@ -993,7 +1023,7 @@ function UnmatchedAdsDomainsModal({
                             </div>
                             {ref.campaignId || ref.campaignName ? (
                               <div className="mt-0.5 text-muted-foreground">
-                                Campaign：
+                                {ref.platform === 'ga4' ? 'Property：' : 'Campaign：'}
                                 <span className="text-foreground font-medium ml-1">
                                   {ref.campaignName || ref.campaignId}
                                 </span>
@@ -1002,17 +1032,19 @@ function UnmatchedAdsDomainsModal({
                                 ) : null}
                               </div>
                             ) : (
-                              <div className="mt-0.5 text-muted-foreground">Campaign：—</div>
+                              <div className="mt-0.5 text-muted-foreground">
+                                {ref.platform === 'ga4' ? 'Property：—' : 'Campaign：—'}
+                              </div>
                             )}
                           </div>
                         ))}
                         {extra > 0 ? (
-                          <div className="text-[11px] text-muted-foreground">另有 {extra} 個帳戶/Campaign…</div>
+                          <div className="text-[11px] text-muted-foreground">另有 {extra} 個帳戶／明細…</div>
                         ) : null}
                       </div>
                     ) : (
                       <div className="mt-2 text-[11px] text-muted-foreground">
-                        尚無帳戶/Campaign 明細（請再按一次「同步廣告網域」）
+                        尚無帳戶／Property 明細（請再按一次「同步廣告網域」）
                       </div>
                     )}
                   </div>
@@ -1472,6 +1504,16 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
     setPendingCreateDomain(null);
 
     if (domainToLink) {
+      const ga4PropertyId = (domainToLink.sourceRefs || []).find((ref) => ref.platform === 'ga4')?.campaignId;
+      if (ga4PropertyId) {
+        const { error: ga4Err } = await supabase
+          .from('webandsystem_list')
+          .update({ ga4_property_id: ga4PropertyId })
+          .eq('id', newSite.id);
+        if (ga4Err) {
+          toast.error('網站已建立，但寫入 GA4 Property 失敗', { description: ga4Err.message });
+        }
+      }
       const linkRes = await markLinkedAndRelink(domainToLink.normalizedDomain, newSite.id);
       if (linkRes.ok) {
         toast.success('已重新連結廣告網域');
@@ -1492,12 +1534,15 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
     const g = r.result.google?.websitesLinked ?? 0;
     const campaigns = r.result.google?.campaignsWithLinks ?? 0;
     const pmax = r.result.google?.pmaxCampaignsWithLinks ?? 0;
+    const ga4Linked = r.result.ga4?.websitesLinked ?? 0;
+    const ga4Properties = r.result.ga4?.propertiesListed ?? 0;
     const errors = [
       ...(r.result.linkErrors || []),
       ...(r.result.google?.linkErrors || []),
+      ...(r.result.ga4?.linkErrors || []),
     ];
     toast.success(
-      `廣告網域同步完成（Google 連結 ${g} 個網站、${campaigns} 個 Campaign，其中 PMax ${pmax}）`,
+      `廣告網域同步完成（Google Ads 連結 ${g} 個網站、${campaigns} 個 Campaign，其中 PMax ${pmax}；Google Analytics 連結 ${ga4Linked} 個網站、${ga4Properties} 個 Property）`,
     );
     if (errors.length) {
       toast.error('部分同步錯誤', {
@@ -1505,9 +1550,9 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       });
     }
     if (unmatchedCount > 0) setShowUnmatchedModal(true);
-    else if (!errors.length && g > 0) toast.message('所有偵測到的網域皆已對應或略過');
-    else if (!errors.length && g === 0) {
-      toast.message('未發現可連結的廣告目的地網域（請確認 Ads API 權限、Search Final URL 與 PMax 資產組 URL）');
+    else if (!errors.length && (g > 0 || ga4Linked > 0)) toast.message('所有偵測到的網域皆已對應或略過');
+    else if (!errors.length && g === 0 && ga4Linked === 0) {
+      toast.message('未發現可連結的廣告或 Analytics 網域（請確認 Google Ads / GA4 API 權限、Search Final URL、PMax 資產組 URL 與 GA4 資料串流網域）');
     }
   };
 

@@ -1,4 +1,4 @@
-export type AdsPlatformSource = 'google' | 'facebook';
+export type AdsPlatformSource = 'google' | 'facebook' | 'ga4';
 
 export type AdsDiscoveredDomainStatus = 'unmatched' | 'linked' | 'dismissed';
 
@@ -34,12 +34,14 @@ export type AdsWebsiteLinkSummary = {
   campaignsWithLinks?: number;
   pmaxCampaignsScanned?: number;
   pmaxCampaignsWithLinks?: number;
+  propertiesListed?: number;
   linkErrors: string[];
 };
 
 export type AdsWebsiteSyncResult = {
   success?: boolean;
   google?: AdsWebsiteLinkSummary;
+  ga4?: AdsWebsiteLinkSummary;
   unmatched: AdsDiscoveredDomain[];
   linkErrors?: string[];
   error?: string;

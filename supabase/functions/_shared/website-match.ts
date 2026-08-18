@@ -13,8 +13,10 @@ export type DomainMatch = {
   matched_domain: string;
 };
 
+export type AdsSourcePlatform = "google" | "facebook" | "ga4";
+
 export type AdsSourceRef = {
-  platform: "google" | "facebook";
+  platform: AdsSourcePlatform;
   accountId: string;
   accountName: string;
   campaignId?: string | null;
@@ -27,10 +29,18 @@ export type AdsSourceRef = {
 export type DiscoveredDomainInput = {
   normalized_domain: string;
   sample_url: string | null;
-  source: "google" | "facebook";
+  source: AdsSourcePlatform;
   website_profile_id?: string | null;
   source_ref?: AdsSourceRef | null;
 };
+
+export function parseAdsSourcePlatform(raw: unknown): AdsSourcePlatform | null {
+  const s = String(raw || "").trim().toLowerCase();
+  if (s === "google" || s === "ads" || s === "google_ads") return "google";
+  if (s === "facebook") return "facebook";
+  if (s === "ga4" || s === "analytics" || s === "google_analytics") return "ga4";
+  return null;
+}
 
 function sourceRefKey(ref: AdsSourceRef): string {
   return [
@@ -51,7 +61,7 @@ export function mergeSourceRefs(
   const push = (raw: unknown) => {
     if (!raw || typeof raw !== "object") return;
     const r = raw as Record<string, unknown>;
-    const platform = r.platform === "facebook" ? "facebook" : r.platform === "google" ? "google" : null;
+    const platform = parseAdsSourcePlatform(r.platform);
     const accountId = String(r.accountId || "").trim();
     if (!platform || !accountId) return;
     const ref: AdsSourceRef = {
@@ -289,6 +299,50 @@ export function pickSampleUrlForDomain(
     }
   }
   return urls.find((u) => !!u) ? String(urls.find((u) => !!u)) : null;
+}
+
+/** Build discovered-domain rows from one GA4 property + its web stream URIs. */
+export function ga4PropertyToDiscoveredInputs(input: {
+  propertyId: string;
+  accountId: string;
+  accountName: string;
+  displayName: string;
+  streamUris: string[];
+  websiteProfileId?: string | null;
+  matchedDomain?: string | null;
+}): DiscoveredDomainInput[] {
+  const propertyId = String(input.propertyId || "").trim();
+  if (!propertyId) return [];
+
+  const domains = new Set(extractDomainsFromUrls(input.streamUris));
+  if (domains.size === 0) {
+    for (const d of extractDomainsFromName(input.displayName)) domains.add(d);
+  }
+  if (domains.size === 0) {
+    const nameDomain = normalizeDomain(input.displayName);
+    if (nameDomain.includes(".") && !nameDomain.includes(" ")) domains.add(nameDomain);
+  }
+  if (domains.size === 0) {
+    const matched = normalizeDomain(input.matchedDomain);
+    if (matched.includes(".") && !matched.includes(" ")) domains.add(matched);
+  }
+
+  const accountId = String(input.accountId || "").trim() || propertyId;
+  const source_ref: AdsSourceRef = {
+    platform: "ga4",
+    accountId,
+    accountName: String(input.accountName || accountId),
+    campaignId: propertyId,
+    campaignName: String(input.displayName || propertyId),
+  };
+
+  return [...domains].map((d) => ({
+    normalized_domain: d,
+    sample_url: pickSampleUrlForDomain(d, input.streamUris) || `https://${d}`,
+    source: "ga4",
+    website_profile_id: input.websiteProfileId || null,
+    source_ref,
+  }));
 }
 
 type SupabaseLike = {

@@ -6,7 +6,8 @@ import {
   getAccessToken,
   linkGoogleCampaignWebsites,
 } from "../_shared/google-ads.ts";
-import { normalizeDomain } from "../_shared/website-match.ts";
+import { parseAdsSourcePlatform, normalizeDomain } from "../_shared/website-match.ts";
+import { linkGa4PropertyWebsites } from "../_shared/google-ga4.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY =
@@ -30,11 +31,7 @@ function mapSourceRefs(raw: unknown) {
       if (!item || typeof item !== "object") return null;
       const r = item as Record<string, unknown>;
       // Legacy facebook refs may still exist in ads_discovered_domains; keep them readable.
-      const platform = r.platform === "facebook"
-        ? "facebook"
-        : r.platform === "google"
-        ? "google"
-        : null;
+      const platform = parseAdsSourcePlatform(r.platform);
       const accountId = String(r.accountId || "").trim();
       if (!platform || !accountId) return null;
       return {
@@ -91,6 +88,13 @@ async function runLinkPass(supabase: ReturnType<typeof createClient>) {
     pmax_campaigns_with_links: 0,
     link_errors: [] as string[],
   };
+  let ga4Summary = {
+    websites_linked: 0,
+    properties_listed: 0,
+    domains_discovered: 0,
+    domains_unmatched: 0,
+    link_errors: [] as string[],
+  };
 
   try {
     const accessToken = await getAccessToken();
@@ -116,6 +120,13 @@ async function runLinkPass(supabase: ReturnType<typeof createClient>) {
     linkErrors.push(`google: ${msg.slice(0, 220)}`);
   }
 
+  try {
+    ga4Summary = await linkGa4PropertyWebsites(supabase, nowIso);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    linkErrors.push(`ga4: ${msg.slice(0, 220)}`);
+  }
+
   const unmatched = await loadUnmatched(supabase);
   return {
     google: {
@@ -127,10 +138,18 @@ async function runLinkPass(supabase: ReturnType<typeof createClient>) {
       pmaxCampaignsWithLinks: googleSummary.pmax_campaigns_with_links,
       linkErrors: googleSummary.link_errors,
     },
+    ga4: {
+      websitesLinked: ga4Summary.websites_linked,
+      propertiesListed: ga4Summary.properties_listed,
+      domainsDiscovered: ga4Summary.domains_discovered,
+      domainsUnmatched: ga4Summary.domains_unmatched,
+      linkErrors: ga4Summary.link_errors,
+    },
     unmatched,
     linkErrors: [
       ...linkErrors,
       ...googleSummary.link_errors.slice(0, 10),
+      ...ga4Summary.link_errors.slice(0, 10),
     ],
   };
 }
