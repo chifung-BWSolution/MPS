@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""One-time helper: obtain a Google OAuth refresh token for GA4 (readonly).
+"""Optional local helper. Preferred path is OAuth Playground — see docs/ga4-setup.md.
 
-Usage:
-  export GOOGLE_GA4_CLIENT_ID='....apps.googleusercontent.com'
-  export GOOGLE_GA4_CLIENT_SECRET='....'
+Reuse the live Google Ads OAuth client (not GSC):
+
+  export GOOGLE_ADS_CLIENT_ID='....apps.googleusercontent.com'
+  export GOOGLE_ADS_CLIENT_SECRET='....'
   python3 scripts/get-ga4-refresh-token.py
 
-Requires: pip install requests
-Uses a Desktop OAuth client + loopback redirect on http://127.0.0.1:8766/
-Sign in as the Google account that can see every GA4 property
-(e.g. chifung.login@gmail.com).
+Then store the printed value as GOOGLE_GA4_REFRESH_TOKEN.
+Playground is easier if the Ads client can add
+https://developers.google.com/oauthplayground as a redirect URI.
 """
 
 from __future__ import annotations
@@ -27,17 +27,23 @@ except ImportError:
     print("Missing dependency: pip install requests", file=sys.stderr)
     sys.exit(1)
 
-CLIENT_ID = os.environ.get("GOOGLE_GA4_CLIENT_ID", "").strip() or os.environ.get(
-    "GOOGLE_GSC_CLIENT_ID", ""
-).strip()
-CLIENT_SECRET = os.environ.get("GOOGLE_GA4_CLIENT_SECRET", "").strip() or os.environ.get(
-    "GOOGLE_GSC_CLIENT_SECRET", ""
-).strip()
+CLIENT_ID = (
+    os.environ.get("GOOGLE_GA4_CLIENT_ID", "").strip()
+    or os.environ.get("GOOGLE_ADS_CLIENT_ID", "").strip()
+)
+CLIENT_SECRET = (
+    os.environ.get("GOOGLE_GA4_CLIENT_SECRET", "").strip()
+    or os.environ.get("GOOGLE_ADS_CLIENT_SECRET", "").strip()
+)
 REDIRECT_URI = "http://127.0.0.1:8766/"
 SCOPE = "https://www.googleapis.com/auth/analytics.readonly"
 
 if not CLIENT_ID or not CLIENT_SECRET:
-    print("Set GOOGLE_GA4_CLIENT_ID and GOOGLE_GA4_CLIENT_SECRET first.", file=sys.stderr)
+    print(
+        "Set GOOGLE_ADS_CLIENT_ID and GOOGLE_ADS_CLIENT_SECRET "
+        "(the live Google Ads OAuth client), or GOOGLE_GA4_* overrides.",
+        file=sys.stderr,
+    )
     sys.exit(1)
 
 auth_code: dict[str, str] = {}
@@ -65,6 +71,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    print(
+        "Preferred: https://developers.google.com/oauthplayground/ "
+        "with the Google Ads OAuth client (docs/ga4-setup.md).\n"
+        "This script is a local fallback for Desktop/loopback clients.\n"
+    )
     server = http.server.HTTPServer(("127.0.0.1", 8766), Handler)
     thread = threading.Thread(target=server.handle_request, daemon=True)
     thread.start()
@@ -118,7 +129,7 @@ def main() -> None:
 
     print("\n=== SUCCESS — store this as Supabase secret GOOGLE_GA4_REFRESH_TOKEN ===\n")
     print(refresh)
-    print("\nAlso set GOOGLE_GA4_CLIENT_ID and GOOGLE_GA4_CLIENT_SECRET on Edge Functions.\n")
+    print("\nClient ID/Secret stay on the Google Ads OAuth client unless you overrode GOOGLE_GA4_*.\n")
 
 
 if __name__ == "__main__":

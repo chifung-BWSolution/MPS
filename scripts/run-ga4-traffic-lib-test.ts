@@ -6,8 +6,11 @@ import {
   formatDurationSeconds,
   ga4DateToIso,
   matchWebsiteForGa4Property,
+  nextRotatedRefreshToken,
   normalizeGa4PropertyId,
   previousPeriod,
+  resolveGa4OAuthClient,
+  resolveGa4RefreshToken,
   validateLiveGa4Range,
 } from '../src/lib/ga4Traffic';
 
@@ -62,5 +65,26 @@ const rangeOk = validateLiveGa4Range('2026-07-01', '2026-08-01');
 assert.equal(rangeOk.ok, true);
 const rangeLong = validateLiveGa4Range('2026-01-01', '2026-08-01');
 assert.equal(rangeLong.ok, false);
+
+const adsClient = resolveGa4OAuthClient({
+  GOOGLE_ADS_CLIENT_ID: 'ads-client',
+  GOOGLE_ADS_CLIENT_SECRET: 'ads-secret',
+});
+assert.equal(adsClient.clientId, 'ads-client');
+assert.equal(adsClient.clientSecret, 'ads-secret');
+
+const overrideClient = resolveGa4OAuthClient({
+  GOOGLE_GA4_CLIENT_ID: 'ga4-web',
+  GOOGLE_GA4_CLIENT_SECRET: 'ga4-secret',
+  GOOGLE_ADS_CLIENT_ID: 'ads-client',
+  GOOGLE_ADS_CLIENT_SECRET: 'ads-secret',
+});
+assert.equal(overrideClient.clientId, 'ga4-web');
+
+assert.equal(resolveGa4RefreshToken('stored-rotated', 'seed-from-secret'), 'stored-rotated');
+assert.equal(resolveGa4RefreshToken(null, 'seed-from-secret'), 'seed-from-secret');
+assert.equal(nextRotatedRefreshToken('abc', 'abc'), null);
+assert.equal(nextRotatedRefreshToken('abc', 'xyz'), 'xyz');
+assert.equal(nextRotatedRefreshToken('abc', ''), null);
 
 console.log('All GA4 traffic helper checks passed.');

@@ -35,4 +35,4 @@
 | 細項 | Edge Function `supabase-functions-ga4-breakdowns`（即時 Data API） |
 | 同步 | Edge Function `sync-ga4` |
 
-設定步驟見 [docs/ga4-setup.md](../ga4-setup.md)。
+設定步驟見 [docs/ga4-setup.md](../ga4-setup.md)：重用 **Google Ads** OAuth client，用 [OAuth Playground](https://developers.google.com/oauthplayground/) 取得 Analytics readonly refresh token。旋轉後的 token 存在 `google_oauth_tokens`。

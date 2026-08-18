@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   corsHeaders,
   fetchGa4Breakdowns,
@@ -8,6 +9,12 @@ import {
   normalizeGa4PropertyId,
   validateLiveGa4Range,
 } from "../_shared/google-ga4.ts";
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
+const SUPABASE_SERVICE_ROLE_KEY =
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
+  Deno.env.get("SUPABASE_SERVICE_KEY") ||
+  "";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -40,7 +47,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    const accessToken = await getGa4AccessToken();
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const accessToken = await getGa4AccessToken(supabase);
     const result = await fetchGa4Breakdowns(accessToken, propertyId, dateFrom, dateTo);
 
     return jsonResponse({

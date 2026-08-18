@@ -72,7 +72,7 @@ export function WebsiteTrafficTab({ site }: { site: WebsiteProfileFull }) {
           <BarChart3 size={32} className="text-muted-foreground mx-auto mb-3" />
           <p className="text-[14px] font-medium text-muted-foreground">尚未對應 GA4 property</p>
           <p className="text-[12px] text-muted-foreground mt-1">
-            請先完成 docs/ga4-setup.md，再到「網站流量」按同步。對不上時可在網站資料填 `ga4_property_id`。
+            請用 Google Ads 的 OAuth client 在 OAuth Playground 取得 refresh token（docs/ga4-setup.md），再到「網站流量」按同步。對不上時可在網站資料填 `ga4_property_id`。
           </p>
         </div>
       ) : (

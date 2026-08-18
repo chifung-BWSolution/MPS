@@ -18,6 +18,42 @@ export type Ga4PropertyMatch = {
   matchedDomain: string;
 };
 
+export type Ga4OAuthEnv = {
+  GOOGLE_GA4_CLIENT_ID?: string;
+  GOOGLE_GA4_CLIENT_SECRET?: string;
+  GOOGLE_GA4_REFRESH_TOKEN?: string;
+  GOOGLE_ADS_CLIENT_ID?: string;
+  GOOGLE_ADS_CLIENT_SECRET?: string;
+};
+
+export function resolveGa4OAuthClient(env: Ga4OAuthEnv): {
+  clientId: string;
+  clientSecret: string;
+} {
+  return {
+    clientId: String(env.GOOGLE_GA4_CLIENT_ID || env.GOOGLE_ADS_CLIENT_ID || '').trim(),
+    clientSecret: String(env.GOOGLE_GA4_CLIENT_SECRET || env.GOOGLE_ADS_CLIENT_SECRET || '').trim(),
+  };
+}
+
+/** Stored (rotated) token wins over the seed secret from Google Ads / Playground. */
+export function resolveGa4RefreshToken(
+  storedToken: string | null | undefined,
+  envToken: string | null | undefined,
+): string {
+  return String(storedToken || envToken || '').trim();
+}
+
+/** Google may return a new refresh token; persist it when it changes. */
+export function nextRotatedRefreshToken(
+  current: string,
+  incoming: string | null | undefined,
+): string | null {
+  const next = String(incoming || '').trim();
+  if (!next || next === current) return null;
+  return next;
+}
+
 export function normalizeGa4PropertyId(raw: string | null | undefined): string {
   const s = String(raw || '').trim();
   const stripped = s.replace(/^properties\//i, '');

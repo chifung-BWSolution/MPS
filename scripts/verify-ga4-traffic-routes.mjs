@@ -21,11 +21,15 @@ const checks = [
     ok: websiteSrc.includes("id: 'traffic', label: '網站流量'") && websiteSrc.includes('<WebsiteTrafficTab'),
   },
   {
-    name: 'setup doc mentions chifung.login@gmail.com and secrets',
+    name: 'setup doc uses Google Ads OAuth + Playground, not GSC',
     ok:
       setupSrc.includes('chifung.login@gmail.com') &&
+      setupSrc.includes('GOOGLE_ADS_CLIENT_ID') &&
       setupSrc.includes('GOOGLE_GA4_REFRESH_TOKEN') &&
-      setupSrc.includes('Google Analytics Data API'),
+      setupSrc.includes('developers.google.com/oauthplayground') &&
+      setupSrc.includes('google_oauth_tokens') &&
+      !setupSrc.includes('GOOGLE_GSC') &&
+      !setupSrc.includes('Search Console'),
   },
 ];
 

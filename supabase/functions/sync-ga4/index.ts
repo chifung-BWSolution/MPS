@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
     const startStr = toIsoDate(start);
     const endStr = toIsoDate(end);
 
-    const accessToken = await getGa4AccessToken();
+    const accessToken = await getGa4AccessToken(supabase);
     const properties = await listGa4Properties(accessToken);
 
     const { data: websiteRows, error: wsErr } = await supabase

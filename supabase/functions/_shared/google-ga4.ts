@@ -60,19 +60,109 @@ export function validateLiveGa4Range(
   return { ok: true };
 }
 
-export async function getGa4AccessToken(): Promise<string> {
-  const clientId =
-    Deno.env.get("GOOGLE_GA4_CLIENT_ID") ||
-    Deno.env.get("GOOGLE_GSC_CLIENT_ID") ||
-    "";
-  const clientSecret =
-    Deno.env.get("GOOGLE_GA4_CLIENT_SECRET") ||
-    Deno.env.get("GOOGLE_GSC_CLIENT_SECRET") ||
-    "";
-  const refreshToken = Deno.env.get("GOOGLE_GA4_REFRESH_TOKEN") || "";
+type Ga4TokenStore = {
+  from: (table: string) => {
+    select: (cols: string) => {
+      eq: (
+        col: string,
+        val: string,
+      ) => {
+        maybeSingle: () => PromiseLike<{
+          data: { refresh_token?: string } | null;
+          error: { message: string } | null;
+        }>;
+      };
+    };
+    upsert: (
+      row: Record<string, unknown>,
+      opts?: { onConflict?: string },
+    ) => PromiseLike<{ error: { message: string } | null }>;
+  };
+};
+
+function resolveGa4OAuthClient(): { clientId: string; clientSecret: string } {
+  return {
+    clientId: (
+      Deno.env.get("GOOGLE_GA4_CLIENT_ID") ||
+      Deno.env.get("GOOGLE_ADS_CLIENT_ID") ||
+      ""
+    ).trim(),
+    clientSecret: (
+      Deno.env.get("GOOGLE_GA4_CLIENT_SECRET") ||
+      Deno.env.get("GOOGLE_ADS_CLIENT_SECRET") ||
+      ""
+    ).trim(),
+  };
+}
+
+function nextRotatedRefreshToken(
+  current: string,
+  incoming: string | null | undefined,
+): string | null {
+  const next = String(incoming || "").trim();
+  if (!next || next === current) return null;
+  return next;
+}
+
+async function loadStoredGa4RefreshToken(
+  supabase?: Ga4TokenStore,
+): Promise<string> {
+  if (!supabase) return "";
+  const { data, error } = await supabase
+    .from("google_oauth_tokens")
+    .select("refresh_token")
+    .eq("provider", "ga4")
+    .maybeSingle();
+  if (error) {
+    console.warn("[ga4-oauth] load stored refresh token:", error.message);
+    return "";
+  }
+  return String(data?.refresh_token || "").trim();
+}
+
+async function persistGa4RefreshToken(
+  supabase: Ga4TokenStore | undefined,
+  refreshToken: string,
+  rotated: boolean,
+): Promise<void> {
+  if (!supabase || !refreshToken) return;
+  const nowIso = new Date().toISOString();
+  const row: Record<string, unknown> = {
+    provider: "ga4",
+    refresh_token: refreshToken,
+    last_used_at: nowIso,
+    updated_at: nowIso,
+  };
+  if (rotated) row.last_rotated_at = nowIso;
+  const { data: existing } = await supabase
+    .from("google_oauth_tokens")
+    .select("refresh_token")
+    .eq("provider", "ga4")
+    .maybeSingle();
+  if (!existing && !rotated) {
+    row.last_rotated_at = nowIso;
+  }
+  const { error } = await supabase.from("google_oauth_tokens").upsert(row, {
+    onConflict: "provider",
+  });
+  if (error) {
+    console.warn("[ga4-oauth] persist refresh token:", error.message);
+  }
+}
+
+/**
+ * Exchange the stored / seed refresh token for an access token.
+ * Reuses the Google Ads OAuth client by default.
+ * If Google returns a new refresh token, persist it so the next call uses the rotated value.
+ */
+export async function getGa4AccessToken(supabase?: Ga4TokenStore): Promise<string> {
+  const { clientId, clientSecret } = resolveGa4OAuthClient();
+  const storedToken = await loadStoredGa4RefreshToken(supabase);
+  const envToken = (Deno.env.get("GOOGLE_GA4_REFRESH_TOKEN") || "").trim();
+  const refreshToken = storedToken || envToken;
   if (!clientId || !clientSecret || !refreshToken) {
     throw new Error(
-      "Missing GOOGLE_GA4_CLIENT_ID / GOOGLE_GA4_CLIENT_SECRET / GOOGLE_GA4_REFRESH_TOKEN",
+      "Missing Google Ads / GA4 OAuth client (GOOGLE_ADS_CLIENT_ID + GOOGLE_ADS_CLIENT_SECRET) or GOOGLE_GA4_REFRESH_TOKEN",
     );
   }
   const body = new URLSearchParams({
@@ -89,8 +179,18 @@ export async function getGa4AccessToken(): Promise<string> {
   if (!res.ok) {
     throw new Error(`GA4 OAuth refresh failed (${res.status}): ${await res.text()}`);
   }
-  const json = await res.json();
-  return json.access_token as string;
+  const json = await res.json() as {
+    access_token?: string;
+    refresh_token?: string;
+  };
+  if (!json.access_token) {
+    throw new Error("GA4 OAuth refresh returned no access_token");
+  }
+
+  const rotated = nextRotatedRefreshToken(refreshToken, json.refresh_token);
+  await persistGa4RefreshToken(supabase, rotated || refreshToken, !!rotated);
+
+  return json.access_token;
 }
 
 export type Ga4AccountProperty = {

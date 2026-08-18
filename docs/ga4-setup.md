@@ -1,124 +1,150 @@
 # Google Analytics 4 (GA4) 連接指南
 
-完成下列步驟後，MPS 才能把各網站的 GA4 流量同步到「網站+系統 → 網站流量」，並開啟與 Google Ads Campaign 詳情相同風格的報表頁。
+完成下列步驟後，MPS 才能把各網站的 GA4 流量同步到「網站+系統 → 網站流量」。
 
-> **你需要做的事（人工）在下方 checklist。** 程式碼、warehouse、Edge Function 由開發端負責；沒有 refresh token，同步會失敗。
+> **你需要做的事（人工）在下方 checklist。** 程式碼、warehouse、Edge Function 已在 `main`。沒有 `GOOGLE_GA4_REFRESH_TOKEN`，同步會失敗。
 
-建議用 **`chifung.login@gmail.com`**（已有全部 GA4 網站權限）來授權。可重用現有 **Google Ads / GSC** 同一個 GCP 專案與 OAuth client，只要另外啟用 Analytics API，並用 **含 Analytics readonly scope** 的方式重新取得一組 refresh token。
+**重用現有 Google Ads API 的 OAuth 連線**（同一個 GCP 專案、同一個 OAuth Client ID / Secret）。Ads 現有的 `GOOGLE_ADS_REFRESH_TOKEN` **不能直接拿來打 GA4**（scope 是 Ads，不是 Analytics）。請用同一個 Client，另外用 [OAuth Playground](https://developers.google.com/oauthplayground/) 簽出一組 **Analytics readonly** refresh token。
+
+建議用 **`chifung.login@gmail.com`**（已有全部 GA4 網站權限）來授權。
 
 ---
 
 ## 你需要準備
 
-- Google 帳號：`chifung.login@gmail.com`（或同等、對所有客戶 GA4 property 有「檢視者」以上權限的帳號）
-- 能登入 [Google Cloud Console](https://console.cloud.google.com/) 的權限
+- Google 帳號：`chifung.login@gmail.com`（對所有客戶 GA4 property 至少 Viewer）
+- 現有 **Google Ads** OAuth Client ID / Secret（Supabase secrets：`GOOGLE_ADS_CLIENT_ID`、`GOOGLE_ADS_CLIENT_SECRET`）
+- 能改該 OAuth client 的 **Authorized redirect URIs**（Playground 需要）
 - 能設定 Supabase Edge Function secrets 的權限（專案 `kwcevjcmdjadhrygjyfp`）
 
 ---
 
 ## Checklist
 
-### 1. 啟用 Analytics API
+### 1. 在 Ads 同一個 GCP 專案啟用 Analytics API
 
-- [ ] 開啟 [Google Cloud Console](https://console.cloud.google.com/) → 選擇 Ads / GSC 用的同一個專案
-- [ ] **APIs & Services → Library** → 啟用這兩個：
-  - **Google Analytics Data API**（報表數字）
-  - **Google Analytics Admin API**（列出帳號／property／data stream）
+- [ ] 開啟 [Google Cloud Console](https://console.cloud.google.com/) → 選擇 **Google Ads API 正在用的專案**
+- [ ] **APIs & Services → Library** → 啟用：
+  - **Google Analytics Data API**
+  - **Google Analytics Admin API**
 
-### 2. OAuth Client
+不必新建 OAuth client。GA4 預設讀 `GOOGLE_ADS_CLIENT_ID` / `GOOGLE_ADS_CLIENT_SECRET`。
 
-- [ ] 重用 Ads／GSC 的 **Desktop** OAuth client（記下 `Client ID`、`Client Secret`）
-- [ ] 或 **APIs & Services → Credentials → Create credentials → OAuth client ID** → Application type：**Desktop app**
-- [ ] 若 OAuth consent screen 仍是 Testing：把 `chifung.login@gmail.com` 加進 **Test users**
+### 2. 讓 OAuth Playground 能用這個 Ads client
+
+Playground 的 redirect 必須加進 **同一個** Ads OAuth client：
+
+- [ ] **APIs & Services → Credentials** → 打開 Ads 用的 OAuth client
+- [ ] **Authorized redirect URIs** 加上：
+
+`https://developers.google.com/oauthplayground`
+
+- [ ] 儲存。若 Ads client 是 Desktop 型、不能加 redirect：在**同一專案**建一個 **Web** client，把上面的 URI 加上，Playground 用這組 ID/Secret；Edge Function 則把 `GOOGLE_GA4_CLIENT_ID` / `GOOGLE_GA4_CLIENT_SECRET` 設成這組 Web client（仍屬 Ads 同一個 GCP 專案）
+- [ ] Consent screen 若仍是 Testing：把 `chifung.login@gmail.com` 加進 **Test users**
 
 ### 3. 確認 GA4 權限
 
-對每個要出報表的網站：
+- [ ] [Google Analytics](https://analytics.google.com/) → Admin → **Property access management**
+- [ ] `chifung.login@gmail.com` 至少是 **Viewer**
+- [ ] 沒有授權的 property，Admin API 看不到，同步會跳過
 
-- [ ] 開啟 [Google Analytics](https://analytics.google.com/)
-- [ ] Admin → **Property access management**
-- [ ] 確認 `chifung.login@gmail.com` 至少是 **Viewer**
-- [ ] 沒有加進 property 的網站，Admin API 的 `accountSummaries` 看不到，同步會跳過
+### 4. 用 OAuth Playground 取得 refresh token
 
-### 4. 取得 Refresh Token（Analytics readonly）
+1. 開啟 [OAuth 2.0 Playground](https://developers.google.com/oauthplayground/)
+2. 右上角齒輪 **OAuth 2.0 configuration**：
+   - 勾選 **Use your own OAuth credentials**
+   - **OAuth Client ID** / **OAuth Client Secret** = 步驟 2 的 Ads（或同專案 Web）client
+3. 左欄 **Step 1 Select & authorize APIs**：
+   - 不要用 Ads scope
+   - 在輸入框貼上並勾選：
 
-在本機執行（需已安裝 Python 3 + `requests`）：
+   `https://www.googleapis.com/auth/analytics.readonly`
 
-```bash
-# 從 repo 根目錄；可重用 GSC 的 client
-export GOOGLE_GA4_CLIENT_ID='你的-client-id.apps.googleusercontent.com'
-export GOOGLE_GA4_CLIENT_SECRET='你的-client-secret'
-python3 scripts/get-ga4-refresh-token.py
-```
+4. **Authorize APIs** → 登入 **`chifung.login@gmail.com`** → 同意檢視 Analytics 資料
+5. **Step 2** 按 **Exchange authorization code for tokens**
+6. 複製 **Refresh token**（不要 commit）
 
-- [ ] 瀏覽器登入 **`chifung.login@gmail.com`**（不要用個人帳號）
-- [ ] 同意 **「查看您的 Google Analytics 資料」**（readonly）
-- [ ] 把終端機印出的 **refresh_token** 存好（不要 commit 進 git）
+若沒有 Refresh token：齒輪裡確認已用**自己的** credentials；或到 [Google 帳號權限](https://myaccount.google.com/permissions) 撤銷該 app 後重做 Step 1（需再同意一次）。
 
-Scope：
+### 5. 寫入 Supabase secret
 
-`https://www.googleapis.com/auth/analytics.readonly`
-
-若沒有 refresh_token：到 [Google 帳號權限](https://myaccount.google.com/permissions) 撤銷該 OAuth app 後重跑（必須 `prompt=consent`）。
-
-### 5. 設定 Supabase Edge secrets
+只需新寫 **GA4 refresh token**。Client ID / Secret 沿用 Ads（除非步驟 2 用了另建的 Web client）。
 
 ```bash
 npx supabase secrets set --project-ref kwcevjcmdjadhrygjyfp \
-  GOOGLE_GA4_CLIENT_ID='....apps.googleusercontent.com' \
-  GOOGLE_GA4_CLIENT_SECRET='....' \
-  GOOGLE_GA4_REFRESH_TOKEN='....'
+  GOOGLE_GA4_REFRESH_TOKEN='從 Playground 複製的 refresh token'
 ```
 
-或在 Dashboard → **Edge Functions → Secrets** 寫入同一組。
+若 Playground 用的是另建 Web client：
+
+```bash
+npx supabase secrets set --project-ref kwcevjcmdjadhrygjyfp \
+  GOOGLE_GA4_CLIENT_ID='web-client-id.apps.googleusercontent.com' \
+  GOOGLE_GA4_CLIENT_SECRET='web-client-secret' \
+  GOOGLE_GA4_REFRESH_TOKEN='從 Playground 複製的 refresh token'
+```
 
 | Secret | 值 |
 |--------|-----|
-| `GOOGLE_GA4_CLIENT_ID` | OAuth Client ID（可與 GSC 相同） |
-| `GOOGLE_GA4_CLIENT_SECRET` | OAuth Client Secret |
-| `GOOGLE_GA4_REFRESH_TOKEN` | 步驟 4 取得的 refresh token |
+| `GOOGLE_ADS_CLIENT_ID` | **已有**，GA4 預設重用 |
+| `GOOGLE_ADS_CLIENT_SECRET` | **已有**，GA4 預設重用 |
+| `GOOGLE_GA4_REFRESH_TOKEN` | 步驟 4 的 Analytics readonly refresh token |
+| `GOOGLE_GA4_CLIENT_ID` | 可選；只在不重用 Ads client 時設 |
+| `GOOGLE_GA4_CLIENT_SECRET` | 可選；只在不重用 Ads client 時設 |
 
-- [ ] 三個 secret 都已寫入（不要放進 `.env` commit）
-- [ ] 改 secrets **不必**重佈署 function；改程式碼才需 deploy
+- [ ] `GOOGLE_GA4_REFRESH_TOKEN` 已寫入（不要放進 `.env` commit）
+- [ ] 改 secrets **不必**重佈署 function
+
+第一次成功同步後，token 會寫進 `google_oauth_tokens`（`provider = ga4`）。之後 Google 若旋轉 refresh token，Edge Function 會自動覆寫這列，**不必再跑 Playground**。
 
 ### 6. 煙霧測試
 
-- [ ] 在 MPS **網站+系統 → 網站流量** 按 **同步 GA4**
-- [ ] 確認列表出現你有權限的 properties
-- [ ] 已對到 `webandsystem_list` 的網站可以點進詳情（KPI／趨勢圖／渠道 donut／星期／每日表）
-- [ ] 詳情頁細項（頁面／裝置／國家／來源）來自即時 Data API
+- [ ] MPS **網站+系統 → 網站流量** → **同步 GA4**
+- [ ] 列表出現你有權限的 properties
+- [ ] 已對到 `webandsystem_list` 的網站可開詳情
+- [ ] 詳情細項（頁面／裝置／國家／來源）來自即時 Data API
 
-### 7. 網站對應（property mapping）
+### 7. 網站對應
 
-系統會依序對應：
-
-1. `webandsystem_list.ga4_property_id`（完整數字 ID，例如 `123456789`）
-2. GA4 web stream 的 default URI／網域 ↔ `domain_url`
+1. `webandsystem_list.ga4_property_id`（例如 `123456789`）
+2. GA4 web stream default URI／網域 ↔ `domain_url`
 3. property 顯示名稱與網站名稱／網域
 
-- [ ] 對不上的網站：在 `webandsystem_list` 填 `ga4_property_id`
-- [ ] 一個網站只應對一個 GA4 property（多 stream 仍屬同一 property）
+對不上就填 `ga4_property_id`。一個網站只對一個 property。
 
 ### 8. 第一次同步預期
 
-- GA4 標準報表通常有 **24–48 小時**延遲；增量預設拉最近 **90 日**、結束日為昨天
-- Users / Sessions / Pageviews / Engagement / Bounce / Duration / Conversions 會寫入 warehouse
-- 渠道（`sessionDefaultChannelGroup`）一併入倉，供 donut
-- 頁面／裝置／國家／來源**不落倉庫**，詳情頁即時拉取（上限 92 日）
+- GA4 通常延遲 **24–48 小時**；增量預設最近 **90 日**、結束日為昨天
+- Users / Sessions / Pageviews / Engagement / Bounce / Duration / Conversions 入倉
+- 渠道入倉供 donut
+- 頁面／裝置／國家／來源即時拉取（上限 92 日）
 
 ---
 
-## 開發端會做的事（你不必做）
+## Refresh token 如何維持有效
 
-- DB migration（`ga4_*`、`webandsystem_list.ga4_property_id`）
-- Edge Function：`sync-ga4`、`supabase-functions-ga4-breakdowns`
-- 前端 `#website/traffic` 列表 + 詳情（對齊 Google Ads Campaign 詳情版面）
+| 情況 | 怎麼做 |
+|------|--------|
+| 第一次 | Playground 換 token → 設 `GOOGLE_GA4_REFRESH_TOKEN` |
+| 日常同步 / 詳情細項 | Function 用 refresh token 換 access token（與 Google Ads 同一套 OAuth token endpoint） |
+| Google 回傳新的 `refresh_token` | 自動寫入 `google_oauth_tokens`，下次優先用這組 |
+| Secret 過期／撤銷／Playground token 失效 | 重做步驟 4–5，再設一次 `GOOGLE_GA4_REFRESH_TOKEN` |
 
-完成 Checklist **1–5** 後跟開發說一聲，即可跑第一次正式同步。
+Consent screen 若一直停在 **Testing**，Google 可能在約 7 天後讓 refresh token 失效。長期使用請把 Ads 那個 GCP 專案的 consent screen 改成 **In production**。
+
+---
+
+## 開發端已做（你不必做）
+
+- DB：`ga4_*`、`webandsystem_list.ga4_property_id`、`google_oauth_tokens`
+- Edge Function：`sync-ga4`、`supabase-functions-ga4-breakdowns`（會旋轉並保存 refresh token）
+- 前端 `#website/traffic`
+
+完成 Checklist **1–5** 後在「網站流量」按同步即可。
 
 ## Daily cron（可選）
 
-Production 可仿 Google Ads，每天增量一次：
+仿 Google Ads 每日增量：
 
 | | |
 |--|--|
@@ -126,4 +152,4 @@ Production 可仿 Google Ads，每天增量一次：
 | **schedule** | `30 22 * * *`（22:30 UTC；Ads 是 `0 22`） |
 | **action** | `net.http_post` → `…/functions/v1/sync-ga4` |
 
-Bearer 請從現有 Ads／GSC cron 複製，**不要把 service role key commit 進 git**。
+Bearer 從現有 **Google Ads** cron 複製，**不要把 service role key commit 進 git**。

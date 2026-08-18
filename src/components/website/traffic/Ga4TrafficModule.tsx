@@ -372,7 +372,7 @@ export function Ga4TrafficModule() {
           授權帳號 chifung.login@gmail.com · 報表由每日指標彙總 · 點擊列可開啟流量詳情
           {dataMinDate && dataMaxDate
             ? ` · 已同步資料 ${dataMinDate} ~ ${dataMaxDate}`
-            : ' · 尚無每日指標（請先完成 docs/ga4-setup.md 後按「同步 GA4」）'}
+            : ' · 尚無每日指標（請用 Google Ads OAuth + Playground 設好 token，見 docs/ga4-setup.md）'}
           {lastSync?.finishedAt
             ? ` · 最近同步 ${new Date(lastSync.finishedAt).toLocaleString()} (${lastSync.status})`
             : ''}
@@ -407,7 +407,7 @@ export function Ga4TrafficModule() {
               {!loading && filtered.length === 0 && (
                 <tr>
                   <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
-                    此日期區間尚無資料。請先完成 GA4 授權（docs/ga4-setup.md）後按「同步 GA4」。
+                    此日期區間尚無資料。請用 Google Ads OAuth + Playground 設好 token（docs/ga4-setup.md）後按「同步 GA4」。
                   </td>
                 </tr>
               )}
