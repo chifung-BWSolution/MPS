@@ -16,6 +16,7 @@ Website Profile 是系統的**內容樞紐頁**，從這裡可查看和管理與
 | `/website/:id/edm` | EDM | 電郵/短訊記錄 |
 | `/website/:id/ads` | 付費廣告 | Paid Ads |
 | `/website/:id/seo` | SEO 關鍵字 | Keywords 管理 |
+| `/website/:id/traffic` | 網站流量 | 開啟 GA4 報表（`#website/traffic`） |
 | `/website/:id/seo-upgrades` | SEO 升級 | 升級記錄 |
 | `/website/:id/plugins` | 插件/工具 | 訂閱管理 |
 | `/website/:id/links` | 外部連結 | 相關連結 |
@@ -184,6 +185,7 @@ WebsiteModule.tsx
     ├── WebsiteEdm.tsx           // EDM
     ├── WebsiteAds.tsx           // 廣告
     ├── WebsiteSeo.tsx           // SEO 關鍵字
+    ├── WebsiteTrafficTab.tsx    // 網站流量（跳轉 GA4 報表）
     ├── WebsiteSeoUpgrades.tsx   // SEO 升級
     ├── WebsitePlugins.tsx       // 插件
     ├── WebsiteLinks.tsx         // 外部連結
@@ -204,6 +206,7 @@ WebsiteModule.tsx
 | EDM | edm_campaigns WHERE website_profile_id | edm_templates |
 | 廣告 | paid_ads WHERE website_profile_id | credit_cards |
 | SEO | seo_keywords WHERE website_profile_id | articles (assigned) |
+| 流量 | ga4_properties WHERE website_profile_id | 詳情見 Website-Traffic.md |
 | 升級 | seo_upgrades WHERE website_profile_id | suppliers |
 | 插件 | plugins WHERE website_profile_id | — |
 

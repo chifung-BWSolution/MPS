@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
-import { Globe, Plus, Search, ExternalLink, FileText, Video, Share2, Mail, TrendingUp, Puzzle, Link2, Calendar, X, Check, Trash2, LayoutGrid, List, ArrowLeft, Megaphone, Star, Sparkles, ChevronDown, Pencil, Monitor, Server, MapPin, RefreshCw, Building2, Users } from 'lucide-react';
+import { Globe, Plus, Search, ExternalLink, FileText, Video, Share2, Mail, TrendingUp, Puzzle, Link2, Calendar, X, Check, Trash2, LayoutGrid, List, ArrowLeft, Megaphone, Star, Sparkles, ChevronDown, Pencil, Monitor, Server, MapPin, RefreshCw, Building2, Users, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WebsiteProfileFull, Article, WebsiteLevel, ProfileType, SystemType, ProjectCategory } from '@/types/app';
 import {
@@ -38,6 +38,8 @@ import {
   WebsiteGoogleBusinessTab,
   WebsiteCalendarTab,
 } from './WebsiteDetailTabs';
+import { Ga4TrafficModule } from './traffic/Ga4TrafficModule';
+import { WebsiteTrafficTab } from './traffic/WebsiteTrafficTab';
 
 const statusConfig = {
   development: { label: '開發中', color: 'text-blue-700', bgColor: 'bg-blue-50' },
@@ -617,6 +619,7 @@ function WebsiteDetail({
     { id: 'social', label: '社交帖文', icon: Share2 },
     { id: 'ads', label: '付費廣告', icon: Megaphone },
     { id: 'seo', label: 'SEO 關鍵字', icon: TrendingUp },
+    { id: 'traffic', label: '網站流量', icon: BarChart3 },
     { id: 'edm', label: 'EDM', icon: Mail },
     { id: 'plugins', label: '插件/工具', icon: Puzzle },
     { id: 'backlink', label: '反向連結', icon: Link2 },
@@ -847,6 +850,7 @@ function WebsiteDetail({
         {activeTab === 'social' && <WebsiteSocialTab site={site} />}
         {activeTab === 'ads' && <WebsiteAdsTab site={site} />}
         {activeTab === 'seo' && <WebsiteSeoTab site={site} />}
+        {activeTab === 'traffic' && <WebsiteTrafficTab site={site} />}
         {activeTab === 'edm' && <WebsiteEdmTab site={site} />}
         {activeTab === 'plugins' && <WebsitePluginsTab site={site} />}
         {activeTab === 'backlink' && <WebsiteBacklinkTab site={site} />}
@@ -3157,6 +3161,10 @@ export function WebsiteModule({ subModule }: { subModule?: string }) {
     setSelectedSite(null);
   };
 
+  if (subModule === 'traffic') {
+    return <Ga4TrafficModule />;
+  }
+
   // Article detail view (from articles-list)
   if (selectedArticle) {
     return <ArticleDetailView article={selectedArticle} onBack={() => setSelectedArticle(null)} />;
@@ -3182,6 +3190,8 @@ export function WebsiteModule({ subModule }: { subModule?: string }) {
       return <GlobalArticleList onSelectArticle={setSelectedArticle} />;
     case 'pending':
       return <PendingContent />;
+    case 'traffic':
+      return <Ga4TrafficModule />;
     case 'list':
       return <WebsiteList onSelectSite={setSelectedSite} />;
     default:

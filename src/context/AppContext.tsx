@@ -100,6 +100,7 @@ export const mainMenuItems: MainMenuItem[] = [
     label: '網站+系統',
     subMenus: [
       { id: 'list', label: '網站列表' },
+      { id: 'traffic', label: '網站流量' },
       { id: 'pending', label: '待跟進項目' },
       { id: 'articles-list', label: '文章列表' },
     ],

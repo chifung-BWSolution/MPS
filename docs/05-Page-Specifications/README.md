@@ -12,6 +12,7 @@
 | 2 | [Day-Report.md](./Day-Report.md) | 工作匯報 | `/day-report` |
 | 3 | [Project.md](./Project.md) | 專案策劃 | `/project` |
 | 4 | [Website-Detail.md](./Website-Detail.md) | 網站管理（樞紐頁） | `/website/:id` |
+| 4b | [Website-Traffic.md](./Website-Traffic.md) | 網站流量（GA4） | `#website/traffic` |
 | 5 | [Marketing.md](./Marketing.md) | 行銷管理 | `/marketing` |
 | 6 | [Video.md](./Video.md) | 影片製作 | `/video` |
 | 7 | [Quotation-Invoice.md](./Quotation-Invoice.md) | 報價與發票 | `/quotation` |
