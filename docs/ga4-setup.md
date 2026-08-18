@@ -140,16 +140,4 @@ Consent screen 若一直停在 **Testing**，Google 可能在約 7 天後讓 ref
 - Edge Function：`sync-ga4`、`supabase-functions-ga4-breakdowns`（會旋轉並保存 refresh token）
 - 前端 `#website/traffic`
 
-完成 Checklist **1–5** 後在「網站流量」按同步即可。
-
-## Daily cron（可選）
-
-仿 Google Ads 每日增量：
-
-| | |
-|--|--|
-| **jobname** | `ga4-incremental-daily` |
-| **schedule** | `30 22 * * *`（22:30 UTC；Ads 是 `0 22`） |
-| **action** | `net.http_post` → `…/functions/v1/sync-ga4` |
-
-Bearer 從現有 **Google Ads** cron 複製，**不要把 service role key commit 進 git**。
+完成 Checklist **1–5** 後在「網站流量」按同步即可。不必設每日 metrics cron：每次 `sync-ga4` / 細項 function 都會用 refresh token 換 access token（與 Google Ads 相同）。

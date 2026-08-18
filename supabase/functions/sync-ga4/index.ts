@@ -37,15 +37,23 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
+    const dryRun = Boolean(body.dryRun || body.dry_run);
+    const requestedLookback = Number(body.lookbackDays);
     const lookbackDays = Math.min(
       400,
-      Math.max(7, Number(body.lookbackDays) || DEFAULT_LOOKBACK_DAYS),
+      Math.max(
+        dryRun ? 1 : 7,
+        Number.isFinite(requestedLookback) && requestedLookback > 0
+          ? requestedLookback
+          : DEFAULT_LOOKBACK_DAYS,
+      ),
     );
 
     await supabase.from("ga4_sync_runs").insert({
       id: runId,
       status: "running",
       started_at: new Date().toISOString(),
+      meta: dryRun ? { dry_run: true } : null,
     });
 
     const now = new Date();
@@ -59,6 +67,76 @@ Deno.serve(async (req) => {
 
     const accessToken = await getGa4AccessToken(supabase);
     const properties = await listGa4Properties(accessToken);
+
+    if (dryRun) {
+      const sample = properties.slice(0, 8).map((p) => ({
+        propertyId: p.propertyId,
+        accountName: p.accountName,
+        displayName: p.displayName,
+      }));
+      let sampleReport: Record<string, unknown> | null = null;
+      if (properties[0]) {
+        try {
+          const stream = await fetchPropertyStreamMeta(
+            accessToken,
+            properties[0].propertyId,
+          );
+          const daily = await fetchDailyPropertyMetrics(
+            accessToken,
+            properties[0].propertyId,
+            startStr,
+            endStr,
+            nowIso,
+          );
+          sampleReport = {
+            propertyId: properties[0].propertyId,
+            displayName: properties[0].displayName,
+            streamUri: stream.streamUri,
+            measurementId: stream.measurementId,
+            daily_rows: daily.length,
+          };
+        } catch (err) {
+          propertyErrors.push(
+            `sample ${properties[0].propertyId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+
+      await supabase
+        .from("ga4_sync_runs")
+        .update({
+          status: propertyErrors.length && !sampleReport ? "error" : "success",
+          finished_at: new Date().toISOString(),
+          properties_synced: 0,
+          rows_upserted: 0,
+          error_message: propertyErrors.length
+            ? propertyErrors[0].slice(0, 1000)
+            : null,
+          meta: {
+            dry_run: true,
+            date_from: startStr,
+            date_to: endStr,
+            properties_listed: properties.length,
+            sample,
+            sample_report: sampleReport,
+            errors: propertyErrors.slice(0, 10),
+          },
+        })
+        .eq("id", runId);
+
+      return jsonResponse({
+        success: !propertyErrors.length || !!sampleReport,
+        dry_run: true,
+        run_id: runId,
+        duration_ms: Date.now() - startedMs,
+        properties_listed: properties.length,
+        sample,
+        sample_report: sampleReport,
+        date_from: startStr,
+        date_to: endStr,
+        errors: propertyErrors.slice(0, 10),
+      });
+    }
 
     const { data: websiteRows, error: wsErr } = await supabase
       .from("webandsystem_list")

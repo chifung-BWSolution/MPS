@@ -151,9 +151,10 @@ async function persistGa4RefreshToken(
 }
 
 /**
- * Exchange the stored / seed refresh token for an access token.
- * Reuses the Google Ads OAuth client by default.
- * If Google returns a new refresh token, persist it so the next call uses the rotated value.
+ * Same pattern as Google Ads `getAccessToken()`: exchange refresh_token → access_token
+ * on every call (https://oauth2.googleapis.com/token). Reuses the Ads OAuth client by
+ * default. Unlike Ads, if Google returns a new refresh token we persist it so the next
+ * call uses the rotated value.
  */
 export async function getGa4AccessToken(supabase?: Ga4TokenStore): Promise<string> {
   const { clientId, clientSecret } = resolveGa4OAuthClient();
