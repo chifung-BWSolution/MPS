@@ -73,6 +73,26 @@ export function toIsoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+export function monthStart(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+}
+
+export function addMonths(d: Date, n: number): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1));
+}
+
+export function monthEnd(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0));
+}
+
+export function countMonthsInclusive(start: Date, end: Date): number {
+  return (
+    (end.getUTCFullYear() - start.getUTCFullYear()) * 12 +
+    (end.getUTCMonth() - start.getUTCMonth()) +
+    1
+  );
+}
+
 export function parseIsoDate(iso: string): Date {
   const [y, m, day] = iso.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, day));

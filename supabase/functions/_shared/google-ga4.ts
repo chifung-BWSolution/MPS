@@ -21,6 +21,53 @@ export function toIsoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+export function monthStart(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+}
+
+export function addMonths(d: Date, n: number): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1));
+}
+
+export function monthEnd(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0));
+}
+
+export function countMonthsInclusive(start: Date, end: Date): number {
+  return (
+    (end.getUTCFullYear() - start.getUTCFullYear()) * 12 +
+    (end.getUTCMonth() - start.getUTCMonth()) +
+    1
+  );
+}
+
+/** Parallel workers for Admin/Data API calls. Ads uses 12; keep under GA4 quota. */
+export const GA4_PROPERTY_CONCURRENCY = 8;
+/** GA4 launched 2020-10-14; empty months upsert 0 rows. */
+export const GA4_HISTORY_START = "2020-10-01";
+/** Daily incremental lookback — same as Google Ads; covers 24–48h processing + late hits. */
+export const GA4_INCREMENTAL_LOOKBACK_DAYS = 7;
+
+export async function mapPool<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i]);
+    }
+  };
+  const n = Math.min(Math.max(1, limit), Math.max(1, items.length));
+  if (!items.length) return out;
+  await Promise.all(Array.from({ length: n }, () => worker()));
+  return out;
+}
+
 export function normalizeGa4PropertyId(raw: string | null | undefined): string {
   return String(raw || "").trim().replace(/^properties\//i, "");
 }
@@ -424,6 +471,20 @@ export async function fetchDailyChannelMetrics(
       };
     })
     .filter((row): row is Ga4ChannelDaily => !!row);
+}
+
+export async function fetchGa4PropertyMonth(
+  accessToken: string,
+  propertyId: string,
+  startDate: string,
+  endDate: string,
+  nowIso: string,
+): Promise<{ daily: Ga4DailyMetric[]; channels: Ga4ChannelDaily[] }> {
+  const [daily, channels] = await Promise.all([
+    fetchDailyPropertyMetrics(accessToken, propertyId, startDate, endDate, nowIso),
+    fetchDailyChannelMetrics(accessToken, propertyId, startDate, endDate, nowIso),
+  ]);
+  return { daily, channels };
 }
 
 function metricNum(row: ReportRow, index: number): number {

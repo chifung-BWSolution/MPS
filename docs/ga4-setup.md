@@ -99,7 +99,8 @@ npx supabase secrets set --project-ref kwcevjcmdjadhrygjyfp \
 
 ### 6. 煙霧測試
 
-- [ ] MPS **網站+系統 → 網站流量** → **同步 GA4**
+- [ ] MPS **行銷管理 → 廣告數據同步 → Google Analytics 4** → **開始完整歷史同步**（保持分頁開啟）
+- [ ] **網站+系統 → 網站流量** → **Refresh recent (7d)**
 - [ ] 列表出現你有權限的 properties
 - [ ] 已對到 `webandsystem_list` 的網站可開詳情
 - [ ] 詳情細項（頁面／裝置／國家／來源）來自即時 Data API
@@ -114,7 +115,8 @@ npx supabase secrets set --project-ref kwcevjcmdjadhrygjyfp \
 
 ### 8. 第一次同步預期
 
-- GA4 通常延遲 **24–48 小時**；增量預設最近 **90 日**、結束日為昨天
+- GA4 通常延遲 **24–48 小時**；歷史回填從 **2020-10-01** 到昨天（每月一步）
+- 日常增量（cron + 報表頁）回看最近 **7 日**（與 Google Ads 相同）
 - Users / Sessions / Pageviews / Engagement / Bounce / Duration / Conversions 入倉
 - 渠道入倉供 donut
 - 頁面／裝置／國家／來源即時拉取（上限 92 日）
@@ -136,8 +138,56 @@ Consent screen 若一直停在 **Testing**，Google 可能在約 7 天後讓 ref
 
 ## 開發端已做（你不必做）
 
-- DB：`ga4_*`、`webandsystem_list.ga4_property_id`、`google_oauth_tokens`
-- Edge Function：`sync-ga4`、`supabase-functions-ga4-breakdowns`（會旋轉並保存 refresh token）
-- 前端 `#website/traffic`
+- DB：`ga4_*`、`ga4_backfill_jobs`、`webandsystem_list.ga4_property_id`、`google_oauth_tokens`
+- Edge Function：`sync-ga4`（增量 7 日）、`supabase-functions-ga4-backfill-step`、`supabase-functions-ga4-breakdowns`
+- 前端 `#website/traffic`、`#marketing/ads-data-sync`（GA4 回填面板）
 
-完成 Checklist **1–5** 後在「網站流量」按同步即可。不必設每日 metrics cron：每次 `sync-ga4` / 細項 function 都會用 refresh token 換 access token（與 Google Ads 相同）。
+完成 Checklist **1–5** 後到「廣告數據同步」跑完整歷史回填；之後每日 cron 與「網站流量」Refresh recent (7d) 會補最新資料。
+
+## Daily cron + 回填視窗
+
+| | |
+|--|--|
+| **回填** | `#marketing/ads-data-sync` → GA4，每月一步，`2020-10-01` → 昨天 |
+| **增量** | `sync-ga4` 預設 **7 日**（結束日為昨天） |
+| **jobname** | `ga4-incremental-daily` |
+| **schedule** | `30 22 * * *`（22:30 UTC；Ads `0 22`、Facebook `15 22`） |
+| **為何 7 日** | GA4 標準報表常延遲 24–48 小時，後期 hits / 歸因仍會改寫數日。3 日是下限；7 日與 Ads 對齊、較穩。視窗加大不會增加 API 次數（每個 property 仍是一次 `runReport`）。 |
+
+Bearer 從現有 **Google Ads** cron 複製，**不要把 service role key commit 進 git**。
+
+```sql
+DO $$
+DECLARE
+  google_cmd text;
+  bearer text;
+BEGIN
+  SELECT command INTO google_cmd
+  FROM cron.job
+  WHERE jobname = 'google-ads-incremental-daily'
+  LIMIT 1;
+
+  bearer := substring(google_cmd from '''Authorization'', ''Bearer ([^'']+)''');
+  IF bearer IS NULL THEN
+    RAISE EXCEPTION 'Could not extract bearer from google-ads cron';
+  END IF;
+
+  PERFORM cron.unschedule(jobid)
+  FROM cron.job
+  WHERE jobname = 'ga4-incremental-daily';
+
+  PERFORM cron.schedule(
+    'ga4-incremental-daily',
+    '30 22 * * *',
+    format(
+      $cron$SELECT net.http_post(
+    url := 'https://kwcevjcmdjadhrygjyfp.supabase.co/functions/v1/sync-ga4',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer %s'),
+    body := '{}'::jsonb
+  ) AS request_id;$cron$,
+      bearer
+    )
+  );
+END
+$$;
+```

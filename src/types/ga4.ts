@@ -83,6 +83,31 @@ export type Ga4SyncRun = {
   errorMessage: string | null;
 };
 
+export type Ga4BackfillJob = {
+  id: string;
+  status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+  historyStartDate: string;
+  historyEndDate: string;
+  cursorMonth: string;
+  totalMonths: number;
+  completedMonths: number;
+  rowsUpserted: number;
+  accountsTargeted: number;
+  errorCount: number;
+  lastError?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  updatedAt: string;
+  meta?: {
+    last_month?: string;
+    last_month_rows?: number;
+    recent_errors?: string[];
+    property_ids?: string[];
+    properties_listed?: number;
+    websites_matched?: number;
+  };
+};
+
 export type Ga4PropertyDetail = {
   property: Ga4Property;
   series: Ga4DailyMetricPoint[];

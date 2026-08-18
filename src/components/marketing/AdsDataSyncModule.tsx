@@ -1,10 +1,12 @@
 import { useGoogleAdsBackfill } from '@/hooks/useGoogleAdsBackfill';
 import { useFacebookAdsBackfill } from '@/hooks/useFacebookAdsBackfill';
+import { useGa4Backfill } from '@/hooks/useGa4Backfill';
 import { AdsSyncPanel } from './AdsSyncPanel';
 
 export function AdsDataSyncModule() {
   const google = useGoogleAdsBackfill();
   const facebook = useFacebookAdsBackfill();
+  const ga4 = useGa4Backfill();
 
   return (
     <div className="space-y-8">
@@ -12,7 +14,7 @@ export function AdsDataSyncModule() {
         <div>
           <h1 className="text-[32px] font-bold tracking-tight">廣告數據同步</h1>
           <p className="text-[14px] text-muted-foreground mt-1">
-            觸發並監控 Google Ads 與 Facebook Ads 的完整歷史回填，以及日常增量同步狀態。
+            觸發並監控 Google Ads、Facebook Ads 與 GA4 的完整歷史回填。日常增量由每日 cron 與各報表頁「Refresh recent (7d)」處理。
           </p>
         </div>
       </div>
@@ -82,6 +84,39 @@ export function AdsDataSyncModule() {
               ? ` 目前任務涵蓋：${facebook.job.meta.businesses.join('、')}。`
               : ''}
             {' '}Campaign 品牌請至「Facebook Ads」報表頁手動設定。
+          </>
+        }
+      />
+
+      <AdsSyncPanel
+        title="Google Analytics 4"
+        accountsLabel="目標 Properties"
+        job={ga4.job}
+        loading={ga4.loading}
+        working={ga4.working}
+        error={ga4.error}
+        autoRun={ga4.autoRun}
+        start={ga4.start}
+        pause={ga4.pause}
+        resume={ga4.resume}
+        cancel={ga4.cancel}
+        refreshJob={ga4.refreshJob}
+        extraStats={
+          <>
+            <div>
+              <div className="text-muted-foreground text-[11px]">已對應網站</div>
+              <div className="font-medium">{ga4.job?.meta?.websites_matched ?? '—'}</div>
+            </div>
+            <div>
+              <div className="text-muted-foreground text-[11px]">列出 Properties</div>
+              <div className="font-medium">{ga4.job?.meta?.properties_listed ?? '—'}</div>
+            </div>
+          </>
+        }
+        helpText={
+          <>
+            從 2020-10-01（GA4 上線）回填至昨天，每月一步，寫入 Users / Sessions / Pageviews / 渠道。執行中請保持此分頁開啟；關閉後可按「繼續」從游標恢復。
+            日常增量與 Google Ads 相同：最近 <strong>7 日</strong>（涵蓋 GA4 24–48 小時處理延遲與後期修正）。報表頁「網站流量」的 Refresh recent 與每日 cron 都拉 7 日。
           </>
         }
       />

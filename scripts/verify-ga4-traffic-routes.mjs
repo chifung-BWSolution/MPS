@@ -13,6 +13,11 @@ const checks = [
     ok: /id: 'traffic',\s*label: '網站流量'/.test(contextSrc),
   },
   {
+    name: 'traffic page uses 7d incremental copy',
+    ok: readFileSync(path.join(root, 'src/components/website/traffic/Ga4TrafficModule.tsx'), 'utf8')
+      .includes('Refresh recent (7d)'),
+  },
+  {
     name: 'WebsiteModule renders Ga4TrafficModule',
     ok: websiteSrc.includes("case 'traffic':") && websiteSrc.includes('<Ga4TrafficModule'),
   },
@@ -28,6 +33,8 @@ const checks = [
       setupSrc.includes('GOOGLE_GA4_REFRESH_TOKEN') &&
       setupSrc.includes('developers.google.com/oauthplayground') &&
       setupSrc.includes('google_oauth_tokens') &&
+      setupSrc.includes('ga4-incremental-daily') &&
+      setupSrc.includes('supabase-functions-ga4-backfill-step') &&
       !setupSrc.includes('GOOGLE_GSC') &&
       !setupSrc.includes('Search Console'),
   },

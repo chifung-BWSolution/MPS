@@ -236,7 +236,7 @@ export function Ga4TrafficModule() {
   const onSync = async () => {
     try {
       await triggerSync();
-      toast.success('GA4 同步完成');
+      toast.success('最近 7 日 GA4 資料已更新');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'GA4 同步失敗');
     }
@@ -289,7 +289,7 @@ export function Ga4TrafficModule() {
             </Button>
             <Button size="sm" onClick={() => void onSync()} disabled={syncing}>
               <RefreshCw size={14} className={`mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? '同步中…' : '同步 GA4'}
+              {syncing ? '更新中…' : 'Refresh recent (7d)'}
             </Button>
           </div>
         </div>
@@ -407,7 +407,7 @@ export function Ga4TrafficModule() {
               {!loading && filtered.length === 0 && (
                 <tr>
                   <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
-                    此日期區間尚無資料。請用 Google Ads OAuth + Playground 設好 token（docs/ga4-setup.md）後按「同步 GA4」。
+                    此日期區間尚無資料。請先到「廣告數據同步」執行 GA4 完整歷史回填，或按 Refresh recent (7d)。
                   </td>
                 </tr>
               )}

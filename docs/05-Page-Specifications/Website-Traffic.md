@@ -16,8 +16,9 @@
 ### 列表
 - 篩選：日期區間、搜尋、GA4 帳戶、關聯網站
 - 欄位：網站、Property、帳戶、Users、Sessions、Pageviews、Bounce、Engagement、Avg duration
-- 操作：重新載入、同步 GA4（最近 90 日）
+- 操作：重新載入、Refresh recent (7d)（與 Google Ads 相同）
 - 點擊列開啟詳情
+- 完整歷史回填：`#marketing/ads-data-sync` → Google Analytics 4
 
 ### 詳情（對齊 Ads Campaign 詳情）
 - KPI（含前期比較與 sparkline）：Users、Sessions、Pageviews、Bounce rate、Engagement、Avg duration
@@ -33,6 +34,6 @@
 | Channel donut | `ga4_channel_daily_metrics` |
 | Property 對應 | `ga4_properties` ↔ `webandsystem_list` |
 | 細項 | Edge Function `supabase-functions-ga4-breakdowns`（即時 Data API） |
-| 同步 | Edge Function `sync-ga4` |
+| 同步 | Edge Function `sync-ga4`（增量 7 日）；歷史回填 `supabase-functions-ga4-backfill-step` |
 
 設定步驟見 [docs/ga4-setup.md](../ga4-setup.md)：重用 **Google Ads** OAuth client，用 [OAuth Playground](https://developers.google.com/oauthplayground/) 取得 Analytics readonly refresh token。旋轉後的 token 存在 `google_oauth_tokens`。

@@ -33,6 +33,11 @@ const checks = [
       && !marketingSrc.includes('FacebookAdsSyncModule'),
   },
   {
+    name: 'AdsDataSyncModule has GA4 backfill panel',
+    ok: readFileSync(path.join(root, 'src/components/marketing/AdsDataSyncModule.tsx'), 'utf8')
+      .includes('title="Google Analytics 4"'),
+  },
+  {
     name: 'sidebar still groups by section',
     ok: sidebarSrc.includes('subItem.section'),
   },

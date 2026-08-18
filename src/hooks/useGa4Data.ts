@@ -183,7 +183,7 @@ export function useGa4Data(dateFrom: string, dateTo: string) {
   const triggerSync = useCallback(async () => {
     setSyncing(true);
     try {
-      const result = await invokeGa4Sync(90);
+      const result = await invokeGa4Sync(7);
       await refresh();
       return result;
     } catch (err) {

@@ -36,6 +36,7 @@ type AdsSyncPanelProps = {
   autoRun: boolean;
   extraStats?: ReactNode;
   helpText: ReactNode;
+  accountsLabel?: string;
   start: () => Promise<AdsSyncActionResult>;
   pause: () => Promise<AdsSyncActionResult>;
   resume: () => Promise<AdsSyncActionResult>;
@@ -69,6 +70,7 @@ export function AdsSyncPanel({
   autoRun,
   extraStats,
   helpText,
+  accountsLabel = '目標帳戶',
   start,
   pause,
   resume,
@@ -187,7 +189,7 @@ export function AdsSyncPanel({
               <div className="font-medium">{job ? job.rowsUpserted.toLocaleString() : '—'}</div>
             </div>
             <div>
-              <div className="text-muted-foreground text-[11px]">目標帳戶</div>
+              <div className="text-muted-foreground text-[11px]">{accountsLabel}</div>
               <div className="font-medium">{job?.accountsTargeted ?? '—'}</div>
             </div>
             <div>

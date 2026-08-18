@@ -160,7 +160,7 @@ Also apply:
 |------|------|
 | `/#marketing/facebook-ads` | Campaign 報表；點擊列開啟詳情；手動設定品牌；編輯欄設定標籤 |
 | `/#marketing/facebook-ads?campaign={adAccountId}:{campaignId}` | Campaign 詳情（KPI / 圖表 / 即時 Ad Sets·Ads·Placements） |
-| `/#marketing/ads-data-sync` | 廣告數據同步（含 Facebook 完整歷史回填） |
+| `/#marketing/ads-data-sync` | 廣告數據同步（Google / Facebook / GA4 完整歷史回填） |
 | `/#website/list` | 網站列表：Google 廣告狀態欄、同步廣告網域、未連結網域建立提示 |
 
 Business 篩選與 KPI 由 warehouse 動態產生，**不需改前端**即可支援新增憑證。

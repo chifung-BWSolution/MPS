@@ -2,12 +2,15 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   corsHeaders,
-  fetchDailyChannelMetrics,
   fetchDailyPropertyMetrics,
+  fetchGa4PropertyMonth,
   fetchPropertyStreamMeta,
+  GA4_INCREMENTAL_LOOKBACK_DAYS,
+  GA4_PROPERTY_CONCURRENCY,
   getGa4AccessToken,
   jsonResponse,
   listGa4Properties,
+  mapPool,
   matchWebsiteForGa4Property,
   toIsoDate,
   type Ga4WebsiteRow,
@@ -19,7 +22,7 @@ const SUPABASE_SERVICE_ROLE_KEY =
   Deno.env.get("SUPABASE_SERVICE_KEY") ||
   "";
 
-const DEFAULT_LOOKBACK_DAYS = 90;
+const DEFAULT_LOOKBACK_DAYS = GA4_INCREMENTAL_LOOKBACK_DAYS;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -144,10 +147,9 @@ Deno.serve(async (req) => {
     if (wsErr) throw new Error(`Load websites failed: ${wsErr.message}`);
     const websites = (websiteRows || []) as Ga4WebsiteRow[];
 
-    let rowsUpserted = 0;
-    let propertiesSynced = 0;
-
-    for (const property of properties) {
+    const results = await mapPool(properties, GA4_PROPERTY_CONCURRENCY, async (property) => {
+      const localErrors: string[] = [];
+      let rows = 0;
       let streamUri: string | null = null;
       let measurementId: string | null = null;
       let uris: string[] = [];
@@ -157,7 +159,7 @@ Deno.serve(async (req) => {
         measurementId = stream.measurementId;
         uris = stream.uris;
       } catch (err) {
-        propertyErrors.push(
+        localErrors.push(
           `${property.propertyId} streams: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
@@ -187,12 +189,12 @@ Deno.serve(async (req) => {
         { onConflict: "property_id" },
       );
       if (propErr) {
-        propertyErrors.push(`${property.propertyId}: property upsert ${propErr.message}`);
-        continue;
+        localErrors.push(`${property.propertyId}: property upsert ${propErr.message}`);
+        return { ok: false, rows: 0, errors: localErrors };
       }
 
       try {
-        const daily = await fetchDailyPropertyMetrics(
+        const { daily, channels } = await fetchGa4PropertyMonth(
           accessToken,
           property.propertyId,
           startStr,
@@ -205,36 +207,37 @@ Deno.serve(async (req) => {
             .from("ga4_property_daily_metrics")
             .upsert(chunk, { onConflict: "property_id,metric_date" });
           if (error) {
-            propertyErrors.push(`${property.propertyId}: daily upsert ${error.message}`);
+            localErrors.push(`${property.propertyId}: daily upsert ${error.message}`);
             break;
           }
-          rowsUpserted += chunk.length;
+          rows += chunk.length;
         }
-
-        const channels = await fetchDailyChannelMetrics(
-          accessToken,
-          property.propertyId,
-          startStr,
-          endStr,
-          nowIso,
-        );
         for (let i = 0; i < channels.length; i += 500) {
           const chunk = channels.slice(i, i + 500);
           const { error } = await supabase
             .from("ga4_channel_daily_metrics")
             .upsert(chunk, { onConflict: "property_id,metric_date,channel" });
           if (error) {
-            propertyErrors.push(`${property.propertyId}: channel upsert ${error.message}`);
+            localErrors.push(`${property.propertyId}: channel upsert ${error.message}`);
             break;
           }
-          rowsUpserted += chunk.length;
+          rows += chunk.length;
         }
-        propertiesSynced += 1;
+        return { ok: true, rows, errors: localErrors };
       } catch (err) {
-        propertyErrors.push(
+        localErrors.push(
           `${property.propertyId}: ${err instanceof Error ? err.message : String(err)}`,
         );
+        return { ok: false, rows, errors: localErrors };
       }
+    });
+
+    let rowsUpserted = 0;
+    let propertiesSynced = 0;
+    for (const result of results) {
+      rowsUpserted += result.rows;
+      if (result.ok) propertiesSynced += 1;
+      propertyErrors.push(...result.errors);
     }
 
     await supabase
@@ -245,6 +248,7 @@ Deno.serve(async (req) => {
         properties_synced: propertiesSynced,
         rows_upserted: rowsUpserted,
         meta: {
+          mode: `incremental_${lookbackDays}d`,
           date_from: startStr,
           date_to: endStr,
           properties_listed: properties.length,

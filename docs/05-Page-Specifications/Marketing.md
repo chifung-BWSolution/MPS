@@ -10,7 +10,7 @@
 | `/marketing/ads-cost-trend` | 廣告成本趨勢 | 以品牌檢視近 180 日 Google / Facebook 成本（每 30 日區間） |
 | `/marketing/ads-comparison` | 廣告比較圖表 | 三欄並排比較 Google / Facebook Campaign 每日成效 |
 | `/marketing/backlink` | 反向連結 | 反向連結購買紀錄 |
-| `/marketing/ads-data-sync` | 廣告數據同步 | Google / Facebook 歷史回填與增量同步（設定） |
+| `/marketing/ads-data-sync` | 廣告數據同步 | Google / Facebook / GA4 歷史回填與增量同步（設定） |
 | `/marketing/ads-tags` | 廣告標籤 | 管理 `ads_tags` 標籤目錄（含 `is_active`） |
 
 舊網址 `#marketing/google-ads-sync`、`#marketing/facebook-ads-sync` 會自動導向 `#marketing/ads-data-sync`。
@@ -130,6 +130,6 @@ MarketingModule.tsx
 ├── GoogleAdsModule.tsx         // Google Ads
 ├── FacebookAdsModule.tsx       // Facebook Ads
 ├── AdsComparisonModule.tsx     // 廣告比較圖表
-├── AdsDataSyncModule.tsx       // 廣告數據同步（Google + Facebook）
+├── AdsDataSyncModule.tsx       // 廣告數據同步（Google + Facebook + GA4）
 └── BacklinkModule.tsx          // 反向連結
 ```

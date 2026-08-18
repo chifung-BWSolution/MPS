@@ -1,16 +1,20 @@
 import assert from 'node:assert/strict';
 import {
   addDaysIso,
+  addMonths,
+  countMonthsInclusive,
   deriveGa4Totals,
   domainsRelated,
   formatDurationSeconds,
   ga4DateToIso,
   matchWebsiteForGa4Property,
+  monthStart,
   nextRotatedRefreshToken,
   normalizeGa4PropertyId,
   previousPeriod,
   resolveGa4OAuthClient,
   resolveGa4RefreshToken,
+  toIsoDate,
   validateLiveGa4Range,
 } from '../src/lib/ga4Traffic';
 
@@ -86,5 +90,13 @@ assert.equal(resolveGa4RefreshToken(null, 'seed-from-secret'), 'seed-from-secret
 assert.equal(nextRotatedRefreshToken('abc', 'abc'), null);
 assert.equal(nextRotatedRefreshToken('abc', 'xyz'), 'xyz');
 assert.equal(nextRotatedRefreshToken('abc', ''), null);
+
+const oct = monthStart(new Date('2020-10-15T00:00:00Z'));
+assert.equal(toIsoDate(oct), '2020-10-01');
+assert.equal(toIsoDate(addMonths(oct, 1)), '2020-11-01');
+assert.equal(
+  countMonthsInclusive(oct, monthStart(new Date('2021-01-01T00:00:00Z'))),
+  4,
+);
 
 console.log('All GA4 traffic helper checks passed.');
