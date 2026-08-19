@@ -684,7 +684,7 @@ function SubmitReportPage() {
     [weekWindow.earlier.dates, buildWeekDateCard],
   );
   const availableDates = useMemo(
-    () => [...laterWeekDates, ...earlierWeekDates],
+    () => [...earlierWeekDates, ...laterWeekDates],
     [laterWeekDates, earlierWeekDates],
   );
 
@@ -1586,18 +1586,18 @@ function SubmitReportPage() {
                 ))}
               </div>
               <div className="pt-1 leading-tight">
-                <div className="text-[12px] font-semibold text-teal-700">{isCurrentWeekWindow ? '本週' : '該週'}</div>
-                <div className="text-[10px] text-muted-foreground">{formatCompactWeekLabel(weekWindow.later.start, weekWindow.later.end)}</div>
-              </div>
-              <div className={cn('grid grid-cols-7 gap-1.5', isLoadingDbReports && 'opacity-50 pointer-events-none')}>
-                {laterWeekDates.map(renderDateCard)}
-              </div>
-              <div className="pt-1 leading-tight">
                 <div className="text-[12px] font-semibold text-muted-foreground">{isCurrentWeekWindow ? '上週' : '前週'}</div>
                 <div className="text-[10px] text-muted-foreground">{formatCompactWeekLabel(weekWindow.earlier.start, weekWindow.earlier.end)}</div>
               </div>
               <div className={cn('grid grid-cols-7 gap-1.5', isLoadingDbReports && 'opacity-50 pointer-events-none')}>
                 {earlierWeekDates.map(renderDateCard)}
+              </div>
+              <div className="pt-1 leading-tight">
+                <div className="text-[12px] font-semibold text-teal-700">{isCurrentWeekWindow ? '本週' : '該週'}</div>
+                <div className="text-[10px] text-muted-foreground">{formatCompactWeekLabel(weekWindow.later.start, weekWindow.later.end)}</div>
+              </div>
+              <div className={cn('grid grid-cols-7 gap-1.5', isLoadingDbReports && 'opacity-50 pointer-events-none')}>
+                {laterWeekDates.map(renderDateCard)}
               </div>
             </div>
 
