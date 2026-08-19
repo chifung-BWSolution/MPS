@@ -2,11 +2,11 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
- * Leftover placeholder staffs.id values created for the UUID FK migration.
- * Map them to the canonical Bubble staff row so submit / team-view share one identity.
+ * Deleted leftover staffs.id values. Old sessions may still send these;
+ * rewrite them to the canonical Bubble staff row.
  */
 const STALE_MANUAL_STAFF_UUIDS: Record<string, string> = {
-  // Lowell Lo (manual) → Lowell Lo (Bubble / BWT OB System)
+  // Lowell Lo (manual, deleted) → Lowell Lo (Bubble / BWT OB System)
   'd88d2465-42d1-4205-8a9b-8495083c3691': '04102dd8-8d0f-4536-82cd-904cc0769227',
 };
 
