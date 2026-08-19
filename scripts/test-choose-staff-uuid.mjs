@@ -14,40 +14,33 @@ const LOWELL_CANONICAL = '04102dd8-8d0f-4536-82cd-904cc0769227';
 assert.equal(remapStaleStaffUuid(LOWELL_MANUAL), LOWELL_CANONICAL);
 
 assert.equal(
-  chooseStaffUuid({ loginStaffId: JANE, uniqueEmailStaffId: OTHER, sessionStaffId: OTHER }),
+  chooseStaffUuid({ loginStaffId: JANE, sessionStaffId: OTHER }),
   JANE,
-  'login whitelist wins over work_email and a corrupted session',
+  'login whitelist wins over a corrupted session',
 );
 
 assert.equal(
-  chooseStaffUuid({ sessionStaffId: LOWELL_MANUAL, uniqueEmailStaffId: OTHER }),
+  chooseStaffUuid({ sessionStaffId: LOWELL_MANUAL }),
   LOWELL_CANONICAL,
-  'Lowell leftover session UUID remaps before email',
+  'Lowell leftover session UUID remaps to canonical staffs.id',
 );
 
 assert.equal(
-  chooseStaffUuid({ uniqueEmailStaffId: JANE }),
-  JANE,
-  'unique work_email is fallback when login/session are missing',
-);
-
-assert.equal(
-  chooseStaffUuid({ sessionStaffId: 'cfb_m02', uniqueEmailStaffId: JANE }),
-  JANE,
-  'non-UUID session does not block unique email fallback',
-);
-
-assert.equal(
-  chooseStaffUuid({ bubbleStaffId: JANE }),
-  JANE,
-  'bubble id is last resort',
+  chooseStaffUuid({ sessionStaffId: 'cfb_m02' }),
+  null,
+  'non-UUID session is not used as a report key',
 );
 
 assert.equal(chooseStaffUuid({}), null);
 
 assert.equal(
-  isPlaceholderStaff({ bubble_staff_id: 'manual_super_admin_lowell', display_name: 'Lowell Lo (manual)' }),
+  isPlaceholderStaff({ id: LOWELL_MANUAL, display_name: 'Lowell Lo (manual)' }),
   true,
+);
+
+assert.equal(
+  isPlaceholderStaff({ id: JANE, display_name: 'Jane Long' }),
+  false,
 );
 
 const local = localDateString(new Date(2026, 7, 19, 1, 0, 0));

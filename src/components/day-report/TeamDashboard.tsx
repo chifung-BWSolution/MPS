@@ -28,7 +28,6 @@ import { WorkInspection } from '@/components/day-report/WorkInspection';
 // ============================
 interface StaffMember {
   id: string;
-  bubble_staff_id: string;
   display_name: string;
   position: string | null;
   user_role: string | null;
@@ -538,7 +537,7 @@ export function TeamDashboard() {
 
       let pickerQuery = supabase
         .from('staffs')
-        .select('id, bubble_staff_id, display_name, position, user_role, status, base_location, team_id, business_unit, profile_pic_url')
+        .select('id, display_name, position, user_role, status, base_location, team_id, business_unit, profile_pic_url')
         .eq('status', 'active')
         .neq('position', 'Director');
       if (pickerIds !== null) pickerQuery = pickerQuery.in('id', pickerIds);
@@ -582,7 +581,7 @@ export function TeamDashboard() {
 
       let staffQuery = supabase
         .from('staffs')
-        .select('id, bubble_staff_id, display_name, position, user_role, status, base_location, team_id, business_unit, profile_pic_url')
+        .select('id, display_name, position, user_role, status, base_location, team_id, business_unit, profile_pic_url')
         .eq('status', 'active')
         .neq('position', 'Director');
       if (allowedStaffIds !== null) staffQuery = staffQuery.in('id', allowedStaffIds);

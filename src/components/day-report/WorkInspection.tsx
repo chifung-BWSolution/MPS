@@ -24,7 +24,6 @@ type DayStatus = 'filled' | 'draft' | 'leave' | 'rest' | 'holiday' | 'missing' |
 
 interface StaffMember {
   id: string;
-  bubble_staff_id: string;
   display_name: string;
   base_location: string | null;
   team_id: string | null;
@@ -352,7 +351,7 @@ export function WorkInspection() {
 
       let staffQuery = supabase
         .from('staffs')
-        .select('id, bubble_staff_id, display_name, base_location, team_id, position, status')
+        .select('id, display_name, base_location, team_id, position, status')
         .eq('status', 'active')
         .neq('position', 'Director');
       if (allowedStaffIds !== null) staffQuery = staffQuery.in('id', allowedStaffIds);
@@ -364,7 +363,6 @@ export function WorkInspection() {
 
       let staffData: StaffMember[] = (rawStaff || []).map((s) => ({
         id: s.id,
-        bubble_staff_id: s.bubble_staff_id,
         display_name: s.display_name,
         base_location: s.base_location,
         team_id: s.team_id,

@@ -17,10 +17,13 @@ export function isStaffUuid(value: string | null | undefined): boolean {
 
 /** True for leftover `manual_*` / "(manual)" staff rows that must not own live reports. */
 export function isPlaceholderStaff(row: {
+  id?: string | null;
   bubble_staff_id?: string | null;
   display_name?: string | null;
 } | null | undefined): boolean {
   if (!row) return false;
+  const id = (row.id || '').trim();
+  if (id && STALE_MANUAL_STAFF_UUIDS[id]) return true;
   const bubble = (row.bubble_staff_id || '').trim().toLowerCase();
   const name = (row.display_name || '').trim().toLowerCase();
   return bubble.startsWith('manual_') || name.includes('(manual)');
@@ -33,27 +36,18 @@ export function remapStaleStaffUuid(value: string | null | undefined): string {
 }
 
 /**
- * Pick one staffs.id from already-fetched candidates.
- * Login whitelist (`users.staff_id`) wins. `staffs.work_email` is last-resort only
- * and only when the match is unique — email-first is what hid Elena/Jane reports.
+ * Pick one staffs.id. Only `users.staff_id` / session staff_id (remapped).
+ * Never use staffs.work_email or staffs.bubble_staff_id.
  */
 export function chooseStaffUuid(options: {
   loginStaffId?: string | null;
   sessionStaffId?: string | null;
-  uniqueEmailStaffId?: string | null;
-  bubbleStaffId?: string | null;
 }): string | null {
   const login = remapStaleStaffUuid(options.loginStaffId);
   if (isStaffUuid(login)) return login;
 
   const session = remapStaleStaffUuid(options.sessionStaffId);
   if (isStaffUuid(session)) return session;
-
-  const email = remapStaleStaffUuid(options.uniqueEmailStaffId);
-  if (isStaffUuid(email)) return email;
-
-  const bubble = remapStaleStaffUuid(options.bubbleStaffId);
-  if (isStaffUuid(bubble)) return bubble;
 
   return null;
 }

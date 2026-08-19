@@ -2,7 +2,6 @@ import { supabase } from '@/lib/supabase';
 import type { OutcomeType, AITool } from '@/data/dayReportDataV2';
 import {
   chooseStaffUuid,
-  isPlaceholderStaff,
   isStaffUuid,
   remapStaleStaffUuid,
 } from '@/services/staffIdentity';
@@ -99,8 +98,9 @@ async function lookupLoginStaffIdsByEmail(email: string): Promise<string[]> {
 }
 
 /**
- * Resolve staffs.id (uuid) for FK writes.
- * Prefer the login whitelist row (`users.staff_id`, remapped) over `staffs.work_email`.
+ * Resolve staffs.id for report load/save.
+ * Source of truth is users.staff_id (login whitelist), remapped.
+ * Does not query staffs.work_email or staffs.bubble_staff_id.
  */
 export async function resolveStaffUuid(systemUser: SystemUserLike): Promise<string | null> {
   if (!systemUser) return null;
@@ -118,37 +118,7 @@ export async function resolveStaffUuid(systemUser: SystemUserLike): Promise<stri
     }
   }
 
-  let uniqueEmailStaffId: string | null = null;
-  if (!loginStaffId && !isStaffUuid(sessionStaffId) && email) {
-    const { data } = await supabase
-      .from('staffs')
-      .select('id, bubble_staff_id, display_name')
-      .ilike('work_email', email)
-      .eq('status', 'active');
-    const matches = (data || []).filter((row) => row?.id && !isPlaceholderStaff(row));
-    if (matches.length === 1) uniqueEmailStaffId = matches[0].id;
-  }
-
-  let bubbleStaffId: string | null = null;
-  const bubbleId = (systemUser.bubble_staff_id || '').trim()
-    || (!isStaffUuid(sessionStaffId) ? sessionStaffId : '');
-  if (!loginStaffId && !isStaffUuid(sessionStaffId) && !uniqueEmailStaffId
-    && bubbleId && !bubbleId.toLowerCase().startsWith('manual_')) {
-    const { data } = await supabase
-      .from('staffs')
-      .select('id, bubble_staff_id, display_name')
-      .eq('bubble_staff_id', bubbleId)
-      .limit(1)
-      .maybeSingle();
-    if (data?.id && !isPlaceholderStaff(data)) bubbleStaffId = data.id;
-  }
-
-  return chooseStaffUuid({
-    loginStaffId,
-    sessionStaffId,
-    uniqueEmailStaffId,
-    bubbleStaffId,
-  });
+  return chooseStaffUuid({ loginStaffId, sessionStaffId });
 }
 
 /** @deprecated Use resolveStaffUuid — FK columns now store staffs.id (uuid). */

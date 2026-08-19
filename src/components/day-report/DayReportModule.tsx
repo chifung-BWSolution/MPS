@@ -25,8 +25,10 @@ import {
   consumePendingItems,
   dismissPendingItem,
   isPlaceholderStaff,
+  isStaffUuid,
   localDateString,
   mergePendingIntoReportEntries,
+  remapStaleStaffUuid,
   resolveStaffUuid,
   type ReportFormEntry,
 } from '@/services/reportLinkService';
@@ -333,18 +335,17 @@ function SubmitReportPage() {
     return () => { aborted = true; };
   }, [systemUser]);
 
-  // Fetch user's office from staff_directory to auto-set office location & target hours
+  // Fetch office from staffs.id (users.staff_id), never bubble_staff_id / work_email
   useEffect(() => {
     async function initOfficeFromProfile() {
-      if (!systemUser?.staff_id && !systemUser?.bubble_staff_id) return;
+      const staffId = remapStaleStaffUuid(systemUser?.staff_id);
+      if (!isStaffUuid(staffId)) return;
       try {
-        let staffQuery = supabase.from('staffs').select('office');
-        if (systemUser.staff_id) {
-          staffQuery = staffQuery.eq('id', systemUser.staff_id);
-        } else {
-          staffQuery = staffQuery.eq('bubble_staff_id', systemUser.bubble_staff_id);
-        }
-        const { data: staffRow, error } = await staffQuery.maybeSingle();
+        const { data: staffRow, error } = await supabase
+          .from('staffs')
+          .select('office')
+          .eq('id', staffId)
+          .maybeSingle();
 
         if (error) {
           console.error('[SubmitReport] Error fetching staff office:', error);
@@ -374,7 +375,7 @@ function SubmitReportPage() {
     }
 
     initOfficeFromProfile();
-  }, [systemUser?.staff_id, systemUser?.bubble_staff_id]);
+  }, [systemUser?.staff_id]);
 
   // Load existing day_reports for this staff in the 14-day window
   const loadDbReports = useCallback(async () => {
@@ -2079,7 +2080,7 @@ function TodayTeamReports() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   
   // === LIVE DATABASE STATE ===
-  const [dbStaff, setDbStaff] = useState<Array<{ id: string; bubble_staff_id: string; display_name: string; department: string; position: string; status: string }>>([]);
+  const [dbStaff, setDbStaff] = useState<Array<{ id: string; display_name: string; department: string; position: string; status: string }>>([]);
   const [dbReports, setDbReports] = useState<Array<{ id: string; staff_id: string; report_date: string; total_hours: number; ot_hours: number; is_leave: boolean; leave_type: string | null; status: string }>>([]);
   const [dbEntries, setDbEntries] = useState<Array<{ id: string; day_report_id: string; staff_id: string; category: string; title: string; hours: number; outcome_url: string | null; growth_experience: string | null; is_ai_assisted: boolean; ai_tools: any; related_name: string | null }>>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -2094,7 +2095,7 @@ function TodayTeamReports() {
         // 1. Fetch active staff from staff_directory; department comes from user_info
         const { data: staffData, error: staffErr } = await supabase
           .from('staffs')
-          .select('id, bubble_staff_id, display_name, position, status')
+          .select('id, display_name, position, status')
           .eq('status', 'active')
           .neq('position', 'Director');
 
@@ -2452,7 +2453,7 @@ function WorkCalendar() {
     }
     resolveDept();
     return () => { aborted = true; };
-  }, [systemUser?.staff_id, systemUser?.bubble_staff_id, systemUser?.department, isSuperAdmin]);
+  }, [systemUser?.staff_id, systemUser?.department, isSuperAdmin]);
 
   // Build available departments list for super_admin dropdown from DB (distinct)
   useEffect(() => {
@@ -2585,7 +2586,7 @@ function WorkCalendar() {
     }
     load();
     return () => { aborted = true; };
-  }, [systemUser?.staff_id, systemUser?.bubble_staff_id, ownDepartment, selectedDepartment, isSuperAdmin, monthStr, year, month, daysInMonth]);
+  }, [systemUser?.staff_id, ownDepartment, selectedDepartment, isSuperAdmin, monthStr, year, month, daysInMonth]);
 
   const reportsByDate = useMemo(() => {
     const m: Record<string, WCReport[]> = {};
