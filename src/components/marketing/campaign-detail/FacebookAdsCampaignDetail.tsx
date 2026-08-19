@@ -7,6 +7,7 @@ import {
   setFacebookAdsCampaignHash,
 } from '@/lib/adsCampaignNavigation';
 import { formatMoneyFromMicros } from '@/lib/formatMoney';
+import { FacebookAdsConversionHover } from '@/components/marketing/FacebookAdsConversionHover';
 import type { DateRangePreset, FacebookAdsMetricTotals } from '@/types/facebookAds';
 import { AdsCampaignDetailShell } from './AdsCampaignDetailShell';
 import type { AdsCampaignDetailViewModel, AdsKpiItem } from './types';
@@ -41,6 +42,7 @@ function buildKpis(
     ctr: number;
     averageCpcMicros: number;
   }[],
+  dateLabel: string,
 ): AdsKpiItem[] {
   const costSpark = series.map((p) => p.spendMicros / 1_000_000);
   const cpaSpark = series.map((p) =>
@@ -82,6 +84,11 @@ function buildKpis(
       value: totals.conversions.toLocaleString(undefined, { maximumFractionDigits: 2 }),
       deltaPct: pctChange(totals.conversions, previous.conversions),
       sparkline: series.map((p) => p.conversions),
+      hover: (
+        <FacebookAdsConversionHover breakdown={totals.actionBreakdown} dateLabel={dateLabel}>
+          {totals.conversions.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+        </FacebookAdsConversionHover>
+      ),
     },
     {
       id: 'cpc',
@@ -105,6 +112,7 @@ const EMPTY_TOTALS: FacebookAdsMetricTotals = {
   clicks: 0,
   spendMicros: 0,
   conversions: 0,
+  actionBreakdown: {},
   ctr: 0,
   averageCpcMicros: 0,
   cpaMicros: null,
@@ -212,7 +220,7 @@ export function FacebookAdsCampaignDetail({
         accountId: adAccountId || '',
         websites: [],
         series: [],
-        kpis: buildKpis(EMPTY_TOTALS, EMPTY_TOTALS, []),
+        kpis: buildKpis(EMPTY_TOTALS, EMPTY_TOTALS, [], `${range.from} → ${range.to}`),
         facebookBreakdowns,
       };
     }
@@ -237,8 +245,14 @@ export function FacebookAdsCampaignDetail({
         conversions: p.conversions,
         ctr: p.ctr,
         cpc: p.averageCpcMicros / 1_000_000,
+        conversionBreakdown: p.actionBreakdown,
       })),
-      kpis: buildKpis(detail.totals, detail.previousTotals, detail.series),
+      kpis: buildKpis(
+        detail.totals,
+        detail.previousTotals,
+        detail.series,
+        `${range.from} → ${range.to}`,
+      ),
       facebookBreakdowns,
     };
   }, [
@@ -246,6 +260,8 @@ export function FacebookAdsCampaignDetail({
     adAccountId,
     campaignId,
     campaignKey,
+    range.from,
+    range.to,
     breakdownsSupported,
     adSets,
     ads,

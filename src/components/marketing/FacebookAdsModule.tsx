@@ -15,6 +15,7 @@ import {
   setFacebookAdsCampaignHash,
 } from '@/lib/adsCampaignNavigation';
 import { FacebookAdsCampaignDetail } from './campaign-detail/FacebookAdsCampaignDetail';
+import { FacebookAdsConversionHover } from './FacebookAdsConversionHover';
 import { AdsCampaignTagsModal } from './ads-tags/AdsCampaignTagsModal';
 import { AdsTagPills } from './ads-tags/AdsTagPills';
 import { useAdsCampaignTags } from '@/hooks/useAdsTags';
@@ -641,7 +642,12 @@ export function FacebookAdsModule() {
                       {formatMoneyFromMicros(c.spendMicros)}
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums">
-                      {c.conversions.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      <FacebookAdsConversionHover
+                        breakdown={c.actionBreakdown}
+                        dateLabel={`${range.from} → ${range.to}`}
+                      >
+                        {c.conversions.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </FacebookAdsConversionHover>
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       <button

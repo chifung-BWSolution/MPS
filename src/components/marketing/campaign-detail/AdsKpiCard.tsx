@@ -51,7 +51,7 @@ export function AdsKpiCard({
           {item.label}
         </div>
         <div className="text-[18px] font-bold tabular-nums leading-tight mt-0.5 truncate">
-          {item.value}
+          {item.hover ?? item.value}
         </div>
         <div className="mt-1 flex items-center gap-1.5">
           <DeltaBadge deltaPct={item.deltaPct} />

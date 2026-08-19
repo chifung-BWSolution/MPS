@@ -5,6 +5,7 @@
 ## 架構
 
 - 前端讀 **Supabase warehouse**（`facebook_ads_*` 表），不直接打 Meta API
+- 倉庫 `conversions` = Insights `results`（Ads Manager 成果，含 0）。`action_breakdown` 存像素／漏斗事件供列表與詳情 Conv. hover；回填後才會填滿歷史日。
 - Edge Functions 用 `META_CREDENTIALS_JSON`（**任意 N 組** App + access token）同步資料
 - 增量同步會 **upsert 現有帳戶**，並 **刪除目前憑證清單已不再回傳的帳戶**
 - Meta Insights 約只保留近 **37 個月**

@@ -35,6 +35,7 @@
 - **詳情：** `#marketing/facebook-ads?campaign={adAccountId}:{campaignId}&preset=30d&from=YYYY-MM-DD&to=YYYY-MM-DD`
   - 版面與 Google Ads 詳情相同（同一 `AdsCampaignDetailShell`）：KPI、趨勢圖、donut、Day-of-week、Daily metrics。
   - 每日指標來源：`facebook_ads_campaign_daily_metrics`。
+  - **Conv.：** Insights `results`（Ads Manager 成果；含 0）。列表／詳情 KPI／Daily Conv. 可 hover 看同期像素事件（`action_breakdown`；加購、結帳等不計入 Conv.）。
   - 細項：Ad Sets / Ads / Placements 為**即時 Meta Marketing API**（Insights；Ads Top 150 by Cost）。不落倉庫。
   - 即時細項日期上限 92 日（與 Google 相同）。
   - Header 顯示帳戶、Business、品牌（手動 `brand_list`），無 Google 網站連結。
@@ -59,7 +60,7 @@
   - 指標：Impr. / Clicks / Cost / Conv.（另含 CTR、Avg. CPC，與詳情頁 KPI 卡片對應）
   - 篩選下方可「從欄位 N 複製」，套用其他欄的日期／平台／Campaign／指標
 - **圖表：** 所選指標的每日折線圖（資料來自 `google_ads_campaign_daily_metrics` / `facebook_ads_campaign_daily_metrics`）。
-- **Conv.：** 與列表頁同一欄位（Google `metrics.conversions` 倉庫值；Facebook 倉庫 `conversions`，即 sync 時 `sumConversions` 結果），勿另算 actions。
+- **Conv.：** 與列表頁同一欄位（Google `metrics.conversions` 倉庫值；Facebook 倉庫 `conversions` = Insights `results`／成果）。Facebook 列表與詳情另以 hover 顯示 `action_breakdown` 漏斗事件，勿把那些事件加回 Conv.。
 - **KPI 卡片：** 每欄圖表下方顯示與 Campaign 詳情相同的六張卡片（含前期比較與 sparkline）。點擊卡片會把該欄指標篩選切到對應 metric。
 
 ### 廣告標籤

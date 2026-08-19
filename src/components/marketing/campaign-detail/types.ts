@@ -11,6 +11,8 @@ export type AdsDailySeriesPoint = {
   conversions: number;
   ctr: number;
   cpc: number;
+  /** Facebook only — pixel event map for the Conv. hover card. */
+  conversionBreakdown?: Record<string, number>;
 };
 
 export type AdsKpiItem = {
@@ -20,6 +22,8 @@ export type AdsKpiItem = {
   deltaPct: number | null;
   sparkline: number[];
   hint?: string;
+  /** Optional rich hover (Facebook Conv. breakdown). */
+  hover?: ReactNode;
 };
 
 export type AdsLinkedWebsite = {

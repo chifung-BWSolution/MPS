@@ -1,4 +1,5 @@
 import { formatMoneyAmount } from '@/lib/formatMoney';
+import { FacebookAdsConversionHover } from '@/components/marketing/FacebookAdsConversionHover';
 import type { AdsDailySeriesPoint } from './types';
 
 function formatMoney(n: number): string {
@@ -50,7 +51,13 @@ export function AdsDailyMetricsTable({ series }: { series: AdsDailySeriesPoint[]
                 <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(r.cost)}</td>
                 <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(r.cpc)}</td>
                 <td className="px-3 py-1.5 text-right tabular-nums">
-                  {r.conversions.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  {r.conversionBreakdown ? (
+                    <FacebookAdsConversionHover breakdown={r.conversionBreakdown} dateLabel={r.date}>
+                      {r.conversions.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </FacebookAdsConversionHover>
+                  ) : (
+                    r.conversions.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                  )}
                 </td>
               </tr>
             ))}
