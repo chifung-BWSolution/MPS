@@ -4,7 +4,6 @@ import { DashboardModule } from '@/components/dashboard/DashboardModule';
 import { DayReportModule } from '@/components/day-report/DayReportModule';
 import { QuotationModule } from '@/components/quotation/QuotationModule';
 import { ProjectModule } from '@/components/project/ProjectModule';
-import { PlanningCenterModule } from '@/components/planning-center/PlanningCenterModule';
 import { WebsiteModule } from '@/components/website/WebsiteModule';
 import { ArticlesModule } from '@/components/articles/ArticlesModule';
 import { MarketingModule } from '@/components/marketing/MarketingModule';
@@ -29,8 +28,6 @@ function ModuleRouter() {
       return <QuotationModule subModule={currentSubModule} />;
     case 'project':
       return <ProjectModule subModule={currentSubModule} />;
-    case 'planning-center':
-      return <PlanningCenterModule subModule={currentSubModule} />;
     case 'website':
       return <WebsiteModule subModule={currentSubModule} />;
     case 'articles':

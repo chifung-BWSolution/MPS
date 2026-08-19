@@ -28,6 +28,10 @@ export function resolveRoute(module: string, sub?: string): { module: string; su
   if (module === 'marketing' && sub === 'graphic-design') {
     return { module: 'graphic-design', subModule: resolveSubModule('graphic-design') };
   }
+  // Removed: 規劃中心 was a mock-only module
+  if (module === 'planning-center') {
+    return { module: 'dashboard', subModule: resolveSubModule('dashboard') };
+  }
   return { module, subModule: resolveSubModule(module, sub) };
 }
 
@@ -79,20 +83,6 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'internal', label: '內部焦點項目' },
       { id: 'client', label: '客戶項目列表' },
       { id: 'progress', label: '項目進度' },
-    ],
-  },
-  {
-    id: 'planning-center',
-    label: '規劃中心',
-    subMenus: [
-      { id: 'internal-plans', label: '內部發展計劃' },
-      { id: 'promo-schedule', label: '推廣時間表' },
-      { id: 'update-frequency', label: '更新頻率設定' },
-      { id: 'kpi-targets', label: 'KPI 目標設定' },
-      { id: 'manhour-templates', label: 'Man-Hour 標準模板' },
-      { id: 'ai-efficiency', label: 'AI 效率對比' },
-      { id: 'sales-gp', label: '銷售 & GP 目標' },
-      { id: 'team-reports', label: '團隊匯報' },
     ],
   },
   {

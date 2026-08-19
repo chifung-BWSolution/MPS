@@ -16,7 +16,6 @@ import {
   ChevronRight,
   Home,
   BookOpen,
-  Target,
   Users,
   Palette,
 } from 'lucide-react';
@@ -27,7 +26,6 @@ const moduleIcons: Record<string, React.ElementType> = {
   'day-report': FileText,
   'quotation': DollarSign,
   'project': FolderKanban,
-  'planning-center': Target,
   'website': Globe,
   'articles': BookOpen,
   'marketing': Megaphone,
