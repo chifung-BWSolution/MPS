@@ -2,9 +2,11 @@ import { useMemo, useState } from 'react';
 import { Plus, Search, ArrowLeft, Eye, Edit, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBacklinkPurchases } from '@/hooks/useBacklinkPurchases';
+import { useBrands } from '@/hooks/useBrands';
 import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
 import { useGoogleAdsAccounts } from '@/hooks/useGoogleAdsAccounts';
 import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
+import { resolveBacklinkBrandLabel, resolveBacklinkBrandListId } from '@/lib/backlinkBrand';
 import { getManualDisplayName } from '@/lib/domainMatch';
 import { formatBacklinkHkd, formatBacklinkUsd, normalizeBacklinkCosts } from '@/lib/backlinkCurrency';
 import type { BacklinkBrand, BacklinkPurchase } from '@/types/marketingOps';
@@ -99,17 +101,26 @@ function hasSiteSelection(data: {
   return !!(data.websiteProfileId || data.googleAdsCustomerId || data.googleAdsAccountName || data.sourceDomain);
 }
 
+function BrandBadge({ label }: { label?: string }) {
+  if (!label) return <span className="text-muted-foreground">—</span>;
+  return (
+    <span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{label}</span>
+  );
+}
+
 function BacklinkDetail({
   record,
   supplierName,
   supplierUrl,
   siteLabel,
+  brandLabel,
   onBack,
 }: {
   record: BacklinkPurchase;
   supplierName: string;
   supplierUrl: string;
   siteLabel: string;
+  brandLabel: string;
   onBack: () => void;
 }) {
   return (
@@ -134,7 +145,7 @@ function BacklinkDetail({
         <div className="grid grid-cols-2 gap-4 text-[13px]">
           <div><span className="text-muted-foreground">費用 USD:</span> <span className="font-medium">{formatBacklinkUsd(record.costUsd)}</span></div>
           <div><span className="text-muted-foreground">費用 HKD:</span> <span className="font-medium">{formatBacklinkHkd(record.costHkd)}</span></div>
-          <div><span className="text-muted-foreground">品牌:</span> <span className="font-medium">{record.brand || '—'}</span></div>
+          <div><span className="text-muted-foreground">品牌:</span> <BrandBadge label={brandLabel} /></div>
           <div><span className="text-muted-foreground">購買日期:</span> <span className="font-medium">{record.purchaseDate}</span></div>
           <div><span className="text-muted-foreground">反向連結數量:</span> <span className="font-medium">{record.quantity}</span></div>
           <div><span className="text-muted-foreground">備註:</span> <span className="font-medium">{record.notes || '—'}</span></div>
@@ -189,6 +200,7 @@ function SiteCell({
 
 export function BacklinkModule() {
   const { profiles: websites } = useWebsiteProfiles();
+  const { brands } = useBrands();
   const { suppliers: webPageSuppliers } = useWebPageSuppliers();
   const { clientAccounts: googleAdsAccounts } = useGoogleAdsAccounts();
   const {
@@ -199,7 +211,7 @@ export function BacklinkModule() {
   } = useBacklinkPurchases();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [brandFilter, setBrandFilter] = useState<'all' | BacklinkBrand>('all');
+  const [brandFilter, setBrandFilter] = useState('all');
   const [accountFilter, setAccountFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
@@ -257,6 +269,11 @@ export function BacklinkModule() {
     return [...years].sort((a, b) => b - a);
   }, [backlinkPurchases]);
 
+  const activeBrands = useMemo(
+    () => brands.filter((b) => b.isActive).sort((a, b) => a.brandCode.localeCompare(b.brandCode)),
+    [brands],
+  );
+
   const enriched = useMemo(() => {
     return backlinkPurchases.map((p) => {
       const supplier = supplierMap.get(p.webSupplierId);
@@ -268,6 +285,8 @@ export function BacklinkModule() {
         site?.websiteName ||
         p.sourceDomain ||
         '—';
+      const brandListId = resolveBacklinkBrandListId(p, websites);
+      const brandLabel = resolveBacklinkBrandLabel(p, websites, brands);
       return {
         ...p,
         supplierName: supplier?.name || '—',
@@ -276,14 +295,17 @@ export function BacklinkModule() {
         siteName: site?.websiteName || '—',
         siteLabel,
         resolvedSiteName,
+        brandListId,
+        brandLabel,
       };
     });
-  }, [backlinkPurchases, supplierMap, siteMap]);
+  }, [backlinkPurchases, supplierMap, siteMap, websites, brands]);
 
   const filtered = useMemo(() => {
     return enriched
       .filter((r) => {
-        if (brandFilter !== 'all' && r.brand !== brandFilter) return false;
+        if (brandFilter === 'none') return !r.brandListId;
+        if (brandFilter !== 'all' && r.brandListId !== brandFilter) return false;
         if (accountFilter !== 'all') {
           if (accountFilter === 'unmatched') return !r.resolvedSiteName && !!r.sourceDomain;
           if (r.googleAdsCustomerId !== accountFilter) return false;
@@ -302,6 +324,7 @@ export function BacklinkModule() {
             r.siteName.toLowerCase().includes(q) ||
             (r.resolvedSiteName || r.googleAdsAccountName || '').toLowerCase().includes(q) ||
             (r.sourceDomain || '').toLowerCase().includes(q) ||
+            (r.brandLabel || '').toLowerCase().includes(q) ||
             (r.brand || '').toLowerCase().includes(q) ||
             (r.notes || '').toLowerCase().includes(q)
           );
@@ -421,6 +444,7 @@ export function BacklinkModule() {
         supplierName={supplier?.name || '—'}
         supplierUrl={formatSupplierUrl(supplier?.url) || '—'}
         siteLabel={siteLabel}
+        brandLabel={resolveBacklinkBrandLabel(selectedRecord, websites, brands)}
         onBack={() => setSelectedRecord(null)}
       />
     );
@@ -644,14 +668,15 @@ export function BacklinkModule() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={brandFilter} onValueChange={(val) => setBrandFilter(val as 'all' | BacklinkBrand)}>
-            <SelectTrigger className="w-[120px] h-9 text-[13px]">
+          <Select value={brandFilter} onValueChange={setBrandFilter}>
+            <SelectTrigger className="w-[160px] h-9 text-[13px]">
               <SelectValue placeholder="品牌" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部品牌</SelectItem>
-              {BACKLINK_BRANDS.map((brand) => (
-                <SelectItem key={brand} value={brand}>{brand}</SelectItem>
+              <SelectItem value="none">未設定品牌</SelectItem>
+              {activeBrands.map((brand) => (
+                <SelectItem key={brand.id} value={brand.id}>{brand.brandCode}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -707,26 +732,7 @@ export function BacklinkModule() {
                   <SiteCell record={record} siteName={record.siteName} />
                 </td>
                 <td className="px-4 py-3">
-                  <Select
-                    value={record.brand || '__none__'}
-                    onValueChange={(val) => {
-                      const nextBrand = val === '__none__' ? undefined : (val as BacklinkBrand);
-                      if (record.brand === nextBrand) return;
-                      void updatePurchase(record.id, { brand: nextBrand }).then((error) => {
-                        if (error) toast.error(`品牌更新失敗：${error.message}`);
-                      });
-                    }}
-                  >
-                    <SelectTrigger className="h-8 w-[96px] text-[12px]">
-                      <SelectValue placeholder="—" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">—</SelectItem>
-                      {BACKLINK_BRANDS.map((brand) => (
-                        <SelectItem key={brand} value={brand}>{brand}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <BrandBadge label={record.brandLabel} />
                 </td>
                 <td className="px-4 py-3">
                   {record.supplierUrl ? (

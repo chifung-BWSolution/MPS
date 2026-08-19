@@ -44,7 +44,9 @@ import { useVchannels } from '@/hooks/useVchannels';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { useBacklinkPurchases } from '@/hooks/useBacklinkPurchases';
+import { useBrands } from '@/hooks/useBrands';
 import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
+import { brandLabelOf } from '@/lib/projectOrg';
 import { useGoogleBusinessRegistrations } from '@/hooks/useGoogleBusinessRegistrations';
 import type { BacklinkBrand, BacklinkPurchase, GoogleBusinessRegistration } from '@/types/marketingOps';
 import { BACKLINK_BRANDS } from '@/types/marketingOps';
@@ -1580,6 +1582,7 @@ const emptyBacklinkForm: BacklinkForm = {
 };
 
 export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
+  const { brands } = useBrands();
   const { suppliers: webPageSuppliers } = useWebPageSuppliers();
   const {
     purchases: backlinkPurchases,
@@ -1603,6 +1606,7 @@ export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
     () => backlinkPurchases.filter((p) => p.websiteProfileId === site.id),
     [backlinkPurchases, site.id],
   );
+  const siteBrandLabel = brandLabelOf(brands, site.brandId) || site.brand || '';
 
   const stats = useMemo(() => {
     const totalQty = records.reduce((s, p) => s + p.quantity, 0);
@@ -1773,7 +1777,13 @@ export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
                 const supplier = supplierMap.get(record.webSupplierId);
                 return (
                   <tr key={record.id} className="border-t border-border/50 hover:bg-muted/10">
-                    <td className="px-4 py-3">{record.brand || '—'}</td>
+                    <td className="px-4 py-3">
+                      {siteBrandLabel ? (
+                        <span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{siteBrandLabel}</span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 break-all">{supplier?.url || '—'}</td>
                     <td className="px-4 py-3 text-muted-foreground">{supplier?.name || '—'}</td>
                     <td className="px-4 py-3 tabular-nums">{formatBacklinkUsd(record.costUsd)}</td>
