@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { invokeFacebookAdsIncrementalSync } from '@/lib/facebookAdsApi';
 import { resolveFacebookBrandListId } from '@/lib/facebookAdsBrand';
+import { parseActionBreakdown } from '@/lib/facebookAdsConversions';
 import type {
   DateRangePreset,
   FacebookAdsAccount,
@@ -61,6 +62,7 @@ type AggRow = {
   clicks: number | string;
   spend_micros: number | string;
   conversions: number | string;
+  action_breakdown?: unknown;
 };
 
 function mapAccount(row: AccountRow): FacebookAdsAccount {
@@ -224,6 +226,7 @@ export function useFacebookAdsData(dateFrom: string, dateTo: string) {
           clicks,
           spendMicros: Number(row.spend_micros) || 0,
           conversions: Number(row.conversions) || 0,
+          actionBreakdown: parseActionBreakdown(row.action_breakdown),
           ctr: impressions > 0 ? clicks / impressions : 0,
           lastSyncedAt: meta?.last_synced_at ?? undefined,
           accountName: nameById.get(row.ad_account_id),

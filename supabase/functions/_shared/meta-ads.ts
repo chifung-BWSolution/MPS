@@ -1,5 +1,11 @@
 /** Shared Meta / Facebook Ads helpers for Edge Functions (multi-credential). */
 
+import {
+  extractActionBreakdown,
+  sumConversions,
+  sumConversionsFromActions,
+} from "./facebook-ads-conversions.ts";
+
 export const ACCOUNT_CONCURRENCY = 6;
 /** Meta Insights rejects ranges older than ~37 months */
 export const META_INSIGHTS_MAX_MONTHS = 36;
@@ -45,6 +51,7 @@ export type DailyMetricRow = {
   clicks: number;
   spend_micros: number;
   conversions: number;
+  action_breakdown: Record<string, number>;
   ctr: number;
   average_cpc_micros: number;
   last_synced_at: string;
@@ -94,263 +101,6 @@ export function mapCampaignStatus(effective: unknown, status?: unknown): string 
   if (s === "PAUSED") return "PAUSED";
   if (s === "DELETED" || s === "ARCHIVED") return "REMOVED";
   return s || "UNKNOWN";
-}
-
-/** Extract a single numeric value from an AdsActionStats / AdsInsightsResult row. */
-function rowNumericValue(raw: unknown): number {
-  if (!raw || typeof raw !== "object") return 0;
-  const a = raw as Record<string, unknown>;
-  if (a.value != null) return Number(a.value) || 0;
-  if (Array.isArray(a.values)) {
-    let sum = 0;
-    for (const v of a.values) {
-      if (v != null && typeof v === "object" && "value" in (v as object)) {
-        sum += Number((v as { value?: unknown }).value) || 0;
-      } else {
-        sum += Number(v) || 0;
-      }
-    }
-    return sum;
-  }
-  return 0;
-}
-
-/** Result indicators that are traffic/awareness — not Conv. column outcomes. */
-function isNonConversionResultIndicator(indicator: string): boolean {
-  const ind = indicator.toLowerCase();
-  const soft = [
-    "reach",
-    "impressions",
-    "link_click",
-    "outbound_click",
-    "landing_page_view",
-    "omni_landing_page_view",
-    "page_engagement",
-    "post_engagement",
-    "video_view",
-    "video_thruplay",
-    "like",
-    "post_interaction",
-    "estimated_ad_recallers",
-  ];
-  return soft.some((s) => ind === s || ind.endsWith(`:${s}`) || ind.endsWith(`.${s}`));
-}
-
-/**
- * Sum Insights `results` / `objective_results` lists.
- * Rows without `values` (indicator-only) contribute 0.
- * Skips traffic/awareness indicators so Conv. stays conversion-oriented.
- */
-function sumResultsField(list: unknown): number {
-  if (!Array.isArray(list)) return 0;
-  let sum = 0;
-  for (const raw of list) {
-    if (!raw || typeof raw !== "object") continue;
-    const indicator = String((raw as Record<string, unknown>).indicator || "");
-    if (indicator && isNonConversionResultIndicator(indicator)) continue;
-    sum += rowNumericValue(raw);
-  }
-  return sum;
-}
-
-/**
- * Parse Insights `conversions` list without double-counting
- * `submit_application_total` + `submit_application_website` (same event).
- * Prefer `*_total` rows when present; otherwise take the max per event family.
- */
-function sumConversionsField(list: unknown): number {
-  if (!Array.isArray(list)) return 0;
-  const byType = new Map<string, number>();
-  for (const raw of list) {
-    if (!raw || typeof raw !== "object") continue;
-    const a = raw as Record<string, unknown>;
-    const type = String(a.action_type || "").toLowerCase();
-    if (!type) continue;
-    const val = rowNumericValue(raw);
-    if (!val) continue;
-    byType.set(type, (byType.get(type) || 0) + val);
-  }
-  if (byType.size === 0) return 0;
-
-  const totals = [...byType.entries()].filter(([t]) => t.endsWith("_total"));
-  if (totals.length) {
-    return totals.reduce((s, [, v]) => s + v, 0);
-  }
-
-  // Group website/app/offline variants of the same event; keep max per family.
-  const familyMax = new Map<string, number>();
-  for (const [type, val] of byType) {
-    const family = type
-      .replace(/_website$/, "")
-      .replace(/_app$/, "")
-      .replace(/_offline$/, "")
-      .replace(/_total$/, "");
-    familyMax.set(family, Math.max(familyMax.get(family) || 0, val));
-  }
-  return [...familyMax.values()].reduce((s, v) => s + v, 0);
-}
-
-/**
- * Meta Insights `actions` names conversions differently per objective / pixel event.
- * Prefer rollup action_types when present to avoid double-counting pixel + omni variants.
- */
-const CONVERSION_ROLLUP_PRIORITY: string[][] = [
-  // Sales / purchase
-  ["omni_purchase", "purchase", "web_in_store_purchase"],
-  // Leads
-  ["omni_complete_registration", "complete_registration"],
-  ["lead", "onsite_conversion.lead_grouped", "omni_lead"],
-  // Checkout funnel (when used as optimization)
-  ["omni_initiated_checkout", "initiate_checkout"],
-  ["omni_add_to_cart", "add_to_cart"],
-  ["omni_add_payment_info", "add_payment_info"],
-  // Other standard conversion events
-  ["omni_subscribe", "subscribe"],
-  ["omni_start_trial", "start_trial"],
-  [
-    "omni_submit_application",
-    "submit_application",
-    "submit_application_total",
-    "submit_application_website",
-    "submit_application_app",
-  ],
-  ["omni_schedule", "schedule"],
-  ["omni_contact", "contact"],
-  ["omni_donate", "donate"],
-  ["find_location"],
-  // Messaging (MESSAGES / many lead campaigns optimize for this)
-  [
-    "onsite_conversion.messaging_conversation_started_7d",
-    "onsite_conversion.total_messaging_connection",
-    "onsite_conversion.messaging_first_reply",
-  ],
-  // App
-  ["omni_app_install", "mobile_app_install", "app_install"],
-];
-
-function isPixelOrCustomConversion(type: string): boolean {
-  if (type.startsWith("offsite_conversion.custom.")) return true;
-  if (type.startsWith("offline_conversion.")) return true;
-  if (type.startsWith("app_custom_event.")) return true;
-  if (!type.startsWith("offsite_conversion.fb_pixel_")) return false;
-  // Soft engagement pixel events — not treated as Conv.
-  const soft = new Set([
-    "offsite_conversion.fb_pixel_view_content",
-    "offsite_conversion.fb_pixel_search",
-    "offsite_conversion.fb_pixel_add_to_wishlist",
-  ]);
-  return !soft.has(type);
-}
-
-function groupMatchTokens(group: string[]): string[] {
-  const tokens = new Set<string>();
-  for (const name of group) {
-    const base = name.includes(".") ? name.split(".").pop() || name : name;
-    // normalize omni_ / web_in_store_ prefixes
-    tokens.add(base.replace(/^omni_/, "").replace(/^web_in_store_/, ""));
-    tokens.add(base);
-  }
-  return [...tokens].filter(Boolean);
-}
-
-function actionMatchesTokens(type: string, tokens: string[]): boolean {
-  if (
-    type.includes("click") ||
-    type.includes("view_content") ||
-    type.includes("video_view") ||
-    type.includes("impression") ||
-    type.includes("engaged_user") ||
-    type.includes("page_engagement") ||
-    type.includes("post_engagement")
-  ) {
-    return false;
-  }
-  for (const token of tokens) {
-    // Exact / suffix matches only — avoid `meta_leads` matching token `lead`.
-    if (
-      type === token ||
-      type.endsWith(`.${token}`) ||
-      type.endsWith(`_${token}`) ||
-      type === `offsite_conversion.fb_pixel_${token}` ||
-      type === `offline_conversion.${token}` ||
-      type === `onsite_conversion.${token}`
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function sumConversionsFromActions(actions: unknown): number {
-  if (!Array.isArray(actions)) return 0;
-  const byType = new Map<string, number>();
-  for (const raw of actions) {
-    if (!raw || typeof raw !== "object") continue;
-    const a = raw as Record<string, unknown>;
-    const type = String(a.action_type || "").toLowerCase();
-    if (!type) continue;
-    const val = Number(a.value ?? 0) || 0;
-    if (!val) continue;
-    byType.set(type, (byType.get(type) || 0) + val);
-  }
-  if (byType.size === 0) return 0;
-
-  const consumed = new Set<string>();
-
-  // First matching category in priority order wins (purchase before ATC, etc.).
-  for (const group of CONVERSION_ROLLUP_PRIORITY) {
-    const tokens = groupMatchTokens(group);
-    let picked = 0;
-
-    for (const candidate of group) {
-      if (byType.has(candidate)) {
-        picked = byType.get(candidate) || 0;
-        break;
-      }
-    }
-
-    if (!picked) {
-      for (const [type, val] of byType) {
-        if (consumed.has(type)) continue;
-        if (actionMatchesTokens(type, tokens)) {
-          picked = val;
-          break;
-        }
-      }
-    }
-
-    if (picked) return picked;
-  }
-
-  // Custom / remaining pixel conversion events (e.g. offsite_conversion.fb_pixel_custom)
-  let customSum = 0;
-  for (const [type, val] of byType) {
-    if (consumed.has(type)) continue;
-    if (isPixelOrCustomConversion(type)) {
-      customSum += val;
-    }
-  }
-  return customSum;
-}
-
-/**
- * Resolve Conv. count for an insights row.
- * Order matches Ads Manager “Results” / conversion reporting across objectives:
- * 1) `results` (objective outcome — purchase, lead, messaging, etc.)
- * 2) dedicated `conversions` list (custom + standard conversion events)
- * 3) filtered `actions` for common conversion action_type names
- */
-function sumConversions(row: Record<string, unknown>): number {
-  const fromResults = sumResultsField(row.results);
-  if (fromResults > 0) return fromResults;
-
-  const fromObjectiveResults = sumResultsField(row.objective_results);
-  if (fromObjectiveResults > 0) return fromObjectiveResults;
-
-  const fromConversions = sumConversionsField(row.conversions);
-  if (fromConversions > 0) return fromConversions;
-
-  return sumConversionsFromActions(row.actions);
 }
 
 /** Debug helper: sample raw conversion-related fields from Insights. */
@@ -677,6 +427,7 @@ async function fetchDailyInsights(
     const clicks = asInt(row.clicks);
     const spendMicros = spendToMicros(row.spend);
     const conversions = sumConversions(row);
+    const actionBreakdown = extractActionBreakdown(row.actions);
     const ctr = Number(row.ctr ?? 0) || (impressions > 0 ? clicks / impressions : 0);
     const cpcMicros = spendToMicros(row.cpc);
     daily.push({
@@ -687,6 +438,7 @@ async function fetchDailyInsights(
       clicks,
       spend_micros: spendMicros,
       conversions,
+      action_breakdown: actionBreakdown,
       ctr,
       average_cpc_micros: cpcMicros,
       last_synced_at: nowIso,

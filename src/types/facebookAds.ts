@@ -26,6 +26,8 @@ export type FacebookAdsCampaign = {
   clicks: number;
   spendMicros: number;
   conversions: number;
+  /** Pixel / conversion event families for the Conv. hover card (range-aggregated). */
+  actionBreakdown?: Record<string, number>;
   ctr?: number;
   averageCpcMicros?: number;
   lastSyncedAt?: string;
@@ -79,6 +81,7 @@ export type FacebookAdsDailyMetricPoint = {
   clicks: number;
   spendMicros: number;
   conversions: number;
+  actionBreakdown: Record<string, number>;
   ctr: number;
   averageCpcMicros: number;
 };
@@ -88,6 +91,7 @@ export type FacebookAdsMetricTotals = {
   clicks: number;
   spendMicros: number;
   conversions: number;
+  actionBreakdown: Record<string, number>;
   ctr: number;
   averageCpcMicros: number;
   cpaMicros: number | null;

@@ -2,6 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { resolveFacebookBrandListId } from '@/lib/facebookAdsBrand';
+import {
+  mergeActionBreakdowns,
+  parseActionBreakdown,
+  type ActionBreakdown,
+} from '@/lib/facebookAdsConversions';
 import type {
   FacebookAdsCampaignDetail,
   FacebookAdsDailyMetricPoint,
@@ -39,6 +44,7 @@ type DailyRow = {
   clicks: number | string;
   spend_micros: number | string;
   conversions: number | string;
+  action_breakdown?: unknown;
 };
 
 function deriveTotals(
@@ -46,12 +52,14 @@ function deriveTotals(
   clicks: number,
   spendMicros: number,
   conversions: number,
+  actionBreakdown: ActionBreakdown = {},
 ): FacebookAdsMetricTotals {
   return {
     impressions,
     clicks,
     spendMicros,
     conversions,
+    actionBreakdown,
     ctr: impressions > 0 ? clicks / impressions : 0,
     averageCpcMicros: clicks > 0 ? Math.round(spendMicros / clicks) : 0,
     cpaMicros: conversions > 0 ? Math.round(spendMicros / conversions) : null,
@@ -103,12 +111,14 @@ function fillSeries(
     const clicks = Number(row?.clicks) || 0;
     const spendMicros = Number(row?.spend_micros) || 0;
     const conversions = Number(row?.conversions) || 0;
+    const actionBreakdown = parseActionBreakdown(row?.action_breakdown);
     series.push({
       date: cursor,
       impressions,
       clicks,
       spendMicros,
       conversions,
+      actionBreakdown,
       ctr: impressions > 0 ? clicks / impressions : 0,
       averageCpcMicros: clicks > 0 ? Math.round(spendMicros / clicks) : 0,
     });
@@ -122,13 +132,21 @@ function sumSeries(series: FacebookAdsDailyMetricPoint[]): FacebookAdsMetricTota
   let clicks = 0;
   let spendMicros = 0;
   let conversions = 0;
+  const breakdowns: ActionBreakdown[] = [];
   for (const p of series) {
     impressions += p.impressions;
     clicks += p.clicks;
     spendMicros += p.spendMicros;
     conversions += p.conversions;
+    breakdowns.push(p.actionBreakdown);
   }
-  return deriveTotals(impressions, clicks, spendMicros, conversions);
+  return deriveTotals(
+    impressions,
+    clicks,
+    spendMicros,
+    conversions,
+    mergeActionBreakdowns(breakdowns),
+  );
 }
 
 async function fetchDailyRows(
@@ -139,7 +157,7 @@ async function fetchDailyRows(
 ): Promise<DailyRow[]> {
   const { data, error } = await supabase
     .from('facebook_ads_campaign_daily_metrics')
-    .select('metric_date,impressions,clicks,spend_micros,conversions')
+    .select('metric_date,impressions,clicks,spend_micros,conversions,action_breakdown')
     .eq('ad_account_id', adAccountId)
     .eq('campaign_id', campaignId)
     .gte('metric_date', from)
