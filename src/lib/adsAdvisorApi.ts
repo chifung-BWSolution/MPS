@@ -8,9 +8,10 @@ export async function invokeAdsCampaignAdvisor(
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
   const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData.session?.access_token;
+  // Dev-bypass login has systemUser but no Supabase session — same fallback as googleAdsApi.
+  const token = sessionData.session?.access_token || supabaseAnonKey;
   if (!token) {
-    throw new Error('請先登入後再使用 AI 廣告顧問');
+    throw new Error('無法連線 AI 服務（缺少 Supabase 設定）');
   }
 
   const url = `${supabaseUrl}/functions/v1/ads-campaign-advisor`;

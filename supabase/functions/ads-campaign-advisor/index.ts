@@ -1,5 +1,4 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { ADVISOR_TOOL_DEFINITIONS } from "./tools.ts";
 import { executeAdvisorTool, type AdvisorDateContext } from "./warehouse.ts";
 
@@ -325,25 +324,9 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const jwt = extractJwt(req);
-    if (!jwt) {
-      return jsonResponse({ error: "未登入" }, 401);
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const supabaseKey =
-      Deno.env.get("SUPABASE_ANON_KEY") ||
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
-      "";
-    if (!supabaseUrl || !supabaseKey) {
-      return jsonResponse({ error: "Supabase 環境變數未設定" }, 500);
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: `Bearer ${jwt}` } },
-    });
-    const { data: userData, error: userError } = await supabase.auth.getUser(jwt);
-    if (userError || !userData?.user) {
+    // Gateway already verifies JWT (user session or anon key). Dev-bypass
+    // logins have no user session and send the anon key, same as other ads functions.
+    if (!extractJwt(req)) {
       return jsonResponse({ error: "未登入" }, 401);
     }
 
