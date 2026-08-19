@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Plus, Check, X, AlertTriangle, ChevronLeft, ChevronRight, Link, Sparkles, Clock, Users, BarChart3, Calendar, FileText, Zap, Bot, Trash2, RefreshCw, Eye, MapPin, CalendarDays, Loader2, Shield, Upload, Image as ImageIcon } from 'lucide-react';
-import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -15,7 +14,6 @@ import {
   parseLocalDateStr as parseWeekDateStr,
   startOfWeekSunday,
   toLocalDateStr,
-  twoWeekWindowFromRange,
 } from '@/lib/sundayWeek';
 import {
   dailyReportsV2,
@@ -690,7 +688,7 @@ function SubmitReportPage() {
     [laterWeekDates, earlierWeekDates],
   );
 
-  const weekPickerValue = useMemo((): DateRange | undefined => ({
+  const weekPickerRange = useMemo(() => ({
     from: parseLocalDateStr(weekWindow.windowStart),
     to: parseLocalDateStr(weekWindow.windowEnd),
   }), [weekWindow.windowStart, weekWindow.windowEnd]);
@@ -706,11 +704,10 @@ function SubmitReportPage() {
     setWeekPickerOpen(false);
   }, [currentWeekSunday]);
 
-  const handleWeekRangeSelect = useCallback((range: DateRange | undefined) => {
-    if (!range?.from) return;
-    const window = twoWeekWindowFromRange(range.from, range.to);
-    setLaterWeekSunday(window.later.start);
-    if (range.to) setWeekPickerOpen(false);
+  const applyWeekFromDate = useCallback((date: Date) => {
+    const sunday = clampLaterWeekSunday(startOfWeekSunday(date));
+    setLaterWeekSunday(toLocalDateStr(sunday));
+    setWeekPickerOpen(false);
   }, []);
 
   // Recent frequent items from the user's real past reports (for quick selection).
@@ -1514,19 +1511,32 @@ function SubmitReportPage() {
                     {formatWeekRangeLabel(weekWindow.windowStart, weekWindow.windowEnd)}
                   </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
+                <PopoverContent
+                  className="w-auto p-0"
+                  align="start"
+                  onOpenAutoFocus={(e) => e.preventDefault()}
+                  onCloseAutoFocus={(e) => e.preventDefault()}
+                >
                   <div className="px-3 pt-3 pb-1">
                     <p className="text-[12px] font-medium text-[#0d1a2d]">選擇週範圍</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">週日–週六 · 顯示所選結束週及其上一週</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">週日–週六 · 點選任一日期即可跳至該週及上一週</p>
                   </div>
                   <DayPickerCalendar
-                    mode="range"
+                    mode="single"
+                    required
                     weekStartsOn={0}
                     numberOfMonths={2}
-                    selected={weekPickerValue}
-                    onSelect={handleWeekRangeSelect}
+                    selected={parseLocalDateStr(weekWindow.later.end)}
+                    onDayClick={(date, modifiers) => {
+                      if (modifiers.disabled) return;
+                      applyWeekFromDate(date);
+                    }}
                     defaultMonth={parseLocalDateStr(weekWindow.windowStart)}
                     disabled={{ after: addCalendarDays(parseLocalDateStr(currentWeekSunday), 6) }}
+                    modifiers={{ weekRange: weekPickerRange }}
+                    modifiersClassNames={{
+                      weekRange: 'bg-teal-100 text-teal-900',
+                    }}
                   />
                   <div className="flex items-center justify-between gap-2 px-3 pb-3">
                     <button
