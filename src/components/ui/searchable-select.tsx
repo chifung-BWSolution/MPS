@@ -62,7 +62,11 @@ export function SearchableSelect({
           <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+      <PopoverContent
+        className="z-[120] w-[var(--radix-popover-trigger-width)] p-0"
+        align="start"
+        // Stay above CrudModal / FixedOverlay (z-[100]/z-[110]) so the list is clickable.
+      >
         <Command>
           <CommandInput placeholder={searchPlaceholder} className="h-9 text-[13px]" />
           <CommandList>

@@ -26,6 +26,10 @@ assert.match(moduleSrc, /searchPlaceholder="搜尋網站名稱、網域、品牌
 assert.doesNotMatch(moduleSrc, /選擇網站或 Google Ads 帳戶/);
 assert.doesNotMatch(moduleSrc, /供應商網址 \*/);
 assert.doesNotMatch(moduleSrc, /BACKLINK_BRANDS/);
+const selectSrc = readFileSync(join(root, 'src/components/ui/searchable-select.tsx'), 'utf8');
+const popoverSrc = readFileSync(join(root, 'src/components/ui/popover.tsx'), 'utf8');
+assert.match(selectSrc, /z-\[120\]/);
+assert.match(popoverSrc, /z-\[120\]/);
 assert.match(moduleSrc, /costsFromUsdInput/);
 assert.match(moduleSrc, /costsFromHkdInput/);
 assert.doesNotMatch(moduleSrc, /!data\.costHkd/);
