@@ -24,6 +24,20 @@ export function normalizeBacklinkCosts(
   return { costUsd: 0, costHkd: 0 };
 }
 
+/** Convert from the USD field the user is typing; always refresh HKD. */
+export function costsFromUsdInput(raw: string): { costUsd: number; costHkd: number } {
+  const usd = Number.parseFloat(raw);
+  if (!Number.isFinite(usd) || usd <= 0) return { costUsd: 0, costHkd: 0 };
+  return { costUsd: usd, costHkd: usdToHkd(usd) };
+}
+
+/** Convert from the HKD field the user is typing; always refresh USD. */
+export function costsFromHkdInput(raw: string): { costUsd: number; costHkd: number } {
+  const hkd = Number.parseFloat(raw);
+  if (!Number.isFinite(hkd) || hkd <= 0) return { costUsd: 0, costHkd: 0 };
+  return { costUsd: hkdToUsd(hkd), costHkd: hkd };
+}
+
 export function formatBacklinkUsd(amount: number): string {
   return `USD $${Math.round(amount).toLocaleString()}`;
 }

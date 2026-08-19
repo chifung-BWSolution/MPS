@@ -21,6 +21,15 @@ assert.doesNotMatch(
   moduleSrc,
   /<th className="text-left px-4 py-2.5 font-medium text-muted-foreground">供應商網址<\/th>/,
 );
+assert.match(moduleSrc, /搜尋並選擇網站/);
+assert.match(moduleSrc, /searchPlaceholder="搜尋網站名稱、網域、品牌…"/);
+assert.doesNotMatch(moduleSrc, /選擇網站或 Google Ads 帳戶/);
+assert.doesNotMatch(moduleSrc, /供應商網址 \*/);
+assert.doesNotMatch(moduleSrc, /BACKLINK_BRANDS/);
+assert.match(moduleSrc, /costsFromUsdInput/);
+assert.match(moduleSrc, /costsFromHkdInput/);
+assert.doesNotMatch(moduleSrc, /!data\.costHkd/);
+assert.doesNotMatch(moduleSrc, /!data\.costUsd/);
 assert.match(tabSrc, /siteBrandLabel/);
 assert.match(tabSrc, /bg-teal-50 text-teal-700/);
 
