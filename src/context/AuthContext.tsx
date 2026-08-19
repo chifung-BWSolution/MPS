@@ -616,7 +616,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Migrate stale sessions: Bubble text id, leftover manual UUID, or email mismatch.
+  // Heal stale sessions: leftover manual UUID, or a session staff_id that
+  // email-first resolveStaffUuid previously overwrote onto the wrong person.
   useEffect(() => {
     if (!systemUser || staffUuidMigrateRef.current) return;
     staffUuidMigrateRef.current = true;

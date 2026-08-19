@@ -25,6 +25,7 @@ import {
   consumePendingItems,
   dismissPendingItem,
   isPlaceholderStaff,
+  localDateString,
   mergePendingIntoReportEntries,
   resolveStaffUuid,
   type ReportFormEntry,
@@ -598,24 +599,19 @@ function SubmitReportPage() {
     [currentStaffId, selectedDate],
   );
 
-  // `hydrated` gates the persist effect so it can't run with stale blank
-  // state on mount and overwrite/delete a draft before we've had a chance
-  // to read it. Reset whenever the (staff, date) key changes.
-  const [draftHydrated, setDraftHydrated] = useState(false);
-  useEffect(() => { setDraftHydrated(false); }, [draftStorageKey]);
-
-  // Mark draft as hydrated once loadExistingReport finishes. Restoration
-  // itself happens inside loadExistingReport's "no existing report" branch
-  // to avoid a race where the async load would overwrite a restored draft.
+  // Persist only after loadExistingReport has finished for THIS (staff, date)
+  // key. Comparing keys (not a boolean) avoids the date-switch race where
+  // persist still thought the previous date was hydrated and deleted the
+  // destination draft.
+  const [hydratedDraftKey, setHydratedDraftKey] = useState<string | null>(null);
   useEffect(() => {
-    if (!draftStorageKey || isLoadingExisting || draftHydrated) return;
-    setDraftHydrated(true);
-  }, [draftStorageKey, isLoadingExisting, draftHydrated]);
+    if (!draftStorageKey || isLoadingExisting) return;
+    setHydratedDraftKey(draftStorageKey);
+  }, [draftStorageKey, isLoadingExisting]);
 
-  // Persist draft as the user edits. Gated by `draftHydrated` so it never
-  // runs before restore. Skip if a submitted report exists.
+  // Persist draft as the user edits. Skip if a saved report exists.
   useEffect(() => {
-    if (!draftStorageKey || !draftHydrated || existingReportId) return;
+    if (!draftStorageKey || hydratedDraftKey !== draftStorageKey || existingReportId) return;
     const hasContent = entries.some(e => e.category || e.title || e.hours > 0 || e.relatedName)
       || underHoursReason.length > 0
       || hoursPreset !== 'full'
@@ -632,7 +628,7 @@ function SubmitReportPage() {
     } catch (err) {
       console.warn('[SubmitReport] failed to persist draft:', err);
     }
-  }, [draftStorageKey, draftHydrated, existingReportId, entries, targetHours, hoursPreset, underHoursReason, office, fullDayHours]);
+  }, [draftStorageKey, hydratedDraftKey, existingReportId, entries, targetHours, hoursPreset, underHoursReason, office, fullDayHours]);
 
   // Generate list of available dates (past 14 days) — always relative to real current date
   const availableDates = useMemo(() => {
@@ -1069,15 +1065,6 @@ function SubmitReportPage() {
           throw new Error(updateError.message);
         }
         reportId = existingReportId;
-
-        const { error: deleteError } = await supabase
-          .from('day_report_entries')
-          .delete()
-          .eq('day_report_id', existingReportId);
-
-        if (deleteError) {
-          throw new Error(deleteError.message);
-        }
       } else {
         const { data: reportData, error: reportError } = await supabase
           .from('day_reports')
@@ -1128,14 +1115,30 @@ function SubmitReportPage() {
         });
         });
 
-      if (entryRecords.length > 0) {
-        const { error: entriesError } = await supabase
-          .from('day_report_entries')
-          .insert(entryRecords);
+      // Replace entries in one DB transaction so a failed insert cannot
+      // leave the report header with zero line items.
+      const { error: entriesError } = await supabase.rpc('replace_day_report_entries', {
+        p_report_id: reportId,
+        p_staff_id: currentStaffId,
+        p_entries: entryRecords.map((r) => ({
+          category: r.category,
+          related_id: r.related_id,
+          related_name: r.related_name,
+          title: r.title,
+          hours: r.hours,
+          outcome_type: r.outcome_type,
+          outcome_url: r.outcome_url,
+          outcome_images: r.outcome_images,
+          growth_experience: r.growth_experience,
+          is_ai_assisted: r.is_ai_assisted,
+          ai_tools: r.ai_tools,
+          ai_tools_v2: r.ai_tools_v2,
+          sort_order: r.sort_order,
+        })),
+      });
 
-        if (entriesError) {
-          throw new Error(entriesError.message);
-        }
+      if (entriesError) {
+        throw new Error(entriesError.message);
       }
 
       // Only consume pending items on final submit
@@ -1291,11 +1294,9 @@ function SubmitReportPage() {
         )}
         <button onClick={() => {
           setSubmitted(false);
-          setEntries([{ category: '', relatedId: '', relatedName: '', title: '', hours: 0, outcomeType: '', outcomeUrl: '', outcomeImages: [], outcomeImageFiles: [], growthExperience: '', isAiAssisted: false, aiTools: [], aiToolsV2: { ...emptyAiTools } }]);
-          setUnderHoursReason('');
           setSubmitError(null);
         }} className="px-4 py-2 rounded-md border border-teal-200 text-teal-700 text-[15px] font-medium hover:bg-teal-50 transition-colors">
-          繼續提交新匯報
+          返回匯報
         </button>
       </div>
     );
@@ -2066,7 +2067,7 @@ function SubmitReportPage() {
 function TodayTeamReports() {
   const { systemUser } = useAuth();
   const categoryLookup = useCategoryLookup();
-  const todayStr = new Date().toISOString().split('T')[0]; // Live today's date
+  const todayStr = localDateString();
   
   // Determine user's department and role
   const rawDepartment = systemUser?.department || 'System';

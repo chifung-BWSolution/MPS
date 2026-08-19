@@ -1,5 +1,19 @@
 import { supabase } from '@/lib/supabase';
 import type { OutcomeType, AITool } from '@/data/dayReportDataV2';
+import {
+  chooseStaffUuid,
+  isPlaceholderStaff,
+  isStaffUuid,
+  remapStaleStaffUuid,
+} from '@/services/staffIdentity';
+
+export {
+  chooseStaffUuid,
+  isPlaceholderStaff,
+  isStaffUuid,
+  localDateString,
+  remapStaleStaffUuid,
+} from '@/services/staffIdentity';
 
 export type PendingReportStatus = 'pending' | 'pulled' | 'consumed' | 'dismissed';
 
@@ -71,83 +85,70 @@ type SystemUserLike = {
   google_email?: string;
 } | null;
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-/**
- * Leftover placeholder staffs.id values created for the UUID FK migration.
- * Map them to the canonical Bubble staff row so submit / team-view share one identity.
- */
-const STALE_MANUAL_STAFF_UUIDS: Record<string, string> = {
-  // Lowell Lo (manual) → Lowell Lo (Bubble / BWT OB System)
-  'd88d2465-42d1-4205-8a9b-8495083c3691': '04102dd8-8d0f-4536-82cd-904cc0769227',
-};
-
-/** True when value is a UUID (staffs.id / FK shape). */
-export function isStaffUuid(value: string | null | undefined): boolean {
-  return !!value && UUID_RE.test(value.trim());
-}
-
-/** True for leftover `manual_*` / "(manual)" staff rows that must not own live reports. */
-export function isPlaceholderStaff(row: {
-  bubble_staff_id?: string | null;
-  display_name?: string | null;
-} | null | undefined): boolean {
-  if (!row) return false;
-  const bubble = (row.bubble_staff_id || '').trim().toLowerCase();
-  const name = (row.display_name || '').trim().toLowerCase();
-  return bubble.startsWith('manual_') || name.includes('(manual)');
-}
-
-/** Rewrite a known leftover manual staff UUID to the canonical staffs.id. */
-export function remapStaleStaffUuid(value: string | null | undefined): string {
-  const raw = (value || '').trim();
-  return STALE_MANUAL_STAFF_UUIDS[raw] || raw;
-}
-
-export function localDateString(d = new Date()): string {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+async function lookupLoginStaffIdsByEmail(email: string): Promise<string[]> {
+  const [byGoogle, byEmail] = await Promise.all([
+    supabase.from('users').select('staff_id').ilike('google_email', email),
+    supabase.from('users').select('staff_id').ilike('email', email),
+  ]);
+  const ids = new Set<string>();
+  for (const row of [...(byGoogle.data || []), ...(byEmail.data || [])]) {
+    const id = remapStaleStaffUuid((row as { staff_id?: string }).staff_id);
+    if (isStaffUuid(id)) ids.add(id);
+  }
+  return [...ids];
 }
 
 /**
  * Resolve staffs.id (uuid) for FK writes.
- * Prefer work_email (canonical person) over a leftover manual UUID from bypass/fallback sessions.
+ * Prefer the login whitelist row (`users.staff_id`, remapped) over `staffs.work_email`.
  */
 export async function resolveStaffUuid(systemUser: SystemUserLike): Promise<string | null> {
   if (!systemUser) return null;
 
-  const staffIdRaw = remapStaleStaffUuid(systemUser.staff_id);
+  const sessionStaffId = remapStaleStaffUuid(systemUser.staff_id);
   const email = (systemUser.email || systemUser.google_email || '').toLowerCase().trim();
 
+  let loginStaffId: string | null = null;
   if (email) {
+    const loginIds = await lookupLoginStaffIdsByEmail(email);
+    if (loginIds.length === 1) {
+      loginStaffId = loginIds[0];
+    } else if (loginIds.length > 1 && loginIds.includes(sessionStaffId)) {
+      loginStaffId = sessionStaffId;
+    }
+  }
+
+  let uniqueEmailStaffId: string | null = null;
+  if (!loginStaffId && !isStaffUuid(sessionStaffId) && email) {
     const { data } = await supabase
       .from('staffs')
       .select('id, bubble_staff_id, display_name')
       .ilike('work_email', email)
       .eq('status', 'active');
-    const match = (data || []).find((row) => !isPlaceholderStaff(row));
-    if (match?.id) return match.id;
+    const matches = (data || []).filter((row) => row?.id && !isPlaceholderStaff(row));
+    if (matches.length === 1) uniqueEmailStaffId = matches[0].id;
   }
 
-  if (isStaffUuid(staffIdRaw)) return staffIdRaw;
-
-  // Prefer explicit bubble id; also accept legacy sessions that stuffed Bubble text into staff_id.
+  let bubbleStaffId: string | null = null;
   const bubbleId = (systemUser.bubble_staff_id || '').trim()
-    || (!isStaffUuid(staffIdRaw) ? staffIdRaw : '');
-  if (bubbleId && !bubbleId.toLowerCase().startsWith('manual_')) {
+    || (!isStaffUuid(sessionStaffId) ? sessionStaffId : '');
+  if (!loginStaffId && !isStaffUuid(sessionStaffId) && !uniqueEmailStaffId
+    && bubbleId && !bubbleId.toLowerCase().startsWith('manual_')) {
     const { data } = await supabase
       .from('staffs')
       .select('id, bubble_staff_id, display_name')
       .eq('bubble_staff_id', bubbleId)
       .limit(1)
       .maybeSingle();
-    if (data?.id && !isPlaceholderStaff(data)) return data.id;
+    if (data?.id && !isPlaceholderStaff(data)) bubbleStaffId = data.id;
   }
 
-  return isStaffUuid(staffIdRaw) ? staffIdRaw : null;
+  return chooseStaffUuid({
+    loginStaffId,
+    sessionStaffId,
+    uniqueEmailStaffId,
+    bubbleStaffId,
+  });
 }
 
 /** @deprecated Use resolveStaffUuid — FK columns now store staffs.id (uuid). */
