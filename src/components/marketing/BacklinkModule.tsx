@@ -3,10 +3,15 @@ import { Plus, Search, ArrowLeft, Eye, Edit, Trash2, AlertTriangle } from 'lucid
 import { toast } from 'sonner';
 import { useBacklinkPurchases } from '@/hooks/useBacklinkPurchases';
 import { useBrands } from '@/hooks/useBrands';
+import { useCompanies } from '@/hooks/useCompanies';
 import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
 import { useGoogleAdsAccounts } from '@/hooks/useGoogleAdsAccounts';
 import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
-import { resolveBacklinkBrandLabel, resolveBacklinkBrandListId } from '@/lib/backlinkBrand';
+import {
+  resolveBacklinkBrandLabel,
+  resolveBacklinkBrandListId,
+  resolveBacklinkWebsite,
+} from '@/lib/backlinkBrand';
 import { getManualDisplayName } from '@/lib/domainMatch';
 import {
   costsFromHkdInput,
@@ -166,6 +171,7 @@ function SiteCell({
 
 export function BacklinkModule() {
   const { profiles: websites } = useWebsiteProfiles();
+  const { companies } = useCompanies();
   const { brands } = useBrands();
   const { suppliers: webPageSuppliers } = useWebPageSuppliers();
   const { clientAccounts: googleAdsAccounts } = useGoogleAdsAccounts();
@@ -177,8 +183,9 @@ export function BacklinkModule() {
   } = useBacklinkPurchases();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [companyFilter, setCompanyFilter] = useState('all');
   const [brandFilter, setBrandFilter] = useState('all');
-  const [accountFilter, setAccountFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -220,19 +227,44 @@ export function BacklinkModule() {
     return [...years].sort((a, b) => b - a);
   }, [backlinkPurchases]);
 
-  const activeBrands = useMemo(
-    () => brands.filter((b) => b.isActive).sort((a, b) => a.brandCode.localeCompare(b.brandCode)),
-    [brands],
+  const companyOptions = useMemo(
+    () => [...new Set(websites.map((w) => w.company || '').filter(Boolean))].sort(),
+    [websites],
   );
+
+  const filteredBrands = useMemo(() => {
+    if (companyFilter === 'all') return brands;
+    return brands.filter((b) => {
+      const company = companies.find((c) => c.uuid === b.companyId || c.id === b.companyId);
+      return company?.companyCode === companyFilter;
+    });
+  }, [brands, companies, companyFilter]);
+
+  const uniqueBrandCodes = useMemo(
+    () => [...new Map(filteredBrands.filter((b) => b.isActive).map((b) => [b.brandCode, b])).values()]
+      .sort((a, b) => a.brandCode.localeCompare(b.brandCode)),
+    [filteredBrands],
+  );
+
+  const brandIdsByCode = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const brand of brands) {
+      if (!map.has(brand.brandCode)) map.set(brand.brandCode, new Set());
+      map.get(brand.brandCode)!.add(brand.id);
+    }
+    return map;
+  }, [brands]);
 
   const enriched = useMemo(() => {
     return backlinkPurchases.map((p) => {
       const supplier = supplierMap.get(p.webSupplierId);
       const site = p.websiteProfileId ? siteMap.get(p.websiteProfileId) : undefined;
+      const relatedSite = resolveBacklinkWebsite(p, websites) || site;
       const manualSiteName = p.sourceDomain ? getManualDisplayName(p.sourceDomain) : null;
       const resolvedSiteName = p.googleAdsAccountName || manualSiteName;
       const siteLabel =
         resolvedSiteName ||
+        relatedSite?.websiteName ||
         site?.websiteName ||
         p.sourceDomain ||
         '—';
@@ -243,11 +275,14 @@ export function BacklinkModule() {
         supplierName: supplier?.name || '—',
         supplierUrl: formatSupplierUrl(supplier?.url),
         platform: supplier?.platform || '—',
-        siteName: site?.websiteName || '—',
+        siteName: relatedSite?.websiteName || site?.websiteName || '—',
         siteLabel,
         resolvedSiteName,
         brandListId,
         brandLabel,
+        siteCompany: relatedSite?.company || '',
+        siteStatus: relatedSite?.status || '',
+        siteBrandId: relatedSite?.brandId || brandListId || '',
       };
     });
   }, [backlinkPurchases, supplierMap, siteMap, websites, brands]);
@@ -255,12 +290,12 @@ export function BacklinkModule() {
   const filtered = useMemo(() => {
     return enriched
       .filter((r) => {
-        if (brandFilter === 'none') return !r.brandListId;
-        if (brandFilter !== 'all' && r.brandListId !== brandFilter) return false;
-        if (accountFilter !== 'all') {
-          if (accountFilter === 'unmatched') return !r.resolvedSiteName && !!r.sourceDomain;
-          if (r.googleAdsCustomerId !== accountFilter) return false;
+        if (companyFilter !== 'all' && r.siteCompany !== companyFilter) return false;
+        if (brandFilter !== 'all') {
+          const matchingIds = brandIdsByCode.get(brandFilter);
+          if (!matchingIds || !matchingIds.has(r.siteBrandId)) return false;
         }
+        if (statusFilter !== 'all' && r.siteStatus !== statusFilter) return false;
         if (yearFilter !== 'all') {
           if (!r.purchaseDate.startsWith(`${yearFilter}-`)) return false;
         }
@@ -277,13 +312,14 @@ export function BacklinkModule() {
             (r.sourceDomain || '').toLowerCase().includes(q) ||
             (r.brandLabel || '').toLowerCase().includes(q) ||
             (r.brand || '').toLowerCase().includes(q) ||
+            r.siteCompany.toLowerCase().includes(q) ||
             (r.notes || '').toLowerCase().includes(q)
           );
         }
         return true;
       })
       .sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate));
-  }, [enriched, brandFilter, accountFilter, yearFilter, dateFrom, dateTo, searchQuery]);
+  }, [enriched, companyFilter, brandFilter, statusFilter, brandIdsByCode, yearFilter, dateFrom, dateTo, searchQuery]);
 
   const stats = useMemo(() => {
     const totalQty = filtered.reduce((s, p) => s + p.quantity, 0);
@@ -559,32 +595,40 @@ export function BacklinkModule() {
               className="pl-8 h-9 text-[13px]"
             />
           </div>
-          <Select value={accountFilter} onValueChange={setAccountFilter}>
-            <SelectTrigger className="w-[200px] h-9 text-[13px]">
-              <SelectValue placeholder="帳戶" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部帳戶</SelectItem>
-              <SelectItem value="unmatched">未匹配 Domain</SelectItem>
-              {googleAdsAccounts.map((a) => (
-                <SelectItem key={a.customerId} value={a.customerId}>
-                  {a.descriptiveName || a.customerId}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={brandFilter} onValueChange={setBrandFilter}>
-            <SelectTrigger className="w-[160px] h-9 text-[13px]">
-              <SelectValue placeholder="品牌" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部品牌</SelectItem>
-              <SelectItem value="none">未設定品牌</SelectItem>
-              {activeBrands.map((brand) => (
-                <SelectItem key={brand.id} value={brand.id}>{brand.brandCode}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <select
+            value={companyFilter}
+            onChange={(e) => {
+              setCompanyFilter(e.target.value);
+              setBrandFilter('all');
+            }}
+            className="h-9 px-3 border border-border rounded-md text-[13px] bg-white"
+          >
+            <option value="all">所有公司</option>
+            {companyOptions.map((code) => (
+              <option key={code} value={code}>{code}</option>
+            ))}
+          </select>
+          <select
+            value={brandFilter}
+            onChange={(e) => setBrandFilter(e.target.value)}
+            className="h-9 px-3 border border-border rounded-md text-[13px] bg-white"
+          >
+            <option value="all">所有品牌</option>
+            {uniqueBrandCodes.map((brand) => (
+              <option key={brand.brandCode} value={brand.brandCode}>{brand.brandCode}</option>
+            ))}
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="h-9 px-3 border border-border rounded-md text-[13px] bg-white"
+          >
+            <option value="all">所有狀態</option>
+            <option value="live">已上線</option>
+            <option value="development">開發中</option>
+            <option value="maintenance">維護中</option>
+            <option value="archived">已封存</option>
+          </select>
           <button
             onClick={() => { setForm(createEmptyForm()); setShowAddModal(true); }}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700 transition-colors duration-200 h-9"

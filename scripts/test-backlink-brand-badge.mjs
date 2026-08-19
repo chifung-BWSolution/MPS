@@ -34,6 +34,12 @@ const purchaseDbSrc = readFileSync(join(root, 'src/lib/backlinkPurchaseDb.ts'), 
 assert.match(purchaseDbSrc, /toBacklinkInsertRow/);
 assert.doesNotMatch(purchaseDbSrc, /brand:/);
 assert.doesNotMatch(purchaseDbSrc, /cost_usd/);
+assert.match(moduleSrc, /所有公司/);
+assert.match(moduleSrc, /所有品牌/);
+assert.match(moduleSrc, /所有狀態/);
+assert.match(moduleSrc, /已上線/);
+assert.doesNotMatch(moduleSrc, /全部帳戶/);
+assert.doesNotMatch(moduleSrc, /accountFilter/);
 assert.match(moduleSrc, /請選擇購買日期/);
 assert.match(moduleSrc, /costsFromUsdInput/);
 assert.match(moduleSrc, /costsFromHkdInput/);
