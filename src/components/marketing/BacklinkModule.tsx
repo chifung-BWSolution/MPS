@@ -32,15 +32,25 @@ type PurchaseForm = {
   notes: string;
 };
 
-const emptyForm: PurchaseForm = {
-  websiteProfileId: '',
-  webSupplierId: '',
-  costUsd: 0,
-  costHkd: 0,
-  purchaseDate: '',
-  quantity: 1,
-  notes: '',
-};
+function todayIsoDate(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function createEmptyForm(): PurchaseForm {
+  return {
+    websiteProfileId: '',
+    webSupplierId: '',
+    costUsd: 0,
+    costHkd: 0,
+    purchaseDate: todayIsoDate(),
+    quantity: 1,
+    notes: '',
+  };
+}
 
 function websiteOptionLabel(name: string, domainUrl?: string): string {
   if (!domainUrl) return name;
@@ -175,7 +185,7 @@ export function BacklinkModule() {
   const [selectedRecord, setSelectedRecord] = useState<BacklinkPurchase | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [form, setForm] = useState<PurchaseForm>(emptyForm);
+  const [form, setForm] = useState<PurchaseForm>(() => createEmptyForm());
   const [editing, setEditing] = useState<(BacklinkPurchase & { notes?: string }) | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BacklinkPurchase | null>(null);
   const [saving, setSaving] = useState(false);
@@ -298,7 +308,23 @@ export function BacklinkModule() {
   const selectedSupplier = form.webSupplierId ? supplierMap.get(form.webSupplierId) : undefined;
 
   const handleAdd = async () => {
-    if (!form.websiteProfileId || !form.webSupplierId || !form.purchaseDate || form.quantity < 1 || saving) return;
+    if (saving) return;
+    if (!form.websiteProfileId) {
+      toast.error('請選擇所屬網站');
+      return;
+    }
+    if (!form.webSupplierId) {
+      toast.error('請選擇供應商');
+      return;
+    }
+    if (!form.purchaseDate) {
+      toast.error('請選擇購買日期');
+      return;
+    }
+    if (form.quantity < 1) {
+      toast.error('反向連結數量必須大於 0');
+      return;
+    }
     setSaving(true);
     const { error } = await addPurchase({
       websiteProfileId: form.websiteProfileId,
@@ -313,7 +339,8 @@ export function BacklinkModule() {
       toast.error(`新增失敗：${error.message}`);
       return;
     }
-    setForm(emptyForm);
+    toast.success('已新增反向連結購買');
+    setForm(createEmptyForm());
     setShowAddModal(false);
   };
 
@@ -559,7 +586,7 @@ export function BacklinkModule() {
             </SelectContent>
           </Select>
           <button
-            onClick={() => { setForm(emptyForm); setShowAddModal(true); }}
+            onClick={() => { setForm(createEmptyForm()); setShowAddModal(true); }}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700 transition-colors duration-200 h-9"
           >
             <Plus size={12} /> 新增購買
@@ -651,7 +678,9 @@ export function BacklinkModule() {
         )}
         <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
           <Button variant="secondary" onClick={() => setShowAddModal(false)}>取消</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleAdd}>新增</Button>
+          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleAdd} disabled={saving}>
+            {saving ? '新增中…' : '新增'}
+          </Button>
         </div>
       </CrudModal>
 

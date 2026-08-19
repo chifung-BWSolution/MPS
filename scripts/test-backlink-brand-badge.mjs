@@ -30,6 +30,11 @@ const selectSrc = readFileSync(join(root, 'src/components/ui/searchable-select.t
 const popoverSrc = readFileSync(join(root, 'src/components/ui/popover.tsx'), 'utf8');
 assert.match(selectSrc, /z-\[120\]/);
 assert.match(popoverSrc, /z-\[120\]/);
+const purchaseDbSrc = readFileSync(join(root, 'src/lib/backlinkPurchaseDb.ts'), 'utf8');
+assert.match(purchaseDbSrc, /toBacklinkInsertRow/);
+assert.doesNotMatch(purchaseDbSrc, /brand:/);
+assert.doesNotMatch(purchaseDbSrc, /cost_usd/);
+assert.match(moduleSrc, /請選擇購買日期/);
 assert.match(moduleSrc, /costsFromUsdInput/);
 assert.match(moduleSrc, /costsFromHkdInput/);
 assert.doesNotMatch(moduleSrc, /!data\.costHkd/);

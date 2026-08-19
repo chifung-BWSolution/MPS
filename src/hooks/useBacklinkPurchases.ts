@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { normalizeBacklinkCosts } from '@/lib/backlinkCurrency';
+import { toBacklinkCostPatch, toBacklinkInsertRow } from '@/lib/backlinkPurchaseDb';
 import type { BacklinkBrand, BacklinkPurchase } from '@/types/marketingOps';
 
 type DbRow = {
@@ -68,27 +69,6 @@ function toDbCosts(data: Pick<BacklinkPurchase, 'costUsd' | 'costHkd'>) {
   return normalizeBacklinkCosts(data.costUsd, data.costHkd);
 }
 
-function toInsertRow(data: Omit<BacklinkPurchase, 'id'> & { id: string }) {
-  const { costUsd, costHkd } = toDbCosts(data);
-  return {
-    id: data.id,
-    website_profile_id: data.websiteProfileId ?? null,
-    web_supplier_id: data.webSupplierId,
-    cost_usd: costUsd,
-    cost_hkd: costHkd,
-    cost: costUsd > 0 ? costUsd : costHkd,
-    currency: costUsd > 0 && costHkd <= 0 ? 'USD' : costHkd > 0 && costUsd <= 0 ? 'HKD' : 'USD',
-    brand: data.brand ?? null,
-    purchase_date: data.purchaseDate,
-    quantity: data.quantity,
-    notes: data.notes ?? null,
-    google_ads_customer_id: data.googleAdsCustomerId ?? null,
-    google_ads_account_name: data.googleAdsAccountName ?? null,
-    source_domain: data.sourceDomain ?? null,
-    excel_sheet: data.excelSheet ?? null,
-  };
-}
-
 export function useBacklinkPurchases() {
   const { session } = useAuth();
   const [purchases, setPurchases] = useState<BacklinkPurchase[]>([]);
@@ -117,7 +97,7 @@ export function useBacklinkPurchases() {
 
   const addPurchase = useCallback(async (data: Omit<BacklinkPurchase, 'id'> & { id?: string }) => {
     const id = data.id || `bl_${Date.now()}`;
-    const row = toInsertRow({ ...data, id });
+    const row = toBacklinkInsertRow({ ...data, id });
     const { error: err } = await supabase.from('backlink_purchases').insert(row);
     const record = mapRow(row as DbRow);
     if (!err) setPurchases(prev => [record, ...prev]);
@@ -134,12 +114,8 @@ export function useBacklinkPurchases() {
         costUsd: data.costUsd ?? current?.costUsd ?? 0,
         costHkd: data.costHkd ?? current?.costHkd ?? 0,
       });
-      patch.cost_usd = costUsd;
-      patch.cost_hkd = costHkd;
-      patch.cost = costUsd > 0 ? costUsd : costHkd;
-      patch.currency = costHkd > 0 && costUsd <= 0 ? 'HKD' : 'USD';
+      Object.assign(patch, toBacklinkCostPatch(costUsd, costHkd));
     }
-    if (data.brand !== undefined) patch.brand = data.brand ?? null;
     if (data.purchaseDate !== undefined) patch.purchase_date = data.purchaseDate;
     if (data.quantity !== undefined) patch.quantity = data.quantity;
     if (data.notes !== undefined) patch.notes = data.notes ?? null;
@@ -174,7 +150,7 @@ export function useBacklinkPurchases() {
 
   const bulkImport = useCallback(async (items: Omit<BacklinkPurchase, 'id'>[]) => {
     if (!items.length) return { inserted: 0, error: null as { message: string } | null };
-    const rows = items.map((data, i) => toInsertRow({
+    const rows = items.map((data, i) => toBacklinkInsertRow({
       ...data,
       id: `bl_imp_${Date.now()}_${i}`,
     }));
