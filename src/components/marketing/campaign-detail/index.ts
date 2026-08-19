@@ -1,6 +1,8 @@
 export { AdsCampaignDetailShell } from './AdsCampaignDetailShell';
 export { GoogleAdsCampaignDetail } from './GoogleAdsCampaignDetail';
 export { FacebookAdsCampaignDetail } from './FacebookAdsCampaignDetail';
+export { AdsCampaignAdvisorDock } from './AdsCampaignAdvisorDock';
+export { AdsCampaignAdvisorChat } from './AdsCampaignAdvisorChat';
 export {
   AdsAdGroupsTable,
   AdsKeywordsTable,

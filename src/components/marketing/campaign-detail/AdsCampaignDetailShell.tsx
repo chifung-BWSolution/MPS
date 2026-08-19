@@ -1,9 +1,12 @@
-import { ArrowLeft } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ArrowLeft, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { DateRangePreset } from '@/types/googleAds';
 import { cn } from '@/lib/utils';
+import { useAdsCampaignTagNames } from '@/hooks/useAdsCampaignTagNames';
+import type { AdsAdvisorSnapshot } from '@/types/adsAdvisor';
 import { AdsKpiCard } from './AdsKpiCard';
 import { AdsMetricTrendChart } from './AdsMetricTrendChart';
 import { AdsDonutChart } from './AdsDonutChart';
@@ -12,8 +15,42 @@ import { AdsDailyMetricsTable } from './AdsDailyMetricsTable';
 import { AdsPlaceholderPanel } from './AdsPlaceholderPanel';
 import { AdsChannelBreakdownGrid } from './AdsBreakdownTables';
 import { FacebookAdsBreakdownGrid } from './FacebookAdsBreakdownTables';
+import { AdsCampaignAdvisorDock } from './AdsCampaignAdvisorDock';
 import { normalizeGoogleAdsBreakdownChannel } from '@/types/googleAds';
-import type { AdsCampaignDetailShellProps } from './types';
+import type {
+  AdsCampaignDetailShellProps,
+  AdsCampaignDetailViewModel,
+  AdsDateRangeControls,
+} from './types';
+
+function buildAdvisorSnapshot(
+  model: AdsCampaignDetailViewModel,
+  dateRange: AdsDateRangeControls,
+  tags: string[],
+): AdsAdvisorSnapshot | null {
+  if (!model.accountId || !model.campaignId) return null;
+  return {
+    platform: model.platform,
+    accountId: model.accountId,
+    campaignId: model.campaignId,
+    campaignName: model.campaignName,
+    status: model.status,
+    accountLabel: model.accountLabel,
+    channelOrObjective: model.channelOrObjective,
+    objectives: model.objectives,
+    brandLabel: model.brandLabel,
+    websites: model.websites.map((w) => ({ domain: w.domain })),
+    tags,
+    dateFrom: dateRange.rangeFrom,
+    dateTo: dateRange.rangeTo,
+    kpis: model.kpis.map((kpi) => ({
+      id: kpi.id,
+      label: kpi.label,
+      value: kpi.value,
+      deltaPct: kpi.deltaPct,
+    })),
+  };
+}
 
 function statusBadge(status: string) {
   const s = status.toUpperCase();
@@ -39,8 +76,24 @@ export function AdsCampaignDetailShell({
   onOpenWebsite,
   headerExtra,
 }: AdsCampaignDetailShellProps) {
+  const [advisorOpen, setAdvisorOpen] = useState(false);
+  const campaignRowId =
+    model.accountId && model.campaignId ? `${model.accountId}:${model.campaignId}` : null;
+  const { tagNames } = useAdsCampaignTagNames(model.platform, campaignRowId);
+  const advisorSnapshot = useMemo(
+    () => buildAdvisorSnapshot(model, dateRange, tagNames),
+    [
+      model,
+      dateRange.rangeFrom,
+      dateRange.rangeTo,
+      tagNames,
+    ],
+  );
+  const conversationKey = `${model.platform}:${model.accountId}:${model.campaignId}`;
+  const advisorDisabled = loading && !model.series.length;
+
   return (
-    <div className="space-y-0">
+    <div className={cn('space-y-0', advisorOpen && 'pr-[400px]')}>
       <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -116,7 +169,19 @@ export function AdsCampaignDetailShell({
               )}
             </div>
           </div>
-          {headerExtra}
+          <div className="flex flex-wrap items-center gap-2">
+            {headerExtra}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-teal-700 border-teal-200 bg-white hover:bg-teal-50"
+              onClick={() => setAdvisorOpen((open) => !open)}
+            >
+              <Sparkles size={14} className="mr-1" />
+              AI 顧問
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -243,6 +308,14 @@ export function AdsCampaignDetailShell({
           })()}
         </div>
       )}
+
+      <AdsCampaignAdvisorDock
+        open={advisorOpen}
+        onOpenChange={setAdvisorOpen}
+        snapshot={advisorSnapshot}
+        disabled={advisorDisabled}
+        conversationKey={conversationKey}
+      />
     </div>
   );
 }

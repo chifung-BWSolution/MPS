@@ -61,6 +61,7 @@ export type AdsCampaignDetailViewModel = {
   platform: AdsCampaignPlatform;
   platformLabel: string;
   campaignName: string;
+  campaignId: string;
   status: string;
   accountLabel: string;
   accountId: string;

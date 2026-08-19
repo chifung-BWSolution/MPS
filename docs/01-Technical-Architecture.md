@@ -297,6 +297,7 @@ Examples:
 | `notification-scheduler` | Cron-triggered alerts (credit card expiry, plugin expiry) |
 | `send-email` | Transactional email via Resend (`RESEND_API_KEY`) |
 | `report-generator` | Automated performance report PDF generation |
+| `ads-campaign-advisor` | Campaign AI advisor (Grok / Gemini + warehouse tools) |
 
 ### 5.5 Realtime Subscriptions
 
