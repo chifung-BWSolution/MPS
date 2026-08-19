@@ -626,6 +626,7 @@ export function BacklinkModule() {
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">費用 HKD</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">購買日期</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">數量</th>
+              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">備註</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">操作</th>
             </tr>
           </thead>
@@ -643,6 +644,11 @@ export function BacklinkModule() {
                 <td className="px-4 py-3 tabular-nums">{formatBacklinkHkd(record.costHkd)}</td>
                 <td className="px-4 py-3 tabular-nums">{record.purchaseDate}</td>
                 <td className="px-4 py-3">{record.quantity}</td>
+                <td className="px-4 py-3 text-muted-foreground max-w-[240px]">
+                  <span className="line-clamp-2 break-words" title={record.notes || undefined}>
+                    {record.notes || '—'}
+                  </span>
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <button
