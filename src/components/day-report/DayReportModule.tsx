@@ -1,8 +1,22 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Plus, Check, X, AlertTriangle, ChevronLeft, ChevronRight, Link, Sparkles, Clock, Users, BarChart3, Calendar, FileText, Zap, Bot, Trash2, RefreshCw, Eye, MapPin, CalendarDays, Loader2, Shield, Upload, Image as ImageIcon } from 'lucide-react';
+import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { Calendar as DayPickerCalendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  addCalendarDays,
+  clampLaterWeekSunday,
+  formatCompactWeekLabel,
+  formatWeekRangeLabel,
+  getTwoWeekWindow,
+  parseLocalDateStr as parseWeekDateStr,
+  startOfWeekSunday,
+  toLocalDateStr,
+  twoWeekWindowFromRange,
+} from '@/lib/sundayWeek';
 import {
   dailyReportsV2,
   staffMembersV2,
@@ -109,8 +123,7 @@ function isPublicHoliday(dateStr: string, office: OfficeLocation): boolean {
 }
 
 function parseLocalDateStr(dateStr: string): Date {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, m - 1, d);
+  return parseWeekDateStr(dateStr);
 }
 
 function isWeekend(dateStr: string): boolean {
@@ -211,15 +224,12 @@ function SubmitReportPage() {
   const categoryLookup = useCategoryLookup();
   const [office, setOffice] = useState<OfficeLocation>('hk');
   
-  // Date selection (single date, up to 14 days back) — always based on NOW (local date)
-  const [selectedDate, setSelectedDate] = useState<string>(() => {
-    const now = new Date();
-    // Use local date (not UTC) to match user's calendar expectation
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  });
+  // Date selection — week grid is current + previous Sun–Sat weeks
+  const [selectedDate, setSelectedDate] = useState<string>(() => toLocalDateStr(new Date()));
+  const [laterWeekSunday, setLaterWeekSunday] = useState<string>(() =>
+    toLocalDateStr(startOfWeekSunday(new Date())),
+  );
+  const [weekPickerOpen, setWeekPickerOpen] = useState(false);
   
   // AI Tools category structure — use module-level EMPTY_AI_TOOLS for stable refs
   const emptyAiTools = EMPTY_AI_TOOLS;
@@ -312,9 +322,17 @@ function SubmitReportPage() {
     }
   }, [currentStaffId, selectedDate]);
 
-  // Database reports for the 14-day window (to show reported status)
+  // Database reports for the visible two-week window (to show reported status)
   const [dbReports, setDbReports] = useState<Array<{ report_date: string; total_hours: number; status: string }>>([]);
   const [isLoadingDbReports, setIsLoadingDbReports] = useState(true);
+
+  const todayStr = toLocalDateStr(new Date());
+  const currentWeekSunday = toLocalDateStr(startOfWeekSunday(new Date()));
+  const weekWindow = useMemo(
+    () => getTwoWeekWindow(parseLocalDateStr(laterWeekSunday)),
+    [laterWeekSunday],
+  );
+  const isCurrentWeekWindow = laterWeekSunday === currentWeekSunday;
 
   // Set current staff from authenticated user (staffs.id uuid). Falls back to email/bubble lookup.
   useEffect(() => {
@@ -377,7 +395,7 @@ function SubmitReportPage() {
     initOfficeFromProfile();
   }, [systemUser?.staff_id]);
 
-  // Load existing day_reports for this staff in the 14-day window
+  // Load existing day_reports for this staff in the visible two-week window
   const loadDbReports = useCallback(async () => {
     if (!currentStaffId) {
       setIsLoadingDbReports(false);
@@ -385,13 +403,8 @@ function SubmitReportPage() {
     }
     setIsLoadingDbReports(true);
     try {
-      const today = new Date();
-      const fourteenDaysAgo = new Date(today);
-      fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 13);
-      // Use local dates to match user's calendar
-      const toLocalDateStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const startStr = toLocalDateStr(fourteenDaysAgo);
-      const endStr = toLocalDateStr(today);
+      const startStr = weekWindow.windowStart;
+      const endStr = weekWindow.windowEnd;
 
       console.log('[SubmitReport] Loading dbReports for staff:', currentStaffId, 'range:', startStr, '->', endStr);
 
@@ -423,7 +436,7 @@ function SubmitReportPage() {
     } finally {
       setIsLoadingDbReports(false);
     }
-  }, [currentStaffId]);
+  }, [currentStaffId, weekWindow.windowStart, weekWindow.windowEnd]);
 
   useEffect(() => {
     loadDbReports();
@@ -631,34 +644,74 @@ function SubmitReportPage() {
     }
   }, [draftStorageKey, hydratedDraftKey, existingReportId, entries, targetHours, hoursPreset, underHoursReason, office, fullDayHours]);
 
-  // Generate list of available dates (past 14 days) — always relative to real current date
-  const availableDates = useMemo(() => {
-    const dates: { date: string; label: string; isToday: boolean; isHoliday: boolean; isSat: boolean; isSun: boolean; reported: boolean; reportedHours: number; reportStatus: string }[] = [];
-    const today = new Date();
-    for (let i = 0; i < 14; i++) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      // Use local date string to match report_date format
-      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      // Check DB reports — normalize comparison by trimming to YYYY-MM-DD
-      const dbReport = dbReports.find(r => {
-        const rDate = r.report_date ? r.report_date.substring(0, 10) : '';
-        return rDate === dateStr;
-      });
-      dates.push({
-        date: dateStr,
-        label: formatDateShort(dateStr),
-        isToday: i === 0,
-        isHoliday: isPublicHoliday(dateStr, office),
-        isSat: isSaturday(dateStr),
-        isSun: d.getDay() === 0,
-        reported: !!dbReport,
-        reportedHours: dbReport ? Number(dbReport.total_hours) || 0 : 0,
-        reportStatus: dbReport?.status || '',
-      });
-    }
-    return dates;
-  }, [office, dbReports]);
+  type WeekDateCard = {
+    date: string;
+    label: string;
+    isToday: boolean;
+    isFuture: boolean;
+    isHoliday: boolean;
+    isSat: boolean;
+    isSun: boolean;
+    reported: boolean;
+    reportedHours: number;
+    reportStatus: string;
+  };
+
+  const buildWeekDateCard = useCallback((dateStr: string): WeekDateCard => {
+    const d = parseLocalDateStr(dateStr);
+    const dbReport = dbReports.find(r => {
+      const rDate = r.report_date ? r.report_date.substring(0, 10) : '';
+      return rDate === dateStr;
+    });
+    return {
+      date: dateStr,
+      label: formatDateShort(dateStr),
+      isToday: dateStr === todayStr,
+      isFuture: dateStr > todayStr,
+      isHoliday: isPublicHoliday(dateStr, office),
+      isSat: isSaturday(dateStr),
+      isSun: d.getDay() === 0,
+      reported: !!dbReport,
+      reportedHours: dbReport ? Number(dbReport.total_hours) || 0 : 0,
+      reportStatus: dbReport?.status || '',
+    };
+  }, [dbReports, office, todayStr]);
+
+  const laterWeekDates = useMemo(
+    () => weekWindow.later.dates.map(buildWeekDateCard),
+    [weekWindow.later.dates, buildWeekDateCard],
+  );
+  const earlierWeekDates = useMemo(
+    () => weekWindow.earlier.dates.map(buildWeekDateCard),
+    [weekWindow.earlier.dates, buildWeekDateCard],
+  );
+  const availableDates = useMemo(
+    () => [...laterWeekDates, ...earlierWeekDates],
+    [laterWeekDates, earlierWeekDates],
+  );
+
+  const weekPickerValue = useMemo((): DateRange | undefined => ({
+    from: parseLocalDateStr(weekWindow.windowStart),
+    to: parseLocalDateStr(weekWindow.windowEnd),
+  }), [weekWindow.windowStart, weekWindow.windowEnd]);
+
+  const shiftWeekWindow = useCallback((dir: -1 | 1) => {
+    const nextSunday = addCalendarDays(parseLocalDateStr(laterWeekSunday), dir * 7);
+    const clamped = clampLaterWeekSunday(nextSunday);
+    setLaterWeekSunday(toLocalDateStr(clamped));
+  }, [laterWeekSunday]);
+
+  const resetToCurrentWeeks = useCallback(() => {
+    setLaterWeekSunday(currentWeekSunday);
+    setWeekPickerOpen(false);
+  }, [currentWeekSunday]);
+
+  const handleWeekRangeSelect = useCallback((range: DateRange | undefined) => {
+    if (!range?.from) return;
+    const window = twoWeekWindowFromRange(range.from, range.to);
+    setLaterWeekSunday(window.later.start);
+    if (range.to) setWeekPickerOpen(false);
+  }, []);
 
   // Recent frequent items from the user's real past reports (for quick selection).
   // Aggregates day_report_entries by related_id + category over the last ~90 days,
@@ -886,7 +939,7 @@ function SubmitReportPage() {
   const isOT = totalHours > fullDayHours;
   const selectedDateIsHoliday = isPublicHoliday(selectedDate, office);
   const selectedDateIsSat = isSaturday(selectedDate);
-  const selectedDateIsSun = new Date(selectedDate).getDay() === 0;
+  const selectedDateIsSun = parseLocalDateStr(selectedDate).getDay() === 0;
   const isDayOff = hoursPreset === 'off' || targetHours === 0;
   
   // On holidays/weekends, minimum hours = 0 (any hours count as OT)
@@ -1276,6 +1329,77 @@ function SubmitReportPage() {
     }
   };
 
+  const renderDateCard = (d: WeekDateCard) => {
+    const isWorkday = !d.isHoliday && !d.isSun;
+    const needsReport = isWorkday && !d.isSat && !d.isFuture;
+    const isMissing = needsReport && !d.reported && !isLoadingDbReports;
+    return (
+      <button
+        key={d.date}
+        type="button"
+        disabled={d.isFuture}
+        onClick={() => {
+          if (!d.isFuture) setSelectedDate(d.date);
+        }}
+        className={cn(
+          'px-1.5 py-2 rounded-lg border text-[13px] font-medium transition-all relative flex flex-col items-center gap-1',
+          d.isFuture && 'opacity-50 cursor-not-allowed',
+          selectedDate === d.date
+            ? 'bg-teal-50 border-teal-400 text-teal-800 shadow-sm ring-2 ring-teal-200'
+            : d.reported && d.reportStatus === 'draft'
+              ? 'bg-amber-50/50 border-amber-200 text-amber-700'
+            : d.reported
+              ? 'bg-teal-50/50 border-teal-200 text-teal-700'
+              : d.isHoliday
+                ? 'bg-red-50/40 border-red-200 text-red-600 hover:bg-red-50'
+                : d.isSun
+                  ? 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+                  : d.isSat
+                    ? 'bg-amber-50/30 border-amber-200 text-amber-600 hover:bg-amber-50'
+                    : isMissing
+                      ? 'bg-rose-50/40 border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-300'
+                      : 'bg-white border-border hover:border-teal-300 hover:bg-teal-50/30'
+        )}
+      >
+        <span className={cn('text-[13px]', d.isToday && 'font-bold')}>{d.label}</span>
+
+        <div className="flex items-center gap-0.5 flex-wrap justify-center min-h-[18px]">
+          {d.isToday && <span className="text-[12px] px-1 py-0 rounded bg-teal-100 text-teal-700 font-semibold">今天</span>}
+          {d.isHoliday && <span className="text-[12px] px-1 py-0 rounded bg-red-100 text-red-600">假日</span>}
+          {d.isSat && !d.isHoliday && <span className="text-[12px] px-1 py-0 rounded bg-amber-100 text-amber-600">六</span>}
+          {d.isSun && !d.isHoliday && <span className="text-[12px] px-1 py-0 rounded bg-gray-100 text-gray-500">日</span>}
+        </div>
+
+        {d.reported ? (
+          <div className="flex flex-col items-center gap-0.5">
+            <span className={cn(
+              'text-[15px] font-bold',
+              d.reportStatus === 'draft' ? 'text-amber-600' : 'text-teal-600',
+            )}>
+              {d.reportedHours}h
+            </span>
+            <span className={cn(
+              'text-[12px] px-1.5 py-0 rounded-full font-medium',
+              d.reportStatus === 'draft'
+                ? 'bg-amber-100 text-amber-700'
+                : 'bg-teal-100 text-teal-700',
+            )}>
+              {d.reportStatus === 'draft' ? '暫存' : '✓ 已匯報'}
+            </span>
+          </div>
+        ) : (d.isHoliday || d.isSun || d.isFuture) ? (
+          <span className="text-[12px] text-gray-400">—</span>
+        ) : d.isSat ? (
+          <span className="text-[12px] text-amber-500/70">可匯報</span>
+        ) : isLoadingDbReports ? (
+          <span className="text-[12px] text-muted-foreground">...</span>
+        ) : (
+          <span className="text-[12px] text-rose-500 font-medium">未匯報</span>
+        )}
+      </button>
+    );
+  };
+
   if (submitted) {
     return (
       <div className="flex flex-col items-center justify-center py-20 space-y-4">
@@ -1350,17 +1474,17 @@ function SubmitReportPage() {
         
         <p className="text-[13px] text-teal-600/70 mt-2">
           {office === 'hk' ? '🇭🇰 香港辦公室 · 依據香港公眾假期' : '🇨🇳 深圳辦公室 · 依據中國法定假日'} · 
-          可補交過去14天未匯報的工作日（含週六加班）
+          可按週瀏覽並補交未匯報的工作日（含週六加班）
         </p>
       </div>
 
-      {/* Step 2: Date Selection — 14-Day View */}
+      {/* Step 2: Date Selection — current week + previous week (Sun–Sat) */}
         <div className="space-y-3">
           <div className="bg-white rounded-lg border border-border/60 px-4 py-3">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
               <CalendarDays size={14} className="text-teal-600" />
               <span className="text-[14px] font-bold text-foreground">選擇匯報日期</span>
-              <span className="text-[13px] text-muted-foreground">（過去14天匯報情況一覽）</span>
+              <span className="text-[13px] text-muted-foreground">（本週與上週 · 週日至週六）</span>
               <div className="ml-auto flex items-center gap-3 text-[13px] text-muted-foreground">
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-500 inline-block" /> 已報 ≥ 8h</span>
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> 已報 &lt; 8h</span>
@@ -1368,95 +1492,123 @@ function SubmitReportPage() {
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-300 inline-block" /> 假日/週末</span>
               </div>
             </div>
-            
-            {/* 14-day grid — 7 per row */}
-            <div className={cn("grid grid-cols-7 gap-1.5 mb-2", isLoadingDbReports && "opacity-50 pointer-events-none")}>
-              {isLoadingDbReports && (
-                <div className="col-span-7 flex items-center justify-center py-4">
-                  <Loader2 size={16} className="animate-spin text-teal-600 mr-2" />
-                  <span className="text-[14px] text-muted-foreground">載入匯報狀態...</span>
-                </div>
-              )}
-              {availableDates.map((d) => {
-                const isWorkday = !d.isHoliday && !d.isSun;
-                const needsReport = isWorkday && !d.isSat;
-                const isMissing = needsReport && !d.reported && !isLoadingDbReports;
-                return (
+
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <button
+                type="button"
+                onClick={() => shiftWeekWindow(-1)}
+                className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
+                aria-label="上一週"
+              >
+                <ChevronLeft size={16} />
+              </button>
+
+              <Popover open={weekPickerOpen} onOpenChange={setWeekPickerOpen}>
+                <PopoverTrigger asChild>
                   <button
-                    key={d.date}
-                    onClick={() => setSelectedDate(d.date)}
-                    className={cn(
-                      'px-1.5 py-2 rounded-lg border text-[13px] font-medium transition-all relative flex flex-col items-center gap-1',
-                      selectedDate === d.date 
-                        ? 'bg-teal-50 border-teal-400 text-teal-800 shadow-sm ring-2 ring-teal-200' 
-                        : d.reported && d.reportStatus === 'draft'
-                          ? 'bg-amber-50/50 border-amber-200 text-amber-700'
-                        : d.reported
-                          ? 'bg-teal-50/50 border-teal-200 text-teal-700'
-                          : d.isHoliday
-                            ? 'bg-red-50/40 border-red-200 text-red-600 hover:bg-red-50'
-                            : d.isSun
-                              ? 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
-                              : d.isSat
-                                ? 'bg-amber-50/30 border-amber-200 text-amber-600 hover:bg-amber-50'
-                                : isMissing
-                                  ? 'bg-rose-50/40 border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-300'
-                                  : 'bg-white border-border hover:border-teal-300 hover:bg-teal-50/30'
-                    )}
+                    type="button"
+                    className="inline-flex items-center gap-1.5 text-[13px] font-medium min-w-[200px] justify-center px-2.5 py-1.5 rounded-md border border-teal-200 bg-teal-50/40 text-teal-800 hover:bg-teal-50 transition-colors"
+                    title="選擇週範圍"
                   >
-                    <span className={cn('text-[13px]', d.isToday && 'font-bold')}>{d.label}</span>
-                    
-                    {/* Status row */}
-                    <div className="flex items-center gap-0.5 flex-wrap justify-center min-h-[18px]">
-                      {d.isToday && <span className="text-[12px] px-1 py-0 rounded bg-teal-100 text-teal-700 font-semibold">今天</span>}
-                      {d.isHoliday && <span className="text-[12px] px-1 py-0 rounded bg-red-100 text-red-600">假日</span>}
-                      {d.isSat && !d.isHoliday && <span className="text-[12px] px-1 py-0 rounded bg-amber-100 text-amber-600">六</span>}
-                      {d.isSun && !d.isHoliday && <span className="text-[12px] px-1 py-0 rounded bg-gray-100 text-gray-500">日</span>}
-                    </div>
-                    
-                    {/* Hours / Status indicator */}
-                    {d.reported ? (
-                      <div className="flex flex-col items-center gap-0.5">
-                        <span className={cn(
-                          'text-[15px] font-bold',
-                          d.reportStatus === 'draft' ? 'text-amber-600' : 'text-teal-600',
-                        )}>
-                          {d.reportedHours}h
-                        </span>
-                        <span className={cn(
-                          'text-[12px] px-1.5 py-0 rounded-full font-medium',
-                          d.reportStatus === 'draft'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-teal-100 text-teal-700',
-                        )}>
-                          {d.reportStatus === 'draft' ? '暫存' : '✓ 已匯報'}
-                        </span>
-                      </div>
-                    ) : (d.isHoliday || d.isSun) ? (
-                      <span className="text-[12px] text-gray-400">—</span>
-                    ) : d.isSat ? (
-                      <span className="text-[12px] text-amber-500/70">可匯報</span>
-                    ) : isLoadingDbReports ? (
-                      <span className="text-[12px] text-muted-foreground">...</span>
-                    ) : (
-                      <span className="text-[12px] text-rose-500 font-medium">未匯報</span>
-                    )}
+                    <Calendar size={14} className="text-teal-600" />
+                    {formatWeekRangeLabel(weekWindow.windowStart, weekWindow.windowEnd)}
                   </button>
-                );
-              })}
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <div className="px-3 pt-3 pb-1">
+                    <p className="text-[12px] font-medium text-[#0d1a2d]">選擇週範圍</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">週日–週六 · 顯示所選結束週及其上一週</p>
+                  </div>
+                  <DayPickerCalendar
+                    mode="range"
+                    weekStartsOn={0}
+                    numberOfMonths={2}
+                    selected={weekPickerValue}
+                    onSelect={handleWeekRangeSelect}
+                    defaultMonth={parseLocalDateStr(weekWindow.windowStart)}
+                    disabled={{ after: addCalendarDays(parseLocalDateStr(currentWeekSunday), 6) }}
+                  />
+                  <div className="flex items-center justify-between gap-2 px-3 pb-3">
+                    <button
+                      type="button"
+                      className="text-[12px] text-teal-700 hover:underline"
+                      onClick={resetToCurrentWeeks}
+                    >
+                      重設為本週及上週
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[12px] text-muted-foreground hover:text-[#0d1a2d]"
+                      onClick={() => setWeekPickerOpen(false)}
+                    >
+                      關閉
+                    </button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <button
+                type="button"
+                onClick={() => shiftWeekWindow(1)}
+                disabled={isCurrentWeekWindow}
+                className="p-1.5 rounded-md hover:bg-muted text-muted-foreground disabled:opacity-40 disabled:hover:bg-transparent"
+                aria-label="下一週"
+              >
+                <ChevronRight size={16} />
+              </button>
+
+              {!isCurrentWeekWindow && (
+                <button
+                  type="button"
+                  onClick={resetToCurrentWeeks}
+                  className="text-[12px] text-teal-700 hover:underline"
+                >
+                  回到本週
+                </button>
+              )}
             </div>
+
+            <div className="grid grid-cols-[3.5rem_1fr] gap-x-2 gap-y-2 mb-2 items-start">
+              <span />
+              <div className="grid grid-cols-7 gap-1.5 text-center text-[11px] text-muted-foreground">
+                {['日', '一', '二', '三', '四', '五', '六'].map((day) => (
+                  <span key={day}>{day}</span>
+                ))}
+              </div>
+              <div className="pt-1 leading-tight">
+                <div className="text-[12px] font-semibold text-teal-700">{isCurrentWeekWindow ? '本週' : '該週'}</div>
+                <div className="text-[10px] text-muted-foreground">{formatCompactWeekLabel(weekWindow.later.start, weekWindow.later.end)}</div>
+              </div>
+              <div className={cn('grid grid-cols-7 gap-1.5', isLoadingDbReports && 'opacity-50 pointer-events-none')}>
+                {laterWeekDates.map(renderDateCard)}
+              </div>
+              <div className="pt-1 leading-tight">
+                <div className="text-[12px] font-semibold text-muted-foreground">{isCurrentWeekWindow ? '上週' : '前週'}</div>
+                <div className="text-[10px] text-muted-foreground">{formatCompactWeekLabel(weekWindow.earlier.start, weekWindow.earlier.end)}</div>
+              </div>
+              <div className={cn('grid grid-cols-7 gap-1.5', isLoadingDbReports && 'opacity-50 pointer-events-none')}>
+                {earlierWeekDates.map(renderDateCard)}
+              </div>
+            </div>
+
+            {isLoadingDbReports && (
+              <div className="flex items-center justify-center py-2">
+                <Loader2 size={16} className="animate-spin text-teal-600 mr-2" />
+                <span className="text-[14px] text-muted-foreground">載入匯報狀態...</span>
+              </div>
+            )}
             
-            {/* 14-day summary stats */}
+            {/* Two-week summary stats */}
             {(() => {
               const reportedDays = availableDates.filter(d => d.reported && d.reportStatus !== 'draft');
               const draftDays = availableDates.filter(d => d.reported && d.reportStatus === 'draft');
-              const workdays = availableDates.filter(d => !d.isHoliday && !d.isSun && !d.isSat);
+              const workdays = availableDates.filter(d => !d.isHoliday && !d.isSun && !d.isSat && !d.isFuture);
               const missingDays = workdays.filter(d => !d.reported || d.reportStatus === 'draft');
               const totalReportedHours = reportedDays.reduce((s, d) => s + d.reportedHours, 0);
               return (
                 <div className="flex items-center gap-4 mt-2 pt-2 border-t border-border/30 text-[13px]">
                   <span className="text-muted-foreground">
-                    14天匯報率：<strong className="text-teal-700">{reportedDays.length}/{workdays.length}</strong> 工作日
+                    兩週匯報率：<strong className="text-teal-700">{reportedDays.length}/{workdays.length}</strong> 工作日
                   </span>
                   <span className="text-muted-foreground">
                     累計：<strong className="text-teal-700">{totalReportedHours}h</strong>
@@ -2957,7 +3109,7 @@ function MonthlyReport() {
 export function DayReportModule({ subModule }: { subModule?: string }) {
   const getTitle = () => {
     switch (subModule) {
-      case 'submit': return { title: '提交匯報', subtitle: '支援香港/深圳雙辦公室 · 14天匯報總覽 · 常用項目快速填入 · 週六加班匯報 · 多日假期申報 · AI 追蹤 · 8h驗證。' };
+      case 'submit': return { title: '提交匯報', subtitle: '支援香港/深圳雙辦公室 · 本週與上週匯報總覽 · 常用項目快速填入 · 週六加班匯報 · 多日假期申報 · AI 追蹤 · 8h驗證。' };
       case 'today-team': return { title: '今日團隊', subtitle: '查看今日團隊提交狀況及工作匯報詳情。' };
       case 'calendar': return { title: '工作日曆', subtitle: '以日曆視圖查看歷史工作記錄，13種工作類型顏色標記。' };
       case 'team-view': return { title: '匯報統計', subtitle: '工作檢查查看填寫情況 · 工時分析統計類別工時與占比。' };
@@ -2965,7 +3117,7 @@ export function DayReportModule({ subModule }: { subModule?: string }) {
       case 'analytics': return { title: '項目分析', subtitle: '按系統／網站項目統計人員投入工時與占比 — 支援按天／週／月篩選。' };
       case 'work-categories': return { title: '工作類型管理', subtitle: '管理匯報工作類別的關聯規則 — 網站/系統、客戶項目、影片頻道、可選關聯或無需關聯。' };
       case 'holiday-settings': return { title: '假期設定', subtitle: '自動載入香港及深圳公眾假期 · Admin 可設定星期六上班人員、公司活動日、免匯報日。' };
-      default: return { title: '提交匯報', subtitle: '支援香港/深圳雙辦公室 · 14天匯報總覽 · 常用項目快速填入 · 週六加班匯報 · 多日假期申報 · AI 追蹤 · 8h驗證。' };
+      default: return { title: '提交匯報', subtitle: '支援香港/深圳雙辦公室 · 本週與上週匯報總覽 · 常用項目快速填入 · 週六加班匯報 · 多日假期申報 · AI 追蹤 · 8h驗證。' };
     }
   };
 
