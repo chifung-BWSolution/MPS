@@ -716,7 +716,6 @@ export function BacklinkModule() {
             <tr>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">所屬網站</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">品牌</th>
-              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">供應商網址</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">供應商</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">費用 USD</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">費用 HKD</th>
@@ -733,11 +732,6 @@ export function BacklinkModule() {
                 </td>
                 <td className="px-4 py-3">
                   <BrandBadge label={record.brandLabel} />
-                </td>
-                <td className="px-4 py-3">
-                  {record.supplierUrl ? (
-                    <span className="break-all text-muted-foreground">{record.supplierUrl}</span>
-                  ) : null}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">{record.supplierName}</td>
                 <td className="px-4 py-3 tabular-nums">{formatBacklinkUsd(record.costUsd)}</td>
