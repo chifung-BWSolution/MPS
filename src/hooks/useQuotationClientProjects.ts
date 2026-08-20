@@ -171,7 +171,7 @@ export function useQuotationClientProjects() {
       const row = {
         id,
         pitching_code: data.pitchingId || `MPS-${id.slice(-8)}`,
-        client_id: data.clientId ?? null,
+        client_id: data.clientId?.trim() || null,
         client_name: data.clientName || null,
         display_name: data.displayName,
         company_name_en: data.companyNameEn?.trim() || null,

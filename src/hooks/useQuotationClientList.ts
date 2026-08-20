@@ -117,9 +117,8 @@ export function useQuotationClientList() {
 
   const addClient = useCallback(
     async (input: QuotationClientInput): Promise<QuotationClient | null> => {
-      const id = `cl_${Date.now()}`;
       const now = new Date().toISOString();
-      const row = { ...inputToRow(input, id), created_at: now };
+      const row = { ...inputToRow(input), created_at: now };
       const { data, error: err } = await supabase
         .from(QUOTATION_CLIENT_LIST_TABLE)
         .insert(row)
