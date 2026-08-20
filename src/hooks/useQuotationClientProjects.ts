@@ -103,6 +103,7 @@ function mapRow(row: DbRow): PitchingRecord {
 export type QuotationClientProjectUpdate = Partial<
   Pick<
     PitchingRecord,
+    | 'clientId'
     | 'clientName'
     | 'displayName'
     | 'companyNameEn'
@@ -220,6 +221,7 @@ export function useQuotationClientProjects() {
   const updateRecord = useCallback(async (id: string, data: QuotationClientProjectUpdate) => {
     const now = new Date().toISOString();
     const row: Record<string, unknown> = { updated_at: now };
+    if (data.clientId !== undefined) row.client_id = data.clientId?.trim() || null;
     if (data.clientName !== undefined) row.client_name = data.clientName || null;
     if (data.displayName !== undefined) row.display_name = data.displayName;
     if (data.companyNameEn !== undefined) row.company_name_en = data.companyNameEn?.trim() || null;

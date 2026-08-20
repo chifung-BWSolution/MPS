@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, ChevronRight, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User } from 'lucide-react';
+import { Search, Plus, ChevronRight, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
@@ -25,7 +25,7 @@ import {
 } from '@/data/pitchingData';
 import { PitchingBudgetTab } from '@/components/quotation/PitchingBudgetTab';
 
-type NewPitchingForm = {
+export type PitchingFormValues = {
   clientId: string;
   clientName: string;
   displayName: string;
@@ -37,9 +37,11 @@ type NewPitchingForm = {
   asanaLink: string;
 };
 
+type ClientOption = { value: string; label: string; keywords: string };
+
 const todayIso = () => new Date().toISOString().split('T')[0]!;
 
-const emptyForm = (): NewPitchingForm => ({
+const emptyForm = (): PitchingFormValues => ({
   clientId: '',
   clientName: '',
   displayName: '',
@@ -50,6 +52,45 @@ const emptyForm = (): NewPitchingForm => ({
   projectTypes: [],
   asanaLink: '',
 });
+
+function formFromRecord(record: PitchingRecord, clientOptions: ClientOption[]): PitchingFormValues {
+  const byId = record.clientId
+    ? clientOptions.find((c) => c.value === record.clientId)
+    : undefined;
+  const byName =
+    !byId && record.clientName && record.clientName !== '—'
+      ? clientOptions.find((c) => c.label === record.clientName)
+      : undefined;
+  const matched = byId ?? byName;
+  const clientName = matched?.label ?? (record.clientName === '—' ? '' : record.clientName);
+  const companyNameEn = record.companyNameEn ?? '';
+  const companyNameZh = record.companyNameZh ?? '';
+  return {
+    clientId: matched?.value ?? record.clientId?.trim() ?? '',
+    clientName,
+    displayName: record.displayName,
+    companyNameEn,
+    companyNameZh: companyNameZh || companyNameEn ? companyNameZh : clientName || record.displayName,
+    inquiryDate: record.inquiryDate,
+    description: record.description ?? '',
+    projectTypes: record.projectTypes,
+    asanaLink: record.asanaLink ?? '',
+  };
+}
+
+export function pitchingFormToUpdate(form: PitchingFormValues): QuotationClientProjectUpdate {
+  return {
+    clientId: form.clientId.trim(),
+    clientName: form.clientName.trim(),
+    displayName: form.displayName.trim(),
+    companyNameEn: form.companyNameEn.trim() || undefined,
+    companyNameZh: form.companyNameZh.trim() || undefined,
+    inquiryDate: form.inquiryDate,
+    description: form.description.trim() || undefined,
+    projectTypes: form.projectTypes,
+    asanaLink: form.asanaLink.trim() || undefined,
+  };
+}
 
 function formatEnquiryDateLabel(iso: string): string {
   if (!iso) return '';
@@ -140,22 +181,29 @@ function ProjectTypeMultiSelect({
   );
 }
 
-function NewPitchingModal({
+export function PitchingFormModal({
   isOpen,
   onClose,
   onSubmit,
   clientOptions,
+  initialRecord,
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (form: NewPitchingForm) => void;
-  clientOptions: { value: string; label: string; keywords: string }[];
+  onSubmit: (form: PitchingFormValues) => void | Promise<void>;
+  clientOptions: ClientOption[];
+  initialRecord?: PitchingRecord | null;
 }) {
-  const [form, setForm] = useState<NewPitchingForm>(emptyForm);
+  const [form, setForm] = useState<PitchingFormValues>(emptyForm);
+  const [submitting, setSubmitting] = useState(false);
+  const isEdit = Boolean(initialRecord);
 
   useEffect(() => {
-    if (isOpen) setForm(emptyForm());
-  }, [isOpen]);
+    if (!isOpen) return;
+    setForm(initialRecord ? formFromRecord(initialRecord, clientOptions) : emptyForm());
+    // Only reset when the dialog opens or the edited row changes — not when the client list refreshes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, initialRecord?.id]);
 
   const handleClose = () => {
     setForm(emptyForm());
@@ -172,8 +220,8 @@ function NewPitchingModal({
     }));
   };
 
-  const handleCreate = () => {
-    if (!form.clientId && !form.clientName.trim()) {
+  const handleSubmit = async () => {
+    if (!form.clientId.trim()) {
       toast.error('請選擇客戶');
       return;
     }
@@ -193,14 +241,23 @@ function NewPitchingModal({
       toast.error('請至少選擇一個專案類型');
       return;
     }
-    onSubmit(form);
-    setForm(emptyForm());
+    setSubmitting(true);
+    try {
+      await onSubmit(form);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const currentYear = new Date().getFullYear();
 
   return (
-    <CrudModal isOpen={isOpen} onClose={handleClose} title="新增提案 New Pitching" size="xl">
+    <CrudModal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title={isEdit ? '編輯提案 Edit Pitching' : '新增提案 New Pitching'}
+      size="xl"
+    >
       <div className="space-y-6 pb-2">
         <section className="space-y-3">
           <h3 className="text-[14px] font-semibold flex items-center gap-2">
@@ -275,7 +332,8 @@ function NewPitchingModal({
             />
             {form.inquiryDate && (
               <p className="text-[11px] text-muted-foreground mt-1">
-                已選：{formatEnquiryDateLabel(form.inquiryDate)}（預設為新增當日）
+                已選：{formatEnquiryDateLabel(form.inquiryDate)}
+                {isEdit ? '' : '（預設為新增當日）'}
               </p>
             )}
           </div>
@@ -319,11 +377,15 @@ function NewPitchingModal({
         </section>
 
         <div className="flex justify-end gap-3 pt-2 border-t border-border">
-          <Button variant="secondary" onClick={handleClose} className="gap-1.5">
+          <Button variant="secondary" onClick={handleClose} className="gap-1.5" disabled={submitting}>
             <X size={14} /> 取消
           </Button>
-          <Button className="bg-teal-600 hover:bg-teal-700 text-white gap-1.5" onClick={handleCreate}>
-            <Save size={14} /> 建立
+          <Button
+            className="bg-teal-600 hover:bg-teal-700 text-white gap-1.5"
+            onClick={() => void handleSubmit()}
+            disabled={submitting}
+          >
+            <Save size={14} /> {submitting ? '儲存中…' : isEdit ? '儲存' : '建立'}
           </Button>
         </div>
       </div>
@@ -334,10 +396,12 @@ function NewPitchingModal({
 function PitchingList({
   records,
   onView,
+  onEdit,
   onStatusChange,
 }: {
   records: PitchingRecord[];
   onView: (record: PitchingRecord) => void;
+  onEdit: (record: PitchingRecord) => void;
   onStatusChange: (id: string, status: PitchingStatus) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -458,10 +522,23 @@ function PitchingList({
                         onChange={(status) => onStatusChange(record.id, status)}
                       />
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="flex items-center gap-1 text-[12px] text-teal-600 font-medium">
-                        詳情 <ChevronRight size={12} />
-                      </span>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => onEdit(record)}
+                          className="flex items-center gap-1 text-[12px] text-teal-600 font-medium hover:text-teal-700"
+                        >
+                          <Pencil size={12} /> 編輯
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onView(record)}
+                          className="flex items-center gap-1 text-[12px] text-muted-foreground font-medium hover:text-foreground"
+                        >
+                          詳情 <ChevronRight size={12} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -963,7 +1040,8 @@ export function PitchingModule() {
   const { records: clientListRecords } = useQuotationClientList();
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedRecord, setSelectedRecord] = useState<PitchingRecord | null>(null);
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [formModalOpen, setFormModalOpen] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<PitchingRecord | null>(null);
 
   const pmName = systemUser?.display_name || userInfo?.display_name || '—';
 
@@ -982,10 +1060,42 @@ export function PitchingModule() {
     setView('detail');
   };
 
-  const handleAddPitching = async (form: NewPitchingForm) => {
+  const openCreateModal = () => {
+    setEditingRecord(null);
+    setFormModalOpen(true);
+  };
+
+  const openEditModal = (record: PitchingRecord) => {
+    setEditingRecord(record);
+    setFormModalOpen(true);
+  };
+
+  const closeFormModal = () => {
+    setFormModalOpen(false);
+    setEditingRecord(null);
+  };
+
+  const handleFormSubmit = async (form: PitchingFormValues) => {
+    const payload = pitchingFormToUpdate(form);
+    if (editingRecord) {
+      const { error: saveErr } = await updateRecord(editingRecord.id, payload);
+      if (saveErr) {
+        toast.error(`儲存失敗：${saveErr.message}`);
+        return;
+      }
+      if (selectedRecord?.id === editingRecord.id) {
+        setSelectedRecord((prev) =>
+          prev ? { ...prev, ...payload, updatedAt: new Date().toISOString() } : null,
+        );
+      }
+      closeFormModal();
+      toast.success('Pitching 已更新');
+      return;
+    }
+
     const { error: addErr } = await addRecord({
-      clientId: form.clientId,
-      clientName: form.clientName,
+      clientId: form.clientId.trim(),
+      clientName: form.clientName.trim(),
       displayName: form.displayName.trim(),
       companyNameEn: form.companyNameEn.trim() || undefined,
       companyNameZh: form.companyNameZh.trim() || undefined,
@@ -1001,7 +1111,7 @@ export function PitchingModule() {
       toast.error(`新增失敗：${addErr.message}`);
       return;
     }
-    setShowAddModal(false);
+    closeFormModal();
     toast.success('Pitching 已成功新增');
   };
 
@@ -1054,7 +1164,7 @@ export function PitchingModule() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={openCreateModal}
             className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors duration-200 active:scale-[0.97]"
           >
             <Plus size={14} /> 新增 Pitching
@@ -1077,15 +1187,17 @@ export function PitchingModule() {
         <PitchingList
           records={records}
           onView={handleView}
+          onEdit={openEditModal}
           onStatusChange={(id, status) => void handleStatusChange(id, status)}
         />
       )}
 
-      <NewPitchingModal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onSubmit={handleAddPitching}
+      <PitchingFormModal
+        isOpen={formModalOpen}
+        onClose={closeFormModal}
+        onSubmit={handleFormSubmit}
         clientOptions={pitchingClientOptions}
+        initialRecord={editingRecord}
       />
     </div>
   );

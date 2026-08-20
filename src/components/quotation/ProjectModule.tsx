@@ -1,9 +1,17 @@
 import { useState, useMemo } from 'react';
-import { Search, ChevronRight } from 'lucide-react';
+import { Search, ChevronRight, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
-import { PitchingDetail, RemainingDaysCell, PitchingStatusSelect } from '@/components/quotation/PitchingModule';
+import { useQuotationClientList } from '@/hooks/useQuotationClientList';
+import {
+  PitchingDetail,
+  PitchingFormModal,
+  pitchingFormToUpdate,
+  RemainingDaysCell,
+  PitchingStatusSelect,
+  type PitchingFormValues,
+} from '@/components/quotation/PitchingModule';
 import {
   pitchingStatusConfig,
   formatProjectTypes,
@@ -17,10 +25,12 @@ import {
 function ProjectList({
   records,
   onView,
+  onEdit,
   onStatusChange,
 }: {
   records: PitchingRecord[];
   onView: (record: PitchingRecord) => void;
+  onEdit: (record: PitchingRecord) => void;
   onStatusChange: (id: string, status: PitchingStatus) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -137,10 +147,23 @@ function ProjectList({
                         onChange={(status) => onStatusChange(record.id, status)}
                       />
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="flex items-center gap-1 text-[12px] text-teal-600 font-medium">
-                        詳情 <ChevronRight size={12} />
-                      </span>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => onEdit(record)}
+                          className="flex items-center gap-1 text-[12px] text-teal-600 font-medium hover:text-teal-700"
+                        >
+                          <Pencil size={12} /> 編輯
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onView(record)}
+                          className="flex items-center gap-1 text-[12px] text-muted-foreground font-medium hover:text-foreground"
+                        >
+                          詳情 <ChevronRight size={12} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -162,17 +185,57 @@ function ProjectList({
 export function ProjectModule() {
   const { navigateTo } = useApp();
   const { records, loading, error, lastSyncedAt, updateStatus, updateRecord } = useQuotationClientProjects();
+  const { records: clientListRecords } = useQuotationClientList();
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedRecord, setSelectedRecord] = useState<PitchingRecord | null>(null);
+  const [formModalOpen, setFormModalOpen] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<PitchingRecord | null>(null);
 
   const projectRecords = useMemo(
     () => records.filter(isProjectPageRecord),
     [records],
   );
 
+  const pitchingClientOptions = useMemo(
+    () =>
+      clientListRecords.map((c) => ({
+        value: c.id,
+        label: c.companyNameZh,
+        keywords: [c.companyNameZh, c.companyNameEn, c.contactPerson, c.brandName].filter(Boolean).join(' '),
+      })),
+    [clientListRecords],
+  );
+
   const handleView = (record: PitchingRecord) => {
     setSelectedRecord(record);
     setView('detail');
+  };
+
+  const openEditModal = (record: PitchingRecord) => {
+    setEditingRecord(record);
+    setFormModalOpen(true);
+  };
+
+  const closeFormModal = () => {
+    setFormModalOpen(false);
+    setEditingRecord(null);
+  };
+
+  const handleFormSubmit = async (form: PitchingFormValues) => {
+    if (!editingRecord) return;
+    const payload = pitchingFormToUpdate(form);
+    const { error: saveErr } = await updateRecord(editingRecord.id, payload);
+    if (saveErr) {
+      toast.error(`儲存失敗：${saveErr.message}`);
+      return;
+    }
+    if (selectedRecord?.id === editingRecord.id) {
+      setSelectedRecord((prev) =>
+        prev ? { ...prev, ...payload, updatedAt: new Date().toISOString() } : null,
+      );
+    }
+    closeFormModal();
+    toast.success('Project 已更新');
   };
 
   const handleStatusChange = async (id: string, status: PitchingStatus) => {
@@ -241,9 +304,18 @@ export function ProjectModule() {
         <ProjectList
           records={projectRecords}
           onView={handleView}
+          onEdit={openEditModal}
           onStatusChange={(id, status) => void handleStatusChange(id, status)}
         />
       )}
+
+      <PitchingFormModal
+        isOpen={formModalOpen}
+        onClose={closeFormModal}
+        onSubmit={handleFormSubmit}
+        clientOptions={pitchingClientOptions}
+        initialRecord={editingRecord}
+      />
     </div>
   );
 }
