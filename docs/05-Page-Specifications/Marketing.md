@@ -27,7 +27,7 @@
   - 細項：Ad Groups / Keywords / Search Terms 為**即時 Google Ads API**（依詳情頁日期區間；Search Terms Top 100 by Cost）。不落倉庫。
   - 即時細項日期上限 92 日（`7d/14d/30d/90d` 可用；`ytd` / `all` / 過長自訂區間會顯示提示，不呼叫 API）。
   - 共用 shell（`AdsCampaignDetailShell`）供 Google / Facebook Ads 詳情複用。
-  - **AI 廣告顧問：** 詳情頁 header「AI 顧問」開啟右側非 modal dock。預設帶入目前 campaign snapshot（名稱、狀態、期間、六張 KPI、標籤、網站）。Edge Function `ads-campaign-advisor`（Grok，失敗則 Gemini）可呼叫倉庫工具：`search_campaigns`、`get_campaign_metrics`、`compare_campaigns`、`get_campaigns_by_tag`；關鍵字／廣告／版位用即時 `get_campaign_breakdowns`（同樣 92 日上限）。對話只存在當次頁面 session，不寫庫。只讀，不寫回 Google Ads。
+  - **AI 廣告顧問：** 詳情頁 header「AI 顧問」開啟右側非 modal dock。預設帶入目前 campaign snapshot（名稱、狀態、期間、六張 KPI、標籤、網站）。四則建議問題依平台與類型／目標而變（Search 談關鍵字；PMax 談 asset group／素材，不提關鍵字；Shopping 談產品組）。Edge Function `ads-campaign-advisor`（Grok，失敗則 Gemini）可呼叫倉庫工具：`search_campaigns`、`get_campaign_metrics`、`compare_campaigns`、`get_campaigns_by_tag`；細項用即時 `get_campaign_breakdowns`（同樣 92 日上限）。對話只存在當次頁面 session，不寫庫。只讀，不寫回 Google Ads。
 
 ### Facebook Ads — Campaign 詳情
 
@@ -39,7 +39,7 @@
   - 細項：Ad Sets / Ads / Placements 為**即時 Meta Marketing API**（Insights；Ads Top 150 by Cost）。不落倉庫。
   - 即時細項日期上限 92 日（與 Google 相同）。
   - Header 顯示帳戶、Business、品牌（手動 `brand_list`），無 Google 網站連結。
-  - **AI 廣告顧問：** 與 Google 詳情同一 dock／同一 Edge Function；snapshot 改帶 Facebook 帳戶、Business、品牌與標籤。可搜尋／比較其他 Google 或 Facebook campaign。即時細項為 Ad Sets / Ads / Placements。
+  - **AI 廣告顧問：** 與 Google 詳情同一 dock／同一 Edge Function；snapshot 改帶 Facebook 帳戶、Business、品牌與標籤。建議問題依 objective 而變（銷售／名單／流量／曝光／App／訊息／互動），談廣告與版位而不談關鍵字。可搜尋／比較其他 Google 或 Facebook campaign。即時細項為 Ad Sets / Ads / Placements。
 
 ### 廣告成本趨勢
 

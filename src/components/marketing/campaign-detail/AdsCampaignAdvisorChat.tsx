@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { invokeAdsCampaignAdvisor } from '@/lib/adsAdvisorApi';
+import { getAdsAdvisorSuggestedPrompts } from '@/lib/adsAdvisorPrompts';
 import type {
   AdsAdvisorMessage,
   AdsAdvisorSnapshot,
@@ -19,13 +20,6 @@ export type AdsCampaignAdvisorChatProps = {
 type ChatTurn = AdsAdvisorMessage & {
   toolsUsed?: AdsAdvisorToolCall[];
 };
-
-const SUGGESTED_PROMPTS = [
-  '這檔 CTR 為何偏低？可以怎麼優化？',
-  '預算是否該加？CPA 是否合理？',
-  '和同品牌／同標籤的其他 campaign 比較一下',
-  '哪些關鍵字或廣告最耗預算？值得保留嗎？',
-];
 
 const TOOL_LABELS: Record<string, string> = {
   search_campaigns: '搜尋 campaign…',
@@ -57,6 +51,10 @@ export function AdsCampaignAdvisorChat({
   const endRef = useRef<HTMLDivElement>(null);
 
   conversationKeyRef.current = conversationKey;
+  const suggestedPrompts = useMemo(
+    () => getAdsAdvisorSuggestedPrompts(snapshot),
+    [snapshot],
+  );
 
   useEffect(() => {
     abortRef.current?.abort();
@@ -136,7 +134,7 @@ export function AdsCampaignAdvisorChat({
             <div className="space-y-2">
               <p className="text-[13px] text-muted-foreground">可以從這些問題開始：</p>
               <div className="flex flex-col gap-2">
-                {SUGGESTED_PROMPTS.map((prompt) => (
+                {suggestedPrompts.map((prompt) => (
                   <button
                     key={prompt}
                     type="button"
