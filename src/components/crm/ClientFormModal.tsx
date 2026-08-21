@@ -27,6 +27,7 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
     if (!open) return;
     if (editingClient) {
       setFormData({
+        displayName: editingClient.displayName,
         companyNameZh: editingClient.companyNameZh,
         companyNameEn: editingClient.companyNameEn,
         brandId: editingClient.brandId,
@@ -91,6 +92,16 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
         </div>
 
         <div className="space-y-4">
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">顯示名稱</label>
+            <Input
+              value={formData.displayName}
+              onChange={(e) => updateForm('displayName', e.target.value)}
+              placeholder="客戶顯示名稱"
+              className="h-9 text-[13px]"
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1">公司名稱（中文）*</label>

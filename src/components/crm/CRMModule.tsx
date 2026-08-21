@@ -36,6 +36,7 @@ export function CRMModule({ subModule }: { subModule?: string }) {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       return (
+        c.displayName.toLowerCase().includes(q) ||
         c.companyNameZh.includes(searchQuery) ||
         c.companyNameEn.toLowerCase().includes(q) ||
         c.contactPerson.toLowerCase().includes(q)
@@ -142,6 +143,7 @@ export function CRMModule({ subModule }: { subModule?: string }) {
         <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-muted/30">
+              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">顯示名稱</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">公司名稱</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">品牌</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">聯絡人</th>
@@ -156,6 +158,9 @@ export function CRMModule({ subModule }: { subModule?: string }) {
               const config = quotationClientStatusConfig[client.status];
               return (
                 <tr key={client.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors duration-200">
+                  <td className="px-4 py-3 text-[14px] font-medium">
+                    {client.displayName || client.companyNameZh || '—'}
+                  </td>
                   <td className="px-4 py-3">
                     <div>
                       <span className="text-[14px] font-medium block">{client.companyNameZh}</span>

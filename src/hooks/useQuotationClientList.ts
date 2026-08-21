@@ -8,6 +8,7 @@ export const QUOTATION_CLIENT_LIST_TABLE = 'quotation_client_list';
 
 type DbRow = {
   id: string;
+  display_name: string;
   company_name_zh: string;
   company_name_en: string | null;
   brand_id: string | null;
@@ -28,6 +29,7 @@ type DbRow = {
 function mapRow(row: DbRow, projectCount = 0): QuotationClient {
   return {
     id: row.id,
+    displayName: row.display_name || row.company_name_zh,
     companyNameZh: row.company_name_zh,
     companyNameEn: row.company_name_en ?? '',
     brandId: row.brand_id ?? '',
@@ -52,6 +54,7 @@ function mapRow(row: DbRow, projectCount = 0): QuotationClient {
 function inputToRow(input: QuotationClientInput, id?: string) {
   return {
     ...(id ? { id } : {}),
+    display_name: input.displayName.trim() || input.companyNameZh.trim(),
     company_name_zh: input.companyNameZh.trim(),
     company_name_en: input.companyNameEn.trim() || null,
     brand_id: input.brandId || null,

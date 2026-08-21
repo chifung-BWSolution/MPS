@@ -4,6 +4,7 @@ export type QuotationClientStatus = 'active' | 'inactive' | 'prospect';
 
 export type QuotationClient = {
   id: string;
+  displayName: string;
   companyNameZh: string;
   companyNameEn: string;
   brandId: string;
@@ -37,6 +38,7 @@ export const quotationClientStatusConfig: Record<
 };
 
 export const emptyQuotationClientInput = (): QuotationClientInput => ({
+  displayName: '',
   companyNameZh: '',
   companyNameEn: '',
   brandId: '',
