@@ -3,15 +3,26 @@ import { Search, Plus, Phone, Mail, Building2, Pencil, Trash2, Loader2 } from 'l
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { ClientFormModal } from '@/components/crm/ClientFormModal';
+import { useApp } from '@/context/AppContext';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
 import { useBrands } from '@/hooks/useBrands';
+import { openQuotationProjectDetail } from '@/lib/quotationProjectNavigation';
 import {
   quotationClientStatusConfig,
   type QuotationClient,
   type QuotationClientInput,
 } from '@/data/quotationClientList';
 
+function BrandBadge({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-sm bg-teal-50 text-teal-700 whitespace-nowrap">
+      {label}
+    </span>
+  );
+}
+
 export function CRMModule({ subModule }: { subModule?: string }) {
+  const { navigateTo } = useApp();
   const { records: clients, loading, addClient, updateClient, deleteClient } = useQuotationClientList();
   const { brands } = useBrands();
   const brandLabel = (id: string) => {
@@ -19,6 +30,8 @@ export function CRMModule({ subModule }: { subModule?: string }) {
     return brand?.displayName || brand?.brandCode || id;
   };
   const brandLabels = (ids: string[]) => ids.map(brandLabel).filter(Boolean);
+  const brandItems = (ids: string[]) =>
+    ids.map((id) => ({ id, label: brandLabel(id) })).filter((item) => item.label);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showModal, setShowModal] = useState(false);
@@ -47,6 +60,7 @@ export function CRMModule({ subModule }: { subModule?: string }) {
         c.companyNameZh.includes(searchQuery) ||
         c.companyNameEn.toLowerCase().includes(q) ||
         c.contactPerson.toLowerCase().includes(q) ||
+        (c.latestProject?.displayName || '').toLowerCase().includes(q) ||
         brandLabels(c.brandIds).some((name) => name.toLowerCase().includes(q))
       );
     }
@@ -148,26 +162,40 @@ export function CRMModule({ subModule }: { subModule?: string }) {
             <Loader2 size={14} className="animate-spin" /> 載入客戶資料…
           </div>
         )}
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border bg-muted/30">
-              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">顯示名稱</th>
-              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">公司名稱</th>
-              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">品牌</th>
-              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">聯絡人</th>
-              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">電話</th>
-              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">項目</th>
-              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
-              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">操作</th>
-            </tr>
-          </thead>
-          <tbody>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[960px]">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">顯示名稱</th>
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">品牌</th>
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">公司名稱</th>
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">聯絡人</th>
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">電話</th>
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">最近項目</th>
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 whitespace-nowrap min-w-[7.5rem]">狀態</th>
+                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">操作</th>
+              </tr>
+            </thead>
+            <tbody>
             {filtered.map((client) => {
               const config = quotationClientStatusConfig[client.status];
+              const brandsForClient = brandItems(client.brandIds);
+              const latestProject = client.latestProject;
               return (
                 <tr key={client.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors duration-200">
                   <td className="px-4 py-3 text-[14px] font-medium">
                     {client.displayName || client.companyNameZh || '—'}
+                  </td>
+                  <td className="px-4 py-3">
+                    {brandsForClient.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {brandsForClient.map((brand) => (
+                          <BrandBadge key={brand.id} label={brand.label} />
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-[13px] text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div>
@@ -177,16 +205,25 @@ export function CRMModule({ subModule }: { subModule?: string }) {
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-[13px]">
-                    {brandLabels(client.brandIds).join('、') || '—'}
-                  </td>
                   <td className="px-4 py-3 text-[13px] font-medium">{client.contactPerson}</td>
-                  <td className="px-4 py-3 text-[13px] text-muted-foreground">{client.phone || '—'}</td>
+                  <td className="px-4 py-3 text-[13px] text-muted-foreground whitespace-nowrap">{client.phone || '—'}</td>
                   <td className="px-4 py-3 text-[13px]">
-                    <span className="text-teal-600 font-medium">{client.projectCount}</span>
+                    {latestProject ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openQuotationProjectDetail(latestProject.id, latestProject.status, navigateTo)
+                        }
+                        className="text-teal-600 font-medium hover:underline text-left"
+                      >
+                        {latestProject.displayName || '—'}
+                      </button>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
-                  <td className="px-4 py-3">
-                    <span className={cn('inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-sm', config.bgColor, config.color)}>
+                  <td className="px-4 py-3 whitespace-nowrap min-w-[7.5rem]">
+                    <span className={cn('inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-sm whitespace-nowrap', config.bgColor, config.color)}>
                       {config.label}
                     </span>
                   </td>
@@ -213,8 +250,9 @@ export function CRMModule({ subModule }: { subModule?: string }) {
                 </tr>
               );
             })}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
         {!loading && filtered.length === 0 && (
           <div className="text-center py-12">
             <Building2 size={32} className="mx-auto text-muted-foreground mb-2" />

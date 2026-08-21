@@ -1,9 +1,13 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Search, ChevronRight, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
+import {
+  readSelectedQuotationProjectId,
+  writeSelectedQuotationProjectId,
+} from '@/lib/quotationProjectNavigation';
 import {
   PitchingDetail,
   PitchingFormModal,
@@ -213,6 +217,17 @@ export function ProjectModule() {
     setView('detail');
   };
 
+  useEffect(() => {
+    const pendingId = readSelectedQuotationProjectId();
+    if (!pendingId || records.length === 0) return;
+    const record = records.find((r) => r.id === pendingId);
+    if (record) {
+      setSelectedRecord(record);
+      setView('detail');
+    }
+    writeSelectedQuotationProjectId(null);
+  }, [records]);
+
   const openEditModal = (record: PitchingRecord) => {
     setEditingRecord(record);
     setFormModalOpen(true);
@@ -270,6 +285,7 @@ export function ProjectModule() {
         record={selectedRecord}
         clientOptions={pitchingClientOptions}
         onBack={() => {
+          writeSelectedQuotationProjectId(null);
           setView('list');
           setSelectedRecord(null);
         }}

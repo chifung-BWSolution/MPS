@@ -4,7 +4,9 @@ import { useAuth } from '@/context/AuthContext';
 import { QUOTATION_CLIENT_PROJECT_TABLE } from '@/hooks/useQuotationClientProjects';
 import {
   parseBrandIds,
+  selectLatestProjectsByClient,
   serializeBrandIds,
+  type LatestQuotationClientProject,
   type QuotationClient,
   type QuotationClientInput,
 } from '@/data/quotationClientList';
@@ -28,7 +30,7 @@ type DbRow = {
   updated_at: string;
 };
 
-function mapRow(row: DbRow, projectCount = 0): QuotationClient {
+function mapRow(row: DbRow, latestProject: LatestQuotationClientProject | null = null): QuotationClient {
   return {
     id: row.id,
     displayName: row.display_name || row.company_name_zh,
@@ -44,7 +46,7 @@ function mapRow(row: DbRow, projectCount = 0): QuotationClient {
       ? row.status
       : 'prospect') as QuotationClient['status'],
     notes: row.notes ?? undefined,
-    projectCount,
+    latestProject,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -68,18 +70,35 @@ function inputToRow(input: QuotationClientInput, id?: string) {
   };
 }
 
-async function fetchProjectCounts(clientIds: string[]): Promise<Record<string, number>> {
+type ProjectDbRow = {
+  id: string;
+  client_id: string | null;
+  display_name: string;
+  status: string | null;
+  inquiry_date: string | null;
+  updated_at: string | null;
+  created_at: string | null;
+};
+
+async function fetchLatestProjects(
+  clientIds: string[],
+): Promise<Record<string, LatestQuotationClientProject>> {
   if (clientIds.length === 0) return {};
   const { data } = await supabase
     .from(QUOTATION_CLIENT_PROJECT_TABLE)
-    .select('client_id')
+    .select('id, client_id, display_name, status, inquiry_date, updated_at, created_at')
     .in('client_id', clientIds);
-  const counts: Record<string, number> = {};
-  ((data as { client_id: string | null }[] | null) ?? []).forEach((row) => {
-    if (!row.client_id) return;
-    counts[row.client_id] = (counts[row.client_id] ?? 0) + 1;
-  });
-  return counts;
+  return selectLatestProjectsByClient(
+    ((data as ProjectDbRow[] | null) ?? []).map((row) => ({
+      id: row.id,
+      clientId: row.client_id ?? '',
+      displayName: row.display_name,
+      status: row.status,
+      inquiryDate: row.inquiry_date,
+      updatedAt: row.updated_at,
+      createdAt: row.created_at,
+    })),
+  );
 }
 
 export function useQuotationClientList() {
@@ -104,9 +123,9 @@ export function useQuotationClientList() {
 
     const rows = (data as DbRow[] | null) ?? [];
     const ids = rows.map((r) => r.id);
-    const counts = await fetchProjectCounts(ids);
+    const latest = await fetchLatestProjects(ids);
     setError(null);
-    setRecords(rows.map((row) => mapRow(row, counts[row.id] ?? 0)));
+    setRecords(rows.map((row) => mapRow(row, latest[row.id] ?? null)));
     setLoading(false);
   }, []);
 
@@ -127,7 +146,7 @@ export function useQuotationClientList() {
         setError(err.message);
         return null;
       }
-      const client = mapRow(data as DbRow, 0);
+      const client = mapRow(data as DbRow, null);
       setRecords((prev) => [client, ...prev]);
       return client;
     },
@@ -148,7 +167,7 @@ export function useQuotationClientList() {
         return null;
       }
       const existing = records.find((r) => r.id === id);
-      const client = mapRow(data as DbRow, existing?.projectCount ?? 0);
+      const client = mapRow(data as DbRow, existing?.latestProject ?? null);
       setRecords((prev) => prev.map((r) => (r.id === id ? client : r)));
       return client;
     },

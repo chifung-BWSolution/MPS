@@ -2,6 +2,22 @@
 
 export type QuotationClientStatus = 'active' | 'inactive' | 'prospect';
 
+export type LatestQuotationClientProject = {
+  id: string;
+  displayName: string;
+  status: string;
+};
+
+export type QuotationClientProjectRef = {
+  id: string;
+  clientId: string;
+  displayName: string;
+  status?: string | null;
+  inquiryDate?: string | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+};
+
 export type QuotationClient = {
   id: string;
   displayName: string;
@@ -16,7 +32,7 @@ export type QuotationClient = {
   inquiryDate: string;
   status: QuotationClientStatus;
   notes?: string;
-  projectCount: number;
+  latestProject: LatestQuotationClientProject | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -40,8 +56,38 @@ export function serializeBrandIds(ids: string[]): string {
 
 export type QuotationClientInput = Omit<
   QuotationClient,
-  'id' | 'projectCount' | 'createdAt' | 'updatedAt'
+  'id' | 'latestProject' | 'createdAt' | 'updatedAt'
 >;
+
+function projectRecencyKey(row: QuotationClientProjectRef): string {
+  return [row.inquiryDate ?? '', row.updatedAt ?? '', row.createdAt ?? '', row.id].join('|');
+}
+
+/** Pick the most recent quotation_client_project per client. */
+export function selectLatestProjectsByClient(
+  rows: QuotationClientProjectRef[],
+): Record<string, LatestQuotationClientProject> {
+  const latest: Record<string, { project: LatestQuotationClientProject; key: string }> = {};
+  for (const row of rows) {
+    const clientId = row.clientId.trim();
+    if (!clientId || !row.id) continue;
+    const key = projectRecencyKey(row);
+    const current = latest[clientId];
+    if (!current || key > current.key) {
+      latest[clientId] = {
+        project: {
+          id: row.id,
+          displayName: row.displayName,
+          status: row.status ?? '',
+        },
+        key,
+      };
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(latest).map(([clientId, value]) => [clientId, value.project]),
+  );
+}
 
 export const quotationClientStatusConfig: Record<
   QuotationClientStatus,

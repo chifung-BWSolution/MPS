@@ -6,6 +6,10 @@ import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
+import {
+  readSelectedQuotationProjectId,
+  writeSelectedQuotationProjectId,
+} from '@/lib/quotationProjectNavigation';
 import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1067,6 +1071,17 @@ export function PitchingModule() {
     setView('detail');
   };
 
+  useEffect(() => {
+    const pendingId = readSelectedQuotationProjectId();
+    if (!pendingId || records.length === 0) return;
+    const record = records.find((r) => r.id === pendingId);
+    if (record) {
+      setSelectedRecord(record);
+      setView('detail');
+    }
+    writeSelectedQuotationProjectId(null);
+  }, [records]);
+
   const openCreateModal = () => {
     setEditingRecord(null);
     setFormModalOpen(true);
@@ -1150,6 +1165,7 @@ export function PitchingModule() {
         record={selectedRecord}
         clientOptions={pitchingClientOptions}
         onBack={() => {
+          writeSelectedQuotationProjectId(null);
           setView('list');
           setSelectedRecord(null);
         }}
