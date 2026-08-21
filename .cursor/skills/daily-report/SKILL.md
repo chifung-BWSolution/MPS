@@ -17,6 +17,7 @@ Generate **today's** work report for this repository. Output the report in the c
 1. **Today only.** Use the conversation's "Today's date". Treat the business day as **Asia/Hong_Kong (UTC+8)**. Do not reuse or summarize a previous day's report. Only include another day if the user names that date.
 2. **Traditional Chinese only.** Module names, titles, and descriptions must be 繁體中文. Do not use Simplified Chinese. English is allowed only for product codes, route hashes, and model names (e.g. `Facebook Ads`, `#marketing/facebook-ads`, `Cursor Grok 4.6`).
 3. **Outcomes, not actions.** Each item is the user-facing result, in one short sentence. Do not list implementation steps, table/column names, file paths, API details, or per-commit diffs.
+4. **One block per module.** After every `{模組}（N 項）` line, start a new paragraph (blank line) before the numbered item. Never put the module name and `1.` / `2.` / `3.` on the same line.
 
 ## Gather sources
 
@@ -56,11 +57,20 @@ Merge related commits or agents into **one** item when they serve the same outco
 
 Match this template. No extra commentary before or after, except a one-line empty-day note when needed.
 
+Chat Markdown **merges the next line into the module name** when an ordered item does not start at `1.` (so `2.` / `3.` after `客戶報價（1 項）` becomes one cluttered line). Prevent that with a **bold module line**, then a **blank line**, then the item.
+
 ```
 今日任務報告（YYYY-MM-DD）
 
-{模組}（N 項）
+**{模組}（N 項）**
+
 1. [類型 · complete] 繁中成果標題
+一句話說明使用者現在能做什麼，或畫面上有什麼改變。
+（模型名稱）
+
+**{下一模組}（N 項）**
+
+2. [類型 · complete] 繁中成果標題
 一句話說明使用者現在能做什麼，或畫面上有什麼改變。
 （模型名稱）
 ```
@@ -69,6 +79,7 @@ Rules for the template:
 
 - Start at `1.` and number continuously across modules.
 - `{模組}（N 項）` uses the count of items in that module only.
+- **Layout (required).** Write `**{模組}（N 項）**` on its own line. Put a blank line after every module header before the first `N.` item. Put a blank line before every later module header. Never write the module name and `N.` on the same line. Do not skip the blank line after the first module either.
 - **類型** is one of: `frontend` / `bugfix` / `chore` / `backend`. Default to `frontend` for UI work, `bugfix` for a broken behavior that was fixed, `chore` for cleanup / policy / login / docs, `backend` for API or data-only work with no UI.
 - Status is `complete` only when the change is on `origin/main` (or the user said it is done). Use `in progress` if it did not land.
 - Title: short Traditional Chinese outcome, not the raw commit subject.
@@ -82,13 +93,26 @@ Rules for the template:
 
 ## Style examples
 
-Good:
+Good (two modules — note the blank line after each module name):
 
 ```
-行銷管理（1 項）
+**行銷管理（1 項）**
+
 1. [frontend · complete] Facebook 廣告活動詳情
 列表可點進活動詳情，查看成效與拆解。
 （Cursor Grok 4.6）
+
+**客戶報價（1 項）**
+
+2. [frontend · complete] Pitching 與 Project 可編輯並綁定客戶
+列表可開啟編輯，儲存時會記下所選客戶。
+（Cursor Grok 4.6）
+```
+
+Bad (module name and `2.` on one line — chat Markdown does this if the blank line is missing):
+
+```
+客戶報價（1 項） 2. [frontend · complete] Pitching 與 Project 可編輯並綁定客戶 列表可開啟編輯，儲存時會記下所選客戶。 （Cursor Grok 4.6）
 ```
 
 Bad (too detailed / English title / implementation):
