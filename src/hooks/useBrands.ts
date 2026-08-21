@@ -22,6 +22,12 @@ function mapRow(row: DbRow): Brand {
   };
 }
 
+type WriteError = { message: string };
+
+function noRowError(action: string): WriteError {
+  return { message: `${action}未寫入資料庫（0 列）。請重新整理後再試。` };
+}
+
 export function useBrands() {
   const { session } = useAuth();
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -55,9 +61,11 @@ export function useBrands() {
       display_name: brand.displayName,
       is_active: brand.isActive,
     };
-    const { error } = await supabase.from('brand_list').insert(row);
-    if (!error) setBrands(prev => [...prev, brand]);
-    return error;
+    const { data, error } = await supabase.from('brand_list').insert(row).select('id').maybeSingle();
+    if (error) return error;
+    if (!data) return noRowError('新增');
+    setBrands(prev => [...prev, brand]);
+    return null;
   }, []);
 
   const updateBrand = useCallback(async (id: string, updates: Partial<Brand>) => {
@@ -67,15 +75,29 @@ export function useBrands() {
     if (updates.displayName !== undefined) row.display_name = updates.displayName;
     if (updates.isActive !== undefined) row.is_active = updates.isActive;
 
-    const { error } = await supabase.from('brand_list').update(row).eq('id', id);
-    if (!error) setBrands(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
-    return error;
+    const { data, error } = await supabase
+      .from('brand_list')
+      .update(row)
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
+    if (error) return error;
+    if (!data) return noRowError('更新');
+    setBrands(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
+    return null;
   }, []);
 
   const deleteBrand = useCallback(async (id: string) => {
-    const { error } = await supabase.from('brand_list').delete().eq('id', id);
-    if (!error) setBrands(prev => prev.filter(b => b.id !== id));
-    return error;
+    const { data, error } = await supabase
+      .from('brand_list')
+      .delete()
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
+    if (error) return error;
+    if (!data) return noRowError('刪除');
+    setBrands(prev => prev.filter(b => b.id !== id));
+    return null;
   }, []);
 
   return { brands, loading, error, addBrand, updateBrand, deleteBrand };

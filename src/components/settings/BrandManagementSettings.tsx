@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { projects, yearPlans } from '@/data/mockData';
 import { Brand, Company } from '@/types/app';
@@ -71,7 +72,12 @@ export function BrandManagementSettings() {
 
   const handleSave = async (formData: Partial<Brand>) => {
     if (editingBrand) {
-      await updateBrand(editingBrand.id, formData);
+      const err = await updateBrand(editingBrand.id, formData);
+      if (err) {
+        toast.error('儲存失敗', { description: err.message });
+        return;
+      }
+      toast.success('品牌已更新');
     } else {
       const newBrand: Brand = {
         id: crypto.randomUUID(),
@@ -81,7 +87,12 @@ export function BrandManagementSettings() {
         isActive: true,
         projectCount: 0,
       };
-      await addBrand(newBrand);
+      const err = await addBrand(newBrand);
+      if (err) {
+        toast.error('新增失敗', { description: err.message });
+        return;
+      }
+      toast.success('品牌已新增');
     }
     setIsModalOpen(false);
     setEditingBrand(null);
@@ -89,7 +100,12 @@ export function BrandManagementSettings() {
 
   const handleConfirmDelete = async () => {
     if (deleteTarget) {
-      await deleteBrand(deleteTarget.id);
+      const err = await deleteBrand(deleteTarget.id);
+      if (err) {
+        toast.error('刪除失敗', { description: err.message });
+        return;
+      }
+      toast.success('品牌已刪除');
     }
     setDeleteTarget(null);
   };
