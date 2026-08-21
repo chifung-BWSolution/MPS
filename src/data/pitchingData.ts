@@ -43,6 +43,7 @@ export interface PitchingRecord {
   description?: string;
   projectTypes: PitchingProjectType[];
   asanaLink?: string;
+  asanaTaskGid?: string;
   asanaProjectGid?: string;
   asanaProjectName?: string;
   assignedPm: string;

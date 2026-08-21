@@ -90,6 +90,113 @@ async function asanaFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return json as T;
 }
 
+export type AsanaStory = {
+  gid: string;
+  created_at?: string;
+  created_by?: { gid?: string; name?: string } | null;
+  text?: string | null;
+  html_text?: string | null;
+  type?: string;
+  resource_subtype?: string;
+};
+
+export type AsanaTaskComment = {
+  id: string;
+  createdAt: string;
+  authorName: string;
+  text: string;
+};
+
+/** Parse an Asana task GID from permalink, inbox URL, or a bare numeric id. */
+export function parseAsanaTaskGidFromLink(raw: string | null | undefined): string | null {
+  const value = (raw ?? "").trim();
+  if (!value) return null;
+  if (/^\d{6,}$/.test(value)) return value;
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    const digits = value.match(/\d{6,}/g);
+    return digits?.[digits.length - 1] ?? null;
+  }
+
+  const path = url.pathname.replace(/\/+$/, "");
+  const parts = path.split("/").filter(Boolean);
+
+  const taskIdx = parts.lastIndexOf("task");
+  if (taskIdx >= 0 && parts[taskIdx + 1] && /^\d+$/.test(parts[taskIdx + 1])) {
+    return parts[taskIdx + 1];
+  }
+
+  const listIdx = parts.lastIndexOf("list");
+  if (listIdx >= 0 && parts[listIdx + 1] && /^\d+$/.test(parts[listIdx + 1])) {
+    return parts[listIdx + 1];
+  }
+
+  if (parts[0] === "0" && parts.length >= 3) {
+    const last = parts[parts.length - 1];
+    if (last && /^\d+$/.test(last)) return last;
+  }
+
+  const queryGid = url.searchParams.get("task") || url.searchParams.get("focus");
+  if (queryGid && /^\d+$/.test(queryGid)) return queryGid;
+
+  const digits = path.match(/\d{6,}/g);
+  return digits?.[digits.length - 1] ?? null;
+}
+
+export function isAsanaChatStory(story: AsanaStory): boolean {
+  return story.resource_subtype === "comment_added" || story.type === "comment";
+}
+
+export function asanaStoryToComment(story: AsanaStory): AsanaTaskComment | null {
+  if (!isAsanaChatStory(story)) return null;
+  const text = story.text?.trim() || (story.html_text ? stripHtml(story.html_text) : "");
+  if (!text) return null;
+  return {
+    id: story.gid,
+    createdAt: story.created_at || "",
+    authorName: story.created_by?.name?.trim() || "Asana",
+    text,
+  };
+}
+
+export async function getTask(taskGid: string): Promise<AsanaTask> {
+  const qs = new URLSearchParams({
+    opt_fields: ["name", "permalink_url", "notes", "created_at", "assignee.name"].join(","),
+  });
+  const data = await asanaFetch<{ data: AsanaTask }>(`/tasks/${taskGid}?${qs}`);
+  return data.data;
+}
+
+export async function listTaskStories(taskGid: string): Promise<AsanaStory[]> {
+  const optFields = [
+    "created_at",
+    "created_by.name",
+    "text",
+    "html_text",
+    "type",
+    "resource_subtype",
+  ].join(",");
+  const out: AsanaStory[] = [];
+  let offset: string | undefined;
+  do {
+    const qs = new URLSearchParams({
+      limit: "100",
+      opt_fields: optFields,
+      ...(offset ? { offset } : {}),
+    });
+    const data = await asanaFetch<{
+      data: AsanaStory[];
+      next_page?: { offset?: string } | null;
+    }>(`/tasks/${taskGid}/stories?${qs}`);
+    out.push(...(data.data || []));
+    offset = data.next_page?.offset;
+  } while (offset);
+  return out;
+}
+
 export async function listProjectTasks(projectGid: string): Promise<AsanaTask[]> {
   const optFields = [
     "name",

@@ -23,6 +23,7 @@ import {
   type PitchingExpenseItem,
 } from '@/data/pitchingData';
 import { PitchingBudgetTab } from '@/components/quotation/PitchingBudgetTab';
+import { PitchingFollowUpsTab } from '@/components/quotation/PitchingFollowUpsTab';
 
 export type PitchingFormValues = {
   clientId: string;
@@ -997,12 +998,11 @@ export function PitchingDetail({
       )}
 
       {activeTab === 'followups' && (
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-8 text-center">
-          <MessageSquare size={24} className="mx-auto text-muted-foreground/50 mb-2" />
-          <p className="text-[13px] text-muted-foreground">
-            {record.followUps.length > 0 ? `${record.followUps.length} 筆跟進記錄` : '暫無跟進記錄'}
-          </p>
-        </div>
+        <PitchingFollowUpsTab
+          projectId={record.id}
+          asanaLink={draft.asanaLink || record.asanaLink || ''}
+          asanaTaskGid={record.asanaTaskGid}
+        />
       )}
 
       {activeTab === 'quotation' && (

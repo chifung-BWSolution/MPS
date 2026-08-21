@@ -96,6 +96,7 @@ function mapRow(row: DbRow): PitchingRecord {
     inquiryDate: String(row.inquiry_date).slice(0, 10),
     description: row.description ?? undefined,
     projectTypes: (row.project_types || []) as PitchingProjectType[],
+    asanaTaskGid: row.asana_task_gid ?? undefined,
     asanaProjectGid: row.asana_project_gid ?? undefined,
     asanaProjectName: row.asana_project_name ?? undefined,
     assignedPm: row.assigned_pm || '',

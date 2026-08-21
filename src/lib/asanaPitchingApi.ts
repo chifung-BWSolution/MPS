@@ -1,4 +1,15 @@
 import { supabase } from '@/lib/supabase';
+import type { AsanaTaskComment } from '@/lib/asanaTaskLink';
+
+export type { AsanaTaskComment };
+
+export type AsanaTaskStoriesResult = {
+  success?: boolean;
+  task_gid?: string;
+  task_name?: string;
+  asana_link?: string | null;
+  comments: AsanaTaskComment[];
+};
 
 async function invokeFunction<T = Record<string, unknown>>(
   slug: string,
@@ -23,6 +34,16 @@ async function invokeFunction<T = Record<string, unknown>>(
     throw new Error(String(json.error || `${res.status} ${res.statusText}`));
   }
   return json;
+}
+
+export function fetchAsanaTaskStories(input: {
+  projectId?: string;
+  asanaLink?: string;
+}) {
+  return invokeFunction<AsanaTaskStoriesResult>('asana-task-stories', {
+    project_id: input.projectId || undefined,
+    asana_link: input.asanaLink || undefined,
+  });
 }
 
 export function invokeAsanaPitchingSync() {
