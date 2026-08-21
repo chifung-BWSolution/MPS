@@ -2,7 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { QUOTATION_CLIENT_PROJECT_TABLE } from '@/hooks/useQuotationClientProjects';
-import type { QuotationClient, QuotationClientInput } from '@/data/quotationClientList';
+import {
+  parseBrandIds,
+  serializeBrandIds,
+  type QuotationClient,
+  type QuotationClientInput,
+} from '@/data/quotationClientList';
 
 export const QUOTATION_CLIENT_LIST_TABLE = 'quotation_client_list';
 
@@ -12,11 +17,8 @@ type DbRow = {
   company_name_zh: string;
   company_name_en: string | null;
   brand_id: string | null;
-  brand_code: string | null;
-  brand_name: string | null;
   contact_person: string;
   phone: string | null;
-  whatsapp: string | null;
   email: string | null;
   address: string | null;
   inquiry_date: string;
@@ -32,12 +34,9 @@ function mapRow(row: DbRow, projectCount = 0): QuotationClient {
     displayName: row.display_name || row.company_name_zh,
     companyNameZh: row.company_name_zh,
     companyNameEn: row.company_name_en ?? '',
-    brandId: row.brand_id ?? '',
-    brandCode: row.brand_code ?? '',
-    brandName: row.brand_name ?? '',
+    brandIds: parseBrandIds(row.brand_id),
     contactPerson: row.contact_person,
     phone: row.phone ?? '',
-    whatsapp: row.whatsapp ?? '',
     email: row.email ?? '',
     address: row.address ?? '',
     inquiryDate: String(row.inquiry_date).slice(0, 10),
@@ -57,12 +56,9 @@ function inputToRow(input: QuotationClientInput, id?: string) {
     display_name: input.displayName.trim() || input.companyNameZh.trim(),
     company_name_zh: input.companyNameZh.trim(),
     company_name_en: input.companyNameEn.trim() || null,
-    brand_id: input.brandId || null,
-    brand_code: input.brandCode || null,
-    brand_name: input.brandName || null,
+    brand_id: serializeBrandIds(input.brandIds) || null,
     contact_person: input.contactPerson.trim(),
     phone: input.phone.trim() || null,
-    whatsapp: input.whatsapp.trim() || null,
     email: input.email.trim() || null,
     address: input.address.trim() || null,
     inquiry_date: input.inquiryDate,

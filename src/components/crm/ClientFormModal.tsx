@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 import { useBrands } from '@/hooks/useBrands';
 import {
   emptyQuotationClientInput,
@@ -20,8 +21,9 @@ type Props = {
 
 export function ClientFormModal({ open, onClose, editingClient, onSave, saving = false }: Props) {
   const { brands, loading: brandsLoading } = useBrands();
-  const activeBrands = brands.filter((b) => b.isActive);
   const [formData, setFormData] = useState<QuotationClientInput>(emptyQuotationClientInput());
+
+  const brandOptions = brands.filter((b) => b.isActive || formData.brandIds.includes(b.id));
 
   useEffect(() => {
     if (!open) return;
@@ -30,12 +32,9 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
         displayName: editingClient.displayName,
         companyNameZh: editingClient.companyNameZh,
         companyNameEn: editingClient.companyNameEn,
-        brandId: editingClient.brandId,
-        brandCode: editingClient.brandCode,
-        brandName: editingClient.brandName,
+        brandIds: editingClient.brandIds,
         contactPerson: editingClient.contactPerson,
         phone: editingClient.phone,
-        whatsapp: editingClient.whatsapp,
         email: editingClient.email,
         address: editingClient.address,
         inquiryDate: editingClient.inquiryDate,
@@ -43,27 +42,20 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
         notes: editingClient.notes,
       });
     } else {
-      const defaultBrand = activeBrands[0];
-      setFormData({
-        ...emptyQuotationClientInput(),
-        brandId: defaultBrand?.id ?? '',
-        brandCode: defaultBrand?.brandCode ?? '',
-        brandName: defaultBrand?.displayName ?? '',
-      });
+      setFormData(emptyQuotationClientInput());
     }
-  }, [open, editingClient, activeBrands]);
+  }, [open, editingClient]);
 
   const updateForm = (field: keyof QuotationClientInput, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleBrandChange = (brandId: string) => {
-    const brand = activeBrands.find((b) => b.id === brandId);
+  const toggleBrand = (brandId: string) => {
     setFormData((prev) => ({
       ...prev,
-      brandId,
-      brandCode: brand?.brandCode ?? '',
-      brandName: brand?.displayName ?? '',
+      brandIds: prev.brandIds.includes(brandId)
+        ? prev.brandIds.filter((id) => id !== brandId)
+        : [...prev.brandIds, brandId],
     }));
   };
 
@@ -72,7 +64,10 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
       toast.error('請填寫必填欄位（公司名稱、聯絡人）');
       return;
     }
-    const saved = await onSave(formData);
+    const saved = await onSave({
+      ...formData,
+      brandIds: [...new Set(formData.brandIds)],
+    });
     if (saved) {
       toast.success(editingClient ? '客戶資料已更新' : '客戶已新增');
       onClose();
@@ -80,6 +75,10 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
   };
 
   if (!open) return null;
+
+  const selectedBrandLabels = brandOptions
+    .filter((b) => formData.brandIds.includes(b.id))
+    .map((b) => b.displayName || b.brandCode);
 
   return (
     <div className="fixed inset-0 m-0 bg-black/50 flex items-center justify-center z-[100]">
@@ -125,19 +124,32 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
 
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1">所屬品牌</label>
-            <select
-              value={formData.brandId}
-              onChange={(e) => handleBrandChange(e.target.value)}
-              disabled={brandsLoading}
-              className="w-full h-9 px-3 border border-border rounded-md text-[13px] bg-white focus:outline-none focus:ring-1 focus:ring-teal-600"
-            >
-              <option value="">— 請選擇 —</option>
-              {activeBrands.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.displayName} ({b.brandCode})
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-wrap gap-2">
+              {brandsLoading && (
+                <span className="text-[12px] text-muted-foreground">載入品牌…</span>
+              )}
+              {brandOptions.map((b) => {
+                const selected = formData.brandIds.includes(b.id);
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => toggleBrand(b.id)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-md text-[13px] font-medium border transition-colors',
+                      selected
+                        ? 'bg-teal-50 border-teal-300 text-teal-800'
+                        : 'bg-white border-border text-muted-foreground hover:bg-muted/40',
+                    )}
+                  >
+                    {b.displayName} ({b.brandCode})
+                  </button>
+                );
+              })}
+            </div>
+            {selectedBrandLabels.length > 0 && (
+              <p className="text-[11px] text-muted-foreground mt-2">已選：{selectedBrandLabels.join('、')}</p>
+            )}
           </div>
 
           <div>
@@ -150,25 +162,14 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">電話</label>
-              <Input
-                value={formData.phone}
-                onChange={(e) => updateForm('phone', e.target.value)}
-                placeholder="+852 9123 4567"
-                className="h-9 text-[13px]"
-              />
-            </div>
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">WhatsApp</label>
-              <Input
-                value={formData.whatsapp}
-                onChange={(e) => updateForm('whatsapp', e.target.value)}
-                placeholder="85291234567"
-                className="h-9 text-[13px]"
-              />
-            </div>
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">電話</label>
+            <Input
+              value={formData.phone}
+              onChange={(e) => updateForm('phone', e.target.value)}
+              placeholder="+852 9123 4567"
+              className="h-9 text-[13px]"
+            />
           </div>
 
           <div>

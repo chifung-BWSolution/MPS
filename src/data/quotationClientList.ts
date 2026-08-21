@@ -7,12 +7,10 @@ export type QuotationClient = {
   displayName: string;
   companyNameZh: string;
   companyNameEn: string;
-  brandId: string;
-  brandCode: string;
-  brandName: string;
+  /** Unique brand_list.id values stored as comma-separated brand_id. */
+  brandIds: string[];
   contactPerson: string;
   phone: string;
-  whatsapp: string;
   email: string;
   address: string;
   inquiryDate: string;
@@ -22,6 +20,23 @@ export type QuotationClient = {
   createdAt: string;
   updatedAt: string;
 };
+
+export function parseBrandIds(value: string | null | undefined): string[] {
+  if (!value) return [];
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const part of value.split(',')) {
+    const id = part.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
+export function serializeBrandIds(ids: string[]): string {
+  return [...new Set(ids.map((id) => id.trim()).filter(Boolean))].sort().join(',');
+}
 
 export type QuotationClientInput = Omit<
   QuotationClient,
@@ -41,12 +56,9 @@ export const emptyQuotationClientInput = (): QuotationClientInput => ({
   displayName: '',
   companyNameZh: '',
   companyNameEn: '',
-  brandId: '',
-  brandCode: '',
-  brandName: '',
+  brandIds: [],
   contactPerson: '',
   phone: '',
-  whatsapp: '',
   email: '',
   address: '',
   inquiryDate: new Date().toISOString().slice(0, 10),

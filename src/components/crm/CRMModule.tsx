@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Search, Plus, Phone, Mail, MessageCircle, Building2, Pencil, Trash2, Loader2 } from 'lucide-react';
+import { Search, Plus, Phone, Mail, Building2, Pencil, Trash2, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { ClientFormModal } from '@/components/crm/ClientFormModal';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
+import { useBrands } from '@/hooks/useBrands';
 import {
   quotationClientStatusConfig,
   type QuotationClient,
@@ -12,6 +13,12 @@ import {
 
 export function CRMModule({ subModule }: { subModule?: string }) {
   const { records: clients, loading, addClient, updateClient, deleteClient } = useQuotationClientList();
+  const { brands } = useBrands();
+  const brandLabel = (id: string) => {
+    const brand = brands.find((b) => b.id === id);
+    return brand?.displayName || brand?.brandCode || id;
+  };
+  const brandLabels = (ids: string[]) => ids.map(brandLabel).filter(Boolean);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showModal, setShowModal] = useState(false);
@@ -39,7 +46,8 @@ export function CRMModule({ subModule }: { subModule?: string }) {
         c.displayName.toLowerCase().includes(q) ||
         c.companyNameZh.includes(searchQuery) ||
         c.companyNameEn.toLowerCase().includes(q) ||
-        c.contactPerson.toLowerCase().includes(q)
+        c.contactPerson.toLowerCase().includes(q) ||
+        brandLabels(c.brandIds).some((name) => name.toLowerCase().includes(q))
       );
     }
     return true;
@@ -169,7 +177,9 @@ export function CRMModule({ subModule }: { subModule?: string }) {
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-[13px]">{client.brandName || '—'}</td>
+                  <td className="px-4 py-3 text-[13px]">
+                    {brandLabels(client.brandIds).join('、') || '—'}
+                  </td>
                   <td className="px-4 py-3 text-[13px] font-medium">{client.contactPerson}</td>
                   <td className="px-4 py-3 text-[13px] text-muted-foreground">{client.phone || '—'}</td>
                   <td className="px-4 py-3 text-[13px]">
@@ -185,11 +195,6 @@ export function CRMModule({ subModule }: { subModule?: string }) {
                       {client.phone && (
                         <a href={`tel:${client.phone}`} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="致電">
                           <Phone size={13} />
-                        </a>
-                      )}
-                      {client.whatsapp && (
-                        <a href={`https://wa.me/${client.whatsapp}`} target="_blank" rel="noopener noreferrer" className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors" title="WhatsApp">
-                          <MessageCircle size={13} />
                         </a>
                       )}
                       {client.email && (

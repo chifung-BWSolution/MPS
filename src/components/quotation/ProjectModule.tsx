@@ -201,7 +201,7 @@ export function ProjectModule() {
       clientListRecords.map((c) => ({
         value: c.id,
         label: c.companyNameZh,
-        keywords: [c.companyNameZh, c.companyNameEn, c.contactPerson, c.brandName].filter(Boolean).join(' '),
+        keywords: [c.companyNameZh, c.companyNameEn, c.contactPerson, c.displayName].filter(Boolean).join(' '),
         companyNameZh: c.companyNameZh,
         companyNameEn: c.companyNameEn,
       })),
