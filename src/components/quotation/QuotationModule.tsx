@@ -561,8 +561,6 @@ function NewQuotationWizard({ onClose, onSaved, saveQuotation, editQuote, editPa
       clientId: client.id,
       clientName: client.companyNameZh,
       displayName: client.companyNameZh,
-      companyNameEn: client.companyNameEn,
-      companyNameZh: client.companyNameZh,
       inquiryDate: client.inquiryDate,
       description: client.notes,
       projectTypes: [],

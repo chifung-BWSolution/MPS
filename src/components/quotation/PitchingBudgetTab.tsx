@@ -15,9 +15,9 @@ import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { PitchingExpenseItem } from '@/data/pitchingData';
+import { PITCHING_CURRENCY, type PitchingExpenseItem } from '@/data/pitchingData';
 
-function formatMoney(amount: number, currency = 'HKD') {
+function formatMoney(amount: number, currency = PITCHING_CURRENCY) {
   return `$${amount.toLocaleString('en-US', { maximumFractionDigits: 0 })} ${currency}`;
 }
 
@@ -27,22 +27,19 @@ function totalExpenses(expenses: PitchingExpenseItem[]) {
 
 export function PitchingBudgetTab({
   income,
-  currency,
   expenses,
   onIncomeChange,
   onExpensesChange,
 }: {
   income: number | undefined;
-  currency: string;
   expenses: PitchingExpenseItem[];
-  onIncomeChange: (income: number | undefined, nextCurrency: string) => void;
+  onIncomeChange: (income: number | undefined) => void;
   onExpensesChange: (next: PitchingExpenseItem[]) => void;
 }) {
   const [showIncomeModal, setShowIncomeModal] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [incomeDraft, setIncomeDraft] = useState('');
-  const [currencyDraft, setCurrencyDraft] = useState('HKD');
-  const [expenseDraft, setExpenseDraft] = useState({ name: '', amount: '', currency: 'HKD', notes: '' });
+  const [expenseDraft, setExpenseDraft] = useState({ name: '', amount: '', notes: '' });
 
   const expenseTotal = useMemo(() => totalExpenses(expenses), [expenses]);
   const incomeValue = income ?? 0;
@@ -64,18 +61,17 @@ export function PitchingBudgetTab({
 
   const openIncomeModal = () => {
     setIncomeDraft(income != null ? String(income) : '');
-    setCurrencyDraft(currency || 'HKD');
     setShowIncomeModal(true);
   };
 
   const saveIncome = () => {
     const parsed = parseFloat(incomeDraft);
-    onIncomeChange(Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined, currencyDraft.trim() || 'HKD');
+    onIncomeChange(Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined);
     setShowIncomeModal(false);
   };
 
   const openExpenseModal = () => {
-    setExpenseDraft({ name: '', amount: '', currency: currency || 'HKD', notes: '' });
+    setExpenseDraft({ name: '', amount: '', notes: '' });
     setShowExpenseModal(true);
   };
 
@@ -88,7 +84,7 @@ export function PitchingBudgetTab({
         id: `exp_${Date.now()}`,
         name: expenseDraft.name.trim(),
         amount,
-        currency: expenseDraft.currency.trim() || 'HKD',
+        currency: PITCHING_CURRENCY,
         notes: expenseDraft.notes.trim() || undefined,
       },
     ]);
@@ -122,7 +118,7 @@ export function PitchingBudgetTab({
             </button>
           </div>
           <p className="text-[28px] font-bold tracking-tight">
-            {income != null ? formatMoney(income, currency) : '—'}
+            {income != null ? formatMoney(income) : '—'}
           </p>
         </div>
 
@@ -174,7 +170,7 @@ export function PitchingBudgetTab({
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-[13px] font-semibold tabular-nums">
-                      {formatMoney(item.amount, item.currency)}
+                      {formatMoney(item.amount)}
                     </span>
                     <button
                       type="button"
@@ -188,7 +184,7 @@ export function PitchingBudgetTab({
                 </div>
               ))}
               <p className="text-[12px] text-muted-foreground text-right pt-1">
-                合計 {formatMoney(expenseTotal, currency)}
+                合計 {formatMoney(expenseTotal)}
               </p>
             </div>
           )}
@@ -205,7 +201,7 @@ export function PitchingBudgetTab({
           </div>
           <div className="flex items-baseline gap-2 mb-1">
             <span className="text-[24px] font-bold text-emerald-600 tabular-nums">
-              {formatMoney(grossProfit, currency).replace(` ${currency}`, '')}
+              {formatMoney(grossProfit).replace(` ${PITCHING_CURRENCY}`, '')}
             </span>
             <span className="text-[18px] font-semibold text-emerald-600 tabular-nums">
               {incomeValue > 0 ? `${marginPercent.toFixed(1)}%` : '—'}
@@ -227,15 +223,15 @@ export function PitchingBudgetTab({
           <div className="mt-4 pt-3 border-t border-border/60 space-y-1 text-[12px]">
             <div className="flex justify-between">
               <span className="text-muted-foreground">收入</span>
-              <span className="tabular-nums">{income != null ? formatMoney(incomeValue, currency) : '—'}</span>
+              <span className="tabular-nums">{income != null ? formatMoney(incomeValue) : '—'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">支出</span>
-              <span className="tabular-nums">{expenseTotal > 0 ? formatMoney(expenseTotal, currency) : '—'}</span>
+              <span className="tabular-nums">{expenseTotal > 0 ? formatMoney(expenseTotal) : '—'}</span>
             </div>
             <div className="flex justify-between font-medium">
               <span>淨額</span>
-              <span className="text-emerald-600 tabular-nums">{formatMoney(grossProfit, currency)}</span>
+              <span className="text-emerald-600 tabular-nums">{formatMoney(grossProfit)}</span>
             </div>
           </div>
         </div>
@@ -247,7 +243,7 @@ export function PitchingBudgetTab({
             <h3 className="text-[13px] font-semibold">收入結構 Income Composition</h3>
           </div>
           <p className="text-[11px] text-muted-foreground mb-3">
-            整個餅圖 = 預計收入 {income != null ? formatMoney(incomeValue, currency) : '—'}
+            整個餅圖 = 預計收入 {income != null ? formatMoney(incomeValue) : '—'}
           </p>
           {pieData.length > 0 ? (
             <>
@@ -299,15 +295,15 @@ export function PitchingBudgetTab({
           <div className="space-y-1 text-[12px] pt-3 border-t border-border/60">
             <div className="flex justify-between">
               <span className="text-muted-foreground">收入</span>
-              <span className="tabular-nums">{income != null ? formatMoney(incomeValue, currency) : '—'}</span>
+              <span className="tabular-nums">{income != null ? formatMoney(incomeValue) : '—'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">支出</span>
-              <span className="tabular-nums">{expenseTotal > 0 ? formatMoney(expenseTotal, currency) : '—'}</span>
+              <span className="tabular-nums">{expenseTotal > 0 ? formatMoney(expenseTotal) : '—'}</span>
             </div>
             <div className="flex justify-between font-medium">
               <span>淨額</span>
-              <span className="text-emerald-600 tabular-nums">{formatMoney(grossProfit, currency)}</span>
+              <span className="text-emerald-600 tabular-nums">{formatMoney(grossProfit)}</span>
             </div>
           </div>
         </div>
@@ -316,7 +312,7 @@ export function PitchingBudgetTab({
       <CrudModal isOpen={showIncomeModal} onClose={() => setShowIncomeModal(false)} title="編輯預計收入" size="sm">
         <div className="space-y-4">
           <div>
-            <Label className="text-[12px]">金額</Label>
+            <Label className="text-[12px]">金額（{PITCHING_CURRENCY}）</Label>
             <Input
               type="number"
               min="0"
@@ -324,15 +320,6 @@ export function PitchingBudgetTab({
               value={incomeDraft}
               onChange={(e) => setIncomeDraft(e.target.value)}
               placeholder="20000"
-              className="mt-1 h-9 text-[13px]"
-            />
-          </div>
-          <div>
-            <Label className="text-[12px]">幣別</Label>
-            <Input
-              value={currencyDraft}
-              onChange={(e) => setCurrencyDraft(e.target.value.toUpperCase())}
-              placeholder="HKD"
               className="mt-1 h-9 text-[13px]"
             />
           </div>
@@ -358,28 +345,17 @@ export function PitchingBudgetTab({
               className="mt-1 h-9 text-[13px]"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-[12px]">金額</Label>
-              <Input
-                type="number"
-                min="0"
-                step="1"
-                value={expenseDraft.amount}
-                onChange={(e) => setExpenseDraft((p) => ({ ...p, amount: e.target.value }))}
-                placeholder="5000"
-                className="mt-1 h-9 text-[13px]"
-              />
-            </div>
-            <div>
-              <Label className="text-[12px]">幣別</Label>
-              <Input
-                value={expenseDraft.currency}
-                onChange={(e) => setExpenseDraft((p) => ({ ...p, currency: e.target.value.toUpperCase() }))}
-                placeholder="HKD"
-                className="mt-1 h-9 text-[13px]"
-              />
-            </div>
+          <div>
+            <Label className="text-[12px]">金額（{PITCHING_CURRENCY}）</Label>
+            <Input
+              type="number"
+              min="0"
+              step="1"
+              value={expenseDraft.amount}
+              onChange={(e) => setExpenseDraft((p) => ({ ...p, amount: e.target.value }))}
+              placeholder="5000"
+              className="mt-1 h-9 text-[13px]"
+            />
           </div>
           <div>
             <Label className="text-[12px]">備註（選填）</Label>

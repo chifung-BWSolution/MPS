@@ -35,7 +35,9 @@ export interface PitchingRecord {
   clientName: string;
   clientId?: string;
   displayName: string;
+  /** Resolved from quotation_client_list via client_id (not stored on the project row). */
   companyNameEn?: string;
+  /** Resolved from quotation_client_list via client_id (not stored on the project row). */
   companyNameZh?: string;
   inquiryDate: string;
   description?: string;
@@ -52,7 +54,6 @@ export interface PitchingRecord {
   linkedQuotationNumber?: string;
   lastFollowUpDate?: string;
   estimatedIncome?: number;
-  estimatedIncomeCurrency?: string;
   estimatedExpenses?: PitchingExpenseItem[];
   createdAt: string;
   updatedAt: string;
@@ -119,13 +120,8 @@ export function matchesProjectTypeFilter(
   return types.includes(filter as PitchingProjectType);
 }
 
-/** At least one company name (English or Chinese) must be provided. */
-export function hasRequiredCompanyName(
-  en: string | undefined | null,
-  zh: string | undefined | null,
-): boolean {
-  return Boolean(en?.trim() || zh?.trim());
-}
+/** Pitching estimated income / expense amounts are always stored and shown as HKD. */
+export const PITCHING_CURRENCY = 'HKD';
 
 export function generatePitchingId(existingCount: number): string {
   const now = new Date();

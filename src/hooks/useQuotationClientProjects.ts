@@ -2,10 +2,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { autoSyncAsanaPitchingIfNeeded } from '@/lib/asanaPitchingApi';
-import type { PitchingExpenseItem, PitchingProjectType, PitchingRecord, PitchingStatus } from '@/data/pitchingData';
+import { PITCHING_CURRENCY, type PitchingExpenseItem, type PitchingProjectType, type PitchingRecord, type PitchingStatus } from '@/data/pitchingData';
 
 /** Supabase table shared by Pitching and Project pages */
 export const QUOTATION_CLIENT_PROJECT_TABLE = 'quotation_client_project';
+
+type ClientListEmbed = {
+  company_name_en: string | null;
+  company_name_zh: string | null;
+} | null;
 
 type DbRow = {
   id: string;
@@ -16,8 +21,6 @@ type DbRow = {
   client_id: string | null;
   client_name: string | null;
   display_name: string;
-  company_name_en: string | null;
-  company_name_zh: string | null;
   inquiry_date: string;
   description: string | null;
   project_types: string[] | null;
@@ -27,11 +30,22 @@ type DbRow = {
   asana_link: string | null;
   notes: string | null;
   estimated_income: number | null;
-  estimated_income_currency: string | null;
   estimated_expenses: PitchingExpenseItem[] | null;
   created_at: string;
   updated_at: string;
+  quotation_client_list?: ClientListEmbed;
 };
+
+function clientNamesFromEmbed(embed: ClientListEmbed | undefined): {
+  companyNameEn?: string;
+  companyNameZh?: string;
+} {
+  if (!embed) return {};
+  return {
+    companyNameEn: embed.company_name_en ?? undefined,
+    companyNameZh: embed.company_name_zh ?? undefined,
+  };
+}
 
 function parseExpenses(raw: unknown): PitchingExpenseItem[] {
   if (raw == null) return [];
@@ -62,7 +76,7 @@ function parseExpenses(raw: unknown): PitchingExpenseItem[] {
       id: item.id,
       name: item.name,
       amount: item.amount,
-      currency: item.currency || 'HKD',
+      currency: item.currency || PITCHING_CURRENCY,
       notes: item.notes,
     }));
 }
@@ -78,8 +92,7 @@ function mapRow(row: DbRow): PitchingRecord {
     clientId: row.client_id ?? undefined,
     clientName: row.client_name || '—',
     displayName: row.display_name,
-    companyNameEn: row.company_name_en ?? undefined,
-    companyNameZh: row.company_name_zh ?? undefined,
+    ...clientNamesFromEmbed(row.quotation_client_list),
     inquiryDate: String(row.inquiry_date).slice(0, 10),
     description: row.description ?? undefined,
     projectTypes: (row.project_types || []) as PitchingProjectType[],
@@ -91,7 +104,6 @@ function mapRow(row: DbRow): PitchingRecord {
     asanaLink: row.asana_link ?? undefined,
     notes: row.notes ?? undefined,
     estimatedIncome: row.estimated_income != null ? Number(row.estimated_income) : undefined,
-    estimatedIncomeCurrency: row.estimated_income_currency ?? 'HKD',
     estimatedExpenses: parseExpenses(row.estimated_expenses),
     followUps: [],
     createdAt: row.created_at,
@@ -106,8 +118,6 @@ export type QuotationClientProjectUpdate = Partial<
     | 'clientId'
     | 'clientName'
     | 'displayName'
-    | 'companyNameEn'
-    | 'companyNameZh'
     | 'inquiryDate'
     | 'description'
     | 'projectTypes'
@@ -116,7 +126,6 @@ export type QuotationClientProjectUpdate = Partial<
     | 'status'
     | 'notes'
     | 'estimatedIncome'
-    | 'estimatedIncomeCurrency'
     | 'estimatedExpenses'
   >
 >;
@@ -133,7 +142,7 @@ export function useQuotationClientProjects() {
     setLoading(true);
     const { data, error: err } = await supabase
       .from(QUOTATION_CLIENT_PROJECT_TABLE)
-      .select('*')
+      .select('*, quotation_client_list ( company_name_zh, company_name_en )')
       .order('inquiry_date', { ascending: false });
 
     if (err) {
@@ -175,8 +184,6 @@ export function useQuotationClientProjects() {
         client_id: data.clientId?.trim() || null,
         client_name: data.clientName || null,
         display_name: data.displayName,
-        company_name_en: data.companyNameEn?.trim() || null,
-        company_name_zh: data.companyNameZh?.trim() || null,
         inquiry_date: data.inquiryDate,
         description: data.description ?? null,
         project_types: data.projectTypes,
@@ -224,8 +231,6 @@ export function useQuotationClientProjects() {
     if (data.clientId !== undefined) row.client_id = data.clientId?.trim() || null;
     if (data.clientName !== undefined) row.client_name = data.clientName || null;
     if (data.displayName !== undefined) row.display_name = data.displayName;
-    if (data.companyNameEn !== undefined) row.company_name_en = data.companyNameEn?.trim() || null;
-    if (data.companyNameZh !== undefined) row.company_name_zh = data.companyNameZh?.trim() || null;
     if (data.inquiryDate !== undefined) row.inquiry_date = data.inquiryDate;
     if (data.description !== undefined) row.description = data.description || null;
     if (data.projectTypes !== undefined) row.project_types = data.projectTypes;
@@ -234,7 +239,6 @@ export function useQuotationClientProjects() {
     if (data.status !== undefined) row.status = data.status;
     if (data.notes !== undefined) row.notes = data.notes || null;
     if (data.estimatedIncome !== undefined) row.estimated_income = data.estimatedIncome;
-    if (data.estimatedIncomeCurrency !== undefined) row.estimated_income_currency = data.estimatedIncomeCurrency;
     if (data.estimatedExpenses !== undefined) row.estimated_expenses = data.estimatedExpenses;
 
     const { error: err } = await supabase

@@ -16,7 +16,6 @@ import {
   PITCHING_STATUS_OPTIONS,
   calcRemainingDays,
   formatProjectTypes,
-  hasRequiredCompanyName,
   matchesProjectTypeFilter,
   type PitchingRecord,
   type PitchingStatus,
@@ -29,15 +28,27 @@ export type PitchingFormValues = {
   clientId: string;
   clientName: string;
   displayName: string;
-  companyNameEn: string;
-  companyNameZh: string;
   inquiryDate: string;
   description: string;
   projectTypes: PitchingProjectType[];
   asanaLink: string;
 };
 
-type ClientOption = { value: string; label: string; keywords: string };
+export type ClientOption = {
+  value: string;
+  label: string;
+  keywords: string;
+  companyNameZh: string;
+  companyNameEn: string;
+};
+
+function companyNamesForClient(clientId: string, clientOptions: ClientOption[]) {
+  const client = clientOptions.find((c) => c.value === clientId);
+  return {
+    companyNameZh: client?.companyNameZh ?? '',
+    companyNameEn: client?.companyNameEn ?? '',
+  };
+}
 
 const todayIso = () => new Date().toISOString().split('T')[0]!;
 
@@ -45,8 +56,6 @@ const emptyForm = (): PitchingFormValues => ({
   clientId: '',
   clientName: '',
   displayName: '',
-  companyNameEn: '',
-  companyNameZh: '',
   inquiryDate: todayIso(),
   description: '',
   projectTypes: [],
@@ -63,14 +72,10 @@ function formFromRecord(record: PitchingRecord, clientOptions: ClientOption[]): 
       : undefined;
   const matched = byId ?? byName;
   const clientName = matched?.label ?? (record.clientName === '—' ? '' : record.clientName);
-  const companyNameEn = record.companyNameEn ?? '';
-  const companyNameZh = record.companyNameZh ?? '';
   return {
     clientId: matched?.value ?? record.clientId?.trim() ?? '',
     clientName,
     displayName: record.displayName,
-    companyNameEn,
-    companyNameZh: companyNameZh || companyNameEn ? companyNameZh : clientName || record.displayName,
     inquiryDate: record.inquiryDate,
     description: record.description ?? '',
     projectTypes: record.projectTypes,
@@ -83,8 +88,6 @@ export function pitchingFormToUpdate(form: PitchingFormValues): QuotationClientP
     clientId: form.clientId.trim(),
     clientName: form.clientName.trim(),
     displayName: form.displayName.trim(),
-    companyNameEn: form.companyNameEn.trim() || undefined,
-    companyNameZh: form.companyNameZh.trim() || undefined,
     inquiryDate: form.inquiryDate,
     description: form.description.trim() || undefined,
     projectTypes: form.projectTypes,
@@ -229,10 +232,6 @@ export function PitchingFormModal({
       toast.error('請填寫顯示名稱');
       return;
     }
-    if (!hasRequiredCompanyName(form.companyNameEn, form.companyNameZh)) {
-      toast.error('請填寫公司名稱（英文或中文至少填寫一項）');
-      return;
-    }
     if (!form.inquiryDate) {
       toast.error('請選擇查詢日期');
       return;
@@ -296,29 +295,25 @@ export function PitchingFormModal({
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">公司名稱 (Eng) *</label>
-              <Input
-                value={form.companyNameEn}
-                onChange={(e) => setForm((prev) => ({ ...prev, companyNameEn: e.target.value }))}
-                placeholder="Company name in English"
-                className="h-9 text-[13px]"
-              />
+          {form.clientId && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <span className="text-[12px] font-medium text-muted-foreground block mb-1">公司名稱 (中文)</span>
+                <p className="text-[13px] px-3 py-2 rounded-md border border-border bg-muted/30">
+                  {companyNamesForClient(form.clientId, clientOptions).companyNameZh || '—'}
+                </p>
+              </div>
+              <div>
+                <span className="text-[12px] font-medium text-muted-foreground block mb-1">公司名稱 (Eng)</span>
+                <p className="text-[13px] px-3 py-2 rounded-md border border-border bg-muted/30">
+                  {companyNamesForClient(form.clientId, clientOptions).companyNameEn || '—'}
+                </p>
+              </div>
+              <p className="text-[11px] text-muted-foreground sm:col-span-2 -mt-2">
+                公司名稱來自客戶列表，請至客戶管理修改
+              </p>
             </div>
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">公司名稱 (中文) *</label>
-              <Input
-                value={form.companyNameZh}
-                onChange={(e) => setForm((prev) => ({ ...prev, companyNameZh: e.target.value }))}
-                placeholder="公司中文名稱"
-                className="h-9 text-[13px]"
-              />
-            </div>
-          </div>
-          <p className="text-[11px] text-muted-foreground -mt-2">
-            英文或中文至少填寫一項（可兩項都填）
-          </p>
+          )}
 
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1">查詢日期 Enquiry Date *</label>
@@ -558,10 +553,9 @@ function PitchingList({
 }
 
 type DetailDraft = {
+  clientId: string;
   clientName: string;
   displayName: string;
-  companyNameEn: string;
-  companyNameZh: string;
   inquiryDate: string;
   description: string;
   projectTypes: PitchingProjectType[];
@@ -569,16 +563,22 @@ type DetailDraft = {
   asanaLink: string;
   status: PitchingStatus;
   estimatedIncome: number | undefined;
-  estimatedIncomeCurrency: string;
   estimatedExpenses: PitchingExpenseItem[];
 };
 
-function draftFromRecord(record: PitchingRecord): DetailDraft {
+function draftFromRecord(record: PitchingRecord, clientOptions: ClientOption[]): DetailDraft {
+  const byId = record.clientId
+    ? clientOptions.find((c) => c.value === record.clientId)
+    : undefined;
+  const byName =
+    !byId && record.clientName && record.clientName !== '—'
+      ? clientOptions.find((c) => c.label === record.clientName)
+      : undefined;
+  const matched = byId ?? byName;
   return {
-    clientName: record.clientName,
+    clientId: matched?.value ?? record.clientId?.trim() ?? '',
+    clientName: matched?.label ?? (record.clientName === '—' ? '' : record.clientName),
     displayName: record.displayName,
-    companyNameEn: record.companyNameEn ?? '',
-    companyNameZh: record.companyNameZh ?? '',
     inquiryDate: record.inquiryDate,
     description: record.description ?? '',
     projectTypes: record.projectTypes,
@@ -586,7 +586,6 @@ function draftFromRecord(record: PitchingRecord): DetailDraft {
     asanaLink: record.asanaLink ?? '',
     status: record.status,
     estimatedIncome: record.estimatedIncome,
-    estimatedIncomeCurrency: record.estimatedIncomeCurrency ?? 'HKD',
     estimatedExpenses: record.estimatedExpenses ?? [],
   };
 }
@@ -762,27 +761,32 @@ function EditableProjectTypesField({
 
 export function PitchingDetail({
   record,
+  clientOptions,
   onBack,
   onConvertToQuote,
   onSave,
 }: {
   record: PitchingRecord;
+  clientOptions: ClientOption[];
   onBack: () => void;
   onConvertToQuote: () => void;
   onSave: (id: string, data: QuotationClientProjectUpdate) => Promise<{ error: { message: string } | null }>;
 }) {
   const [activeTab, setActiveTab] = useState<'info' | 'followups' | 'quotation' | 'budget'>('info');
-  const [draft, setDraft] = useState<DetailDraft>(() => draftFromRecord(record));
+  const [draft, setDraft] = useState<DetailDraft>(() => draftFromRecord(record, clientOptions));
   const [saving, setSaving] = useState(false);
+  const clientCompany = companyNamesForClient(draft.clientId, clientOptions);
 
   useEffect(() => {
-    setDraft(draftFromRecord(record));
+    setDraft(draftFromRecord(record, clientOptions));
+    // Reset when the viewed row changes — not when the client list refreshes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record.id, record.updatedAt]);
 
   const remaining = calcRemainingDays(draft.inquiryDate, draft.status);
 
   const hasChanges = useMemo(() => {
-    const initial = draftFromRecord(record);
+    const initial = draftFromRecord(record, clientOptions);
     const typesChanged =
       draft.projectTypes.length !== initial.projectTypes.length ||
       [...draft.projectTypes].sort().join(',') !== [...initial.projectTypes].sort().join(',');
@@ -790,33 +794,31 @@ export function PitchingDetail({
       draft.estimatedExpenses.length !== initial.estimatedExpenses.length ||
       JSON.stringify(draft.estimatedExpenses) !== JSON.stringify(initial.estimatedExpenses);
     return (
+      draft.clientId !== initial.clientId ||
       draft.clientName !== initial.clientName ||
       draft.displayName !== initial.displayName ||
-      draft.companyNameEn !== initial.companyNameEn ||
-      draft.companyNameZh !== initial.companyNameZh ||
       draft.inquiryDate !== initial.inquiryDate ||
       draft.description !== initial.description ||
       draft.assignedPmName !== initial.assignedPmName ||
       draft.asanaLink !== initial.asanaLink ||
       draft.status !== initial.status ||
       draft.estimatedIncome !== initial.estimatedIncome ||
-      draft.estimatedIncomeCurrency !== initial.estimatedIncomeCurrency ||
       expensesChanged ||
       typesChanged
     );
-  }, [draft, record]);
+  }, [draft, record, clientOptions]);
 
   const patchDraft = (patch: Partial<DetailDraft>) => {
     setDraft((prev) => ({ ...prev, ...patch }));
   };
 
   const handleSave = async () => {
-    if (!draft.displayName.trim()) {
-      toast.error('提案顯示名稱不可為空');
+    if (!draft.clientId.trim()) {
+      toast.error('請選擇客戶');
       return;
     }
-    if (!hasRequiredCompanyName(draft.companyNameEn, draft.companyNameZh)) {
-      toast.error('請填寫公司名稱（英文或中文至少填寫一項）');
+    if (!draft.displayName.trim()) {
+      toast.error('提案顯示名稱不可為空');
       return;
     }
     if (!draft.inquiryDate) {
@@ -826,10 +828,9 @@ export function PitchingDetail({
 
     setSaving(true);
     const payload: QuotationClientProjectUpdate = {
+      clientId: draft.clientId.trim(),
       clientName: draft.clientName,
       displayName: draft.displayName.trim(),
-      companyNameEn: draft.companyNameEn.trim() || undefined,
-      companyNameZh: draft.companyNameZh.trim() || undefined,
       inquiryDate: draft.inquiryDate,
       description: draft.description.trim() || undefined,
       projectTypes: draft.projectTypes,
@@ -837,7 +838,6 @@ export function PitchingDetail({
       asanaLink: draft.asanaLink.trim() || undefined,
       status: draft.status,
       estimatedIncome: draft.estimatedIncome,
-      estimatedIncomeCurrency: draft.estimatedIncomeCurrency,
       estimatedExpenses: draft.estimatedExpenses,
     };
     const { error } = await onSave(record.id, payload);
@@ -923,29 +923,37 @@ export function PitchingDetail({
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6 space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
-              <EditableTextField
-                label="客戶名稱"
-                value={draft.clientName}
-                onChange={(clientName) => patchDraft({ clientName })}
-              />
+              <div>
+                <span className="text-[12px] text-muted-foreground block mb-1">客戶 Customer</span>
+                <SearchableSelect
+                  value={draft.clientId}
+                  onValueChange={(clientId) => {
+                    const client = clientOptions.find((c) => c.value === clientId);
+                    patchDraft({
+                      clientId,
+                      clientName: client?.label ?? '',
+                    });
+                  }}
+                  options={clientOptions}
+                  placeholder="搜尋客戶..."
+                  searchPlaceholder="搜尋客戶名稱..."
+                  emptyText="找不到客戶"
+                />
+              </div>
               <EditableTextField
                 label="提案顯示名稱"
                 value={draft.displayName}
                 onChange={(displayName) => patchDraft({ displayName })}
               />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <EditableTextField
-                  label="公司名稱 (Eng) *"
-                  value={draft.companyNameEn}
-                  onChange={(companyNameEn) => patchDraft({ companyNameEn })}
-                  placeholder="Company name in English"
-                />
-                <EditableTextField
-                  label="公司名稱 (中文) *"
-                  value={draft.companyNameZh}
-                  onChange={(companyNameZh) => patchDraft({ companyNameZh })}
-                  placeholder="公司中文名稱"
-                />
+                <div>
+                  <span className="text-[12px] text-muted-foreground block">公司名稱 (中文)</span>
+                  <p className="text-[14px] font-medium mt-0.5">{clientCompany.companyNameZh || '—'}</p>
+                </div>
+                <div>
+                  <span className="text-[12px] text-muted-foreground block">公司名稱 (Eng)</span>
+                  <p className="text-[14px] font-medium mt-0.5">{clientCompany.companyNameEn || '—'}</p>
+                </div>
               </div>
               <EditableDateField
                 label="查詢日期"
@@ -1021,11 +1029,8 @@ export function PitchingDetail({
       {activeTab === 'budget' && (
         <PitchingBudgetTab
           income={draft.estimatedIncome}
-          currency={draft.estimatedIncomeCurrency}
           expenses={draft.estimatedExpenses}
-          onIncomeChange={(estimatedIncome, estimatedIncomeCurrency) =>
-            patchDraft({ estimatedIncome, estimatedIncomeCurrency })
-          }
+          onIncomeChange={(estimatedIncome) => patchDraft({ estimatedIncome })}
           onExpensesChange={(estimatedExpenses) => patchDraft({ estimatedExpenses })}
         />
       )}
@@ -1051,6 +1056,8 @@ export function PitchingModule() {
         value: c.id,
         label: c.companyNameZh,
         keywords: [c.companyNameZh, c.companyNameEn, c.contactPerson, c.brandName].filter(Boolean).join(' '),
+        companyNameZh: c.companyNameZh,
+        companyNameEn: c.companyNameEn,
       })),
     [clientListRecords],
   );
@@ -1097,8 +1104,6 @@ export function PitchingModule() {
       clientId: form.clientId.trim(),
       clientName: form.clientName.trim(),
       displayName: form.displayName.trim(),
-      companyNameEn: form.companyNameEn.trim() || undefined,
-      companyNameZh: form.companyNameZh.trim() || undefined,
       inquiryDate: form.inquiryDate,
       description: form.description.trim() || undefined,
       projectTypes: form.projectTypes,
@@ -1143,6 +1148,7 @@ export function PitchingModule() {
     return (
       <PitchingDetail
         record={selectedRecord}
+        clientOptions={pitchingClientOptions}
         onBack={() => {
           setView('list');
           setSelectedRecord(null);

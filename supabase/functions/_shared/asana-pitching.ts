@@ -320,7 +320,6 @@ export function asanaTaskToRecord(
     asana_project_gid: project.project_gid,
     asana_project_name: project.project_name,
     asana_section_name: sectionName || null,
-    asana_status_label: statusLabel || null,
     pitching_code: `ASANA-${task.gid.slice(-8)}`,
     client_name: clientName || null,
     display_name: task.name.trim(),

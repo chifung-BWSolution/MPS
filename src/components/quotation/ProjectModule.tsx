@@ -202,6 +202,8 @@ export function ProjectModule() {
         value: c.id,
         label: c.companyNameZh,
         keywords: [c.companyNameZh, c.companyNameEn, c.contactPerson, c.brandName].filter(Boolean).join(' '),
+        companyNameZh: c.companyNameZh,
+        companyNameEn: c.companyNameEn,
       })),
     [clientListRecords],
   );
@@ -266,6 +268,7 @@ export function ProjectModule() {
     return (
       <PitchingDetail
         record={selectedRecord}
+        clientOptions={pitchingClientOptions}
         onBack={() => {
           setView('list');
           setSelectedRecord(null);

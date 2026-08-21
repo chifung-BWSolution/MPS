@@ -65,7 +65,7 @@ Migration `20260806150000` 已將 `asana_pitching_projects` 設定為**只啟用
 |---|---|
 | Task name | display_name |
 | created_at（日期部分） | inquiry_date |
-| 自訂欄位「狀態」 | status、asana_status_label |
+| 自訂欄位「狀態」 | status |
 | assignee.name | assigned_pm_name |
 | notes | description |
 | permalink_url | asana_link |
