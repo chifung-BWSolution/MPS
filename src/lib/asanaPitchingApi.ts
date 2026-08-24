@@ -1,7 +1,8 @@
 import { supabase } from '@/lib/supabase';
-import type { AsanaTaskComment } from '@/lib/asanaTaskLink';
+import type { AsanaAttachment, AsanaTaskComment } from '@/lib/asanaTaskLink';
+import { attachmentOpenUrl } from '@/lib/asanaTaskLink';
 
-export type { AsanaTaskComment };
+export type { AsanaAttachment, AsanaTaskComment };
 
 export type AsanaTaskStoriesResult = {
   success?: boolean;
@@ -9,6 +10,19 @@ export type AsanaTaskStoriesResult = {
   task_name?: string;
   asana_link?: string | null;
   comments: AsanaTaskComment[];
+  attachments: AsanaAttachment[];
+};
+
+export type AsanaAttachmentDownloadResult = {
+  success?: boolean;
+  gid?: string;
+  name: string;
+  size?: number | null;
+  resource_subtype?: string | null;
+  download_url?: string | null;
+  view_url?: string | null;
+  permanent_url?: string | null;
+  host?: string | null;
 };
 
 async function invokeFunction<T = Record<string, unknown>>(
@@ -43,7 +57,46 @@ export function fetchAsanaTaskStories(input: {
   return invokeFunction<AsanaTaskStoriesResult>('asana-task-stories', {
     project_id: input.projectId || undefined,
     asana_link: input.asanaLink || undefined,
+  }).then((result) => ({
+    ...result,
+    comments: result.comments || [],
+    attachments: result.attachments || [],
+  }));
+}
+
+export function fetchAsanaAttachmentDownload(attachmentGid: string) {
+  return invokeFunction<AsanaAttachmentDownloadResult>('asana-attachment-download', {
+    attachment_gid: attachmentGid,
   });
+}
+
+export async function downloadAsanaAttachment(
+  attachment: Pick<AsanaAttachment, 'gid' | 'name'> & Partial<AsanaAttachment>,
+): Promise<void> {
+  const fresh = await fetchAsanaAttachmentDownload(attachment.gid);
+  const url =
+    fresh.download_url ||
+    fresh.view_url ||
+    fresh.permanent_url ||
+    attachmentOpenUrl({
+      gid: attachment.gid,
+      name: attachment.name,
+      createdAt: attachment.createdAt || '',
+      downloadUrl: attachment.downloadUrl,
+      viewUrl: attachment.viewUrl,
+      permanentUrl: attachment.permanentUrl,
+    });
+  if (!url) {
+    throw new Error('此附件沒有可用的下載連結');
+  }
+  const link = document.createElement('a');
+  link.href = url;
+  link.target = '_blank';
+  link.rel = 'noreferrer';
+  link.download = fresh.name || attachment.name || 'attachment';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 export function invokeAsanaPitchingSync() {

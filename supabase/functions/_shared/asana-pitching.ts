@@ -90,6 +90,30 @@ async function asanaFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return json as T;
 }
 
+export type AsanaAttachmentRaw = {
+  gid?: string;
+  name?: string | null;
+  created_at?: string;
+  resource_subtype?: string;
+  size?: number | null;
+  download_url?: string | null;
+  view_url?: string | null;
+  permanent_url?: string | null;
+  host?: string | null;
+};
+
+export type AsanaAttachment = {
+  gid: string;
+  name: string;
+  createdAt: string;
+  resourceSubtype?: string;
+  size?: number | null;
+  downloadUrl?: string | null;
+  viewUrl?: string | null;
+  permanentUrl?: string | null;
+  host?: string | null;
+};
+
 export type AsanaStory = {
   gid: string;
   created_at?: string;
@@ -98,6 +122,7 @@ export type AsanaStory = {
   html_text?: string | null;
   type?: string;
   resource_subtype?: string;
+  attachments?: AsanaAttachmentRaw[] | null;
 };
 
 export type AsanaTaskComment = {
@@ -105,7 +130,23 @@ export type AsanaTaskComment = {
   createdAt: string;
   authorName: string;
   text: string;
+  attachments: AsanaAttachment[];
 };
+
+export const ATTACHMENT_OPT_FIELDS = [
+  "name",
+  "created_at",
+  "resource_subtype",
+  "size",
+  "download_url",
+  "view_url",
+  "permanent_url",
+  "host",
+  "parent",
+  "parent.name",
+  "parent.resource_type",
+  "parent.resource_subtype",
+].join(",");
 
 /** Parse an Asana task GID from permalink, inbox URL, or a bare numeric id. */
 export function parseAsanaTaskGidFromLink(raw: string | null | undefined): string | null {
@@ -150,15 +191,39 @@ export function isAsanaChatStory(story: AsanaStory): boolean {
   return story.resource_subtype === "comment_added" || story.type === "comment";
 }
 
+export function mapAsanaAttachment(raw: AsanaAttachmentRaw | null | undefined): AsanaAttachment | null {
+  const gid = raw?.gid?.trim();
+  if (!gid) return null;
+  return {
+    gid,
+    name: raw?.name?.trim() || "未命名附件",
+    createdAt: raw?.created_at || "",
+    resourceSubtype: raw?.resource_subtype || undefined,
+    size: typeof raw?.size === "number" && Number.isFinite(raw.size) ? raw.size : null,
+    downloadUrl: raw?.download_url || null,
+    viewUrl: raw?.view_url || null,
+    permanentUrl: raw?.permanent_url || null,
+    host: raw?.host || null,
+  };
+}
+
+export function mapAsanaAttachments(raw: AsanaAttachmentRaw[] | null | undefined): AsanaAttachment[] {
+  return (raw || [])
+    .map(mapAsanaAttachment)
+    .filter((item): item is AsanaAttachment => item != null);
+}
+
 export function asanaStoryToComment(story: AsanaStory): AsanaTaskComment | null {
   if (!isAsanaChatStory(story)) return null;
+  const attachments = mapAsanaAttachments(story.attachments);
   const text = story.text?.trim() || (story.html_text ? stripHtml(story.html_text) : "");
-  if (!text) return null;
+  if (!text && attachments.length === 0) return null;
   return {
     id: story.gid,
     createdAt: story.created_at || "",
     authorName: story.created_by?.name?.trim() || "Asana",
     text,
+    attachments,
   };
 }
 
@@ -178,6 +243,8 @@ export async function listTaskStories(taskGid: string): Promise<AsanaStory[]> {
     "html_text",
     "type",
     "resource_subtype",
+    "attachments",
+    ...ATTACHMENT_OPT_FIELDS.split(",").map((field) => `attachments.${field}`),
   ].join(",");
   const out: AsanaStory[] = [];
   let offset: string | undefined;
@@ -195,6 +262,36 @@ export async function listTaskStories(taskGid: string): Promise<AsanaStory[]> {
     offset = data.next_page?.offset;
   } while (offset);
   return out;
+}
+
+export async function listTaskAttachments(taskGid: string): Promise<AsanaAttachment[]> {
+  const out: AsanaAttachment[] = [];
+  let offset: string | undefined;
+  do {
+    const qs = new URLSearchParams({
+      parent: taskGid,
+      limit: "100",
+      opt_fields: ATTACHMENT_OPT_FIELDS,
+      ...(offset ? { offset } : {}),
+    });
+    const data = await asanaFetch<{
+      data: AsanaAttachmentRaw[];
+      next_page?: { offset?: string } | null;
+    }>(`/attachments?${qs}`);
+    out.push(...mapAsanaAttachments(data.data));
+    offset = data.next_page?.offset;
+  } while (offset);
+  return out;
+}
+
+export async function getAttachment(attachmentGid: string): Promise<AsanaAttachment> {
+  const qs = new URLSearchParams({ opt_fields: ATTACHMENT_OPT_FIELDS });
+  const data = await asanaFetch<{ data: AsanaAttachmentRaw }>(
+    `/attachments/${attachmentGid}?${qs}`,
+  );
+  const mapped = mapAsanaAttachment(data.data);
+  if (!mapped) throw new Error("找不到 Asana 附件");
+  return mapped;
 }
 
 export async function listProjectTasks(projectGid: string): Promise<AsanaTask[]> {

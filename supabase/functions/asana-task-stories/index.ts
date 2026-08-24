@@ -4,6 +4,7 @@ import {
   asanaStoryToComment,
   corsHeaders,
   getTask,
+  listTaskAttachments,
   listTaskStories,
   parseAsanaTaskGidFromLink,
 } from "../_shared/asana-pitching.ts";
@@ -57,6 +58,7 @@ Deno.serve(async (req) => {
           error: asanaLink ? "無法從 Asana 連結解析任務" : "尚未設定 Asana 連結",
           asana_link: asanaLink || null,
           comments: [],
+          attachments: [],
         }),
         {
           status: 400,
@@ -65,14 +67,19 @@ Deno.serve(async (req) => {
       );
     }
 
-    const [task, stories] = await Promise.all([
+    const [task, stories, taskAttachments] = await Promise.all([
       getTask(taskGid),
       listTaskStories(taskGid),
+      listTaskAttachments(taskGid),
     ]);
     const comments = stories
       .map(asanaStoryToComment)
       .filter((item): item is NonNullable<typeof item> => item != null)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const commentAttachmentIds = new Set(
+      comments.flatMap((comment) => comment.attachments.map((item) => item.gid)),
+    );
+    const attachments = taskAttachments.filter((item) => !commentAttachmentIds.has(item.gid));
 
     return new Response(
       JSON.stringify({
@@ -81,6 +88,7 @@ Deno.serve(async (req) => {
         task_name: task.name || "",
         asana_link: task.permalink_url || asanaLink || null,
         comments,
+        attachments,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

@@ -42,6 +42,8 @@ supabase db push
 
 # 2. 部署 Edge Function
 supabase functions deploy sync-asana-pitching --no-verify-jwt
+supabase functions deploy asana-task-stories --project-ref kwcevjcmdjadhrygjyfp
+supabase functions deploy asana-attachment-download --project-ref kwcevjcmdjadhrygjyfp
 
 # 3. 設定 Secrets（示例）
 supabase secrets set ASANA_ACCESS_TOKEN=your_pat_here
@@ -75,6 +77,7 @@ Migration `20260806150000` 已將 `asana_pitching_projects` 設定為**只啟用
 
 - 列表資料來自 Supabase `quotation_client_project`（Pitching 顯示全部，Project 篩選 `status = confirmed`）
 - **同步 Asana** → 呼叫 `/functions/v1/sync-asana-pitching`  
+- **跟進記錄** → 呼叫 `/functions/v1/asana-task-stories` 載入任務留言、任務附件與留言附件；下載時再呼叫 `/functions/v1/asana-attachment-download` 取得新的 `download_url`（Asana 連結約 2 分鐘失效）
 - **新增 Pitching** → 手動寫入 Supabase（可填 Asana 連結，不會自動建立 Asana Task）
 
 ## 安全提醒
