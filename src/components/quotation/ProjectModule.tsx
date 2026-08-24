@@ -275,17 +275,27 @@ export function ProjectModule() {
 
   if (view === 'detail' && selectedRecord) {
     return (
-      <PitchingDetail
-        record={selectedRecord}
-        clientOptions={pitchingClientOptions}
-        onBack={() => {
-          writeSelectedQuotationProjectId(null);
-          setView('list');
-          setSelectedRecord(null);
-        }}
-        onConvertToQuote={handleConvertToQuote}
-        onSave={handleSaveRecord}
-      />
+      <>
+        <PitchingDetail
+          record={selectedRecord}
+          clientOptions={pitchingClientOptions}
+          onBack={() => {
+            writeSelectedQuotationProjectId(null);
+            setView('list');
+            setSelectedRecord(null);
+          }}
+          onEdit={() => openEditModal(selectedRecord)}
+          onConvertToQuote={handleConvertToQuote}
+          onSave={handleSaveRecord}
+        />
+        <PitchingFormModal
+          isOpen={formModalOpen}
+          onClose={closeFormModal}
+          onSubmit={handleFormSubmit}
+          clientOptions={pitchingClientOptions}
+          initialRecord={editingRecord}
+        />
+      </>
     );
   }
 

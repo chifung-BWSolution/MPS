@@ -766,12 +766,14 @@ export function PitchingDetail({
   record,
   clientOptions,
   onBack,
+  onEdit,
   onConvertToQuote,
   onSave,
 }: {
   record: PitchingRecord;
   clientOptions: ClientOption[];
   onBack: () => void;
+  onEdit: () => void;
   onConvertToQuote: () => void;
   onSave: (id: string, data: QuotationClientProjectUpdate) => Promise<{ error: { message: string } | null }>;
 }) {
@@ -881,6 +883,13 @@ export function PitchingDetail({
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="flex items-center gap-1.5 px-4 py-2 border border-border rounded-md text-[13px] font-medium text-foreground hover:bg-muted/50 transition-colors active:scale-[0.97]"
+          >
+            <Pencil size={14} /> 編輯
+          </button>
           <button
             type="button"
             onClick={() => void handleSave()}
@@ -1152,17 +1161,27 @@ export function PitchingModule() {
 
   if (view === 'detail' && selectedRecord) {
     return (
-      <PitchingDetail
-        record={selectedRecord}
-        clientOptions={pitchingClientOptions}
-        onBack={() => {
-          writeSelectedQuotationProjectId(null);
-          setView('list');
-          setSelectedRecord(null);
-        }}
-        onConvertToQuote={handleConvertToQuote}
-        onSave={handleSaveRecord}
-      />
+      <>
+        <PitchingDetail
+          record={selectedRecord}
+          clientOptions={pitchingClientOptions}
+          onBack={() => {
+            writeSelectedQuotationProjectId(null);
+            setView('list');
+            setSelectedRecord(null);
+          }}
+          onEdit={() => openEditModal(selectedRecord)}
+          onConvertToQuote={handleConvertToQuote}
+          onSave={handleSaveRecord}
+        />
+        <PitchingFormModal
+          isOpen={formModalOpen}
+          onClose={closeFormModal}
+          onSubmit={handleFormSubmit}
+          clientOptions={pitchingClientOptions}
+          initialRecord={editingRecord}
+        />
+      </>
     );
   }
 
