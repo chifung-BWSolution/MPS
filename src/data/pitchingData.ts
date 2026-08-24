@@ -40,6 +40,10 @@ export interface PitchingRecord {
   /** Resolved from quotation_client_list via client_id (not stored on the project row). */
   companyNameZh?: string;
   inquiryDate: string;
+  /** Contract signed date (簽約日期). */
+  signedDate?: string;
+  /** Project handover / delivery date (交付日期). */
+  handoverDate?: string;
   description?: string;
   projectTypes: PitchingProjectType[];
   asanaLink?: string;
@@ -95,6 +99,13 @@ export function isProjectPageRecord(
 
 /** Days from enquiry date until follow-up deadline (30-day window). */
 export const PITCHING_FOLLOW_UP_DAYS = 30;
+
+/** Normalize a DB / form date to YYYY-MM-DD, or undefined when empty. */
+export function optionalIsoDate(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  const iso = String(value).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : undefined;
+}
 
 /** Only 初步提案 tracks the 30-day follow-up window from 查詢日期. */
 export function calcRemainingDays(inquiryDate: string, status: PitchingStatus): number | null {

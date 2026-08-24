@@ -24,6 +24,7 @@ import {
   formatProjectTypes,
   formatMainPmName,
   matchesProjectTypeFilter,
+  optionalIsoDate,
   type PitchingRecord,
   type PitchingStatus,
   type PitchingProjectType,
@@ -37,6 +38,8 @@ export type PitchingFormValues = {
   clientName: string;
   displayName: string;
   inquiryDate: string;
+  signedDate: string;
+  handoverDate: string;
   description: string;
   projectTypes: PitchingProjectType[];
   mainPmId: string;
@@ -60,6 +63,8 @@ const emptyForm = (defaultMainPmId = ''): PitchingFormValues => ({
   clientName: '',
   displayName: '',
   inquiryDate: todayIso(),
+  signedDate: '',
+  handoverDate: '',
   description: '',
   projectTypes: [],
   mainPmId: defaultMainPmId,
@@ -81,6 +86,8 @@ function formFromRecord(record: PitchingRecord, clientOptions: ClientOption[]): 
     clientName,
     displayName: record.displayName,
     inquiryDate: record.inquiryDate,
+    signedDate: optionalIsoDate(record.signedDate) ?? '',
+    handoverDate: optionalIsoDate(record.handoverDate) ?? '',
     description: record.description ?? '',
     projectTypes: record.projectTypes,
     mainPmId: record.mainPmId ?? '',
@@ -94,6 +101,8 @@ export function pitchingFormToUpdate(form: PitchingFormValues): QuotationClientP
     clientName: form.clientName.trim(),
     displayName: form.displayName.trim(),
     inquiryDate: form.inquiryDate,
+    signedDate: form.signedDate,
+    handoverDate: form.handoverDate,
     description: form.description.trim() || undefined,
     projectTypes: form.projectTypes,
     mainPmId: form.mainPmId.trim(),
@@ -332,22 +341,56 @@ export function PitchingFormModal({
             </div>
           )}
 
-          <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">查詢日期 Enquiry Date *</label>
-            <Input
-              type="date"
-              value={form.inquiryDate}
-              min={`${currentYear}-01-01`}
-              max={`${currentYear + 1}-12-31`}
-              onChange={(e) => setForm((prev) => ({ ...prev, inquiryDate: e.target.value }))}
-              className="h-9 text-[13px] w-full max-w-[260px]"
-            />
-            {form.inquiryDate && (
-              <p className="text-[11px] text-muted-foreground mt-1">
-                已選：{formatEnquiryDateLabel(form.inquiryDate)}
-                {isEdit ? '' : '（預設為新增當日）'}
-              </p>
-            )}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1">查詢日期 Enquiry Date *</label>
+              <Input
+                type="date"
+                value={form.inquiryDate}
+                min={`${currentYear}-01-01`}
+                max={`${currentYear + 1}-12-31`}
+                onChange={(e) => setForm((prev) => ({ ...prev, inquiryDate: e.target.value }))}
+                className="h-9 text-[13px] w-full"
+              />
+              {form.inquiryDate && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  已選：{formatEnquiryDateLabel(form.inquiryDate)}
+                  {isEdit ? '' : '（預設為新增當日）'}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1">簽約日期 Signed Date</label>
+              <Input
+                type="date"
+                value={form.signedDate}
+                min={`${currentYear - 2}-01-01`}
+                max={`${currentYear + 2}-12-31`}
+                onChange={(e) => setForm((prev) => ({ ...prev, signedDate: e.target.value }))}
+                className="h-9 text-[13px] w-full"
+              />
+              {form.signedDate && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  已選：{formatEnquiryDateLabel(form.signedDate)}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1">交付日期 Handover Date</label>
+              <Input
+                type="date"
+                value={form.handoverDate}
+                min={`${currentYear - 2}-01-01`}
+                max={`${currentYear + 2}-12-31`}
+                onChange={(e) => setForm((prev) => ({ ...prev, handoverDate: e.target.value }))}
+                className="h-9 text-[13px] w-full"
+              />
+              {form.handoverDate && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  已選：{formatEnquiryDateLabel(form.handoverDate)}
+                </p>
+              )}
+            </div>
           </div>
 
           <div>
@@ -587,6 +630,8 @@ type DetailDraft = {
   clientName: string;
   displayName: string;
   inquiryDate: string;
+  signedDate: string;
+  handoverDate: string;
   description: string;
   projectTypes: PitchingProjectType[];
   asanaLink: string;
@@ -609,6 +654,8 @@ function draftFromRecord(record: PitchingRecord, clientOptions: ClientOption[]):
     clientName: matched?.label ?? (record.clientName === '—' ? '' : record.clientName),
     displayName: record.displayName,
     inquiryDate: record.inquiryDate,
+    signedDate: optionalIsoDate(record.signedDate) ?? '',
+    handoverDate: optionalIsoDate(record.handoverDate) ?? '',
     description: record.description ?? '',
     projectTypes: record.projectTypes,
     asanaLink: record.asanaLink ?? '',
@@ -828,6 +875,8 @@ export function PitchingDetail({
       draft.clientName !== initial.clientName ||
       draft.displayName !== initial.displayName ||
       draft.inquiryDate !== initial.inquiryDate ||
+      draft.signedDate !== initial.signedDate ||
+      draft.handoverDate !== initial.handoverDate ||
       draft.description !== initial.description ||
       draft.asanaLink !== initial.asanaLink ||
       draft.status !== initial.status ||
@@ -861,6 +910,8 @@ export function PitchingDetail({
       clientName: draft.clientName,
       displayName: draft.displayName.trim(),
       inquiryDate: draft.inquiryDate,
+      signedDate: draft.signedDate,
+      handoverDate: draft.handoverDate,
       description: draft.description.trim() || undefined,
       projectTypes: draft.projectTypes,
       asanaLink: draft.asanaLink.trim() || undefined,
@@ -994,6 +1045,16 @@ export function PitchingDetail({
                 label="查詢日期"
                 value={draft.inquiryDate}
                 onChange={(inquiryDate) => patchDraft({ inquiryDate })}
+              />
+              <EditableDateField
+                label="簽約日期"
+                value={draft.signedDate}
+                onChange={(signedDate) => patchDraft({ signedDate })}
+              />
+              <EditableDateField
+                label="交付日期"
+                value={draft.handoverDate}
+                onChange={(handoverDate) => patchDraft({ handoverDate })}
               />
               <div>
                 <span className="text-[12px] text-muted-foreground block">剩餘天數</span>
@@ -1135,6 +1196,8 @@ export function PitchingModule() {
       clientName: form.clientName.trim(),
       displayName: form.displayName.trim(),
       inquiryDate: form.inquiryDate,
+      signedDate: form.signedDate || undefined,
+      handoverDate: form.handoverDate || undefined,
       description: form.description.trim() || undefined,
       projectTypes: form.projectTypes,
       assignedPm: '',
