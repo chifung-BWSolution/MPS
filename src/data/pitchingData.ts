@@ -48,6 +48,10 @@ export interface PitchingRecord {
   asanaProjectName?: string;
   assignedPm: string;
   assignedPmName: string;
+  /** UUID FK to staffs.id — canonical main PM. */
+  mainPmId?: string;
+  /** Resolved from staffs.display_name via main_pm_id. */
+  mainPmName?: string;
   status: PitchingStatus;
   notes?: string;
   followUps: PitchingFollowUp[];
@@ -103,6 +107,10 @@ export function calcRemainingDays(inquiryDate: string, status: PitchingStatus): 
   today.setHours(0, 0, 0, 0);
   deadline.setHours(0, 0, 0, 0);
   return Math.ceil((deadline.getTime() - today.getTime()) / 86400000);
+}
+
+export function formatMainPmName(record: Pick<PitchingRecord, 'mainPmName'>): string {
+  return record.mainPmName?.trim() || '—';
 }
 
 export function formatProjectTypes(types: PitchingProjectType[]): string {

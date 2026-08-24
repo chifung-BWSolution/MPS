@@ -6,6 +6,7 @@ import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
+import { useActiveStaffOptions, type StaffSelectOption } from '@/hooks/useActiveStaffOptions';
 import {
   toQuotationClientSelectOption,
   type QuotationClientSelectOption,
@@ -24,6 +25,7 @@ import {
   PITCHING_STATUS_OPTIONS,
   calcRemainingDays,
   formatProjectTypes,
+  formatMainPmName,
   matchesProjectTypeFilter,
   type PitchingRecord,
   type PitchingStatus,
@@ -40,6 +42,7 @@ export type PitchingFormValues = {
   inquiryDate: string;
   description: string;
   projectTypes: PitchingProjectType[];
+  mainPmId: string;
   asanaLink: string;
 };
 
@@ -55,13 +58,14 @@ function companyNamesForClient(clientId: string, clientOptions: ClientOption[]) 
 
 const todayIso = () => new Date().toISOString().split('T')[0]!;
 
-const emptyForm = (): PitchingFormValues => ({
+const emptyForm = (defaultMainPmId = ''): PitchingFormValues => ({
   clientId: '',
   clientName: '',
   displayName: '',
   inquiryDate: todayIso(),
   description: '',
   projectTypes: [],
+  mainPmId: defaultMainPmId,
   asanaLink: '',
 });
 
@@ -82,6 +86,7 @@ function formFromRecord(record: PitchingRecord, clientOptions: ClientOption[]): 
     inquiryDate: record.inquiryDate,
     description: record.description ?? '',
     projectTypes: record.projectTypes,
+    mainPmId: record.mainPmId ?? '',
     asanaLink: record.asanaLink ?? '',
   };
 }
@@ -94,6 +99,7 @@ export function pitchingFormToUpdate(form: PitchingFormValues): QuotationClientP
     inquiryDate: form.inquiryDate,
     description: form.description.trim() || undefined,
     projectTypes: form.projectTypes,
+    mainPmId: form.mainPmId.trim(),
     asanaLink: form.asanaLink.trim() || undefined,
   };
 }
@@ -187,26 +193,37 @@ function ProjectTypeMultiSelect({
   );
 }
 
+const EMPTY_STAFF_OPTION: StaffSelectOption = { value: '', label: '未指定', status: '' };
+
 export function PitchingFormModal({
   isOpen,
   onClose,
   onSubmit,
   clientOptions,
+  staffOptions,
+  defaultMainPmId,
   initialRecord,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (form: PitchingFormValues) => void | Promise<void>;
   clientOptions: ClientOption[];
+  staffOptions: StaffSelectOption[];
+  defaultMainPmId?: string;
   initialRecord?: PitchingRecord | null;
 }) {
   const [form, setForm] = useState<PitchingFormValues>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const isEdit = Boolean(initialRecord);
+  const pmOptions = useMemo(() => [EMPTY_STAFF_OPTION, ...staffOptions], [staffOptions]);
 
   useEffect(() => {
     if (!isOpen) return;
-    setForm(initialRecord ? formFromRecord(initialRecord, clientOptions) : emptyForm());
+    setForm(
+      initialRecord
+        ? formFromRecord(initialRecord, clientOptions)
+        : emptyForm(defaultMainPmId ?? ''),
+    );
     // Only reset when the dialog opens or the edited row changes — not when the client list refreshes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, initialRecord?.id]);
@@ -345,6 +362,18 @@ export function PitchingFormModal({
           </div>
 
           <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">負責 PM</label>
+            <SearchableSelect
+              value={form.mainPmId}
+              onValueChange={(mainPmId) => setForm((prev) => ({ ...prev, mainPmId }))}
+              options={pmOptions}
+              placeholder="選擇負責 PM..."
+              searchPlaceholder="搜尋同事名稱或電郵..."
+              emptyText="找不到同事"
+            />
+          </div>
+
+          <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1">提案描述 Description</label>
             <textarea
               value={form.description}
@@ -417,6 +446,7 @@ function PitchingList({
           p.clientName.toLowerCase().includes(query) ||
           p.displayName.toLowerCase().includes(query) ||
           formatProjectTypes(p.projectTypes).toLowerCase().includes(query) ||
+          formatMainPmName(p).toLowerCase().includes(query) ||
           p.assignedPmName.toLowerCase().includes(query)
         );
       }
@@ -513,7 +543,7 @@ function PitchingList({
                     </td>
                     <td className="px-4 py-3 text-[13px] max-w-[180px]">{formatProjectTypes(record.projectTypes)}</td>
                     <td className="px-4 py-3 text-[14px] font-medium">{record.displayName}</td>
-                    <td className="px-4 py-3 text-[13px]">{record.assignedPmName || '—'}</td>
+                    <td className="px-4 py-3 text-[13px]">{formatMainPmName(record)}</td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <PitchingStatusSelect
                         value={record.status}
@@ -562,7 +592,6 @@ type DetailDraft = {
   inquiryDate: string;
   description: string;
   projectTypes: PitchingProjectType[];
-  assignedPmName: string;
   asanaLink: string;
   status: PitchingStatus;
   estimatedIncome: number | undefined;
@@ -585,7 +614,6 @@ function draftFromRecord(record: PitchingRecord, clientOptions: ClientOption[]):
     inquiryDate: record.inquiryDate,
     description: record.description ?? '',
     projectTypes: record.projectTypes,
-    assignedPmName: record.assignedPmName,
     asanaLink: record.asanaLink ?? '',
     status: record.status,
     estimatedIncome: record.estimatedIncome,
@@ -804,7 +832,6 @@ export function PitchingDetail({
       draft.displayName !== initial.displayName ||
       draft.inquiryDate !== initial.inquiryDate ||
       draft.description !== initial.description ||
-      draft.assignedPmName !== initial.assignedPmName ||
       draft.asanaLink !== initial.asanaLink ||
       draft.status !== initial.status ||
       draft.estimatedIncome !== initial.estimatedIncome ||
@@ -839,7 +866,6 @@ export function PitchingDetail({
       inquiryDate: draft.inquiryDate,
       description: draft.description.trim() || undefined,
       projectTypes: draft.projectTypes,
-      assignedPmName: draft.assignedPmName,
       asanaLink: draft.asanaLink.trim() || undefined,
       status: draft.status,
       estimatedIncome: draft.estimatedIncome,
@@ -985,11 +1011,10 @@ export function PitchingDetail({
                 value={draft.projectTypes}
                 onChange={(projectTypes) => patchDraft({ projectTypes })}
               />
-              <EditableTextField
-                label="負責 PM"
-                value={draft.assignedPmName}
-                onChange={(assignedPmName) => patchDraft({ assignedPmName })}
-              />
+              <div>
+                <span className="text-[12px] text-muted-foreground block">負責 PM</span>
+                <p className="text-[14px] font-medium mt-0.5">{formatMainPmName(record)}</p>
+              </div>
               <EditableTextField
                 label="Asana 連結"
                 value={draft.asanaLink}
@@ -1051,15 +1076,14 @@ export function PitchingDetail({
 
 export function PitchingModule() {
   const { navigateTo } = useApp();
-  const { systemUser, userInfo } = useAuth();
+  const { systemUser } = useAuth();
   const { records, loading, error, lastSyncedAt, addRecord, updateStatus, updateRecord } = useQuotationClientProjects();
   const { records: clientListRecords } = useQuotationClientList();
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedRecord, setSelectedRecord] = useState<PitchingRecord | null>(null);
   const [formModalOpen, setFormModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<PitchingRecord | null>(null);
-
-  const pmName = systemUser?.display_name || userInfo?.display_name || '—';
+  const { options: staffOptions } = useActiveStaffOptions([editingRecord?.mainPmId]);
 
   const pitchingClientOptions = useMemo(
     () => clientListRecords.map(toQuotationClientSelectOption),
@@ -1098,7 +1122,12 @@ export function PitchingModule() {
   };
 
   const handleFormSubmit = async (form: PitchingFormValues) => {
-    const payload = pitchingFormToUpdate(form);
+    const selectedStaff = staffOptions.find((s) => s.value === form.mainPmId);
+    const payload = {
+      ...pitchingFormToUpdate(form),
+      assignedPmName: selectedStaff?.label || '',
+      mainPmName: selectedStaff?.label || undefined,
+    };
     if (editingRecord) {
       const { error: saveErr } = await updateRecord(editingRecord.id, payload);
       if (saveErr) {
@@ -1107,7 +1136,14 @@ export function PitchingModule() {
       }
       if (selectedRecord?.id === editingRecord.id) {
         setSelectedRecord((prev) =>
-          prev ? { ...prev, ...payload, updatedAt: new Date().toISOString() } : null,
+          prev
+            ? {
+                ...prev,
+                ...payload,
+                mainPmName: selectedStaff?.label || undefined,
+                updatedAt: new Date().toISOString(),
+              }
+            : null,
         );
       }
       closeFormModal();
@@ -1122,8 +1158,10 @@ export function PitchingModule() {
       inquiryDate: form.inquiryDate,
       description: form.description.trim() || undefined,
       projectTypes: form.projectTypes,
-      assignedPm: systemUser?.id ?? '',
-      assignedPmName: pmName,
+      assignedPm: '',
+      assignedPmName: selectedStaff?.label || '',
+      mainPmId: form.mainPmId.trim() || undefined,
+      mainPmName: selectedStaff?.label || undefined,
       status: 'initial',
       asanaLink: form.asanaLink.trim() || undefined,
     });
@@ -1229,6 +1267,8 @@ export function PitchingModule() {
         onClose={closeFormModal}
         onSubmit={handleFormSubmit}
         clientOptions={pitchingClientOptions}
+        staffOptions={staffOptions}
+        defaultMainPmId={systemUser?.staff_id}
         initialRecord={editingRecord}
       />
     </div>

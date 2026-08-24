@@ -33,7 +33,7 @@ export type AsanaTask = {
   created_at?: string;
   completed?: boolean;
   permalink_url?: string;
-  assignee?: { gid?: string; name?: string } | null;
+  assignee?: { gid?: string; name?: string; email?: string } | null;
   custom_fields?: AsanaCustomField[];
   memberships?: Array<{
     project?: { gid?: string; name?: string };
@@ -88,6 +88,18 @@ async function asanaFetch<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`Asana API ${path}: ${msg}`);
   }
   return json as T;
+}
+
+export async function getAsanaUser(
+  userGid: string,
+): Promise<{ gid: string; email?: string; name?: string }> {
+  const qs = new URLSearchParams({
+    opt_fields: ["email", "name"].join(","),
+  });
+  const data = await asanaFetch<{ data: { gid: string; email?: string; name?: string } }>(
+    `/users/${userGid}?${qs}`,
+  );
+  return data.data;
 }
 
 export type AsanaAttachmentRaw = {
@@ -229,7 +241,7 @@ export function asanaStoryToComment(story: AsanaStory): AsanaTaskComment | null 
 
 export async function getTask(taskGid: string): Promise<AsanaTask> {
   const qs = new URLSearchParams({
-    opt_fields: ["name", "permalink_url", "notes", "created_at", "assignee.name"].join(","),
+    opt_fields: ["name", "permalink_url", "notes", "created_at", "assignee.name", "assignee.email"].join(","),
   });
   const data = await asanaFetch<{ data: AsanaTask }>(`/tasks/${taskGid}?${qs}`);
   return data.data;
@@ -304,6 +316,8 @@ export async function listProjectTasks(projectGid: string): Promise<AsanaTask[]>
     "completed",
     "permalink_url",
     "assignee.name",
+    "assignee.email",
+    "assignee.gid",
     "memberships.project.name",
     "memberships.section.name",
     "custom_fields",

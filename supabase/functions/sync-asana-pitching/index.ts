@@ -3,17 +3,97 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   corsHeaders,
   asanaTaskToRecord,
+  getAsanaUser,
   isTaskInSyncRange,
   listProjectTasks,
   taskMatchesSectionFilter,
   type SyncProjectConfig,
 } from "../_shared/asana-pitching.ts";
+import {
+  resolveMainPmId,
+  type MainPmStaffCandidate,
+} from "../_shared/main-pm.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY =
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
   Deno.env.get("SUPABASE_SERVICE_KEY") ||
   "";
+
+type SupabaseClient = ReturnType<typeof createClient>;
+
+async function loadStaffCandidates(supabase: SupabaseClient): Promise<MainPmStaffCandidate[]> {
+  const { data, error } = await supabase
+    .from("staffs")
+    .select("id, display_name, work_email, status, created_at");
+  if (error) throw new Error(`Load staffs failed: ${error.message}`);
+  return (data || []) as MainPmStaffCandidate[];
+}
+
+async function backfillMainPmIds(supabase: SupabaseClient) {
+  const staffs = await loadStaffCandidates(supabase);
+  const { data: rows, error } = await supabase
+    .from("quotation_client_project")
+    .select("id, assigned_pm, assigned_pm_name, main_pm_id");
+  if (error) throw new Error(`Load projects failed: ${error.message}`);
+
+  const projects = (rows || []) as Array<{
+    id: string;
+    assigned_pm: string | null;
+    assigned_pm_name: string | null;
+    main_pm_id: string | null;
+  }>;
+
+  const uniqueGids = [
+    ...new Set(projects.map((row) => row.assigned_pm?.trim()).filter((gid): gid is string => Boolean(gid))),
+  ];
+  const asanaUsers = new Map<string, { email?: string; name?: string }>();
+  const asanaErrors: string[] = [];
+  for (const gid of uniqueGids) {
+    try {
+      const user = await getAsanaUser(gid);
+      asanaUsers.set(gid, { email: user.email, name: user.name });
+    } catch (e) {
+      asanaErrors.push(`${gid}: ${(e as Error).message}`);
+    }
+  }
+
+  let updated = 0;
+  let unmatched = 0;
+  const unmatchedNames = new Set<string>();
+  for (const row of projects) {
+    const asana = row.assigned_pm ? asanaUsers.get(row.assigned_pm) : undefined;
+    const mainPmId = resolveMainPmId(staffs, {
+      email: asana?.email,
+      name: asana?.name || row.assigned_pm_name,
+    });
+    if (!mainPmId) {
+      unmatched += 1;
+      if (row.assigned_pm_name) unmatchedNames.add(row.assigned_pm_name);
+      continue;
+    }
+    if (row.main_pm_id === mainPmId) continue;
+    const { error: updateErr } = await supabase
+      .from("quotation_client_project")
+      .update({ main_pm_id: mainPmId })
+      .eq("id", row.id);
+    if (updateErr) {
+      asanaErrors.push(`${row.id}: ${updateErr.message}`);
+    } else {
+      updated += 1;
+    }
+  }
+
+  return {
+    action: "backfill_main_pm",
+    total_rows: projects.length,
+    asana_users_fetched: asanaUsers.size,
+    updated,
+    unmatched,
+    unmatched_names: [...unmatchedNames],
+    errors: asanaErrors,
+  };
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -29,13 +109,21 @@ Deno.serve(async (req) => {
       throw new Error("Missing SUPABASE_URL or service role key");
     }
 
+    const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
+    const action = (body as { action?: string }).action;
+    if (action === "backfill_main_pm") {
+      const result = await backfillMainPmIds(supabase);
+      return new Response(JSON.stringify({ success: true, ...result }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     await supabase.from("asana_pitching_sync_runs").insert({
       id: runId,
       status: "running",
       started_at: new Date().toISOString(),
     });
 
-    const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
     const filterGid = (body as { project_gid?: string }).project_gid;
 
     let query = supabase
@@ -62,6 +150,7 @@ Deno.serve(async (req) => {
     let tasksSkipped = 0;
     let recordsUpserted = 0;
     const errors: string[] = [];
+    const staffs = await loadStaffCandidates(supabase);
 
     for (const project of projects) {
       try {
@@ -87,6 +176,18 @@ Deno.serve(async (req) => {
               errors.push(`${task.gid}: ${upsertErr.message}`);
             } else {
               recordsUpserted += 1;
+              const mainPmId = resolveMainPmId(staffs, {
+                email: task.assignee?.email,
+                name: task.assignee?.name,
+              });
+              if (mainPmId) {
+                const { error: pmErr } = await supabase
+                  .from("quotation_client_project")
+                  .update({ main_pm_id: mainPmId })
+                  .eq("asana_task_gid", task.gid)
+                  .is("main_pm_id", null);
+                if (pmErr) errors.push(`${task.gid} main_pm: ${pmErr.message}`);
+              }
             }
           } catch (e) {
             errors.push(`${task.gid}: ${(e as Error).message}`);

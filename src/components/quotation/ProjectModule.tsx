@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
+import { useActiveStaffOptions } from '@/hooks/useActiveStaffOptions';
 import { toQuotationClientSelectOption } from '@/data/quotationClientList';
 import {
   readSelectedQuotationProjectId,
@@ -20,6 +21,7 @@ import {
 import {
   pitchingStatusConfig,
   formatProjectTypes,
+  formatMainPmName,
   matchesProjectTypeFilter,
   PITCHING_PROJECT_TYPE_OPTIONS,
   isProjectPageRecord,
@@ -53,6 +55,7 @@ function ProjectList({
           p.clientName.toLowerCase().includes(query) ||
           p.displayName.toLowerCase().includes(query) ||
           formatProjectTypes(p.projectTypes).toLowerCase().includes(query) ||
+          formatMainPmName(p).toLowerCase().includes(query) ||
           p.assignedPmName.toLowerCase().includes(query)
         );
       }
@@ -145,7 +148,7 @@ function ProjectList({
                     </td>
                     <td className="px-4 py-3 text-[13px] max-w-[180px]">{formatProjectTypes(record.projectTypes)}</td>
                     <td className="px-4 py-3 text-[14px] font-medium">{record.displayName}</td>
-                    <td className="px-4 py-3 text-[13px]">{record.assignedPmName || '—'}</td>
+                    <td className="px-4 py-3 text-[13px]">{formatMainPmName(record)}</td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <PitchingStatusSelect
                         value={record.status}
@@ -195,6 +198,7 @@ export function ProjectModule() {
   const [selectedRecord, setSelectedRecord] = useState<PitchingRecord | null>(null);
   const [formModalOpen, setFormModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<PitchingRecord | null>(null);
+  const { options: staffOptions } = useActiveStaffOptions([editingRecord?.mainPmId]);
 
   const projectRecords = useMemo(
     () => records.filter(isProjectPageRecord),
@@ -234,7 +238,12 @@ export function ProjectModule() {
 
   const handleFormSubmit = async (form: PitchingFormValues) => {
     if (!editingRecord) return;
-    const payload = pitchingFormToUpdate(form);
+    const selectedStaff = staffOptions.find((s) => s.value === form.mainPmId);
+    const payload = {
+      ...pitchingFormToUpdate(form),
+      assignedPmName: selectedStaff?.label || '',
+      mainPmName: selectedStaff?.label || undefined,
+    };
     const { error: saveErr } = await updateRecord(editingRecord.id, payload);
     if (saveErr) {
       toast.error(`儲存失敗：${saveErr.message}`);
@@ -242,7 +251,14 @@ export function ProjectModule() {
     }
     if (selectedRecord?.id === editingRecord.id) {
       setSelectedRecord((prev) =>
-        prev ? { ...prev, ...payload, updatedAt: new Date().toISOString() } : null,
+        prev
+          ? {
+              ...prev,
+              ...payload,
+              mainPmName: selectedStaff?.label || undefined,
+              updatedAt: new Date().toISOString(),
+            }
+          : null,
       );
     }
     closeFormModal();
@@ -337,6 +353,7 @@ export function ProjectModule() {
         onClose={closeFormModal}
         onSubmit={handleFormSubmit}
         clientOptions={pitchingClientOptions}
+        staffOptions={staffOptions}
         initialRecord={editingRecord}
       />
     </div>

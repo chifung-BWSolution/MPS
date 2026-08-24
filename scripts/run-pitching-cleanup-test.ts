@@ -8,7 +8,7 @@ const hook = readFileSync(new URL('../src/hooks/useQuotationClientProjects.ts', 
 assert.doesNotMatch(hook, /estimated_income_currency/);
 assert.doesNotMatch(hook, /row\.company_name_en/);
 assert.doesNotMatch(hook, /row\.company_name_zh/);
-assert.match(hook, /quotation_client_list \( company_name_zh, company_name_en \)/);
+assert.match(hook, /quotation_client_list \( company_name_zh, company_name_en \), main_pm:staffs!main_pm_id \( display_name \)/);
 
 const asana = readFileSync(
   new URL('../supabase/functions/_shared/asana-pitching.ts', import.meta.url),

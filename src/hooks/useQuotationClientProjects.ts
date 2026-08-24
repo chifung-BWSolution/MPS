@@ -12,6 +12,10 @@ type ClientListEmbed = {
   company_name_zh: string | null;
 } | null;
 
+type StaffEmbed = {
+  display_name: string | null;
+} | null;
+
 type DbRow = {
   id: string;
   asana_task_gid: string | null;
@@ -26,6 +30,8 @@ type DbRow = {
   project_types: string[] | null;
   assigned_pm: string | null;
   assigned_pm_name: string | null;
+  main_pm_id: string | null;
+  main_pm?: StaffEmbed;
   status: string;
   asana_link: string | null;
   notes: string | null;
@@ -101,6 +107,8 @@ function mapRow(row: DbRow): PitchingRecord {
     asanaProjectName: row.asana_project_name ?? undefined,
     assignedPm: row.assigned_pm || '',
     assignedPmName: row.assigned_pm_name || '—',
+    mainPmId: row.main_pm_id || undefined,
+    mainPmName: row.main_pm?.display_name?.trim() || undefined,
     status,
     asanaLink: row.asana_link ?? undefined,
     notes: row.notes ?? undefined,
@@ -123,6 +131,8 @@ export type QuotationClientProjectUpdate = Partial<
     | 'description'
     | 'projectTypes'
     | 'assignedPmName'
+    | 'mainPmId'
+    | 'mainPmName'
     | 'asanaLink'
     | 'status'
     | 'notes'
@@ -143,7 +153,7 @@ export function useQuotationClientProjects() {
     setLoading(true);
     const { data, error: err } = await supabase
       .from(QUOTATION_CLIENT_PROJECT_TABLE)
-      .select('*, quotation_client_list ( company_name_zh, company_name_en )')
+      .select('*, quotation_client_list ( company_name_zh, company_name_en ), main_pm:staffs!main_pm_id ( display_name )')
       .order('inquiry_date', { ascending: false });
 
     if (err) {
@@ -190,6 +200,7 @@ export function useQuotationClientProjects() {
         project_types: data.projectTypes,
         assigned_pm: data.assignedPm || null,
         assigned_pm_name: data.assignedPmName || '',
+        main_pm_id: data.mainPmId?.trim() || null,
         status: data.status,
         asana_link: data.asanaLink ?? null,
         notes: data.notes ?? null,
@@ -201,6 +212,7 @@ export function useQuotationClientProjects() {
         ...data,
         id,
         pitchingId: row.pitching_code,
+        mainPmName: data.mainPmName || (data.mainPmId ? data.assignedPmName : undefined),
         followUps: [],
         createdAt: now,
         updatedAt: now,
@@ -236,6 +248,7 @@ export function useQuotationClientProjects() {
     if (data.description !== undefined) row.description = data.description || null;
     if (data.projectTypes !== undefined) row.project_types = data.projectTypes;
     if (data.assignedPmName !== undefined) row.assigned_pm_name = data.assignedPmName || '';
+    if (data.mainPmId !== undefined) row.main_pm_id = data.mainPmId?.trim() || null;
     if (data.asanaLink !== undefined) row.asana_link = data.asanaLink || null;
     if (data.status !== undefined) row.status = data.status;
     if (data.notes !== undefined) row.notes = data.notes || null;
