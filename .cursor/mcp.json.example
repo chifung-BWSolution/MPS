@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "brevo": {
+      "url": "https://mcp.brevo.com/v1/brevo/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_BREVO_MCP_TOKEN"
+      }
+    }
+  }
+}

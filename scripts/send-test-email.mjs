@@ -33,9 +33,9 @@ if (!supabaseUrl || !key) {
 const url = `${supabaseUrl.replace(/\/$/, '')}/functions/v1/send-email`;
 const body = {
   to,
-  subject: 'MPS Resend test',
-  html: `<p>This is a test email from <strong>MPS</strong> via Resend.</p><p>If you received this, the Resend integration is working.</p>`,
-  text: 'This is a test email from MPS via Resend. If you received this, the Resend integration is working.',
+  subject: 'MPS Brevo test',
+  html: `<p>This is a test email from <strong>MPS</strong> via Brevo.</p><p>If you received this, the Brevo integration is working.</p>`,
+  text: 'This is a test email from MPS via Brevo. If you received this, the Brevo integration is working.',
   idempotencyKey: `mps-test-email/${to}/${new Date().toISOString()}`,
 };
 

@@ -18,10 +18,36 @@ type SendEmailBody = {
   idempotencyKey?: string;
 };
 
+type BrevoAddress = {
+  email: string;
+  name?: string;
+};
+
 function normalizeAddresses(value: string | string[] | undefined): string[] {
   if (!value) return [];
   const list = Array.isArray(value) ? value : [value];
   return list.map((item) => String(item).trim()).filter(Boolean);
+}
+
+function parseAddress(value: string): BrevoAddress {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(.*)<([^>]+)>$/);
+  if (!match) return { email: trimmed };
+  const name = match[1].trim().replace(/^["']|["']$/g, "");
+  const email = match[2].trim();
+  return name ? { email, name } : { email };
+}
+
+function toBrevoAddresses(values: string[]): BrevoAddress[] {
+  return values.map(parseAddress);
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 Deno.serve(async (req: Request) => {
@@ -37,12 +63,12 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const apiKey = Deno.env.get("RESEND_API_KEY");
+    const apiKey = Deno.env.get("BREVO_API_KEY");
     if (!apiKey) {
       return new Response(
         JSON.stringify({
           error:
-            "RESEND_API_KEY is not configured. Set it with: supabase secrets set RESEND_API_KEY=re_xxx",
+            "BREVO_API_KEY is not configured. Set it with: supabase secrets set BREVO_API_KEY=xkeysib-xxx",
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -56,10 +82,11 @@ Deno.serve(async (req: Request) => {
     const subject = String(body.subject ?? "").trim();
     const html = body.html ? String(body.html) : undefined;
     const text = body.text ? String(body.text) : undefined;
-    const from =
+    const fromRaw =
       String(body.from ?? "").trim() ||
-      Deno.env.get("RESEND_FROM_EMAIL") ||
-      "MPS <onboarding@resend.dev>";
+      Deno.env.get("BREVO_FROM_EMAIL") ||
+      "MPS <noreply@bwteam-marketing.com>";
+    const sender = parseAddress(fromRaw);
 
     if (!to.length) {
       return new Response(JSON.stringify({ error: "to is required" }), {
@@ -84,32 +111,32 @@ Deno.serve(async (req: Request) => {
     }
 
     const payload: Record<string, unknown> = {
-      from,
-      to,
+      sender,
+      to: toBrevoAddresses(to),
       subject,
+      htmlContent: html || `<p>${escapeHtml(text || "")}</p>`,
     };
-    if (html) payload.html = html;
-    if (text) payload.text = text;
+    if (text) payload.textContent = text;
 
     const cc = normalizeAddresses(body.cc);
     const bcc = normalizeAddresses(body.bcc);
     const replyTo = normalizeAddresses(body.replyTo);
-    if (cc.length) payload.cc = cc;
-    if (bcc.length) payload.bcc = bcc;
-    if (replyTo.length) payload.reply_to = replyTo;
+    if (cc.length) payload.cc = toBrevoAddresses(cc);
+    if (bcc.length) payload.bcc = toBrevoAddresses(bcc);
+    if (replyTo.length) payload.replyTo = parseAddress(replyTo[0]);
 
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    };
     const idempotencyKey = String(body.idempotencyKey ?? "").trim();
     if (idempotencyKey) {
-      headers["Idempotency-Key"] = idempotencyKey.slice(0, 256);
+      payload.headers = { "Idempotency-Key": idempotencyKey.slice(0, 256) };
     }
 
-    const res = await fetch("https://api.resend.com/emails", {
+    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
-      headers,
+      headers: {
+        accept: "application/json",
+        "api-key": apiKey,
+        "content-type": "application/json",
+      },
       body: JSON.stringify(payload),
     });
 
@@ -117,7 +144,7 @@ Deno.serve(async (req: Request) => {
     if (!res.ok) {
       const message =
         (data && (data.message || data.error)) ||
-        `Resend API error (${res.status})`;
+        `Brevo API error (${res.status})`;
       return new Response(JSON.stringify({ error: String(message), details: data }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: res.status >= 400 && res.status < 600 ? res.status : 502,
@@ -127,8 +154,8 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         success: true,
-        id: data?.id ?? null,
-        from,
+        id: data?.messageId ?? null,
+        from: fromRaw,
         to,
         subject,
       }),

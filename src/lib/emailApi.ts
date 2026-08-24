@@ -56,7 +56,7 @@ async function invokeSendEmail(body: SendEmailInput): Promise<SendEmailResult> {
   };
 }
 
-/** Send a transactional email via the Resend-backed Edge Function. */
+/** Send a transactional email via the Brevo-backed Edge Function. */
 export function sendEmail(input: SendEmailInput) {
   return invokeSendEmail(input);
 }
@@ -65,14 +65,14 @@ export function sendEmail(input: SendEmailInput) {
 export function sendTestEmail(to: string) {
   return sendEmail({
     to,
-    subject: 'MPS Resend test',
+    subject: 'MPS Brevo test',
     html: `
       <div style="font-family: ui-sans-serif, system-ui, sans-serif; line-height: 1.5;">
-        <p>This is a test email from <strong>MPS</strong> via Resend.</p>
-        <p>If you received this, the Resend integration is working.</p>
+        <p>This is a test email from <strong>MPS</strong> via Brevo.</p>
+        <p>If you received this, the Brevo integration is working.</p>
       </div>
     `,
-    text: 'This is a test email from MPS via Resend. If you received this, the Resend integration is working.',
+    text: 'This is a test email from MPS via Brevo. If you received this, the Brevo integration is working.',
     idempotencyKey: `mps-test-email/${to}/${new Date().toISOString().slice(0, 13)}`,
   });
 }
