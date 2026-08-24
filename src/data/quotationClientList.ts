@@ -150,7 +150,7 @@ export function composeClientDisplayName(
 
 export type QuotationClientSelectFields = Pick<
   QuotationClient,
-  'id' | 'displayName' | 'companyNameZh' | 'companyNameEn' | 'contactPerson'
+  'id' | 'displayName' | 'companyNameZh' | 'companyNameEn' | 'contactPerson' | 'phone'
 >;
 
 export type QuotationClientSelectOption = {
@@ -161,15 +161,29 @@ export type QuotationClientSelectOption = {
   companyNameEn: string;
 };
 
-/** Visible label for client pickers. Chinese name is preferred; English / display / contact fill gaps. */
+function joinNameAndPhone(name: string, phone: string): string {
+  return [name.trim(), phone.trim()].filter(Boolean).join(' ');
+}
+
+/**
+ * Visible label for client pickers.
+ * Prefer display_name; otherwise use the first present name and append phone when it exists.
+ * An empty phone never skips a fallback level.
+ */
 export function quotationClientSelectLabel(client: Omit<QuotationClientSelectFields, 'id'>): string {
-  return (
-    client.companyNameZh.trim() ||
-    client.companyNameEn.trim() ||
-    client.displayName.trim() ||
-    client.contactPerson.trim() ||
-    '未命名客戶'
-  );
+  const displayName = client.displayName.trim();
+  if (displayName) return displayName;
+
+  const companyNameZh = client.companyNameZh.trim();
+  if (companyNameZh) return joinNameAndPhone(companyNameZh, client.phone);
+
+  const companyNameEn = client.companyNameEn.trim();
+  if (companyNameEn) return joinNameAndPhone(companyNameEn, client.phone);
+
+  const contactPerson = client.contactPerson.trim();
+  if (contactPerson) return joinNameAndPhone(contactPerson, client.phone);
+
+  return joinNameAndPhone(client.companyNameZh, client.phone) || '未命名客戶';
 }
 
 export function toQuotationClientSelectOption(
@@ -178,7 +192,13 @@ export function toQuotationClientSelectOption(
   return {
     value: client.id,
     label: quotationClientSelectLabel(client),
-    keywords: [client.companyNameZh, client.companyNameEn, client.contactPerson, client.displayName]
+    keywords: [
+      client.displayName,
+      client.companyNameZh,
+      client.companyNameEn,
+      client.contactPerson,
+      client.phone,
+    ]
       .map((part) => part.trim())
       .filter(Boolean)
       .join(' '),

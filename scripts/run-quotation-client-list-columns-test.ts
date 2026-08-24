@@ -173,33 +173,67 @@ assert.equal(
     companyNameZh: '香港城市大學',
     companyNameEn: 'City University of Hong Kong',
     contactPerson: 'Jane',
+    phone: '6749 3792',
+  }),
+  'CityU Jane',
+);
+assert.equal(
+  quotationClientSelectLabel({
+    displayName: '   ',
+    companyNameZh: '香港城市大學',
+    companyNameEn: 'City University of Hong Kong',
+    contactPerson: 'Jane',
+    phone: '6749 3792',
+  }),
+  '香港城市大學 6749 3792',
+);
+assert.equal(
+  quotationClientSelectLabel({
+    displayName: '',
+    companyNameZh: '香港城市大學',
+    companyNameEn: 'City University of Hong Kong',
+    contactPerson: 'Jane',
+    phone: '',
   }),
   '香港城市大學',
 );
 assert.equal(
   quotationClientSelectLabel({
-    displayName: 'CityU Jane',
+    displayName: '',
     companyNameZh: '   ',
     companyNameEn: 'City University of Hong Kong',
     contactPerson: 'Jane',
+    phone: '6749 3792',
   }),
-  'City University of Hong Kong',
+  'City University of Hong Kong 6749 3792',
 );
 assert.equal(
   quotationClientSelectLabel({
-    displayName: 'HK event Pro Jane 1234',
+    displayName: '',
     companyNameZh: '',
-    companyNameEn: '',
+    companyNameEn: 'HK event Pro',
     contactPerson: 'Jane',
+    phone: '   ',
   }),
-  'HK event Pro Jane 1234',
+  'HK event Pro',
 );
 assert.equal(
   quotationClientSelectLabel({
-    displayName: '   ',
+    displayName: '',
     companyNameZh: '',
     companyNameEn: '',
     contactPerson: 'Jane CHEUNG',
+    phone: '6749 3792',
+  }),
+  'Jane CHEUNG 6749 3792',
+);
+assert.equal(
+  quotationClientSelectLabel({
+    displayName: '',
+    companyNameZh: '',
+    companyNameEn: '',
+    contactPerson: 'Jane CHEUNG',
+    phone: '',
   }),
   'Jane CHEUNG',
 );
@@ -209,21 +243,33 @@ assert.equal(
     companyNameZh: '',
     companyNameEn: '',
     contactPerson: '',
+    phone: '6749 3792',
+  }),
+  '6749 3792',
+);
+assert.equal(
+  quotationClientSelectLabel({
+    displayName: '',
+    companyNameZh: '',
+    companyNameEn: '',
+    contactPerson: '',
+    phone: '',
   }),
   '未命名客戶',
 );
 
 const enOnlyOption = toQuotationClientSelectOption({
   id: 'c-en',
-  displayName: 'CityU Jane',
+  displayName: '',
   companyNameZh: '',
   companyNameEn: 'City University of Hong Kong',
   contactPerson: 'Jane',
+  phone: '6749 3792',
 });
 assert.equal(enOnlyOption.value, 'c-en');
-assert.equal(enOnlyOption.label, 'City University of Hong Kong');
+assert.equal(enOnlyOption.label, 'City University of Hong Kong 6749 3792');
 assert.match(enOnlyOption.keywords, /City University of Hong Kong/);
-assert.match(enOnlyOption.keywords, /CityU Jane/);
+assert.match(enOnlyOption.keywords, /6749 3792/);
 assert.equal(enOnlyOption.companyNameZh, '');
 assert.equal(enOnlyOption.companyNameEn, 'City University of Hong Kong');
 
