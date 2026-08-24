@@ -6,8 +6,10 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useBrands } from '@/hooks/useBrands';
 import {
+  applyClientDisplayNameAutofill,
   composeClientDisplayName,
   emptyQuotationClientInput,
+  seedClientDisplayName,
   type QuotationClient,
   type QuotationClientInput,
 } from '@/data/quotationClientList';
@@ -23,16 +25,14 @@ type Props = {
 export function ClientFormModal({ open, onClose, editingClient, onSave, saving = false }: Props) {
   const { brands, loading: brandsLoading } = useBrands();
   const [formData, setFormData] = useState<QuotationClientInput>(emptyQuotationClientInput());
-  const [displayNameManual, setDisplayNameManual] = useState(false);
 
   const brandOptions = brands.filter((b) => b.isActive || formData.brandIds.includes(b.id));
   const isCreate = !editingClient;
 
   useEffect(() => {
     if (!open) return;
-    setDisplayNameManual(false);
     if (editingClient) {
-      setFormData({
+      setFormData(seedClientDisplayName({
         displayName: editingClient.displayName,
         companyNameZh: editingClient.companyNameZh,
         companyNameEn: editingClient.companyNameEn,
@@ -44,26 +44,14 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
         inquiryDate: editingClient.inquiryDate,
         status: editingClient.status,
         notes: editingClient.notes,
-      });
+      }));
     } else {
-      setFormData(emptyQuotationClientInput());
+      setFormData(seedClientDisplayName(emptyQuotationClientInput()));
     }
   }, [open, editingClient]);
 
   const updateForm = (field: keyof QuotationClientInput, value: string) => {
-    setFormData((prev) => {
-      const next = { ...prev, [field]: value };
-      const sourceFields: Array<keyof QuotationClientInput> = [
-        'companyNameZh',
-        'companyNameEn',
-        'contactPerson',
-        'phone',
-      ];
-      if (isCreate && !displayNameManual && sourceFields.includes(field)) {
-        next.displayName = composeClientDisplayName(next);
-      }
-      return next;
-    });
+    setFormData((prev) => applyClientDisplayNameAutofill(prev, field, value));
   };
 
   const toggleBrand = (brandId: string) => {
@@ -76,8 +64,7 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
   };
 
   const handleSubmit = async () => {
-    const displayName = formData.displayName.trim()
-      || (isCreate ? composeClientDisplayName(formData) : '');
+    const displayName = formData.displayName.trim() || composeClientDisplayName(formData);
     if (formData.brandIds.length === 0 || !formData.contactPerson.trim() || !displayName) {
       toast.error('請填寫必填欄位（所屬品牌、聯絡人、顯示名稱）');
       return;
@@ -185,11 +172,8 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
             <label className="text-[12px] font-medium text-muted-foreground block mb-1">顯示名稱 *</label>
             <Input
               value={formData.displayName}
-              onChange={(e) => {
-                setDisplayNameManual(true);
-                updateForm('displayName', e.target.value);
-              }}
-              placeholder={isCreate ? '預設為公司名稱、聯絡人與電話' : '客戶顯示名稱'}
+              onChange={(e) => updateForm('displayName', e.target.value)}
+              placeholder="預設為公司名稱、聯絡人與電話"
               className="h-9 text-[13px]"
             />
           </div>

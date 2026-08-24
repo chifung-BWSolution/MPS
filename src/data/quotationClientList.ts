@@ -132,6 +132,13 @@ export const quotationClientStatusConfig: Record<
   prospect: { label: '潛在客戶', color: 'text-amber-700', bgColor: 'bg-amber-50' },
 };
 
+export const CLIENT_DISPLAY_NAME_SOURCE_FIELDS = [
+  'companyNameZh',
+  'companyNameEn',
+  'contactPerson',
+  'phone',
+] as const;
+
 export function composeClientDisplayName(
   input: Pick<QuotationClientInput, 'companyNameZh' | 'companyNameEn' | 'contactPerson' | 'phone'>,
 ): string {
@@ -139,6 +146,30 @@ export function composeClientDisplayName(
     .map((part) => part.trim())
     .filter(Boolean)
     .join(' ');
+}
+
+/** Fill 顯示名稱 from source fields when the dialog opens with an empty value. */
+export function seedClientDisplayName(input: QuotationClientInput): QuotationClientInput {
+  if (input.displayName.trim()) return input;
+  return { ...input, displayName: composeClientDisplayName(input) };
+}
+
+/**
+ * Keep a user-typed 顯示名稱 as-is. Resume auto-fill only after the field is
+ * emptied and a source field (company / contact / phone) changes.
+ */
+export function applyClientDisplayNameAutofill(
+  prev: QuotationClientInput,
+  field: keyof QuotationClientInput,
+  value: string,
+): QuotationClientInput {
+  const next = { ...prev, [field]: value };
+  if (field === 'displayName') return next;
+  const isSourceField = (CLIENT_DISPLAY_NAME_SOURCE_FIELDS as readonly string[]).includes(field);
+  if (isSourceField && !prev.displayName.trim()) {
+    next.displayName = composeClientDisplayName(next);
+  }
+  return next;
 }
 
 export const emptyQuotationClientInput = (): QuotationClientInput => ({
