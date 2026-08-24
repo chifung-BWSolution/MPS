@@ -148,6 +148,45 @@ export function composeClientDisplayName(
     .join(' ');
 }
 
+export type QuotationClientSelectFields = Pick<
+  QuotationClient,
+  'id' | 'displayName' | 'companyNameZh' | 'companyNameEn' | 'contactPerson'
+>;
+
+export type QuotationClientSelectOption = {
+  value: string;
+  label: string;
+  keywords: string;
+  companyNameZh: string;
+  companyNameEn: string;
+};
+
+/** Visible label for client pickers. Chinese name is preferred; English / display / contact fill gaps. */
+export function quotationClientSelectLabel(client: Omit<QuotationClientSelectFields, 'id'>): string {
+  return (
+    client.companyNameZh.trim() ||
+    client.companyNameEn.trim() ||
+    client.displayName.trim() ||
+    client.contactPerson.trim() ||
+    '未命名客戶'
+  );
+}
+
+export function toQuotationClientSelectOption(
+  client: QuotationClientSelectFields,
+): QuotationClientSelectOption {
+  return {
+    value: client.id,
+    label: quotationClientSelectLabel(client),
+    keywords: [client.companyNameZh, client.companyNameEn, client.contactPerson, client.displayName]
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(' '),
+    companyNameZh: client.companyNameZh,
+    companyNameEn: client.companyNameEn,
+  };
+}
+
 /** Fill 顯示名稱 from source fields when the dialog opens with an empty value. */
 export function seedClientDisplayName(input: QuotationClientInput): QuotationClientInput {
   if (input.displayName.trim()) return input;

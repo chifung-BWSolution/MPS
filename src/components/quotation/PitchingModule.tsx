@@ -7,6 +7,10 @@ import { useAuth } from '@/context/AuthContext';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
 import {
+  toQuotationClientSelectOption,
+  type QuotationClientSelectOption,
+} from '@/data/quotationClientList';
+import {
   readSelectedQuotationProjectId,
   writeSelectedQuotationProjectId,
 } from '@/lib/quotationProjectNavigation';
@@ -39,13 +43,7 @@ export type PitchingFormValues = {
   asanaLink: string;
 };
 
-export type ClientOption = {
-  value: string;
-  label: string;
-  keywords: string;
-  companyNameZh: string;
-  companyNameEn: string;
-};
+export type ClientOption = QuotationClientSelectOption;
 
 function companyNamesForClient(clientId: string, clientOptions: ClientOption[]) {
   const client = clientOptions.find((c) => c.value === clientId);
@@ -1055,14 +1053,7 @@ export function PitchingModule() {
   const pmName = systemUser?.display_name || userInfo?.display_name || '—';
 
   const pitchingClientOptions = useMemo(
-    () =>
-      clientListRecords.map((c) => ({
-        value: c.id,
-        label: c.companyNameZh,
-        keywords: [c.companyNameZh, c.companyNameEn, c.contactPerson, c.displayName].filter(Boolean).join(' '),
-        companyNameZh: c.companyNameZh,
-        companyNameEn: c.companyNameEn,
-      })),
+    () => clientListRecords.map(toQuotationClientSelectOption),
     [clientListRecords],
   );
 

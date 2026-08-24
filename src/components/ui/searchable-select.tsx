@@ -42,6 +42,7 @@ export function SearchableSelect({
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value);
+  const selectedLabel = selected ? selected.label.trim() || '—' : placeholder;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -58,7 +59,7 @@ export function SearchableSelect({
             className,
           )}
         >
-          <span className="truncate text-left">{selected?.label ?? placeholder}</span>
+          <span className="truncate text-left">{selectedLabel}</span>
           <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -72,25 +73,28 @@ export function SearchableSelect({
           <CommandList>
             <CommandEmpty className="text-[13px]">{emptyText}</CommandEmpty>
             <CommandGroup>
-              {options.map((option) => (
-                <CommandItem
-                  key={option.value}
-                  value={[option.label, option.keywords, option.value].filter(Boolean).join(' ')}
-                  className="text-[13px]"
-                  onSelect={() => {
-                    onValueChange(option.value);
-                    setOpen(false);
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      'h-4 w-4 shrink-0',
-                      value === option.value ? 'opacity-100' : 'opacity-0',
-                    )}
-                  />
-                  <span className="truncate">{option.label}</span>
-                </CommandItem>
-              ))}
+              {options.map((option) => {
+                const itemLabel = option.label.trim() || '—';
+                return (
+                  <CommandItem
+                    key={option.value}
+                    value={[option.value, itemLabel, option.keywords].filter(Boolean).join(' ')}
+                    className="text-[13px]"
+                    onSelect={() => {
+                      onValueChange(option.value);
+                      setOpen(false);
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        'h-4 w-4 shrink-0',
+                        value === option.value ? 'opacity-100' : 'opacity-0',
+                      )}
+                    />
+                    <span className="truncate">{itemLabel}</span>
+                  </CommandItem>
+                );
+              })}
             </CommandGroup>
           </CommandList>
         </Command>

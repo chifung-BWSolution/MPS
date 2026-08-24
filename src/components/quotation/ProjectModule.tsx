@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
+import { toQuotationClientSelectOption } from '@/data/quotationClientList';
 import {
   readSelectedQuotationProjectId,
   writeSelectedQuotationProjectId,
@@ -201,14 +202,7 @@ export function ProjectModule() {
   );
 
   const pitchingClientOptions = useMemo(
-    () =>
-      clientListRecords.map((c) => ({
-        value: c.id,
-        label: c.companyNameZh,
-        keywords: [c.companyNameZh, c.companyNameEn, c.contactPerson, c.displayName].filter(Boolean).join(' '),
-        companyNameZh: c.companyNameZh,
-        companyNameEn: c.companyNameEn,
-      })),
+    () => clientListRecords.map(toQuotationClientSelectOption),
     [clientListRecords],
   );
 

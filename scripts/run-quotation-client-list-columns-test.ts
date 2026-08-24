@@ -4,7 +4,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   filterQuotationClients,
+  quotationClientSelectLabel,
   selectLatestProjectsByClient,
+  toQuotationClientSelectOption,
   type QuotationClient,
 } from '../src/data/quotationClientList';
 import {
@@ -55,7 +57,11 @@ assert.match(hookSrc, /display_name, status, inquiry_date, updated_at, created_a
 assert.doesNotMatch(hookSrc, /fetchProjectCounts/);
 
 assert.match(pitchingSrc, /readSelectedQuotationProjectId/);
+assert.match(pitchingSrc, /toQuotationClientSelectOption/);
+assert.doesNotMatch(pitchingSrc, /label: c\.companyNameZh/);
 assert.match(projectSrc, /readSelectedQuotationProjectId/);
+assert.match(projectSrc, /toQuotationClientSelectOption/);
+assert.doesNotMatch(projectSrc, /label: c\.companyNameZh/);
 
 const latest = selectLatestProjectsByClient([
   {
@@ -160,6 +166,66 @@ assert.deepEqual(
   filterQuotationClients(sampleClients, { brandFilter: 'missing-brand' }).map((c) => c.id),
   [],
 );
+
+assert.equal(
+  quotationClientSelectLabel({
+    displayName: 'CityU Jane',
+    companyNameZh: '香港城市大學',
+    companyNameEn: 'City University of Hong Kong',
+    contactPerson: 'Jane',
+  }),
+  '香港城市大學',
+);
+assert.equal(
+  quotationClientSelectLabel({
+    displayName: 'CityU Jane',
+    companyNameZh: '   ',
+    companyNameEn: 'City University of Hong Kong',
+    contactPerson: 'Jane',
+  }),
+  'City University of Hong Kong',
+);
+assert.equal(
+  quotationClientSelectLabel({
+    displayName: 'HK event Pro Jane 1234',
+    companyNameZh: '',
+    companyNameEn: '',
+    contactPerson: 'Jane',
+  }),
+  'HK event Pro Jane 1234',
+);
+assert.equal(
+  quotationClientSelectLabel({
+    displayName: '   ',
+    companyNameZh: '',
+    companyNameEn: '',
+    contactPerson: 'Jane CHEUNG',
+  }),
+  'Jane CHEUNG',
+);
+assert.equal(
+  quotationClientSelectLabel({
+    displayName: '',
+    companyNameZh: '',
+    companyNameEn: '',
+    contactPerson: '',
+  }),
+  '未命名客戶',
+);
+
+const enOnlyOption = toQuotationClientSelectOption({
+  id: 'c-en',
+  displayName: 'CityU Jane',
+  companyNameZh: '',
+  companyNameEn: 'City University of Hong Kong',
+  contactPerson: 'Jane',
+});
+assert.equal(enOnlyOption.value, 'c-en');
+assert.equal(enOnlyOption.label, 'City University of Hong Kong');
+assert.match(enOnlyOption.keywords, /City University of Hong Kong/);
+assert.match(enOnlyOption.keywords, /CityU Jane/);
+assert.equal(enOnlyOption.companyNameZh, '');
+assert.equal(enOnlyOption.companyNameEn, 'City University of Hong Kong');
 
 const store = new Map<string, string>();
 const memoryStorage = {
