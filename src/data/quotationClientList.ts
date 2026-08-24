@@ -54,6 +54,40 @@ export function serializeBrandIds(ids: string[]): string {
   return [...new Set(ids.map((id) => id.trim()).filter(Boolean))].sort().join(',');
 }
 
+export type QuotationClientListFilters = {
+  statusFilter?: string;
+  brandFilter?: string;
+  searchQuery?: string;
+  brandNames?: (ids: string[]) => string[];
+};
+
+/** Client-side filters for 客戶列表: status, brand, and search. */
+export function filterQuotationClients(
+  clients: QuotationClient[],
+  {
+    statusFilter = 'all',
+    brandFilter = 'all',
+    searchQuery = '',
+    brandNames = () => [],
+  }: QuotationClientListFilters = {},
+): QuotationClient[] {
+  const query = searchQuery.trim();
+  return clients.filter((client) => {
+    if (statusFilter !== 'all' && client.status !== statusFilter) return false;
+    if (brandFilter !== 'all' && !client.brandIds.includes(brandFilter)) return false;
+    if (!query) return true;
+    const q = query.toLowerCase();
+    return (
+      client.displayName.toLowerCase().includes(q) ||
+      client.companyNameZh.includes(query) ||
+      client.companyNameEn.toLowerCase().includes(q) ||
+      client.contactPerson.toLowerCase().includes(q) ||
+      (client.latestProject?.displayName || '').toLowerCase().includes(q) ||
+      brandNames(client.brandIds).some((name) => name.toLowerCase().includes(q))
+    );
+  });
+}
+
 export type QuotationClientInput = Omit<
   QuotationClient,
   'id' | 'latestProject' | 'createdAt' | 'updatedAt'

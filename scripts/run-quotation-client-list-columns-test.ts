@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { selectLatestProjectsByClient } from '../src/data/quotationClientList';
+import {
+  filterQuotationClients,
+  selectLatestProjectsByClient,
+  type QuotationClient,
+} from '../src/data/quotationClientList';
 import {
   buildQuotationProjectHash,
   buildQuotationProjectHref,
@@ -31,6 +35,11 @@ assert.deepEqual(headers, [
 
 assert.match(crmSrc, /function BrandBadge/);
 assert.match(crmSrc, /bg-teal-50 text-teal-700/);
+assert.match(crmSrc, /filterQuotationClients/);
+assert.match(crmSrc, /所有品牌/);
+assert.match(crmSrc, /brandFilter/);
+assert.match(crmSrc, /setBrandFilter/);
+assert.match(crmSrc, /aria-label="篩選品牌"/);
 assert.match(crmSrc, /latestProject\.displayName/);
 assert.match(crmSrc, /buildQuotationProjectHref/);
 assert.match(crmSrc, /target="_blank"/);
@@ -76,6 +85,81 @@ const latest = selectLatestProjectsByClient([
 assert.equal(latest.c1?.id, 'new');
 assert.equal(latest.c1?.displayName, '最新網站改版');
 assert.equal(latest.c2?.displayName, '活動提案');
+
+const sampleClients: QuotationClient[] = [
+  {
+    id: 'c-bwt',
+    displayName: 'BWT 客戶',
+    companyNameZh: 'BWT 公司',
+    companyNameEn: 'BWT Co',
+    brandIds: ['brand-bwt'],
+    contactPerson: 'Amy',
+    phone: '',
+    email: '',
+    address: '',
+    inquiryDate: '2026-01-01',
+    status: 'active',
+    latestProject: { id: 'p1', displayName: 'BWT SEM', status: 'confirmed' },
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'c-bwl',
+    displayName: 'BWL 客戶',
+    companyNameZh: 'BWL 公司',
+    companyNameEn: 'BWL Co',
+    brandIds: ['brand-bwl', 'brand-bwt'],
+    contactPerson: 'Ben',
+    phone: '',
+    email: '',
+    address: '',
+    inquiryDate: '2026-01-02',
+    status: 'prospect',
+    latestProject: { id: 'p2', displayName: 'BWL branding design', status: 'initial' },
+    createdAt: '2026-01-02T00:00:00.000Z',
+    updatedAt: '2026-01-02T00:00:00.000Z',
+  },
+  {
+    id: 'c-none',
+    displayName: '無品牌客戶',
+    companyNameZh: '獨立公司',
+    companyNameEn: 'Indie Co',
+    brandIds: [],
+    contactPerson: 'Cara',
+    phone: '',
+    email: '',
+    address: '',
+    inquiryDate: '2026-01-03',
+    status: 'inactive',
+    latestProject: null,
+    createdAt: '2026-01-03T00:00:00.000Z',
+    updatedAt: '2026-01-03T00:00:00.000Z',
+  },
+];
+
+assert.deepEqual(
+  filterQuotationClients(sampleClients).map((c) => c.id),
+  ['c-bwt', 'c-bwl', 'c-none'],
+);
+assert.deepEqual(
+  filterQuotationClients(sampleClients, { brandFilter: 'brand-bwt' }).map((c) => c.id),
+  ['c-bwt', 'c-bwl'],
+);
+assert.deepEqual(
+  filterQuotationClients(sampleClients, { brandFilter: 'brand-bwl' }).map((c) => c.id),
+  ['c-bwl'],
+);
+assert.deepEqual(
+  filterQuotationClients(sampleClients, {
+    brandFilter: 'brand-bwt',
+    statusFilter: 'prospect',
+  }).map((c) => c.id),
+  ['c-bwl'],
+);
+assert.deepEqual(
+  filterQuotationClients(sampleClients, { brandFilter: 'missing-brand' }).map((c) => c.id),
+  [],
+);
 
 const store = new Map<string, string>();
 const memoryStorage = {

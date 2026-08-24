@@ -7,6 +7,7 @@ import { useQuotationClientList } from '@/hooks/useQuotationClientList';
 import { useBrands } from '@/hooks/useBrands';
 import { buildQuotationProjectHref } from '@/lib/quotationProjectNavigation';
 import {
+  filterQuotationClients,
   quotationClientStatusConfig,
   type QuotationClient,
   type QuotationClientInput,
@@ -32,6 +33,7 @@ export function CRMModule({ subModule }: { subModule?: string }) {
     ids.map((id) => ({ id, label: brandLabel(id) })).filter((item) => item.label);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [brandFilter, setBrandFilter] = useState<string>('all');
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState<QuotationClient | null>(null);
   const [saving, setSaving] = useState(false);
@@ -49,20 +51,15 @@ export function CRMModule({ subModule }: { subModule?: string }) {
 
   const { title, subtitle } = getTitle();
 
-  const filtered = clients.filter((c) => {
-    if (statusFilter !== 'all' && c.status !== statusFilter) return false;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return (
-        c.displayName.toLowerCase().includes(q) ||
-        c.companyNameZh.includes(searchQuery) ||
-        c.companyNameEn.toLowerCase().includes(q) ||
-        c.contactPerson.toLowerCase().includes(q) ||
-        (c.latestProject?.displayName || '').toLowerCase().includes(q) ||
-        brandLabels(c.brandIds).some((name) => name.toLowerCase().includes(q))
-      );
-    }
-    return true;
+  const brandOptions = brands.filter(
+    (b) => b.isActive || clients.some((c) => c.brandIds.includes(b.id)),
+  );
+
+  const filtered = filterQuotationClients(clients, {
+    statusFilter,
+    brandFilter,
+    searchQuery,
+    brandNames: brandLabels,
   });
 
   const activeCount = clients.filter((c) => c.status === 'active').length;
@@ -143,8 +140,22 @@ export function CRMModule({ subModule }: { subModule?: string }) {
           />
         </div>
         <select
+          value={brandFilter}
+          onChange={(e) => setBrandFilter(e.target.value)}
+          aria-label="篩選品牌"
+          className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white"
+        >
+          <option value="all">所有品牌</option>
+          {brandOptions.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.displayName || b.brandCode}
+            </option>
+          ))}
+        </select>
+        <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
+          aria-label="篩選狀態"
           className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white"
         >
           <option value="all">所有狀態</option>
