@@ -101,15 +101,15 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
 
   return (
     <div className="fixed inset-0 m-0 bg-black/50 flex items-center justify-center z-[100]">
-      <div className="bg-white rounded-md p-6 w-full max-w-lg shadow-xl max-h-[85vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-5">
+      <div className="bg-white rounded-md w-full max-w-lg shadow-xl max-h-[85vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h3 className="text-[18px] font-bold">{editingClient ? '編輯客戶' : '新增客戶'}</h3>
           <button type="button" onClick={onClose} className="p-1 hover:bg-muted rounded transition-colors">
             <X size={18} />
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-6 py-4">
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1">所屬品牌 *</label>
             <div className="flex flex-wrap gap-2">
@@ -250,7 +250,7 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 pt-5 mt-5 border-t border-border">
+        <div className="flex justify-end gap-3 px-6 py-3 border-t border-border shrink-0 bg-white">
           <Button variant="secondary" onClick={onClose} disabled={saving}>
             取消
           </Button>

@@ -273,7 +273,7 @@ function AddArticleModal({
 
   return (
     <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[80vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[80vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="text-[16px] font-bold">新增文章到此網站</h3>
@@ -297,7 +297,7 @@ function AddArticleModal({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
           {mode === 'existing' ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm bg-white">
@@ -964,7 +964,7 @@ function UnmatchedAdsDomainsModal({
 }) {
   return (
     <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[860px] max-h-[85vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[860px] max-h-[85vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
             <h3 className="text-[16px] font-bold">未連結的廣告網域</h3>
@@ -976,7 +976,7 @@ function UnmatchedAdsDomainsModal({
             <X size={16} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-3">
           {domains.length === 0 ? (
             <div className="text-[13px] text-muted-foreground py-8 text-center">沒有待處理網域</div>
           ) : (
@@ -1174,7 +1174,7 @@ function WebsiteFormModal({
 
   return (
     <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[85vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[85vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="text-[16px] font-bold">{mode === 'add' ? '新增網站/系統' : '編輯網站/系統'}</h3>
@@ -1182,7 +1182,7 @@ function WebsiteFormModal({
         </div>
 
         {/* Form Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
           {/* Profile Type */}
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1">類型 *</label>
@@ -2165,12 +2165,12 @@ function AddWebsiteToArticleModal({
 
   return (
     <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[560px] max-h-[70vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[560px] max-h-[70vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="text-[16px] font-bold">加入其他網站</h3>
           <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-3">
           <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm bg-white">
             <Search size={14} className="text-muted-foreground" />
             <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground" placeholder="搜尋網站名稱..." />
@@ -2412,7 +2412,7 @@ function BatchAddToWebsiteModal({
 
   return (
     <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[540px] max-h-[70vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[540px] max-h-[70vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
             <h3 className="text-[16px] font-bold">批量加入網站</h3>
@@ -2420,7 +2420,7 @@ function BatchAddToWebsiteModal({
           </div>
           <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-3">
           <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm bg-white">
             <Search size={14} className="text-muted-foreground" />
             <input value={search} onChange={e => setSearch(e.target.value)} className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground" placeholder="搜尋網站..." />
@@ -2527,13 +2527,13 @@ function CreateArticleModal({
 
   return (
     <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[85vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[85vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="text-[16px] font-bold">新增文章</h3>
           <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1">文章標題 *</label>
             <input
@@ -2908,7 +2908,7 @@ function SubmitCompleteModal({
 
   return (
     <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[540px] max-h-[75vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[540px] max-h-[75vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
             <h3 className="text-[16px] font-bold">提交完成</h3>
@@ -2916,7 +2916,7 @@ function SubmitCompleteModal({
           </div>
           <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
           <div className="bg-teal-50 rounded-md p-3 border border-teal-200">
             <p className="text-[12px] text-teal-700">選擇要將此文章關聯到的網站，系統將自動建立文章記錄並關聯。</p>
           </div>

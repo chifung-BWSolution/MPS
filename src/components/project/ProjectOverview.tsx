@@ -194,13 +194,13 @@ function ProjectFormModal({
 
   return (
     <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[85vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[85vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="text-[16px] font-bold">{mode === 'add' ? '新增項目' : '編輯項目'}</h3>
           <button type="button" onClick={onClose} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
           {showCategory && (
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1">項目類型 *</label>

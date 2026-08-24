@@ -229,12 +229,12 @@ function PaymentRecordModal({ invoice, onSave, onClose }: { invoice: Invoice; on
 
   return (
     <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[450px] p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-5">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[450px] max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h3 className="text-[18px] font-bold">記錄付款</h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
         </div>
-        <div className="space-y-4">
+        <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-6 py-4">
           <div className="bg-muted/30 rounded-md p-3 text-[13px] space-y-1">
             <div className="flex justify-between"><span className="text-muted-foreground">發票</span><span className="font-medium">{invoice.invoiceNumber}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">客戶</span><span>{invoice.client}</span></div>
@@ -262,7 +262,7 @@ function PaymentRecordModal({ invoice, onSave, onClose }: { invoice: Invoice; on
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none bg-white" rows={2} placeholder="如：第一期付款..." />
           </div>
         </div>
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border/50">
+        <div className="flex justify-end gap-3 px-6 py-3 border-t border-border/50 shrink-0 bg-white">
           <button onClick={onClose} className="px-4 py-2 border border-border rounded-md text-[13px] font-medium hover:bg-muted/50 transition-colors">取消</button>
           <button onClick={handleSubmit} disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > remaining} className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             <Save size={13} /> 確認付款
@@ -279,17 +279,19 @@ function ReceiptUploadModal({ invoice, onUpload, onClose }: { invoice: Invoice; 
 
   return (
     <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[400px] p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-5">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[400px] max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h3 className="text-[18px] font-bold">上傳收據</h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
         </div>
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
         <p className="text-[13px] text-muted-foreground mb-4">發票：{invoice.invoiceNumber} | 客戶：{invoice.client}</p>
         <div className="border-2 border-dashed border-border rounded-md p-8 text-center cursor-pointer hover:border-teal-400 transition-colors" onClick={() => setFileName(`receipt_${invoice.invoiceNumber}.pdf`)}>
           <Upload size={24} className="mx-auto text-muted-foreground mb-2" />
           {fileName ? (<p className="text-[13px] text-teal-600 font-medium">{fileName}</p>) : (<p className="text-[13px] text-muted-foreground">點擊選擇檔案（模擬上傳）</p>)}
         </div>
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border/50">
+        </div>
+        <div className="flex justify-end gap-3 px-6 py-3 border-t border-border/50 shrink-0 bg-white">
           <button onClick={onClose} className="px-4 py-2 border border-border rounded-md text-[13px] font-medium hover:bg-muted/50 transition-colors">取消</button>
           <button onClick={() => onUpload(invoice.id)} disabled={!fileName} className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             <Upload size={13} /> 確認上傳
@@ -417,12 +419,12 @@ function CreditCardFormModal({ card, onSave, onClose }: { card: CreditCardEntry 
 
   return (
     <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[500px] p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-5">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[500px] max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h3 className="text-[18px] font-bold">{card ? '編輯信用卡' : '新增信用卡'}</h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
         </div>
-        <div className="space-y-4">
+        <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-6 py-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">所屬公司 *</label>
@@ -467,7 +469,7 @@ function CreditCardFormModal({ card, onSave, onClose }: { card: CreditCardEntry 
             </div>
           </div>
         </div>
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border/50">
+        <div className="flex justify-end gap-3 px-6 py-3 border-t border-border/50 shrink-0 bg-white">
           <button onClick={onClose} className="px-4 py-2 border border-border rounded-md text-[13px] font-medium hover:bg-muted/50 transition-colors">取消</button>
           <button onClick={() => onSave(formData)} disabled={!formData.companyName || !formData.lastFour || !formData.bank} className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             <Save size={13} /> {card ? '儲存' : '新增'}

@@ -127,7 +127,7 @@ export function ProductionEditModal({ open, video, onClose, onSave }: Props) {
       title={`編輯 — ${video.videoCode}`}
       size="lg"
     >
-      <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+      <div className="space-y-4">
         {formError && (
           <p className="text-[12px] text-rose-600 bg-rose-50 border border-rose-200 rounded px-3 py-2">{formError}</p>
         )}

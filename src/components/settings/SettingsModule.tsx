@@ -629,15 +629,15 @@ function ProfileSection() {
       {/* Add Role Modal */}
       {showAddRole && (
         <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={() => setShowAddRole(false)}>
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-[550px] p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-[550px] max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
               <h3 className="text-[18px] font-bold">新增角色</h3>
               <button onClick={() => setShowAddRole(false)} className="text-muted-foreground hover:text-foreground">
                 <X size={18} />
               </button>
             </div>
 
-            <div className="space-y-5">
+            <div className="space-y-5 flex-1 min-h-0 overflow-y-auto px-6 py-4">
               {/* Role Selection */}
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-2">選擇角色 *</label>
@@ -718,7 +718,7 @@ function ProfileSection() {
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-border/50">
+            <div className="flex items-center justify-end gap-3 px-6 py-3 border-t border-border/50 shrink-0 bg-white">
               <button
                 onClick={() => setShowAddRole(false)}
                 className="px-4 py-2 border border-border rounded-md text-[13px] font-medium hover:bg-muted/50 transition-colors"
@@ -885,14 +885,14 @@ function UserModal({ user, onSave, onClose }: { user: UserItem | null; onSave: (
 
   return (
     <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[500px] p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-5">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[500px] max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h3 className="text-[18px] font-bold">{user ? '編輯使用者' : '新增使用者'}</h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <X size={18} />
           </button>
         </div>
-        <div className="space-y-4">
+        <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-6 py-4">
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">姓名 *</label>
             <input
@@ -939,7 +939,7 @@ function UserModal({ user, onSave, onClose }: { user: UserItem | null; onSave: (
             </div>
           </div>
         </div>
-        <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-border/50">
+        <div className="flex items-center justify-end gap-3 px-6 py-3 border-t border-border/50 shrink-0 bg-white">
           <button onClick={onClose} className="px-4 py-2 border border-border rounded-md text-[13px] font-medium hover:bg-muted/50 transition-colors duration-200">
             取消
           </button>
@@ -1362,14 +1362,14 @@ function CreditCardModal({ card, onSave, onClose }: { card: CreditCardItem | nul
 
   return (
     <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[500px] p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-5">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[500px] max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h3 className="text-[18px] font-bold">{card ? '編輯信用卡' : '新增信用卡'}</h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <X size={18} />
           </button>
         </div>
-        <div className="space-y-4">
+        <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-6 py-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">所屬公司 *</label>
@@ -1459,7 +1459,7 @@ function CreditCardModal({ card, onSave, onClose }: { card: CreditCardItem | nul
             </div>
           </div>
         </div>
-        <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-border/50">
+        <div className="flex items-center justify-end gap-3 px-6 py-3 border-t border-border/50 shrink-0 bg-white">
           <button onClick={onClose} className="px-4 py-2 border border-border rounded-md text-[13px] font-medium hover:bg-muted/50 transition-colors duration-200">
             取消
           </button>
@@ -1606,12 +1606,12 @@ function QuotationTypeModal({ editingType, onSave, onClose }: {
 
   return (
     <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[420px] p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-5">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[420px] max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h3 className="text-[18px] font-bold">{editingType ? '編輯報價類型' : '新增報價類型'}</h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
         </div>
-        <div className="space-y-4">
+        <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-6 py-4">
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">中文名稱 *</label>
             <input
@@ -1631,7 +1631,7 @@ function QuotationTypeModal({ editingType, onSave, onClose }: {
             />
           </div>
         </div>
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border/50">
+        <div className="flex justify-end gap-3 px-6 py-3 border-t border-border/50 shrink-0 bg-white">
           <button onClick={onClose} className="px-4 py-2 border border-border rounded-md text-[13px] font-medium hover:bg-muted/50 transition-colors">取消</button>
           <button
             onClick={() => { if (name.trim() && nameEn.trim()) onSave({ name: name.trim(), nameEn: nameEn.trim() }); }}

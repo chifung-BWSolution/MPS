@@ -191,8 +191,8 @@ export function KolCooperatedModule() {
 
       {(showForm || editingRow) && (
         <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-5 py-4 border-b sticky top-0 bg-white">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b shrink-0 bg-white">
               <div>
                 <h2 className="text-[16px] font-semibold">
                   {editingRow ? '編輯合作記錄' : '新增合作記錄'}
@@ -209,7 +209,7 @@ export function KolCooperatedModule() {
                 <X size={18} />
               </button>
             </div>
-            <div className="px-5 py-4">
+            <div className="px-5 py-4 flex-1 min-h-0 flex flex-col">
               <KolCooperationForm
                 key={editingRow?.id || 'new'}
                 createdBy={createdBy}

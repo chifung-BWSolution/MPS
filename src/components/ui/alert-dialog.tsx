@@ -3,6 +3,7 @@ import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog"
 
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
+import { splitDialogChrome } from "@/components/ui/modal-layout"
 
 const AlertDialog = AlertDialogPrimitive.Root
 
@@ -28,19 +29,43 @@ AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName
 const AlertDialogContent = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>
->(({ className, ...props }, ref) => (
+>(({ className, children, ...props }, ref) => {
+  const { headers, body, footers, structured } = splitDialogChrome(children)
+
+  return (
   <AlertDialogPortal>
     <AlertDialogOverlay />
     <AlertDialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-[100] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
-        className
+        "fixed left-[50%] top-[50%] z-[100] w-full max-w-lg translate-x-[-50%] translate-y-[-50%] border bg-background shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        structured
+          ? "flex max-h-[90vh] flex-col gap-0 p-0"
+          : "grid max-h-[90vh] gap-4 p-6",
+        className,
+        "overflow-hidden"
       )}
       {...props}
-    />
+    >
+      {structured ? (
+        <>
+          {headers.length > 0 ? (
+            <div className="shrink-0 px-6 pt-6">{headers}</div>
+          ) : null}
+          {body ? (
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">{body}</div>
+          ) : null}
+          {footers.length > 0 ? (
+            <div className="shrink-0 border-t border-border bg-background px-6 py-4">{footers}</div>
+          ) : null}
+        </>
+      ) : (
+        children
+      )}
+    </AlertDialogPrimitive.Content>
   </AlertDialogPortal>
-))
+  )
+})
 AlertDialogContent.displayName = AlertDialogPrimitive.Content.displayName
 
 const AlertDialogHeader = ({

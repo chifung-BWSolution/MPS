@@ -337,12 +337,12 @@ function VideoDetail({ video, onBack }: { video: any; onBack: () => void }) {
       {/* Distribution Modal */}
       {showDistModal && (
         <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={() => setShowDistModal(false)}>
-          <div className="bg-white rounded-lg shadow-xl p-6 w-[480px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
+          <div className="bg-white rounded-lg shadow-xl w-[480px] max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
               <h3 className="text-[16px] font-bold">{editingDist ? '編輯發佈記錄' : '新增發佈記錄'}</h3>
               <button onClick={() => setShowDistModal(false)} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-6 py-4">
               <div>
                 <label className="block text-[12px] font-medium mb-1">發佈平台 <span className="text-rose-500">*</span></label>
                 <select value={distForm.platform} onChange={e => setDistForm(f => ({ ...f, platform: e.target.value }))}
@@ -386,7 +386,7 @@ function VideoDetail({ video, onBack }: { video: any; onBack: () => void }) {
                   rows={2} placeholder="選填備註..." className="w-full px-3 py-2 border border-border rounded text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 resize-none" />
               </div>
             </div>
-            <div className="flex justify-end gap-2 mt-5">
+            <div className="flex justify-end gap-2 px-6 py-3 border-t border-border shrink-0 bg-white">
               <Button variant="outline" size="sm" onClick={() => setShowDistModal(false)}>取消</Button>
               <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white"
                 onClick={saveDist}
@@ -401,12 +401,12 @@ function VideoDetail({ video, onBack }: { video: any; onBack: () => void }) {
       {/* Link Website Modal */}
       {showLinkModal && (
         <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={() => setShowLinkModal(false)}>
-          <div className="bg-white rounded-lg shadow-xl p-6 w-[480px] max-h-[70vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white rounded-lg shadow-xl w-[480px] max-h-[70vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
               <h3 className="text-[16px] font-bold">選擇關聯網站（可多選）</h3>
               <button onClick={() => setShowLinkModal(false)} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 flex-1 min-h-0 overflow-y-auto px-6 py-4">
               {websiteProfiles.map(wp => (
                 <label key={wp.id} className="flex items-center gap-3 p-3 rounded-md border border-border hover:bg-muted/30 cursor-pointer transition-colors duration-200">
                   <input
@@ -425,7 +425,9 @@ function VideoDetail({ video, onBack }: { video: any; onBack: () => void }) {
                 </label>
               ))}
             </div>
-            <button onClick={() => setShowLinkModal(false)} className="mt-4 w-full py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors duration-200">確認</button>
+            <div className="px-6 py-3 border-t border-border shrink-0 bg-white">
+              <button onClick={() => setShowLinkModal(false)} className="w-full py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors duration-200">確認</button>
+            </div>
           </div>
         </div>
       )}
@@ -433,15 +435,17 @@ function VideoDetail({ video, onBack }: { video: any; onBack: () => void }) {
       {/* Link Project Modal */}
       {showProjectModal && (
         <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={() => setShowProjectModal(false)}>
-          <div className="bg-white rounded-lg shadow-xl p-6 w-[480px] max-h-[70vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white rounded-lg shadow-xl w-[480px] max-h-[70vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
               <h3 className="text-[16px] font-bold">選擇關聯項目（可多選）</h3>
               <button onClick={() => setShowProjectModal(false)} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 flex-1 min-h-0 overflow-y-auto px-6 py-4">
               <p className="text-[12px] text-muted-foreground">可從項目列表中選擇關聯的項目。</p>
             </div>
-            <button onClick={() => setShowProjectModal(false)} className="mt-4 w-full py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors duration-200">確認</button>
+            <div className="px-6 py-3 border-t border-border shrink-0 bg-white">
+              <button onClick={() => setShowProjectModal(false)} className="w-full py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors duration-200">確認</button>
+            </div>
           </div>
         </div>
       )}
@@ -527,7 +531,7 @@ function AddVideoModal({ onClose, onSave }: { onClose: () => void; onSave: (vide
   return (
     <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={onClose}>
       <div
-        className="bg-white rounded-lg shadow-xl w-[560px] max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-lg shadow-xl w-[560px] max-h-[90vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -542,7 +546,7 @@ function AddVideoModal({ onClose, onSave }: { onClose: () => void; onSave: (vide
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5 space-y-4">
+        <div className="px-6 py-5 space-y-4 flex-1 min-h-0 overflow-y-auto">
           {/* Title */}
           <div>
             <label className="block text-[12px] font-medium mb-1">影片標題 <span className="text-rose-500">*</span></label>
@@ -703,7 +707,7 @@ function AddVideoModal({ onClose, onSave }: { onClose: () => void; onSave: (vide
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-slate-50/60">
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border bg-slate-50/60 shrink-0">
           <Button variant="outline" size="sm" onClick={onClose}>取消</Button>
           <Button
             size="sm"

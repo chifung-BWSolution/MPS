@@ -350,7 +350,7 @@ export function WebsiteVideosTab({
 
       {showModal && (
         <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[85vh] flex flex-col">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[85vh] flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
               <div>
                 <h3 className="text-[16px] font-bold">關聯影片</h3>
@@ -404,7 +404,7 @@ export function WebsiteVideosTab({
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-6 py-3 min-h-[200px]">
+            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-3 min-h-[200px]">
               {loadingLinkable ? (
                 <div className="flex items-center justify-center py-10 text-muted-foreground gap-2">
                   <Loader2 size={16} className="animate-spin" />

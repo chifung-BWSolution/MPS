@@ -5,6 +5,7 @@ import {
   ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { splitModalChrome } from '@/components/ui/modal-layout';
 import { supabase } from '@/lib/supabase';
 import { getSiteOrigin } from '@/lib/siteUrl';
 import { useAuth } from '@/context/AuthContext';
@@ -1735,18 +1736,23 @@ function Modal({ title, onClose, children, width = 'max-w-[640px]', headerAction
   width?: string;
   headerAction?: React.ReactNode;
 }) {
+  const split = splitModalChrome(children);
   return (
     <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-      <div className={cn('bg-white rounded-lg shadow-xl w-full max-h-[85vh] flex flex-col', width)}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <div className={cn('bg-white rounded-lg shadow-xl w-full max-h-[85vh] flex flex-col overflow-hidden', width)}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h3 className="text-[16px] font-bold">{title}</h3>
           <div className="flex items-center gap-2">
             {headerAction}
             <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-4">{children}</div>
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">{split.body}</div>
+        {split.footer ? (
+          <div className="shrink-0 px-6 py-3 border-t border-border bg-white">{split.footer}</div>
+        ) : null}
       </div>
+      {split.extras}
     </div>
   );
 }

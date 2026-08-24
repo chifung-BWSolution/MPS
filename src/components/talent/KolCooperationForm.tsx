@@ -355,7 +355,8 @@ export function KolCooperationForm({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col min-h-0 flex-1">
+      <div className="space-y-4 flex-1 min-h-0 overflow-y-auto pr-0.5">
       <KolPicker value={kolId} fixedKol={fixedKol} onChange={(id) => setKolId(id)} />
 
       <div className="space-y-1">
@@ -394,7 +395,8 @@ export function KolCooperationForm({
         />
       </div>
 
-      <div className="flex justify-end gap-2 pt-1">
+      </div>
+      <div className="flex justify-end gap-2 pt-3 mt-3 border-t border-border shrink-0">
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
             取消

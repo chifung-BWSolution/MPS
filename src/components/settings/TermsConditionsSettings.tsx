@@ -290,13 +290,13 @@ function TermsTemplateModal({ editingTemplate, onSave, onClose }: {
 
   return (
     <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[600px] p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-5">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[600px] max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h3 className="text-[18px] font-bold">{editingTemplate ? '編輯條款範本' : '新增條款範本'}</h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-6 py-4">
           {/* Name */}
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">範本名稱 *</label>
@@ -350,7 +350,7 @@ function TermsTemplateModal({ editingTemplate, onSave, onClose }: {
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border/50">
+        <div className="flex justify-end gap-3 px-6 py-3 border-t border-border/50 shrink-0 bg-white">
           <button onClick={onClose} className="px-4 py-2 border border-border rounded-md text-[13px] font-medium hover:bg-muted/50 transition-colors">取消</button>
           <button
             onClick={handleSubmit}

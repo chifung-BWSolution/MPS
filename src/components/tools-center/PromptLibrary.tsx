@@ -233,9 +233,11 @@ export function PromptLibrary() {
       {/* Add Modal */}
       {showAddModal && (
         <div className="fixed inset-0 m-0 bg-black/50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-lg w-full max-w-lg p-6 space-y-4 shadow-xl">
-            <h2 className="text-lg font-bold">新增 Prompt</h2>
-            <div className="space-y-3">
+          <div className="bg-white rounded-lg w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col shadow-xl">
+            <div className="px-6 py-4 border-b border-border shrink-0">
+              <h2 className="text-lg font-bold">新增 Prompt</h2>
+            </div>
+            <div className="space-y-3 flex-1 min-h-0 overflow-y-auto px-6 py-4">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">標題</label>
                 <input
@@ -289,7 +291,7 @@ export function PromptLibrary() {
                 </label>
               </div>
             </div>
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 px-6 py-3 border-t border-border shrink-0 bg-white">
               <button
                 onClick={() => setShowAddModal(false)}
                 className="px-4 py-2 text-sm border border-border rounded-md hover:bg-muted transition-colors"
@@ -310,9 +312,11 @@ export function PromptLibrary() {
       {/* Edit Modal */}
       {editingPrompt && (
         <div className="fixed inset-0 m-0 bg-black/50 flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-lg w-full max-w-lg p-6 space-y-4 shadow-xl">
-            <h2 className="text-lg font-bold">編輯 Prompt</h2>
-            <div className="space-y-3">
+          <div className="bg-white rounded-lg w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col shadow-xl">
+            <div className="px-6 py-4 border-b border-border shrink-0">
+              <h2 className="text-lg font-bold">編輯 Prompt</h2>
+            </div>
+            <div className="space-y-3 flex-1 min-h-0 overflow-y-auto px-6 py-4">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">標題</label>
                 <input
@@ -363,7 +367,7 @@ export function PromptLibrary() {
                 </label>
               </div>
             </div>
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 px-6 py-3 border-t border-border shrink-0 bg-white">
               <button
                 onClick={() => setEditingPrompt(null)}
                 className="px-4 py-2 text-sm border border-border rounded-md hover:bg-muted transition-colors"

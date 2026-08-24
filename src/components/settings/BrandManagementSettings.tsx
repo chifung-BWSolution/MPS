@@ -548,7 +548,7 @@ function BrandModal({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-5">
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">所屬公司 *</label>
             <select

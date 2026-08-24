@@ -312,13 +312,13 @@ export function DistributionTrackingModule() {
       {/* Add / Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={() => setShowModal(false)}>
-          <div className="bg-white rounded-lg shadow-xl p-6 w-[640px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
+          <div className="bg-white rounded-lg shadow-xl w-[640px] max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
               <h3 className="text-[16px] font-bold">{editingGroup ? '編輯發佈記錄' : '新增發佈記錄'}</h3>
               <button onClick={() => setShowModal(false)} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 flex-1 min-h-0 overflow-y-auto px-6 py-4">
               <div>
                 <label className="block text-[12px] font-medium mb-1">影片名稱 <span className="text-rose-500">*</span></label>
                 <input
@@ -428,7 +428,7 @@ export function DistributionTrackingModule() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 mt-5">
+            <div className="flex justify-end gap-2 px-6 py-3 border-t border-border shrink-0 bg-white">
               <Button variant="outline" size="sm" onClick={() => setShowModal(false)}>取消</Button>
               <Button
                 size="sm"

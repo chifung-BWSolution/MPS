@@ -121,14 +121,14 @@ function TaskModal({ item, onClose, onSave }: TaskModalProps) {
 
   return (
     <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h2 className="text-[16px] font-bold">{isEdit ? '編輯拍攝任務' : '新增拍攝任務'}</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
             <X size={18} />
           </button>
         </div>
-        <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div className="px-6 py-5 space-y-4 flex-1 min-h-0 overflow-y-auto">
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1">影片標題 *</label>
             <input
@@ -245,7 +245,7 @@ function TaskModal({ item, onClose, onSave }: TaskModalProps) {
             </div>
           </div>
         </div>
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-muted/20">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border bg-muted/20 shrink-0">
           <button onClick={onClose} className="px-4 py-2 text-[13px] text-muted-foreground hover:text-foreground transition-colors">取消</button>
           <button
             onClick={handleSubmit}

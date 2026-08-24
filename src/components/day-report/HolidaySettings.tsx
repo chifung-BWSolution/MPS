@@ -850,15 +850,15 @@ function AddEditModal({
 }) {
   return (
     <div className="fixed inset-0 m-0 bg-black/40 z-[100] flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-[560px] max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-[560px] max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
           <h3 className="text-[16px] font-bold">{isEditing ? '編輯自訂日' : '新增自訂日'}</h3>
           <button onClick={onCancel} className="p-1 hover:bg-muted rounded-md transition-colors">
             <X size={18} />
           </button>
         </div>
 
-        <div className="px-6 py-5 space-y-4">
+        <div className="px-6 py-5 space-y-4 flex-1 min-h-0 overflow-y-auto">
           {/* Date */}
           <div>
             <label className="text-[12px] font-semibold text-muted-foreground block mb-1.5">日期 *</label>
@@ -973,7 +973,7 @@ function AddEditModal({
           </div>
         </div>
 
-        <div className="px-6 py-3 border-t border-border flex items-center justify-end gap-2">
+        <div className="px-6 py-3 border-t border-border flex items-center justify-end gap-2 shrink-0 bg-white">
           <button 
             onClick={onCancel}
             className="px-4 py-2 text-[12px] font-medium text-muted-foreground hover:bg-muted rounded-md transition-colors"

@@ -141,12 +141,12 @@ function ChannelDetail({ channel, onBack }: { channel: any; onBack: () => void }
       {/* Link Modal */}
       {showLinkModal && (
         <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={() => setShowLinkModal(false)}>
-          <div className="bg-white rounded-lg shadow-xl p-6 w-[480px] max-h-[70vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white rounded-lg shadow-xl w-[480px] max-h-[70vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
               <h3 className="text-[16px] font-bold">選擇關聯網站（可多選）</h3>
               <button onClick={() => setShowLinkModal(false)} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 flex-1 min-h-0 overflow-y-auto px-6 py-4">
               {websiteProfiles.map(wp => (
                 <label key={wp.id} className="flex items-center gap-3 p-3 rounded-md border border-border hover:bg-muted/30 cursor-pointer transition-colors duration-200">
                   <input
@@ -165,7 +165,9 @@ function ChannelDetail({ channel, onBack }: { channel: any; onBack: () => void }
                 </label>
               ))}
             </div>
-            <button onClick={() => setShowLinkModal(false)} className="mt-4 w-full py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors duration-200">確認</button>
+            <div className="px-6 py-3 border-t border-border shrink-0 bg-white">
+              <button onClick={() => setShowLinkModal(false)} className="w-full py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors duration-200">確認</button>
+            </div>
           </div>
         </div>
       )}

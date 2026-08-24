@@ -134,7 +134,7 @@ export function CompanyManagement() {
                 新增公司
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[560px] max-h-[85vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-[560px]">
               <DialogHeader>
                 <DialogTitle>{editingCompany ? '編輯公司' : '新增公司'}</DialogTitle>
               </DialogHeader>

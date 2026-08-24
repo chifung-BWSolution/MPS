@@ -1,6 +1,9 @@
 import { ReactNode } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
 import { FixedOverlay } from '@/components/ui/fixed-overlay';
+import { CrudModalFooter, splitModalChrome } from '@/components/ui/modal-layout';
+
+export { CrudModalFooter };
 
 interface CrudModalProps {
   isOpen: boolean;
@@ -9,9 +12,10 @@ interface CrudModalProps {
   children: ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   headerActions?: ReactNode;
+  footer?: ReactNode;
 }
 
-export function CrudModal({ isOpen, onClose, title, children, size = 'md', headerActions }: CrudModalProps) {
+export function CrudModal({ isOpen, onClose, title, children, size = 'md', headerActions, footer }: CrudModalProps) {
   if (!isOpen) return null;
 
   const sizeClass =
@@ -25,11 +29,14 @@ export function CrudModal({ isOpen, onClose, title, children, size = 'md', heade
             ? 'max-w-[960px] max-h-[92vh]'
             : 'max-w-[550px] max-h-[85vh]';
 
+  const split = splitModalChrome(children);
+  const resolvedFooter = footer ?? split.footer;
+
   return (
     <FixedOverlay className="flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className={`relative bg-white rounded-lg shadow-xl w-full ${sizeClass} mx-4 flex flex-col`}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <div className={`relative bg-white rounded-lg shadow-xl w-full ${sizeClass} mx-4 flex flex-col overflow-hidden`}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h2 className="text-[16px] font-bold">{title}</h2>
           <div className="flex items-center gap-2">
             {headerActions}
@@ -38,10 +45,16 @@ export function CrudModal({ isOpen, onClose, title, children, size = 'md', heade
             </button>
           </div>
         </div>
-        <div className="px-6 py-4 overflow-y-auto flex-1">
-          {children}
+        <div className="px-6 py-4 overflow-y-auto flex-1 min-h-0">
+          {split.body}
         </div>
+        {resolvedFooter ? (
+          <div className="shrink-0 px-6 py-3 border-t border-border bg-white">
+            {resolvedFooter}
+          </div>
+        ) : null}
       </div>
+      {split.extras}
     </FixedOverlay>
   );
 }
