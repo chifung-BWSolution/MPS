@@ -132,6 +132,15 @@ export const quotationClientStatusConfig: Record<
   prospect: { label: '潛在客戶', color: 'text-amber-700', bgColor: 'bg-amber-50' },
 };
 
+export function composeClientDisplayName(
+  input: Pick<QuotationClientInput, 'companyNameZh' | 'companyNameEn' | 'contactPerson' | 'phone'>,
+): string {
+  return [input.companyNameZh, input.companyNameEn, input.contactPerson, input.phone]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(' ');
+}
+
 export const emptyQuotationClientInput = (): QuotationClientInput => ({
   displayName: '',
   companyNameZh: '',

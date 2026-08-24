@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useBrands } from '@/hooks/useBrands';
 import {
+  composeClientDisplayName,
   emptyQuotationClientInput,
   type QuotationClient,
   type QuotationClientInput,
@@ -22,11 +23,14 @@ type Props = {
 export function ClientFormModal({ open, onClose, editingClient, onSave, saving = false }: Props) {
   const { brands, loading: brandsLoading } = useBrands();
   const [formData, setFormData] = useState<QuotationClientInput>(emptyQuotationClientInput());
+  const [displayNameManual, setDisplayNameManual] = useState(false);
 
   const brandOptions = brands.filter((b) => b.isActive || formData.brandIds.includes(b.id));
+  const isCreate = !editingClient;
 
   useEffect(() => {
     if (!open) return;
+    setDisplayNameManual(false);
     if (editingClient) {
       setFormData({
         displayName: editingClient.displayName,
@@ -47,7 +51,19 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
   }, [open, editingClient]);
 
   const updateForm = (field: keyof QuotationClientInput, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => {
+      const next = { ...prev, [field]: value };
+      const sourceFields: Array<keyof QuotationClientInput> = [
+        'companyNameZh',
+        'companyNameEn',
+        'contactPerson',
+        'phone',
+      ];
+      if (isCreate && !displayNameManual && sourceFields.includes(field)) {
+        next.displayName = composeClientDisplayName(next);
+      }
+      return next;
+    });
   };
 
   const toggleBrand = (brandId: string) => {
@@ -60,12 +76,15 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
   };
 
   const handleSubmit = async () => {
-    if (!formData.companyNameZh.trim() || !formData.contactPerson.trim()) {
-      toast.error('請填寫必填欄位（公司名稱、聯絡人）');
+    const displayName = formData.displayName.trim()
+      || (isCreate ? composeClientDisplayName(formData) : '');
+    if (formData.brandIds.length === 0 || !formData.contactPerson.trim() || !displayName) {
+      toast.error('請填寫必填欄位（所屬品牌、聯絡人、顯示名稱）');
       return;
     }
     const saved = await onSave({
       ...formData,
+      displayName,
       brandIds: [...new Set(formData.brandIds)],
     });
     if (saved) {
@@ -92,38 +111,7 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
 
         <div className="space-y-4">
           <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">顯示名稱</label>
-            <Input
-              value={formData.displayName}
-              onChange={(e) => updateForm('displayName', e.target.value)}
-              placeholder="客戶顯示名稱"
-              className="h-9 text-[13px]"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">公司名稱（中文）*</label>
-              <Input
-                value={formData.companyNameZh}
-                onChange={(e) => updateForm('companyNameZh', e.target.value)}
-                placeholder="例：新創科技有限公司"
-                className="h-9 text-[13px]"
-              />
-            </div>
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">公司名稱（英文）</label>
-              <Input
-                value={formData.companyNameEn}
-                onChange={(e) => updateForm('companyNameEn', e.target.value)}
-                placeholder="e.g. TechStart Inc"
-                className="h-9 text-[13px]"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">所屬品牌</label>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">所屬品牌 *</label>
             <div className="flex flex-wrap gap-2">
               {brandsLoading && (
                 <span className="text-[12px] text-muted-foreground">載入品牌…</span>
@@ -152,6 +140,27 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
             )}
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1">公司名稱（中文）</label>
+              <Input
+                value={formData.companyNameZh}
+                onChange={(e) => updateForm('companyNameZh', e.target.value)}
+                placeholder="例：新創科技有限公司"
+                className="h-9 text-[13px]"
+              />
+            </div>
+            <div>
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1">公司名稱（英文）</label>
+              <Input
+                value={formData.companyNameEn}
+                onChange={(e) => updateForm('companyNameEn', e.target.value)}
+                placeholder="e.g. TechStart Inc"
+                className="h-9 text-[13px]"
+              />
+            </div>
+          </div>
+
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1">聯絡人 *</label>
             <Input
@@ -168,6 +177,19 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
               value={formData.phone}
               onChange={(e) => updateForm('phone', e.target.value)}
               placeholder="+852 9123 4567"
+              className="h-9 text-[13px]"
+            />
+          </div>
+
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">顯示名稱 *</label>
+            <Input
+              value={formData.displayName}
+              onChange={(e) => {
+                setDisplayNameManual(true);
+                updateForm('displayName', e.target.value);
+              }}
+              placeholder={isCreate ? '預設為公司名稱、聯絡人與電話' : '客戶顯示名稱'}
               className="h-9 text-[13px]"
             />
           </div>

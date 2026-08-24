@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { QUOTATION_CLIENT_PROJECT_TABLE } from '@/hooks/useQuotationClientProjects';
 import {
+  composeClientDisplayName,
   parseBrandIds,
   selectLatestProjectsByClient,
   serializeBrandIds,
@@ -55,7 +56,7 @@ function mapRow(row: DbRow, latestProject: LatestQuotationClientProject | null =
 function inputToRow(input: QuotationClientInput, id?: string) {
   return {
     ...(id ? { id } : {}),
-    display_name: input.displayName.trim() || input.companyNameZh.trim(),
+    display_name: input.displayName.trim() || composeClientDisplayName(input),
     company_name_zh: input.companyNameZh.trim(),
     company_name_en: input.companyNameEn.trim() || null,
     brand_id: serializeBrandIds(input.brandIds) || null,
