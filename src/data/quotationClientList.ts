@@ -154,9 +154,14 @@ export function seedClientDisplayName(input: QuotationClientInput): QuotationCli
   return { ...input, displayName: composeClientDisplayName(input) };
 }
 
+/** True when 顯示名稱 is empty or still the last auto-composed value. */
+export function isClientDisplayNameFollowing(input: QuotationClientInput): boolean {
+  return !input.displayName.trim() || input.displayName === composeClientDisplayName(input);
+}
+
 /**
- * Keep a user-typed 顯示名稱 as-is. Resume auto-fill only after the field is
- * emptied and a source field (company / contact / phone) changes.
+ * Keep a custom 顯示名稱 as-is. While the field is empty or still matches the
+ * composed source value, keep updating it as company / contact / phone change.
  */
 export function applyClientDisplayNameAutofill(
   prev: QuotationClientInput,
@@ -166,7 +171,7 @@ export function applyClientDisplayNameAutofill(
   const next = { ...prev, [field]: value };
   if (field === 'displayName') return next;
   const isSourceField = (CLIENT_DISPLAY_NAME_SOURCE_FIELDS as readonly string[]).includes(field);
-  if (isSourceField && !prev.displayName.trim()) {
+  if (isSourceField && isClientDisplayNameFollowing(prev)) {
     next.displayName = composeClientDisplayName(next);
   }
   return next;

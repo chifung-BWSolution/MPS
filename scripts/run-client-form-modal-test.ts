@@ -95,13 +95,29 @@ assert.equal(
 
 const cleared = applyClientDisplayNameAutofill(base, 'displayName', '');
 assert.equal(cleared.displayName, '');
+const afterFirstFill = applyClientDisplayNameAutofill(cleared, 'companyNameZh', '新公司');
+assert.equal(afterFirstFill.displayName, '新公司 Amy');
 assert.equal(
-  applyClientDisplayNameAutofill(cleared, 'companyNameZh', '新公司').displayName,
-  '新公司 Amy',
+  applyClientDisplayNameAutofill(afterFirstFill, 'companyNameEn', 'TechStart').displayName,
+  '新公司 TechStart Amy',
+);
+assert.equal(
+  applyClientDisplayNameAutofill(
+    applyClientDisplayNameAutofill(afterFirstFill, 'companyNameEn', 'TechStart'),
+    'phone',
+    '+852 9123 4567',
+  ).displayName,
+  '新公司 TechStart Amy +852 9123 4567',
 );
 assert.equal(
   applyClientDisplayNameAutofill(cleared, 'email', 'a@b.com').displayName,
   '',
+);
+
+const customized = applyClientDisplayNameAutofill(afterFirstFill, 'displayName', '我的客戶');
+assert.equal(
+  applyClientDisplayNameAutofill(customized, 'phone', '+852 1111 2222').displayName,
+  '我的客戶',
 );
 
 console.log('client form modal: ok');
