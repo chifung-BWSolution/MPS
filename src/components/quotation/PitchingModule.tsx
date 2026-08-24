@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, ChevronRight, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil } from 'lucide-react';
+import { Search, Plus, ChevronRight, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
@@ -35,6 +35,7 @@ import {
 } from '@/data/pitchingData';
 import { PitchingBudgetTab } from '@/components/quotation/PitchingBudgetTab';
 import { PitchingFollowUpsTab } from '@/components/quotation/PitchingFollowUpsTab';
+import { PitchingWorkHoursTab } from '@/components/quotation/PitchingWorkHoursTab';
 
 export type PitchingFormValues = {
   clientId: string;
@@ -884,7 +885,7 @@ export function PitchingDetail({
   onConvertToQuote: () => void;
   onSave: (id: string, data: QuotationClientProjectUpdate) => Promise<{ error: { message: string } | null }>;
 }) {
-  const [activeTab, setActiveTab] = useState<'info' | 'followups' | 'quotation' | 'budget'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'followups' | 'hours' | 'quotation' | 'budget'>('info');
   const [draft, setDraft] = useState<DetailDraft>(() => draftFromRecord(record, clientOptions));
   const [saving, setSaving] = useState(false);
   const clientCompany = companyNamesForClient(draft.clientId, clientOptions);
@@ -964,6 +965,7 @@ export function PitchingDetail({
   const tabs = [
     { id: 'info', label: '基本資訊', icon: FileText },
     { id: 'followups', label: '跟進記錄', icon: MessageSquare },
+    { id: 'hours', label: '工作時數', icon: Clock },
     { id: 'quotation', label: '關聯報價單', icon: FileText },
     { id: 'budget', label: '預計收入支出', icon: DollarSign },
   ] as const;
@@ -1132,6 +1134,10 @@ export function PitchingDetail({
           asanaLink={draft.asanaLink || record.asanaLink || ''}
           asanaTaskGid={record.asanaTaskGid}
         />
+      )}
+
+      {activeTab === 'hours' && (
+        <PitchingWorkHoursTab projectId={record.id} />
       )}
 
       {activeTab === 'quotation' && (
