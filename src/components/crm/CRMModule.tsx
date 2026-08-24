@@ -3,10 +3,9 @@ import { Search, Plus, Phone, Mail, Building2, Pencil, Trash2, Loader2 } from 'l
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { ClientFormModal } from '@/components/crm/ClientFormModal';
-import { useApp } from '@/context/AppContext';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
 import { useBrands } from '@/hooks/useBrands';
-import { openQuotationProjectDetail } from '@/lib/quotationProjectNavigation';
+import { buildQuotationProjectHref } from '@/lib/quotationProjectNavigation';
 import {
   quotationClientStatusConfig,
   type QuotationClient,
@@ -22,7 +21,6 @@ function BrandBadge({ label }: { label: string }) {
 }
 
 export function CRMModule({ subModule }: { subModule?: string }) {
-  const { navigateTo } = useApp();
   const { records: clients, loading, addClient, updateClient, deleteClient } = useQuotationClientList();
   const { brands } = useBrands();
   const brandLabel = (id: string) => {
@@ -209,15 +207,14 @@ export function CRMModule({ subModule }: { subModule?: string }) {
                   <td className="px-4 py-3 text-[13px] text-muted-foreground whitespace-nowrap">{client.phone || '—'}</td>
                   <td className="px-4 py-3 text-[13px]">
                     {latestProject ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          openQuotationProjectDetail(latestProject.id, latestProject.status, navigateTo)
-                        }
+                      <a
+                        href={buildQuotationProjectHref(latestProject.id, latestProject.status)}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="text-teal-600 font-medium hover:underline text-left"
                       >
                         {latestProject.displayName || '—'}
-                      </button>
+                      </a>
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}

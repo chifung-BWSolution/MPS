@@ -4,6 +4,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { selectLatestProjectsByClient } from '../src/data/quotationClientList';
 import {
+  buildQuotationProjectHash,
+  buildQuotationProjectHref,
   openQuotationProjectDetail,
   readSelectedQuotationProjectId,
   SELECTED_QUOTATION_PROJECT_KEY,
@@ -30,7 +32,10 @@ assert.deepEqual(headers, [
 assert.match(crmSrc, /function BrandBadge/);
 assert.match(crmSrc, /bg-teal-50 text-teal-700/);
 assert.match(crmSrc, /latestProject\.displayName/);
-assert.match(crmSrc, /openQuotationProjectDetail/);
+assert.match(crmSrc, /buildQuotationProjectHref/);
+assert.match(crmSrc, /target="_blank"/);
+assert.match(crmSrc, /rel="noopener noreferrer"/);
+assert.doesNotMatch(crmSrc, /openQuotationProjectDetail/);
 assert.match(crmSrc, /min-w-\[7\.5rem\]/);
 assert.match(crmSrc, /whitespace-nowrap min-w-\[7\.5rem\]/);
 assert.doesNotMatch(crmSrc, /client\.projectCount/);
@@ -83,6 +88,13 @@ const memoryStorage = {
   },
 };
 Object.defineProperty(globalThis, 'sessionStorage', { value: memoryStorage, configurable: true });
+Object.defineProperty(globalThis, 'window', {
+  value: {
+    location: { pathname: '/app', search: '', hash: '' },
+    history: { replaceState() {} },
+  },
+  configurable: true,
+});
 
 const calls: Array<[string, string?]> = [];
 openQuotationProjectDetail('proj-1', 'confirmed', (module, sub) => calls.push([module, sub]));
@@ -93,5 +105,13 @@ assert.equal(store.get(SELECTED_QUOTATION_PROJECT_KEY), 'proj-1');
 openQuotationProjectDetail('proj-2', 'initial', (module, sub) => calls.push([module, sub]));
 assert.deepEqual(calls[1], ['quotation', 'pitching']);
 assert.equal(readSelectedQuotationProjectId(), 'proj-2');
+
+assert.equal(buildQuotationProjectHash('proj-1', 'confirmed'), 'quotation/projects?project=proj-1');
+assert.equal(buildQuotationProjectHash('proj-2', 'initial'), 'quotation/pitching?project=proj-2');
+assert.equal(buildQuotationProjectHref('proj-1', 'confirmed'), '/app#quotation/projects?project=proj-1');
+assert.equal(
+  readSelectedQuotationProjectId('#quotation/projects?project=from-hash'),
+  'from-hash',
+);
 
 console.log('quotation client list columns: ok');
