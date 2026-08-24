@@ -9,9 +9,12 @@ import { useQuotationClientList } from '@/hooks/useQuotationClientList';
 import { useActiveStaffOptions, type StaffSelectOption } from '@/hooks/useActiveStaffOptions';
 import {
   toQuotationClientSelectOption,
+  type QuotationClient,
+  type QuotationClientInput,
   type QuotationClientSelectOption,
 } from '@/data/quotationClientList';
 import { useQuotationClientDetailId } from '@/hooks/useQuotationClientDetailId';
+import { ClientFormModal } from '@/components/crm/ClientFormModal';
 import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -209,6 +212,7 @@ export function PitchingFormModal({
   staffOptions,
   defaultMainPmId,
   initialRecord,
+  onCreateClient,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -217,9 +221,12 @@ export function PitchingFormModal({
   staffOptions: StaffSelectOption[];
   defaultMainPmId?: string;
   initialRecord?: PitchingRecord | null;
+  onCreateClient?: (input: QuotationClientInput) => Promise<QuotationClient | null>;
 }) {
   const [form, setForm] = useState<PitchingFormValues>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [showQuickAddClient, setShowQuickAddClient] = useState(false);
+  const [savingClient, setSavingClient] = useState(false);
   const isEdit = Boolean(initialRecord);
   const pmOptions = useMemo(() => [EMPTY_STAFF_OPTION, ...staffOptions], [staffOptions]);
 
@@ -230,23 +237,46 @@ export function PitchingFormModal({
         ? formFromRecord(initialRecord, clientOptions)
         : emptyForm(defaultMainPmId ?? ''),
     );
+    setShowQuickAddClient(false);
     // Only reset when the dialog opens or the edited row changes — not when the client list refreshes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, initialRecord?.id]);
 
   const handleClose = () => {
-    setForm(emptyForm());
+    setForm(emptyForm(defaultMainPmId ?? ''));
+    setShowQuickAddClient(false);
     onClose();
+  };
+
+  const applyClient = (clientId: string, clientName: string) => {
+    setForm((prev) => ({
+      ...prev,
+      clientId,
+      clientName,
+      displayName: prev.displayName || clientName,
+    }));
   };
 
   const handleClientChange = (clientId: string) => {
     const client = clientOptions.find((c) => c.value === clientId);
-    setForm((prev) => ({
-      ...prev,
-      clientId,
-      clientName: client?.label ?? '',
-      displayName: prev.displayName || client?.label || '',
-    }));
+    applyClient(clientId, client?.label ?? '');
+  };
+
+  const handleQuickAddClient = async (input: QuotationClientInput) => {
+    if (!onCreateClient) return null;
+    setSavingClient(true);
+    try {
+      const client = await onCreateClient(input);
+      if (!client) {
+        toast.error('儲存客戶失敗');
+        return null;
+      }
+      const option = toQuotationClientSelectOption(client);
+      applyClient(client.id, option.label);
+      return client;
+    } finally {
+      setSavingClient(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -277,6 +307,7 @@ export function PitchingFormModal({
   const currentYear = new Date().getFullYear();
 
   return (
+    <>
     <CrudModal
       isOpen={isOpen}
       onClose={handleClose}
@@ -291,14 +322,28 @@ export function PitchingFormModal({
           </h3>
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1">客戶 Customer *</label>
-            <SearchableSelect
-              value={form.clientId}
-              onValueChange={handleClientChange}
-              options={clientOptions}
-              placeholder="搜尋客戶..."
-              searchPlaceholder="搜尋客戶名稱..."
-              emptyText="找不到客戶"
-            />
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <SearchableSelect
+                  value={form.clientId}
+                  onValueChange={handleClientChange}
+                  options={clientOptions}
+                  placeholder="搜尋客戶..."
+                  searchPlaceholder="搜尋客戶名稱..."
+                  emptyText="找不到客戶"
+                />
+              </div>
+              {onCreateClient && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowQuickAddClient(true)}
+                  className="h-9 shrink-0 gap-1.5 text-[13px] border-teal-200 text-teal-700 bg-teal-50 hover:bg-teal-100"
+                >
+                  <Plus size={14} /> 新增客戶
+                </Button>
+              )}
+            </div>
           </div>
         </section>
 
@@ -320,26 +365,6 @@ export function PitchingFormModal({
               系統會使用此名稱作為主要顯示，選擇客戶時會自動填入，可手動覆蓋
             </p>
           </div>
-
-          {form.clientId && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <span className="text-[12px] font-medium text-muted-foreground block mb-1">公司名稱 (中文)</span>
-                <p className="text-[13px] px-3 py-2 rounded-md border border-border bg-muted/30">
-                  {companyNamesForClient(form.clientId, clientOptions).companyNameZh || '—'}
-                </p>
-              </div>
-              <div>
-                <span className="text-[12px] font-medium text-muted-foreground block mb-1">公司名稱 (Eng)</span>
-                <p className="text-[13px] px-3 py-2 rounded-md border border-border bg-muted/30">
-                  {companyNamesForClient(form.clientId, clientOptions).companyNameEn || '—'}
-                </p>
-              </div>
-              <p className="text-[11px] text-muted-foreground sm:col-span-2 -mt-2">
-                公司名稱來自客戶列表，請至客戶管理修改
-              </p>
-            </div>
-          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
@@ -457,6 +482,16 @@ export function PitchingFormModal({
         </div>
       </div>
     </CrudModal>
+    {onCreateClient && (
+      <ClientFormModal
+        open={showQuickAddClient}
+        onClose={() => setShowQuickAddClient(false)}
+        onSave={handleQuickAddClient}
+        saving={savingClient}
+        overlayClassName="z-[120]"
+      />
+    )}
+    </>
   );
 }
 
@@ -1136,7 +1171,7 @@ export function PitchingModule() {
   const { navigateTo } = useApp();
   const { systemUser } = useAuth();
   const { records, loading, error, lastSyncedAt, addRecord, updateStatus, updateRecord } = useQuotationClientProjects();
-  const { records: clientListRecords } = useQuotationClientList();
+  const { records: clientListRecords, addClient } = useQuotationClientList();
   const { detailId, openDetail, closeDetail } = useQuotationClientDetailId('pitching');
   const selectedRecord = useMemo(
     () => (detailId ? records.find((r) => r.id === detailId) ?? null : null),
@@ -1241,6 +1276,7 @@ export function PitchingModule() {
       staffOptions={staffOptions}
       defaultMainPmId={systemUser?.staff_id}
       initialRecord={editingRecord}
+      onCreateClient={addClient}
     />
   );
 

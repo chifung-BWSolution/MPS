@@ -20,9 +20,17 @@ type Props = {
   editingClient?: QuotationClient | null;
   onSave: (input: QuotationClientInput) => Promise<QuotationClient | null>;
   saving?: boolean;
+  overlayClassName?: string;
 };
 
-export function ClientFormModal({ open, onClose, editingClient, onSave, saving = false }: Props) {
+export function ClientFormModal({
+  open,
+  onClose,
+  editingClient,
+  onSave,
+  saving = false,
+  overlayClassName,
+}: Props) {
   const { brands, loading: brandsLoading } = useBrands();
   const [formData, setFormData] = useState<QuotationClientInput>(emptyQuotationClientInput());
 
@@ -87,7 +95,7 @@ export function ClientFormModal({ open, onClose, editingClient, onSave, saving =
     .map((b) => b.displayName || b.brandCode);
 
   return (
-    <div className="fixed inset-0 m-0 bg-black/50 flex items-center justify-center z-[100]">
+    <div className={cn('fixed inset-0 m-0 bg-black/50 flex items-center justify-center z-[100]', overlayClassName)}>
       <div className="bg-white rounded-md w-full max-w-lg shadow-xl max-h-[85vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h3 className="text-[18px] font-bold">{editingClient ? '編輯客戶' : '新增客戶'}</h3>

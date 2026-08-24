@@ -61,11 +61,20 @@ assert.match(pitchingSrc, /openDetail\(record\.id\)/);
 assert.match(pitchingSrc, /staffOptions=\{staffOptions\}/);
 assert.match(pitchingSrc, /toQuotationClientSelectOption/);
 assert.doesNotMatch(pitchingSrc, /label: c\.companyNameZh/);
+assert.match(pitchingSrc, /onCreateClient=\{addClient\}/);
+assert.doesNotMatch(
+  pitchingSrc.slice(
+    pitchingSrc.indexOf('export function PitchingFormModal'),
+    pitchingSrc.indexOf('function PitchingList'),
+  ),
+  /公司名稱來自客戶列表/,
+);
 assert.match(projectSrc, /useQuotationClientDetailId\('projects'\)/);
 assert.match(projectSrc, /openDetail\(record\.id\)/);
 assert.match(projectSrc, /staffOptions=\{staffOptions\}/);
 assert.match(projectSrc, /toQuotationClientSelectOption/);
 assert.doesNotMatch(projectSrc, /label: c\.companyNameZh/);
+assert.match(projectSrc, /onCreateClient=\{addClient\}/);
 
 const latest = selectLatestProjectsByClient([
   {

@@ -190,7 +190,7 @@ function ProjectList({
 export function ProjectModule() {
   const { navigateTo } = useApp();
   const { records, loading, error, lastSyncedAt, updateStatus, updateRecord } = useQuotationClientProjects();
-  const { records: clientListRecords } = useQuotationClientList();
+  const { records: clientListRecords, addClient } = useQuotationClientList();
   const { detailId, openDetail, closeDetail } = useQuotationClientDetailId('projects');
   const selectedRecord = useMemo(
     () => (detailId ? records.find((r) => r.id === detailId) ?? null : null),
@@ -269,6 +269,7 @@ export function ProjectModule() {
       clientOptions={pitchingClientOptions}
       staffOptions={staffOptions}
       initialRecord={editingRecord}
+      onCreateClient={addClient}
     />
   );
 
