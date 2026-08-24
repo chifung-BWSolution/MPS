@@ -56,10 +56,14 @@ assert.match(hookSrc, /selectLatestProjectsByClient/);
 assert.match(hookSrc, /display_name, status, inquiry_date, updated_at, created_at/);
 assert.doesNotMatch(hookSrc, /fetchProjectCounts/);
 
-assert.match(pitchingSrc, /readSelectedQuotationProjectId/);
+assert.match(pitchingSrc, /useQuotationClientDetailId\('pitching'\)/);
+assert.match(pitchingSrc, /openDetail\(record\.id\)/);
+assert.match(pitchingSrc, /staffOptions=\{staffOptions\}/);
 assert.match(pitchingSrc, /toQuotationClientSelectOption/);
 assert.doesNotMatch(pitchingSrc, /label: c\.companyNameZh/);
-assert.match(projectSrc, /readSelectedQuotationProjectId/);
+assert.match(projectSrc, /useQuotationClientDetailId\('projects'\)/);
+assert.match(projectSrc, /openDetail\(record\.id\)/);
+assert.match(projectSrc, /staffOptions=\{staffOptions\}/);
 assert.match(projectSrc, /toQuotationClientSelectOption/);
 assert.doesNotMatch(projectSrc, /label: c\.companyNameZh/);
 
@@ -292,22 +296,28 @@ Object.defineProperty(globalThis, 'window', {
   configurable: true,
 });
 
-const calls: Array<[string, string?]> = [];
-openQuotationProjectDetail('proj-1', 'confirmed', (module, sub) => calls.push([module, sub]));
-assert.deepEqual(calls[0], ['quotation', 'projects']);
+openQuotationProjectDetail('proj-1', 'confirmed');
+assert.equal(window.location.hash, '#quotation/projects?id=proj-1');
 assert.equal(readSelectedQuotationProjectId(), 'proj-1');
 assert.equal(store.get(SELECTED_QUOTATION_PROJECT_KEY), 'proj-1');
 
-openQuotationProjectDetail('proj-2', 'initial', (module, sub) => calls.push([module, sub]));
-assert.deepEqual(calls[1], ['quotation', 'pitching']);
+openQuotationProjectDetail('proj-2', 'initial');
+assert.equal(window.location.hash, '#quotation/pitching?id=proj-2');
 assert.equal(readSelectedQuotationProjectId(), 'proj-2');
 
-assert.equal(buildQuotationProjectHash('proj-1', 'confirmed'), 'quotation/projects?project=proj-1');
-assert.equal(buildQuotationProjectHash('proj-2', 'initial'), 'quotation/pitching?project=proj-2');
-assert.equal(buildQuotationProjectHref('proj-1', 'confirmed'), '/app#quotation/projects?project=proj-1');
+assert.equal(buildQuotationProjectHash('proj-1', 'confirmed'), 'quotation/projects?id=proj-1');
+assert.equal(buildQuotationProjectHash('proj-2', 'initial'), 'quotation/pitching?id=proj-2');
+assert.equal(buildQuotationProjectHash('asana_1', 'pitching'), 'quotation/pitching?id=asana_1');
+assert.equal(buildQuotationProjectHash('asana_1', 'projects'), 'quotation/projects?id=asana_1');
+assert.notEqual(
+  buildQuotationProjectHash('asana_1', 'pitching'),
+  buildQuotationProjectHash('asana_1', 'projects'),
+);
+assert.equal(buildQuotationProjectHref('proj-1', 'confirmed'), '/app#quotation/projects?id=proj-1');
+assert.equal(readSelectedQuotationProjectId('#quotation/projects?id=from-hash'), 'from-hash');
 assert.equal(
-  readSelectedQuotationProjectId('#quotation/projects?project=from-hash'),
-  'from-hash',
+  readSelectedQuotationProjectId('#quotation/projects?project=legacy-id'),
+  'legacy-id',
 );
 
 console.log('quotation client list columns: ok');

@@ -1,15 +1,12 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Search, ChevronRight, Pencil } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Search, ChevronRight, Pencil, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
 import { useActiveStaffOptions } from '@/hooks/useActiveStaffOptions';
 import { toQuotationClientSelectOption } from '@/data/quotationClientList';
-import {
-  readSelectedQuotationProjectId,
-  writeSelectedQuotationProjectId,
-} from '@/lib/quotationProjectNavigation';
+import { useQuotationClientDetailId } from '@/hooks/useQuotationClientDetailId';
 import {
   PitchingDetail,
   PitchingFormModal,
@@ -194,11 +191,17 @@ export function ProjectModule() {
   const { navigateTo } = useApp();
   const { records, loading, error, lastSyncedAt, updateStatus, updateRecord } = useQuotationClientProjects();
   const { records: clientListRecords } = useQuotationClientList();
-  const [view, setView] = useState<'list' | 'detail'>('list');
-  const [selectedRecord, setSelectedRecord] = useState<PitchingRecord | null>(null);
+  const { detailId, openDetail, closeDetail } = useQuotationClientDetailId('projects');
+  const selectedRecord = useMemo(
+    () => (detailId ? records.find((r) => r.id === detailId) ?? null : null),
+    [detailId, records],
+  );
   const [formModalOpen, setFormModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<PitchingRecord | null>(null);
-  const { options: staffOptions } = useActiveStaffOptions([editingRecord?.mainPmId]);
+  const { options: staffOptions } = useActiveStaffOptions([
+    editingRecord?.mainPmId,
+    selectedRecord?.mainPmId,
+  ]);
 
   const projectRecords = useMemo(
     () => records.filter(isProjectPageRecord),
@@ -211,20 +214,8 @@ export function ProjectModule() {
   );
 
   const handleView = (record: PitchingRecord) => {
-    setSelectedRecord(record);
-    setView('detail');
+    openDetail(record.id);
   };
-
-  useEffect(() => {
-    const pendingId = readSelectedQuotationProjectId();
-    if (!pendingId || records.length === 0) return;
-    const record = records.find((r) => r.id === pendingId);
-    if (record) {
-      setSelectedRecord(record);
-      setView('detail');
-    }
-    writeSelectedQuotationProjectId(null);
-  }, [records]);
 
   const openEditModal = (record: PitchingRecord) => {
     setEditingRecord(record);
@@ -249,18 +240,6 @@ export function ProjectModule() {
       toast.error(`儲存失敗：${saveErr.message}`);
       return;
     }
-    if (selectedRecord?.id === editingRecord.id) {
-      setSelectedRecord((prev) =>
-        prev
-          ? {
-              ...prev,
-              ...payload,
-              mainPmName: selectedStaff?.label || undefined,
-              updatedAt: new Date().toISOString(),
-            }
-          : null,
-      );
-    }
     closeFormModal();
     toast.success('Project 已更新');
   };
@@ -271,17 +250,10 @@ export function ProjectModule() {
       toast.error(`狀態更新失敗：${updateErr.message}`);
       return;
     }
-    if (selectedRecord?.id === id) {
-      setSelectedRecord((prev) => (prev ? { ...prev, status } : null));
-    }
   };
 
   const handleSaveRecord = async (id: string, data: QuotationClientProjectUpdate) => {
-    const { error: saveErr } = await updateRecord(id, data);
-    if (!saveErr && selectedRecord?.id === id) {
-      setSelectedRecord((prev) => (prev ? { ...prev, ...data, updatedAt: new Date().toISOString() } : null));
-    }
-    return { error: saveErr };
+    return updateRecord(id, data);
   };
 
   const handleConvertToQuote = () => {
@@ -289,28 +261,48 @@ export function ProjectModule() {
     navigateTo('quotation', 'new');
   };
 
-  if (view === 'detail' && selectedRecord) {
+  const formModal = (
+    <PitchingFormModal
+      isOpen={formModalOpen}
+      onClose={closeFormModal}
+      onSubmit={handleFormSubmit}
+      clientOptions={pitchingClientOptions}
+      staffOptions={staffOptions}
+      initialRecord={editingRecord}
+    />
+  );
+
+  if (detailId) {
+    if (loading && !selectedRecord) {
+      return <div className="text-[13px] text-muted-foreground py-12 text-center">載入中…</div>;
+    }
+    if (!selectedRecord) {
+      return (
+        <div className="space-y-4">
+          <button
+            type="button"
+            onClick={closeDetail}
+            className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft size={14} /> 返回 Project 列表
+          </button>
+          <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-[13px] text-rose-700">
+            找不到此 Project 紀錄（id: {detailId}）
+          </div>
+        </div>
+      );
+    }
     return (
       <>
         <PitchingDetail
           record={selectedRecord}
           clientOptions={pitchingClientOptions}
-          onBack={() => {
-            writeSelectedQuotationProjectId(null);
-            setView('list');
-            setSelectedRecord(null);
-          }}
+          onBack={closeDetail}
           onEdit={() => openEditModal(selectedRecord)}
           onConvertToQuote={handleConvertToQuote}
           onSave={handleSaveRecord}
         />
-        <PitchingFormModal
-          isOpen={formModalOpen}
-          onClose={closeFormModal}
-          onSubmit={handleFormSubmit}
-          clientOptions={pitchingClientOptions}
-          initialRecord={editingRecord}
-        />
+        {formModal}
       </>
     );
   }
@@ -348,14 +340,7 @@ export function ProjectModule() {
         />
       )}
 
-      <PitchingFormModal
-        isOpen={formModalOpen}
-        onClose={closeFormModal}
-        onSubmit={handleFormSubmit}
-        clientOptions={pitchingClientOptions}
-        staffOptions={staffOptions}
-        initialRecord={editingRecord}
-      />
+      {formModal}
     </div>
   );
 }
