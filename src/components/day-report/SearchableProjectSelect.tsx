@@ -1,14 +1,20 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Search, X, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { relatedTypeBadgeClass } from '@/hooks/useProjects';
+import {
+  filterProjectSelectItems,
+  projectSelectTypeLabel,
+  relatedTypesInItems,
+  type ProjectSelectItem,
+  type ProjectSelectRelatedType,
+  type ProjectSelectRelatedTypeFilter,
+} from '@/lib/searchableProjectSelect';
 
-interface SelectItem {
-  id: string;
-  name: string;
-}
+export type { ProjectSelectItem };
 
 interface SearchableProjectSelectProps {
-  items: SelectItem[];
+  items: ProjectSelectItem[];
   value: string;
   onChange: (id: string, name: string) => void;
   disabled?: boolean;
@@ -30,20 +36,35 @@ export function SearchableProjectSelect({
 }: SearchableProjectSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [relatedTypeFilter, setRelatedTypeFilter] = useState<ProjectSelectRelatedTypeFilter>('all');
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const typeOptions = useMemo(() => relatedTypesInItems(items), [items]);
+  const showTypeFilters = typeOptions.length > 1;
+
+  useEffect(() => {
+    if (relatedTypeFilter !== 'all' && !typeOptions.includes(relatedTypeFilter)) {
+      setRelatedTypeFilter('all');
+    }
+  }, [relatedTypeFilter, typeOptions]);
+
+  const closeDropdown = useCallback(() => {
+    setIsOpen(false);
+    setSearchTerm('');
+    setRelatedTypeFilter('all');
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-        setSearchTerm('');
+        closeDropdown();
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [closeDropdown]);
 
   // Auto-focus search input when dropdown opens
   useEffect(() => {
@@ -53,24 +74,28 @@ export function SearchableProjectSelect({
     }
   }, [isOpen]);
 
-  // Filter items by search term
-  const filteredItems = items.filter(item =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase())
+  const scopedItems = useMemo(
+    () => filterProjectSelectItems(items, '', relatedTypeFilter),
+    [items, relatedTypeFilter],
+  );
+  const filteredItems = useMemo(
+    () => filterProjectSelectItems(items, searchTerm, relatedTypeFilter),
+    [items, searchTerm, relatedTypeFilter],
   );
 
   // Get selected item name for display
   const selectedItem = items.find(item => item.id === value);
 
-  const handleSelect = useCallback((item: SelectItem) => {
+  const handleSelect = useCallback((item: ProjectSelectItem) => {
     onChange(item.id, item.name);
-    setIsOpen(false);
-    setSearchTerm('');
-  }, [onChange]);
+    closeDropdown();
+  }, [onChange, closeDropdown]);
 
   const handleClear = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     onChange('', '');
     setSearchTerm('');
+    setRelatedTypeFilter('all');
   }, [onChange]);
 
   if (disabled) {
@@ -89,7 +114,7 @@ export function SearchableProjectSelect({
       {/* Trigger Button */}
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => (isOpen ? closeDropdown() : setIsOpen(true))}
         className={cn(
           'w-full px-2.5 py-2 border rounded-md text-[13px] text-left flex items-center gap-1.5 transition-all',
           isOpen
@@ -113,7 +138,7 @@ export function SearchableProjectSelect({
 
       {/* Dropdown Panel */}
       {isOpen && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-border rounded-md shadow-lg overflow-hidden">
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 min-w-[280px] bg-white border border-border rounded-md shadow-lg overflow-hidden">
           {/* Search Bar */}
           <div className="p-2 border-b border-border/60">
             <div className="relative">
@@ -128,6 +153,7 @@ export function SearchableProjectSelect({
               />
               {searchTerm && (
                 <button
+                  type="button"
                   onClick={() => setSearchTerm('')}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
@@ -135,6 +161,29 @@ export function SearchableProjectSelect({
                 </button>
               )}
             </div>
+            {showTypeFilters && (
+              <div
+                className="mt-2 flex flex-wrap gap-1"
+                onMouseDown={(event) => event.preventDefault()}
+              >
+                {(['all', ...typeOptions] as const).map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    aria-pressed={relatedTypeFilter === type}
+                    onClick={() => setRelatedTypeFilter(type)}
+                    className={cn(
+                      'px-2 py-0.5 rounded text-[10px] font-medium transition-colors',
+                      relatedTypeFilter === type
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80',
+                    )}
+                  >
+                    {projectSelectTypeLabel(type)}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Items List — max 9 items visible (each ~32px height → max-h = 9 * 32px = 288px) */}
@@ -155,6 +204,9 @@ export function SearchableProjectSelect({
                   )}
                 >
                   <span className="flex-1 truncate">{item.name}</span>
+                  {item.relatedType && (
+                    <RelatedTypeBadge type={item.relatedType} />
+                  )}
                   {item.id === value && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-600 shrink-0">已選</span>
                   )}
@@ -167,13 +219,26 @@ export function SearchableProjectSelect({
           {items.length > 0 && (
             <div className="px-3 py-1.5 border-t border-border/60 text-[10px] text-muted-foreground bg-white">
               {searchTerm
-                ? `${filteredItems.length} / ${items.length} 項目`
-                : `共 ${items.length} 個項目`
+                ? `${filteredItems.length} / ${scopedItems.length} 項目`
+                : relatedTypeFilter !== 'all'
+                  ? `共 ${scopedItems.length} 個項目`
+                  : `共 ${items.length} 個項目`
               }
             </div>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+function RelatedTypeBadge({ type }: { type: ProjectSelectRelatedType }) {
+  return (
+    <span className={cn(
+      'text-[10px] px-1.5 py-0.5 rounded border shrink-0',
+      relatedTypeBadgeClass[type],
+    )}>
+      {projectSelectTypeLabel(type)}
+    </span>
   );
 }

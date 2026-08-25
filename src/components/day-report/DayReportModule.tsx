@@ -32,7 +32,8 @@ import { ProjectAnalysis } from '@/components/day-report/ProjectAnalysis';
 import { SearchableProjectSelect } from '@/components/day-report/SearchableProjectSelect';
 import { useDayReportTypes } from '@/hooks/useDayReportTypes';
 import { useCategoryLookup } from '@/hooks/useCategoryLookup';
-import { useProjects, relatedTypeLabels, type ProjectRelatedType } from '@/hooks/useProjects';
+import { useProjects, type ProjectRelatedType } from '@/hooks/useProjects';
+import type { ProjectSelectItem } from '@/lib/searchableProjectSelect';
 import { usePendingReportItems } from '@/hooks/usePendingReportItems';
 import {
   consumePendingItems,
@@ -265,18 +266,19 @@ function SubmitReportPage() {
   const isUpdateMode = !!existingReportId;
   const isDraftReport = existingReportStatus === 'draft';
 
-  const getRelatedItemsForRelation = useCallback((relationType: CategoryRelationType | undefined): { id: string; name: string }[] => {
+  const getRelatedItemsForRelation = useCallback((relationType: CategoryRelationType | undefined): ProjectSelectItem[] => {
     if (!relationType || relationType === 'none') return [];
     if (relationType === 'optional') {
       return masterProjects.map(p => ({
         id: p.id,
-        name: `${p.name}（${relatedTypeLabels[p.relatedType]}）`,
+        name: p.name,
+        relatedType: p.relatedType,
       }));
     }
     if (relationType === 'webandsystem' || relationType === 'quotation_client' || relationType === 'vchannel') {
       return masterProjects
         .filter(p => p.relatedType === (relationType as ProjectRelatedType))
-        .map(p => ({ id: p.id, name: p.name }));
+        .map(p => ({ id: p.id, name: p.name, relatedType: p.relatedType }));
     }
     return [];
   }, [masterProjects]);
@@ -1931,12 +1933,8 @@ function SubmitReportPage() {
                               items={getRelatedItemsForRelation(relationType)}
                               value={entry.relatedId}
                               onChange={(id, name) => {
-                                // Strip type suffix from optional labels when storing related_name
-                                const cleanName = relationType === 'optional'
-                                  ? (masterProjects.find(p => p.id === id)?.name || name)
-                                  : name;
                                 updateEntry(idx, 'relatedId', id);
-                                updateEntry(idx, 'relatedName', cleanName);
+                                updateEntry(idx, 'relatedName', name);
                               }}
                               disabled={!entry.category}
                               placeholder={placeholder}
