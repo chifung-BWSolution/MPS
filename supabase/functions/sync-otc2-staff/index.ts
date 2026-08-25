@@ -17,52 +17,86 @@ const OTC2_ANON_KEY =
   Deno.env.get("OTC2_ANON_KEY") ||
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3aGJmcGhhdmN4bmNmbWNyd3JyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzODg4MjIsImV4cCI6MjA5NTk2NDgyMn0.pxdK15j23OklXl6fQNECaNkxE9mmQggrWw13BJMvaDI";
 
-interface Otc2Staff {
-  id: number;
-  bubble_id: string | null;
+const STAFF_SYNC_SELECT = [
+  "id",
+  "staff_id",
+  "display_name",
+  "full_name",
+  "chinese_name",
+  "position",
+  "role",
+  "status",
+  "work_email",
+  "private_email",
+  "private_phone",
+  "company_phone",
+  "image_url",
+  "base_location",
+  "team_name",
+  "company",
+  "company_id",
+  "brand_ids",
+  "entry_date",
+  "termination_date",
+].join(",");
+
+interface Otc2StaffSync {
+  id: string | null;
+  staff_id: string | number | null;
   display_name: string | null;
   full_name: string | null;
   chinese_name: string | null;
   position: string | null;
-  o_user_role: string | null;
-  o_status: string | null;
-  o_status_text: string | null;
+  role: string | null;
+  user_role?: string | null;
+  status: string | null;
   work_email: string | null;
   private_email: string | null;
-  linked_user_email: string | null;
-  work_phone: string | null;
   private_phone: string | null;
-  direct_phone: string | null;
-  login_mobile: string | null;
-  o_base_location: string | null;
+  company_phone: string | null;
+  image_url: string | null;
   base_location: string | null;
-  birthday: string | null;
+  team_name: string | null;
+  company: string | null;
+  company_id: number | string | null;
+  brand_ids: string[] | string | null;
   entry_date: string | null;
   termination_date: string | null;
-  o_probation: string | null;
-  al_quota: number | null;
-  n_bu: string | null;
-  bu_name: string | null;
-  n_team: string | null;
+}
+
+interface CompanyListRow {
+  uuid: string;
+  company_code: string | null;
+}
+
+interface BrandListRow {
+  id: string;
+  otc_id: string | null;
+  brand_code: string | null;
+}
+
+/** Allowed staffs write columns only. Never include local `id`. */
+interface StaffsUpsertRow {
+  otc_staff_sync_id: string;
+  display_name: string;
+  full_name: string | null;
+  chinese_name: string | null;
+  position: string | null;
+  user_role: string | null;
+  status: "active" | "inactive";
+  work_email: string | null;
+  private_email: string | null;
+  work_phone: string | null;
+  private_phone: string | null;
+  profile_pic_url: string | null;
+  base_location: string | null;
   team_name: string | null;
-  n_team_role: string | null;
-  team_role_name: string | null;
-  profile_pic: string | null;
-  voov_id: number | null;
-  bubble_created_date: string | null;
-  bubble_modified_date: string | null;
-}
-
-function isActiveStaff(staff: Otc2Staff): boolean {
-  const status = staff.o_status || staff.o_status_text || "";
-  return status === "Active" || status === "Probation";
-}
-
-function resolveProbationStatus(staff: Otc2Staff): string | null {
-  if (staff.o_probation) return staff.o_probation;
-  const status = staff.o_status || staff.o_status_text || "";
-  if (status === "Probation") return "試用期";
-  return null;
+  company_list_id: string | null;
+  brand_list_id: string | null;
+  entry_date: string | null;
+  termination_date: string | null;
+  synced_at: string;
+  updated_at: string;
 }
 
 function toDateString(value: string | null | undefined): string | null {
@@ -72,98 +106,196 @@ function toDateString(value: string | null | undefined): string | null {
   return d.toISOString().split("T")[0];
 }
 
-function normalizeOffice(baseLocation: string | null | undefined): string | null {
-  const raw = (baseLocation || "").trim().toLowerCase();
-  if (!raw) return null;
-  if (raw.includes("sz") || raw.includes("深圳") || raw.includes("shenzhen")) return "深圳";
-  if (raw.includes("hk") || raw.includes("香港") || raw.includes("hong kong")) return "香港";
+function isActiveStatus(status: string | null | undefined): boolean {
+  return status === "Active";
+}
+
+function normalizeBrandIds(value: Otc2StaffSync["brand_ids"]): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.map((id) => String(id).trim()).filter(Boolean);
+  }
+  const raw = String(value).trim();
+  if (!raw) return [];
+  if (raw.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.map((id) => String(id).trim()).filter(Boolean);
+      }
+    } catch {
+      // fall through to comma-split
+    }
+  }
+  return raw.split(",").map((id) => id.trim()).filter(Boolean);
+}
+
+function resolveCompanyListId(
+  company: string | null | undefined,
+  companies: CompanyListRow[],
+): string | null {
+  const needle = (company || "").trim().toLowerCase();
+  if (!needle) return null;
+  const match = companies.find(
+    (row) => (row.company_code || "").trim().toLowerCase() === needle,
+  );
+  return match?.uuid ?? null;
+}
+
+function resolveBrandListId(
+  brandIds: Otc2StaffSync["brand_ids"],
+  brands: BrandListRow[],
+): string | null {
+  const otcToLocalId = new Map<string, string>();
+  for (const brand of brands) {
+    if (!brand.otc_id) continue;
+    otcToLocalId.set(brand.otc_id.toLowerCase(), brand.id);
+  }
+  for (const brandId of normalizeBrandIds(brandIds)) {
+    const localId = otcToLocalId.get(brandId.toLowerCase());
+    if (localId) return localId;
+  }
   return null;
 }
 
-function resolveOffice(staff: Otc2Staff): string | null {
-  return normalizeOffice(staff.base_location || staff.o_base_location);
+function mapStaffSyncRow(
+  staff: Otc2StaffSync,
+  companies: CompanyListRow[],
+  brands: BrandListRow[],
+  now: string,
+): StaffsUpsertRow | null {
+  if (!staff.id) return null;
+
+  return {
+    otc_staff_sync_id: staff.id,
+    display_name: staff.display_name ?? "",
+    full_name: staff.full_name,
+    chinese_name: staff.chinese_name,
+    position: staff.position,
+    user_role: staff.user_role || staff.role || null,
+    status: isActiveStatus(staff.status) ? "active" : "inactive",
+    work_email: staff.work_email,
+    private_email: staff.private_email,
+    work_phone: staff.company_phone,
+    private_phone: staff.private_phone,
+    profile_pic_url: staff.image_url,
+    base_location: staff.base_location,
+    team_name: staff.team_name,
+    company_list_id: resolveCompanyListId(staff.company, companies),
+    brand_list_id: resolveBrandListId(staff.brand_ids, brands),
+    entry_date: toDateString(staff.entry_date),
+    termination_date: toDateString(staff.termination_date),
+    synced_at: now,
+    updated_at: now,
+  };
 }
 
-/** Map OTC team_name → MPS department (keep in sync with src/lib/staffMapping.ts) */
-function resolveDepartment(staff: Otc2Staff): string | null {
-  const team = (staff.team_name || staff.n_team || "").trim();
-  const bu = (staff.bu_name || staff.n_bu || "").trim().toLowerCase();
-  if (!team && !bu) return null;
-
-  if (/operation\s*admin|accounting|營運行政|會計/i.test(team)) return "Accounting & Admin";
-  if (/ob\s*system|商業系統/i.test(team) || (/\bsystem\b/i.test(team) && /ob|bwt/i.test(team))) {
-    return "System";
-  }
-  if (/^fc\s|fc\s*marketing|\bfc\b/i.test(team)) return "FC";
-  if (/marketing\s*and\s*branding|市場推廣|品牌設計/i.test(team)) {
-    return bu === "wine" || bu.includes("wine") ? "Wine" : "Marketing & Video";
-  }
-  if (bu === "wine" || bu.includes("wine")) return "Wine";
-  if (/bwa|bwf|bw\s*pm|ob\s*&\s*design|project\s*design|3d\s*design|furniture|工程項目/i.test(team)) {
-    return "FC";
-  }
-  return null;
-}
-
-async function fetchAllOtc2Staff(otc2: ReturnType<typeof createClient>): Promise<Otc2Staff[]> {
+async function fetchAllOtc2StaffSync(
+  otc2: ReturnType<typeof createClient>,
+): Promise<Otc2StaffSync[]> {
   const pageSize = 1000;
   let from = 0;
-  const all: Otc2Staff[] = [];
+  const all: Otc2StaffSync[] = [];
 
   while (true) {
     const { data, error } = await otc2
-      .from("staff")
-      .select(
-        [
-          "id",
-          "bubble_id",
-          "display_name",
-          "full_name",
-          "chinese_name",
-          "position",
-          "o_user_role",
-          "o_status",
-          "o_status_text",
-          "work_email",
-          "private_email",
-          "linked_user_email",
-          "work_phone",
-          "private_phone",
-          "direct_phone",
-          "login_mobile",
-          "o_base_location",
-          "base_location",
-          "birthday",
-          "entry_date",
-          "termination_date",
-          "o_probation",
-          "al_quota",
-          "n_bu",
-          "bu_name",
-          "n_team",
-          "team_name",
-          "n_team_role",
-          "team_role_name",
-          "profile_pic",
-          "voov_id",
-          "bubble_created_date",
-          "bubble_modified_date",
-        ].join(",")
-      )
+      .from("staff_sync")
+      .select(STAFF_SYNC_SELECT)
       .order("id", { ascending: true })
       .range(from, from + pageSize - 1);
 
     if (error) {
-      throw new Error(`OTC2 staff fetch failed: ${error.message}`);
+      throw new Error(`OTC2 staff_sync fetch failed: ${error.message}`);
     }
 
-    const batch = (data || []) as Otc2Staff[];
+    const batch = (data || []) as Otc2StaffSync[];
     all.push(...batch);
     if (batch.length < pageSize) break;
     from += pageSize;
   }
 
   return all;
+}
+
+async function loadCompanyList(
+  supabaseAdmin: ReturnType<typeof createClient>,
+): Promise<CompanyListRow[]> {
+  const pageSize = 1000;
+  let from = 0;
+  const all: CompanyListRow[] = [];
+
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from("company_list")
+      .select("uuid, company_code")
+      .range(from, from + pageSize - 1);
+
+    if (error) {
+      throw new Error(`Failed to load company_list: ${error.message}`);
+    }
+
+    const batch = (data || []) as CompanyListRow[];
+    all.push(...batch);
+    if (batch.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return all;
+}
+
+async function loadBrandList(
+  supabaseAdmin: ReturnType<typeof createClient>,
+): Promise<BrandListRow[]> {
+  const pageSize = 1000;
+  let from = 0;
+  const all: BrandListRow[] = [];
+
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from("brand_list")
+      .select("id, otc_id, brand_code")
+      .range(from, from + pageSize - 1);
+
+    if (error) {
+      throw new Error(`Failed to load brand_list: ${error.message}`);
+    }
+
+    const batch = (data || []) as BrandListRow[];
+    all.push(...batch);
+    if (batch.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return all;
+}
+
+async function loadExistingSyncIds(
+  supabaseAdmin: ReturnType<typeof createClient>,
+): Promise<Set<string>> {
+  const pageSize = 1000;
+  let from = 0;
+  const ids = new Set<string>();
+
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from("staffs")
+      .select("otc_staff_sync_id")
+      .not("otc_staff_sync_id", "is", null)
+      .range(from, from + pageSize - 1);
+
+    if (error) {
+      throw new Error(`Failed to load existing staffs: ${error.message}`);
+    }
+
+    const batch = (data || []) as { otc_staff_sync_id: string | null }[];
+    for (const row of batch) {
+      if (row.otc_staff_sync_id) ids.add(row.otc_staff_sync_id);
+    }
+    if (batch.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return ids;
 }
 
 Deno.serve(async (req: Request) => {
@@ -193,15 +325,15 @@ Deno.serve(async (req: Request) => {
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const otc2 = createClient(OTC2_SUPABASE_URL, OTC2_ANON_KEY);
 
-    console.log("[sync-otc2-staff] Fetching staff from OTC2...");
-    const otc2Staff = await fetchAllOtc2Staff(otc2);
-    const syncable = otc2Staff.filter((s) => !!s.bubble_id);
+    console.log("[sync-otc2-staff] Fetching staff_sync from OTC2...");
+    const otc2Staff = await fetchAllOtc2StaffSync(otc2);
+    const syncable = otc2Staff.filter((s) => !!s.id);
 
     if (syncable.length === 0) {
       return new Response(
         JSON.stringify({
           success: true,
-          message: "No staff with bubble_id found in OTC2",
+          message: "No staff_sync records with id found in OTC2",
           environment: "OTC2",
           full_refresh: false,
           stats: { total: 0, created: 0, updated: 0, active: 0, inactive: 0, teams: 0 },
@@ -211,116 +343,58 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Upsert merge: keep existing rows (including manual_*), update/insert OTC2 records only.
-    const { data: existingRows, error: existingError } = await supabaseAdmin
-      .from("staffs")
-      .select("bubble_staff_id");
+    console.log("[sync-otc2-staff] Loading company_list / brand_list for FK resolve...");
+    const [companies, brands, existingIds] = await Promise.all([
+      loadCompanyList(supabaseAdmin),
+      loadBrandList(supabaseAdmin),
+      loadExistingSyncIds(supabaseAdmin),
+    ]);
 
-    if (existingError) {
-      throw new Error(`Failed to load existing staffs: ${existingError.message}`);
-    }
-
-    const existingIds = new Set((existingRows || []).map((r: { bubble_staff_id: string }) => r.bubble_staff_id));
+    const now = new Date().toISOString();
     let created = 0;
     let updated = 0;
 
-    const upsertData = syncable.map((staff) => {
-      const bubbleStaffId = staff.bubble_id as string;
-      if (existingIds.has(bubbleStaffId)) updated += 1;
+    const upsertData: StaffsUpsertRow[] = [];
+    for (const staff of syncable) {
+      const row = mapStaffSyncRow(staff, companies, brands, now);
+      if (!row) continue;
+      if (existingIds.has(row.otc_staff_sync_id)) updated += 1;
       else created += 1;
-
-      const active = isActiveStaff(staff);
-      const office = resolveOffice(staff);
-      const department = resolveDepartment(staff);
-      const entryDate = toDateString(staff.entry_date);
-
-      return {
-        bubble_staff_id: bubbleStaffId,
-        display_name: staff.display_name || staff.full_name || staff.chinese_name || "",
-        full_name: staff.full_name || staff.chinese_name || null,
-        position: staff.position || null,
-        user_role: staff.o_user_role || null,
-        status: active ? "active" : "inactive",
-        work_email: staff.work_email || staff.linked_user_email || null,
-        private_email: staff.private_email || null,
-        work_phone: staff.work_phone || staff.direct_phone || staff.login_mobile || null,
-        private_phone: staff.private_phone || null,
-        base_location: staff.base_location || staff.o_base_location || null,
-        office,
-        department,
-        birthday: staff.birthday || null,
-        entry_date: entryDate,
-        joining_date: entryDate,
-        termination_date: toDateString(staff.termination_date),
-        probation_status: resolveProbationStatus(staff),
-        al_quota: staff.al_quota != null ? Number(staff.al_quota) : null,
-        // Prefer human-readable names for UI filters; fall back to OTC2 reference ids.
-        team_id: staff.team_name || staff.n_team || null,
-        team_role: staff.team_role_name || staff.n_team_role || null,
-        business_unit: staff.bu_name || staff.n_bu || null,
-        profile_pic_url: staff.profile_pic || null,
-        voov_id: staff.voov_id != null ? String(staff.voov_id) : null,
-        bubble_created_date: staff.bubble_created_date || null,
-        bubble_modified_date: staff.bubble_modified_date || null,
-        synced_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-    });
-
-    // Batch upsert (PostgREST payload limit ~1MB; 225 rows is fine in one shot)
-    console.log(`[sync-otc2-staff] Upserting ${upsertData.length} records...`);
-    const { error: upsertError } = await supabaseAdmin
-      .from("staffs")
-      .upsert(upsertData, {
-        onConflict: "bubble_staff_id",
-        ignoreDuplicates: false,
-      });
-
-    if (upsertError) {
-      return new Response(
-        JSON.stringify({
-          error: `Database upsert failed: ${upsertError.message}`,
-          code: upsertError.code,
-          details: upsertError.details,
-          hint: upsertError.hint,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
-      );
+      upsertData.push(row);
     }
 
-    // Backfill users.office / users.department from synced staff when still empty
-    const backfillRows = upsertData.filter((row) => row.office || row.department);
-    for (const row of backfillRows) {
-      const patch: Record<string, string> = { updated_at: new Date().toISOString() };
-      if (row.office) patch.office = row.office;
-      if (row.department) patch.department = row.department;
+    const upsertPageSize = 200;
+    console.log(`[sync-otc2-staff] Upserting ${upsertData.length} staff_sync records...`);
+    for (let i = 0; i < upsertData.length; i += upsertPageSize) {
+      const batch = upsertData.slice(i, i + upsertPageSize);
+      const { error: upsertError } = await supabaseAdmin
+        .from("staffs")
+        .upsert(batch, {
+          onConflict: "otc_staff_sync_id",
+          ignoreDuplicates: false,
+        });
 
-      const { error: backfillError } = await supabaseAdmin
-        .from("users")
-        .update(patch)
-        .eq("staff_id", row.bubble_staff_id)
-        .or(
-          [
-            row.office ? "office.is.null" : "",
-            row.department ? "department.is.null" : "",
-          ].filter(Boolean).join(","),
-        );
-
-      if (backfillError) {
-        console.warn(
-          `[sync-otc2-staff] users backfill skipped for ${row.bubble_staff_id}: ${backfillError.message}`,
+      if (upsertError) {
+        return new Response(
+          JSON.stringify({
+            error: `Database upsert failed: ${upsertError.message}`,
+            code: upsertError.code,
+            details: upsertError.details,
+            hint: upsertError.hint,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
         );
       }
     }
 
-    const activeCount = syncable.filter(isActiveStaff).length;
+    const activeCount = syncable.filter((s) => isActiveStatus(s.status)).length;
     const inactiveCount = syncable.length - activeCount;
-    const teams = new Set(syncable.map((s) => s.team_name || s.n_team).filter(Boolean));
+    const teams = new Set(syncable.map((s) => s.team_name).filter(Boolean));
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Successfully synced ${syncable.length} staff records from OTC2`,
+        message: `Successfully synced ${syncable.length} staff_sync records from OTC2`,
         environment: "OTC2",
         api_url: OTC2_SUPABASE_URL,
         full_refresh: false,
@@ -331,7 +405,7 @@ Deno.serve(async (req: Request) => {
           active: activeCount,
           inactive: inactiveCount,
           teams: teams.size,
-          skipped_no_bubble_id: otc2Staff.length - syncable.length,
+          skipped_no_id: otc2Staff.length - syncable.length,
         },
         synced_at: new Date().toISOString(),
       }),
