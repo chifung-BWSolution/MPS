@@ -107,17 +107,37 @@ export function optionalIsoDate(value: string | null | undefined): string | unde
   return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : undefined;
 }
 
-/** Only 初步提案 tracks the 30-day follow-up window from 查詢日期. */
-export function calcRemainingDays(inquiryDate: string, status: PitchingStatus): number | null {
-  if (status !== 'initial') return null;
-  const start = new Date(inquiryDate);
-  if (Number.isNaN(start.getTime())) return null;
-  const deadline = new Date(start);
-  deadline.setDate(deadline.getDate() + PITCHING_FOLLOW_UP_DAYS);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  deadline.setHours(0, 0, 0, 0);
-  return Math.ceil((deadline.getTime() - today.getTime()) / 86400000);
+/** Local calendar YYYY-MM-DD (browser / host timezone, not UTC). */
+export function localTodayIso(now: Date = new Date()): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/** Signed calendar-day difference (`to - from`) for YYYY-MM-DD dates. */
+export function calendarDaysBetween(fromIso: string, toIso: string): number | null {
+  const from = optionalIsoDate(fromIso);
+  const to = optionalIsoDate(toIso);
+  if (!from || !to) return null;
+  const [fy, fm, fd] = from.split('-').map(Number);
+  const [ty, tm, td] = to.split('-').map(Number);
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 86_400_000);
+}
+
+/**
+ * Days left in the 30-day follow-up window: `30 - (asOf - 查詢日期)`.
+ * Future inquiry dates yield more than 30. Status is ignored — only a missing
+ * or invalid inquiry date returns null (shown as —).
+ */
+export function calcRemainingDays(
+  inquiryDate: string,
+  _status?: PitchingStatus,
+  asOfDate: string = localTodayIso(),
+): number | null {
+  const elapsed = calendarDaysBetween(inquiryDate, asOfDate);
+  if (elapsed == null) return null;
+  return PITCHING_FOLLOW_UP_DAYS - elapsed;
 }
 
 export function formatMainPmName(record: Pick<PitchingRecord, 'mainPmName'>): string {
