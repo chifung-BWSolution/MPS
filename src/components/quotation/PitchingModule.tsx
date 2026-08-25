@@ -204,8 +204,6 @@ function ProjectTypeMultiSelect({
   );
 }
 
-const EMPTY_STAFF_OPTION: StaffSelectOption = { value: '', label: '未指定', status: '' };
-
 export function PitchingFormModal({
   isOpen,
   onClose,
@@ -230,7 +228,6 @@ export function PitchingFormModal({
   const [showQuickAddClient, setShowQuickAddClient] = useState(false);
   const [savingClient, setSavingClient] = useState(false);
   const isEdit = Boolean(initialRecord);
-  const pmOptions = useMemo(() => [EMPTY_STAFF_OPTION, ...staffOptions], [staffOptions]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -296,6 +293,10 @@ export function PitchingFormModal({
     }
     if (form.projectTypes.length === 0) {
       toast.error('請至少選擇一個專案類型');
+      return;
+    }
+    if (!form.mainPmId.trim()) {
+      toast.error('請選擇負責 PM');
       return;
     }
     setSubmitting(true);
@@ -429,11 +430,11 @@ export function PitchingFormModal({
           </div>
 
           <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">負責 PM</label>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">負責 PM *</label>
             <SearchableSelect
               value={form.mainPmId}
               onValueChange={(mainPmId) => setForm((prev) => ({ ...prev, mainPmId }))}
-              options={pmOptions}
+              options={staffOptions}
               placeholder="選擇負責 PM..."
               searchPlaceholder="搜尋同事名稱或電郵..."
               emptyText="找不到同事"
