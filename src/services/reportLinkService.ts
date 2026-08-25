@@ -79,43 +79,36 @@ export type ReportFormEntry = {
 
 type SystemUserLike = {
   staff_id?: string;
+  auth_user_id?: string | null;
   bubble_staff_id?: string;
   email?: string;
   google_email?: string;
 } | null;
 
-async function lookupLoginStaffIdsByEmail(email: string): Promise<string[]> {
-  const [byGoogle, byEmail] = await Promise.all([
-    supabase.from('users').select('staff_id').ilike('google_email', email),
-    supabase.from('users').select('staff_id').ilike('email', email),
-  ]);
-  const ids = new Set<string>();
-  for (const row of [...(byGoogle.data || []), ...(byEmail.data || [])]) {
-    const id = remapStaleStaffUuid((row as { staff_id?: string }).staff_id);
-    if (isStaffUuid(id)) ids.add(id);
-  }
-  return [...ids];
+async function lookupLoginStaffIdByAuthUserId(authUserId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('users')
+    .select('staff_id')
+    .eq('auth_user_id', authUserId)
+    .maybeSingle();
+  const id = remapStaleStaffUuid((data as { staff_id?: string } | null)?.staff_id);
+  return isStaffUuid(id) ? id : null;
 }
 
 /**
  * Resolve staffs.id for report load/save.
- * Source of truth is users.staff_id (login whitelist), remapped.
- * Does not query staffs.work_email or staffs.bubble_staff_id.
+ * Source of truth is users.staff_id via users.auth_user_id (Auth UID).
+ * Does not join on email, staffs.work_email, or staffs.bubble_staff_id.
  */
 export async function resolveStaffUuid(systemUser: SystemUserLike): Promise<string | null> {
   if (!systemUser) return null;
 
   const sessionStaffId = remapStaleStaffUuid(systemUser.staff_id);
-  const email = (systemUser.email || systemUser.google_email || '').toLowerCase().trim();
+  const authUserId = (systemUser.auth_user_id || '').trim();
 
   let loginStaffId: string | null = null;
-  if (email) {
-    const loginIds = await lookupLoginStaffIdsByEmail(email);
-    if (loginIds.length === 1) {
-      loginStaffId = loginIds[0];
-    } else if (loginIds.length > 1 && loginIds.includes(sessionStaffId)) {
-      loginStaffId = sessionStaffId;
-    }
+  if (authUserId) {
+    loginStaffId = await lookupLoginStaffIdByAuthUserId(authUserId);
   }
 
   return chooseStaffUuid({ loginStaffId, sessionStaffId });

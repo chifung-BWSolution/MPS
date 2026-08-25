@@ -2,6 +2,14 @@ import { createContext, useContext, useEffect, useState, useRef, ReactNode, useC
 import { supabase } from '@/lib/supabase';
 import { getSiteOrigin } from '@/lib/siteUrl';
 import { isStaffUuid, remapStaleStaffUuid, resolveStaffUuid } from '@/services/reportLinkService';
+import {
+  fetchUsersByAuthUserId,
+  fetchUsersCandidatesByEmail,
+  pickPreferredWhitelistRow,
+  resolveUsersRowForAuthUid,
+  scoreWhitelistCandidate,
+  type UsersWhitelistRow,
+} from '@/services/authStaffResolve';
 import type { User as SupabaseUser, Session } from '@supabase/supabase-js';
 
 interface SystemUserProfile {
@@ -22,6 +30,7 @@ interface SystemUserProfile {
 interface UserInfoProfile {
   id: string;
   staff_id: string;
+  auth_user_id: string | null;
   role_tag: string | null;
   system_status: string;
   classification: string;
@@ -133,6 +142,7 @@ function fallbackFromHardcoded(
     userInfo: {
       id: `fallback-user-info-${profile.staff_id}`,
       staff_id: profile.staff_id,
+      auth_user_id: authUserId,
       role_tag: profile.role_tag,
       system_status: 'active',
       classification: profile.classification,
@@ -169,43 +179,55 @@ function applyStaffEnrichment(
   };
 }
 
-function dedupeById<T extends { id?: string }>(rows: T[]): T[] {
-  const seen = new Set<string>();
-  const out: T[] = [];
-  for (const row of rows) {
-    const key = row.id || JSON.stringify(row);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(row);
-  }
-  return out;
-}
-
 function isStaffActive(status: string | null | undefined): boolean {
   return (status || '').toLowerCase() === 'active';
 }
 
-/**
- * Flexible whitelist lookup against public.users (email / google_email),
- * enriched by public.staffs (users.staff_id → staffs.id only).
- *
- * When the same email matches multiple people (shared work mailbox), prefer the row
- * linked to staffs.status = 'active'. Falls back to inactive only if no active match exists.
- *
- * Uses parallel .ilike() queries instead of PostgREST `.or()` because the latter mis-parses
- * email values containing "." and "@".
- */
-async function findSystemUserByEmail(email: string): Promise<{ data: SystemUserProfile | null; error: any }> {
-  const normalizedEmail = email.toLowerCase().trim();
-  console.log('[Auth:findSystemUserByEmail] Starting lookup for:', normalizedEmail);
+async function loadStaffStatusMap(staffIds: string[]): Promise<Map<string, StaffDirectoryLite>> {
+  const map = new Map<string, StaffDirectoryLite>();
+  const uniqueIds = [...new Set(staffIds.filter(Boolean))];
+  if (uniqueIds.length === 0) return map;
 
-  if (!normalizedEmail) {
-    return { data: null, error: new Error('Empty email after normalization') };
+  const { data } = await supabase
+    .from('staffs')
+    .select(STAFFS_LITE_SELECT)
+    .in('id', uniqueIds);
+
+  for (const row of (data || []) as StaffDirectoryLite[]) {
+    if (row?.id) map.set(row.id, row);
+  }
+  return map;
+}
+
+async function profileFromUsersRow(
+  row: UsersWhitelistRow,
+  email: string,
+): Promise<SystemUserProfile> {
+  const staffMap = await loadStaffStatusMap([row.staff_id].filter(Boolean));
+  const staff = staffMap.get(row.staff_id) || null;
+  return bootstrapSystemUserFromUserInfo(row, email, staff);
+}
+
+/**
+ * Resolve the whitelist row for a session.
+ * OAuth: users.auth_user_id = auth.users.id (RPC links once if unlinked).
+ * Dev bypass (no Auth UID): email match only — does not write auth_user_id.
+ */
+async function findSystemUser(opts: {
+  email: string;
+  authUserId?: string | null;
+}): Promise<{ data: SystemUserProfile | null; error: any }> {
+  const normalizedEmail = (opts.email || '').toLowerCase().trim();
+  const authUserId = (opts.authUserId || '').trim() || null;
+  console.log('[Auth:findSystemUser] Starting lookup', {
+    email: normalizedEmail || null,
+    authUserId,
+  });
+
+  if (!normalizedEmail && !authUserId) {
+    return { data: null, error: new Error('Empty email and auth_user_id') };
   }
 
-  // Master timeout — bumped to 8s because PostgREST cold-start on Vercel can take
-  // 4-6s for the first query of the session. Clears itself on success so we don't
-  // print a misleading "timeout reached" log after auth has already succeeded.
   const MASTER_TIMEOUT_MS = 8000;
   let masterTimer: ReturnType<typeof setTimeout> | undefined;
   let timedOut = false;
@@ -213,96 +235,81 @@ async function findSystemUserByEmail(email: string): Promise<{ data: SystemUserP
   const masterTimeoutPromise = new Promise<{ data: null; error: Error }>((resolve) => {
     masterTimer = setTimeout(() => {
       timedOut = true;
-      console.warn(`[Auth:findSystemUserByEmail] ⏰ Master ${MASTER_TIMEOUT_MS}ms timeout reached. Falling back.`);
-      resolve({ data: null, error: new Error(`findSystemUserByEmail: Master timeout (${MASTER_TIMEOUT_MS}ms) reached`) });
+      console.warn(`[Auth:findSystemUser] ⏰ Master ${MASTER_TIMEOUT_MS}ms timeout reached. Falling back.`);
+      resolve({ data: null, error: new Error(`findSystemUser: Master timeout (${MASTER_TIMEOUT_MS}ms) reached`) });
     }, MASTER_TIMEOUT_MS);
   });
 
-  const lookupAllInUsers = async () => {
-    const [byGoogle, byEmail] = await Promise.all([
-      supabase.from('users').select('*').ilike('google_email', normalizedEmail),
-      supabase.from('users').select('*').ilike('email', normalizedEmail),
-    ]);
-    const rows = dedupeById([...(byGoogle.data || []), ...(byEmail.data || [])] as any[]);
-    return {
-      data: rows,
-      error: byGoogle.error || byEmail.error || null,
-    };
-  };
-
-  const loadStaffStatusMap = async (staffIds: string[]): Promise<Map<string, StaffDirectoryLite>> => {
-    const map = new Map<string, StaffDirectoryLite>();
-    const uniqueIds = [...new Set(staffIds.filter(Boolean))];
-    if (uniqueIds.length === 0) return map;
-
-    const { data } = await supabase
-      .from('staffs')
-      .select(STAFFS_LITE_SELECT)
-      .in('id', uniqueIds);
-
-    for (const row of (data || []) as StaffDirectoryLite[]) {
-      if (row?.id) map.set(row.id, row);
-    }
-    return map;
-  };
-
-  const pickPreferredUser = (
-    rows: any[],
-    staffMap: Map<string, StaffDirectoryLite>
-  ): { ui: any; staff: StaffDirectoryLite | null } | null => {
-    if (rows.length === 0) return null;
-    const scored = rows.map((row) => {
-      const staff = staffMap.get(row.staff_id) || null;
-      const staffActive = isStaffActive(staff?.status);
-      const systemActive = (row.system_status || '').toLowerCase() === 'active';
-      let score = 0;
-      if (staffActive) score += 100;
-      if (systemActive) score += 10;
-      return { ui: row, staff, score };
-    });
-    scored.sort((a, b) => b.score - a.score);
-    const best = scored[0];
-    return best ? { ui: best.ui, staff: best.staff } : null;
-  };
-
   const lookupLogic = async (): Promise<{ data: SystemUserProfile | null; error: any }> => {
     try {
-      const { data: userMatches, error: usersErr } = await lookupAllInUsers();
-      console.log('[Auth:findSystemUserByEmail] users matches:', {
+      if (authUserId) {
+        const byId = await fetchUsersByAuthUserId(authUserId);
+        if (timedOut) return { data: null, error: new Error('Timed out') };
+        if (byId.data) {
+          console.log('[Auth:findSystemUser] ✅ users.auth_user_id', {
+            display_name: byId.data.display_name,
+            staff_id: byId.data.staff_id,
+          });
+          return { data: await profileFromUsersRow(byId.data, normalizedEmail), error: null };
+        }
+
+        const linked = await resolveUsersRowForAuthUid();
+        if (timedOut) return { data: null, error: new Error('Timed out') };
+        if (linked.data) {
+          console.log('[Auth:findSystemUser] ✅ resolve_users_for_auth', {
+            display_name: linked.data.display_name,
+            staff_id: linked.data.staff_id,
+            auth_user_id: linked.data.auth_user_id,
+          });
+          return { data: await profileFromUsersRow(linked.data, normalizedEmail), error: null };
+        }
+        if (linked.error) {
+          console.warn('[Auth:findSystemUser] resolve_users_for_auth error:', linked.error);
+        }
+      }
+
+      if (!normalizedEmail) {
+        return { data: null, error: new Error('Not found in users whitelist') };
+      }
+
+      const { data: userMatches, error: usersErr } = await fetchUsersCandidatesByEmail(normalizedEmail);
+      console.log('[Auth:findSystemUser] email fallback matches:', {
         count: userMatches.length,
-        staff_ids: userMatches.map((r: any) => r.staff_id),
-        error: usersErr?.message || null,
+        staff_ids: userMatches.map((r) => r.staff_id),
+        error: (usersErr as { message?: string } | null)?.message || null,
       });
 
       if (timedOut) return { data: null, error: new Error('Timed out') };
 
-      const staffIds = userMatches.map((r: any) => r.staff_id).filter(Boolean);
+      const staffIds = userMatches.map((r) => r.staff_id).filter(Boolean);
       const staffMap = await loadStaffStatusMap(staffIds);
-      console.log('[Auth:findSystemUserByEmail] staffs status map:', {
-        size: staffMap.size,
-        active: [...staffMap.values()].filter((s) => isStaffActive(s.status)).map((s) => s.display_name),
+      const picked = pickPreferredWhitelistRow(userMatches, (row) => {
+        const staff = staffMap.get(row.staff_id) || null;
+        return scoreWhitelistCandidate({
+          staffActive: isStaffActive(staff?.status),
+          systemActive: (row.system_status || '').toLowerCase() === 'active',
+          googleEmailMatch: (row.google_email || '').toLowerCase().trim() === normalizedEmail,
+          emailMatch: (row.email || '').toLowerCase().trim() === normalizedEmail,
+        });
       });
 
-      if (timedOut) return { data: null, error: new Error('Timed out') };
-
-      const pick = pickPreferredUser(userMatches, staffMap);
-      if (pick?.ui) {
-        const uiMatch = pick.ui;
-        console.log('[Auth:findSystemUserByEmail] ✅ Picked users:', {
-          display_name: uiMatch.display_name,
-          staff_id: uiMatch.staff_id,
-          staff_status: pick.staff?.status || null,
+      if (picked) {
+        const staff = staffMap.get(picked.staff_id) || null;
+        console.log('[Auth:findSystemUser] ✅ email fallback picked:', {
+          display_name: picked.display_name,
+          staff_id: picked.staff_id,
+          staff_status: staff?.status || null,
         });
         return {
-          data: bootstrapSystemUserFromUserInfo(uiMatch, normalizedEmail, pick.staff),
+          data: bootstrapSystemUserFromUserInfo(picked, normalizedEmail, staff),
           error: null,
         };
       }
 
-      console.warn('[Auth:findSystemUserByEmail] ❌ No users match for:', normalizedEmail);
+      console.warn('[Auth:findSystemUser] ❌ No users match for:', authUserId || normalizedEmail);
       return { data: null, error: usersErr || new Error('Not found in users whitelist') };
     } catch (err) {
-      console.warn('[Auth:findSystemUserByEmail] Query error:', err);
+      console.warn('[Auth:findSystemUser] Query error:', err);
       return { data: null, error: err };
     }
   };
@@ -405,7 +412,7 @@ function bootstrapSystemUserFromUserInfo(
 
   return {
     id: uiRecord.id || `ui-bootstrap-${uiRecord.staff_id}`,
-    auth_user_id: null,
+    auth_user_id: uiRecord.auth_user_id || null,
     staff_id: uiRecord.staff_id,
     display_name: displayName,
     email: uiRecord.email || email,
@@ -465,6 +472,7 @@ function normalizeRestoredUserInfo(raw: any, staffUuid: string): UserInfoProfile
   return {
     id: raw.id || 'fallback-user-info',
     staff_id: isStaffUuid(raw.staff_id) ? remapStaleStaffUuid(raw.staff_id) : staffUuid,
+    auth_user_id: raw.auth_user_id ?? null,
     role_tag: raw.role_tag ?? null,
     system_status: raw.system_status || 'active',
     classification: raw.classification || 'staff',
@@ -623,7 +631,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Heal stale sessions: leftover manual UUID, or a session staff_id that
-  // email-first resolveStaffUuid previously overwrote onto the wrong person.
+  // no longer matches users.auth_user_id.
   useEffect(() => {
     if (!systemUser || staffUuidMigrateRef.current) return;
     staffUuidMigrateRef.current = true;
@@ -632,7 +640,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       const uuid = await resolveStaffUuid({
         staff_id: systemUser.staff_id,
-        email: systemUser.email || systemUser.google_email || undefined,
+        auth_user_id: systemUser.auth_user_id,
       });
       if (cancelled || !uuid || uuid === systemUser.staff_id) return;
       setSystemUser(prev => (prev ? { ...prev, staff_id: uuid } : prev));
@@ -693,7 +701,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Try DB lookup first, but don't block on failure
         let foundInDB = false;
         try {
-          const { data: sysUser } = await findSystemUserByEmail(normalizedEmail);
+          const { data: sysUser } = await findSystemUser({
+            email: normalizedEmail,
+            authUserId: authUserId || null,
+          });
           if (sysUser) {
             console.log('[Auth] 🔑 Master bypass: Found in DB:', sysUser.display_name);
             setSystemUser({ ...sysUser, phone: sysUser.phone || null });
@@ -754,8 +765,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (abortController.signal.aborted) throw new Error('Verification timed out');
 
       // Step 1: Flexible whitelist lookup (case-insensitive, cross-column)
-      const { data: sysUser, error: sysError } = await findSystemUserByEmail(normalizedEmail);
-      console.log('[Auth] findSystemUserByEmail result:', { found: !!sysUser, displayName: sysUser?.display_name, role: sysUser?.role, error: sysError?.message || null });
+      const { data: sysUser, error: sysError } = await findSystemUser({
+        email: normalizedEmail,
+        authUserId: authUserId || null,
+      });
+      console.log('[Auth] findSystemUser result:', { found: !!sysUser, displayName: sysUser?.display_name, role: sysUser?.role, auth_user_id: sysUser?.auth_user_id, error: sysError?.message || null });
 
       if (abortController.signal.aborted) throw new Error('Verification timed out');
 
@@ -816,11 +830,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // findSystemUserByEmail already checks users + staffs comprehensively.
+      // findSystemUser already checks users.auth_user_id + staffs.
       // No additional fallback queries needed — they were causing 502 by cascading timeouts.
 
       // All lookups failed — NOT authorized
-      const failMsg = `Auth FAILED: All lookup attempts exhausted for email "${normalizedEmail}". No matching record in users (whitelist) / staffs tables.`;
+      const failMsg = `Auth FAILED: No public.users row for auth_user_id "${authUserId || ''}" / email "${normalizedEmail}".`;
       console.error('[Auth] ❌', failMsg);
       setSystemUser(null);
       setUserInfo(null);
@@ -908,7 +922,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Try DB lookup first, but don't block on failure
           let sysUser: SystemUserProfile | null = null;
           try {
-            const result = await findSystemUserByEmail(email);
+            const result = await findSystemUser({ email });
             sysUser = result.data;
             console.log('[Auth] DB lookup result:', { found: !!sysUser, error: result.error?.message });
           } catch (lookupErr) {
@@ -967,7 +981,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // ====== Normal dev bypass flow ======
         console.log('[Auth] Dev bypass: querying users for email:', email);
-        const { data: sysUser, error: sysError } = await findSystemUserByEmail(email);
+        const { data: sysUser, error: sysError } = await findSystemUser({ email });
         
         console.log('[Auth] Dev bypass lookup result:', { found: !!sysUser, error: sysError?.message });
 

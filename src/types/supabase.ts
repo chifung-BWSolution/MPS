@@ -295,6 +295,7 @@ export type Database = {
       }
       users: {
         Row: {
+          auth_user_id: string | null
           classification: string
           created_at: string | null
           department: string | null
@@ -309,6 +310,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          auth_user_id?: string | null
           classification?: string
           created_at?: string | null
           department?: string | null
@@ -323,6 +325,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          auth_user_id?: string | null
           classification?: string
           created_at?: string | null
           department?: string | null
@@ -351,7 +354,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      resolve_users_for_auth: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          auth_user_id: string | null
+          classification: string
+          created_at: string | null
+          department: string | null
+          display_name: string | null
+          email: string | null
+          google_email: string | null
+          id: string
+          office: string | null
+          role_tag: string | null
+          staff_id: string
+          system_status: string
+          updated_at: string | null
+        }
+      }
     }
     Enums: {
       [_ in never]: never
