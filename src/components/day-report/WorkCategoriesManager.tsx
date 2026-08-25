@@ -117,7 +117,7 @@ const relationTypeLabels: Record<CategoryRelationType, { label: string; descript
   },
   quotation_client: {
     label: '客戶項目（必填）',
-    description: '必須選擇一個已確認的客戶項目',
+    description: '必須選擇一個未結案的客戶項目',
     icon: Building2,
     color: 'text-amber-700',
     bg: 'bg-amber-50',
