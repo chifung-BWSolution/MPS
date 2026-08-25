@@ -64,4 +64,15 @@ assert.doesNotMatch(
 const project = read('src/components/quotation/ProjectModule.tsx');
 assert.match(project, /PitchingDetail/);
 
+const automation = read('supabase/migrations/20260825120000_quotation_bv_main_pm_automations.sql');
+assert.match(automation, /CREATE OR REPLACE FUNCTION public\.trg_quotation_bv_seed_main_pm/);
+assert.match(automation, /VALUES \(NEW\.id, NEW\.main_pm_id, 100\)/);
+assert.match(automation, /staff_id = NEW\.main_pm_id/);
+assert.match(automation, /DELETE FROM public\.quotation_bv/);
+assert.match(automation, /VALUES \(NEW\.id, NEW\.main_pm_id, v_old_ratio\)/);
+
+assert.match(pitching, /負責 PM \*/);
+assert.match(pitching, /請選擇負責 PM/);
+assert.doesNotMatch(pitching, /EMPTY_STAFF_OPTION/);
+
 console.log('quotation bv: ok');
