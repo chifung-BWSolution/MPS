@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { Edit, Trash2, CreditCard, Shield, X, Plus, Save, Eye, EyeOff, FileText, Building2, Tag, Briefcase, UserCircle, ChevronDown, GripVertical } from 'lucide-react';
+import { Edit, Trash2, CreditCard, Shield, X, Plus, Save, Eye, EyeOff, FileText, UserCircle, ChevronDown } from 'lucide-react';
 import { CompanyManagementSettings } from './CompanyManagementSettings';
 import { BrandManagementSettings } from './BrandManagementSettings';
 import { TermsConditionsSettings } from './TermsConditionsSettings';
 import { StaffDirectory } from './StaffDirectory';
 import { UserManagement } from './UserManagement';
 import { TalentApplicationForm } from './TalentApplicationForm';
-import { companies, brands } from '@/data/mockData';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { canAccessSettings } from '@/lib/permissions';
@@ -38,7 +37,7 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
 
   const getTitle = () => {
     switch (activeTab) {
-      case 'profile': return { title: '個人設定', subtitle: '管理個人資料及安全設定。' };
+      case 'profile': return { title: '個人設定', subtitle: '查看個人資料。資料由 OTC2 同步，無法在此修改。' };
       case 'users': return { title: '用戶管理', subtitle: '從員工列表選擇員工加入系統，支援 Google 電郵登入。' };
       case 'companies': return { title: '公司管理', subtitle: '管理多間公司資料及銀行帳戶。' };
       case 'brands': return { title: '品牌管理', subtitle: '管理品牌，每個品牌歸屬於一間公司。' };
@@ -51,7 +50,7 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
       case 'terms-conditions': return { title: '條款及細則管理', subtitle: '管理各報價類型的條款範本，報價時可選擇或編輯。' };
       case 'staff-directory': return { title: '員工列表', subtitle: '查看所有員工資料，資料來源：OTC2 staff_sync（同步至 staffs）。' };
       case 'login-logs': return { title: '登入紀錄', subtitle: '查看用戶登入歷史記錄。' };
-      default: return { title: '個人設定', subtitle: '管理個人資料及安全設定。' };
+      default: return { title: '個人設定', subtitle: '查看個人資料。資料由 OTC2 同步，無法在此修改。' };
     }
   };
 
@@ -108,14 +107,6 @@ function ProfileSection() {
     { value: 'video_editor', label: '影片剪輯', color: 'bg-orange-50 text-orange-700 border-orange-200', description: '影片製作、頻道管理' },
     { value: 'marketing', label: '市場推廣', color: 'bg-cyan-50 text-cyan-700 border-cyan-200', description: 'SEO、付費廣告、社交媒體' },
   ];
-
-  interface RoleAssignment {
-    id: string;
-    role: string;
-    companyId: string;
-    brandIds: string[];
-    projectIds: string[];
-  }
 
   const { systemUser, session } = useAuth();
 
@@ -230,84 +221,15 @@ function ProfileSection() {
     }
   }, [systemUser?.phone]);
 
-  // Multi-role assignments
-  const [roleAssignments, setRoleAssignments] = useState<RoleAssignment[]>([
-    {
-      id: 'ra1',
-      role: 'super_admin',
-      companyId: 'c1',
-      brandIds: ['b1', 'b2', 'b3'],
-      projectIds: [],
-    },
-    {
-      id: 'ra2',
-      role: 'management',
-      companyId: 'c2',
-      brandIds: ['b4', 'b5'],
-      projectIds: [],
-    },
-  ]);
-
-  const [showAddRole, setShowAddRole] = useState(false);
-  const [newRole, setNewRole] = useState<Partial<RoleAssignment>>({
-    role: '',
-    companyId: '',
-    brandIds: [],
-    projectIds: [],
-  });
-  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
-  const [profileSaved, setProfileSaved] = useState(false);
-
-  const handleSaveProfile = async () => {
-    if (systemUser?.staff_id) {
-      try {
-        await supabase
-          .from('staffs')
-          .update({ work_phone: profile.phone, updated_at: new Date().toISOString() })
-          .eq('id', systemUser.staff_id);
-        console.log('[Settings] Saved phone to staffs via staff_id:', profile.phone);
-      } catch (err) {
-        console.warn('[Settings] Failed to save phone to staffs:', err);
-      }
-    }
-
-    setProfileSaved(true);
-    setTimeout(() => setProfileSaved(false), 2000);
-  };
-
-  const handleAddRoleAssignment = () => {
-    if (!newRole.role || !newRole.companyId) return;
-    const assignment: RoleAssignment = {
-      id: `ra_${Date.now()}`,
-      role: newRole.role || '',
-      companyId: newRole.companyId || '',
-      brandIds: newRole.brandIds || [],
-      projectIds: newRole.projectIds || [],
-    };
-    setRoleAssignments(prev => [...prev, assignment]);
-    setNewRole({ role: '', companyId: '', brandIds: [], projectIds: [] });
-    setShowAddRole(false);
-  };
-
-  const handleRemoveRoleAssignment = (id: string) => {
-    setRoleAssignments(prev => prev.filter(r => r.id !== id));
-  };
-
-  const handleUpdateRoleAssignment = (id: string, updates: Partial<RoleAssignment>) => {
-    setRoleAssignments(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
-  };
-
-  const getCompanyBrands = (companyId: string) => {
-    return brands.filter(b => b.companyId === companyId);
-  };
-
   const getRoleInfo = (roleValue: string) => {
     return ALL_ROLES.find(r => r.value === roleValue);
   };
 
-  const getCompanyInfo = (companyId: string) => {
-    return companies.find(c => c.id === companyId);
-  };
+  const currentRole = systemUser?.role || '';
+  const roleInfo = getRoleInfo(currentRole);
+
+  const readOnlyFieldClass =
+    'w-full px-3 py-2 border border-border rounded-md text-[13px] bg-muted/40 text-foreground cursor-default';
 
   return (
     <div className="space-y-8">
@@ -317,368 +239,56 @@ function ProfileSection() {
           <UserCircle size={20} className="text-teal-600" />
           個人資料
         </h3>
+        <p className="text-[12px] text-muted-foreground">
+          姓名、職位及電話來自 OTC2 staff_sync；部門來自登入資料。此頁僅供查看。
+        </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">姓名</label>
-            <input
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-              value={profile.name}
-              onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-            />
+            <input readOnly tabIndex={-1} className={readOnlyFieldClass} value={profile.name} />
           </div>
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">電郵地址</label>
-            <input
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-              value={profile.email}
-              onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-            />
+            <input readOnly tabIndex={-1} className={readOnlyFieldClass} value={profile.email} />
           </div>
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">職位</label>
-            <input
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-              value={profile.position}
-              onChange={(e) => setProfile({ ...profile, position: e.target.value })}
-            />
+            <input readOnly tabIndex={-1} className={readOnlyFieldClass} value={profile.position} />
           </div>
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">部門</label>
-            <input
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-              value={profile.department}
-              onChange={(e) => setProfile({ ...profile, department: e.target.value })}
-            />
+            <input readOnly tabIndex={-1} className={readOnlyFieldClass} value={profile.department} />
           </div>
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">聯絡電話</label>
-            <input
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-              value={profile.phone}
-              onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-            />
+            <input readOnly tabIndex={-1} className={readOnlyFieldClass} value={profile.phone} />
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleSaveProfile}
-            className="px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors duration-200"
-          >
-            儲存變更
-          </button>
-          {profileSaved && <span className="text-[12px] text-teal-600 font-medium">✓ 已儲存</span>}
         </div>
       </div>
 
       <div className="border-t border-border/50" />
 
-      {/* Multi-Role Assignments */}
       <div className="space-y-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-[18px] font-bold flex items-center gap-2">
-              <Shield size={20} className="text-purple-600" />
-              角色管理
-            </h3>
-            <p className="text-[12px] text-muted-foreground mt-1">
-              每人可擁有多個角色，每個角色隸屬於一間公司，並可負責該公司下不同的品牌及項目。
-            </p>
+        <h3 className="text-[18px] font-bold flex items-center gap-2">
+          <Shield size={20} className="text-purple-600" />
+          系統角色
+        </h3>
+        <p className="text-[12px] text-muted-foreground">
+          角色由系統管理員在用戶管理設定，無法在此修改。
+        </p>
+        {roleInfo ? (
+          <div className="border border-border/50 rounded-md px-4 py-3">
+            <span className={cn('inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-medium border', roleInfo.color)}>
+              {roleInfo.label}
+            </span>
+            <p className="text-[12px] text-muted-foreground mt-2">{roleInfo.description}</p>
           </div>
-          <button
-            onClick={() => setShowAddRole(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-bold hover:bg-teal-700 transition-colors shadow-sm"
-          >
-            <Plus size={14} /> 新增角色
-          </button>
-        </div>
-
-        {/* Info Banner */}
-        <div className="bg-purple-50 border border-purple-200 rounded-md p-4 flex items-start gap-3">
-          <Shield size={16} className="text-purple-600 mt-0.5 shrink-0" />
-          <div className="text-[12px] text-purple-800">
-            <p className="font-medium mb-1">角色說明</p>
-            <p className="text-purple-700">
-              <span className="font-medium">Super Admin</span> — 最高系統權限 ·
-              <span className="font-medium"> 系統開發</span> — 技術維護 ·
-              <span className="font-medium"> 公司行政</span> — 行政管理 ·
-              每個角色會綁定一間公司，可選擇該公司下的品牌，並負責多個項目。
-            </p>
+        ) : (
+          <div className="border border-dashed border-border rounded-md px-4 py-3 text-[13px] text-muted-foreground">
+            {currentRole || '尚未分配角色'}
           </div>
-        </div>
-
-        {/* Role Assignments List */}
-        <div className="space-y-3">
-          {roleAssignments.length === 0 ? (
-            <div className="border border-dashed border-border rounded-md p-8 flex flex-col items-center text-muted-foreground">
-              <Shield size={28} className="mb-2 opacity-50" />
-              <p className="text-[13px]">尚未分配任何角色</p>
-              <button
-                onClick={() => setShowAddRole(true)}
-                className="mt-3 text-[12px] text-teal-600 hover:text-teal-700 font-medium underline"
-              >
-                新增第一個角色
-              </button>
-            </div>
-          ) : (
-            roleAssignments.map((assignment) => {
-              const roleInfo = getRoleInfo(assignment.role);
-              const companyInfo = getCompanyInfo(assignment.companyId);
-              const assignedBrands = brands.filter(b => assignment.brandIds.includes(b.id));
-              const isEditing = editingRoleId === assignment.id;
-
-              return (
-                <div
-                  key={assignment.id}
-                  className={cn(
-                    "border rounded-md overflow-hidden transition-all",
-                    isEditing ? "border-teal-300 shadow-md" : "border-border/50 hover:border-border"
-                  )}
-                >
-                  {/* Role Header */}
-                  <div className="flex items-center gap-3 px-4 py-3 bg-white">
-                    <GripVertical size={14} className="text-muted-foreground/50 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {roleInfo && (
-                          <span className={cn('inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-medium border', roleInfo.color)}>
-                            {roleInfo.label}
-                          </span>
-                        )}
-                        <span className="text-[11px] text-muted-foreground">→</span>
-                        <span className="inline-flex items-center gap-1 text-[12px] font-medium text-slate-700">
-                          <Building2 size={12} className="text-slate-500" />
-                          {companyInfo?.companyNameZh || '未選擇公司'}
-                        </span>
-                      </div>
-                      {assignedBrands.length > 0 && (
-                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                          <Tag size={11} className="text-muted-foreground shrink-0" />
-                          {assignedBrands.map(brand => (
-                            <span
-                              key={brand.id}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600"
-                            >
-                              <span className="w-2 h-2 rounded-full bg-teal-600" />
-                              {brand.displayName}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => setEditingRoleId(isEditing ? null : assignment.id)}
-                        className="text-teal-600 hover:text-teal-700 p-1"
-                        title="編輯"
-                      >
-                        <Edit size={13} />
-                      </button>
-                      <button
-                        onClick={() => handleRemoveRoleAssignment(assignment.id)}
-                        className="text-muted-foreground hover:text-rose-500 p-1"
-                        title="移除角色"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Editing Panel */}
-                  {isEditing && (
-                    <div className="border-t border-border/50 p-4 bg-muted/20 space-y-4">
-                      {/* Company Selection */}
-                      <div>
-                        <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">所屬公司</label>
-                        <select
-                          className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-                          value={assignment.companyId}
-                          onChange={(e) => {
-                            handleUpdateRoleAssignment(assignment.id, {
-                              companyId: e.target.value,
-                              brandIds: [], // Reset brands when company changes
-                            });
-                          }}
-                        >
-                          <option value="">選擇公司</option>
-                          {companies.map(c => (
-                            <option key={c.id} value={c.id}>{c.companyNameZh} ({c.companyCode})</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Brand Selection (multi-select checkboxes) */}
-                      {assignment.companyId && (
-                        <div>
-                          <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">
-                            負責品牌 <span className="text-muted-foreground font-normal">(可多選)</span>
-                          </label>
-                          <div className="border border-border rounded-md p-3 space-y-2 max-h-[180px] overflow-y-auto bg-white">
-                            {getCompanyBrands(assignment.companyId).length === 0 ? (
-                              <p className="text-[12px] text-muted-foreground">此公司下暫無品牌</p>
-                            ) : (
-                              getCompanyBrands(assignment.companyId).map(brand => (
-                                <label
-                                  key={brand.id}
-                                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/30 cursor-pointer"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={assignment.brandIds.includes(brand.id)}
-                                    onChange={(e) => {
-                                      const newBrandIds = e.target.checked
-                                        ? [...assignment.brandIds, brand.id]
-                                        : assignment.brandIds.filter(id => id !== brand.id);
-                                      handleUpdateRoleAssignment(assignment.id, { brandIds: newBrandIds });
-                                    }}
-                                    className="w-3.5 h-3.5 rounded border-border text-teal-600 focus:ring-teal-600"
-                                  />
-                                  <span className="w-3 h-3 rounded-full shrink-0 bg-teal-600" />
-                                  <span className="text-[12px] font-medium">{brand.displayName}</span>
-                                  <span className="text-[11px] text-muted-foreground ml-auto">{brand.brandCode}</span>
-                                </label>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Role description */}
-                      {roleInfo && (
-                        <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                          <Briefcase size={13} className="text-blue-600 shrink-0" />
-                          <p className="text-[11px] text-blue-800">
-                            <span className="font-medium">{roleInfo.label}</span>: {roleInfo.description}
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="flex justify-end">
-                        <button
-                          onClick={() => setEditingRoleId(null)}
-                          className="px-3 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-medium hover:bg-teal-700 transition-colors"
-                        >
-                          完成
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
+        )}
       </div>
-
-      {/* Add Role Modal */}
-      {showAddRole && (
-        <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[100]" onClick={() => setShowAddRole(false)}>
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-[550px] max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
-              <h3 className="text-[18px] font-bold">新增角色</h3>
-              <button onClick={() => setShowAddRole(false)} className="text-muted-foreground hover:text-foreground">
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-5 flex-1 min-h-0 overflow-y-auto px-6 py-4">
-              {/* Role Selection */}
-              <div>
-                <label className="text-[12px] font-medium text-muted-foreground block mb-2">選擇角色 *</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {ALL_ROLES.map(role => (
-                    <button
-                      key={role.value}
-                      onClick={() => setNewRole({ ...newRole, role: role.value })}
-                      className={cn(
-                        'flex items-center gap-2 px-3 py-2 rounded-md border text-[12px] font-medium transition-colors text-left',
-                        newRole.role === role.value
-                          ? 'border-teal-500 bg-teal-50 text-teal-800 ring-1 ring-teal-500'
-                          : 'border-border hover:bg-muted/30'
-                      )}
-                    >
-                      <Shield size={12} className={newRole.role === role.value ? 'text-teal-600' : 'text-muted-foreground'} />
-                      {role.label}
-                    </button>
-                  ))}
-                </div>
-                {newRole.role && (
-                  <p className="text-[11px] text-muted-foreground mt-2">
-                    {getRoleInfo(newRole.role)?.description}
-                  </p>
-                )}
-              </div>
-
-              {/* Company Selection */}
-              <div>
-                <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">所屬公司 *</label>
-                <select
-                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-                  value={newRole.companyId || ''}
-                  onChange={(e) => setNewRole({ ...newRole, companyId: e.target.value, brandIds: [] })}
-                >
-                  <option value="">選擇公司</option>
-                  {companies.map(c => (
-                    <option key={c.id} value={c.id}>{c.companyNameZh} ({c.companyCode})</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Brand Selection */}
-              {newRole.companyId && (
-                <div>
-                  <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">
-                    負責品牌 <span className="text-muted-foreground font-normal">(可多選)</span>
-                  </label>
-                  <div className="border border-border rounded-md p-3 space-y-2 max-h-[160px] overflow-y-auto">
-                    {getCompanyBrands(newRole.companyId).length === 0 ? (
-                      <p className="text-[12px] text-muted-foreground">此公司下暫無品牌</p>
-                    ) : (
-                      getCompanyBrands(newRole.companyId).map(brand => (
-                        <label
-                          key={brand.id}
-                          className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/30 cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={(newRole.brandIds || []).includes(brand.id)}
-                            onChange={(e) => {
-                              const currentBrands = newRole.brandIds || [];
-                              const newBrands = e.target.checked
-                                ? [...currentBrands, brand.id]
-                                : currentBrands.filter(id => id !== brand.id);
-                              setNewRole({ ...newRole, brandIds: newBrands });
-                            }}
-                            className="w-3.5 h-3.5 rounded border-border text-teal-600 focus:ring-teal-600"
-                          />
-                          <span className="w-3 h-3 rounded-full shrink-0 bg-teal-600" />
-                          <span className="text-[12px] font-medium">{brand.displayName}</span>
-                          <span className="text-[11px] text-muted-foreground ml-auto">{brand.brandCode}</span>
-                        </label>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-end gap-3 px-6 py-3 border-t border-border/50 shrink-0 bg-white">
-              <button
-                onClick={() => setShowAddRole(false)}
-                className="px-4 py-2 border border-border rounded-md text-[13px] font-medium hover:bg-muted/50 transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleAddRoleAssignment}
-                disabled={!newRole.role || !newRole.companyId}
-                className="flex items-center gap-1.5 px-5 py-2 bg-teal-600 text-white rounded-md text-[13px] font-bold hover:bg-teal-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Plus size={13} /> 確認新增
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

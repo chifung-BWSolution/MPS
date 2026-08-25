@@ -168,7 +168,7 @@ export function Sidebar() {
           <div
             onClick={() => navigateTo('settings', 'profile')}
             className="flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-[#f5f8fc] transition-colors cursor-pointer"
-            title="查看 / 編輯個人設定"
+            title="查看個人設定"
           >
             <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center shrink-0">
               <span className="text-teal-700 text-xs font-bold">
