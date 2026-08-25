@@ -36,6 +36,7 @@ import {
 import { PitchingBudgetTab } from '@/components/quotation/PitchingBudgetTab';
 import { PitchingFollowUpsTab } from '@/components/quotation/PitchingFollowUpsTab';
 import { PitchingWorkHoursTab } from '@/components/quotation/PitchingWorkHoursTab';
+import { QuotationBvCard } from '@/components/quotation/QuotationBvCard';
 
 export type PitchingFormValues = {
   clientId: string;
@@ -1043,82 +1044,87 @@ export function PitchingDetail({
       </div>
 
       {activeTab === 'info' && (
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6 space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div>
-                <span className="text-[12px] text-muted-foreground block mb-1">客戶 Customer</span>
-                <SearchableSelect
-                  value={draft.clientId}
-                  onValueChange={(clientId) => {
-                    const client = clientOptions.find((c) => c.value === clientId);
-                    patchDraft({
-                      clientId,
-                      clientName: client?.label ?? '',
-                    });
-                  }}
-                  options={clientOptions}
-                  placeholder="搜尋客戶..."
-                  searchPlaceholder="搜尋客戶名稱..."
-                  emptyText="找不到客戶"
-                />
-              </div>
-              <EditableTextField
-                label="提案顯示名稱"
-                value={draft.displayName}
-                onChange={(displayName) => patchDraft({ displayName })}
-              />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <span className="text-[12px] text-muted-foreground block">公司名稱 (中文)</span>
-                  <p className="text-[14px] font-medium mt-0.5">{clientCompany.companyNameZh || '—'}</p>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
+            <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6 space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <span className="text-[12px] text-muted-foreground block mb-1">客戶 Customer</span>
+                    <SearchableSelect
+                      value={draft.clientId}
+                      onValueChange={(clientId) => {
+                        const client = clientOptions.find((c) => c.value === clientId);
+                        patchDraft({
+                          clientId,
+                          clientName: client?.label ?? '',
+                        });
+                      }}
+                      options={clientOptions}
+                      placeholder="搜尋客戶..."
+                      searchPlaceholder="搜尋客戶名稱..."
+                      emptyText="找不到客戶"
+                    />
+                  </div>
+                  <EditableTextField
+                    label="提案顯示名稱"
+                    value={draft.displayName}
+                    onChange={(displayName) => patchDraft({ displayName })}
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-[12px] text-muted-foreground block">公司名稱 (中文)</span>
+                      <p className="text-[14px] font-medium mt-0.5">{clientCompany.companyNameZh || '—'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[12px] text-muted-foreground block">公司名稱 (Eng)</span>
+                      <p className="text-[14px] font-medium mt-0.5">{clientCompany.companyNameEn || '—'}</p>
+                    </div>
+                  </div>
+                  <EditableDateField
+                    label="查詢日期"
+                    value={draft.inquiryDate}
+                    onChange={(inquiryDate) => patchDraft({ inquiryDate })}
+                  />
+                  <EditableDateField
+                    label="簽約日期"
+                    value={draft.signedDate}
+                    onChange={(signedDate) => patchDraft({ signedDate })}
+                  />
+                  <EditableDateField
+                    label="交付日期"
+                    value={draft.handoverDate}
+                    onChange={(handoverDate) => patchDraft({ handoverDate })}
+                  />
+                  <div>
+                    <span className="text-[12px] text-muted-foreground block">剩餘天數</span>
+                    <span className="text-[14px]">
+                      {remaining === null ? '—' : remaining <= 0 ? `逾期 ${Math.abs(remaining)} 天` : `${remaining} 天`}
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-[12px] text-muted-foreground block">公司名稱 (Eng)</span>
-                  <p className="text-[14px] font-medium mt-0.5">{clientCompany.companyNameEn || '—'}</p>
+                <div className="space-y-4">
+                  <EditableProjectTypesField
+                    label="項目類型"
+                    value={draft.projectTypes}
+                    onChange={(projectTypes) => patchDraft({ projectTypes })}
+                  />
+                  <div>
+                    <span className="text-[12px] text-muted-foreground block">負責 PM</span>
+                    <p className="text-[14px] font-medium mt-0.5">{formatMainPmName(record)}</p>
+                  </div>
+                  <EditableTextField
+                    label="Asana 連結"
+                    value={draft.asanaLink}
+                    onChange={(asanaLink) => patchDraft({ asanaLink })}
+                    placeholder="https://app.asana.com/..."
+                  />
                 </div>
-              </div>
-              <EditableDateField
-                label="查詢日期"
-                value={draft.inquiryDate}
-                onChange={(inquiryDate) => patchDraft({ inquiryDate })}
-              />
-              <EditableDateField
-                label="簽約日期"
-                value={draft.signedDate}
-                onChange={(signedDate) => patchDraft({ signedDate })}
-              />
-              <EditableDateField
-                label="交付日期"
-                value={draft.handoverDate}
-                onChange={(handoverDate) => patchDraft({ handoverDate })}
-              />
-              <div>
-                <span className="text-[12px] text-muted-foreground block">剩餘天數</span>
-                <span className="text-[14px]">
-                  {remaining === null ? '—' : remaining <= 0 ? `逾期 ${Math.abs(remaining)} 天` : `${remaining} 天`}
-                </span>
               </div>
             </div>
-            <div className="space-y-4">
-              <EditableProjectTypesField
-                label="項目類型"
-                value={draft.projectTypes}
-                onChange={(projectTypes) => patchDraft({ projectTypes })}
-              />
-              <div>
-                <span className="text-[12px] text-muted-foreground block">負責 PM</span>
-                <p className="text-[14px] font-medium mt-0.5">{formatMainPmName(record)}</p>
-              </div>
-              <EditableTextField
-                label="Asana 連結"
-                value={draft.asanaLink}
-                onChange={(asanaLink) => patchDraft({ asanaLink })}
-                placeholder="https://app.asana.com/..."
-              />
-            </div>
+            <QuotationBvCard projectId={record.id} />
           </div>
-          <div className="border-t border-border pt-4">
+          <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6">
             <EditableTextAreaField
               label="提案描述"
               value={draft.description}
