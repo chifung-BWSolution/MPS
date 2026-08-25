@@ -8,7 +8,6 @@ interface SystemUserProfile {
   id: string;
   auth_user_id: string | null;
   staff_id: string;
-  bubble_staff_id: string;
   display_name: string;
   email: string;
   role: string;
@@ -49,13 +48,18 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 type StaffDirectoryLite = {
   id: string;
-  bubble_staff_id: string;
   display_name: string | null;
   full_name: string | null;
   status: string | null;
   position: string | null;
   work_email: string | null;
+  work_phone: string | null;
+  private_phone: string | null;
+  profile_pic_url: string | null;
 };
+
+const STAFFS_LITE_SELECT =
+  'id, display_name, full_name, status, position, work_email, work_phone, private_phone, profile_pic_url';
 
 // Canonical Bubble staffs.id — not the leftover "Lowell Lo (manual)" placeholder.
 const MANUAL_SUPER_ADMIN_STAFF_UUID = '04102dd8-8d0f-4536-82cd-904cc0769227';
@@ -113,10 +117,9 @@ function fallbackFromHardcoded(
 ): { systemUser: SystemUserProfile; userInfo: UserInfoProfile } {
   return {
     systemUser: {
-      id: `fallback-${profile.bubble_staff_id}`,
+      id: `fallback-${profile.staff_id}`,
       auth_user_id: authUserId,
       staff_id: profile.staff_id,
-      bubble_staff_id: profile.bubble_staff_id,
       display_name: profile.display_name,
       email,
       role: profile.role,
@@ -128,7 +131,7 @@ function fallbackFromHardcoded(
       google_email: email,
     },
     userInfo: {
-      id: `fallback-user-info-${profile.bubble_staff_id}`,
+      id: `fallback-user-info-${profile.staff_id}`,
       staff_id: profile.staff_id,
       role_tag: profile.role_tag,
       system_status: 'active',
@@ -137,6 +140,32 @@ function fallbackFromHardcoded(
       email,
       google_email: email,
     },
+  };
+}
+
+function staffPhone(staff?: { work_phone?: string | null; private_phone?: string | null } | null): string | null {
+  return staff?.work_phone || staff?.private_phone || null;
+}
+
+async function fetchStaffLiteById(staffId: string | null | undefined): Promise<StaffDirectoryLite | null> {
+  if (!staffId) return null;
+  const { data } = await supabase
+    .from('staffs')
+    .select(STAFFS_LITE_SELECT)
+    .eq('id', staffId)
+    .maybeSingle();
+  return (data as StaffDirectoryLite | null) || null;
+}
+
+function applyStaffEnrichment(
+  prev: SystemUserProfile,
+  staff: StaffDirectoryLite | null
+): SystemUserProfile {
+  if (!staff) return prev;
+  return {
+    ...prev,
+    phone: staffPhone(staff) || prev.phone,
+    profile_pic_url: staff.profile_pic_url || prev.profile_pic_url,
   };
 }
 
@@ -158,7 +187,7 @@ function isStaffActive(status: string | null | undefined): boolean {
 
 /**
  * Flexible whitelist lookup against public.users (email / google_email),
- * enriched by public.staffs (users.staff_id → staffs.id; bubble_staff_id is Bubble external id).
+ * enriched by public.staffs (users.staff_id → staffs.id only).
  *
  * When the same email matches multiple people (shared work mailbox), prefer the row
  * linked to staffs.status = 'active'. Falls back to inactive only if no active match exists.
@@ -204,28 +233,15 @@ async function findSystemUserByEmail(email: string): Promise<{ data: SystemUserP
   const loadStaffStatusMap = async (staffIds: string[]): Promise<Map<string, StaffDirectoryLite>> => {
     const map = new Map<string, StaffDirectoryLite>();
     const uniqueIds = [...new Set(staffIds.filter(Boolean))];
+    if (uniqueIds.length === 0) return map;
 
-    const queries: PromiseLike<any>[] = [
-      supabase
-        .from('staffs')
-        .select('id, bubble_staff_id, display_name, full_name, status, position, work_email')
-        .ilike('work_email', normalizedEmail),
-    ];
+    const { data } = await supabase
+      .from('staffs')
+      .select(STAFFS_LITE_SELECT)
+      .in('id', uniqueIds);
 
-    if (uniqueIds.length > 0) {
-      queries.push(
-        supabase
-          .from('staffs')
-          .select('id, bubble_staff_id, display_name, full_name, status, position, work_email')
-          .in('id', uniqueIds)
-      );
-    }
-
-    const results = await Promise.all(queries);
-    for (const result of results) {
-      for (const row of (result.data || []) as StaffDirectoryLite[]) {
-        if (row?.id) map.set(row.id, row);
-      }
+    for (const row of (data || []) as StaffDirectoryLite[]) {
+      if (row?.id) map.set(row.id, row);
     }
     return map;
   };
@@ -391,14 +407,13 @@ function bootstrapSystemUserFromUserInfo(
     id: uiRecord.id || `ui-bootstrap-${uiRecord.staff_id}`,
     auth_user_id: null,
     staff_id: uiRecord.staff_id,
-    bubble_staff_id: staff?.bubble_staff_id || '',
     display_name: displayName,
     email: uiRecord.email || email,
     role: role,
     department: uiRecord.department || null,
     position: staff?.position || uiRecord.role_tag || uiRecord.classification || null,
-    phone: null,
-    profile_pic_url: uiRecord.profile_pic_url || null,
+    phone: staffPhone(staff),
+    profile_pic_url: staff?.profile_pic_url || uiRecord.profile_pic_url || null,
     is_active: true, // If they're in users, they're authorized
     google_email: uiRecord.google_email || email,
   };
@@ -406,42 +421,33 @@ function bootstrapSystemUserFromUserInfo(
 
 const DEV_BYPASS_STORAGE_KEY = 'mps_dev_bypass_session';
 
+function remapStaffIdFromLegacySession(raw: any): string {
+  const staffIdRaw = typeof raw?.staff_id === 'string' ? raw.staff_id.trim() : '';
+  if (isStaffUuid(staffIdRaw)) return remapStaleStaffUuid(staffIdRaw);
+
+  // Old session JSON may still carry Bubble ids. Remap hardcoded bypass users only;
+  // bubble-id restore is not the primary path.
+  const bubbleRaw = typeof raw?.bubble_staff_id === 'string' ? raw.bubble_staff_id.trim() : '';
+  const legacyBubble = bubbleRaw || (!isStaffUuid(staffIdRaw) ? staffIdRaw : '');
+  if (legacyBubble === 'manual_super_admin_lowell' || legacyBubble === MANUAL_SUPER_ADMIN_BUBBLE_STAFF_ID) {
+    return MANUAL_SUPER_ADMIN_STAFF_UUID;
+  }
+  const hardcoded = Object.values(HARDCODED_BYPASS_USERS).find(
+    (p) => p.bubble_staff_id === legacyBubble
+  );
+  return hardcoded?.staff_id || '';
+}
+
 function normalizeRestoredSystemUser(raw: any): SystemUserProfile | null {
   if (!raw || typeof raw !== 'object') return null;
 
-  const staffIdRaw = typeof raw.staff_id === 'string' ? raw.staff_id.trim() : '';
-  const bubbleRaw = typeof raw.bubble_staff_id === 'string' ? raw.bubble_staff_id.trim() : '';
-
-  // Legacy sessions stored Bubble text in staff_id / omitted staff_id entirely.
-  // Also rewrite the leftover "Lowell Lo (manual)" UUID to the canonical staff row.
-  let staff_id = isStaffUuid(staffIdRaw) ? remapStaleStaffUuid(staffIdRaw) : '';
-  let bubble_staff_id = bubbleRaw;
-  if (bubble_staff_id === 'manual_super_admin_lowell') {
-    bubble_staff_id = MANUAL_SUPER_ADMIN_BUBBLE_STAFF_ID;
-    if (!staff_id) staff_id = MANUAL_SUPER_ADMIN_STAFF_UUID;
-  }
-
-  if (!bubble_staff_id && staffIdRaw && !isStaffUuid(staffIdRaw)) {
-    bubble_staff_id = staffIdRaw;
-  }
-
-  if (!staff_id) {
-    const hardcoded = Object.values(HARDCODED_BYPASS_USERS).find(
-      (p) => p.bubble_staff_id === bubble_staff_id || p.bubble_staff_id === staffIdRaw
-    );
-    if (hardcoded) {
-      staff_id = hardcoded.staff_id;
-      bubble_staff_id = hardcoded.bubble_staff_id;
-    }
-  }
-
-  if (!staff_id && !bubble_staff_id) return null;
+  const staff_id = remapStaffIdFromLegacySession(raw);
+  if (!staff_id) return null;
 
   return {
-    id: raw.id || `ui-bootstrap-${staff_id || bubble_staff_id}`,
+    id: raw.id || `ui-bootstrap-${staff_id}`,
     auth_user_id: raw.auth_user_id ?? null,
     staff_id,
-    bubble_staff_id,
     display_name: raw.display_name || raw.email || 'User',
     email: raw.email || '',
     role: raw.role || 'staff',
@@ -626,7 +632,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     (async () => {
       const uuid = await resolveStaffUuid({
         staff_id: systemUser.staff_id,
-        bubble_staff_id: systemUser.bubble_staff_id,
         email: systemUser.email || systemUser.google_email || undefined,
       });
       if (cancelled || !uuid || uuid === systemUser.staff_id) return;
@@ -697,38 +702,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             foundInDB = true;
 
 
-            // Enrich phone — fire and forget
+            // Enrich phone / profile pic from staffs.id — fire and forget
             (async () => {
               try {
-                let phone: string | null = null;
-                if (sysUser.staff_id) {
-                  const { data: staffRow } = await supabase
-                    .from('staffs')
-                    .select('work_phone, private_phone')
-                    .eq('id', sysUser.staff_id)
-                    .maybeSingle();
-                  if (staffRow) phone = staffRow.work_phone || staffRow.private_phone || null;
-                }
-                if (!phone && sysUser.bubble_staff_id) {
-                  const { data: staffRow } = await supabase
-                    .from('staffs')
-                    .select('work_phone, private_phone')
-                    .eq('bubble_staff_id', sysUser.bubble_staff_id)
-                    .maybeSingle();
-                  if (staffRow) phone = staffRow.work_phone || staffRow.private_phone || null;
-                }
-                if (!phone) {
-                  const { data: staffByEmail } = await supabase
-                    .from('staffs')
-                    .select('work_phone, private_phone')
-                    .ilike('work_email', normalizedEmail)
-                    .limit(1)
-                    .maybeSingle();
-                  if (staffByEmail) phone = staffByEmail.work_phone || staffByEmail.private_phone || null;
-                }
-                if (phone) {
-                  setSystemUser(prev => prev ? { ...prev, phone } : prev);
-                }
+                const staff = await fetchStaffLiteById(sysUser.staff_id);
+                if (staff) setSystemUser(prev => prev ? applyStaffEnrichment(prev, staff) : prev);
               } catch {}
             })();
 
@@ -790,46 +768,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthError(null);
         authSucceededRef.current = true; // CRITICAL: Mark auth as succeeded IMMEDIATELY
 
-        // Enrich phone from staffs — fire and forget, updates state when ready
+        // Enrich phone / profile pic from staffs.id — fire and forget
         (async () => {
           try {
-            let phone: string | null = null;
-            // Prefer staffs.id (users.staff_id FK), then bubble_staff_id
-            if (sysUser.staff_id) {
-              const { data: staffRow } = await supabase
-                .from('staffs')
-                .select('work_phone, private_phone')
-                .eq('id', sysUser.staff_id)
-                .maybeSingle();
-              if (staffRow) {
-                phone = staffRow.work_phone || staffRow.private_phone || null;
-              }
-            }
-            if (!phone && sysUser.bubble_staff_id) {
-              const { data: staffRow } = await supabase
-                .from('staffs')
-                .select('work_phone, private_phone')
-                .eq('bubble_staff_id', sysUser.bubble_staff_id)
-                .maybeSingle();
-              if (staffRow) {
-                phone = staffRow.work_phone || staffRow.private_phone || null;
-              }
-            }
-            // Fallback: try by email
-            if (!phone && normalizedEmail) {
-              const { data: staffByEmail } = await supabase
-                .from('staffs')
-                .select('work_phone, private_phone')
-                .ilike('work_email', normalizedEmail)
-                .limit(1)
-                .maybeSingle();
-              if (staffByEmail) {
-                phone = staffByEmail.work_phone || staffByEmail.private_phone || null;
-              }
-            }
-            if (phone) {
-              console.log('[Auth] 📞 Phone enriched from staffs:', phone);
-              setSystemUser(prev => prev ? { ...prev, phone } : prev);
+            const staff = await fetchStaffLiteById(sysUser.staff_id);
+            if (staff) {
+              console.log('[Auth] 📞 Phone enriched from staffs:', staffPhone(staff));
+              setSystemUser(prev => prev ? applyStaffEnrichment(prev, staff) : prev);
             }
           } catch (err) {
             console.warn('[Auth] Phone enrichment failed (non-blocking):', err);
@@ -975,38 +920,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setAuthError(null);
             authSucceededRef.current = true;
 
-            // Enrich phone — fire and forget
+            // Enrich phone / profile pic from staffs.id — fire and forget
             (async () => {
               try {
-                let phone: string | null = null;
-                if (sysUser.staff_id) {
-                  const { data: staffRow } = await supabase
-                    .from('staffs')
-                    .select('work_phone, private_phone')
-                    .eq('id', sysUser.staff_id)
-                    .maybeSingle();
-                  if (staffRow) phone = staffRow.work_phone || staffRow.private_phone || null;
-                }
-                if (!phone && sysUser.bubble_staff_id) {
-                  const { data: staffRow } = await supabase
-                    .from('staffs')
-                    .select('work_phone, private_phone')
-                    .eq('bubble_staff_id', sysUser.bubble_staff_id)
-                    .maybeSingle();
-                  if (staffRow) phone = staffRow.work_phone || staffRow.private_phone || null;
-                }
-                if (!phone) {
-                  const { data: staffByEmail } = await supabase
-                    .from('staffs')
-                    .select('work_phone, private_phone')
-                    .ilike('work_email', hardcodedBypass.email)
-                    .limit(1)
-                    .maybeSingle();
-                  if (staffByEmail) phone = staffByEmail.work_phone || staffByEmail.private_phone || null;
-                }
-                if (phone) {
-                  setSystemUser(prev => prev ? { ...prev, phone } : prev);
-                }
+                const staff = await fetchStaffLiteById(sysUser.staff_id);
+                if (staff) setSystemUser(prev => prev ? applyStaffEnrichment(prev, staff) : prev);
               } catch {}
             })();
 
@@ -1067,44 +985,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthError(null);
         authSucceededRef.current = true;
 
-        // Enrich phone from staffs — fire and forget
+        // Enrich phone / profile pic from staffs.id — fire and forget
         (async () => {
           try {
-            let phone: string | null = null;
-            if (sysUser.staff_id) {
-              const { data: staffRow } = await supabase
-                .from('staffs')
-                .select('work_phone, private_phone')
-                .eq('id', sysUser.staff_id)
-                .maybeSingle();
-              if (staffRow) {
-                phone = staffRow.work_phone || staffRow.private_phone || null;
-              }
-            }
-            if (!phone && sysUser.bubble_staff_id) {
-              const { data: staffRow } = await supabase
-                .from('staffs')
-                .select('work_phone, private_phone')
-                .eq('bubble_staff_id', sysUser.bubble_staff_id)
-                .maybeSingle();
-              if (staffRow) {
-                phone = staffRow.work_phone || staffRow.private_phone || null;
-              }
-            }
-            if (!phone) {
-              const { data: staffByEmail } = await supabase
-                .from('staffs')
-                .select('work_phone, private_phone')
-                .ilike('work_email', email.toLowerCase().trim())
-                .limit(1)
-                .maybeSingle();
-              if (staffByEmail) {
-                phone = staffByEmail.work_phone || staffByEmail.private_phone || null;
-              }
-            }
-            if (phone) {
-              console.log('[Auth] 📞 Dev bypass phone enriched:', phone);
-              setSystemUser(prev => prev ? { ...prev, phone } : prev);
+            const staff = await fetchStaffLiteById(sysUser.staff_id);
+            if (staff) {
+              console.log('[Auth] 📞 Dev bypass phone enriched:', staffPhone(staff));
+              setSystemUser(prev => prev ? applyStaffEnrichment(prev, staff) : prev);
             }
           } catch (err) {
             console.warn('[Auth] Dev bypass phone enrichment failed:', err);

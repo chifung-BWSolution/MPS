@@ -205,102 +205,93 @@ export type Database = {
       }
       staffs: {
         Row: {
-          al_quota: number | null
           base_location: string | null
-          birthday: string | null
-          bubble_created_date: string | null
-          bubble_modified_date: string | null
-          bubble_staff_id: string
-          business_unit: string | null
+          brand_list_id: string | null
+          chinese_name: string | null
+          company_list_id: string | null
           created_at: string | null
-          department: string | null
           display_name: string
           entry_date: string | null
           full_name: string | null
           id: string
-          joining_date: string | null
-          office: string | null
+          otc_staff_sync_id: string | null
           position: string | null
           private_email: string | null
           private_phone: string | null
-          probation_status: string | null
           profile_pic_url: string | null
           status: string
           synced_at: string | null
-          team_id: string | null
-          team_role: string | null
+          team_name: string | null
           termination_date: string | null
           updated_at: string | null
           user_role: string | null
-          voov_id: string | null
           work_email: string | null
           work_phone: string | null
         }
         Insert: {
-          al_quota?: number | null
           base_location?: string | null
-          birthday?: string | null
-          bubble_created_date?: string | null
-          bubble_modified_date?: string | null
-          bubble_staff_id: string
-          business_unit?: string | null
+          brand_list_id?: string | null
+          chinese_name?: string | null
+          company_list_id?: string | null
           created_at?: string | null
-          department?: string | null
           display_name?: string
           entry_date?: string | null
           full_name?: string | null
           id?: string
-          joining_date?: string | null
-          office?: string | null
+          otc_staff_sync_id?: string | null
           position?: string | null
           private_email?: string | null
           private_phone?: string | null
-          probation_status?: string | null
           profile_pic_url?: string | null
           status?: string
           synced_at?: string | null
-          team_id?: string | null
-          team_role?: string | null
+          team_name?: string | null
           termination_date?: string | null
           updated_at?: string | null
           user_role?: string | null
-          voov_id?: string | null
           work_email?: string | null
           work_phone?: string | null
         }
         Update: {
-          al_quota?: number | null
           base_location?: string | null
-          birthday?: string | null
-          bubble_created_date?: string | null
-          bubble_modified_date?: string | null
-          bubble_staff_id?: string
-          business_unit?: string | null
+          brand_list_id?: string | null
+          chinese_name?: string | null
+          company_list_id?: string | null
           created_at?: string | null
-          department?: string | null
           display_name?: string
           entry_date?: string | null
           full_name?: string | null
           id?: string
-          joining_date?: string | null
-          office?: string | null
+          otc_staff_sync_id?: string | null
           position?: string | null
           private_email?: string | null
           private_phone?: string | null
-          probation_status?: string | null
           profile_pic_url?: string | null
           status?: string
           synced_at?: string | null
-          team_id?: string | null
-          team_role?: string | null
+          team_name?: string | null
           termination_date?: string | null
           updated_at?: string | null
           user_role?: string | null
-          voov_id?: string | null
           work_email?: string | null
           work_phone?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "staffs_brand_list_id_fkey"
+            columns: ["brand_list_id"]
+            isOneToOne: false
+            referencedRelation: "brand_list"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staffs_company_list_id_fkey"
+            columns: ["company_list_id"]
+            isOneToOne: false
+            referencedRelation: "company_list"
+            referencedColumns: ["uuid"]
+          },
+        ]
       }
       users: {
         Row: {

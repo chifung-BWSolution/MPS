@@ -49,7 +49,7 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
       case 'credit-cards': return { title: '信用卡管理', subtitle: '管理公司付款信用卡。' };
       case 'quotation-settings': return { title: '客戶報價設定', subtitle: '管理報價類型、預設服務項目及付款安排。' };
       case 'terms-conditions': return { title: '條款及細則管理', subtitle: '管理各報價類型的條款範本，報價時可選擇或編輯。' };
-      case 'staff-directory': return { title: '員工列表', subtitle: '查看所有員工資料，資料來源：OTC2 Staff（同步至 staffs）。' };
+      case 'staff-directory': return { title: '員工列表', subtitle: '查看所有員工資料，資料來源：OTC2 staff_sync（同步至 staffs）。' };
       case 'login-logs': return { title: '登入紀錄', subtitle: '查看用戶登入歷史記錄。' };
       default: return { title: '個人設定', subtitle: '管理個人資料及安全設定。' };
     }
@@ -140,17 +140,25 @@ function ProfileSection() {
       let department = authDepartment;
       let displayName = authName;
 
-      console.log('[Settings:loadProfile] Starting. authEmail:', authEmail, '| systemUser.phone:', systemUser?.phone, '| staff_id:', systemUser?.staff_id, '| bubble_staff_id:', systemUser?.bubble_staff_id);
+      console.log('[Settings:loadProfile] Starting. authEmail:', authEmail, '| systemUser.phone:', systemUser?.phone, '| staff_id:', systemUser?.staff_id);
 
-      // === Step 1: Prefer staffs.id (uuid FK), then bubble_staff_id ===
       const PROFILE_TIMEOUT = 5000;
+      const STAFFS_PROFILE_SELECT = 'display_name, full_name, position, work_phone, private_phone, profile_pic_url';
+
+      const applyStaffRow = (staffRow: any) => {
+        if (!staffRow) return;
+        displayName = staffRow.full_name || staffRow.display_name || displayName;
+        position = staffRow.position || position;
+        if (!phone) phone = staffRow.work_phone || staffRow.private_phone || '';
+        // department stays on users.department — never copy staffs.business_unit
+      };
 
       if (systemUser?.staff_id) {
         try {
           const result = await Promise.race([
             supabase
               .from('staffs')
-              .select('display_name, full_name, position, work_phone, private_phone, base_location, business_unit')
+              .select(STAFFS_PROFILE_SELECT)
               .eq('id', systemUser.staff_id)
               .maybeSingle(),
             new Promise<never>((_, reject) => setTimeout(() => reject(new Error('staffs id lookup timeout')), PROFILE_TIMEOUT))
@@ -158,86 +166,45 @@ function ProfileSection() {
 
           const { data: staffRow } = result as any;
           console.log('[Settings:loadProfile] staffs by id:', staffRow ? { work_phone: staffRow.work_phone, private_phone: staffRow.private_phone } : 'not found');
-          if (staffRow) {
-            displayName = staffRow.full_name || staffRow.display_name || authName;
-            position = staffRow.position || position;
-            if (!phone) phone = staffRow.work_phone || staffRow.private_phone || '';
-            department = staffRow.business_unit || department;
-          }
+          applyStaffRow(staffRow);
         } catch (err) {
           console.warn('[Settings] Failed to fetch staffs by id:', err);
         }
-      }
-
-      if ((!phone || !displayName) && systemUser?.bubble_staff_id) {
+      } else if (authEmail) {
         try {
           const result = await Promise.race([
             supabase
               .from('staffs')
-              .select('display_name, full_name, position, work_phone, private_phone, base_location, business_unit')
-              .eq('bubble_staff_id', systemUser.bubble_staff_id)
-              .maybeSingle(),
-            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('staff_directory lookup timeout')), PROFILE_TIMEOUT))
-          ]);
-          
-          const { data: staffRow } = result as any;
-          console.log('[Settings:loadProfile] staff_directory by bubble_staff_id:', staffRow ? { work_phone: staffRow.work_phone, private_phone: staffRow.private_phone } : 'not found');
-          if (staffRow) {
-            displayName = staffRow.full_name || staffRow.display_name || authName;
-            position = staffRow.position || position;
-            if (!phone) phone = staffRow.work_phone || staffRow.private_phone || '';
-            department = staffRow.business_unit || department;
-          }
-        } catch (err) {
-          console.warn('[Settings] Failed to fetch staff_directory details:', err);
-        }
-      }
-
-      // === Step 3: Try staff_directory by work_email ===
-      if (!phone && authEmail) {
-        try {
-          const result = await Promise.race([
-            supabase
-              .from('staffs')
-              .select('display_name, full_name, position, work_phone, private_phone, base_location, business_unit, work_email')
+              .select(STAFFS_PROFILE_SELECT)
               .ilike('work_email', authEmail)
               .limit(1)
               .maybeSingle(),
-            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('staff_directory work_email lookup timeout')), PROFILE_TIMEOUT))
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('staffs work_email lookup timeout')), PROFILE_TIMEOUT))
           ]);
-          
-          const { data: staffByWorkEmail } = result as any;
-          console.log('[Settings:loadProfile] staff_directory by work_email:', staffByWorkEmail ? { work_phone: staffByWorkEmail.work_phone, private_phone: staffByWorkEmail.private_phone } : 'not found');
-          if (staffByWorkEmail) {
-            displayName = staffByWorkEmail.full_name || staffByWorkEmail.display_name || displayName;
-            position = staffByWorkEmail.position || position;
-            phone = staffByWorkEmail.work_phone || staffByWorkEmail.private_phone || phone;
-            department = staffByWorkEmail.business_unit || department;
-          }
 
-          // If still no phone, try private_email
+          const { data: staffByWorkEmail } = result as any;
+          console.log('[Settings:loadProfile] staffs by work_email:', staffByWorkEmail ? { work_phone: staffByWorkEmail.work_phone, private_phone: staffByWorkEmail.private_phone } : 'not found');
+          applyStaffRow(staffByWorkEmail);
+
           if (!phone) {
             const result2 = await Promise.race([
               supabase
                 .from('staffs')
-                .select('display_name, full_name, position, work_phone, private_phone, base_location, business_unit, private_email')
+                .select(STAFFS_PROFILE_SELECT)
                 .ilike('private_email', authEmail)
                 .limit(1)
                 .maybeSingle(),
-              new Promise<never>((_, reject) => setTimeout(() => reject(new Error('staff_directory private_email lookup timeout')), PROFILE_TIMEOUT))
+              new Promise<never>((_, reject) => setTimeout(() => reject(new Error('staffs private_email lookup timeout')), PROFILE_TIMEOUT))
             ]);
-            
+
             const { data: staffByPrivateEmail } = result2 as any;
             if (staffByPrivateEmail) {
-              displayName = staffByPrivateEmail.full_name || staffByPrivateEmail.display_name || displayName;
-              position = staffByPrivateEmail.position || position;
-              phone = staffByPrivateEmail.work_phone || staffByPrivateEmail.private_phone || phone;
-              department = staffByPrivateEmail.business_unit || department;
+              applyStaffRow(staffByPrivateEmail);
               console.log('[Settings:loadProfile] Found staff by private_email:', { phone, displayName });
             }
           }
         } catch (err) {
-          console.warn('[Settings] Failed to fetch staff_directory by email:', err);
+          console.warn('[Settings] Failed to fetch staffs by email:', err);
         }
       }
 
@@ -292,39 +259,15 @@ function ProfileSection() {
   const [profileSaved, setProfileSaved] = useState(false);
 
   const handleSaveProfile = async () => {
-    const authEmail = systemUser?.email || systemUser?.google_email || session?.user?.email || '';
-    
-    // Persist phone to staffs.work_phone
-    if (authEmail) {
+    if (systemUser?.staff_id) {
       try {
-        const { data: staffMatch } = await supabase
+        await supabase
           .from('staffs')
-          .select('id')
-          .or(`work_email.ilike.${authEmail},private_email.ilike.${authEmail}`)
-          .limit(1)
-          .maybeSingle();
-        
-        if (staffMatch?.id) {
-          await supabase
-            .from('staffs')
-            .update({ work_phone: profile.phone, updated_at: new Date().toISOString() })
-            .eq('id', staffMatch.id);
-          console.log('[Settings] Saved phone to staff_directory:', profile.phone);
-        } else if (systemUser?.staff_id) {
-          await supabase
-            .from('staffs')
-            .update({ work_phone: profile.phone, updated_at: new Date().toISOString() })
-            .eq('id', systemUser.staff_id);
-          console.log('[Settings] Saved phone to staffs via staff_id:', profile.phone);
-        } else if (systemUser?.bubble_staff_id) {
-          await supabase
-            .from('staffs')
-            .update({ work_phone: profile.phone, updated_at: new Date().toISOString() })
-            .eq('bubble_staff_id', systemUser.bubble_staff_id);
-          console.log('[Settings] Saved phone to staff_directory via bubble_staff_id:', profile.phone);
-        }
+          .update({ work_phone: profile.phone, updated_at: new Date().toISOString() })
+          .eq('id', systemUser.staff_id);
+        console.log('[Settings] Saved phone to staffs via staff_id:', profile.phone);
       } catch (err) {
-        console.warn('[Settings] Failed to save phone to staff_directory:', err);
+        console.warn('[Settings] Failed to save phone to staffs:', err);
       }
     }
 

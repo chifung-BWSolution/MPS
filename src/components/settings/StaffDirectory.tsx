@@ -2,9 +2,45 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { Search, RefreshCw, Users, Phone, Mail, Building2, Briefcase, UserCheck, UserX, Tag, ChevronDown, Shield, Ban, CheckSquare, Square, MinusSquare, CloudDownload, CheckCircle2, AlertCircle, Loader2, ArrowUpDown, Database, Save, Chrome, Edit } from 'lucide-react';
-import { type BubbleStaff, toBubbleCdnUrl } from '@/types/bubble';
 import { supabase } from '@/lib/supabase';
-import { resolveStaffOfficeAndDepartment } from '@/lib/staffMapping';
+
+const STAFF_SELECT =
+  'id, display_name, full_name, chinese_name, position, user_role, status, work_email, private_email, work_phone, private_phone, profile_pic_url, base_location, team_name, company_list_id, brand_list_id, entry_date, termination_date';
+
+/** Local staffs row — identity is staffs.id (uuid). Never key UI by otc_staff_sync_id. */
+interface StaffRow {
+  id: string;
+  display_name: string | null;
+  full_name: string | null;
+  chinese_name: string | null;
+  position: string | null;
+  user_role: string | null;
+  status: string | null;
+  work_email: string | null;
+  private_email: string | null;
+  work_phone: string | null;
+  private_phone: string | null;
+  profile_pic_url: string | null;
+  base_location: string | null;
+  team_name: string | null;
+  company_list_id: string | null;
+  brand_list_id: string | null;
+  entry_date: string | null;
+  termination_date: string | null;
+}
+
+/** Use profile_pic_url as-is when it is already an absolute http(s) URL. */
+function staffAvatarSrc(url?: string | null): string | undefined {
+  const trimmed = (url || '').trim();
+  if (!trimmed) return undefined;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith('//')) return `https:${trimmed}`;
+  return trimmed;
+}
+
+function isActiveStaff(staff: StaffRow): boolean {
+  return (staff.status || '').toLowerCase() === 'active' && !staff.termination_date;
+}
 
 // Role labels (身份標籤) matching the PRD roles - determines page access
 const ROLE_LABELS: Record<string, { label: string; color: string; modules: string }> = {
@@ -23,29 +59,25 @@ const ROLE_LABELS: Record<string, { label: string; color: string; modules: strin
 type StaffClassification = 'system_user' | 'other_staff' | 'disabled';
 
 interface StaffUserConfig {
-  bubbleId: string;
+  staffId: string; // staffs.id
   classification: StaffClassification;
   roleTag?: string; // key of ROLE_LABELS
 }
 
 export function StaffDirectory() {
-  // Primary data source: MPS staff_directory (synced from OTC2)
-  const [staffList, setStaffList] = useState<BubbleStaff[]>([]);
+  // Primary data source: staffs (OTC2 staff_sync replica)
+  const [staffList, setStaffList] = useState<StaffRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // bubble_staff_id → staffs.id (uuid) for users.staff_id writes
-  const [staffUuidByBubbleId, setStaffUuidByBubbleId] = useState<Record<string, string>>({});
-
-  // Fetch staff from Supabase staff_directory table
   const fetchFromSupabase = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const { data, error: fetchErr } = await supabase
         .from('staffs')
-        .select('*')
-        .order('synced_at', { ascending: false });
+        .select(STAFF_SELECT)
+        .order('display_name', { ascending: true });
 
       if (fetchErr) {
         console.warn('[StaffDirectory] Supabase fetch error:', fetchErr.message);
@@ -54,69 +86,7 @@ export function StaffDirectory() {
         return;
       }
 
-      const rows = data || [];
-      const uuidByBubble: Record<string, string> = {};
-      rows.forEach((row: any) => {
-        if (row.bubble_staff_id && row.id) {
-          uuidByBubble[row.bubble_staff_id] = row.id;
-        }
-      });
-      setStaffUuidByBubbleId(uuidByBubble);
-      // Convert Supabase records back to BubbleStaff format for rendering
-      const converted: BubbleStaff[] = rows.map((row: any) => ({
-        _id: row.bubble_staff_id,
-        'Display Name': row.display_name || '',
-        'Full Name': row.full_name || undefined,
-        'Position': row.position || '',
-        'O_User Role': row.user_role || '',
-        'O_Status': row.status === 'active'
-          ? 'Active'
-          : row.probation_status && !row.termination_date
-            ? 'Probation'
-            : 'Inactive',
-        'O_Status_Text': row.status === 'active'
-          ? 'Active'
-          : row.probation_status && !row.termination_date
-            ? 'Probation'
-            : 'Inactive',
-        'Work Email': row.work_email || '',
-        'Private Email': row.private_email || undefined,
-        'Work Phone': row.work_phone ? Number(row.work_phone) || undefined : undefined,
-        'Private Phone': row.private_phone ? Number(row.private_phone) || undefined : undefined,
-        'O_Base Location': row.base_location || undefined,
-        'Birthday': row.birthday || undefined,
-        'Entry Date': row.entry_date || undefined,
-        'Joining Date': row.joining_date || undefined,
-        'Termination Date': row.termination_date || undefined,
-        'O_Probation': row.probation_status || undefined,
-        'AL Quota': row.al_quota || undefined,
-        'N_BU': row.business_unit || undefined,
-        'N_Team': row.team_id || undefined,
-        'N_Team Role': row.team_role || undefined,
-        'Profile Pic': row.profile_pic_url || undefined,
-        'Voov ID': row.voov_id ? Number(row.voov_id) || undefined : undefined,
-        'Created By': '',
-        'Created Date': row.bubble_created_date || row.created_at || '',
-        'Modified Date': row.bubble_modified_date || row.updated_at || '',
-      }));
-      setStaffList(converted);
-
-      // Populate office/department from synced staffs (with Team → department mapping)
-      const officeData: Record<string, string> = {};
-      const deptData: Record<string, string> = {};
-      rows.forEach((row: any) => {
-        const { office, department } = resolveStaffOfficeAndDepartment({
-          office: row.office,
-          base_location: row.base_location,
-          department: row.department,
-          team_id: row.team_id,
-          business_unit: row.business_unit,
-        });
-        if (office) officeData[row.bubble_staff_id] = office;
-        if (department) deptData[row.bubble_staff_id] = department;
-      });
-      setOfficeMap(prev => ({ ...prev, ...officeData }));
-      setDepartmentMap(prev => ({ ...prev, ...deptData }));
+      setStaffList((data || []) as StaffRow[]);
     } catch (err: any) {
       console.warn('[StaffDirectory] Supabase fetch error:', err.message);
       setError(err.message);
@@ -147,12 +117,8 @@ export function StaffDirectory() {
   const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
   const [selectedStaffIds, setSelectedStaffIds] = useState<Set<string>>(new Set());
 
-  // Google email map: staffId -> google_email (inline editable)
+  // Google email map: staffs.id -> google_email (inline editable)
   const [googleEmailMap, setGoogleEmailMap] = useState<Record<string, string>>({});
-
-  // Office & Department maps: staffId -> value
-  const [officeMap, setOfficeMap] = useState<Record<string, string>>({});
-  const [departmentMap, setDepartmentMap] = useState<Record<string, string>>({});
 
   // Cache of system_users for google_email lookup during save
   const [systemUsersCache, setSystemUsersCache] = useState<{ staff_id: string; google_email: string | null }[]>([]);
@@ -175,16 +141,12 @@ export function StaffDirectory() {
     loadSystemUsersCache();
   }, [loadSystemUsersCache]);
 
-  const resolveStaffUuid = useCallback((bubbleStaffId: string): string | undefined => {
-    return staffUuidByBubbleId[bubbleStaffId];
-  }, [staffUuidByBubbleId]);
-
-  // Load user_info from Supabase on mount
+  // Load user_info from Supabase on mount — users.staff_id is already staffs.id
   const loadUserInfo = useCallback(async () => {
     try {
       const { data, error: fetchErr } = await supabase
         .from('users')
-        .select('*, staffs(bubble_staff_id)');
+        .select('*');
 
       if (fetchErr) {
         console.warn('[StaffDirectory] user_info fetch error:', fetchErr.message);
@@ -192,37 +154,20 @@ export function StaffDirectory() {
       }
 
       if (data && data.length > 0) {
-        const configs: StaffUserConfig[] = data.map((row: any) => {
-          const bubbleId = row.staffs?.bubble_staff_id ?? row.staff_id;
-          return {
-            bubbleId,
-            classification: (row.classification || 'other_staff') as StaffClassification,
-            roleTag: row.role_tag || undefined,
-          };
-        });
+        const configs: StaffUserConfig[] = data.map((row: any) => ({
+          staffId: row.staff_id,
+          classification: (row.classification || 'other_staff') as StaffClassification,
+          roleTag: row.role_tag || undefined,
+        }));
         setUserConfigs(configs);
 
-        // Populate googleEmailMap from existing user_info records (keyed by bubble id)
         const emailMap: Record<string, string> = {};
         data.forEach((row: any) => {
-          const bubbleId = row.staffs?.bubble_staff_id;
-          if (bubbleId && row.google_email) {
-            emailMap[bubbleId] = row.google_email;
+          if (row.staff_id && row.google_email) {
+            emailMap[row.staff_id] = row.google_email;
           }
         });
         setGoogleEmailMap(prev => ({ ...prev, ...emailMap }));
-
-        // Populate officeMap and departmentMap from user_info records (keyed by bubble id)
-        const officeData: Record<string, string> = {};
-        const deptData: Record<string, string> = {};
-        data.forEach((row: any) => {
-          const bubbleId = row.staffs?.bubble_staff_id;
-          if (!bubbleId) return;
-          if (row.office) officeData[bubbleId] = row.office;
-          if (row.department) deptData[bubbleId] = row.department;
-        });
-        setOfficeMap(prev => ({ ...prev, ...officeData }));
-        setDepartmentMap(prev => ({ ...prev, ...deptData }));
       }
       setUserConfigsLoaded(true);
     } catch (err: any) {
@@ -235,71 +180,36 @@ export function StaffDirectory() {
     loadUserInfo();
   }, [loadUserInfo]);
 
-  const getSyncedOfficeDepartment = useCallback((staffId: string) => {
-    const staff = staffList.find((s) => s._id === staffId);
-    if (!staff) return { office: null, department: null };
-    return resolveStaffOfficeAndDepartment({
-      base_location: staff['O_Base Location'],
-      team_id: staff['N_Team'],
-      business_unit: staff['N_BU'],
-    });
-  }, [staffList]);
-
-  const applySyncedOfficeDepartment = useCallback((staffId: string) => {
-    const { office, department } = getSyncedOfficeDepartment(staffId);
-    if (office) {
-      setOfficeMap((prev) => (prev[staffId] ? prev : { ...prev, [staffId]: office }));
-    }
-    if (department) {
-      setDepartmentMap((prev) => (prev[staffId] ? prev : { ...prev, [staffId]: department }));
-    }
-  }, [getSyncedOfficeDepartment]);
-
-  // Save all user configs to Supabase user_info table
+  // Save all user configs to Supabase users table — keyed by staffs.id
   const handleSaveUserConfigs = async () => {
     setSaving(true);
     setSaveResult(null);
 
     try {
-      // Prepare records for upsert (only system_user and manually disabled entries)
-      // Include display_name, email, and google_email from staffList for full sync
       const records = userConfigs
         .filter(c => c.classification === 'system_user' || c.classification === 'disabled')
         .map(c => {
-          const staffUuid = resolveStaffUuid(c.bubbleId);
-          if (!staffUuid) {
-            console.warn(`[StaffDirectory] No staffs.id for bubble ${c.bubbleId}, skipping upsert`);
-            return null;
-          }
-          // Find the staff entry to get display_name, email, google_email
-          const staffEntry = staffList.find(s => s._id === c.bubbleId);
-          const displayName = staffEntry?.['Display Name'] || staffEntry?.['Full Name'] || null;
-          const workEmail = staffEntry?.['Work Email'] || null;
-          // Look up google_email from googleEmailMap first, then system_users cache, then fallback to workEmail
-          const sysUser = systemUsersCache.find(su => su.staff_id === staffUuid);
-          const googleEmail = googleEmailMap[c.bubbleId] || sysUser?.google_email || workEmail;
-
-          const synced = getSyncedOfficeDepartment(c.bubbleId);
+          const staffEntry = staffList.find(s => s.id === c.staffId);
+          const displayName = staffEntry?.display_name ?? null;
+          const workEmail = staffEntry?.work_email || null;
+          const sysUser = systemUsersCache.find(su => su.staff_id === c.staffId);
+          const googleEmail = googleEmailMap[c.staffId] || sysUser?.google_email || workEmail;
 
           return {
-            staff_id: staffUuid,
+            staff_id: c.staffId,
             role_tag: c.roleTag || null,
             classification: c.classification,
             system_status: c.classification === 'system_user' ? 'active' : 'inactive',
             display_name: displayName,
             email: workEmail,
             google_email: googleEmail,
-            office: officeMap[c.bubbleId] || synced.office || null,
-            department: departmentMap[c.bubbleId] || synced.department || null,
             updated_at: new Date().toISOString(),
           };
-        })
-        .filter((r): r is NonNullable<typeof r> => r !== null);
+        });
 
-      // Also remove records that were previously saved but are now "other_staff"
       const otherStaffUuids = userConfigs
         .filter(c => c.classification === 'other_staff')
-        .map(c => resolveStaffUuid(c.bubbleId))
+        .map(c => c.staffId)
         .filter((id): id is string => !!id);
 
       // Delete records that are back to "other_staff"
@@ -329,7 +239,7 @@ export function StaffDirectory() {
 
       setSaveResult({ success: true, message: '設定已成功儲存！' });
       setHasUnsavedChanges(false);
-      console.log('[StaffDirectory] ✅ All user configs (including office & department) saved successfully to user_info');
+      console.log('[StaffDirectory] ✅ All user configs saved successfully');
 
       // Auto-hide success message after 4 seconds
       setTimeout(() => setSaveResult(null), 4000);
@@ -344,58 +254,6 @@ export function StaffDirectory() {
   const handleGoogleEmailChange = (staffId: string, email: string) => {
     setGoogleEmailMap(prev => ({ ...prev, [staffId]: email }));
     setHasUnsavedChanges(true);
-  };
-
-  // Handle office change for a staff member (bubbleStaffId = bubble_staff_id for UI)
-  const handleOfficeChange = async (bubbleStaffId: string, office: string) => {
-    setOfficeMap(prev => ({ ...prev, [bubbleStaffId]: office }));
-    setHasUnsavedChanges(true);
-    // Persist immediately to staff_directory (keyed by bubble_staff_id)
-    try {
-      await supabase
-        .from('staffs')
-        .update({ office, updated_at: new Date().toISOString() })
-        .eq('bubble_staff_id', bubbleStaffId);
-    } catch (err) {
-      console.warn('[StaffDirectory] Office save to staff_directory error:', err);
-    }
-    // Also persist to user_info table (staff_id = staffs.id uuid)
-    const staffUuid = resolveStaffUuid(bubbleStaffId);
-    if (!staffUuid) return;
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({ office, updated_at: new Date().toISOString() })
-        .eq('staff_id', staffUuid);
-      if (error) {
-        console.warn('[StaffDirectory] Office save to user_info error:', error.message);
-      } else {
-        console.log(`[StaffDirectory] ✅ Office updated to "${office}" for staff ${bubbleStaffId} in user_info`);
-      }
-    } catch (err) {
-      console.warn('[StaffDirectory] Office save to user_info error:', err);
-    }
-  };
-
-  // Handle department change for a staff member (persist to user_info only)
-  const handleDepartmentChange = async (bubbleStaffId: string, department: string) => {
-    setDepartmentMap(prev => ({ ...prev, [bubbleStaffId]: department }));
-    setHasUnsavedChanges(true);
-    const staffUuid = resolveStaffUuid(bubbleStaffId);
-    if (!staffUuid) return;
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({ department, updated_at: new Date().toISOString() })
-        .eq('staff_id', staffUuid);
-      if (error) {
-        console.warn('[StaffDirectory] Department save to user_info error:', error.message);
-      } else {
-        console.log(`[StaffDirectory] ✅ Department updated to "${department}" for staff ${bubbleStaffId} in user_info`);
-      }
-    } catch (err) {
-      console.warn('[StaffDirectory] Department save to user_info error:', err);
-    }
   };
 
   // Sync state
@@ -450,35 +308,28 @@ export function StaffDirectory() {
     }
   };
 
-  // Get unique teams from data
   const teams = Array.from(
-    new Set(staffList.map((s) => s['N_Team']).filter(Boolean))
+    new Set(staffList.map((s) => s.team_name).filter(Boolean))
   ) as string[];
 
-  // Check if a staff member is terminated/inactive
-  const isTerminated = (staff: BubbleStaff): boolean => {
-    if (staff['Termination Date']) return true;
-    const status = staff['O_Status'] || staff['O_Status_Text'] || '';
-    return status !== 'Active' && status !== 'Probation';
-  };
+  const isTerminated = (staff: StaffRow): boolean => !isActiveStaff(staff);
 
-  // Helpers - terminated staff auto-assigned to 'disabled' regardless of config
+  // Helpers - inactive / terminated staff auto-assigned to 'disabled'
   const getStaffClassification = (staffId: string): StaffClassification => {
-    const staff = staffList.find(s => s._id === staffId);
+    const staff = staffList.find(s => s.id === staffId);
     if (staff && isTerminated(staff)) {
       return 'disabled';
     }
-    const config = userConfigs.find(c => c.bubbleId === staffId);
+    const config = userConfigs.find(c => c.staffId === staffId);
     return config?.classification || 'other_staff';
   };
 
-  // Count stats — dynamically linked to the staffList (which reflects Supabase data after sync)
   const activeCount = useMemo(() => {
-    return staffList.filter((s) => !isTerminated(s)).length;
+    return staffList.filter((s) => isActiveStaff(s)).length;
   }, [staffList]);
 
   const systemUserCount = useMemo(() => {
-    return staffList.filter(s => getStaffClassification(s._id) === 'system_user').length;
+    return staffList.filter(s => getStaffClassification(s.id) === 'system_user').length;
   }, [userConfigs, staffList]);
 
   const disabledCount = useMemo(() => {
@@ -486,33 +337,29 @@ export function StaffDirectory() {
   }, [staffList]);
 
   const getStaffRole = (staffId: string): string | undefined => {
-    const config = userConfigs.find(c => c.bubbleId === staffId);
+    const config = userConfigs.find(c => c.staffId === staffId);
     return config?.roleTag;
   };
 
   const handleSetClassification = (staffId: string, classification: StaffClassification) => {
-    if (classification === 'system_user') {
-      applySyncedOfficeDepartment(staffId);
-    }
     setUserConfigs(prev => {
-      const existing = prev.find(c => c.bubbleId === staffId);
+      const existing = prev.find(c => c.staffId === staffId);
       if (existing) {
-        return prev.map(c => c.bubbleId === staffId ? { ...c, classification, roleTag: classification === 'other_staff' ? undefined : c.roleTag } : c);
+        return prev.map(c => c.staffId === staffId ? { ...c, classification, roleTag: classification === 'other_staff' ? undefined : c.roleTag } : c);
       } else {
-        return [...prev, { bubbleId: staffId, classification }];
+        return [...prev, { staffId, classification }];
       }
     });
     setHasUnsavedChanges(true);
   };
 
   const handleSetRole = (staffId: string, roleTag: string) => {
-    applySyncedOfficeDepartment(staffId);
     setUserConfigs(prev => {
-      const existing = prev.find(c => c.bubbleId === staffId);
+      const existing = prev.find(c => c.staffId === staffId);
       if (existing) {
-        return prev.map(c => c.bubbleId === staffId ? { ...c, roleTag, classification: 'system_user' } : c);
+        return prev.map(c => c.staffId === staffId ? { ...c, roleTag, classification: 'system_user' } : c);
       } else {
-        return [...prev, { bubbleId: staffId, classification: 'system_user', roleTag }];
+        return [...prev, { staffId, classification: 'system_user', roleTag }];
       }
     });
     setEditingStaffId(null);
@@ -521,22 +368,21 @@ export function StaffDirectory() {
 
   const handleRemoveRole = (staffId: string) => {
     setUserConfigs(prev =>
-      prev.map(c => c.bubbleId === staffId ? { ...c, roleTag: undefined } : c)
+      prev.map(c => c.staffId === staffId ? { ...c, roleTag: undefined } : c)
     );
     setEditingStaffId(null);
     setHasUnsavedChanges(true);
   };
 
-  // Bulk classification handler
   const handleBulkClassification = useCallback((classification: StaffClassification) => {
     setUserConfigs(prev => {
       let updated = [...prev];
       selectedStaffIds.forEach(staffId => {
-        const existing = updated.find(c => c.bubbleId === staffId);
+        const existing = updated.find(c => c.staffId === staffId);
         if (existing) {
-          updated = updated.map(c => c.bubbleId === staffId ? { ...c, classification, roleTag: classification === 'other_staff' ? undefined : c.roleTag } : c);
+          updated = updated.map(c => c.staffId === staffId ? { ...c, classification, roleTag: classification === 'other_staff' ? undefined : c.roleTag } : c);
         } else {
-          updated.push({ bubbleId: staffId, classification });
+          updated.push({ staffId, classification });
         }
       });
       return updated;
@@ -578,30 +424,29 @@ export function StaffDirectory() {
   const filteredStaff = staffList.filter((staff) => {
     const matchSearch =
       !searchTerm ||
-      (staff['Display Name'] || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (staff['Full Name'] || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (staff['Work Email'] || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (staff['Position'] || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (staff['O_User Role'] || '').toLowerCase().includes(searchTerm.toLowerCase());
+      (staff.display_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (staff.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (staff.work_email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (staff.position || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (staff.user_role || '').toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchStatus =
       filterStatus === 'all' ||
-      (filterStatus === 'active' && !isTerminated(staff)) ||
-      (filterStatus === 'inactive' && isTerminated(staff));
+      (filterStatus === 'active' && isActiveStaff(staff)) ||
+      (filterStatus === 'inactive' && !isActiveStaff(staff));
 
     const matchTeam =
-      filterTeam === 'all' || staff['N_Team'] === filterTeam;
+      filterTeam === 'all' || staff.team_name === filterTeam;
 
     const matchClassification =
-      filterClassification === 'all' || getStaffClassification(staff._id) === filterClassification;
+      filterClassification === 'all' || getStaffClassification(staff.id) === filterClassification;
 
     return matchSearch && matchStatus && matchTeam && matchClassification;
   });
 
-  // Split into system users, other staff, and disabled
-  const systemUsers = filteredStaff.filter(s => getStaffClassification(s._id) === 'system_user');
-  const otherStaff = filteredStaff.filter(s => getStaffClassification(s._id) === 'other_staff');
-  const disabledStaff = filteredStaff.filter(s => getStaffClassification(s._id) === 'disabled');
+  const systemUsers = filteredStaff.filter(s => getStaffClassification(s.id) === 'system_user');
+  const otherStaff = filteredStaff.filter(s => getStaffClassification(s.id) === 'other_staff');
+  const disabledStaff = filteredStaff.filter(s => getStaffClassification(s.id) === 'disabled');
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '—';
@@ -1050,10 +895,6 @@ export function StaffDirectory() {
                 googleEmailMap={googleEmailMap}
                 onGoogleEmailChange={handleGoogleEmailChange}
                 showGoogleEmailColumn={true}
-                officeMap={officeMap}
-                onOfficeChange={handleOfficeChange}
-                departmentMap={departmentMap}
-                onDepartmentChange={handleDepartmentChange}
                 emptyMessage={
                   filterClassification === 'system_user' && (searchTerm || filterTeam !== 'all')
                     ? '沒有符合篩選條件的系統使用者'
@@ -1090,10 +931,6 @@ export function StaffDirectory() {
                 selectedStaffIds={selectedStaffIds}
                 onToggleSelect={handleToggleSelect}
                 onSelectAll={handleSelectAll}
-                officeMap={officeMap}
-                onOfficeChange={handleOfficeChange}
-                departmentMap={departmentMap}
-                onDepartmentChange={handleDepartmentChange}
                 emptyMessage={
                   searchTerm || filterStatus !== 'all' || filterTeam !== 'all'
                     ? '沒有符合篩選條件的其他職員'
@@ -1126,10 +963,6 @@ export function StaffDirectory() {
                 formatDate={formatDate}
                 showRoleColumn={false}
                 showActionColumn={true}
-                officeMap={officeMap}
-                onOfficeChange={handleOfficeChange}
-                departmentMap={departmentMap}
-                onDepartmentChange={handleDepartmentChange}
                 emptyMessage={
                   searchTerm || filterTeam !== 'all'
                     ? '沒有符合篩選條件的離職員工'
@@ -1144,7 +977,7 @@ export function StaffDirectory() {
             <span>顯示 {filteredStaff.length} / {staffList.length} 位員工 （{systemUserCount} 位系統使用者 · {disabledCount} 位不能使用系統）</span>
             <span className="flex items-center gap-1.5">
               <Database size={11} className="text-teal-600" />
-              <span className="text-teal-700 font-medium">資料來源：OTC2 → staffs</span>
+              <span className="text-teal-700 font-medium">資料來源：OTC2 staff_sync → staffs</span>
             </span>
           </div>
         </div>
@@ -1280,7 +1113,7 @@ function RoleTagCell({ staffId, roleInfo, roleTag, isEditing, setEditingStaffId,
 
 // === Staff Table Sub-component ===
 interface StaffTableProps {
-  staff: BubbleStaff[];
+  staff: StaffRow[];
   getStaffClassification: (id: string) => StaffClassification;
   getStaffRole: (id: string) => string | undefined;
   onSetClassification: (id: string, classification: StaffClassification) => void;
@@ -1299,10 +1132,6 @@ interface StaffTableProps {
   googleEmailMap?: Record<string, string>;
   onGoogleEmailChange?: (staffId: string, email: string) => void;
   showGoogleEmailColumn?: boolean;
-  officeMap?: Record<string, string>;
-  onOfficeChange?: (staffId: string, office: string) => void;
-  departmentMap?: Record<string, string>;
-  onDepartmentChange?: (staffId: string, department: string) => void;
 }
 
 type SortDirection = 'asc' | 'desc' | null;
@@ -1327,10 +1156,6 @@ function StaffTable({
   googleEmailMap = {},
   onGoogleEmailChange,
   showGoogleEmailColumn = false,
-  officeMap = {},
-  onOfficeChange,
-  departmentMap = {},
-  onDepartmentChange,
 }: StaffTableProps) {
   const [joiningDateSort, setJoiningDateSort] = useState<SortDirection>(null);
 
@@ -1345,8 +1170,8 @@ function StaffTable({
   const sortedStaff = useMemo(() => {
     if (!joiningDateSort) return staff;
     return [...staff].sort((a, b) => {
-      const dateA = a['Entry Date'] || a['Joining Date'] || '';
-      const dateB = b['Entry Date'] || b['Joining Date'] || '';
+      const dateA = a.entry_date || '';
+      const dateB = b.entry_date || '';
       if (!dateA && !dateB) return 0;
       if (!dateA) return joiningDateSort === 'asc' ? 1 : -1;
       if (!dateB) return joiningDateSort === 'asc' ? -1 : 1;
@@ -1355,8 +1180,8 @@ function StaffTable({
     });
   }, [staff, joiningDateSort]);
 
-  const colSpan = (showBulkSelect ? 1 : 0) + 5 + (showGoogleEmailColumn ? 1 : 0) + 2 + (showRoleColumn ? 1 : 0) + (showActionColumn ? 1 : 0) + 1;
-  const allIds = staff.map(s => s._id);
+  const colSpan = (showBulkSelect ? 1 : 0) + 5 + (showGoogleEmailColumn ? 1 : 0) + (showRoleColumn ? 1 : 0) + (showActionColumn ? 1 : 0) + 1;
+  const allIds = staff.map(s => s.id);
   const allSelected = staff.length > 0 && allIds.every(id => selectedStaffIds?.has(id));
   const someSelected = staff.length > 0 && allIds.some(id => selectedStaffIds?.has(id)) && !allSelected;
 
@@ -1395,18 +1220,6 @@ function StaffTable({
                 </th>
               )}
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Building2 size={12} className="text-teal-500" />
-                  辦公室
-                </span>
-              </th>
-              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Briefcase size={12} className="text-indigo-500" />
-                  部門
-                </span>
-              </th>
-              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">
                 <button
                   onClick={toggleJoiningDateSort}
                   className="flex items-center gap-1 hover:text-teal-600 transition-colors"
@@ -1440,25 +1253,26 @@ function StaffTable({
               </tr>
             ) : (
               sortedStaff.map((staffMember) => {
-                const classification = getStaffClassification(staffMember._id);
-                const roleTag = getStaffRole(staffMember._id);
+                const classification = getStaffClassification(staffMember.id);
+                const roleTag = getStaffRole(staffMember.id);
                 const roleInfo = roleTag ? ROLE_LABELS[roleTag] : null;
-                const isEditing = editingStaffId === staffMember._id;
+                const isEditing = editingStaffId === staffMember.id;
+                const avatarSrc = staffAvatarSrc(staffMember.profile_pic_url);
+                const active = isActiveStaff(staffMember);
 
                 return (
-                  <tr key={staffMember._id} className={cn(
+                  <tr key={staffMember.id} className={cn(
                     "border-t border-border/50 hover:bg-muted/20",
                     classification === 'disabled' && 'opacity-60',
-                    selectedStaffIds?.has(staffMember._id) && 'bg-teal-50/50'
+                    selectedStaffIds?.has(staffMember.id) && 'bg-teal-50/50'
                   )}>
-                    {/* Bulk select checkbox */}
                     {showBulkSelect && (
                       <td className="w-10 px-3 py-3">
                         <button
-                          onClick={() => onToggleSelect?.(staffMember._id)}
+                          onClick={() => onToggleSelect?.(staffMember.id)}
                           className="text-muted-foreground hover:text-teal-600 transition-colors"
                         >
-                          {selectedStaffIds?.has(staffMember._id) ? (
+                          {selectedStaffIds?.has(staffMember.id) ? (
                             <CheckSquare size={15} className="text-teal-600" />
                           ) : (
                             <Square size={15} />
@@ -1466,111 +1280,68 @@ function StaffTable({
                         </button>
                       </td>
                     )}
-                    {/* 員工 */}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
                         <div className={cn(
                           "w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold shrink-0 overflow-hidden",
                           classification === 'disabled' ? 'bg-gray-100 text-gray-400' : 'bg-teal-100 text-teal-700'
                         )}>
-                          {staffMember['Profile Pic'] ? (
+                          {avatarSrc ? (
                             <img
-                              src={toBubbleCdnUrl(staffMember['Profile Pic'])}
-                              alt={staffMember['Display Name']}
+                              src={avatarSrc}
+                              alt={staffMember.display_name || ''}
                               className={cn("w-full h-full object-cover", classification === 'disabled' && 'grayscale')}
                             />
                           ) : (
-                            (staffMember['Display Name'] || '?').charAt(0)
+                            (staffMember.display_name || '').charAt(0)
                           )}
                         </div>
                         <div>
-                          <p className="font-medium text-[13px]">{staffMember['Display Name'] || '—'}</p>
-                          {staffMember['Full Name'] && (
-                            <p className="text-[11px] text-muted-foreground">{staffMember['Full Name']}</p>
-                          )}
+                          <p className="font-medium text-[13px]">{staffMember.display_name}</p>
+                          {staffMember.full_name ? (
+                            <p className="text-[11px] text-muted-foreground">{staffMember.full_name}</p>
+                          ) : null}
                         </div>
                       </div>
                     </td>
-                    {/* 職位 */}
                     <td className="px-4 py-3">
-                      <span className="text-[13px]">{staffMember['Position'] || '—'}</span>
-                      {(staffMember['O_Probation'] && staffMember['O_Probation'] !== '正式員工') ||
-                      staffMember['O_Status'] === 'Probation' ||
-                      staffMember['O_Status_Text'] === 'Probation' ? (
-                        <span className="ml-1.5 px-1.5 py-0.5 text-[10px] bg-amber-50 text-amber-700 rounded">
-                          {staffMember['O_Probation'] || '試用期'}
-                        </span>
-                      ) : null}
+                      <span className="text-[13px]">{staffMember.position || '—'}</span>
                     </td>
-                    {/* 電郵 */}
                     <td className="px-4 py-3 text-muted-foreground">
-                      {staffMember['Work Email'] ? (
+                      {staffMember.work_email ? (
                         <span className="flex items-center gap-1">
                           <Mail size={11} />
-                          <span className="truncate max-w-[160px]">{staffMember['Work Email']}</span>
+                          <span className="truncate max-w-[160px]">{staffMember.work_email}</span>
                         </span>
                       ) : '—'}
                     </td>
-                    {/* Google 登入電郵 */}
                     {showGoogleEmailColumn && (
                       <td className="px-4 py-3">
                         <InlineGoogleEmailEditor
-                          staffId={staffMember._id}
-                          currentValue={googleEmailMap[staffMember._id] || ''}
-                          onSave={(newEmail) => onGoogleEmailChange?.(staffMember._id, newEmail)}
+                          staffId={staffMember.id}
+                          currentValue={googleEmailMap[staffMember.id] || ''}
+                          onSave={(newEmail) => onGoogleEmailChange?.(staffMember.id, newEmail)}
                         />
                       </td>
                     )}
-                    {/* 辦公室 */}
-                    <td className="px-4 py-3">
-                      <select
-                        value={officeMap[staffMember._id] || ''}
-                        onChange={(e) => onOfficeChange?.(staffMember._id, e.target.value)}
-                        className="px-2 py-1 rounded text-[12px] border border-border/60 bg-white cursor-pointer focus:outline-none focus:ring-1 focus:ring-teal-500 min-w-[80px]"
-                      >
-                        <option value="">—</option>
-                        <option value="香港">香港</option>
-                        <option value="深圳">深圳</option>
-                      </select>
-                    </td>
-                    {/* 部門 */}
-                    <td className="px-4 py-3">
-                      <select
-                        value={departmentMap[staffMember._id] || ''}
-                        onChange={(e) => onDepartmentChange?.(staffMember._id, e.target.value)}
-                        className="px-2 py-1 rounded text-[12px] border border-border/60 bg-white cursor-pointer focus:outline-none focus:ring-1 focus:ring-teal-500 min-w-[120px]"
-                      >
-                        <option value="">—</option>
-                        <option value="FC">FC</option>
-                        <option value="Wine">Wine</option>
-                        <option value="Accounting & Admin">Accounting & Admin</option>
-                        <option value="Marketing & Video">Marketing & Video</option>
-                        <option value="System">System</option>
-                      </select>
-                    </td>
-                    {/* 入職日期 — prioritize Entry Date */}
                     <td className="px-4 py-3 text-muted-foreground text-[13px]">
-                      {staffMember['Entry Date']
-                        ? new Date(staffMember['Entry Date']).toLocaleDateString('zh-HK', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-')
-                        : staffMember['Joining Date']
-                          ? new Date(staffMember['Joining Date']).toLocaleDateString('zh-HK', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-')
-                          : '—'}
+                      {staffMember.entry_date
+                        ? new Date(staffMember.entry_date).toLocaleDateString('zh-HK', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-')
+                        : '—'}
                     </td>
-                    {/* 電話 */}
                     <td className="px-4 py-3 text-muted-foreground">
-                      {staffMember['Work Phone'] ? (
-                        <a href={`tel:${staffMember['Work Phone']}`} className="hover:text-teal-600 flex items-center gap-1">
+                      {staffMember.work_phone ? (
+                        <a href={`tel:${staffMember.work_phone}`} className="hover:text-teal-600 flex items-center gap-1">
                           <Phone size={11} />
-                          {staffMember['Work Phone']}
+                          {staffMember.work_phone}
                         </a>
                       ) : '—'}
                     </td>
-                    {/* 身份標籤 */}
                     {showRoleColumn && (
                       <td className="px-4 py-3">
                         {classification === 'system_user' ? (
                           <RoleTagCell
-                            staffId={staffMember._id}
+                            staffId={staffMember.id}
                             roleInfo={roleInfo}
                             roleTag={roleTag}
                             isEditing={isEditing}
@@ -1583,7 +1354,6 @@ function StaffTable({
                         )}
                       </td>
                     )}
-                    {/* 分類操作 */}
                     {showActionColumn && (
                       <td className="px-4 py-3">
                         {classification === 'disabled' ? (
@@ -1594,7 +1364,7 @@ function StaffTable({
                         ) : (
                           <select
                             value={classification}
-                            onChange={(e) => onSetClassification(staffMember._id, e.target.value as StaffClassification)}
+                            onChange={(e) => onSetClassification(staffMember.id, e.target.value as StaffClassification)}
                             className={cn(
                               "px-2 py-1 rounded text-[11px] font-medium border transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-teal-500",
                               classification === 'system_user'
@@ -1609,30 +1379,22 @@ function StaffTable({
                         )}
                       </td>
                     )}
-                    {/* 狀態 */}
                     <td className="px-4 py-3">
-                      {(() => {
-                        const terminated = classification === 'disabled' || !!staffMember['Termination Date'] || (staffMember['O_Status'] !== 'Active' && staffMember['O_Status_Text'] !== 'Active');
-                        return (
-                          <>
-                            <span
-                              className={cn(
-                                'inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium',
-                                terminated
-                                  ? 'bg-rose-50 text-rose-600'
-                                  : 'bg-teal-50 text-teal-700'
-                              )}
-                            >
-                              {terminated ? '已離職' : '在職'}
-                            </span>
-                            {staffMember['Termination Date'] && (
-                              <p className="text-[10px] text-rose-500 mt-0.5">
-                                離職: {formatDate(staffMember['Termination Date'])}
-                              </p>
-                            )}
-                          </>
-                        );
-                      })()}
+                      <span
+                        className={cn(
+                          'inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium',
+                          active
+                            ? 'bg-teal-50 text-teal-700'
+                            : 'bg-rose-50 text-rose-600'
+                        )}
+                      >
+                        {active ? '在職' : '已離職'}
+                      </span>
+                      {staffMember.termination_date && (
+                        <p className="text-[10px] text-rose-500 mt-0.5">
+                          離職: {formatDate(staffMember.termination_date)}
+                        </p>
+                      )}
                     </td>
                   </tr>
                 );

@@ -1,14 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
-import { type BubbleStaff, toBubbleCdnUrl } from '@/types/bubble';
 import {
   Search, Plus, Edit, Trash2, Shield, Users, UserPlus, UserCheck,
   Mail, X, Save, RefreshCw, Chrome, CheckCircle2, XCircle, Clock,
   AlertTriangle, Eye, EyeOff
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { resolveStaffOfficeAndDepartment } from '@/lib/staffMapping';
 
 // Role labels matching PRD
 const ROLE_OPTIONS: { value: string; label: string; color: string }[] = [
@@ -26,14 +24,23 @@ const ROLE_OPTIONS: { value: string; label: string; color: string }[] = [
 
 const DEPT_OPTIONS = ['Management', 'PM Team', 'Design', 'Video', 'Content', 'Marketing', 'Finance'];
 
-/** Staff row from picker — BubbleStaff fields plus staffs.id for FK writes. */
-type StaffPickerItem = BubbleStaff & { staffUuid: string };
+const STAFF_PICKER_SELECT = 'id, display_name, full_name, position, work_email, team_name, status';
+
+/** Staff row from picker — identity is staffs.id. */
+interface StaffPickerItem {
+  id: string;
+  display_name: string | null;
+  full_name: string | null;
+  position: string | null;
+  work_email: string | null;
+  team_name: string | null;
+  status: string | null;
+}
 
 /** UI shape for whitelist users (backed by public.users). */
 interface SystemUser {
   id: string;
   staff_id: string; // users.staff_id → staffs.id (uuid)
-  bubble_staff_id: string | null; // from staffs.bubble_staff_id (display only)
   display_name: string;
   email: string;
   role: string; // maps to users.role_tag
@@ -48,12 +55,10 @@ interface SystemUser {
 }
 
 function mapUsersRow(row: any): SystemUser {
-  const bubbleStaffId = row.staffs?.bubble_staff_id ?? null;
   return {
     id: row.id,
     staff_id: row.staff_id,
-    bubble_staff_id: bubbleStaffId,
-    display_name: row.display_name || row.email || bubbleStaffId || row.staff_id || '',
+    display_name: row.display_name || row.email || row.staff_id || '',
     email: row.email || '',
     role: row.role_tag || 'staff',
     department: row.department || null,
@@ -85,7 +90,7 @@ export function UserManagement() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('*, staffs(bubble_staff_id)')
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -105,30 +110,23 @@ export function UserManagement() {
   // Add staff as system user
   const handleAddStaff = async (staff: StaffPickerItem, role: string, googleEmail?: string) => {
     try {
-      const displayName = staff['Display Name'] || staff['Full Name'] || '';
-      const workEmail = staff['Work Email'] || '';
+      const displayName = staff.display_name ?? '';
+      const workEmail = staff.work_email || '';
       const resolvedGoogleEmail = googleEmail || workEmail || null;
-      const { office, department } = resolveStaffOfficeAndDepartment({
-        base_location: staff['O_Base Location'],
-        team_id: staff['N_Team'],
-        business_unit: staff['N_BU'],
-      });
 
       const { data, error } = await supabase
         .from('users')
         .upsert({
-          staff_id: staff.staffUuid,
+          staff_id: staff.id,
           display_name: displayName,
           email: workEmail,
           role_tag: role,
-          department: department || null,
-          office: office || null,
           google_email: resolvedGoogleEmail,
           classification: 'system_user',
           system_status: 'active',
           updated_at: new Date().toISOString(),
         }, { onConflict: 'staff_id' })
-        .select('*, staffs(bubble_staff_id)')
+        .select('*')
         .single();
 
       if (error) throw error;
@@ -168,7 +166,7 @@ export function UserManagement() {
         .from('users')
         .update(dbUpdates)
         .eq('id', userId)
-        .select('*, staffs(bubble_staff_id)')
+        .select('*')
         .single();
 
       if (error) throw error;
@@ -524,35 +522,14 @@ function StaffPickerModal({
       try {
         const { data, error } = await supabase
           .from('staffs')
-          .select('*')
+          .select(STAFF_PICKER_SELECT)
           .eq('status', 'active')
           .order('display_name', { ascending: true });
 
         if (error) throw error;
         if (cancelled) return;
 
-        const converted: StaffPickerItem[] = (data || []).map((row: any) => ({
-          staffUuid: row.id,
-          _id: row.bubble_staff_id,
-          'Display Name': row.display_name || '',
-          'Full Name': row.full_name || undefined,
-          'Position': row.position || '',
-          'O_User Role': row.user_role || '',
-          'O_Status': 'Active',
-          'O_Status_Text': 'Active',
-          'Work Email': row.work_email || '',
-          'Private Email': row.private_email || undefined,
-          'Work Phone': row.work_phone ? Number(row.work_phone) || undefined : undefined,
-          'Private Phone': row.private_phone ? Number(row.private_phone) || undefined : undefined,
-          'O_Base Location': row.base_location || undefined,
-          'N_BU': row.business_unit || undefined,
-          'N_Team': row.team_id || undefined,
-          'Profile Pic': row.profile_pic_url || undefined,
-          'Created By': '',
-          'Created Date': row.created_at || '',
-          'Modified Date': row.updated_at || '',
-        }));
-        setStaffList(converted);
+        setStaffList((data || []) as StaffPickerItem[]);
       } catch (err: any) {
         console.warn('[UserManagement] staff_directory load failed:', err?.message || err);
         if (!cancelled) setStaffList([]);
@@ -563,18 +540,16 @@ function StaffPickerModal({
     return () => { cancelled = true; };
   }, []);
 
-  // Filter out already-added staff (dedupe by staffs.id uuid)
   const existingStaffUuids = new Set(existingUsers.map(u => u.staff_id));
   const availableStaff = staffList.filter(s => {
-    if (existingStaffUuids.has(s.staffUuid)) return false;
-    // Search
+    if (existingStaffUuids.has(s.id)) return false;
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       return (
-        (s['Display Name'] || '').toLowerCase().includes(term) ||
-        (s['Full Name'] || '').toLowerCase().includes(term) ||
-        (s['Work Email'] || '').toLowerCase().includes(term) ||
-        (s['Position'] || '').toLowerCase().includes(term)
+        (s.display_name || '').toLowerCase().includes(term) ||
+        (s.full_name || '').toLowerCase().includes(term) ||
+        (s.work_email || '').toLowerCase().includes(term) ||
+        (s.position || '').toLowerCase().includes(term)
       );
     }
     return true;
@@ -582,7 +557,7 @@ function StaffPickerModal({
 
   const handleConfirmAdd = () => {
     if (!selectedStaff) return;
-    onAdd(selectedStaff, selectedRole, googleEmail || selectedStaff['Work Email']);
+    onAdd(selectedStaff, selectedRole, googleEmail || selectedStaff.work_email || undefined);
   };
 
   return (
@@ -630,28 +605,24 @@ function StaffPickerModal({
                 ) : (
                   availableStaff.map(staff => (
                     <button
-                      key={staff._id}
+                      key={staff.id}
                       onClick={() => {
                         setSelectedStaff(staff);
-                        setGoogleEmail(staff['Work Email'] || '');
+                        setGoogleEmail(staff.work_email || '');
                       }}
                       className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors text-left"
                     >
-                      {staff['Profile Pic'] ? (
-                        <img src={toBubbleCdnUrl(staff['Profile Pic'])} alt="" className="w-9 h-9 rounded-full object-cover" />
-                      ) : (
-                        <div className="w-9 h-9 rounded-full bg-teal-50 flex items-center justify-center text-teal-700 text-[12px] font-medium">
-                          {(staff['Display Name'] || '?').charAt(0)}
-                        </div>
-                      )}
+                      <div className="w-9 h-9 rounded-full bg-teal-50 flex items-center justify-center text-teal-700 text-[12px] font-medium">
+                        {(staff.display_name || '').charAt(0)}
+                      </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-[13px] truncate">{staff['Display Name']}</p>
+                        <p className="font-medium text-[13px] truncate">{staff.display_name}</p>
                         <p className="text-[11px] text-muted-foreground truncate">
-                          {staff['Position']} {staff['N_Team'] ? `· ${staff['N_Team']}` : ''}
+                          {[staff.position, staff.team_name].filter(Boolean).join(' · ') || '—'}
                         </p>
                       </div>
                       <div className="text-[11px] text-muted-foreground shrink-0">
-                        {staff['Work Email'] || '無電郵'}
+                        {staff.work_email || '無電郵'}
                       </div>
                       <UserPlus size={14} className="text-teal-600 shrink-0" />
                     </button>
@@ -667,16 +638,15 @@ function StaffPickerModal({
             <div className="space-y-5">
               {/* Selected Staff Info */}
               <div className="flex items-center gap-3 p-4 bg-teal-50 border border-teal-200 rounded-md">
-                {selectedStaff['Profile Pic'] ? (
-                  <img src={toBubbleCdnUrl(selectedStaff['Profile Pic'])} alt="" className="w-12 h-12 rounded-full object-cover" />
-                ) : (
-                  <div className="w-12 h-12 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 text-[16px] font-bold">
-                    {(selectedStaff['Display Name'] || '?').charAt(0)}
-                  </div>
-                )}
+                <div className="w-12 h-12 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 text-[16px] font-bold">
+                  {(selectedStaff.display_name || '').charAt(0)}
+                </div>
                 <div>
-                  <p className="font-bold text-[15px]">{selectedStaff['Display Name']}</p>
-                  <p className="text-[12px] text-teal-700">{selectedStaff['Position']} · {selectedStaff['Work Email']}</p>
+                  <p className="font-bold text-[15px]">{selectedStaff.display_name}</p>
+                  <p className="text-[12px] text-teal-700">
+                    {[selectedStaff.position, selectedStaff.team_name].filter(Boolean).join(' · ') || '—'}
+                    {selectedStaff.work_email ? ` · ${selectedStaff.work_email}` : ''}
+                  </p>
                 </div>
                 <button
                   onClick={() => setSelectedStaff(null)}

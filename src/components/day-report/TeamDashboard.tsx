@@ -33,8 +33,7 @@ interface StaffMember {
   user_role: string | null;
   status: string;
   base_location: string | null;
-  team_id: string | null;
-  business_unit: string | null;
+  team_name: string | null;
   profile_pic_url: string | null;
   department: string | null;
 }
@@ -537,7 +536,7 @@ export function TeamDashboard() {
 
       let pickerQuery = supabase
         .from('staffs')
-        .select('id, display_name, position, user_role, status, base_location, team_id, business_unit, profile_pic_url')
+        .select('id, display_name, position, user_role, status, base_location, team_name, profile_pic_url')
         .eq('status', 'active')
         .neq('position', 'Director');
       if (pickerIds !== null) pickerQuery = pickerQuery.in('id', pickerIds);
@@ -581,7 +580,7 @@ export function TeamDashboard() {
 
       let staffQuery = supabase
         .from('staffs')
-        .select('id, display_name, position, user_role, status, base_location, team_id, business_unit, profile_pic_url')
+        .select('id, display_name, position, user_role, status, base_location, team_name, profile_pic_url')
         .eq('status', 'active')
         .neq('position', 'Director');
       if (allowedStaffIds !== null) staffQuery = staffQuery.in('id', allowedStaffIds);

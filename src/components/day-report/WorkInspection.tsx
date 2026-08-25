@@ -26,7 +26,7 @@ interface StaffMember {
   id: string;
   display_name: string;
   base_location: string | null;
-  team_id: string | null;
+  team_name: string | null;
   department: string | null;
   position: string | null;
 }
@@ -351,7 +351,7 @@ export function WorkInspection() {
 
       let staffQuery = supabase
         .from('staffs')
-        .select('id, display_name, base_location, team_id, position, status')
+        .select('id, display_name, base_location, team_name, position, status')
         .eq('status', 'active')
         .neq('position', 'Director');
       if (allowedStaffIds !== null) staffQuery = staffQuery.in('id', allowedStaffIds);
@@ -365,7 +365,7 @@ export function WorkInspection() {
         id: s.id,
         display_name: s.display_name,
         base_location: s.base_location,
-        team_id: s.team_id,
+        team_name: s.team_name,
         position: s.position,
         department: deptMap[s.id] || null,
       }));
@@ -472,7 +472,7 @@ export function WorkInspection() {
   const teamOptions = useMemo(() => {
     const groups = new Map<string, StaffMember[]>();
     staff.forEach((s) => {
-      const t = (s.team_id || '').trim();
+      const t = (s.team_name || '').trim();
       if (!t) return;
       if (!groups.has(t)) groups.set(t, []);
       groups.get(t)!.push(s);
@@ -498,12 +498,12 @@ export function WorkInspection() {
     const q = nameQuery.trim().toLowerCase();
     return staff
       .filter((s) => {
-        if (selectedTeam === UNASSIGNED_TEAM) return !(s.team_id || '').trim();
-        if (selectedTeam !== '__ALL__' && (s.team_id || '').trim() !== selectedTeam) return false;
+        if (selectedTeam === UNASSIGNED_TEAM) return !(s.team_name || '').trim();
+        if (selectedTeam !== '__ALL__' && (s.team_name || '').trim() !== selectedTeam) return false;
         if (!q) return true;
         const name = getStaffName(s.id).toLowerCase();
         const dept = (s.department || '').toLowerCase();
-        const team = (s.team_id || '').toLowerCase();
+        const team = (s.team_name || '').toLowerCase();
         return name.includes(q) || dept.includes(q) || team.includes(q);
       })
       .sort((a, b) => getStaffName(a.id).localeCompare(getStaffName(b.id), 'zh-Hant'));
@@ -529,7 +529,7 @@ export function WorkInspection() {
   const teamGroups = useMemo(() => {
     const groups = new Map<string, StaffMember[]>();
     filteredStaff.forEach((s) => {
-      const key = (s.team_id || '').trim() || UNASSIGNED_LABEL;
+      const key = (s.team_name || '').trim() || UNASSIGNED_LABEL;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(s);
     });
@@ -561,7 +561,7 @@ export function WorkInspection() {
             <div className="min-w-0">
               <p className="text-[13px] font-semibold truncate">{name}</p>
               <p className="text-[11px] text-muted-foreground truncate">
-                {[member.department, member.team_id].filter(Boolean).join(' · ') || UNASSIGNED_LABEL}
+                {[member.department, member.team_name].filter(Boolean).join(' · ') || UNASSIGNED_LABEL}
               </p>
             </div>
           </div>

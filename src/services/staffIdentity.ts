@@ -18,15 +18,13 @@ export function isStaffUuid(value: string | null | undefined): boolean {
 /** True for leftover `manual_*` / "(manual)" staff rows that must not own live reports. */
 export function isPlaceholderStaff(row: {
   id?: string | null;
-  bubble_staff_id?: string | null;
   display_name?: string | null;
 } | null | undefined): boolean {
   if (!row) return false;
   const id = (row.id || '').trim();
   if (id && STALE_MANUAL_STAFF_UUIDS[id]) return true;
-  const bubble = (row.bubble_staff_id || '').trim().toLowerCase();
   const name = (row.display_name || '').trim().toLowerCase();
-  return bubble.startsWith('manual_') || name.includes('(manual)');
+  return name.includes('(manual)');
 }
 
 /** Rewrite a known leftover manual staff UUID to the canonical staffs.id. */
@@ -37,7 +35,7 @@ export function remapStaleStaffUuid(value: string | null | undefined): string {
 
 /**
  * Pick one staffs.id. Only `users.staff_id` / session staff_id (remapped).
- * Never use staffs.work_email or staffs.bubble_staff_id.
+ * Never use staffs.work_email or staffs.otc_staff_sync_id.
  */
 export function chooseStaffUuid(options: {
   loginStaffId?: string | null;

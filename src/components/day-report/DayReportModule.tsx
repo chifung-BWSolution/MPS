@@ -58,6 +58,12 @@ import {
 type OfficeLocation = 'hk' | 'sz';
 type HoursPreset = 'full' | 'half' | 'custom' | 'off';
 
+function officeFromBaseLocation(baseLocation: string | null | undefined): OfficeLocation {
+  const raw = (baseLocation || '').toLowerCase();
+  if (raw.includes('sz') || raw.includes('深圳') || raw.includes('shenzhen')) return 'sz';
+  return 'hk';
+}
+
 function getFullDayHours(office: OfficeLocation): number {
   return office === 'sz' ? 7.5 : 8;
 }
@@ -351,7 +357,7 @@ function SubmitReportPage() {
     return () => { aborted = true; };
   }, [systemUser]);
 
-  // Fetch office from staffs.id (users.staff_id), never bubble_staff_id / work_email
+  // Fetch office from staffs.base_location (users.staff_id), never bubble_staff_id / work_email
   useEffect(() => {
     async function initOfficeFromProfile() {
       const staffId = remapStaleStaffUuid(systemUser?.staff_id);
@@ -359,31 +365,24 @@ function SubmitReportPage() {
       try {
         const { data: staffRow, error } = await supabase
           .from('staffs')
-          .select('office')
+          .select('base_location')
           .eq('id', staffId)
           .maybeSingle();
 
         if (error) {
-          console.error('[SubmitReport] Error fetching staff office:', error);
+          console.error('[SubmitReport] Error fetching staff base_location:', error);
           // Fallback to HK defaults
           setOffice('hk');
           applyHoursPreset('full', 'hk');
           return;
         }
 
-        const officeValue = staffRow?.office?.trim() || '';
-        console.log('[SubmitReport] Staff office from DB:', officeValue);
-
-        if (officeValue === '深圳') {
-          setOffice('sz');
-          applyHoursPreset('full', 'sz');
-        } else {
-          // "香港" or any unexpected/empty value → default to HK
-          setOffice('hk');
-          applyHoursPreset('full', 'hk');
-        }
+        const derived = officeFromBaseLocation(staffRow?.base_location);
+        console.log('[SubmitReport] Staff office from base_location:', staffRow?.base_location, '→', derived);
+        setOffice(derived);
+        applyHoursPreset('full', derived);
       } catch (err) {
-        console.error('[SubmitReport] Exception fetching staff office:', err);
+        console.error('[SubmitReport] Exception fetching staff base_location:', err);
         // Graceful fallback
         setOffice('hk');
         applyHoursPreset('full', 'hk');
