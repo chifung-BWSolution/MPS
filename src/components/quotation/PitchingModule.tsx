@@ -717,7 +717,7 @@ function EditableTextField({
 
   if (editing) {
     return (
-      <div>
+      <div className="min-w-0">
         <span className="text-[12px] text-muted-foreground block mb-1">{label}</span>
         <Input
           value={value}
@@ -725,19 +725,19 @@ function EditableTextField({
           onBlur={() => setEditing(false)}
           autoFocus
           placeholder={placeholder}
-          className="text-[14px] h-9"
+          className="text-[14px] h-9 min-w-0"
         />
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="min-w-0">
       <span className="text-[12px] text-muted-foreground block">{label}</span>
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className="text-left text-[14px] font-medium rounded px-1 -mx-1 py-0.5 hover:bg-muted/50 transition-colors w-full"
+        className="text-left text-[14px] font-medium rounded px-1 -mx-1 py-0.5 hover:bg-muted/50 transition-colors w-full min-w-0 max-w-full break-all whitespace-normal"
       >
         {value.trim() || <span className="text-muted-foreground font-normal italic">點擊編輯</span>}
       </button>
@@ -1046,9 +1046,9 @@ export function PitchingDetail({
       {activeTab === 'info' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
-            <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6 space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
+            <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6 space-y-5 min-w-0 overflow-hidden">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-w-0">
+                <div className="space-y-4 min-w-0">
                   <div>
                     <span className="text-[12px] text-muted-foreground block mb-1">客戶 Customer</span>
                     <SearchableSelect
@@ -1103,7 +1103,7 @@ export function PitchingDetail({
                     </span>
                   </div>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-4 min-w-0">
                   <EditableProjectTypesField
                     label="項目類型"
                     value={draft.projectTypes}
