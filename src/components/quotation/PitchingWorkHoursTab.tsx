@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Clock, Loader2, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
-import { categoryConfig, type WorkCategory } from '@/data/dayReportDataV2';
+import { useCategoryLookup } from '@/hooks/useCategoryLookup';
+import { resolveCategoryLabel } from '@/lib/workCategoryLabel';
 
 type TaskRow = {
   id: string;
@@ -36,11 +37,6 @@ function reportDateOf(row: EntryRow): string {
   return date?.slice(0, 10) || '';
 }
 
-function categoryLabel(category: string): string {
-  const known = categoryConfig[category as WorkCategory];
-  return known?.label || category || '—';
-}
-
 function formatHours(hours: number): string {
   const rounded = Math.round(hours * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
@@ -66,6 +62,7 @@ async function resolveRelatedIds(quotationClientProjectId: string): Promise<stri
 }
 
 export function PitchingWorkHoursTab({ projectId }: { projectId: string }) {
+  const categoryLookup = useCategoryLookup();
   const [groups, setGroups] = useState<StaffGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -256,7 +253,7 @@ export function PitchingWorkHoursTab({ projectId }: { projectId: string }) {
                             </span>
                           </td>
                           <td className="px-4 py-2 text-[12px] text-muted-foreground whitespace-nowrap">
-                            {categoryLabel(task.category)}
+                            {resolveCategoryLabel(task.category, categoryLookup)}
                           </td>
                           <td className="px-4 py-2 text-[13px]">{task.title || '—'}</td>
                           <td className="px-4 py-2 text-[13px] font-semibold text-right tabular-nums">

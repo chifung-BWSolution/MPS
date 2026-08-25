@@ -31,6 +31,7 @@ import { TeamDashboard } from '@/components/day-report/TeamDashboard';
 import { ProjectAnalysis } from '@/components/day-report/ProjectAnalysis';
 import { SearchableProjectSelect } from '@/components/day-report/SearchableProjectSelect';
 import { useDayReportTypes } from '@/hooks/useDayReportTypes';
+import { useCategoryLookup } from '@/hooks/useCategoryLookup';
 import { useProjects, relatedTypeLabels, type ProjectRelatedType } from '@/hooks/useProjects';
 import { usePendingReportItems } from '@/hooks/usePendingReportItems';
 import {
@@ -158,29 +159,6 @@ function getDateRange(startDate: string, endDate: string): string[] {
     current.setDate(current.getDate() + 1);
   }
   return dates;
-}
-
-// Merge built-in categoryConfig with custom 工作類型 from Supabase so
-// entries created with a custom category render its label/icon/colour
-// instead of the raw id (e.g. custom_1779878653873).
-type CategoryLookup = Record<string, { label: string; icon: string; color: string; bg: string }>;
-function useCategoryLookup(): CategoryLookup {
-  const { types: dynamicTypes } = useDayReportTypes();
-  return useMemo(() => {
-    const map: CategoryLookup = {};
-    for (const [k, v] of Object.entries(categoryConfig)) {
-      map[k] = { label: v.label, icon: v.icon, color: v.color, bg: v.bg };
-    }
-    for (const t of dynamicTypes) {
-      map[t.id] = {
-        label: t.label,
-        icon: t.icon || '📋',
-        color: t.color || 'text-gray-600',
-        bg: t.bg || 'bg-gray-100',
-      };
-    }
-    return map;
-  }, [dynamicTypes]);
 }
 
 // ============================
