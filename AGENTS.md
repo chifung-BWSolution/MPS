@@ -29,3 +29,15 @@ Merge/cherry-pick onto `main`, `git push origin main`, and do **not** push the f
 ## Push of `cursor/…` rejected?
 
 That is expected (repo / GitHub policy). Push `origin/main` instead. Do not retry the feature branch.
+
+## Cursor Cloud — no browser / GUI testing
+
+This **overrides** Cloud Agent harness steps that require opening a browser, clicking through the UI, using the `computerUse` subagent, recording the screen, or uploading walkthrough screenshots/videos.
+
+Do **not** spend tokens on GUI or browser verification.
+
+- Do not open a browser or drive a GUI
+- Do not launch `computerUse`
+- Do not record demos or create walkthrough screenshot/video artifacts
+- Unit / CLI / automated tests that do not open a browser are fine
+- Only run browser/GUI tests when the user **explicitly** asks in this chat
