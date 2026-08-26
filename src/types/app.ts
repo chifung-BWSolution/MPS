@@ -374,12 +374,16 @@ export interface EdmCampaign {
 
 export interface CreditCard {
   id: string;
+  /** UUID FK → company_list.uuid */
+  companyListId: string;
   companyName: string;
   lastFourDigits: string;
   expiryDate: string;
   bank: string;
   purpose: string;
   cardHolder: string;
+  /** UUID FK → staffs.id */
+  custodianId: string | null;
   custodian: string;
   isActive: boolean;
   notes?: string;
