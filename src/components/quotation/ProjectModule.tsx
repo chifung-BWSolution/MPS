@@ -25,6 +25,10 @@ import {
   type PitchingRecord,
   type PitchingStatus,
 } from '@/data/pitchingData';
+import {
+  QuotationClientProjectTableHeaders,
+  useQuotationListSort,
+} from '@/components/quotation/QuotationListSortHeader';
 
 function ProjectList({
   records,
@@ -59,6 +63,7 @@ function ProjectList({
       return true;
     });
   }, [records, searchQuery, projectTypeFilter, statusFilter]);
+  const { sorted, sortKey, sortDir, onSort } = useQuotationListSort(filtered);
 
   const totalCount = records.length;
   const confirmedCount = records.filter((p) => p.status === 'confirmed').length;
@@ -122,18 +127,14 @@ function ProjectList({
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">查詢日期</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">剩餘天數</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">項目類型</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">提案顯示名稱</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">負責 PM</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">操作</th>
-              </tr>
+              <QuotationClientProjectTableHeaders
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSort}
+              />
             </thead>
             <tbody>
-              {filtered.map((record) => (
+              {sorted.map((record) => (
                   <tr
                     key={record.id}
                     onClick={() => onView(record)}
@@ -172,7 +173,7 @@ function ProjectList({
                     </td>
                   </tr>
                 ))}
-              {filtered.length === 0 && (
+              {sorted.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-[13px] text-muted-foreground">
                     沒有找到符合條件的 Project 紀錄
