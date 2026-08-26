@@ -36,6 +36,10 @@ export function resolveRoute(module: string, sub?: string): { module: string; su
   if (module === 'settings' && sub === 'notifications') {
     return { module: 'settings', subModule: resolveSubModule('settings') };
   }
+  // Removed: V1 藝人表格 preview. Live form is 藝人管理 → 新增藝人.
+  if (module === 'settings' && sub === 'talent-form') {
+    return { module: 'talent', subModule: 'invite' };
+  }
   return { module, subModule: resolveSubModule(module, sub) };
 }
 
@@ -186,7 +190,6 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'staff-directory', label: '員工列表' },
       { id: 'companies', label: '公司管理' },
       { id: 'brands', label: '品牌管理' },
-      { id: 'talent-form', label: '藝人表格' },
       { id: 'roles', label: '角色權限' },
       { id: 'options', label: '選項設定' },
       { id: 'credit-cards', label: '信用卡管理' },

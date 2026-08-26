@@ -8,7 +8,6 @@ import { LoginLogsSettings } from './LoginLogsSettings';
 import { TermsConditionsSettings } from './TermsConditionsSettings';
 import { StaffDirectory } from './StaffDirectory';
 import { UserManagement } from './UserManagement';
-import { TalentApplicationForm } from './TalentApplicationForm';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { canAccessSettings } from '@/lib/permissions';
@@ -43,7 +42,6 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
       case 'users': return { title: '用戶管理', subtitle: '從員工列表選擇員工加入系統，支援 Google 電郵登入。' };
       case 'companies': return { title: '公司管理', subtitle: '管理多間公司資料及銀行帳戶。' };
       case 'brands': return { title: '品牌管理', subtitle: '管理品牌，每個品牌歸屬於一間公司。' };
-      case 'talent-form': return { title: '藝人表格', subtitle: '面試登記表範本，可在「新增藝人」自助填表流程中使用。' };
       case 'roles': return { title: '角色權限', subtitle: '查看及設定各角色的存取權限。' };
       case 'options': return { title: '選項設定', subtitle: '管理網站／系統建立表單的開發平台選項。' };
       case 'credit-cards': return { title: '信用卡管理', subtitle: '管理公司付款信用卡。' };
@@ -70,8 +68,6 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
         <CompanyManagementSettings />
       ) : activeTab === 'brands' ? (
         <BrandManagementSettings />
-      ) : activeTab === 'talent-form' ? (
-        <TalentApplicationForm />
       ) : activeTab === 'quotation-settings' ? (
         <QuotationSettingsSection />
       ) : activeTab === 'terms-conditions' ? (
