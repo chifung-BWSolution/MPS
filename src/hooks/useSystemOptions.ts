@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
-export type OptionCategory = 'platform' | 'brand_category' | 'project_type';
+export type OptionCategory = 'platform';
 
 export interface SystemOption {
   id: string;
@@ -35,7 +35,7 @@ export function useSystemOptions() {
     const { data, error } = await supabase
       .from('system_options')
       .select('*')
-      .order('category')
+      .eq('category', 'platform')
       .order('sort_order');
     if (error) {
       setError(error.message);

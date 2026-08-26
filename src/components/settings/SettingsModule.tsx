@@ -44,7 +44,7 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
       case 'brands': return { title: '品牌管理', subtitle: '管理品牌，每個品牌歸屬於一間公司。' };
       case 'talent-form': return { title: '藝人表格', subtitle: '面試登記表範本，可在「新增藝人」自助填表流程中使用。' };
       case 'roles': return { title: '角色權限', subtitle: '查看及設定各角色的存取權限。' };
-      case 'options': return { title: '選項設定', subtitle: '管理系統預設選項及分類。' };
+      case 'options': return { title: '選項設定', subtitle: '管理網站／系統建立表單的開發平台選項。' };
       case 'credit-cards': return { title: '信用卡管理', subtitle: '管理公司付款信用卡。' };
       case 'quotation-settings': return { title: '客戶報價設定', subtitle: '管理報價類型、預設服務項目及付款安排。' };
       case 'terms-conditions': return { title: '條款及細則管理', subtitle: '管理各報價類型的條款範本，報價時可選擇或編輯。' };
@@ -586,18 +586,18 @@ function LoginLogsSection() {
 
 function OptionsSection() {
   const { byCategory, loading, addOption, updateOption, deleteOption } = useSystemOptions();
-  const [newValues, setNewValues] = useState<Record<string, string>>({ platform: '', brand_category: '', project_type: '' });
+  const [newValue, setNewValue] = useState('');
   const [editing, setEditing] = useState<{ id: string; value: string } | null>(null);
+  const items = byCategory('platform');
 
-  const handleAdd = async (category: 'platform' | 'brand_category' | 'project_type') => {
-    const value = newValues[category];
-    if (!value.trim()) return;
-    const err = await addOption(category, value);
+  const handleAdd = async () => {
+    if (!newValue.trim()) return;
+    const err = await addOption('platform', newValue);
     if (err) {
       toast.error('新增失敗：' + (err as any).message);
     } else {
       toast.success('已新增');
-      setNewValues(prev => ({ ...prev, [category]: '' }));
+      setNewValue('');
     }
   };
 
@@ -624,72 +624,51 @@ function OptionsSection() {
     }
   };
 
-  const renderSection = (
-    title: string,
-    category: 'platform' | 'brand_category' | 'project_type',
-    itemWidth: string,
-    inputWidth: string,
-    bold = false
-  ) => {
-    const items = byCategory(category);
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-[18px] font-bold">{title}</h3>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {items.map((item) => (
-            <div key={item.id} className="flex items-center gap-2 border border-border/50 rounded-md px-3 py-2 group">
-              {editing?.id === item.id ? (
-                <input
-                  className={`text-[13px] border-b border-teal-600 outline-none ${itemWidth}`}
-                  value={editing.value}
-                  onChange={(e) => setEditing({ ...editing, value: e.target.value })}
-                  onBlur={handleSaveEdit}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
-                  autoFocus
-                />
-              ) : (
-                <>
-                  <span className={bold ? 'text-[13px] font-medium' : 'text-[13px]'}>{item.value}</span>
-                  <button onClick={() => setEditing({ id: item.id, value: item.value })} className="text-muted-foreground hover:text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Edit size={11} />
-                  </button>
-                  <button onClick={() => handleDelete(item.id)} className="text-muted-foreground hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <X size={11} />
-                  </button>
-                </>
-              )}
-            </div>
-          ))}
-          <div className="flex items-center gap-1 border border-dashed border-teal-300 rounded-md px-3 py-2">
-            <input
-              className={`text-[13px] outline-none ${inputWidth} placeholder:text-muted-foreground`}
-              value={newValues[category]}
-              onChange={(e) => setNewValues(prev => ({ ...prev, [category]: e.target.value }))}
-              onKeyDown={(e) => e.key === 'Enter' && handleAdd(category)}
-              placeholder="新增..."
-            />
-            <button onClick={() => handleAdd(category)} className="text-teal-600 hover:text-teal-700">
-              <Plus size={13} />
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   if (loading) {
     return <div className="text-[13px] text-muted-foreground">載入中...</div>;
   }
 
   return (
-    <div className="space-y-8">
-      {renderSection('開發平台選項', 'platform', 'w-24', 'w-20')}
-      <div className="border-t border-border/50" />
-      {renderSection('品牌分類選項', 'brand_category', 'w-20', 'w-20', true)}
-      <div className="border-t border-border/50" />
-      {renderSection('項目類型選項', 'project_type', 'w-24', 'w-24')}
+    <div className="space-y-4">
+      <h3 className="text-[18px] font-bold">開發平台選項</h3>
+      <div className="flex flex-wrap gap-2">
+        {items.map((item) => (
+          <div key={item.id} className="flex items-center gap-2 border border-border/50 rounded-md px-3 py-2 group">
+            {editing?.id === item.id ? (
+              <input
+                className="text-[13px] border-b border-teal-600 outline-none w-24"
+                value={editing.value}
+                onChange={(e) => setEditing({ ...editing, value: e.target.value })}
+                onBlur={handleSaveEdit}
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
+                autoFocus
+              />
+            ) : (
+              <>
+                <span className="text-[13px]">{item.value}</span>
+                <button onClick={() => setEditing({ id: item.id, value: item.value })} className="text-muted-foreground hover:text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Edit size={11} />
+                </button>
+                <button onClick={() => handleDelete(item.id)} className="text-muted-foreground hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <X size={11} />
+                </button>
+              </>
+            )}
+          </div>
+        ))}
+        <div className="flex items-center gap-1 border border-dashed border-teal-300 rounded-md px-3 py-2">
+          <input
+            className="text-[13px] outline-none w-20 placeholder:text-muted-foreground"
+            value={newValue}
+            onChange={(e) => setNewValue(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+            placeholder="新增..."
+          />
+          <button onClick={handleAdd} className="text-teal-600 hover:text-teal-700">
+            <Plus size={13} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
