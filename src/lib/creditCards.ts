@@ -51,6 +51,41 @@ export function isValidExpiry(raw: string): boolean {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(raw.trim());
 }
 
+export const CREDIT_CARD_MONTHS = [
+  '01',
+  '02',
+  '03',
+  '04',
+  '05',
+  '06',
+  '07',
+  '08',
+  '09',
+  '10',
+  '11',
+  '12',
+] as const;
+
+export function splitExpiry(raw: string): { year: string; month: string } {
+  if (!isValidExpiry(raw)) return { year: '', month: '' };
+  const [year, month] = raw.trim().split('-');
+  return { year, month };
+}
+
+export function joinExpiry(year: string, month: string): string {
+  if (!year || !month) return '';
+  return `${year}-${month}`;
+}
+
+export function creditCardYearOptions(now = new Date(), extraYear = ''): string[] {
+  const current = now.getFullYear();
+  const years = new Set<number>();
+  for (let year = current - 1; year <= current + 15; year += 1) years.add(year);
+  const extra = Number(extraYear);
+  if (Number.isInteger(extra) && extra >= 2000 && extra <= 2100) years.add(extra);
+  return [...years].sort((a, b) => a - b).map(String);
+}
+
 export function isCardExpiringSoon(expiry: string, now = new Date()): boolean {
   if (!isValidExpiry(expiry)) return false;
   const [year, month] = expiry.split('-').map(Number);

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CreditCard, Edit, Eye, EyeOff, Plus, Save, Trash2 } from 'lucide-react';
+import { CreditCard, Edit, Plus, Save, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useCompanies } from '@/hooks/useCompanies';
@@ -7,11 +7,15 @@ import { useActiveStaffOptions } from '@/hooks/useActiveStaffOptions';
 import { useCreditCards } from '@/hooks/useCreditCards';
 import {
   CREDIT_CARD_BANKS,
+  CREDIT_CARD_MONTHS,
+  creditCardYearOptions,
   formatCompanyOptionLabel,
   isCardExpiringSoon,
   isValidExpiry,
   isValidLastFour,
+  joinExpiry,
   normalizeLastFour,
+  splitExpiry,
   type CreditCardInput,
   type CreditCardRecord,
 } from '@/lib/creditCards';
@@ -26,7 +30,8 @@ type Draft = {
   purpose: string;
   holder: string;
   custodianId: string;
-  expiry: string;
+  expiryYear: string;
+  expiryMonth: string;
 };
 
 const emptyDraft = (): Draft => ({
@@ -36,7 +41,8 @@ const emptyDraft = (): Draft => ({
   purpose: '',
   holder: '',
   custodianId: '',
-  expiry: '',
+  expiryYear: '',
+  expiryMonth: '',
 });
 
 function companyKey(company: Company) {
@@ -51,7 +57,7 @@ function toInput(draft: Draft): CreditCardInput {
     purpose: draft.purpose,
     holder: draft.holder,
     custodianId: draft.custodianId || null,
-    expiry: draft.expiry,
+    expiry: joinExpiry(draft.expiryYear, draft.expiryMonth),
   };
 }
 
@@ -247,21 +253,29 @@ function CreditCardFormModal({
   onSave: (draft: Draft) => void;
   onClose: () => void;
 }) {
-  const [draft, setDraft] = useState<Draft>(() =>
-    card
-      ? {
-          companyListId: card.companyListId,
-          lastFour: card.lastFour,
-          bank: card.bank,
-          purpose: card.purpose,
-          holder: card.holder,
-          custodianId: card.custodianId || '',
-          expiry: card.expiry,
-        }
-      : emptyDraft(),
+  const [draft, setDraft] = useState<Draft>(() => {
+    if (!card) return emptyDraft();
+    const expiry = splitExpiry(card.expiry);
+    return {
+      companyListId: card.companyListId,
+      lastFour: card.lastFour,
+      bank: card.bank,
+      purpose: card.purpose,
+      holder: card.holder,
+      custodianId: card.custodianId || '',
+      expiryYear: expiry.year,
+      expiryMonth: expiry.month,
+    };
+  });
+  const { options: staffOptions } = useActiveStaffOptions();
+  const activeStaffOptions = useMemo(
+    () => staffOptions.filter((option) => option.status.toLowerCase() === 'active'),
+    [staffOptions],
   );
-  const [showCardNumber, setShowCardNumber] = useState(false);
-  const { options: staffOptions } = useActiveStaffOptions([draft.custodianId]);
+  const yearOptions = useMemo(
+    () => creditCardYearOptions(new Date(), draft.expiryYear),
+    [draft.expiryYear],
+  );
 
   const companyOptions = useMemo(() => {
     return companies.filter((company) => {
@@ -275,7 +289,7 @@ function CreditCardFormModal({
     Boolean(draft.companyListId) &&
     isValidLastFour(draft.lastFour) &&
     Boolean(draft.bank) &&
-    isValidExpiry(draft.expiry);
+    isValidExpiry(joinExpiry(draft.expiryYear, draft.expiryMonth));
 
   return (
     <CrudModal
@@ -342,32 +356,44 @@ function CreditCardFormModal({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">卡號末四位 *</label>
-            <div className="relative">
-              <input
-                type={showCardNumber ? 'text' : 'password'}
-                maxLength={4}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-                value={draft.lastFour}
-                onChange={(e) => setDraft({ ...draft, lastFour: normalizeLastFour(e.target.value) })}
-                placeholder="0000"
-              />
-              <button
-                type="button"
-                onClick={() => setShowCardNumber(!showCardNumber)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                {showCardNumber ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
-            </div>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={4}
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
+              value={draft.lastFour}
+              onChange={(e) => setDraft({ ...draft, lastFour: normalizeLastFour(e.target.value) })}
+              placeholder="0000"
+            />
           </div>
           <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">到期日 (YYYY-MM) *</label>
-            <input
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-              value={draft.expiry}
-              onChange={(e) => setDraft({ ...draft, expiry: e.target.value })}
-              placeholder="2025-12"
-            />
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">到期日 *</label>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
+                value={draft.expiryYear}
+                onChange={(e) => setDraft({ ...draft, expiryYear: e.target.value })}
+              >
+                <option value="">年</option>
+                {yearOptions.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
+                value={draft.expiryMonth}
+                onChange={(e) => setDraft({ ...draft, expiryMonth: e.target.value })}
+              >
+                <option value="">月</option>
+                {CREDIT_CARD_MONTHS.map((month) => (
+                  <option key={month} value={month}>
+                    {month}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
         <div>
@@ -394,7 +420,7 @@ function CreditCardFormModal({
             <SearchableSelect
               value={draft.custodianId}
               onValueChange={(custodianId) => setDraft({ ...draft, custodianId })}
-              options={[{ value: '', label: '（未指定）' }, ...staffOptions]}
+              options={[{ value: '', label: '（未指定）' }, ...activeStaffOptions]}
               placeholder="選擇保管人"
               searchPlaceholder="搜尋姓名或電郵..."
               emptyText="沒有可選同事"
