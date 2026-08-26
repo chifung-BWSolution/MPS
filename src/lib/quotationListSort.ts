@@ -2,6 +2,7 @@ import {
   calcRemainingDays,
   formatMainPmName,
   formatProjectTypes,
+  formatRelatedClientName,
   optionalIsoDate,
   PITCHING_STATUS_OPTIONS,
   type PitchingRecord,
@@ -12,6 +13,7 @@ export type QuotationListSortKey =
   | 'remainingDays'
   | 'projectTypes'
   | 'displayName'
+  | 'clientName'
   | 'mainPm'
   | 'status';
 
@@ -22,6 +24,7 @@ export const QUOTATION_LIST_SORT_KEYS: QuotationListSortKey[] = [
   'remainingDays',
   'projectTypes',
   'displayName',
+  'clientName',
   'mainPm',
   'status',
 ];
@@ -29,7 +32,7 @@ export const QUOTATION_LIST_SORT_KEYS: QuotationListSortKey[] = [
 export function getQuotationListSortValue(
   record: Pick<
     PitchingRecord,
-    'inquiryDate' | 'status' | 'projectTypes' | 'displayName' | 'mainPmName'
+    'inquiryDate' | 'status' | 'projectTypes' | 'displayName' | 'clientName' | 'mainPmName'
   >,
   key: QuotationListSortKey,
   asOfDate?: string,
@@ -45,6 +48,10 @@ export function getQuotationListSortValue(
     }
     case 'displayName':
       return record.displayName?.trim() || null;
+    case 'clientName': {
+      const name = formatRelatedClientName(record);
+      return name === '—' ? null : name;
+    }
     case 'mainPm': {
       const name = formatMainPmName(record);
       return name === '—' ? null : name;
@@ -95,7 +102,7 @@ export function nextQuotationListSort(
 
 export function sortQuotationListRecords<T extends Pick<
   PitchingRecord,
-  'inquiryDate' | 'status' | 'projectTypes' | 'displayName' | 'mainPmName'
+  'inquiryDate' | 'status' | 'projectTypes' | 'displayName' | 'clientName' | 'mainPmName'
 >>(
   records: T[],
   key: QuotationListSortKey,

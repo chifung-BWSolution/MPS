@@ -14,7 +14,7 @@ const headerClass =
 
 export function useQuotationListSort<T extends Pick<
   PitchingRecord,
-  'inquiryDate' | 'status' | 'projectTypes' | 'displayName' | 'mainPmName'
+  'inquiryDate' | 'status' | 'projectTypes' | 'displayName' | 'clientName' | 'mainPmName'
 >>(records: T[]) {
   const [sortKey, setSortKey] = useState<QuotationListSortKey>('inquiryDate');
   const [sortDir, setSortDir] = useState<QuotationListSortDir>('desc');
@@ -103,6 +103,13 @@ export function QuotationClientProjectTableHeaders({
       <QuotationListSortableTh
         label="提案顯示名稱"
         sortKey="displayName"
+        activeKey={sortKey}
+        sortDir={sortDir}
+        onSort={onSort}
+      />
+      <QuotationListSortableTh
+        label="相關客戶"
+        sortKey="clientName"
         activeKey={sortKey}
         sortDir={sortDir}
         onSort={onSort}

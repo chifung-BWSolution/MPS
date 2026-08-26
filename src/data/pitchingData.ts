@@ -148,6 +148,11 @@ export function formatMainPmName(record: Pick<PitchingRecord, 'mainPmName'>): st
   return record.mainPmName?.trim() || '—';
 }
 
+export function formatRelatedClientName(record: Pick<PitchingRecord, 'clientName'>): string {
+  const name = record.clientName?.trim();
+  return !name || name === '—' ? '—' : name;
+}
+
 export function formatProjectTypes(types: PitchingProjectType[]): string {
   if (!types.length) return '—';
   return types

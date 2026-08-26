@@ -27,8 +27,15 @@ assert.match(headerSrc, /查詢日期/);
 assert.match(headerSrc, /剩餘天數/);
 assert.match(headerSrc, /項目類型/);
 assert.match(headerSrc, /提案顯示名稱/);
+assert.match(headerSrc, /相關客戶/);
 assert.match(headerSrc, /負責 PM/);
 assert.match(headerSrc, /狀態/);
+assert.ok(headerSrc.indexOf('提案顯示名稱') < headerSrc.indexOf('相關客戶'));
+assert.ok(headerSrc.indexOf('相關客戶') < headerSrc.indexOf('負責 PM'));
+assert.match(pitchingSrc, /formatRelatedClientName\(record\)/);
+assert.match(projectSrc, /formatRelatedClientName\(record\)/);
+assert.match(pitchingSrc, /colSpan=\{8\}/);
+assert.match(projectSrc, /colSpan=\{8\}/);
 
 assert.equal(defaultQuotationListSortDir('inquiryDate'), 'desc');
 assert.equal(defaultQuotationListSortDir('remainingDays'), 'desc');
@@ -53,6 +60,7 @@ function row(partial: {
   status?: PitchingStatus;
   projectTypes?: PitchingProjectType[];
   displayName?: string;
+  clientName?: string;
   mainPmName?: string;
 }) {
   return {
@@ -60,6 +68,7 @@ function row(partial: {
     status: 'initial' as PitchingStatus,
     projectTypes: [] as PitchingProjectType[],
     displayName: '',
+    clientName: '',
     mainPmName: '',
     ...partial,
   };
@@ -72,6 +81,7 @@ const rows = [
     status: 'closed',
     projectTypes: ['bwt_web'],
     displayName: 'Zeta',
+    clientName: 'Zeta Bank',
     mainPmName: 'Chris',
   }),
   row({
@@ -80,6 +90,7 @@ const rows = [
     status: 'initial',
     projectTypes: ['bwl_event'],
     displayName: 'Alpha',
+    clientName: 'Alpha Air',
     mainPmName: 'Ada',
   }),
   row({
@@ -87,6 +98,7 @@ const rows = [
     inquiryDate: '',
     status: 'following_up',
     displayName: 'Missing date',
+    clientName: '—',
     mainPmName: '',
   }),
 ];
@@ -130,6 +142,12 @@ assert.deepEqual(
 const byTypeAsc = sortQuotationListRecords(rows, 'projectTypes', 'asc', '2026-08-25');
 assert.deepEqual(
   byTypeAsc.map((r) => r.id),
+  ['b', 'a', 'c'],
+);
+
+const byClientAsc = sortQuotationListRecords(rows, 'clientName', 'asc', '2026-08-25');
+assert.deepEqual(
+  byClientAsc.map((r) => r.id),
   ['b', 'a', 'c'],
 );
 

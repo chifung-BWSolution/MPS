@@ -27,6 +27,7 @@ import {
   calcRemainingDays,
   formatProjectTypes,
   formatMainPmName,
+  formatRelatedClientName,
   matchesProjectTypeFilter,
   optionalIsoDate,
   type PitchingRecord,
@@ -644,6 +645,7 @@ function PitchingList({
                     </td>
                     <td className="px-4 py-3 text-[13px] max-w-[180px]">{formatProjectTypes(record.projectTypes)}</td>
                     <td className="px-4 py-3 text-[14px] font-medium">{record.displayName}</td>
+                    <td className="px-4 py-3 text-[13px]">{formatRelatedClientName(record)}</td>
                     <td className="px-4 py-3 text-[13px]">{formatMainPmName(record)}</td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <PitchingStatusSelect
@@ -673,7 +675,7 @@ function PitchingList({
                 ))}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-[13px] text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-8 text-center text-[13px] text-muted-foreground">
                     沒有找到符合條件的 Pitching 紀錄
                   </td>
                 </tr>
