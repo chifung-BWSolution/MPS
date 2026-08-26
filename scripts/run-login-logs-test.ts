@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import {
   displayNameForLoginEmail,
   formatLoginLogTime,
+  isUsersUuid,
   loginMethodLabel,
   mapLoginLogRow,
 } from '../src/lib/loginLogs';
@@ -30,6 +31,9 @@ assert.equal(
   'Franco Lee',
 );
 assert.equal(displayNameForLoginEmail('unknown@example.com', []), 'unknown@example.com');
+assert.equal(isUsersUuid('c87bfd89-a004-4db0-b3c4-f408a5f223e0'), true);
+assert.equal(isUsersUuid('fallback-6ddee578-cfe2-4e27-b758-affb02fa02ae'), false);
+assert.equal(isUsersUuid('ui-bootstrap-abc'), false);
 
 const mapped = mapLoginLogRow(
   {
@@ -57,6 +61,7 @@ const hook = read('src/hooks/useLoginLogs.ts');
 assert.match(hook, /LOGIN_LOGS_TABLE/);
 assert.match(hook, /\.order\('created_at', \{ ascending: false \}\)/);
 assert.match(hook, /\.limit\(LOGIN_LOGS_LIMIT\)/);
+assert.match(hook, /login_logs_user_id_fkey/);
 assert.match(hook, /from\('users'\)/);
 
 const page = read('src/components/settings/LoginLogsSettings.tsx');
@@ -65,9 +70,10 @@ assert.match(page, /formatLoginLogTime/);
 assert.doesNotMatch(page, /wm\.zhang@company\.com/);
 
 const auth = read('src/context/AuthContext.tsx');
-assert.match(auth, /const \{ error \} = await supabase\.from\('login_logs'\)\.insert/);
-assert.match(auth, /void logLoginEvent\(email, true, hardcodedBypass\.profile\.login_method\)/);
-assert.match(auth, /void logLoginEvent\(email, true, 'dev_bypass'\)/);
+assert.match(auth, /user_id: resolvedUserId/);
+assert.match(auth, /isUsersUuid/);
+assert.match(auth, /void logLoginEvent\(email, true, hardcodedBypass\.profile\.login_method, sysUser\?\.id\)/);
+assert.match(auth, /void logLoginEvent\(email, true, 'dev_bypass', sysUser\.id\)/);
 assert.doesNotMatch(auth, /\.then\(\(\) => \{\}\)\.catch\(\(\) => \{\}\)/);
 
 const migration = read('supabase/migrations/20260826031000_login_logs_rls.sql');
@@ -82,5 +88,12 @@ assert.doesNotMatch(migration, /FOR UPDATE/);
 assert.doesNotMatch(migration, /FOR DELETE/);
 assert.doesNotMatch(migration, /GRANT UPDATE/);
 assert.doesNotMatch(migration, /GRANT DELETE/);
+
+const fkMigration = read('supabase/migrations/20260826034500_login_logs_user_id_fk.sql');
+assert.match(fkMigration, /login_logs_user_id_fkey/);
+assert.match(fkMigration, /REFERENCES public\.users\(id\) ON DELETE SET NULL/);
+assert.match(fkMigration, /login_logs_match_user_id/);
+assert.match(fkMigration, /SET user_id = public\.login_logs_match_user_id/);
+assert.match(fkMigration, /trg_login_logs_fill_user_id/);
 
 console.log('login logs: ok');

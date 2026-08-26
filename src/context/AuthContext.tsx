@@ -10,6 +10,7 @@ import {
   scoreWhitelistCandidate,
   type UsersWhitelistRow,
 } from '@/services/authStaffResolve';
+import { isUsersUuid } from '@/lib/loginLogs';
 import type { User as SupabaseUser, Session } from '@supabase/supabase-js';
 
 interface SystemUserProfile {
@@ -583,7 +584,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             // Log the login event (fire and forget)
             if (event === 'SIGNED_IN' && !authSucceededRef.current) {
-              logLoginEvent(session.user.email || '', true);
+              void logLoginEvent(session.user.email || '', true);
             }
           } else {
             // Session became null — BUT don't clear state if:
@@ -752,7 +753,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           authSucceededRef.current = true;
         }
 
-        logLoginEvent(normalizedEmail, true);
+        void logLoginEvent(normalizedEmail, true);
         clearTimeout(functionTimeout);
         verifyInProgressRef.current = false;
         setLoading(false);
@@ -826,7 +827,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUserInfo(null);
         }
 
-        logLoginEvent(normalizedEmail, true);
+        void logLoginEvent(normalizedEmail, true, 'google', sysUser.id);
         return;
       }
 
@@ -840,7 +841,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUserInfo(null);
       setAuthError(`登入失敗：您的 Google 電郵 ${normalizedEmail} 未在系統使用者白名單中，請聯絡管理員。`);
       // Log the failed attempt
-      logLoginEvent(normalizedEmail, false);
+      void logLoginEvent(normalizedEmail, false);
       // Sign out — with timeout protection so it doesn't hang
       try {
         await Promise.race([
@@ -877,13 +878,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const logLoginEvent = async (email: string, success: boolean, loginMethod = 'google') => {
+  const logLoginEvent = async (
+    email: string,
+    success: boolean,
+    loginMethod = 'google',
+    userId?: string | null,
+  ) => {
     try {
+      let resolvedUserId = isUsersUuid(userId) ? userId : null;
+      if (!resolvedUserId && email) {
+        try {
+          const { data: matches } = await fetchUsersCandidatesByEmail(email);
+          const picked = pickPreferredWhitelistRow(matches, (row) => {
+            const normalized = email.toLowerCase().trim();
+            return scoreWhitelistCandidate({
+              staffActive: true,
+              systemActive: (row.system_status || '').toLowerCase() === 'active',
+              googleEmailMatch: (row.google_email || '').toLowerCase().trim() === normalized,
+              emailMatch: (row.email || '').toLowerCase().trim() === normalized,
+            });
+          });
+          if (isUsersUuid(picked?.id)) resolvedUserId = picked.id;
+        } catch (lookupErr) {
+          console.warn('[Auth] login_logs user_id lookup failed:', lookupErr);
+        }
+      }
+
       const { error } = await supabase.from('login_logs').insert({
         email,
         login_method: loginMethod,
         user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
         success,
+        user_id: resolvedUserId,
       });
       if (error) {
         console.error('[Auth] Failed to log login:', error.message);
@@ -971,7 +997,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             authSucceededRef.current = true;
           }
 
-          void logLoginEvent(email, true, hardcodedBypass.profile.login_method);
+          void logLoginEvent(email, true, hardcodedBypass.profile.login_method, sysUser?.id);
 
           return 'done';
         }
@@ -1031,7 +1057,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUserInfo(null);
         }
 
-        void logLoginEvent(email, true, 'dev_bypass');
+        void logLoginEvent(email, true, 'dev_bypass', sysUser.id);
 
         return 'done';
       } catch (err) {

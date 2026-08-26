@@ -10,8 +10,19 @@ import {
   type LoginLogUserLookup,
 } from '@/lib/loginLogs';
 
-const LOG_SELECT = 'id, email, login_method, ip_address, user_agent, success, created_at';
-const USER_SELECT = 'email, google_email, display_name';
+const LOG_SELECT = [
+  'id',
+  'email',
+  'login_method',
+  'ip_address',
+  'user_agent',
+  'success',
+  'created_at',
+  'user_id',
+  'user:users!login_logs_user_id_fkey ( id, display_name, email, google_email )',
+].join(', ');
+
+const USER_SELECT = 'id, email, google_email, display_name';
 
 async function fetchUsersForEmails(emails: string[]): Promise<LoginLogUserLookup[]> {
   const unique = Array.from(new Set(emails.map(normalizeLoginEmail).filter(Boolean)));
@@ -53,7 +64,11 @@ export function useLoginLogs() {
     }
 
     const rows = (data as LoginLogRow[] | null) ?? [];
-    const users = await fetchUsersForEmails(rows.map((row) => row.email));
+    const missingName = rows.filter((row) => {
+      const joined = Array.isArray(row.user) ? row.user[0] : row.user;
+      return !joined?.display_name?.trim();
+    });
+    const users = await fetchUsersForEmails(missingName.map((row) => row.email));
     setError(null);
     setLogs(rows.map((row) => mapLoginLogRow(row, users)));
     setLoading(false);
