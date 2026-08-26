@@ -25,7 +25,8 @@ assert.doesNotMatch(formModalSrc, /EMPTY_STAFF_OPTION/);
 assert.doesNotMatch(formModalSrc, /公司名稱 \(中文\)/);
 assert.doesNotMatch(formModalSrc, /公司名稱 \(Eng\)/);
 assert.doesNotMatch(formModalSrc, /公司名稱來自客戶列表/);
-assert.doesNotMatch(formModalSrc, /companyNamesForClient/);
+assert.match(formModalSrc, /companyNamesForClient/);
+assert.match(formModalSrc, /ClientWebsiteSelectField/);
 
 assert.match(pitchingSrc, /onCreateClient=\{addClient\}/);
 assert.match(projectSrc, /onCreateClient=\{addClient\}/);

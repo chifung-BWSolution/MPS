@@ -47,6 +47,10 @@ export interface PitchingRecord {
   description?: string;
   projectTypes: PitchingProjectType[];
   asanaLink?: string;
+  /** Optional FK to webandsystem_list.id (client website / system). */
+  webandsystemListId?: string;
+  webandsystemName?: string;
+  webandsystemDomainUrl?: string;
   asanaTaskGid?: string;
   asanaProjectGid?: string;
   asanaProjectName?: string;

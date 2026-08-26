@@ -16,6 +16,12 @@ type StaffEmbed = {
   display_name: string | null;
 } | null;
 
+type WebsiteEmbed = {
+  website_name: string | null;
+  domain_url: string | null;
+  profile_type: string | null;
+} | null;
+
 type DbRow = {
   id: string;
   asana_task_gid: string | null;
@@ -36,12 +42,14 @@ type DbRow = {
   main_pm?: StaffEmbed;
   status: string;
   asana_link: string | null;
+  webandsystem_list_id: string | null;
   notes: string | null;
   estimated_income: number | null;
   estimated_expenses: PitchingExpenseItem[] | null;
   created_at: string;
   updated_at: string;
   quotation_client_list?: ClientListEmbed;
+  webandsystem_list?: WebsiteEmbed;
 };
 
 function clientNamesFromEmbed(embed: ClientListEmbed | undefined): {
@@ -115,6 +123,9 @@ function mapRow(row: DbRow): PitchingRecord {
     mainPmName: row.main_pm?.display_name?.trim() || undefined,
     status,
     asanaLink: row.asana_link ?? undefined,
+    webandsystemListId: row.webandsystem_list_id ?? undefined,
+    webandsystemName: row.webandsystem_list?.website_name ?? undefined,
+    webandsystemDomainUrl: row.webandsystem_list?.domain_url ?? undefined,
     notes: row.notes ?? undefined,
     estimatedIncome: row.estimated_income != null ? Number(row.estimated_income) : undefined,
     estimatedExpenses: parseExpenses(row.estimated_expenses),
@@ -140,6 +151,7 @@ export type QuotationClientProjectUpdate = Partial<
     | 'mainPmId'
     | 'mainPmName'
     | 'asanaLink'
+    | 'webandsystemListId'
     | 'status'
     | 'notes'
     | 'estimatedIncome'
@@ -159,7 +171,7 @@ export function useQuotationClientProjects() {
     setLoading(true);
     const { data, error: err } = await supabase
       .from(QUOTATION_CLIENT_PROJECT_TABLE)
-      .select('*, quotation_client_list ( company_name_zh, company_name_en ), main_pm:staffs!main_pm_id ( display_name )')
+      .select('*, quotation_client_list ( company_name_zh, company_name_en ), main_pm:staffs!main_pm_id ( display_name ), webandsystem_list ( website_name, domain_url, profile_type )')
       .order('inquiry_date', { ascending: false });
 
     if (err) {
@@ -211,6 +223,7 @@ export function useQuotationClientProjects() {
         main_pm_id: data.mainPmId?.trim() || null,
         status: data.status,
         asana_link: data.asanaLink ?? null,
+        webandsystem_list_id: data.webandsystemListId?.trim() || null,
         notes: data.notes ?? null,
         created_at: now,
         updated_at: now,
@@ -260,6 +273,9 @@ export function useQuotationClientProjects() {
     if (data.assignedPmName !== undefined) row.assigned_pm_name = data.assignedPmName || '';
     if (data.mainPmId !== undefined) row.main_pm_id = data.mainPmId?.trim() || null;
     if (data.asanaLink !== undefined) row.asana_link = data.asanaLink || null;
+    if (data.webandsystemListId !== undefined) {
+      row.webandsystem_list_id = data.webandsystemListId.trim() || null;
+    }
     if (data.status !== undefined) row.status = data.status;
     if (data.notes !== undefined) row.notes = data.notes || null;
     if (data.estimatedIncome !== undefined) row.estimated_income = data.estimatedIncome;

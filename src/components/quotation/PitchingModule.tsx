@@ -15,6 +15,7 @@ import {
 } from '@/data/quotationClientList';
 import { useQuotationClientDetailId } from '@/hooks/useQuotationClientDetailId';
 import { ClientFormModal } from '@/components/crm/ClientFormModal';
+import { ClientWebsiteSelectField } from '@/components/quotation/ClientWebsiteSelectField';
 import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,6 +54,7 @@ export type PitchingFormValues = {
   description: string;
   projectTypes: PitchingProjectType[];
   mainPmId: string;
+  webandsystemListId: string;
   asanaLink: string;
 };
 
@@ -78,6 +80,7 @@ const emptyForm = (defaultMainPmId = ''): PitchingFormValues => ({
   description: '',
   projectTypes: [],
   mainPmId: defaultMainPmId,
+  webandsystemListId: '',
   asanaLink: '',
 });
 
@@ -101,6 +104,7 @@ function formFromRecord(record: PitchingRecord, clientOptions: ClientOption[]): 
     description: record.description ?? '',
     projectTypes: record.projectTypes,
     mainPmId: record.mainPmId ?? '',
+    webandsystemListId: record.webandsystemListId ?? '',
     asanaLink: record.asanaLink ?? '',
   };
 }
@@ -116,6 +120,7 @@ export function pitchingFormToUpdate(form: PitchingFormValues): QuotationClientP
     description: form.description.trim() || undefined,
     projectTypes: form.projectTypes,
     mainPmId: form.mainPmId.trim(),
+    webandsystemListId: form.webandsystemListId.trim(),
     asanaLink: form.asanaLink.trim() || undefined,
   };
 }
@@ -461,6 +466,22 @@ export function PitchingFormModal({
 
         <section className="space-y-3 border-t border-border pt-5">
           <h3 className="text-[14px] font-semibold flex items-center gap-2">
+            網站 / 系統
+          </h3>
+          <ClientWebsiteSelectField
+            value={form.webandsystemListId}
+            onChange={(webandsystemListId) => setForm((prev) => ({ ...prev, webandsystemListId }))}
+            clientId={form.clientId}
+            companyNameZh={companyNamesForClient(form.clientId, clientOptions).companyNameZh}
+            companyNameEn={companyNamesForClient(form.clientId, clientOptions).companyNameEn}
+            clientName={form.clientName}
+            displayName={form.displayName}
+            projectTypes={form.projectTypes}
+          />
+        </section>
+
+        <section className="space-y-3 border-t border-border pt-5">
+          <h3 className="text-[14px] font-semibold flex items-center gap-2">
             <Link2 size={15} className="text-teal-600" />
             連結 Links
           </h3>
@@ -674,6 +695,7 @@ type DetailDraft = {
   handoverDate: string;
   description: string;
   projectTypes: PitchingProjectType[];
+  webandsystemListId: string;
   asanaLink: string;
   status: PitchingStatus;
   estimatedIncome: number | undefined;
@@ -698,6 +720,7 @@ function draftFromRecord(record: PitchingRecord, clientOptions: ClientOption[]):
     handoverDate: optionalIsoDate(record.handoverDate) ?? '',
     description: record.description ?? '',
     projectTypes: record.projectTypes,
+    webandsystemListId: record.webandsystemListId ?? '',
     asanaLink: record.asanaLink ?? '',
     status: record.status,
     estimatedIncome: record.estimatedIncome,
@@ -918,6 +941,7 @@ export function PitchingDetail({
       draft.signedDate !== initial.signedDate ||
       draft.handoverDate !== initial.handoverDate ||
       draft.description !== initial.description ||
+      draft.webandsystemListId !== initial.webandsystemListId ||
       draft.asanaLink !== initial.asanaLink ||
       draft.status !== initial.status ||
       draft.estimatedIncome !== initial.estimatedIncome ||
@@ -954,6 +978,7 @@ export function PitchingDetail({
       handoverDate: draft.handoverDate,
       description: draft.description.trim() || undefined,
       projectTypes: draft.projectTypes,
+      webandsystemListId: draft.webandsystemListId.trim(),
       asanaLink: draft.asanaLink.trim() || undefined,
       status: draft.status,
       estimatedIncome: draft.estimatedIncome,
@@ -1117,6 +1142,17 @@ export function PitchingDetail({
                     <span className="text-[12px] text-muted-foreground block">負責 PM</span>
                     <p className="text-[14px] font-medium mt-0.5">{formatMainPmName(record)}</p>
                   </div>
+                  <ClientWebsiteSelectField
+                    value={draft.webandsystemListId}
+                    onChange={(webandsystemListId) => patchDraft({ webandsystemListId })}
+                    clientId={draft.clientId}
+                    companyNameZh={clientCompany.companyNameZh}
+                    companyNameEn={clientCompany.companyNameEn}
+                    clientName={draft.clientName}
+                    displayName={draft.displayName}
+                    projectTypes={draft.projectTypes}
+                    showOpenLink
+                  />
                   <EditableTextField
                     label="Asana 連結"
                     value={draft.asanaLink}
@@ -1260,6 +1296,7 @@ export function PitchingModule() {
       mainPmId: form.mainPmId.trim() || undefined,
       mainPmName: selectedStaff?.label || undefined,
       status: 'initial',
+      webandsystemListId: form.webandsystemListId.trim() || undefined,
       asanaLink: form.asanaLink.trim() || undefined,
     });
     if (addErr) {
