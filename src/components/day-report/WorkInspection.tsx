@@ -561,7 +561,7 @@ export function WorkInspection() {
             <div className="min-w-0">
               <p className="text-[13px] font-semibold truncate">{name}</p>
               <p className="text-[11px] text-muted-foreground truncate">
-                {[member.department, member.team_name].filter(Boolean).join(' · ') || UNASSIGNED_LABEL}
+                {Array.from(new Set([member.department, member.team_name].filter(Boolean))).join(' · ') || UNASSIGNED_LABEL}
               </p>
             </div>
           </div>

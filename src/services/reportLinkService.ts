@@ -82,7 +82,6 @@ type SystemUserLike = {
   auth_user_id?: string | null;
   bubble_staff_id?: string;
   email?: string;
-  google_email?: string;
 } | null;
 
 async function lookupLoginStaffIdByAuthUserId(authUserId: string): Promise<string | null> {

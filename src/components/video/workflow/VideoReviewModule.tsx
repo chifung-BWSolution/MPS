@@ -129,7 +129,7 @@ export function VideoReviewModule() {
     approveReview,
     rejectReview,
   } = useVideoWorkflow();
-  const { user, userInfo, systemUser } = useAuth();
+  const { user, systemUser } = useAuth();
   const [reviewTargetId, setReviewTargetId] = useState<string | null>(null);
   const [reviewMode, setReviewMode] = useState<ReviewActionMode>('admin');
   const [statusFilter, setStatusFilter] = useState<WorkflowBinaryStatusFilter>('pending');
@@ -164,8 +164,8 @@ export function VideoReviewModule() {
   const reviewTarget = reviewTargetId ? getById(reviewTargetId) ?? null : null;
 
   const reviewerName = useMemo(
-    () => userInfo?.display_name || systemUser?.display_name || user?.email || 'User',
-    [userInfo, systemUser, user],
+    () => systemUser?.display_name || user?.email || 'User',
+    [systemUser, user],
   );
 
   const openReview = (id: string, mode: ReviewActionMode) => {

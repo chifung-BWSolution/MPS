@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import {
-  Search, Plus, Edit, Trash2, Shield, Users, UserPlus, UserCheck,
-  Mail, X, Save, RefreshCw, Chrome, CheckCircle2, XCircle, Clock,
-  AlertTriangle, Eye, EyeOff
+  Search, Edit, Trash2, Shield, Users, UserPlus, UserCheck,
+  X, Save, RefreshCw, Chrome, CheckCircle2, Clock,
+  AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -22,9 +22,7 @@ const ROLE_OPTIONS: { value: string; label: string; color: string }[] = [
   { value: 'marketing', label: '市場推廣', color: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
 ];
 
-const DEPT_OPTIONS = ['Management', 'PM Team', 'Design', 'Video', 'Content', 'Marketing', 'Finance'];
-
-const STAFF_PICKER_SELECT = 'id, display_name, full_name, position, work_email, team_name, status';
+const STAFF_PICKER_SELECT = 'id, display_name, full_name, position, work_email, team_name, base_location, status, profile_pic_url';
 
 /** Staff row from picker — identity is staffs.id. */
 interface StaffPickerItem {
@@ -34,10 +32,28 @@ interface StaffPickerItem {
   position: string | null;
   work_email: string | null;
   team_name: string | null;
+  base_location: string | null;
   status: string | null;
+  profile_pic_url: string | null;
 }
 
-/** UI shape for whitelist users (backed by public.users). */
+type UsersStaffJoin = {
+  display_name?: string | null;
+  team_name?: string | null;
+  base_location?: string | null;
+  position?: string | null;
+  profile_pic_url?: string | null;
+  work_email?: string | null;
+} | {
+  display_name?: string | null;
+  team_name?: string | null;
+  base_location?: string | null;
+  position?: string | null;
+  profile_pic_url?: string | null;
+  work_email?: string | null;
+}[] | null;
+
+/** UI shape for whitelist users (backed by public.users + staffs via staff_id). */
 interface SystemUser {
   id: string;
   staff_id: string; // users.staff_id → staffs.id (uuid)
@@ -45,27 +61,31 @@ interface SystemUser {
   email: string;
   role: string; // maps to users.role_tag
   department: string | null;
+  office: string | null;
   position: string | null;
   profile_pic_url: string | null;
-  is_active: boolean; // maps to users.system_status === 'active'
-  google_email: string | null;
   last_login_at: string | null;
   invited_at: string;
   created_at: string;
 }
 
+function staffFromJoin(staffs: UsersStaffJoin) {
+  if (!staffs) return null;
+  return Array.isArray(staffs) ? staffs[0] || null : staffs;
+}
+
 function mapUsersRow(row: any): SystemUser {
+  const staff = staffFromJoin(row.staffs);
   return {
     id: row.id,
     staff_id: row.staff_id,
-    display_name: row.display_name || row.email || row.staff_id || '',
+    display_name: staff?.display_name || row.email || row.staff_id || '',
     email: row.email || '',
     role: row.role_tag || 'staff',
-    department: row.department || null,
-    position: null,
-    profile_pic_url: null,
-    is_active: (row.system_status || '').toLowerCase() === 'active',
-    google_email: row.google_email || null,
+    department: staff?.team_name || null,
+    office: staff?.base_location || null,
+    position: staff?.position || null,
+    profile_pic_url: staff?.profile_pic_url || null,
     last_login_at: null,
     invited_at: row.created_at || '',
     created_at: row.created_at || '',
@@ -77,7 +97,6 @@ export function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
 
   // Modal states
   const [showStaffPicker, setShowStaffPicker] = useState(false);
@@ -90,7 +109,7 @@ export function UserManagement() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('*')
+        .select('*, staffs(display_name, team_name, base_location, position, profile_pic_url, work_email)')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -108,25 +127,21 @@ export function UserManagement() {
   }, [fetchSystemUsers]);
 
   // Add staff as system user
-  const handleAddStaff = async (staff: StaffPickerItem, role: string, googleEmail?: string) => {
+  const handleAddStaff = async (staff: StaffPickerItem, role: string, loginEmail?: string) => {
     try {
       const displayName = staff.display_name ?? '';
       const workEmail = staff.work_email || '';
-      const resolvedGoogleEmail = googleEmail || workEmail || null;
+      const resolvedEmail = loginEmail || workEmail || null;
 
       const { data, error } = await supabase
         .from('users')
         .upsert({
           staff_id: staff.id,
-          display_name: displayName,
-          email: workEmail,
+          email: resolvedEmail,
           role_tag: role,
-          google_email: resolvedGoogleEmail,
-          classification: 'system_user',
-          system_status: 'active',
           updated_at: new Date().toISOString(),
         }, { onConflict: 'staff_id' })
-        .select('*')
+        .select('*, staffs(display_name, team_name, base_location, position, profile_pic_url, work_email)')
         .single();
 
       if (error) throw error;
@@ -153,20 +168,14 @@ export function UserManagement() {
   const handleUpdateUser = async (userId: string, updates: Partial<SystemUser>) => {
     try {
       const dbUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      if (updates.display_name !== undefined) dbUpdates.display_name = updates.display_name;
       if (updates.email !== undefined) dbUpdates.email = updates.email;
-      if (updates.google_email !== undefined) dbUpdates.google_email = updates.google_email;
       if (updates.role !== undefined) dbUpdates.role_tag = updates.role;
-      if (updates.department !== undefined) dbUpdates.department = updates.department;
-      if (updates.is_active !== undefined) {
-        dbUpdates.system_status = updates.is_active ? 'active' : 'inactive';
-      }
 
       const { data, error } = await supabase
         .from('users')
         .update(dbUpdates)
         .eq('id', userId)
-        .select('*')
+        .select('*, staffs(display_name, team_name, base_location, position, profile_pic_url, work_email)')
         .single();
 
       if (error) throw error;
@@ -176,26 +185,6 @@ export function UserManagement() {
       setEditingUser(null);
     } catch (err: any) {
       toast.error('更新失敗', { description: err.message });
-    }
-  };
-
-  // Toggle user active status
-  const handleToggleActive = async (user: SystemUser) => {
-    const newStatus = !user.is_active;
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({
-          system_status: newStatus ? 'active' : 'inactive',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-
-      if (error) throw error;
-      setSystemUsers(prev => prev.map(u => u.id === user.id ? { ...u, is_active: newStatus } : u));
-      toast.success(newStatus ? `已啟用「${user.display_name}」` : `已停用「${user.display_name}」`);
-    } catch (err: any) {
-      toast.error('操作失敗', { description: err.message });
     }
   };
 
@@ -220,22 +209,15 @@ export function UserManagement() {
   const filteredUsers = systemUsers.filter(u => {
     const matchSearch = !searchTerm ||
       u.display_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (u.google_email || '').toLowerCase().includes(searchTerm.toLowerCase());
+      u.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchRole = filterRole === 'all' || u.role === filterRole;
-    const matchStatus = filterStatus === 'all' ||
-      (filterStatus === 'active' && u.is_active) ||
-      (filterStatus === 'inactive' && !u.is_active);
-    return matchSearch && matchRole && matchStatus;
+    return matchSearch && matchRole;
   });
-
-  const activeCount = systemUsers.filter(u => u.is_active).length;
-  const inactiveCount = systemUsers.filter(u => !u.is_active).length;
 
   return (
     <div className="space-y-5">
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white border border-border/50 rounded-md p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-md bg-teal-50 flex items-center justify-center">
             <Users size={18} className="text-teal-600" />
@@ -250,17 +232,8 @@ export function UserManagement() {
             <UserCheck size={18} className="text-green-600" />
           </div>
           <div>
-            <p className="text-[11px] text-muted-foreground">啟用中</p>
-            <p className="text-[20px] font-bold">{activeCount}</p>
-          </div>
-        </div>
-        <div className="bg-white border border-border/50 rounded-md p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-md bg-amber-50 flex items-center justify-center">
-            <XCircle size={18} className="text-amber-600" />
-          </div>
-          <div>
-            <p className="text-[11px] text-muted-foreground">已停用</p>
-            <p className="text-[20px] font-bold">{inactiveCount}</p>
+            <p className="text-[11px] text-muted-foreground">可登入</p>
+            <p className="text-[20px] font-bold">{systemUsers.length}</p>
           </div>
         </div>
         <div className="bg-white border border-border/50 rounded-md p-4 flex items-center gap-3">
@@ -268,8 +241,8 @@ export function UserManagement() {
             <Chrome size={18} className="text-blue-600" />
           </div>
           <div>
-            <p className="text-[11px] text-muted-foreground">Google 登入</p>
-            <p className="text-[20px] font-bold">{systemUsers.filter(u => u.google_email).length}</p>
+            <p className="text-[11px] text-muted-foreground">已設登入電郵</p>
+            <p className="text-[20px] font-bold">{systemUsers.filter(u => u.email).length}</p>
           </div>
         </div>
       </div>
@@ -309,16 +282,6 @@ export function UserManagement() {
             <option key={r.value} value={r.value}>{r.label}</option>
           ))}
         </select>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value as any)}
-          className="px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-        >
-          <option value="all">所有狀態</option>
-          <option value="active">啟用中</option>
-          <option value="inactive">已停用</option>
-        </select>
-
         <div className="ml-auto flex items-center gap-2">
           <button
             onClick={fetchSystemUsers}
@@ -360,10 +323,10 @@ export function UserManagement() {
             <thead className="bg-muted/50">
               <tr>
                 <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">使用者</th>
-                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Google 登入電郵</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">登入電郵</th>
                 <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">角色</th>
                 <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">部門</th>
-                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">狀態</th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">辦公室</th>
                 <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">最後登入</th>
                 <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">操作</th>
               </tr>
@@ -391,9 +354,9 @@ export function UserManagement() {
                     <td className="px-4 py-2.5">
                       <InlineGoogleEmailEditor
                         userId={user.id}
-                        currentValue={user.google_email || ''}
+                        currentValue={user.email || ''}
                         onSave={(newEmail) => {
-                          handleUpdateUser(user.id, { google_email: newEmail });
+                          handleUpdateUser(user.id, { email: newEmail });
                         }}
                       />
                     </td>
@@ -405,18 +368,7 @@ export function UserManagement() {
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">{user.department || '—'}</td>
-                    <td className="px-4 py-2.5">
-                      <span
-                        onClick={() => handleToggleActive(user)}
-                        className={cn(
-                          'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium cursor-pointer transition-colors',
-                          user.is_active ? 'bg-teal-50 text-teal-700 hover:bg-teal-100' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                        )}
-                      >
-                        {user.is_active ? <CheckCircle2 size={10} /> : <XCircle size={10} />}
-                        {user.is_active ? '啟用' : '停用'}
-                      </span>
-                    </td>
+                    <td className="px-4 py-2.5 text-muted-foreground">{user.office || '—'}</td>
                     <td className="px-4 py-2.5 text-[12px] text-muted-foreground">
                       {user.last_login_at ? (
                         <div className="flex items-center gap-1">
@@ -505,7 +457,7 @@ function StaffPickerModal({
   onClose,
 }: {
   existingUsers: SystemUser[];
-  onAdd: (staff: StaffPickerItem, role: string, googleEmail?: string) => void;
+  onAdd: (staff: StaffPickerItem, role: string, loginEmail?: string) => void;
   onClose: () => void;
 }) {
   const [staffList, setStaffList] = useState<StaffPickerItem[]>([]);
@@ -513,7 +465,7 @@ function StaffPickerModal({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStaff, setSelectedStaff] = useState<StaffPickerItem | null>(null);
   const [selectedRole, setSelectedRole] = useState('designer');
-  const [googleEmail, setGoogleEmail] = useState('');
+  const [loginEmail, setLoginEmail] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -557,7 +509,7 @@ function StaffPickerModal({
 
   const handleConfirmAdd = () => {
     if (!selectedStaff) return;
-    onAdd(selectedStaff, selectedRole, googleEmail || selectedStaff.work_email || undefined);
+    onAdd(selectedStaff, selectedRole, loginEmail || selectedStaff.work_email || undefined);
   };
 
   return (
@@ -567,7 +519,7 @@ function StaffPickerModal({
         <div className="flex items-center justify-between p-5 border-b border-border/50">
           <div>
             <h3 className="text-[18px] font-bold">從員工列表加入使用者</h3>
-            <p className="text-[12px] text-muted-foreground mt-0.5">選擇要加入系統的員工，設定角色及 Google 登入電郵</p>
+            <p className="text-[12px] text-muted-foreground mt-0.5">選擇要加入系統的員工，設定角色及登入電郵</p>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <X size={18} />
@@ -608,7 +560,7 @@ function StaffPickerModal({
                       key={staff.id}
                       onClick={() => {
                         setSelectedStaff(staff);
-                        setGoogleEmail(staff.work_email || '');
+                        setLoginEmail(staff.work_email || '');
                       }}
                       className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors text-left"
                     >
@@ -678,10 +630,10 @@ function StaffPickerModal({
                 </div>
               </div>
 
-              {/* Google Email */}
+              {/* Login Email */}
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">
-                  Google 登入電郵 *
+                  登入電郵 *
                 </label>
                 <p className="text-[11px] text-muted-foreground mb-2">
                   此電郵將作為 Google OAuth 登入的認證電郵，必須是有效的 Google 帳號（Gmail 或 Google Workspace）
@@ -690,19 +642,18 @@ function StaffPickerModal({
                   <Chrome size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500" />
                   <input
                     type="email"
-                    value={googleEmail}
-                    onChange={(e) => setGoogleEmail(e.target.value)}
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
                     placeholder="user@gmail.com 或 user@company.com"
                     className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
                   />
                 </div>
               </div>
 
-              {/* Warning if no email */}
-              {!googleEmail && (
+              {!loginEmail && (
                 <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-md">
                   <AlertTriangle size={14} className="text-amber-600 shrink-0" />
-                  <p className="text-[11px] text-amber-800">請輸入 Google 登入電郵，否則該使用者將無法登入系統。</p>
+                  <p className="text-[11px] text-amber-800">請輸入登入電郵，否則該使用者將無法登入系統。</p>
                 </div>
               )}
             </div>
@@ -720,7 +671,7 @@ function StaffPickerModal({
           {selectedStaff && (
             <button
               onClick={handleConfirmAdd}
-              disabled={!googleEmail}
+              disabled={!loginEmail}
               className="flex items-center gap-1.5 px-5 py-2 bg-teal-600 text-white rounded-md text-[13px] font-bold hover:bg-teal-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <UserPlus size={13} /> 確認加入系統
@@ -780,7 +731,7 @@ function InlineGoogleEmailEditor({
           onKeyDown={handleKeyDown}
           autoFocus
           className="w-full min-w-[160px] px-1.5 py-0.5 border border-teal-400 rounded text-[12px] focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white"
-          placeholder="輸入 Google 登入電郵"
+          placeholder="輸入登入電郵"
         />
       </div>
     );
@@ -790,7 +741,7 @@ function InlineGoogleEmailEditor({
     <div
       className="flex items-center gap-1.5 cursor-pointer group hover:bg-blue-50 rounded px-1 py-0.5 -mx-1 transition-colors"
       onClick={() => setEditing(true)}
-      title="點擊編輯 Google 登入電郵"
+      title="點擊編輯登入電郵"
     >
       <Chrome size={12} className="text-blue-500" />
       <span className="text-[12px] text-muted-foreground group-hover:text-blue-700">
@@ -815,8 +766,8 @@ function EditUserModal({
     display_name: user.display_name,
     role: user.role,
     department: user.department || '',
-    google_email: user.google_email || '',
-    is_active: user.is_active,
+    office: user.office || '',
+    email: user.email || '',
   });
 
   return (
@@ -855,54 +806,38 @@ function EditUserModal({
             </select>
           </div>
 
-          {/* Department */}
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">部門</label>
-            <select
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-              value={formData.department}
-              onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-            >
-              <option value="">選擇部門</option>
-              {DEPT_OPTIONS.map(d => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
+            <input
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] bg-muted/30 bg-white"
+              value={formData.department || '—'}
+              readOnly
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">部門來自員工列表，不可在此修改</p>
           </div>
 
-          {/* Google Email */}
           <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">Google 登入電郵 *</label>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">辦公室</label>
+            <input
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] bg-muted/30 bg-white"
+              value={formData.office || '—'}
+              readOnly
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">辦公室來自員工列表，不可在此修改</p>
+          </div>
+
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">登入電郵 *</label>
             <div className="relative">
               <Chrome size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500" />
               <input
                 type="email"
                 className="w-full pl-9 pr-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-                value={formData.google_email}
-                onChange={(e) => setFormData({ ...formData, google_email: e.target.value })}
-                placeholder="Google 帳號電郵"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="登入用電郵"
               />
             </div>
-          </div>
-
-          {/* Active Status */}
-          <div className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
-            <div>
-              <p className="text-[12px] font-medium">帳號狀態</p>
-              <p className="text-[11px] text-muted-foreground">停用後該使用者將無法登入系統</p>
-            </div>
-            <button
-              onClick={() => setFormData({ ...formData, is_active: !formData.is_active })}
-              className={cn(
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                formData.is_active ? 'bg-teal-600' : 'bg-gray-300'
-              )}
-            >
-              <span className={cn(
-                'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                formData.is_active ? 'translate-x-6' : 'translate-x-1'
-              )} />
-            </button>
           </div>
         </div>
 
@@ -912,7 +847,7 @@ function EditUserModal({
           </button>
           <button
             onClick={() => onSave(formData)}
-            disabled={!formData.google_email}
+            disabled={!formData.email}
             className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Save size={13} /> 儲存

@@ -186,8 +186,8 @@ function RadioGroup({
 
 export const ClientRequirementsQuestionnaire = forwardRef<ClientRequirementsFormRef, Props>(
   function ClientRequirementsQuestionnaire({ initialForm, onSummaryGenerated, hideGenerateSection = false, formKey }, ref) {
-  const { systemUser, userInfo } = useAuth();
-  const defaultPmName = systemUser?.display_name || userInfo?.display_name || '';
+  const { systemUser } = useAuth();
+  const defaultPmName = systemUser?.display_name || '';
 
   const [form, setForm] = useState<ClientRequirementsForm>(() => ({
     ...emptyClientRequirementsForm(),

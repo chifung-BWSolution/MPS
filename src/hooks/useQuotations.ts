@@ -138,7 +138,7 @@ function generateQuoteCode(existingCodes: string[]): string {
 }
 
 export function useQuotations() {
-  const { session, systemUser, userInfo } = useAuth();
+  const { session, systemUser } = useAuth();
   const [records, setRecords] = useState<QuotationEntry[]>([]);
   const [payloadById, setPayloadById] = useState<Record<string, QuotationWizardPayload>>({});
   const [loading, setLoading] = useState(true);
@@ -177,7 +177,6 @@ export function useQuotations() {
       const creator =
         input.createdBy ||
         systemUser?.display_name ||
-        userInfo?.display_name ||
         session?.user?.email ||
         '—';
 
@@ -213,7 +212,7 @@ export function useQuotations() {
       await refresh();
       return { id: data.id, quoteCode: data.quote_code };
     },
-    [refresh, session, systemUser, userInfo],
+    [refresh, session, systemUser],
   );
 
   const getPayload = useCallback(

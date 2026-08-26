@@ -117,7 +117,7 @@ function ProfileSection() {
   // Dynamically populate profile from authenticated user + staffs
   useEffect(() => {
     const loadProfile = async () => {
-      const authEmail = systemUser?.email || systemUser?.google_email || session?.user?.email || '';
+      const authEmail = systemUser?.email || session?.user?.email || '';
       const authName = systemUser?.display_name || session?.user?.user_metadata?.full_name || '';
       const authPosition = systemUser?.position || '';
       const authDepartment = systemUser?.department || '';
@@ -130,14 +130,14 @@ function ProfileSection() {
       console.log('[Settings:loadProfile] Starting. authEmail:', authEmail, '| systemUser.phone:', systemUser?.phone, '| staff_id:', systemUser?.staff_id);
 
       const PROFILE_TIMEOUT = 5000;
-      const STAFFS_PROFILE_SELECT = 'display_name, full_name, position, work_phone, private_phone, profile_pic_url';
+      const STAFFS_PROFILE_SELECT = 'display_name, full_name, position, work_phone, private_phone, profile_pic_url, team_name, base_location';
 
       const applyStaffRow = (staffRow: any) => {
         if (!staffRow) return;
-        displayName = staffRow.full_name || staffRow.display_name || displayName;
+        displayName = staffRow.display_name || staffRow.full_name || displayName;
         position = staffRow.position || position;
+        department = staffRow.team_name || department;
         if (!phone) phone = staffRow.work_phone || staffRow.private_phone || '';
-        // department stays on users.department — never copy staffs.business_unit
       };
 
       if (systemUser?.staff_id) {

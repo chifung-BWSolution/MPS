@@ -11,7 +11,6 @@ export function isUsersUuid(value: string | null | undefined): value is string {
 export type LoginLogUserLookup = {
   id?: string | null;
   email?: string | null;
-  google_email?: string | null;
   display_name?: string | null;
 };
 
@@ -64,12 +63,7 @@ export function displayNameForLoginEmail(
 ): string {
   const normalized = normalizeLoginEmail(email);
   if (!normalized) return '—';
-  const match = users.find((user) => {
-    return (
-      normalizeLoginEmail(user.email) === normalized ||
-      normalizeLoginEmail(user.google_email) === normalized
-    );
-  });
+  const match = users.find((user) => normalizeLoginEmail(user.email) === normalized);
   return match?.display_name?.trim() || email;
 }
 

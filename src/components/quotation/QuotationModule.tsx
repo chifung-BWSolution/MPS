@@ -236,7 +236,7 @@ function NewQuotationWizard({ onClose, onSaved, saveQuotation, editQuote, editPa
   const isEditMode = Boolean(editQuote && editPayload);
   const { records: pitchingRecords, loading: pitchingLoading, addRecord: addPitchingRecord, refresh: refreshPitching } = useQuotationClientProjects();
   const { addClient } = useQuotationClientList();
-  const { systemUser, userInfo } = useAuth();
+  const { systemUser } = useAuth();
   const [step, setStep] = useState(isEditMode ? 3 : 1);
   const [editingId, setEditingId] = useState<string | undefined>(editQuote?.id);
   const [saving, setSaving] = useState(false);
@@ -556,7 +556,7 @@ function NewQuotationWizard({ onClose, onSaved, saveQuotation, editQuote, editPa
       return null;
     }
 
-    const pmName = systemUser?.display_name || userInfo?.display_name || '—';
+    const pmName = systemUser?.display_name || '—';
     const { data: pitching, error } = await addPitchingRecord({
       clientId: client.id,
       clientName: client.companyNameZh,

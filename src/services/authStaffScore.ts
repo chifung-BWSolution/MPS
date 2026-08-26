@@ -1,14 +1,10 @@
 export function scoreWhitelistCandidate(opts: {
   staffActive: boolean;
-  systemActive: boolean;
-  googleEmailMatch?: boolean;
   emailMatch?: boolean;
 }): number {
   let score = 0;
   if (opts.staffActive) score += 100;
-  if (opts.systemActive) score += 10;
-  if (opts.googleEmailMatch) score += 20;
-  if (opts.emailMatch) score += 10;
+  if (opts.emailMatch) score += 30;
   return score;
 }
 

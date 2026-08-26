@@ -25,9 +25,9 @@ import {
 } from '@/components/talent/kolCooperation';
 
 export function KolCooperatedModule() {
-  const { systemUser, userInfo, user } = useAuth();
+  const { systemUser, user } = useAuth();
   const createdBy =
-    systemUser?.display_name || userInfo?.display_name || user?.email || '同事';
+    systemUser?.display_name || user?.email || '同事';
 
   const [rows, setRows] = useState<KolCooperationRow[]>([]);
   const [loading, setLoading] = useState(true);

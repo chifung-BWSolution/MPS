@@ -765,9 +765,9 @@ function LinkValue({ href, children }: { href: string | null; children: ReactNod
 export function KolListModule({ workflowView = 'all' }: { workflowView?: KolWorkflowView }) {
   const viewMeta = VIEW_META[workflowView];
   const kolTable = kolTableForView(workflowView);
-  const { systemUser, userInfo, user } = useAuth();
+  const { systemUser, user } = useAuth();
   const actorName =
-    systemUser?.display_name || userInfo?.display_name || user?.email || '同事';
+    systemUser?.display_name || user?.email || '同事';
   const [rows, setRows] = useState<KolProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

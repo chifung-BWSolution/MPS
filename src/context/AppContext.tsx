@@ -302,7 +302,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return {
       id: systemUser.id || '0',
       name: systemUser.display_name || session?.user?.user_metadata?.full_name || session?.user?.email || 'User',
-      email: systemUser.email || systemUser.google_email || session?.user?.email || '',
+      email: systemUser.email || session?.user?.email || '',
       role: mappedRole,
       department: systemUser.department || undefined,
       accessibleCompanies: ['c1', 'c2', 'c3'],

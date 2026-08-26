@@ -117,18 +117,16 @@ export function StaffDirectory() {
   const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
   const [selectedStaffIds, setSelectedStaffIds] = useState<Set<string>>(new Set());
 
-  // Google email map: staffs.id -> google_email (inline editable)
+  // Login email map: staffs.id -> users.email (inline editable)
   const [googleEmailMap, setGoogleEmailMap] = useState<Record<string, string>>({});
 
-  // Cache of system_users for google_email lookup during save
-  const [systemUsersCache, setSystemUsersCache] = useState<{ staff_id: string; google_email: string | null }[]>([]);
+  const [systemUsersCache, setSystemUsersCache] = useState<{ staff_id: string; email: string | null }[]>([]);
 
-  // Load system_users cache for google_email mapping
   const loadSystemUsersCache = useCallback(async () => {
     try {
       const { data } = await supabase
         .from('users')
-        .select('staff_id, google_email');
+        .select('staff_id, email');
       if (data) {
         setSystemUsersCache(data);
       }
@@ -156,15 +154,15 @@ export function StaffDirectory() {
       if (data && data.length > 0) {
         const configs: StaffUserConfig[] = data.map((row: any) => ({
           staffId: row.staff_id,
-          classification: (row.classification || 'other_staff') as StaffClassification,
+          classification: 'system_user' as StaffClassification,
           roleTag: row.role_tag || undefined,
         }));
         setUserConfigs(configs);
 
         const emailMap: Record<string, string> = {};
         data.forEach((row: any) => {
-          if (row.staff_id && row.google_email) {
-            emailMap[row.staff_id] = row.google_email;
+          if (row.staff_id && row.email) {
+            emailMap[row.staff_id] = row.email;
           }
         });
         setGoogleEmailMap(prev => ({ ...prev, ...emailMap }));
@@ -187,28 +185,23 @@ export function StaffDirectory() {
 
     try {
       const records = userConfigs
-        .filter(c => c.classification === 'system_user' || c.classification === 'disabled')
+        .filter(c => c.classification === 'system_user')
         .map(c => {
           const staffEntry = staffList.find(s => s.id === c.staffId);
-          const displayName = staffEntry?.display_name ?? null;
           const workEmail = staffEntry?.work_email || null;
           const sysUser = systemUsersCache.find(su => su.staff_id === c.staffId);
-          const googleEmail = googleEmailMap[c.staffId] || sysUser?.google_email || workEmail;
+          const loginEmail = googleEmailMap[c.staffId] || sysUser?.email || workEmail;
 
           return {
             staff_id: c.staffId,
             role_tag: c.roleTag || null,
-            classification: c.classification,
-            system_status: c.classification === 'system_user' ? 'active' : 'inactive',
-            display_name: displayName,
-            email: workEmail,
-            google_email: googleEmail,
+            email: loginEmail,
             updated_at: new Date().toISOString(),
           };
         });
 
       const otherStaffUuids = userConfigs
-        .filter(c => c.classification === 'other_staff')
+        .filter(c => c.classification === 'other_staff' || c.classification === 'disabled')
         .map(c => c.staffId)
         .filter((id): id is string => !!id);
 
@@ -1452,7 +1445,7 @@ function InlineGoogleEmailEditor({
           onKeyDown={handleKeyDown}
           autoFocus
           className="w-full min-w-[160px] px-1.5 py-0.5 border border-teal-400 rounded text-[12px] focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white"
-          placeholder="輸入 Google 登入電郵"
+          placeholder="輸入登入電郵"
         />
       </div>
     );
@@ -1462,7 +1455,7 @@ function InlineGoogleEmailEditor({
     <div
       className="flex items-center gap-1.5 cursor-pointer group hover:bg-blue-50 rounded px-1 py-0.5 -mx-1 transition-colors"
       onClick={() => setEditing(true)}
-      title="點擊編輯 Google 登入電郵"
+      title="點擊編輯登入電郵"
     >
       <Chrome size={12} className="text-blue-500" />
       <span className="text-[12px] text-muted-foreground group-hover:text-blue-700">

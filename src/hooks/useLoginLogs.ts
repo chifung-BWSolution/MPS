@@ -19,10 +19,43 @@ const LOG_SELECT = [
   'success',
   'created_at',
   'user_id',
-  'user:users!login_logs_user_id_fkey ( id, display_name, email, google_email )',
+  'user:users!login_logs_user_id_fkey ( id, email, staffs(display_name) )',
 ].join(', ');
 
-const USER_SELECT = 'id, email, google_email, display_name';
+const USER_SELECT = 'id, email, staff_id, staffs(display_name)';
+
+type StaffNameJoin = { display_name?: string | null } | { display_name?: string | null }[] | null;
+
+type UsersEmailRow = {
+  id?: string | null;
+  email?: string | null;
+  staff_id?: string | null;
+  staffs?: StaffNameJoin;
+};
+
+type JoinedUserRow = {
+  id?: string | null;
+  email?: string | null;
+  display_name?: string | null;
+  staffs?: StaffNameJoin;
+};
+
+function staffDisplayName(staffs: StaffNameJoin): string | null {
+  if (!staffs) return null;
+  const row = Array.isArray(staffs) ? staffs[0] : staffs;
+  return row?.display_name?.trim() || null;
+}
+
+function flattenJoinedUser(user: JoinedUserRow | JoinedUserRow[] | null | undefined): LoginLogUserLookup | null {
+  if (!user) return null;
+  const row = Array.isArray(user) ? user[0] : user;
+  if (!row) return null;
+  return {
+    id: row.id,
+    email: row.email,
+    display_name: row.display_name?.trim() || staffDisplayName(row.staffs),
+  };
+}
 
 async function fetchUsersForEmails(emails: string[]): Promise<LoginLogUserLookup[]> {
   const unique = Array.from(new Set(emails.map(normalizeLoginEmail).filter(Boolean)));
@@ -31,7 +64,7 @@ async function fetchUsersForEmails(emails: string[]): Promise<LoginLogUserLookup
   const orFilter = unique
     .map((email) => {
       const quoted = `"${email.replace(/"/g, '\\"')}"`;
-      return `email.eq.${quoted},google_email.eq.${quoted}`;
+      return `email.eq.${quoted}`;
     })
     .join(',');
 
@@ -40,7 +73,11 @@ async function fetchUsersForEmails(emails: string[]): Promise<LoginLogUserLookup
     console.warn('[login_logs] users lookup failed:', error.message);
     return [];
   }
-  return (data as LoginLogUserLookup[] | null) ?? [];
+  return ((data as UsersEmailRow[] | null) ?? []).map((row) => ({
+    id: row.id,
+    email: row.email,
+    display_name: staffDisplayName(row.staffs),
+  }));
 }
 
 export function useLoginLogs() {
@@ -63,7 +100,10 @@ export function useLoginLogs() {
       return;
     }
 
-    const rows = (data as LoginLogRow[] | null) ?? [];
+    const rows = ((data as (LoginLogRow & { user?: JoinedUserRow | JoinedUserRow[] | null })[] | null) ?? []).map((row) => ({
+      ...row,
+      user: flattenJoinedUser(row.user),
+    }));
     const missingName = rows.filter((row) => {
       const joined = Array.isArray(row.user) ? row.user[0] : row.user;
       return !joined?.display_name?.trim();

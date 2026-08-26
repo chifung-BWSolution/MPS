@@ -177,9 +177,9 @@ export function KolRatingSection({
   ratingCount: number | null | undefined;
   onRated: () => void;
 }) {
-  const { systemUser, userInfo, user } = useAuth();
+  const { systemUser, user } = useAuth();
   const ratedBy =
-    systemUser?.display_name || userInfo?.display_name || user?.email || '同事';
+    systemUser?.display_name || user?.email || '同事';
 
   const [ratings, setRatings] = useState<KolRatingRow[]>([]);
   const [loading, setLoading] = useState(true);

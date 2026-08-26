@@ -21,11 +21,11 @@ interface SystemUserProfile {
   email: string;
   role: string;
   department: string | null;
+  office: string | null;
   position: string | null;
   phone: string | null;
   profile_pic_url: string | null;
   is_active: boolean | null;
-  google_email: string | null;
 }
 
 interface UserInfoProfile {
@@ -33,11 +33,7 @@ interface UserInfoProfile {
   staff_id: string;
   auth_user_id: string | null;
   role_tag: string | null;
-  system_status: string;
-  classification: string;
-  display_name: string | null;
   email: string | null;
-  google_email: string | null;
 }
 
 interface AuthContextType {
@@ -66,10 +62,12 @@ type StaffDirectoryLite = {
   work_phone: string | null;
   private_phone: string | null;
   profile_pic_url: string | null;
+  team_name: string | null;
+  base_location: string | null;
 };
 
 const STAFFS_LITE_SELECT =
-  'id, display_name, full_name, status, position, work_email, work_phone, private_phone, profile_pic_url';
+  'id, display_name, full_name, status, position, work_email, work_phone, private_phone, profile_pic_url, team_name, base_location';
 
 // Canonical Bubble staffs.id — not the leftover "Lowell Lo (manual)" placeholder.
 const MANUAL_SUPER_ADMIN_STAFF_UUID = '04102dd8-8d0f-4536-82cd-904cc0769227';
@@ -134,22 +132,18 @@ function fallbackFromHardcoded(
       email,
       role: profile.role,
       department: profile.department,
+      office: null,
       position: profile.position,
       phone: null,
       profile_pic_url: null,
       is_active: true,
-      google_email: email,
     },
     userInfo: {
       id: `fallback-user-info-${profile.staff_id}`,
       staff_id: profile.staff_id,
       auth_user_id: authUserId,
       role_tag: profile.role_tag,
-      system_status: 'active',
-      classification: profile.classification,
-      display_name: profile.display_name,
       email,
-      google_email: email,
     },
   };
 }
@@ -175,6 +169,10 @@ function applyStaffEnrichment(
   if (!staff) return prev;
   return {
     ...prev,
+    display_name: staff.display_name || staff.full_name || prev.display_name,
+    department: staff.team_name || prev.department,
+    office: staff.base_location || prev.office,
+    position: staff.position || prev.position,
     phone: staffPhone(staff) || prev.phone,
     profile_pic_url: staff.profile_pic_url || prev.profile_pic_url,
   };
@@ -248,7 +246,6 @@ async function findSystemUser(opts: {
         if (timedOut) return { data: null, error: new Error('Timed out') };
         if (byId.data) {
           console.log('[Auth:findSystemUser] ✅ users.auth_user_id', {
-            display_name: byId.data.display_name,
             staff_id: byId.data.staff_id,
           });
           return { data: await profileFromUsersRow(byId.data, normalizedEmail), error: null };
@@ -258,7 +255,6 @@ async function findSystemUser(opts: {
         if (timedOut) return { data: null, error: new Error('Timed out') };
         if (linked.data) {
           console.log('[Auth:findSystemUser] ✅ resolve_users_for_auth', {
-            display_name: linked.data.display_name,
             staff_id: linked.data.staff_id,
             auth_user_id: linked.data.auth_user_id,
           });
@@ -288,8 +284,6 @@ async function findSystemUser(opts: {
         const staff = staffMap.get(row.staff_id) || null;
         return scoreWhitelistCandidate({
           staffActive: isStaffActive(staff?.status),
-          systemActive: (row.system_status || '').toLowerCase() === 'active',
-          googleEmailMatch: (row.google_email || '').toLowerCase().trim() === normalizedEmail,
           emailMatch: (row.email || '').toLowerCase().trim() === normalizedEmail,
         });
       });
@@ -297,7 +291,6 @@ async function findSystemUser(opts: {
       if (picked) {
         const staff = staffMap.get(picked.staff_id) || null;
         console.log('[Auth:findSystemUser] ✅ email fallback picked:', {
-          display_name: picked.display_name,
           staff_id: picked.staff_id,
           staff_status: staff?.status || null,
         });
@@ -398,15 +391,13 @@ function bootstrapSystemUserFromUserInfo(
   email: string,
   staff?: StaffDirectoryLite | null
 ): SystemUserProfile {
-  const role = mapRoleToInternal(uiRecord.role_tag, uiRecord.classification);
+  const role = mapRoleToInternal(uiRecord.role_tag);
   const displayName =
-    staff?.display_name || staff?.full_name || uiRecord.display_name || uiRecord.email || email;
+    staff?.display_name || staff?.full_name || uiRecord.email || email;
   console.log('[Auth:bootstrap] Creating SystemUserProfile from users:', {
     staff_id: uiRecord.staff_id,
     display_name: displayName,
     role_tag: uiRecord.role_tag,
-    classification: uiRecord.classification,
-    system_status: uiRecord.system_status,
     staff_status: staff?.status || null,
     mapped_role: role,
   });
@@ -418,12 +409,12 @@ function bootstrapSystemUserFromUserInfo(
     display_name: displayName,
     email: uiRecord.email || email,
     role: role,
-    department: uiRecord.department || null,
-    position: staff?.position || uiRecord.role_tag || uiRecord.classification || null,
+    department: staff?.team_name || null,
+    office: staff?.base_location || null,
+    position: staff?.position || uiRecord.role_tag || null,
     phone: staffPhone(staff),
-    profile_pic_url: staff?.profile_pic_url || uiRecord.profile_pic_url || null,
+    profile_pic_url: staff?.profile_pic_url || null,
     is_active: true, // If they're in users, they're authorized
-    google_email: uiRecord.google_email || email,
   };
 }
 
@@ -457,14 +448,14 @@ function normalizeRestoredSystemUser(raw: any): SystemUserProfile | null {
     auth_user_id: raw.auth_user_id ?? null,
     staff_id,
     display_name: raw.display_name || raw.email || 'User',
-    email: raw.email || '',
+    email: raw.email || raw.google_email || '',
     role: raw.role || 'staff',
     department: raw.department ?? null,
+    office: raw.office ?? null,
     position: raw.position ?? null,
     phone: raw.phone ?? null,
     profile_pic_url: raw.profile_pic_url ?? null,
     is_active: raw.is_active ?? true,
-    google_email: raw.google_email ?? null,
   };
 }
 
@@ -475,11 +466,7 @@ function normalizeRestoredUserInfo(raw: any, staffUuid: string): UserInfoProfile
     staff_id: isStaffUuid(raw.staff_id) ? remapStaleStaffUuid(raw.staff_id) : staffUuid,
     auth_user_id: raw.auth_user_id ?? null,
     role_tag: raw.role_tag ?? null,
-    system_status: raw.system_status || 'active',
-    classification: raw.classification || 'staff',
-    display_name: raw.display_name ?? null,
-    email: raw.email ?? null,
-    google_email: raw.google_email ?? null,
+    email: raw.email ?? raw.google_email ?? null,
   };
 }
 
@@ -730,9 +717,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 .eq('staff_id', sysUser.staff_id)
                 .limit(1)
                 .maybeSingle();
-              setUserInfo(uInfo || null);
-              if (uInfo?.role_tag || uInfo?.classification) {
-                const enrichedRole = mapRoleToInternal(uInfo.role_tag, uInfo.classification);
+              setUserInfo(uInfo ? {
+                id: uInfo.id,
+                staff_id: uInfo.staff_id,
+                auth_user_id: uInfo.auth_user_id ?? null,
+                role_tag: uInfo.role_tag ?? null,
+                email: uInfo.email ?? null,
+              } : null);
+              if (uInfo?.role_tag) {
+                const enrichedRole = mapRoleToInternal(uInfo.role_tag);
                 setSystemUser(prev => prev ? { ...prev, role: enrichedRole } : prev);
               }
             } catch {
@@ -806,16 +799,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .maybeSingle();
 
           if (uInfo) {
-            // Ensure role_tag is mapped properly for the UI
-            const mappedUInfo = {
-              ...uInfo,
-              role_tag: uInfo.role_tag || mapRoleTagDisplay(uInfo.role_tag, uInfo.classification),
+            const mappedUInfo: UserInfoProfile = {
+              id: uInfo.id,
+              staff_id: uInfo.staff_id,
+              auth_user_id: uInfo.auth_user_id ?? null,
+              role_tag: uInfo.role_tag || mapRoleTagDisplay(uInfo.role_tag),
+              email: uInfo.email ?? null,
             };
             setUserInfo(mappedUInfo);
 
-            // Enrich systemUser.role from users.role_tag so permissions match users.role_tag
-            if (uInfo.role_tag || uInfo.classification) {
-              const enrichedRole = mapRoleToInternal(uInfo.role_tag, uInfo.classification);
+            if (uInfo.role_tag) {
+              const enrichedRole = mapRoleToInternal(uInfo.role_tag);
               console.log('[Auth] Enriching role from users:', uInfo.role_tag, '->', enrichedRole);
               setSystemUser(prev => prev ? { ...prev, role: enrichedRole } : prev);
             }
@@ -893,8 +887,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const normalized = email.toLowerCase().trim();
             return scoreWhitelistCandidate({
               staffActive: true,
-              systemActive: (row.system_status || '').toLowerCase() === 'active',
-              googleEmailMatch: (row.google_email || '').toLowerCase().trim() === normalized,
               emailMatch: (row.email || '').toLowerCase().trim() === normalized,
             });
           });
@@ -979,9 +971,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 .eq('staff_id', sysUser.staff_id)
                 .limit(1)
                 .maybeSingle();
-              setUserInfo(uInfo || null);
-              if (uInfo?.role_tag || uInfo?.classification) {
-                const enrichedRole = mapRoleToInternal(uInfo.role_tag, uInfo.classification);
+              setUserInfo(uInfo ? {
+                id: uInfo.id,
+                staff_id: uInfo.staff_id,
+                auth_user_id: uInfo.auth_user_id ?? null,
+                role_tag: uInfo.role_tag ?? null,
+                email: uInfo.email ?? null,
+              } : null);
+              if (uInfo?.role_tag) {
+                const enrichedRole = mapRoleToInternal(uInfo.role_tag);
                 setSystemUser(prev => prev ? { ...prev, role: enrichedRole } : prev);
               }
             } catch {
@@ -1044,11 +1042,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .limit(1)
             .maybeSingle();
 
-          setUserInfo(uInfo || null);
+          setUserInfo(uInfo ? {
+            id: uInfo.id,
+            staff_id: uInfo.staff_id,
+            auth_user_id: uInfo.auth_user_id ?? null,
+            role_tag: uInfo.role_tag ?? null,
+            email: uInfo.email ?? null,
+          } : null);
 
-          // Enrich systemUser.role from users.role_tag so permissions match users.role_tag
-          if (uInfo?.role_tag || uInfo?.classification) {
-            const enrichedRole = mapRoleToInternal(uInfo.role_tag, uInfo.classification);
+          if (uInfo?.role_tag) {
+            const enrichedRole = mapRoleToInternal(uInfo.role_tag);
             console.log('[Auth] Dev bypass: enriching role from users:', uInfo.role_tag, '->', enrichedRole);
             setSystemUser(prev => prev ? { ...prev, role: enrichedRole } : prev);
           }

@@ -15,12 +15,7 @@ export type UsersWhitelistRow = {
   staff_id: string;
   auth_user_id?: string | null;
   role_tag?: string | null;
-  system_status?: string | null;
-  classification?: string | null;
-  display_name?: string | null;
   email?: string | null;
-  google_email?: string | null;
-  department?: string | null;
   [key: string]: unknown;
 };
 
@@ -42,21 +37,12 @@ export async function fetchUsersCandidatesByEmail(
   const normalized = email.toLowerCase().trim();
   if (!normalized) return { data: [], error: null };
 
-  const [byGoogle, byEmail] = await Promise.all([
-    supabase.from('users').select('*').ilike('google_email', normalized),
-    supabase.from('users').select('*').ilike('email', normalized),
-  ]);
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .ilike('email', normalized);
 
-  const seen = new Set<string>();
-  const rows: UsersWhitelistRow[] = [];
-  for (const row of [...(byGoogle.data || []), ...(byEmail.data || [])] as UsersWhitelistRow[]) {
-    const key = row.id || JSON.stringify(row);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    rows.push(row);
-  }
-
-  return { data: rows, error: byGoogle.error || byEmail.error || null };
+  return { data: (data as UsersWhitelistRow[] | null) || [], error };
 }
 
 /** OAuth: resolve whitelist by auth.uid() (auth_user_id), linking once if needed. */

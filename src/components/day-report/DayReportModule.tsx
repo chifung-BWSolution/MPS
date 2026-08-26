@@ -2229,7 +2229,7 @@ function TodayTeamReports() {
     async function fetchData() {
       setIsLoading(true);
       try {
-        // 1. Fetch active staff from staff_directory; department comes from user_info
+        // 1. Fetch active staff; department comes from staffs.team_name via staff_id
         const { data: staffData, error: staffErr } = await supabase
           .from('staffs')
           .select('id, display_name, position, status')

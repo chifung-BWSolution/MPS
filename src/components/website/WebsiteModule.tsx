@@ -601,16 +601,7 @@ function WebsiteDetail({
         .select('id, display_name, full_name')
         .in('id', staffIds);
 
-      const { data: uiData } = await supabase
-        .from('users')
-        .select('staff_id, display_name')
-        .in('staff_id', staffIds);
-
       const nameById: Record<string, string> = {};
-      (uiData || []).forEach((s: any) => {
-        const n = (s.display_name || '').trim();
-        if (n) nameById[s.staff_id] = n;
-      });
       (dirData || []).forEach((s: any) => {
         const n = (s.display_name || s.full_name || '').trim();
         if (n) nameById[s.id] = n;

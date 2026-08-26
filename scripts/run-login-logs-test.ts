@@ -26,7 +26,7 @@ assert.equal(
 );
 assert.equal(
   displayNameForLoginEmail('franco.kaffa@gmail.com', [
-    { google_email: 'franco.kaffa@gmail.com', display_name: 'Franco Lee' },
+    { email: 'franco.kaffa@gmail.com', display_name: 'Franco Lee' },
   ]),
   'Franco Lee',
 );

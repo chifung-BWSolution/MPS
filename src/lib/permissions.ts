@@ -5,7 +5,7 @@
  * the "系統設定" (System Settings) module, which is restricted to roles
  * mapped to 管理層 / management or above.
  *
- * Role enrichment from user_info.role_tag / classification happens in
+ * Role enrichment from users.role_tag happens in
  * AuthContext (see mapRoleToInternal), so by the time we read
  * systemUser.role here it already reflects the staff directory tag.
  */
