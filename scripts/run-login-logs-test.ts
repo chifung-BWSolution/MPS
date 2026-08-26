@@ -70,4 +70,17 @@ assert.match(auth, /void logLoginEvent\(email, true, hardcodedBypass\.profile\.l
 assert.match(auth, /void logLoginEvent\(email, true, 'dev_bypass'\)/);
 assert.doesNotMatch(auth, /\.then\(\(\) => \{\}\)\.catch\(\(\) => \{\}\)/);
 
+const migration = read('supabase/migrations/20260826031000_login_logs_rls.sql');
+assert.match(migration, /ALTER TABLE public\.login_logs ENABLE ROW LEVEL SECURITY/);
+assert.match(migration, /login_logs_insert_clients/);
+assert.match(migration, /TO anon, authenticated/);
+assert.match(migration, /WITH CHECK \(true\)/);
+assert.match(migration, /login_logs_select_clients/);
+assert.match(migration, /GRANT SELECT, INSERT ON TABLE public\.login_logs TO anon/);
+assert.match(migration, /GRANT SELECT, INSERT ON TABLE public\.login_logs TO authenticated/);
+assert.doesNotMatch(migration, /FOR UPDATE/);
+assert.doesNotMatch(migration, /FOR DELETE/);
+assert.doesNotMatch(migration, /GRANT UPDATE/);
+assert.doesNotMatch(migration, /GRANT DELETE/);
+
 console.log('login logs: ok');
