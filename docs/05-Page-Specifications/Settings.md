@@ -10,7 +10,6 @@
 | `/settings/companies` | 公司管理 | 公司 CRUD |
 | `/settings/brands` | 品牌管理 | 品牌 CRUD |
 | `/settings/roles` | 角色權限 | 查看權限矩陣 |
-| `/settings/notifications` | 通知設定 | 偏好配置 |
 | `/settings/options` | 選項設定 | 系統參數 |
 | `/settings/credit-cards` | 信用卡管理 | 公司信用卡 |
 | `/settings/login-logs` | 登入紀錄 | 歷史記錄 |
@@ -98,26 +97,6 @@
 
 ---
 
-## Notifications Sub-page
-
-### 偏好設定
-
-| 通知類型 | 啟用 | 提前天數 |
-|---------|------|---------|
-| 信用卡到期 | ✅ | 30天 |
-| 插件到期 | ✅ | 30天 |
-| 登入請求 | ✅ | — |
-| 日報待審 | ✅ | — |
-| 預算警告 | ✅ | — |
-| 任務逾期 | ✅ | — |
-| 發票逾期 | ✅ | — |
-
-### Email 通知收件人
-- 可設定額外 email 收件人
-- JSONB: email_recipients
-
----
-
 ## 組件結構
 
 ```
@@ -127,7 +106,6 @@ SettingsModule.tsx
 ├── CompanyManagementSettings.tsx
 ├── BrandManagementSettings.tsx
 ├── RolePermissions.tsx
-├── NotificationSettings.tsx
 ├── SystemOptions.tsx
 ├── CreditCardSettings.tsx
 └── LoginLogs.tsx
@@ -144,7 +122,6 @@ SettingsModule.tsx
 | Companies | ✅ | ❌ | ❌ |
 | Brands | ✅ | ❌ | ❌ |
 | Roles | ✅ | ❌ | ❌ |
-| Notifications | ✅ | ✅ | ✅ |
 | Options | ✅ | ❌ | ❌ |
 | Credit Cards | ✅ | ❌ | ❌ |
 | Login Logs | ✅ | ❌ | ❌ |

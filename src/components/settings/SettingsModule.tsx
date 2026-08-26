@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { Edit, Trash2, Shield, X, Plus, Save, FileText, UserCircle, ChevronDown } from 'lucide-react';
+import { Edit, Trash2, Shield, X, Plus, Save, FileText, UserCircle } from 'lucide-react';
 import { CompanyManagementSettings } from './CompanyManagementSettings';
 import { BrandManagementSettings } from './BrandManagementSettings';
 import { CreditCardsSettings } from './CreditCardsSettings';
@@ -44,7 +44,6 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
       case 'brands': return { title: '品牌管理', subtitle: '管理品牌，每個品牌歸屬於一間公司。' };
       case 'talent-form': return { title: '藝人表格', subtitle: '面試登記表範本，可在「新增藝人」自助填表流程中使用。' };
       case 'roles': return { title: '角色權限', subtitle: '查看及設定各角色的存取權限。' };
-      case 'notifications': return { title: '通知設定', subtitle: '設定系統通知偏好及提醒。' };
       case 'options': return { title: '選項設定', subtitle: '管理系統預設選項及分類。' };
       case 'credit-cards': return { title: '信用卡管理', subtitle: '管理公司付款信用卡。' };
       case 'quotation-settings': return { title: '客戶報價設定', subtitle: '管理報價類型、預設服務項目及付款安排。' };
@@ -85,7 +84,6 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
           {activeTab === 'profile' && <ProfileSection />}
           {activeTab === 'roles' && <RolesSection />}
           {activeTab === 'login-logs' && <LoginLogsSection />}
-          {activeTab === 'notifications' && <NotificationsSection />}
           {activeTab === 'options' && <OptionsSection />}
           {activeTab === 'credit-cards' && <CreditCardsSettings />}
         </div>
@@ -581,73 +579,6 @@ function LoginLogsSection() {
             ))}
           </tbody>
         </table>
-      </div>
-    </div>
-  );
-}
-
-function NotificationsSection() {
-  const [advanceDays, setAdvanceDays] = useState(30);
-  const [items, setItems] = useState([
-    { id: 'cc_expiry', label: '信用卡到期提醒', description: '30天內到期的信用卡自動提醒', enabled: true },
-    { id: 'plugin_expiry', label: '插件訂閱到期', description: '工具訂閱到期前通知', enabled: true },
-    { id: 'login_req', label: '待審批登入申請', description: '有新登入申請時通知', enabled: true },
-    { id: 'day_report', label: '日報待審批', description: '同事提交工作匯報待審批', enabled: true },
-    { id: 'budget_warn', label: '預算警告', description: '預算使用超過 80% 時提醒', enabled: true },
-    { id: 'task_overdue', label: '任務逾期', description: '任務過期未完成時通知', enabled: false },
-    { id: 'invoice_overdue', label: '發票逾期', description: '發票過期未付款時通知', enabled: true },
-  ]);
-  const [saved, setSaved] = useState(false);
-
-  const handleToggle = (id: string) => {
-    setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, enabled: !item.enabled } : item))
-    );
-  };
-
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
-  return (
-    <div className="space-y-5">
-      <h3 className="text-[18px] font-bold">通知設定</h3>
-      <div className="space-y-4 max-w-[500px]">
-        <div>
-          <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">提前通知天數</label>
-          <input
-            type="number"
-            value={advanceDays}
-            onChange={(e) => setAdvanceDays(parseInt(e.target.value) || 30)}
-            className="w-24 px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-          />
-        </div>
-        <div className="border-t border-border/50 pt-4 space-y-3">
-          {items.map((item) => (
-            <div key={item.id} className="flex items-center justify-between py-2">
-              <div>
-                <span className="text-[13px] font-medium block">{item.label}</span>
-                <span className="text-[11px] text-muted-foreground">{item.description}</span>
-              </div>
-              <div
-                onClick={() => handleToggle(item.id)}
-                className={cn('w-9 h-5 rounded-full relative cursor-pointer shrink-0 ml-4 transition-colors duration-200', item.enabled ? 'bg-teal-600' : 'bg-gray-300')}
-              >
-                <div className={cn('absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-200', item.enabled ? 'right-0.5' : 'left-0.5')} />
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors duration-200"
-          >
-            儲存設定
-          </button>
-          {saved && <span className="text-[12px] text-teal-600 font-medium">✓ 已儲存</span>}
-        </div>
       </div>
     </div>
   );

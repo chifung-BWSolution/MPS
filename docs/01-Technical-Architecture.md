@@ -183,7 +183,6 @@ App.tsx
     ├── /profile
     ├── /users
     ├── /roles
-    ├── /notifications
     └── /login-logs
 ```
 

@@ -92,7 +92,6 @@
 DashboardModule.tsx
 ├── KPIStatsGrid.tsx          // 4 KPI 卡片
 ├── ProjectProgressPanel.tsx  // 項目進度
-├── NotificationCenter.tsx    // 通知待辦
 ├── QuickActions.tsx          // 快捷操作
 ├── RecentActivity.tsx        // 時間線
 └── MyProjects.tsx            // 我的項目

@@ -32,6 +32,10 @@ export function resolveRoute(module: string, sub?: string): { module: string; su
   if (module === 'planning-center') {
     return { module: 'dashboard', subModule: resolveSubModule('dashboard') };
   }
+  // Removed: 通知設定 was a local-state demo page
+  if (module === 'settings' && sub === 'notifications') {
+    return { module: 'settings', subModule: resolveSubModule('settings') };
+  }
   return { module, subModule: resolveSubModule(module, sub) };
 }
 
@@ -184,7 +188,6 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'brands', label: '品牌管理' },
       { id: 'talent-form', label: '藝人表格' },
       { id: 'roles', label: '角色權限' },
-      { id: 'notifications', label: '通知設定' },
       { id: 'options', label: '選項設定' },
       { id: 'credit-cards', label: '信用卡管理' },
       { id: 'quotation-settings', label: '客戶報價設定' },
