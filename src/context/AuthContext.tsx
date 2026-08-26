@@ -877,14 +877,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const logLoginEvent = async (email: string, success: boolean) => {
+  const logLoginEvent = async (email: string, success: boolean, loginMethod = 'google') => {
     try {
-      await supabase.from('login_logs').insert({
+      const { error } = await supabase.from('login_logs').insert({
         email,
-        login_method: 'google',
-        user_agent: navigator.userAgent,
+        login_method: loginMethod,
+        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
         success,
       });
+      if (error) {
+        console.error('[Auth] Failed to log login:', error.message);
+      }
     } catch (err) {
       console.error('[Auth] Failed to log login:', err);
     }
@@ -968,13 +971,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             authSucceededRef.current = true;
           }
 
-          // Log — fire and forget
-          supabase.from('login_logs').insert({
-            email,
-            login_method: hardcodedBypass.profile.login_method,
-            user_agent: navigator.userAgent,
-            success: true,
-          }).then(() => {}).catch(() => {});
+          void logLoginEvent(email, true, hardcodedBypass.profile.login_method);
 
           return 'done';
         }
@@ -1034,13 +1031,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUserInfo(null);
         }
 
-        // Log — fire and forget
-        supabase.from('login_logs').insert({
-          email,
-          login_method: 'dev_bypass',
-          user_agent: navigator.userAgent,
-          success: true,
-        }).then(() => {}).catch(() => {});
+        void logLoginEvent(email, true, 'dev_bypass');
 
         return 'done';
       } catch (err) {

@@ -4,6 +4,7 @@ import { Edit, Trash2, Shield, X, Plus, Save, FileText, UserCircle } from 'lucid
 import { CompanyManagementSettings } from './CompanyManagementSettings';
 import { BrandManagementSettings } from './BrandManagementSettings';
 import { CreditCardsSettings } from './CreditCardsSettings';
+import { LoginLogsSettings } from './LoginLogsSettings';
 import { TermsConditionsSettings } from './TermsConditionsSettings';
 import { StaffDirectory } from './StaffDirectory';
 import { UserManagement } from './UserManagement';
@@ -83,7 +84,7 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6">
           {activeTab === 'profile' && <ProfileSection />}
           {activeTab === 'roles' && <RolesSection />}
-          {activeTab === 'login-logs' && <LoginLogsSection />}
+          {activeTab === 'login-logs' && <LoginLogsSettings />}
           {activeTab === 'options' && <OptionsSection />}
           {activeTab === 'credit-cards' && <CreditCardsSettings />}
         </div>
@@ -542,43 +543,6 @@ function RolesSection() {
             </div>
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function LoginLogsSection() {
-  const logs = [
-    { name: '張偉明', email: 'wm.zhang@company.com', time: '2024-12-20 09:15:22' },
-    { name: '李美玲', email: 'ml.lee@company.com', time: '2024-12-20 09:02:45' },
-    { name: '陳志強', email: 'zq.chen@company.com', time: '2024-12-20 08:55:10' },
-    { name: '王小明', email: 'xm.wang@company.com', time: '2024-12-19 17:30:00' },
-    { name: '黃曉華', email: 'xh.huang@company.com', time: '2024-12-19 09:10:30' },
-  ];
-
-  return (
-    <div className="space-y-5">
-      <h3 className="text-[18px] font-bold">登入紀錄</h3>
-      <p className="text-[13px] text-muted-foreground">最近 50 筆用戶登入記錄。</p>
-      <div className="border border-border/50 rounded-md overflow-hidden">
-        <table className="w-full text-[13px]">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">用戶</th>
-              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">電郵</th>
-              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">登入時間</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.map((log, i) => (
-              <tr key={i} className="border-t border-border/50 hover:bg-muted/20">
-                <td className="px-4 py-2.5 font-medium">{log.name}</td>
-                <td className="px-4 py-2.5 text-muted-foreground">{log.email}</td>
-                <td className="px-4 py-2.5 text-muted-foreground font-mono text-[12px]">{log.time}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </div>
   );
