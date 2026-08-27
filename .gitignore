@@ -29,7 +29,6 @@ core
 !.github/workflows/land-cursor-prs.yml
 .env
 .env.*
-.cursor/mcp.json
 **/tempobook/**
 supabase/.temp/
 tempo/.tempo/
