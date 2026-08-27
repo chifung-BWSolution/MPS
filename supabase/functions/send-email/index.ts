@@ -59,7 +59,7 @@ Deno.serve(async (req: Request) => {
     const from =
       String(body.from ?? "").trim() ||
       Deno.env.get("RESEND_FROM_EMAIL") ||
-      "MPS <onboarding@resend.dev>";
+      "MPS <noreply@bwteam-marketing.com>";
 
     if (!to.length) {
       return new Response(JSON.stringify({ error: "to is required" }), {

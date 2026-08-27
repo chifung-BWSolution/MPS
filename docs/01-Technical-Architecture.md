@@ -376,7 +376,7 @@ Developer → Git Push → Vite Build → Static Hosting (Vercel / Netlify)
 | `SUPABASE_SERVICE_KEY` | Server-side service role key (Edge Functions only) |
 | `OPENAI_API_KEY` | For AI keyword/title generation (Edge Functions only) |
 | `RESEND_API_KEY` | Resend API key for transactional email (Edge Function `send-email` only) |
-| `RESEND_FROM_EMAIL` | Optional default From address (e.g. `MPS <noreply@your-domain.com>`) |
+| `RESEND_FROM_EMAIL` | Optional default From address (defaults to `MPS <noreply@bwteam-marketing.com>`) |
 
 ---
 
