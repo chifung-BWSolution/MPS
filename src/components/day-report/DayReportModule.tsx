@@ -2215,11 +2215,18 @@ function SubmitReportPage() {
 // ============================
 // Today Team Reports (Read-Only)
 // ============================
+function formatTeamDateLabel(dateStr: string): string {
+  const d = parseWeekDateStr(dateStr);
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+}
+
 function TodayTeamReports() {
   const categoryLookup = useCategoryLookup();
   const { companies } = useCompanies();
   const { brands } = useBrands();
   const todayStr = localDateString();
+  const [targetDate, setTargetDate] = useState(() => localDateString());
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   const [selectedCompanyId, setSelectedCompanyId] = useState(STAFF_ORG_ALL);
   const [selectedBrandId, setSelectedBrandId] = useState(STAFF_ORG_ALL);
@@ -2240,13 +2247,25 @@ function TodayTeamReports() {
   const [dbStaff, setDbStaff] = useState<TodayStaff[]>([]);
   const [dbReports, setDbReports] = useState<Array<{ id: string; staff_id: string; report_date: string; total_hours: number; ot_hours: number; is_leave: boolean; leave_type: string | null; status: string }>>([]);
   const [dbEntries, setDbEntries] = useState<Array<{ id: string; day_report_id: string; staff_id: string; category: string; title: string; hours: number; outcome_url: string | null; growth_experience: string | null; is_ai_assisted: boolean; ai_tools: any; related_name: string | null }>>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [staffLoading, setStaffLoading] = useState(true);
+  const [reportsLoading, setReportsLoading] = useState(true);
   const [staffNameById, setStaffNameById] = useState<Record<string, string>>({});
+  const isLoading = staffLoading || reportsLoading;
 
-  // Fetch live staff directory and reports from Supabase
+  const applyTargetDate = (dateStr: string) => {
+    setTargetDate(dateStr);
+    setExpandedId(null);
+    setDatePickerOpen(false);
+  };
+
+  const shiftTargetDate = (dir: -1 | 1) => {
+    applyTargetDate(toLocalDateStr(addCalendarDays(parseWeekDateStr(targetDate), dir)));
+  };
+
   useEffect(() => {
-    async function fetchData() {
-      setIsLoading(true);
+    let cancelled = false;
+    async function fetchStaff() {
+      setStaffLoading(true);
       try {
         const { data: staffData, error: staffErr } = await supabase
           .from('staffs')
@@ -2284,24 +2303,40 @@ function TodayTeamReports() {
               && !EXCLUDED_DEPARTMENTS.includes(dept)
               && !isPlaceholderStaff(s);
           });
+        if (cancelled) return;
         setDbStaff(staff);
+        const nameMap = await fetchStaffNameMap(staff.map((s) => s.id).filter(Boolean));
+        if (!cancelled) setStaffNameById((prev) => ({ ...prev, ...nameMap }));
+      } catch (err) {
+        console.error('[TodayTeamReports] Unexpected staff error:', err);
+      } finally {
+        if (!cancelled) setStaffLoading(false);
+      }
+    }
+    fetchStaff();
+    return () => { cancelled = true; };
+  }, []);
 
-        // 3. Fetch today's day_reports
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchReports() {
+      setReportsLoading(true);
+      try {
         const { data: reportData, error: reportErr } = await supabase
           .from('day_reports')
           .select('id, staff_id, report_date, total_hours, ot_hours, is_leave, leave_type, status')
-          .eq('report_date', todayStr);
+          .eq('report_date', targetDate);
 
         if (reportErr) {
           console.error('[TodayTeamReports] Reports query error:', reportErr);
         }
 
         const reports = reportData || [];
+        if (cancelled) return;
         setDbReports(reports);
 
-        // 4. Fetch entries for today's reports
         if (reports.length > 0) {
-          const reportIds = reports.map(r => r.id);
+          const reportIds = reports.map((r) => r.id);
           const { data: entryData, error: entryErr } = await supabase
             .from('day_report_entries')
             .select('id, day_report_id, staff_id, category, title, hours, outcome_url, growth_experience, is_ai_assisted, ai_tools, related_name')
@@ -2310,26 +2345,23 @@ function TodayTeamReports() {
           if (entryErr) {
             console.error('[TodayTeamReports] Entries query error:', entryErr);
           }
-          setDbEntries(entryData || []);
-        } else {
+          if (!cancelled) setDbEntries(entryData || []);
+        } else if (!cancelled) {
           setDbEntries([]);
         }
 
-        // 5. Resolve display names for all staff in today's reports (not only dept-filtered staff)
-        const reportStaffIds = reports.map(r => r.staff_id).filter(Boolean);
-        const scopeStaffIds = staff.map(s => s.id).filter(Boolean);
-        const nameLookupIds = [...new Set([...reportStaffIds, ...scopeStaffIds])];
-        const nameMap = await fetchStaffNameMap(nameLookupIds);
-        setStaffNameById(nameMap);
+        const reportStaffIds = reports.map((r) => r.staff_id).filter(Boolean);
+        const nameMap = await fetchStaffNameMap(reportStaffIds);
+        if (!cancelled) setStaffNameById((prev) => ({ ...prev, ...nameMap }));
       } catch (err) {
-        console.error('[TodayTeamReports] Unexpected error:', err);
+        console.error('[TodayTeamReports] Unexpected reports error:', err);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setReportsLoading(false);
       }
     }
-
-    fetchData();
-  }, [todayStr]);
+    fetchReports();
+    return () => { cancelled = true; };
+  }, [targetDate]);
 
   const teamOptions = useMemo(() => {
     const scoped = dbStaff.filter((s) => (
@@ -2418,7 +2450,7 @@ function TodayTeamReports() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label: '已提交', value: `${submittedCount}/${totalStaff}`, icon: <Users size={14} />, color: submittedCount === totalStaff && totalStaff > 0 ? 'text-teal-600' : 'text-amber-600', bgColor: submittedCount === totalStaff && totalStaff > 0 ? 'bg-teal-50' : 'bg-amber-50' },
-          { label: '今日總工時', value: `${totalHoursToday}h`, icon: <BarChart3 size={14} />, color: 'text-blue-600', bgColor: 'bg-blue-50' },
+          { label: '當日總工時', value: `${totalHoursToday}h`, icon: <BarChart3 size={14} />, color: 'text-blue-600', bgColor: 'bg-blue-50' },
           { label: 'OT 人數', value: `${otCount}`, icon: <AlertTriangle size={14} />, color: otCount > 0 ? 'text-amber-600' : 'text-teal-600', bgColor: otCount > 0 ? 'bg-amber-50' : 'bg-teal-50' },
           { label: 'AI 使用', value: `${aiUsedCount}人`, icon: <Bot size={14} />, color: 'text-purple-600', bgColor: 'bg-purple-50' },
         ].map(stat => (
@@ -2440,7 +2472,71 @@ function TodayTeamReports() {
               <Eye size={16} className="text-teal-600" />
               今日團隊匯報
             </h4>
-            <p className="text-[12px] text-muted-foreground mt-0.5">{todayStr} · {submittedCount} 人已提交</p>
+            <div className="mt-1.5 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => shiftTargetDate(-1)}
+                className="p-1 rounded-md hover:bg-muted text-muted-foreground"
+                aria-label="上一天"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 text-[13px] font-medium px-2 py-1 rounded-md border border-teal-200 bg-teal-50/40 text-teal-800 hover:bg-teal-50 transition-colors"
+                    title="選擇日期"
+                  >
+                    <Calendar size={14} className="text-teal-600" />
+                    {formatTeamDateLabel(targetDate)}
+                    {targetDate === todayStr && (
+                      <span className="text-[10px] font-semibold text-teal-600">今天</span>
+                    )}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <div className="px-3 pt-3 pb-1">
+                    <p className="text-[12px] font-medium text-[#0d1a2d]">選擇查看日期</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">預設今天 · 可改選其他日期</p>
+                  </div>
+                  <DayPickerCalendar
+                    mode="single"
+                    selected={parseWeekDateStr(targetDate)}
+                    onSelect={(date) => {
+                      if (!date) return;
+                      applyTargetDate(toLocalDateStr(date));
+                    }}
+                    defaultMonth={parseWeekDateStr(targetDate)}
+                  />
+                  <div className="flex items-center justify-between gap-2 px-3 pb-3">
+                    <button
+                      type="button"
+                      className="text-[12px] text-teal-700 hover:underline"
+                      onClick={() => applyTargetDate(todayStr)}
+                    >
+                      回到今天
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[12px] text-muted-foreground hover:text-[#0d1a2d]"
+                      onClick={() => setDatePickerOpen(false)}
+                    >
+                      關閉
+                    </button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <button
+                type="button"
+                onClick={() => shiftTargetDate(1)}
+                className="p-1 rounded-md hover:bg-muted text-muted-foreground"
+                aria-label="下一天"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+            <p className="text-[12px] text-muted-foreground mt-1">{submittedCount} 人已提交</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3">
             <StaffOrgFilterSelects
@@ -2545,7 +2641,7 @@ function TodayTeamReports() {
             {todayReports.length === 0 && filteredStaff.length > 0 && (
               <div className="px-5 py-6 text-center text-muted-foreground">
                 <FileText size={20} className="mx-auto mb-2 opacity-40" />
-                <p className="text-[13px]">今日尚無提交匯報</p>
+                <p className="text-[13px]">此日期尚無提交匯報</p>
               </div>
             )}
 
@@ -3143,7 +3239,7 @@ export function DayReportModule({ subModule }: { subModule?: string }) {
   const getTitle = () => {
     switch (subModule) {
       case 'submit': return { title: '提交匯報', subtitle: '支援香港/深圳雙辦公室 · 本週與上週匯報總覽 · 常用項目快速填入 · 週六加班匯報 · 多日假期申報 · AI 追蹤 · 8h驗證。' };
-      case 'today-team': return { title: '今日團隊', subtitle: '查看今日提交狀況 — 可依公司、品牌與團隊篩選。' };
+      case 'today-team': return { title: '今日團隊', subtitle: '查看指定日期提交狀況 — 可依公司、品牌與團隊篩選。' };
       case 'calendar': return { title: '工作日曆', subtitle: '以日曆視圖查看歷史工作記錄，13種工作類型顏色標記。' };
       case 'team-view': return { title: '匯報統計', subtitle: '工作檢查查看填寫情況 · 工時分析統計類別工時與占比。' };
       case 'monthly': return { title: '月度報告', subtitle: '本月工時排名、AI 使用統計及類別分佈分析。' };
