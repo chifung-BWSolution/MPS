@@ -5,15 +5,21 @@ import {
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { useCompanies } from '@/hooks/useCompanies';
+import { useBrands } from '@/hooks/useBrands';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
+import { isValidDepartment } from '@/components/day-report/departmentLookup';
+import { isPlaceholderStaff } from '@/services/reportLinkService';
+import { StaffOrgFilterSelects } from '@/components/day-report/StaffOrgFilterSelects';
 import {
-  fetchDepartmentByStaffId,
-  fetchDepartmentMap,
-  fetchDistinctDepartments,
-  fetchStaffIdsByDepartment,
-  isValidDepartment,
-} from '@/components/day-report/departmentLookup';
-import { isPlaceholderStaff, resolveStaffUuid } from '@/services/reportLinkService';
+  STAFF_ORG_ALL,
+  distinctTeamNames,
+  matchesBrandFilter,
+  matchesCompanyFilter,
+  matchesStaffOrgFilter,
+  nextBrandAfterCompanyChange,
+  nextTeamAfterScopeChange,
+} from '@/components/day-report/staffOrgFilter';
 
 // ============================
 // Types
@@ -27,6 +33,8 @@ interface StaffMember {
   display_name: string;
   base_location: string | null;
   team_name: string | null;
+  company_list_id: string | null;
+  brand_list_id: string | null;
   department: string | null;
   position: string | null;
 }
@@ -43,9 +51,7 @@ interface DayReportLite {
   status: string | null;
 }
 
-const UNASSIGNED_DEPT = '__UNASSIGNED__';
 const UNASSIGNED_LABEL = '未分組';
-const UNASSIGNED_TEAM = '__UNASSIGNED_TEAM__';
 const WEEKDAY_HEADERS = ['一', '二', '三', '四', '五', '六', '日'];
 
 // ============================
@@ -159,14 +165,6 @@ function resolveOffice(baseLocation: string | null | undefined, officeLocation?:
   return 'hk';
 }
 
-function isAdminRole(role: string | null | undefined): boolean {
-  const normalized = (role || '').toLowerCase().replace(/[\s-]/g, '_');
-  return normalized === 'super_admin'
-    || normalized === 'management'
-    || normalized === 'administrator'
-    || normalized === 'admin';
-}
-
 function formatPeriodLabel(periodType: PeriodType, anchor: Date): string {
   if (periodType === 'week') {
     const { start, end } = getWeekRange(anchor);
@@ -265,15 +263,15 @@ function StatusCell({
 // ============================
 export function WorkInspection() {
   const { systemUser } = useAuth();
-  const isAdmin = useMemo(() => isAdminRole(systemUser?.role), [systemUser?.role]);
+  const { companies } = useCompanies();
+  const { brands } = useBrands();
 
   const [periodType, setPeriodType] = useState<PeriodType>('month');
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [nameQuery, setNameQuery] = useState('');
-  const [ownDepartment, setOwnDepartment] = useState<string | null>(null);
-  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
-  const [selectedTeam, setSelectedTeam] = useState<string>('__ALL__');
-  const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState(STAFF_ORG_ALL);
+  const [selectedBrandId, setSelectedBrandId] = useState(STAFF_ORG_ALL);
+  const [selectedTeam, setSelectedTeam] = useState(STAFF_ORG_ALL);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [reports, setReports] = useState<DayReportLite[]>([]);
   const [staffNameById, setStaffNameById] = useState<Record<string, string>>({});
@@ -300,75 +298,29 @@ export function WorkInspection() {
     [periodType, anchorDate],
   );
 
-  useEffect(() => {
-    const detect = async () => {
-      if (!systemUser) return;
-      const staffUuid = await resolveStaffUuid(systemUser);
-      if (!staffUuid) return;
-      let dept = systemUser.department || null;
-      if (!dept) {
-        try {
-          dept = await fetchDepartmentByStaffId(staffUuid);
-        } catch {
-          dept = null;
-        }
-      }
-      const valid = isValidDepartment(dept) ? dept!.trim() : null;
-      setOwnDepartment(valid);
-      if (isAdmin) {
-        setSelectedDepartment((prev) => prev ?? '__ALL__');
-      } else {
-        setSelectedDepartment(valid);
-      }
-    };
-    detect();
-  }, [systemUser, isAdmin]);
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    fetchDistinctDepartments().then(setDepartmentOptions);
-  }, [isAdmin]);
-
   const fetchData = useCallback(async () => {
-    if (!systemUser || selectedDepartment === null) return;
-    const selfStaffUuid = await resolveStaffUuid(systemUser);
-    if (!selfStaffUuid) return;
+    if (!systemUser) return;
 
     try {
-      let allowedStaffIds: string[] | null = null;
-      let filterUnassignedOnly = false;
-
-      if (!isAdmin) {
-        allowedStaffIds = ownDepartment
-          ? await fetchStaffIdsByDepartment(ownDepartment)
-          : [selfStaffUuid];
-      } else if (selectedDepartment === UNASSIGNED_DEPT) {
-        filterUnassignedOnly = true;
-        allowedStaffIds = null;
-      } else if (selectedDepartment !== '__ALL__') {
-        allowedStaffIds = await fetchStaffIdsByDepartment(selectedDepartment);
-      }
-
-      let staffQuery = supabase
+      const { data: rawStaff } = await supabase
         .from('staffs')
-        .select('id, display_name, base_location, team_name, position, status')
+        .select('id, display_name, base_location, team_name, position, status, company_list_id, brand_list_id')
         .eq('status', 'active')
         .neq('position', 'Director');
-      if (allowedStaffIds !== null) staffQuery = staffQuery.in('id', allowedStaffIds);
-      const { data: rawStaff } = await staffQuery;
 
-      const deptMap = await fetchDepartmentMap(
-        (rawStaff || []).map((s) => s.id).filter(Boolean),
-      );
-
-      let staffData: StaffMember[] = (rawStaff || []).map((s) => ({
-        id: s.id,
-        display_name: s.display_name,
-        base_location: s.base_location,
-        team_name: s.team_name,
-        position: s.position,
-        department: deptMap[s.id] || null,
-      }));
+      let staffData: StaffMember[] = (rawStaff || []).map((s) => {
+        const teamName = (s.team_name || '').trim() || null;
+        return {
+          id: s.id,
+          display_name: s.display_name,
+          base_location: s.base_location,
+          team_name: teamName,
+          company_list_id: s.company_list_id,
+          brand_list_id: s.brand_list_id,
+          position: s.position,
+          department: isValidDepartment(teamName) ? teamName : null,
+        };
+      });
 
       // Dedupe + exclude management-like positions
       const EXCLUDED_POSITIONS = ['director', 'director / management'];
@@ -383,10 +335,6 @@ export function WorkInspection() {
           && !EXCLUDED_DEPARTMENTS.includes(dept)
           && !isPlaceholderStaff(s);
       });
-
-      if (filterUnassignedOnly) {
-        staffData = staffData.filter((s) => !s.department);
-      }
 
       const staffIds = staffData.map((s) => s.id);
       let reportData: DayReportLite[] = [];
@@ -428,19 +376,14 @@ export function WorkInspection() {
     }
   }, [
     systemUser,
-    selectedDepartment,
-    isAdmin,
-    ownDepartment,
     dateRange.start,
     dateRange.end,
   ]);
 
   useEffect(() => {
-    if (selectedDepartment !== null) {
-      setLoading(true);
-      fetchData();
-    }
-  }, [fetchData, selectedDepartment]);
+    setLoading(true);
+    fetchData();
+  }, [fetchData]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -470,21 +413,26 @@ export function WorkInspection() {
   ), [staffWithReports]);
 
   const teamOptions = useMemo(() => {
+    const scoped = staff.filter((s) => (
+      matchesCompanyFilter(s.company_list_id, selectedCompanyId)
+      && matchesBrandFilter(s.brand_list_id, selectedBrandId)
+    ));
     const groups = new Map<string, StaffMember[]>();
-    staff.forEach((s) => {
+    scoped.forEach((s) => {
       const t = (s.team_name || '').trim();
       if (!t) return;
       if (!groups.has(t)) groups.set(t, []);
       groups.get(t)!.push(s);
     });
-    return Array.from(groups.entries())
+    const ranked = Array.from(groups.entries())
       .sort(([a, aMembers], [b, bMembers]) => {
         const diff = countReportedMembers(bMembers) - countReportedMembers(aMembers);
         if (diff !== 0) return diff;
         return a.localeCompare(b, 'zh-Hant');
       })
       .map(([name]) => name);
-  }, [staff, countReportedMembers]);
+    return ranked.length > 0 ? ranked : distinctTeamNames(scoped);
+  }, [staff, selectedCompanyId, selectedBrandId, countReportedMembers]);
 
   const reportByStaffDate = useMemo(() => {
     const map = new Map<string, DayReportLite>();
@@ -497,9 +445,12 @@ export function WorkInspection() {
   const filteredStaff = useMemo(() => {
     const q = nameQuery.trim().toLowerCase();
     return staff
+      .filter((s) => matchesStaffOrgFilter(s, {
+        companyId: selectedCompanyId,
+        brandId: selectedBrandId,
+        teamName: selectedTeam,
+      }))
       .filter((s) => {
-        if (selectedTeam === UNASSIGNED_TEAM) return !(s.team_name || '').trim();
-        if (selectedTeam !== '__ALL__' && (s.team_name || '').trim() !== selectedTeam) return false;
         if (!q) return true;
         const name = getStaffName(s.id).toLowerCase();
         const dept = (s.department || '').toLowerCase();
@@ -507,7 +458,30 @@ export function WorkInspection() {
         return name.includes(q) || dept.includes(q) || team.includes(q);
       })
       .sort((a, b) => getStaffName(a.id).localeCompare(getStaffName(b.id), 'zh-Hant'));
-  }, [staff, selectedTeam, nameQuery, getStaffName]);
+  }, [staff, selectedCompanyId, selectedBrandId, selectedTeam, nameQuery, getStaffName]);
+
+  const handleCompanyChange = (id: string) => {
+    setSelectedCompanyId(id);
+    setSelectedBrandId((prev) => nextBrandAfterCompanyChange(prev, brands, id));
+    setSelectedTeam((prev) => {
+      const scoped = staff.filter((s) => (
+        matchesCompanyFilter(s.company_list_id, id)
+        && matchesBrandFilter(s.brand_list_id, nextBrandAfterCompanyChange(selectedBrandId, brands, id))
+      ));
+      return nextTeamAfterScopeChange(prev, distinctTeamNames(scoped));
+    });
+  };
+
+  const handleBrandChange = (id: string) => {
+    setSelectedBrandId(id);
+    setSelectedTeam((prev) => {
+      const scoped = staff.filter((s) => (
+        matchesCompanyFilter(s.company_list_id, selectedCompanyId)
+        && matchesBrandFilter(s.brand_list_id, id)
+      ));
+      return nextTeamAfterScopeChange(prev, distinctTeamNames(scoped));
+    });
+  };
 
   const staffMissingCount = useCallback((member: StaffMember) => {
     const office = resolveOffice(member.base_location);
@@ -673,35 +647,17 @@ export function WorkInspection() {
           />
         </div>
 
-        {isAdmin ? (
-          <select
-            value={selectedDepartment || '__ALL__'}
-            onChange={(e) => setSelectedDepartment(e.target.value)}
-            className="px-2.5 py-1.5 border border-border rounded-md text-[12px] bg-white"
-          >
-            <option value="__ALL__">全部部門</option>
-            {departmentOptions.map((d) => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-            <option value={UNASSIGNED_DEPT}>{UNASSIGNED_LABEL}</option>
-          </select>
-        ) : (
-          <span className="text-[12px] text-muted-foreground px-2">
-            {ownDepartment || '本部門'}
-          </span>
-        )}
-
-        <select
-          value={selectedTeam}
-          onChange={(e) => setSelectedTeam(e.target.value)}
-          className="px-2.5 py-1.5 border border-border rounded-md text-[12px] bg-white"
-        >
-          <option value="__ALL__">全部團隊</option>
-          {teamOptions.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-          <option value={UNASSIGNED_TEAM}>未分團隊</option>
-        </select>
+        <StaffOrgFilterSelects
+          companies={companies}
+          brands={brands}
+          teamOptions={teamOptions}
+          companyId={selectedCompanyId}
+          brandId={selectedBrandId}
+          teamName={selectedTeam}
+          onCompanyChange={handleCompanyChange}
+          onBrandChange={handleBrandChange}
+          onTeamChange={setSelectedTeam}
+        />
 
         <span className="text-[12px] text-muted-foreground tabular-nums">
           {filteredStaff.length}人

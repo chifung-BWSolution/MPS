@@ -7,21 +7,27 @@ import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { useCompanies } from '@/hooks/useCompanies';
+import { useBrands } from '@/hooks/useBrands';
 import { categoryConfig } from '@/data/dayReportDataV2';
 import { useDayReportTypes } from '@/hooks/useDayReportTypes';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
-import {
-  fetchDepartmentByStaffId,
-  fetchDepartmentMap,
-  fetchDistinctDepartments,
-  fetchStaffIdsByDepartment,
-  isValidDepartment,
-} from '@/components/day-report/departmentLookup';
+import { isValidDepartment } from '@/components/day-report/departmentLookup';
 import { isPlaceholderStaff, resolveStaffUuid } from '@/services/reportLinkService';
 import { Calendar as DayPickerCalendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { SearchableProjectSelect } from '@/components/day-report/SearchableProjectSelect';
 import { WorkInspection } from '@/components/day-report/WorkInspection';
+import { StaffOrgFilterSelects } from '@/components/day-report/StaffOrgFilterSelects';
+import {
+  STAFF_ORG_ALL,
+  distinctTeamNames,
+  matchesBrandFilter,
+  matchesCompanyFilter,
+  matchesStaffOrgFilter,
+  nextBrandAfterCompanyChange,
+  nextTeamAfterScopeChange,
+} from '@/components/day-report/staffOrgFilter';
 
 // ============================
 // Types
@@ -34,6 +40,8 @@ interface StaffMember {
   status: string;
   base_location: string | null;
   team_name: string | null;
+  company_list_id: string | null;
+  brand_list_id: string | null;
   profile_pic_url: string | null;
   department: string | null;
 }
@@ -69,7 +77,6 @@ type Mode = 'team' | 'personal';
 type PeriodType = 'week' | 'month';
 type OfficeLocation = 'hk' | 'sz';
 
-const UNASSIGNED_DEPT = '__UNASSIGNED__';
 const UNASSIGNED_LABEL = '未分組';
 
 // ============================
@@ -245,14 +252,6 @@ function pct(hours: number, total: number): number {
   return total > 0 ? (hours / total) * 100 : 0;
 }
 
-function isAdminRole(role: string | null | undefined): boolean {
-  const normalized = (role || '').toLowerCase().replace(/[\s-]/g, '_');
-  return normalized === 'super_admin'
-    || normalized === 'management'
-    || normalized === 'administrator'
-    || normalized === 'admin';
-}
-
 // ============================
 // Category hours bar list
 // ============================
@@ -357,8 +356,8 @@ function CategoryHoursList({
 export function TeamDashboard() {
   const { systemUser } = useAuth();
   const { types: dynamicTypes } = useDayReportTypes();
-
-  const isAdmin = useMemo(() => isAdminRole(systemUser?.role), [systemUser?.role]);
+  const { companies } = useCompanies();
+  const { brands } = useBrands();
 
   const categories = useMemo((): CategoryMeta[] => {
     if (dynamicTypes.length > 0) {
@@ -393,9 +392,9 @@ export function TeamDashboard() {
   const [rangeStart, setRangeStart] = useState(initialWeek.start);
   const [rangeEnd, setRangeEnd] = useState(initialWeek.end);
   const [rangePickerOpen, setRangePickerOpen] = useState(false);
-  const [ownDepartment, setOwnDepartment] = useState<string | null>(null);
-  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
-  const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState(STAFF_ORG_ALL);
+  const [selectedBrandId, setSelectedBrandId] = useState(STAFF_ORG_ALL);
+  const [selectedTeam, setSelectedTeam] = useState(STAFF_ORG_ALL);
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [detailStaffId, setDetailStaffId] = useState<string | null>(null);
   const [detailDateFilter, setDetailDateFilter] = useState<string | null>(null);
@@ -458,48 +457,29 @@ export function TeamDashboard() {
     if (range.to) setRangePickerOpen(false);
   };
 
-  // Resolve own department
   useEffect(() => {
     const detect = async () => {
       if (!systemUser) return;
       const staffUuid = await resolveStaffUuid(systemUser);
       if (!staffUuid) return;
-      let dept = systemUser.department || null;
-      if (!dept) {
-        try {
-          dept = await fetchDepartmentByStaffId(staffUuid);
-        } catch {
-          dept = null;
-        }
-      }
-      const valid = isValidDepartment(dept) ? dept!.trim() : null;
-      setOwnDepartment(valid);
-      if (isAdmin) {
-        setSelectedDepartment((prev) => prev ?? '__ALL__');
-      } else {
-        setSelectedDepartment(valid);
-      }
       setSelectedStaffId((prev) => prev ?? staffUuid);
     };
     detect();
-  }, [systemUser, isAdmin]);
+  }, [systemUser]);
 
-  // Load department options for admin
-  useEffect(() => {
-    if (!isAdmin) return;
-    fetchDistinctDepartments().then(setDepartmentOptions);
-  }, [isAdmin]);
-
-  const cleanStaffRows = useCallback(async (rawStaffData: Omit<StaffMember, 'department'>[]): Promise<StaffMember[]> => {
-    const deptMap = await fetchDepartmentMap(
-      rawStaffData.map((s) => s.id).filter(Boolean),
-    );
+  const cleanStaffRows = useCallback((rawStaffData: Omit<StaffMember, 'department'>[]): StaffMember[] => {
     const EXCLUDED_POSITIONS = ['director', 'director / management'];
     const EXCLUDED_DEPARTMENTS = ['management'];
-    const cleaned = rawStaffData.map((s) => ({
-      ...s,
-      department: deptMap[s.id] || null,
-    })).filter((s) => {
+    const cleaned = rawStaffData.map((s) => {
+      const teamName = (s.team_name || '').trim() || null;
+      return {
+        ...s,
+        team_name: teamName,
+        company_list_id: s.company_list_id ?? null,
+        brand_list_id: s.brand_list_id ?? null,
+        department: isValidDepartment(teamName) ? teamName : null,
+      };
+    }).filter((s) => {
       const pos = (s.position || '').toLowerCase().trim();
       const dept = (s.department || '').toLowerCase().trim();
       return !EXCLUDED_POSITIONS.includes(pos)
@@ -516,88 +496,40 @@ export function TeamDashboard() {
   }, []);
 
   const fetchData = useCallback(async () => {
-    if (!systemUser || selectedDepartment === null || !selectedStaffId) return;
+    if (!systemUser) return;
+    if (mode === 'personal' && !selectedStaffId) return;
     const selfStaffUuid = await resolveStaffUuid(systemUser);
     if (!selfStaffUuid) return;
 
     try {
-      // --- Picker staff (personal mode dropdown) ---
-      let pickerIds: string[] | null = null;
-      if (!isAdmin) {
-        if (!ownDepartment) {
-          pickerIds = [selfStaffUuid];
-        } else {
-          pickerIds = await fetchStaffIdsByDepartment(ownDepartment);
-          if (!pickerIds.includes(selfStaffUuid)) {
-            pickerIds = [...pickerIds, selfStaffUuid];
-          }
-        }
-      }
+      const STAFF_SELECT = 'id, display_name, position, user_role, status, base_location, team_name, profile_pic_url, company_list_id, brand_list_id';
 
-      let pickerQuery = supabase
+      const { data: rawPicker } = await supabase
         .from('staffs')
-        .select('id, display_name, position, user_role, status, base_location, team_name, profile_pic_url')
+        .select(STAFF_SELECT)
         .eq('status', 'active')
         .neq('position', 'Director');
-      if (pickerIds !== null) pickerQuery = pickerQuery.in('id', pickerIds);
-      const { data: rawPicker } = await pickerQuery;
-      const cleanedPicker = await cleanStaffRows(rawPicker || []);
+      const cleanedPicker = cleanStaffRows(rawPicker || []);
       setPickerStaff(cleanedPicker);
 
-      // Ensure selected staff is visible under permission
       const allowedPickerIds = new Set(cleanedPicker.map((s) => s.id));
-      let effectiveStaffId = selectedStaffId;
+      let effectiveStaffId = selectedStaffId || selfStaffUuid;
       if (!allowedPickerIds.has(effectiveStaffId)) {
         effectiveStaffId = selfStaffUuid;
         setSelectedStaffId(effectiveStaffId);
       }
 
-      // --- Scope staff for data fetch ---
-      // null = no staff_id filter (fetch all, then optionally post-filter)
-      let allowedStaffIds: string[] | null = null;
-      let filterUnassignedOnly = false;
-
-      if (mode === 'personal') {
-        allowedStaffIds = [effectiveStaffId];
-      } else if (!isAdmin) {
-        allowedStaffIds = ownDepartment
-          ? await fetchStaffIdsByDepartment(ownDepartment)
-          : [selfStaffUuid];
-      } else if (selectedDepartment === UNASSIGNED_DEPT) {
-        filterUnassignedOnly = true;
-        allowedStaffIds = null;
-      } else if (selectedDepartment !== '__ALL__') {
-        allowedStaffIds = await fetchStaffIdsByDepartment(selectedDepartment);
-      }
-
-      if (allowedStaffIds !== null && allowedStaffIds.length === 0) {
-        setStaff([]);
-        setStaffNameById({});
-        setReports([]);
-        setEntries([]);
-        return;
-      }
+      // Team view lists everyone; personal view fetches the selected person only.
+      const allowedStaffIds = mode === 'personal' ? [effectiveStaffId] : null;
 
       let staffQuery = supabase
         .from('staffs')
-        .select('id, display_name, position, user_role, status, base_location, team_name, profile_pic_url')
+        .select(STAFF_SELECT)
         .eq('status', 'active')
         .neq('position', 'Director');
       if (allowedStaffIds !== null) staffQuery = staffQuery.in('id', allowedStaffIds);
       const { data: rawStaff } = await staffQuery;
-      let staffData = await cleanStaffRows(rawStaff || []);
-
-      if (filterUnassignedOnly) {
-        staffData = staffData.filter((s) => !s.department);
-        allowedStaffIds = staffData.map((s) => s.id);
-        if (allowedStaffIds.length === 0) {
-          setStaff([]);
-          setStaffNameById({});
-          setReports([]);
-          setEntries([]);
-          return;
-        }
-      }
+      const staffData = cleanStaffRows(rawStaff || []);
 
       let reportQuery = supabase
         .from('day_reports')
@@ -658,10 +590,7 @@ export function TeamDashboard() {
     }
   }, [
     systemUser,
-    selectedDepartment,
     selectedStaffId,
-    isAdmin,
-    ownDepartment,
     mode,
     dateRange.start,
     dateRange.end,
@@ -669,11 +598,10 @@ export function TeamDashboard() {
   ]);
 
   useEffect(() => {
-    if (selectedDepartment !== null && selectedStaffId) {
-      setLoading(true);
-      fetchData();
-    }
-  }, [fetchData, selectedDepartment, selectedStaffId]);
+    if (mode === 'personal' && !selectedStaffId) return;
+    setLoading(true);
+    fetchData();
+  }, [fetchData, mode, selectedStaffId]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -777,18 +705,54 @@ export function TeamDashboard() {
     return map;
   }, [staff, entries, categories]);
 
+  const orgFilter = useMemo(() => ({
+    companyId: selectedCompanyId,
+    brandId: selectedBrandId,
+    teamName: selectedTeam,
+  }), [selectedCompanyId, selectedBrandId, selectedTeam]);
+
+  const filteredStaff = useMemo(
+    () => staff.filter((s) => matchesStaffOrgFilter(s, orgFilter)),
+    [staff, orgFilter],
+  );
+
+  const teamOptions = useMemo(() => {
+    const scoped = staff.filter((s) => (
+      matchesCompanyFilter(s.company_list_id, selectedCompanyId)
+      && matchesBrandFilter(s.brand_list_id, selectedBrandId)
+    ));
+    return distinctTeamNames(scoped);
+  }, [staff, selectedCompanyId, selectedBrandId]);
+
+  const handleCompanyChange = (id: string) => {
+    const nextBrand = nextBrandAfterCompanyChange(selectedBrandId, brands, id);
+    setSelectedCompanyId(id);
+    setSelectedBrandId(nextBrand);
+    const scoped = staff.filter((s) => (
+      matchesCompanyFilter(s.company_list_id, id)
+      && matchesBrandFilter(s.brand_list_id, nextBrand)
+    ));
+    setSelectedTeam((prev) => nextTeamAfterScopeChange(prev, distinctTeamNames(scoped)));
+  };
+
+  const handleBrandChange = (id: string) => {
+    setSelectedBrandId(id);
+    const scoped = staff.filter((s) => (
+      matchesCompanyFilter(s.company_list_id, selectedCompanyId)
+      && matchesBrandFilter(s.brand_list_id, id)
+    ));
+    setSelectedTeam((prev) => nextTeamAfterScopeChange(prev, distinctTeamNames(scoped)));
+  };
+
   const teamGroups = useMemo(() => {
     const groups = new Map<string, StaffMember[]>();
-    const sorted = [...staff].sort((a, b) => getStaffName(a.id).localeCompare(getStaffName(b.id), 'zh-Hant'));
-    const hideUnassignedInAll = selectedDepartment === '__ALL__';
+    const sorted = [...filteredStaff].sort((a, b) => getStaffName(a.id).localeCompare(getStaffName(b.id), 'zh-Hant'));
     const staffWithReports = new Set(reports.map((r) => r.staff_id));
 
     sorted.forEach((s) => {
-      const dept = s.department || UNASSIGNED_LABEL;
-      // 「全部門」預設不顯示未分組
-      if (hideUnassignedInAll && dept === UNASSIGNED_LABEL) return;
-      if (!groups.has(dept)) groups.set(dept, []);
-      groups.get(dept)!.push(s);
+      const team = (s.team_name || '').trim() || UNASSIGNED_LABEL;
+      if (!groups.has(team)) groups.set(team, []);
+      groups.get(team)!.push(s);
     });
 
     return Array.from(groups.entries()).sort(([a, aMembers], [b, bMembers]) => {
@@ -799,7 +763,7 @@ export function TeamDashboard() {
       if (bCount !== aCount) return bCount - aCount;
       return a.localeCompare(b, 'zh-Hant');
     });
-  }, [staff, getStaffName, selectedDepartment, reports]);
+  }, [filteredStaff, getStaffName, reports]);
 
   // Personal: daily breakdown (week = 7 days; month = all days in month)
   const personalDayByDate = useMemo(() => {
@@ -899,14 +863,6 @@ export function TeamDashboard() {
 
   const showInitialLoading = loading && staff.length === 0 && reports.length === 0;
 
-  const activeDeptLabel = !isAdmin
-    ? (ownDepartment || '本部門')
-    : selectedDepartment === '__ALL__'
-      ? '全部門'
-      : selectedDepartment === UNASSIGNED_DEPT
-        ? UNASSIGNED_LABEL
-        : selectedDepartment;
-
   return (
     <div>
       {/* Sticky: title + 工作檢查|工時分析 */}
@@ -915,7 +871,7 @@ export function TeamDashboard() {
           <h1 className="text-[24px] font-bold tracking-tight">匯報統計</h1>
           <p className="text-[13px] text-muted-foreground mt-0.5">
             {viewTab === 'inspection'
-              ? '按團隊查看每人匯報填寫情況 — 支援周報／月報、人名與部門篩選。'
+              ? '按團隊查看每人匯報填寫情況 — 支援周報／月報、人名、公司、品牌與團隊篩選。'
               : '按週／月統計工作類別工時與占比 — 週統計可自選日期範圍 · 點擊卡片於右側查看工作內容。'}
           </p>
         </div>
@@ -1084,24 +1040,22 @@ export function TeamDashboard() {
           </div>
 
           {mode === 'team' && (
-            isAdmin ? (
-              <select
-                value={selectedDepartment || '__ALL__'}
-                onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="ml-auto px-2.5 py-1.5 border border-border rounded-md text-[12px] bg-white"
-              >
-                <option value="__ALL__">全部門</option>
-                {departmentOptions.map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-                <option value={UNASSIGNED_DEPT}>{UNASSIGNED_LABEL}</option>
-              </select>
-            ) : (
-              <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200">
-                <Users size={10} />
-                {activeDeptLabel}
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <StaffOrgFilterSelects
+                companies={companies}
+                brands={brands}
+                teamOptions={teamOptions}
+                companyId={selectedCompanyId}
+                brandId={selectedBrandId}
+                teamName={selectedTeam}
+                onCompanyChange={handleCompanyChange}
+                onBrandChange={handleBrandChange}
+                onTeamChange={setSelectedTeam}
+              />
+              <span className="text-[12px] text-muted-foreground tabular-nums">
+                {filteredStaff.length}人
               </span>
-            )
+            </div>
           )}
 
           {mode === 'personal' && (
