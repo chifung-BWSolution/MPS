@@ -12,6 +12,7 @@ import { useBrands } from '@/hooks/useBrands';
 import { categoryConfig } from '@/data/dayReportDataV2';
 import { useDayReportTypes } from '@/hooks/useDayReportTypes';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
+import { fetchUserStaffIds, filterStaffInUsers } from '@/components/day-report/userStaffLookup';
 import { isValidDepartment } from '@/components/day-report/departmentLookup';
 import { isPlaceholderStaff, resolveStaffUuid } from '@/services/reportLinkService';
 import { Calendar as DayPickerCalendar } from '@/components/ui/calendar';
@@ -504,12 +505,14 @@ export function TeamDashboard() {
     try {
       const STAFF_SELECT = 'id, display_name, position, user_role, status, base_location, team_name, profile_pic_url, company_list_id, brand_list_id';
 
+      const userStaffIds = await fetchUserStaffIds();
+
       const { data: rawPicker } = await supabase
         .from('staffs')
         .select(STAFF_SELECT)
         .eq('status', 'active')
         .neq('position', 'Director');
-      const cleanedPicker = cleanStaffRows(rawPicker || []);
+      const cleanedPicker = filterStaffInUsers(cleanStaffRows(rawPicker || []), userStaffIds);
       setPickerStaff(cleanedPicker);
 
       const allowedPickerIds = new Set(cleanedPicker.map((s) => s.id));
@@ -519,26 +522,34 @@ export function TeamDashboard() {
         setSelectedStaffId(effectiveStaffId);
       }
 
-      // Team view lists everyone; personal view fetches the selected person only.
-      const allowedStaffIds = mode === 'personal' ? [effectiveStaffId] : null;
+      // Team view lists allowlisted users; personal view fetches the selected person only.
+      const allowedStaffIds = mode === 'personal'
+        ? [effectiveStaffId]
+        : userStaffIds;
 
-      let staffQuery = supabase
+      if (allowedStaffIds.length === 0) {
+        setStaff([]);
+        setStaffNameById({});
+        setReports([]);
+        setEntries([]);
+        return;
+      }
+
+      const { data: rawStaff } = await supabase
         .from('staffs')
         .select(STAFF_SELECT)
         .eq('status', 'active')
-        .neq('position', 'Director');
-      if (allowedStaffIds !== null) staffQuery = staffQuery.in('id', allowedStaffIds);
-      const { data: rawStaff } = await staffQuery;
-      const staffData = cleanStaffRows(rawStaff || []);
+        .neq('position', 'Director')
+        .in('id', allowedStaffIds);
+      const staffData = filterStaffInUsers(cleanStaffRows(rawStaff || []), userStaffIds);
 
-      let reportQuery = supabase
+      const { data: reportData } = await supabase
         .from('day_reports')
         .select('id, staff_id, report_date, total_hours, is_leave, leave_type, office_location, is_holiday, is_weekend')
         .gte('report_date', dateRange.start)
         .lte('report_date', dateRange.end)
+        .in('staff_id', allowedStaffIds)
         .limit(5000);
-      if (allowedStaffIds !== null) reportQuery = reportQuery.in('staff_id', allowedStaffIds);
-      const { data: reportData } = await reportQuery;
 
       let entryData: DayReportEntry[] = [];
       if (reportData && reportData.length > 0) {

@@ -47,6 +47,7 @@ import {
   type ReportFormEntry,
 } from '@/services/reportLinkService';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
+import { fetchUserStaffIds, filterStaffInUsers } from '@/components/day-report/userStaffLookup';
 import {
   fetchDistinctDepartments,
   fetchDepartmentMap,
@@ -2303,9 +2304,10 @@ function TodayTeamReports() {
               && !EXCLUDED_DEPARTMENTS.includes(dept)
               && !isPlaceholderStaff(s);
           });
+        const allowlisted = filterStaffInUsers(staff, await fetchUserStaffIds());
         if (cancelled) return;
-        setDbStaff(staff);
-        const nameMap = await fetchStaffNameMap(staff.map((s) => s.id).filter(Boolean));
+        setDbStaff(allowlisted);
+        const nameMap = await fetchStaffNameMap(allowlisted.map((s) => s.id).filter(Boolean));
         if (!cancelled) setStaffNameById((prev) => ({ ...prev, ...nameMap }));
       } catch (err) {
         console.error('[TodayTeamReports] Unexpected staff error:', err);

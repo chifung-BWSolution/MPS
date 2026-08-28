@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useBrands } from '@/hooks/useBrands';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
+import { fetchUserStaffIds, filterStaffInUsers } from '@/components/day-report/userStaffLookup';
 import { isValidDepartment } from '@/components/day-report/departmentLookup';
 import { isPlaceholderStaff } from '@/services/reportLinkService';
 import { StaffOrgFilterSelects } from '@/components/day-report/StaffOrgFilterSelects';
@@ -335,6 +336,8 @@ export function WorkInspection() {
           && !EXCLUDED_DEPARTMENTS.includes(dept)
           && !isPlaceholderStaff(s);
       });
+
+      staffData = filterStaffInUsers(staffData, await fetchUserStaffIds());
 
       const staffIds = staffData.map((s) => s.id);
       let reportData: DayReportLite[] = [];
