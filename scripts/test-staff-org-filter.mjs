@@ -18,6 +18,11 @@ import {
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const inspectionSrc = readFileSync(join(root, 'src/components/day-report/WorkInspection.tsx'), 'utf8');
 const dashboardSrc = readFileSync(join(root, 'src/components/day-report/TeamDashboard.tsx'), 'utf8');
+const todayTeamSrc = readFileSync(join(root, 'src/components/day-report/DayReportModule.tsx'), 'utf8');
+const todayTeamFn = todayTeamSrc.slice(
+  todayTeamSrc.indexOf('function TodayTeamReports()'),
+  todayTeamSrc.indexOf('function WorkCalendar()'),
+);
 
 assert.match(inspectionSrc, /company_list_id/);
 assert.match(inspectionSrc, /brand_list_id/);
@@ -30,6 +35,13 @@ assert.match(dashboardSrc, /StaffOrgFilterSelects/);
 assert.doesNotMatch(dashboardSrc, /fetchStaffIdsByDepartment/);
 assert.doesNotMatch(dashboardSrc, /ownDepartment/);
 assert.doesNotMatch(dashboardSrc, /isAdminRole/);
+
+assert.match(todayTeamFn, /company_list_id/);
+assert.match(todayTeamFn, /brand_list_id/);
+assert.match(todayTeamFn, /StaffOrgFilterSelects/);
+assert.doesNotMatch(todayTeamFn, /userDepartment/);
+assert.doesNotMatch(todayTeamFn, /canSwitchDepartment/);
+assert.doesNotMatch(todayTeamFn, /selectedDepartment/);
 
 const staff = [
   { company_list_id: 'co-1', brand_list_id: 'br-1', team_name: '行銷' },

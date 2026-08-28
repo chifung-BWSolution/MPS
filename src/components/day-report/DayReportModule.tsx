@@ -52,7 +52,20 @@ import {
   fetchDepartmentMap,
   fetchDepartmentByStaffId,
   fetchStaffIdsByDepartment,
+  isValidDepartment,
 } from '@/components/day-report/departmentLookup';
+import { useCompanies } from '@/hooks/useCompanies';
+import { useBrands } from '@/hooks/useBrands';
+import { StaffOrgFilterSelects } from '@/components/day-report/StaffOrgFilterSelects';
+import {
+  STAFF_ORG_ALL,
+  distinctTeamNames,
+  matchesBrandFilter,
+  matchesCompanyFilter,
+  matchesStaffOrgFilter,
+  nextBrandAfterCompanyChange,
+  nextTeamAfterScopeChange,
+} from '@/components/day-report/staffOrgFilter';
 
 // ============================
 // Office Location & Holiday Config
@@ -2203,25 +2216,31 @@ function SubmitReportPage() {
 // Today Team Reports (Read-Only)
 // ============================
 function TodayTeamReports() {
-  const { systemUser } = useAuth();
   const categoryLookup = useCategoryLookup();
+  const { companies } = useCompanies();
+  const { brands } = useBrands();
   const todayStr = localDateString();
-  
-  // Determine user's department and role
-  const rawDepartment = systemUser?.department || 'System';
-  const userDepartment = rawDepartment === 'Management' ? 'System' : rawDepartment;
-  const userRole = systemUser?.role || '';
-  const canSwitchDepartment = userRole === 'super_admin' || userRole === 'management';
-  
-  const [selectedDepartment, setSelectedDepartment] = useState<string>(userDepartment);
+
+  const [selectedCompanyId, setSelectedCompanyId] = useState(STAFF_ORG_ALL);
+  const [selectedBrandId, setSelectedBrandId] = useState(STAFF_ORG_ALL);
+  const [selectedTeam, setSelectedTeam] = useState(STAFF_ORG_ALL);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  
-  // === LIVE DATABASE STATE ===
-  const [dbStaff, setDbStaff] = useState<Array<{ id: string; display_name: string; department: string; position: string; status: string }>>([]);
+
+  type TodayStaff = {
+    id: string;
+    display_name: string;
+    team_name: string | null;
+    company_list_id: string | null;
+    brand_list_id: string | null;
+    department: string | null;
+    position: string;
+    status: string;
+  };
+
+  const [dbStaff, setDbStaff] = useState<TodayStaff[]>([]);
   const [dbReports, setDbReports] = useState<Array<{ id: string; staff_id: string; report_date: string; total_hours: number; ot_hours: number; is_leave: boolean; leave_type: string | null; status: string }>>([]);
   const [dbEntries, setDbEntries] = useState<Array<{ id: string; day_report_id: string; staff_id: string; category: string; title: string; hours: number; outcome_url: string | null; growth_experience: string | null; is_ai_assisted: boolean; ai_tools: any; related_name: string | null }>>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [departmentOptions, setDepartmentOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [staffNameById, setStaffNameById] = useState<Record<string, string>>({});
 
   // Fetch live staff directory and reports from Supabase
@@ -2229,10 +2248,9 @@ function TodayTeamReports() {
     async function fetchData() {
       setIsLoading(true);
       try {
-        // 1. Fetch active staff; department comes from staffs.team_name via staff_id
         const { data: staffData, error: staffErr } = await supabase
           .from('staffs')
-          .select('id, display_name, position, status')
+          .select('id, display_name, position, status, team_name, company_list_id, brand_list_id')
           .eq('status', 'active')
           .neq('position', 'Director');
 
@@ -2240,31 +2258,33 @@ function TodayTeamReports() {
           console.error('[TodayTeamReports] Staff query error:', staffErr);
         }
 
-        const staffIds = (staffData || []).map(s => s.id).filter(Boolean);
-        const deptMap = await fetchDepartmentMap(staffIds);
-
-        // Post-fetch: attach user_info department and exclude legacy Director / Management rows
         const EXCLUDED_POSITIONS = ['director', 'director / management'];
         const EXCLUDED_DEPARTMENTS = ['management'];
+        const seen = new Set<string>();
         const staff = (staffData || [])
-          .map(s => ({ ...s, department: deptMap[s.id] || '' }))
-          .filter(s => {
+          .map((s) => {
+            const teamName = (s.team_name || '').trim() || null;
+            return {
+              id: s.id,
+              display_name: s.display_name,
+              position: s.position,
+              status: s.status,
+              team_name: teamName,
+              company_list_id: s.company_list_id,
+              brand_list_id: s.brand_list_id,
+              department: isValidDepartment(teamName) ? teamName : null,
+            };
+          })
+          .filter((s) => {
+            if (!s.id || seen.has(s.id)) return false;
+            seen.add(s.id);
             const pos = (s.position || '').toLowerCase().trim();
             const dept = (s.department || '').toLowerCase().trim();
             return !EXCLUDED_POSITIONS.includes(pos)
-              && !!dept
               && !EXCLUDED_DEPARTMENTS.includes(dept)
               && !isPlaceholderStaff(s);
           });
         setDbStaff(staff);
-
-        // 2. Build dynamic department options from user_info
-        const distinctDepts = await fetchDistinctDepartments();
-        const dynamicDepts: Array<{ value: string; label: string }> = [
-          { value: '__ALL__', label: '全部門' },
-          ...distinctDepts.map(d => ({ value: d, label: d })),
-        ];
-        setDepartmentOptions(dynamicDepts);
 
         // 3. Fetch today's day_reports
         const { data: reportData, error: reportErr } = await supabase
@@ -2311,18 +2331,44 @@ function TodayTeamReports() {
     fetchData();
   }, [todayStr]);
 
-  // === DERIVED STATE (from live DB data) ===
-  const activeDept = canSwitchDepartment ? selectedDepartment : userDepartment;
-  
-  // Filter staff by selected department (all staff already have valid department from query)
-  const filteredStaff = useMemo(() => {
-    if (activeDept === '__ALL__') return dbStaff;
-    return dbStaff.filter(s => s.department === activeDept);
-  }, [dbStaff, activeDept]);
+  const teamOptions = useMemo(() => {
+    const scoped = dbStaff.filter((s) => (
+      matchesCompanyFilter(s.company_list_id, selectedCompanyId)
+      && matchesBrandFilter(s.brand_list_id, selectedBrandId)
+    ));
+    return distinctTeamNames(scoped);
+  }, [dbStaff, selectedCompanyId, selectedBrandId]);
+
+  const handleCompanyChange = (id: string) => {
+    const nextBrand = nextBrandAfterCompanyChange(selectedBrandId, brands, id);
+    setSelectedCompanyId(id);
+    setSelectedBrandId(nextBrand);
+    const scoped = dbStaff.filter((s) => (
+      matchesCompanyFilter(s.company_list_id, id)
+      && matchesBrandFilter(s.brand_list_id, nextBrand)
+    ));
+    setSelectedTeam((prev) => nextTeamAfterScopeChange(prev, distinctTeamNames(scoped)));
+  };
+
+  const handleBrandChange = (id: string) => {
+    setSelectedBrandId(id);
+    const scoped = dbStaff.filter((s) => (
+      matchesCompanyFilter(s.company_list_id, selectedCompanyId)
+      && matchesBrandFilter(s.brand_list_id, id)
+    ));
+    setSelectedTeam((prev) => nextTeamAfterScopeChange(prev, distinctTeamNames(scoped)));
+  };
+
+  const filteredStaff = useMemo(() => (
+    dbStaff.filter((s) => matchesStaffOrgFilter(s, {
+      companyId: selectedCompanyId,
+      brandId: selectedBrandId,
+      teamName: selectedTeam,
+    }))
+  ), [dbStaff, selectedCompanyId, selectedBrandId, selectedTeam]);
 
   const filteredStaffIds = useMemo(() => new Set(filteredStaff.map(s => s.id)), [filteredStaff]);
 
-  // Filter reports to only those belonging to staff in the selected department
   const todayReports = useMemo(() => {
     return dbReports.filter(r => filteredStaffIds.has(r.staff_id));
   }, [dbReports, filteredStaffIds]);
@@ -2388,7 +2434,7 @@ function TodayTeamReports() {
 
       {/* Filter Bar */}
       <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm">
-        <div className="px-5 py-4 border-b border-border/50 flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-border/50 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h4 className="text-[16px] font-bold flex items-center gap-2">
               <Eye size={16} className="text-teal-600" />
@@ -2396,19 +2442,21 @@ function TodayTeamReports() {
             </h4>
             <p className="text-[12px] text-muted-foreground mt-0.5">{todayStr} · {submittedCount} 人已提交</p>
           </div>
-          <div className="flex items-center gap-3">
-            {/* Department Selector (only visible to super_admin / management) */}
-            {canSwitchDepartment && (
-              <select
-                value={selectedDepartment}
-                onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="border border-border/60 rounded-md px-2.5 py-1.5 text-[12px] font-medium bg-muted/30 hover:bg-muted/50 focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 transition-colors"
-              >
-                {departmentOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            )}
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <StaffOrgFilterSelects
+              companies={companies}
+              brands={brands}
+              teamOptions={teamOptions}
+              companyId={selectedCompanyId}
+              brandId={selectedBrandId}
+              teamName={selectedTeam}
+              onCompanyChange={handleCompanyChange}
+              onBrandChange={handleBrandChange}
+              onTeamChange={setSelectedTeam}
+            />
+            <span className="text-[12px] text-muted-foreground tabular-nums">
+              {filteredStaff.length}人
+            </span>
             <div className="flex items-center gap-2">
               <span className="text-[12px] text-muted-foreground">提交率</span>
               <div className="w-24 h-2 bg-muted rounded-full overflow-hidden"><div className="h-full bg-teal-500 rounded-full transition-all" style={{ width: `${totalStaff > 0 ? (submittedCount / totalStaff) * 100 : 0}%` }} /></div>
@@ -2429,9 +2477,9 @@ function TodayTeamReports() {
         {!isLoading && filteredStaff.length === 0 && (
           <div className="px-5 py-8 text-center">
             <Users size={32} className="mx-auto text-muted-foreground/40 mb-2" />
-            <p className="text-[14px] font-medium text-muted-foreground">此部門暫無員工</p>
+            <p className="text-[14px] font-medium text-muted-foreground">此篩選條件下暫無人員</p>
             <p className="text-[12px] text-muted-foreground/70 mt-1">
-              「{activeDept}」部門目前沒有已分配的活躍員工
+              可改選公司、品牌或團隊
             </p>
           </div>
         )}
@@ -3095,7 +3143,7 @@ export function DayReportModule({ subModule }: { subModule?: string }) {
   const getTitle = () => {
     switch (subModule) {
       case 'submit': return { title: '提交匯報', subtitle: '支援香港/深圳雙辦公室 · 本週與上週匯報總覽 · 常用項目快速填入 · 週六加班匯報 · 多日假期申報 · AI 追蹤 · 8h驗證。' };
-      case 'today-team': return { title: '今日團隊', subtitle: '查看今日團隊提交狀況及工作匯報詳情。' };
+      case 'today-team': return { title: '今日團隊', subtitle: '查看今日提交狀況 — 可依公司、品牌與團隊篩選。' };
       case 'calendar': return { title: '工作日曆', subtitle: '以日曆視圖查看歷史工作記錄，13種工作類型顏色標記。' };
       case 'team-view': return { title: '匯報統計', subtitle: '工作檢查查看填寫情況 · 工時分析統計類別工時與占比。' };
       case 'monthly': return { title: '月度報告', subtitle: '本月工時排名、AI 使用統計及類別分佈分析。' };
