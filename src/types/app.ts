@@ -292,9 +292,6 @@ export interface WebsiteProfileFull {
   projectCategory?: ProjectCategory;
   // System-specific fields
   systemType?: SystemType;
-  techStack?: string[];
-  deploymentEnv?: string;
-  apiDocUrl?: string;
 }
 
 export interface SocialPost {

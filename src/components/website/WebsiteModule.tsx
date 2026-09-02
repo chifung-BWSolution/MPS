@@ -25,6 +25,7 @@ import { useCompanies } from '@/hooks/useCompanies';
 import { useBrands } from '@/hooks/useBrands';
 import { projects as allProjectsData } from '@/data/mockData';
 import { ProjectCategoryBadge, getProjectCategory, type ProjectCategoryType } from '@/components/ui/project-category-badge';
+import { BrandFieldBadge, CompanyFieldBadge, EmptyDash, MutedFieldBadge, StatusFieldBadge, displayText } from '@/components/ui/nullable-badge';
 import { useAdsWebsiteLinks } from '@/hooks/useAdsWebsiteLinks';
 import { useWebsiteConnectionStatus } from '@/hooks/useWebsiteConnectionStatus';
 import type { AdsDiscoveredDomain } from '@/types/adsWebsiteLink';
@@ -83,8 +84,9 @@ const levelConfig: Record<WebsiteLevel, { label: string; borderColor: string; te
 };
 
 // ===== Website Level Badge Component =====
-function WebsiteLevelBadge({ level, size = 'default' }: { level: WebsiteLevel; size?: 'default' | 'small' | 'large' }) {
-  const config = levelConfig[level];
+function WebsiteLevelBadge({ level, size = 'default' }: { level?: WebsiteLevel | null; size?: 'default' | 'small' | 'large' }) {
+  const config = level != null ? levelConfig[level] : undefined;
+  if (!config) return <EmptyDash />;
   const sizeClasses = size === 'small' ? 'text-[9px] px-1 py-0' : size === 'large' ? 'text-[12px] px-2 py-1' : 'text-[10px] px-1.5 py-0.5';
   return (
     <span className={cn('font-bold rounded-sm border inline-flex items-center gap-0.5', sizeClasses, config.className)}>
@@ -112,6 +114,7 @@ const systemTypeLabels: Record<SystemType, string> = {
 function ProfileTypeBadge({ profileType, size = 'default' }: { profileType?: ProfileType; size?: 'default' | 'small' }) {
   const type = profileType || 'website';
   const config = profileTypeConfig[type];
+  if (!config) return <EmptyDash />;
   const sizeClasses = size === 'small' ? 'text-[9px] px-1 py-0 gap-0.5' : 'text-[10px] px-1.5 py-0.5 gap-1';
   return (
     <span className={cn('font-bold rounded-sm border inline-flex items-center', sizeClasses, config.bgColor, config.color)}>
@@ -167,7 +170,7 @@ function WebsiteCard({ site, onClick }: { site: WebsiteProfileFull; onClick: () 
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <WebsiteLevelBadge level={site.level} />
-          <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-sm', config.bgColor, config.color)}>{config.label}</span>
+          <StatusFieldBadge config={config} className="text-[10px]" />
         </div>
       </div>
 
@@ -175,11 +178,11 @@ function WebsiteCard({ site, onClick }: { site: WebsiteProfileFull; onClick: () 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <ProjectCategoryBadge category={category} clientName={clientName} size="sm" />
         {site.profileType === 'system' && site.systemType && (
-          <span className="text-[11px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200">{systemTypeLabels[site.systemType]}</span>
+          <MutedFieldBadge value={systemTypeLabels[site.systemType]} className="bg-purple-50 text-purple-700 border border-purple-200" />
         )}
-        <span className="text-[11px] bg-muted px-1.5 py-0.5 rounded">{site.platform}</span>
-        <span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{site.brand}</span>
-        <span className="text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{site.company}</span>
+        <MutedFieldBadge value={site.platform} />
+        <BrandFieldBadge value={site.brand} />
+        <CompanyFieldBadge value={site.company} />
       </div>
 
       {/* Stats */}
@@ -230,10 +233,10 @@ function WebsiteTableRow({ site, onClick }: { site: WebsiteProfileFull; onClick:
       </td>
       <td className="px-4 py-3"><ProjectCategoryBadge category={category} clientName={clientName} size="sm" /></td>
       <td className="px-4 py-3"><WebsiteLevelBadge level={site.level} size="small" /></td>
-      <td className="px-4 py-3"><span className="text-[11px] bg-muted px-1.5 py-0.5 rounded">{site.platform}</span></td>
-      <td className="px-4 py-3"><span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{site.brand}</span></td>
-      <td className="px-4 py-3"><span className="text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{site.company}</span></td>
-      <td className="px-4 py-3"><span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', config.bgColor, config.color)}>{config.label}</span></td>
+      <td className="px-4 py-3"><MutedFieldBadge value={site.platform} /></td>
+      <td className="px-4 py-3"><BrandFieldBadge value={site.brand} /></td>
+      <td className="px-4 py-3"><CompanyFieldBadge value={site.company} /></td>
+      <td className="px-4 py-3"><StatusFieldBadge config={config} /></td>
       <td className="px-4 py-3 text-[13px]">{site.articlesCount}</td>
       <td className="px-4 py-3 text-[13px]">{site.videosCount}</td>
       <td className="px-4 py-3 text-[13px] font-medium">{site.totalHours}h</td>
@@ -340,11 +343,11 @@ function AddArticleModal({
                           <span className="text-[13px] font-medium block truncate">{article.title}</span>
                           <div className="flex items-center gap-2 mt-0.5">
                             <span className="text-[11px] text-muted-foreground">{article.authorName}</span>
-                            <span className="text-[11px] bg-teal-50 text-teal-700 px-1 py-0.5 rounded">{article.brand}</span>
+                            <BrandFieldBadge value={article.brand} className="px-1 py-0.5" />
                             {article.publishDate && <span className="text-[11px] text-muted-foreground">{article.publishDate}</span>}
                           </div>
                         </div>
-                        <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-sm shrink-0', statusCfg.bgColor, statusCfg.color)}>{statusCfg.label}</span>
+                        <StatusFieldBadge config={statusCfg} className="text-[10px] shrink-0" />
                       </div>
                     );
                   })
@@ -516,7 +519,7 @@ function WebsiteArticlesTab({ site }: { site: WebsiteProfileFull }) {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', statusCfg.bgColor, statusCfg.color)}>{statusCfg.label}</span>
+                      <StatusFieldBadge config={statusCfg} />
                     </td>
                     <td className="px-4 py-3">
                       {article.url ? (
@@ -681,37 +684,14 @@ function WebsiteDetail({
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               {site.profileType === 'system' ? <Monitor size={12} className="text-purple-500" /> : <Globe size={12} className="text-muted-foreground" />}
               <a href={toExternalHref(site.domainUrl)} target="_blank" rel="noopener noreferrer" className="text-[13px] text-teal-600 hover:underline">{site.domainUrl}</a>
-              <span className="text-[11px] bg-muted px-1.5 py-0.5 rounded">{site.platform}</span>
+              <MutedFieldBadge value={site.platform} />
               {site.profileType === 'system' && site.systemType && (
-                <span className="text-[11px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200">{systemTypeLabels[site.systemType]}</span>
+                <MutedFieldBadge value={systemTypeLabels[site.systemType]} className="bg-purple-50 text-purple-700 border border-purple-200" />
               )}
-              <span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{site.brand}</span>
-              <span className="text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{site.company}</span>
-              <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-sm', statusConfig[site.status].bgColor, statusConfig[site.status].color)}>
-                {statusConfig[site.status].label}
-              </span>
+              <BrandFieldBadge value={site.brand} />
+              <CompanyFieldBadge value={site.company} />
+              <StatusFieldBadge config={statusConfig[site.status]} className="text-[10px]" />
             </div>
-            {/* System-specific metadata */}
-            {site.profileType === 'system' && (site.techStack || site.deploymentEnv || site.apiDocUrl) && (
-              <div className="flex items-center gap-2 mt-2 flex-wrap">
-                {site.techStack && site.techStack.length > 0 && (
-                  <div className="flex items-center gap-1">
-                    <span className="text-[10px] text-muted-foreground font-medium">技術棧:</span>
-                    {site.techStack.map((tech, i) => (
-                      <span key={i} className="text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded">{tech}</span>
-                    ))}
-                  </div>
-                )}
-                {site.deploymentEnv && (
-                  <span className="text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">🚀 {site.deploymentEnv}</span>
-                )}
-                {site.apiDocUrl && (
-                  <a href={site.apiDocUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5">
-                    <ExternalLink size={9} />API 文件
-                  </a>
-                )}
-              </div>
-            )}
           </div>
           <div className="grid grid-cols-5 gap-4 text-center">
             <div><span className="text-[18px] font-bold block">{site.pagesCount}</span><span className="text-[10px] text-muted-foreground">頁面</span></div>
@@ -772,10 +752,10 @@ function WebsiteDetail({
                 <h5 className="text-[14px] font-bold">基本資料</h5>
                 <div className="space-y-2">
                   <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">Level</span><span className="font-medium"><WebsiteLevelBadge level={currentLevel} /></span></div>
-                  <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">狀態</span><span className="font-medium">{statusConfig[site.status].label}</span></div>
-                  <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">平台</span><span className="font-medium capitalize">{site.platform}</span></div>
-                  <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">品牌</span><span className="font-medium">{site.brand}</span></div>
-                  <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">公司</span><span className="font-medium">{site.company}</span></div>
+                  <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">狀態</span><span className="font-medium">{displayText(statusConfig[site.status]?.label)}</span></div>
+                  <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">平台</span><span className="font-medium capitalize">{displayText(site.platform)}</span></div>
+                  <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">品牌</span><span className="font-medium">{displayText(site.brand)}</span></div>
+                  <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">公司</span><span className="font-medium">{displayText(site.company)}</span></div>
                   <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">主機</span><span className="font-medium">{site.hostingProvider || '—'}</span></div>
                   <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">總工時</span><span className="font-medium">{site.totalHours}h</span></div>
                   {staffHours.length > 0 && (
@@ -797,7 +777,7 @@ function WebsiteDetail({
                     {site.assignedStaff.map((staff, i) => (
                       <div key={i} className="flex items-center justify-between text-[13px]">
                         <span className="font-medium">{staff.name}</span>
-                        <span className="text-muted-foreground text-[11px] bg-muted px-1.5 py-0.5 rounded">{staff.role}</span>
+                        <MutedFieldBadge value={staff.role} className="text-muted-foreground" />
                       </div>
                     ))}
                   </div>
@@ -1232,9 +1212,6 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
     profileType: site.profileType || 'website',
     projectCategory: site.projectCategory === 'client' ? 'client' : 'internal',
     systemType: site.systemType,
-    techStack: site.techStack || [],
-    deploymentEnv: site.deploymentEnv || '',
-    apiDocUrl: site.apiDocUrl || '',
   });
 
   const filtered = websiteProfiles.filter(ws => {
@@ -1441,10 +1418,10 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3"><ProfileTypeBadge profileType={site.profileType} size="small" /></td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3"><ProjectCategoryBadge category={category} clientName={clientName} size="sm" /></td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3"><WebsiteLevelBadge level={site.level} size="small" /></td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><span className="text-[11px] bg-muted px-1.5 py-0.5 rounded">{site.platform}</span></td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><span className="text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{site.company}</span></td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{site.brand}</span></td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', config.bgColor, config.color)}>{config.label}</span></td>
+                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><MutedFieldBadge value={site.platform} /></td>
+                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><CompanyFieldBadge value={site.company} /></td>
+                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><BrandFieldBadge value={site.brand} /></td>
+                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><StatusFieldBadge config={config} /></td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3">
                     <GoogleAdsConnectionBadge status={googleAdsByWebsiteId[site.id] || 'unlinked'} />
                   </td>
@@ -1560,15 +1537,15 @@ function FeaturedWebsiteCard({ site, onClick }: { site: WebsiteProfileFull; onCl
         </div>
         <div className="flex items-center gap-1.5 shrink-0 ml-2">
           <WebsiteLevelBadge level={site.level} />
-          <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-sm', config.bgColor, config.color)}>{config.label}</span>
+          <StatusFieldBadge config={config} className="text-[10px]" />
         </div>
       </div>
 
       {/* Company / Brand */}
       <div className="flex items-center gap-2 mb-4">
-        <span className="text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{site.company}</span>
-        <span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{site.brand}</span>
-        <span className="text-[11px] bg-muted px-1.5 py-0.5 rounded capitalize">{site.platform}</span>
+        <CompanyFieldBadge value={site.company} />
+        <BrandFieldBadge value={site.brand} />
+        <MutedFieldBadge value={site.platform} className="capitalize" />
       </div>
 
       {/* Stats grid */}
@@ -1791,8 +1768,8 @@ function AddWebsiteToArticleModal({
                     <div className="flex items-center gap-2 mt-0.5">
                       <Globe size={10} className="text-muted-foreground" />
                       <span className="text-[11px] text-teal-600">{ws.domainUrl}</span>
-                      <span className="text-[11px] bg-teal-50 text-teal-700 px-1 py-0.5 rounded">{ws.brand}</span>
-                      <span className="text-[11px] bg-slate-100 text-slate-600 px-1 py-0.5 rounded">{ws.company}</span>
+                      <BrandFieldBadge value={ws.brand} className="px-1 py-0.5" />
+                      <CompanyFieldBadge value={ws.company} className="px-1 py-0.5" />
                     </div>
                   </div>
                 </div>
@@ -1840,9 +1817,9 @@ function ArticleDetailView({ article, onBack }: { article: Article; onBack: () =
           <div>
             <h2 className="text-[20px] font-bold">{article.title}</h2>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', statusCfg.bgColor, statusCfg.color)}>{statusCfg.label}</span>
-              <span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{article.brand}</span>
-              <span className="text-[11px] bg-muted px-1.5 py-0.5 rounded">{channelLabels[article.channel] || article.channel}</span>
+              <StatusFieldBadge config={statusCfg} />
+              <BrandFieldBadge value={article.brand} />
+              <MutedFieldBadge value={channelLabels[article.channel] || article.channel} />
               {article.authorName && <span className="text-[12px] text-muted-foreground">撰稿人：{article.authorName}</span>}
             </div>
           </div>
@@ -1868,9 +1845,9 @@ function ArticleDetailView({ article, onBack }: { article: Article; onBack: () =
             <div className="space-y-3">
               <h5 className="text-[14px] font-bold">基本資料</h5>
               <div className="space-y-2">
-                <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">渠道</span><span className="font-medium">{channelLabels[article.channel]}</span></div>
-                <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">品牌</span><span className="font-medium">{article.brand}</span></div>
-                <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">公司</span><span className="font-medium">{article.company || '—'}</span></div>
+                <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">渠道</span><span className="font-medium">{displayText(channelLabels[article.channel] || article.channel)}</span></div>
+                <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">品牌</span><span className="font-medium">{displayText(article.brand)}</span></div>
+                <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">公司</span><span className="font-medium">{displayText(article.company)}</span></div>
                 <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">撰稿人</span><span className="font-medium">{article.authorName || '—'}</span></div>
                 <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">字數</span><span className="font-medium">{article.wordCount?.toLocaleString() || '—'}</span></div>
                 <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">工時</span><span className="font-medium">{article.hoursSpent ? `${article.hoursSpent}h` : '—'}</span></div>
@@ -1938,9 +1915,9 @@ function ArticleDetailView({ article, onBack }: { article: Article; onBack: () =
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
                             <span className="text-[11px] text-teal-600">{ws.domainUrl}</span>
-                            <span className="text-[11px] bg-teal-50 text-teal-700 px-1 py-0.5 rounded">{ws.brand}</span>
-                            <span className="text-[11px] bg-slate-100 text-slate-600 px-1 py-0.5 rounded">{ws.company}</span>
-                            <span className={cn('text-[10px] font-medium px-1 py-0.5 rounded-sm', cfg.bgColor, cfg.color)}>{cfg.label}</span>
+                            <BrandFieldBadge value={ws.brand} className="px-1 py-0.5" />
+                            <CompanyFieldBadge value={ws.company} className="px-1 py-0.5" />
+                            <StatusFieldBadge config={cfg} className="text-[10px] px-1 py-0.5" />
                           </div>
                         </div>
                       </div>
@@ -2040,10 +2017,10 @@ function BatchAddToWebsiteModal({
                     <div className="flex items-center gap-2 mt-0.5">
                       <Globe size={10} className="text-muted-foreground" />
                       <span className="text-[11px] text-teal-600">{ws.domainUrl}</span>
-                      <span className="text-[11px] bg-teal-50 text-teal-700 px-1 py-0.5 rounded">{ws.brand}</span>
+                      <BrandFieldBadge value={ws.brand} className="px-1 py-0.5" />
                     </div>
                   </div>
-                  <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-sm shrink-0', cfg.bgColor, cfg.color)}>{cfg.label}</span>
+                  <StatusFieldBadge config={cfg} className="text-[10px] shrink-0" />
                 </div>
               );
             })}
@@ -2245,7 +2222,7 @@ function CreateArticleModal({
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <Globe size={10} className="text-muted-foreground shrink-0" />
                           <span className="text-[11px] text-teal-600 truncate">{ws.domainUrl}</span>
-                          {ws.brand && <span className="text-[11px] bg-teal-50 text-teal-700 px-1 py-0.5 rounded shrink-0">{ws.brand}</span>}
+                          <BrandFieldBadge value={ws.brand} className="px-1 py-0.5 shrink-0" />
                         </div>
                       </div>
                     </div>
@@ -2392,7 +2369,7 @@ function GlobalArticleList({ onSelectArticle }: { onSelectArticle: (a: Article) 
                     <span className="text-[13px] font-medium max-w-[200px] truncate block hover:text-teal-700 transition-colors">{article.title}</span>
                   </td>
                   <td className="px-4 py-3 text-[12px] text-muted-foreground">{channelLabels[article.channel] || article.channel}</td>
-                  <td className="px-4 py-3"><span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{article.brand}</span></td>
+                  <td className="px-4 py-3"><BrandFieldBadge value={article.brand} /></td>
                   <td className="px-4 py-3 text-[13px]">{article.authorName || '—'}</td>
                   <td className="px-4 py-3 text-[13px] font-medium">{article.hoursSpent ? `${article.hoursSpent}h` : '—'}</td>
                   <td className="px-4 py-3">
@@ -2412,7 +2389,7 @@ function GlobalArticleList({ onSelectArticle }: { onSelectArticle: (a: Article) 
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', config.bgColor, config.color)}>{config.label}</span>
+                    <StatusFieldBadge config={config} />
                   </td>
                   <td className="px-4 py-3">
                     {relatedWebsites.length > 0 ? (
@@ -2557,10 +2534,10 @@ function SubmitCompleteModal({
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[11px] text-teal-600">{ws.domainUrl}</span>
-                        <span className="text-[11px] bg-teal-50 text-teal-700 px-1 py-0.5 rounded">{ws.brand}</span>
+                        <BrandFieldBadge value={ws.brand} className="px-1 py-0.5" />
                       </div>
                     </div>
-                    <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-sm shrink-0', cfg.bgColor, cfg.color)}>{cfg.label}</span>
+                    <StatusFieldBadge config={cfg} className="text-[10px] shrink-0" />
                   </div>
                 );
               })}
@@ -2710,7 +2687,7 @@ function PendingContent() {
                         <span className="text-[14px] font-semibold">{entry.title}</span>
                       </div>
                       <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                        <span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded font-medium">{entry.brand}</span>
+                        <BrandFieldBadge value={entry.brand} className="font-medium" />
                         <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                           <Calendar size={10} />計劃日期：{entry.plannedDate}
                         </span>
@@ -2725,7 +2702,7 @@ function PendingContent() {
 
                     {/* Status & Actions */}
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className={cn('text-[11px] font-medium px-2 py-1 rounded-sm', config.bgColor, config.color)}>{config.label}</span>
+                      <StatusFieldBadge config={config} className="px-2 py-1" />
                       {entry.status === 'planned' && (
                         <button
                           onClick={() => handleStart(entry.id)}
@@ -2790,7 +2767,7 @@ function PendingContent() {
                 <div key={e.id} className="flex items-center gap-2 text-[12px]">
                   <Check size={11} className="text-teal-600" />
                   <span className="truncate">{e.title}</span>
-                  <span className="text-[10px] bg-teal-50 text-teal-700 px-1 py-0.5 rounded shrink-0">{e.brand}</span>
+                  <BrandFieldBadge value={e.brand} className="text-[10px] px-1 py-0.5 shrink-0" />
                 </div>
               ))}
             </div>

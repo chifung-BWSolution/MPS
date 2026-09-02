@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { BrandFieldBadge, MutedFieldBadge } from '@/components/ui/nullable-badge';
 import { projects, yearPlans } from '@/data/mockData';
 import { Brand, Company } from '@/types/app';
 import { useBrands } from '@/hooks/useBrands';
@@ -341,7 +342,7 @@ function BrandCardView({
                   <Building2 size={11} />所屬公司
                 </span>
                 <span className="font-medium">
-                  <span className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded mr-1.5">{getCompanyCode(brand.companyId)}</span>
+                  <MutedFieldBadge value={getCompanyCode(brand.companyId)} className="text-[10px] font-mono mr-1.5" />
                   {getCompanyName(brand.companyId)}
                 </span>
               </div>
@@ -431,14 +432,14 @@ function BrandTableView({
               return (
                 <tr key={brand.id} className="border-t border-border/50 hover:bg-muted/20 transition-colors">
                   <td className="px-4 py-3">
-                    <span className="font-mono font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded text-[11px]">{brand.brandCode}</span>
+                    <BrandFieldBadge value={brand.brandCode} className="font-mono font-bold px-2 py-0.5" />
                   </td>
                   <td className="px-4 py-3">
                     <span className="font-medium text-[#0d1a2d]">{brand.displayName}</span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded">{getCompanyCode(brand.companyId)}</span>
+                      <MutedFieldBadge value={getCompanyCode(brand.companyId)} className="text-[10px] font-mono" />
                       <span className="text-[12px]">{getCompanyName(brand.companyId)}</span>
                     </div>
                   </td>

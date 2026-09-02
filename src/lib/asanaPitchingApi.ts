@@ -120,7 +120,7 @@ let inFlightAutoSync: Promise<void> | null = null;
 let lastAutoSyncAt = 0;
 const AUTO_SYNC_COOLDOWN_MS = 2 * 60 * 1000;
 
-/** Background Asana import — deduped across Pitching/Project page mounts. */
+/** Background Asana staging sync — deduped across 待匯入 tab mounts. */
 export async function autoSyncAsanaPitchingIfNeeded(): Promise<void> {
   const now = Date.now();
   if (inFlightAutoSync) {

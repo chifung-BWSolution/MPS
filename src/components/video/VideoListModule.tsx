@@ -5,6 +5,7 @@ import { getAllVideos } from '@/data/marketingData';
 import { websiteProfiles } from '@/data/websiteData';
 import { projects as allProjectsData } from '@/data/mockData';
 import { ProjectCategoryBadge, getProjectCategory } from '@/components/ui/project-category-badge';
+import { MutedFieldBadge, StatusFieldBadge, displayText } from '@/components/ui/nullable-badge';
 import { Button } from '@/components/ui/button';
 import { Video } from '@/types/app';
 
@@ -110,13 +111,13 @@ function VideoDetail({ video, onBack }: { video: any; onBack: () => void }) {
       {/* Context Bar */}
       <div className="bg-slate-50 rounded-md border border-slate-200 p-3 flex items-center gap-4 text-[12px] text-muted-foreground">
         <ProjectCategoryBadge category={getVideoProjectCategory(video.websiteName).category} clientName={getVideoProjectCategory(video.websiteName).clientName} />
-        <span className="font-medium text-foreground">所屬公司:</span> {video.company}
+        <span className="font-medium text-foreground">所屬公司:</span> {displayText(video.company)}
         <span className="mx-1">•</span>
-        <span className="font-medium text-foreground">品牌:</span> {video.brand}
+        <span className="font-medium text-foreground">品牌:</span> {displayText(video.brand)}
         <span className="mx-1">•</span>
-        <span className="font-medium text-foreground">類型:</span> {videoTypeLabels[video.videoType] || '—'}
+        <span className="font-medium text-foreground">類型:</span> {displayText(videoTypeLabels[video.videoType])}
         <span className="mx-1">•</span>
-        <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded', config.bgColor, config.color)}>{config.label}</span>
+        <StatusFieldBadge config={config} className="px-2 py-0.5 rounded" />
       </div>
 
       {/* Tabs */}
@@ -858,20 +859,14 @@ export function VideoListModule() {
                 )}
               </div>
               <div className="text-[12px] text-muted-foreground truncate">
-                <p className="truncate">{video.company || '—'}</p>
-                <p className="text-[11px] truncate">{video.brand || '—'}</p>
+                <p className="truncate">{displayText(video.company)}</p>
+                <p className="text-[11px] truncate">{displayText(video.brand)}</p>
               </div>
               <div>
-                {video.videoType ? (
-                  <span className="text-[11px] bg-muted px-2 py-0.5 rounded">{videoTypeLabels[video.videoType] || video.videoType}</span>
-                ) : (
-                  <span className="text-[11px] text-muted-foreground">—</span>
-                )}
+                <MutedFieldBadge value={videoTypeLabels[video.videoType] || video.videoType} className="px-2 py-0.5" />
               </div>
               <div>
-                <span className={cn('inline-block text-[10px] font-medium px-1.5 py-0.5 rounded mb-1', config.bgColor, config.color)}>
-                  {config.label}
-                </span>
+                <StatusFieldBadge config={config} className="inline-block text-[10px] rounded mb-1" />
                 <div className="flex items-center gap-0.5">
                   {[1, 2, 3, 4, 5].map((step) => (
                     <div key={step} className={cn('h-1 flex-1 rounded-full', step <= config.step ? 'bg-teal-600' : 'bg-muted')} />

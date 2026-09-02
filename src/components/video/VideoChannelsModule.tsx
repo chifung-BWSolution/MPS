@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Plus, ArrowLeft, Eye, Link2, X, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MutedFieldBadge } from '@/components/ui/nullable-badge';
 import { websiteProfiles } from '@/data/websiteData';
 
 const importanceConfig: Record<string, { label: string; color: string; bg: string }> = {
@@ -219,8 +220,8 @@ export function VideoChannelsModule() {
                 </span>
               </div>
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-[11px] bg-muted px-2 py-0.5 rounded">{channel.company}</span>
-                <span className="text-[11px] bg-muted px-2 py-0.5 rounded">{channel.brand}</span>
+                <MutedFieldBadge value={channel.company} className="px-2 py-0.5" />
+                <MutedFieldBadge value={channel.brand} className="px-2 py-0.5" />
               </div>
               <div className="flex items-center justify-end text-[12px]">
                 <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded', channel.status === 'active' ? 'bg-teal-100 text-teal-700' : 'bg-amber-100 text-amber-700')}>

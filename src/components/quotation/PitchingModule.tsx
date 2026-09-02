@@ -222,6 +222,9 @@ export function PitchingFormModal({
   clientOptions,
   staffOptions,
   defaultMainPmId,
+  defaultValues,
+  defaultsKey,
+  createTitle,
   initialRecord,
   onCreateClient,
 }: {
@@ -231,6 +234,10 @@ export function PitchingFormModal({
   clientOptions: ClientOption[];
   staffOptions: StaffSelectOption[];
   defaultMainPmId?: string;
+  /** Prefills create mode (e.g. Asana import). Ignored when editing. */
+  defaultValues?: Partial<PitchingFormValues> | null;
+  defaultsKey?: string;
+  createTitle?: string;
   initialRecord?: PitchingRecord | null;
   onCreateClient?: (input: QuotationClientInput) => Promise<QuotationClient | null>;
 }) {
@@ -239,18 +246,24 @@ export function PitchingFormModal({
   const [showQuickAddClient, setShowQuickAddClient] = useState(false);
   const [savingClient, setSavingClient] = useState(false);
   const isEdit = Boolean(initialRecord);
+  const isAsanaImport = Boolean(defaultsKey || defaultValues) && !isEdit;
 
   useEffect(() => {
     if (!isOpen) return;
-    setForm(
-      initialRecord
-        ? formFromRecord(initialRecord, clientOptions)
-        : emptyForm(defaultMainPmId ?? ''),
-    );
+    if (initialRecord) {
+      setForm(formFromRecord(initialRecord, clientOptions));
+    } else {
+      const fallbackPm = defaultMainPmId ?? '';
+      setForm({
+        ...emptyForm(fallbackPm),
+        ...defaultValues,
+        mainPmId: defaultValues?.mainPmId?.trim() || fallbackPm,
+      });
+    }
     setShowQuickAddClient(false);
-    // Only reset when the dialog opens or the edited row changes — not when the client list refreshes.
+    // Only reset when the dialog opens or the source row changes — not when the client list refreshes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, initialRecord?.id]);
+  }, [isOpen, initialRecord?.id, defaultsKey]);
 
   const handleClose = () => {
     setForm(emptyForm(defaultMainPmId ?? ''));
@@ -325,7 +338,11 @@ export function PitchingFormModal({
     <CrudModal
       isOpen={isOpen}
       onClose={handleClose}
-      title={isEdit ? '編輯提案 Edit Pitching' : '新增提案 New Pitching'}
+      title={
+        isEdit
+          ? '編輯提案 Edit Pitching'
+          : createTitle || (isAsanaImport ? '從 Asana 新增項目' : '新增提案 New Pitching')
+      }
       size="xl"
     >
       <div className="space-y-6 pb-2">

@@ -12,7 +12,7 @@ export interface SubMenuItem {
 export function resolveSubModule(module: string, sub?: string): string {
   const menuItem = mainMenuItems.find(m => m.id === module);
   const defaultSub = menuItem?.subMenus[0]?.id || 'overview';
-  if (!sub) return defaultSub;
+  if (!sub) return module === 'quotation' ? 'pitching' : defaultSub;
   // Legacy alias: 影片管理 → 影片統籌
   if (module === 'video' && sub === 'management') return 'coordination';
   // Legacy alias: Google / Facebook Ads 同步 → 廣告數據同步
@@ -74,6 +74,7 @@ export const mainMenuItems: MainMenuItem[] = [
     id: 'quotation',
     label: '客戶報價',
     subMenus: [
+      { id: 'asana-pending', label: 'Asana 待匯入' },
       { id: 'pitching', label: 'Pitching' },
       { id: 'projects', label: 'Project' },
       { id: 'new', label: '新建報價單' },

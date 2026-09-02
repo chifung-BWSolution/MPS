@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { EmptyDash } from '@/components/ui/nullable-badge';
 
 export type ProjectCategoryType = 'internal' | 'client' | 'unknown';
 
@@ -25,7 +26,8 @@ const categoryConfig: Record<ProjectCategoryType, { label: string; badgeClass: s
 };
 
 export function ProjectCategoryBadge({ category, clientName, size = 'default', className }: ProjectCategoryBadgeProps) {
-  const config = categoryConfig[category];
+  const config = category ? categoryConfig[category] : undefined;
+  if (!config) return <EmptyDash />;
   const sizeClasses = size === 'sm' ? 'text-[9px] px-1.5 py-0' : size === 'lg' ? 'text-[12px] px-2.5 py-1' : 'text-[10px] px-2 py-0.5';
 
   return (

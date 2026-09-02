@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Search, Plus, Phone, Mail, Building2, Pencil, Trash2, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { BrandFieldBadge, StatusFieldBadge } from '@/components/ui/nullable-badge';
 import { toast } from 'sonner';
 import { ClientFormModal } from '@/components/crm/ClientFormModal';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
@@ -14,11 +14,7 @@ import {
 } from '@/data/quotationClientList';
 
 function BrandBadge({ label }: { label: string }) {
-  return (
-    <span className="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-sm bg-teal-50 text-teal-700 whitespace-nowrap">
-      {label}
-    </span>
-  );
+  return <BrandFieldBadge value={label} className="inline-flex items-center font-medium px-2 py-0.5 rounded-sm whitespace-nowrap" />;
 }
 
 export function CRMModule({ subModule }: { subModule?: string }) {
@@ -231,9 +227,7 @@ export function CRMModule({ subModule }: { subModule?: string }) {
                     )}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap min-w-[7.5rem]">
-                    <span className={cn('inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-sm whitespace-nowrap', config.bgColor, config.color)}>
-                      {config.label}
-                    </span>
+                    <StatusFieldBadge config={config} className="inline-flex items-center px-2 py-0.5 whitespace-nowrap" />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">

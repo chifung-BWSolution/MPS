@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Edit, Trash2, KeyRound, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { EmptyDash, MutedFieldBadge } from '@/components/ui/nullable-badge';
 import { supabase } from '@/lib/supabase';
 import { formatLinkedLoginMethods, type Vchannel, type VchannelAccount, type VchannelImportance, type VchannelStatus } from '@/types/vchannel';
 import { useVchannels } from '@/hooks/useVchannels';
@@ -40,14 +41,14 @@ import { VchannelAccountLoginMethodsDialog } from './VchannelAccountLoginMethods
 
 function ChannelWorkHoursCell({ hours }: { hours?: number }) {
   if (hours == null || hours <= 0) {
-    return <span className="text-muted-foreground">—</span>;
+    return <EmptyDash />;
   }
   return <span className="font-medium text-teal-700 whitespace-nowrap">{hours.toFixed(1)}h</span>;
 }
 
 function ChannelAccountLabelCell({ label }: { label: string }) {
   if (!label) {
-    return <span className="text-muted-foreground">—</span>;
+    return <EmptyDash />;
   }
   return (
     <span className="text-[11px] font-medium truncate max-w-[140px] inline-block align-bottom" title={label}>
@@ -594,7 +595,7 @@ export function VideoChannelsList() {
                         <td className="px-3 py-3">
                           <ChannelNameCell internalName={channel.internalName} publicName={channel.publicName} />
                         </td>
-                        <td className="px-3 py-3"><span className="text-[11px] bg-muted px-2 py-0.5 rounded">{channelBrandLabel(channel)}</span></td>
+                        <td className="px-3 py-3"><MutedFieldBadge value={channelBrandLabel(channel)} className="px-2 py-0.5" /></td>
                         <td className="px-3 py-3">
                           <span className={cn('text-[11px] font-bold px-2 py-0.5 rounded', iConfig.bg, iConfig.color)}>{iConfig.label}</span>
                         </td>

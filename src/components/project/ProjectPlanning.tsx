@@ -7,6 +7,7 @@ import { projectTypeLabels, statusConfig, priorityConfig } from '@/data/mockData
 import { useCompanies } from '@/hooks/useCompanies';
 import { useBrands } from '@/hooks/useBrands';
 import { ProjectCategoryBadge } from '@/components/ui/project-category-badge';
+import { StatusFieldBadge } from '@/components/ui/nullable-badge';
 import {
   Select,
   SelectContent,
@@ -311,12 +312,13 @@ export function ProjectPlanning({ onSelectProject, forcedCategory, projects, loa
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded', priorityConfig[project.priority].color)}>
-                        {priorityConfig[project.priority].label}
-                      </span>
+                      <StatusFieldBadge config={priorityConfig[project.priority]} className="text-[10px] rounded" />
                     </td>
                     <td className="px-4 py-3">
-                      <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-sm', config.bgColor, config.textColor)}>{config.label}</span>
+                      <StatusFieldBadge
+                        config={config ? { label: config.label, bgColor: config.bgColor, color: config.textColor } : undefined}
+                        className="text-[10px]"
+                      />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">

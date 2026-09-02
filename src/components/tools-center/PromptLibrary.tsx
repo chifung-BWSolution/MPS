@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Search, Plus, Tag, Globe, Lock, Copy, Trash2, Edit2, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { NullableBadge } from '@/components/ui/nullable-badge';
 
 interface Prompt {
   id: string;
@@ -174,7 +175,7 @@ export function PromptLibrary() {
               <div className="flex-1 min-w-0">
                 <h3 className="font-semibold text-sm text-[#0d1a2d] truncate">{prompt.title}</h3>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-xs px-2 py-0.5 bg-[#f0fdf4] text-[#0D9488] rounded-full border border-[#0D9488]/20">{prompt.category}</span>
+                  <NullableBadge value={prompt.category} className="text-xs px-2 py-0.5 bg-[#f0fdf4] text-[#0D9488] rounded-full border border-[#0D9488]/20" />
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
                     {prompt.isPublic ? <Globe size={11} /> : <Lock size={11} />}
                     {prompt.isPublic ? '公開' : '私人'}

@@ -20,9 +20,6 @@ export interface WebsiteFormData {
   profileType: ProfileType;
   projectCategory: ProjectCategory;
   systemType?: SystemType;
-  techStack?: string[];
-  deploymentEnv?: string;
-  apiDocUrl?: string;
 }
 
 export const emptyFormData: WebsiteFormData = {
@@ -39,9 +36,6 @@ export const emptyFormData: WebsiteFormData = {
   profileType: 'website',
   projectCategory: 'internal',
   systemType: undefined,
-  techStack: [],
-  deploymentEnv: '',
-  apiDocUrl: '',
 };
 
 export function websiteFormDataToProfile(
@@ -79,9 +73,6 @@ export function websiteFormDataToProfile(
     profileType: data.profileType,
     projectCategory: data.projectCategory,
     systemType: data.systemType,
-    techStack: data.techStack,
-    deploymentEnv: data.deploymentEnv || undefined,
-    apiDocUrl: data.apiDocUrl || undefined,
   };
 }
 
@@ -393,58 +384,21 @@ export function WebsiteFormModal({
               <h4 className="text-[13px] font-bold text-purple-700 flex items-center gap-1.5">
                 <Server size={13} /> 系統專屬設定
               </h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[12px] font-medium text-muted-foreground block mb-1">系統類型</label>
-                  <select
-                    value={form.systemType || ''}
-                    onChange={(e) => handleChange('systemType', e.target.value || undefined)}
-                    className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-purple-600 bg-white"
-                  >
-                    <option value="">選擇類型...</option>
-                    <option value="internal_tool">內部工具</option>
-                    <option value="client_system">客戶系統</option>
-                    <option value="saas_platform">SaaS 平台</option>
-                    <option value="erp">ERP 系統</option>
-                    <option value="crm">CRM 系統</option>
-                    <option value="other">其他系統</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[12px] font-medium text-muted-foreground block mb-1">部署環境</label>
-                  <input
-                    value={form.deploymentEnv || ''}
-                    onChange={(e) => handleChange('deploymentEnv', e.target.value)}
-                    className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-purple-600 bg-white"
-                    placeholder="如 AWS, Vercel, GCP..."
-                  />
-                </div>
-              </div>
               <div>
-                <label className="text-[12px] font-medium text-muted-foreground block mb-1">技術棧（逗號分隔）</label>
-                <input
-                  value={(form.techStack || []).join(', ')}
-                  onChange={(e) =>
-                    handleChange(
-                      'techStack',
-                      e.target.value
-                        .split(',')
-                        .map((s: string) => s.trim())
-                        .filter(Boolean),
-                    )
-                  }
+                <label className="text-[12px] font-medium text-muted-foreground block mb-1">系統類型</label>
+                <select
+                  value={form.systemType || ''}
+                  onChange={(e) => handleChange('systemType', e.target.value || undefined)}
                   className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-purple-600 bg-white"
-                  placeholder="React, TypeScript, Supabase..."
-                />
-              </div>
-              <div>
-                <label className="text-[12px] font-medium text-muted-foreground block mb-1">API 文件連結</label>
-                <input
-                  value={form.apiDocUrl || ''}
-                  onChange={(e) => handleChange('apiDocUrl', e.target.value)}
-                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-purple-600 bg-white"
-                  placeholder="https://api-docs.example.com"
-                />
+                >
+                  <option value="">選擇類型...</option>
+                  <option value="internal_tool">內部工具</option>
+                  <option value="client_system">客戶系統</option>
+                  <option value="saas_platform">SaaS 平台</option>
+                  <option value="erp">ERP 系統</option>
+                  <option value="crm">CRM 系統</option>
+                  <option value="other">其他系統</option>
+                </select>
               </div>
             </div>
           )}

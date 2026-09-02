@@ -11,6 +11,7 @@ import {
   addNewArticle,
 } from '@/data/websiteData';
 import { companies, brands } from '@/data/mockData';
+import { BrandFieldBadge, CompanyFieldBadge, EmptyDash, MutedFieldBadge, StatusFieldBadge, displayText } from '@/components/ui/nullable-badge';
 
 const statusConfig = {
   draft: { label: '草稿', color: 'text-slate-700', bgColor: 'bg-slate-50' },
@@ -37,8 +38,9 @@ const levelConfig: Record<WebsiteLevel, { label: string; className: string }> = 
   5: { label: '已關閉', className: 'border-rose-500 bg-rose-50 text-rose-600 line-through' },
 };
 
-function ArticleLevelBadge({ level }: { level: WebsiteLevel }) {
-  const config = levelConfig[level];
+function ArticleLevelBadge({ level }: { level?: WebsiteLevel | null }) {
+  const config = level != null ? levelConfig[level] : undefined;
+  if (!config) return <EmptyDash />;
   return (
     <span className={cn('text-[9px] font-bold px-1 py-0 rounded-sm border inline-flex items-center gap-0.5', config.className)}>
       {level === 1 && <Star size={8} className="fill-amber-400 text-amber-500" />}
@@ -136,7 +138,7 @@ function AddWebsiteModal({
                       <div className="flex items-center gap-2 mt-0.5">
                         <Globe size={10} className="text-muted-foreground" />
                         <span className="text-[11px] text-teal-600">{ws.domainUrl}</span>
-                        <span className="text-[11px] bg-teal-50 text-teal-700 px-1 py-0.5 rounded">{ws.brand}</span>
+                        <BrandFieldBadge value={ws.brand} className="px-1 py-0.5" />
                       </div>
                     </div>
                   </div>
@@ -194,9 +196,9 @@ function ArticleDetail({ article, onBack }: { article: Article; onBack: () => vo
           <div>
             <h2 className="text-[20px] font-bold">{article.title}</h2>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', statusCfg.bgColor, statusCfg.color)}>{statusCfg.label}</span>
-              <span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{article.brand}</span>
-              <span className="text-[11px] bg-muted px-1.5 py-0.5 rounded">{channelLabels[article.channel] || article.channel}</span>
+              <StatusFieldBadge config={statusCfg} />
+              <BrandFieldBadge value={article.brand} />
+              <MutedFieldBadge value={channelLabels[article.channel] || article.channel} />
               {article.authorName && <span className="text-[12px] text-muted-foreground">撰稿人：{article.authorName}</span>}
             </div>
           </div>
@@ -231,9 +233,9 @@ function ArticleDetail({ article, onBack }: { article: Article; onBack: () => vo
             <div className="space-y-3">
               <h5 className="text-[14px] font-bold">基本資料</h5>
               <div className="space-y-2">
-                <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">渠道</span><span className="font-medium">{channelLabels[article.channel]}</span></div>
-                <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">品牌</span><span className="font-medium">{article.brand}</span></div>
-                <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">公司</span><span className="font-medium">{article.company || '—'}</span></div>
+                <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">渠道</span><span className="font-medium">{displayText(channelLabels[article.channel] || article.channel)}</span></div>
+                <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">品牌</span><span className="font-medium">{displayText(article.brand)}</span></div>
+                <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">公司</span><span className="font-medium">{displayText(article.company)}</span></div>
                 <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">撰稿人</span><span className="font-medium">{article.authorName || '—'}</span></div>
                 <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">字數</span><span className="font-medium">{article.wordCount?.toLocaleString() || '—'}</span></div>
                 <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">工時</span><span className="font-medium">{article.hoursSpent ? `${article.hoursSpent}h` : '—'}</span></div>
@@ -304,8 +306,8 @@ function ArticleDetail({ article, onBack }: { article: Article; onBack: () => vo
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-[11px] text-teal-600">{ws.domainUrl}</span>
-                          <span className="text-[11px] bg-teal-50 text-teal-700 px-1 py-0.5 rounded">{ws.brand}</span>
-                          <span className="text-[11px] bg-slate-100 text-slate-600 px-1 py-0.5 rounded">{ws.company}</span>
+                          <BrandFieldBadge value={ws.brand} className="px-1 py-0.5" />
+                          <CompanyFieldBadge value={ws.company} className="px-1 py-0.5" />
                         </div>
                       </div>
                     </div>
@@ -406,7 +408,7 @@ function ArticleList({ onSelectArticle }: { onSelectArticle: (article: Article) 
                     <span className="text-[13px] font-medium max-w-[220px] truncate block">{article.title}</span>
                   </td>
                   <td className="px-4 py-3 text-[12px] text-muted-foreground">{channelLabels[article.channel] || article.channel}</td>
-                  <td className="px-4 py-3"><span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{article.brand}</span></td>
+                  <td className="px-4 py-3"><BrandFieldBadge value={article.brand} /></td>
                   <td className="px-4 py-3 text-[13px]">{article.authorName || '—'}</td>
                   <td className="px-4 py-3 text-[13px] font-medium">{article.hoursSpent ? `${article.hoursSpent}h` : '—'}</td>
                   <td className="px-4 py-3">
@@ -418,7 +420,7 @@ function ArticleList({ onSelectArticle }: { onSelectArticle: (article: Article) 
                       ))}
                     </div>
                   </td>
-                  <td className="px-4 py-3"><span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', config.bgColor, config.color)}>{config.label}</span></td>
+                  <td className="px-4 py-3"><StatusFieldBadge config={config} /></td>
                   <td className="px-4 py-3">
                     {article.url ? (
                       <a href={article.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="flex items-center gap-0.5 text-[11px] text-teal-600 hover:underline">
@@ -467,7 +469,7 @@ function ContentPlan() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', config.bgColor, config.color)}>{config.label}</span>
+                <StatusFieldBadge config={config} />
                 {entry.status === 'planned' && (
                   <button className="text-[12px] px-3 py-1 bg-teal-600 text-white rounded hover:bg-teal-700">開始撰寫</button>
                 )}

@@ -1,5 +1,6 @@
 import { Star, ExternalLink, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MutedFieldBadge } from '@/components/ui/nullable-badge';
 import { useState } from 'react';
 
 const categories = ['全部', 'Shopify', 'Figma', 'WordPress', 'Google Ads', 'SEO Tools', 'Social Media', 'Video Editing'];
@@ -116,7 +117,7 @@ export function TrainingModule({ subModule }: { subModule?: string }) {
               <h4 className="text-[14px] font-medium mb-1">{r.title}</h4>
               <p className="text-[12px] text-muted-foreground mb-2">{r.description}</p>
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">{r.category}</span>
+                <MutedFieldBadge value={r.category} className="text-[10px]" />
               </div>
             </a>
           );

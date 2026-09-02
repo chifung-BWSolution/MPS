@@ -21,6 +21,7 @@ import {
   normalizeBacklinkCosts,
 } from '@/lib/backlinkCurrency';
 import type { BacklinkPurchase } from '@/types/marketingOps';
+import { BrandFieldBadge } from '@/components/ui/nullable-badge';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -73,10 +74,7 @@ function hasSiteSelection(data: {
 }
 
 function BrandBadge({ label }: { label?: string }) {
-  if (!label) return <span className="text-muted-foreground">—</span>;
-  return (
-    <span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{label}</span>
-  );
+  return <BrandFieldBadge value={label} />;
 }
 
 function BacklinkDetail({

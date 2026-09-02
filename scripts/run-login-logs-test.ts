@@ -75,14 +75,17 @@ assert.match(auth, /isUsersUuid/);
 assert.match(auth, /void logLoginEvent\(email, true, hardcodedBypass\.profile\.login_method, sysUser\?\.id\)/);
 assert.match(auth, /void logLoginEvent\(email, true, 'dev_bypass', sysUser\.id\)/);
 assert.match(auth, /Last-chance hardcoded bypass/);
-assert.match(auth, /DEV_BYPASS_PRESETS/);
 assert.match(auth, /Hardcoded bypass failsafe triggered/);
 assert.match(auth, /authSucceededRef\.current = true/);
+assert.match(auth, /parsed\.kind === 'google'/);
+assert.match(auth, /isBackgroundRefresh/);
+assert.match(auth, /kind: authKindRef.current/);
 assert.doesNotMatch(auth, /event === 'SIGNED_IN' && !authSucceededRef\.current/);
 assert.doesNotMatch(auth, /\.then\(\(\) => \{\}\)\.catch\(\(\) => \{\}\)/);
 
 const loginPage = read('src/components/auth/LoginPage.tsx');
-assert.match(loginPage, /DEV_BYPASS_PRESETS/);
+assert.doesNotMatch(loginPage, /DEV_BYPASS_PRESETS/);
+assert.doesNotMatch(loginPage, /以 \$\{preset\.displayName\} 登入/);
 
 const migration = read('supabase/migrations/20260826031000_login_logs_rls.sql');
 assert.match(migration, /ALTER TABLE public\.login_logs ENABLE ROW LEVEL SECURITY/);

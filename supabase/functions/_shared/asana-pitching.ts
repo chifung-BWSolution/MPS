@@ -512,7 +512,7 @@ export function taskMatchesSectionFilter(
   return section.toLowerCase().includes(pattern.toLowerCase());
 }
 
-export function asanaTaskToRecord(
+export function asanaTaskToSyncedRow(
   task: AsanaTask,
   project: SyncProjectConfig,
   syncedAt: string,
@@ -528,17 +528,15 @@ export function asanaTaskToRecord(
   const projectTypes = project.sync_project_types_only
     ? [...(project.project_types || [])]
     : inferProjectTypes(task.name, project.project_types || [], project.project_name);
-  const status =
+  const mappedStatus =
     project.sync_default_status ??
     mapCustomFieldStatus(statusLabel, task);
 
   return {
-    id: `asana_${task.gid}`,
     asana_task_gid: task.gid,
     asana_project_gid: project.project_gid,
     asana_project_name: project.project_name,
     asana_section_name: sectionName || null,
-    pitching_code: `ASANA-${task.gid.slice(-8)}`,
     client_name: clientName || null,
     display_name: task.name.trim(),
     inquiry_date: taskInquiryDate(task, project),
@@ -546,9 +544,37 @@ export function asanaTaskToRecord(
     project_types: projectTypes,
     assigned_pm: task.assignee?.gid || null,
     assigned_pm_name: task.assignee?.name || "",
-    status,
+    mapped_status: mappedStatus,
     asana_link: task.permalink_url || `https://app.asana.com/0/0/${task.gid}`,
     synced_at: syncedAt,
     updated_at: syncedAt,
+  };
+}
+
+/** @deprecated Sync writes asana_synced_tasks via asanaTaskToSyncedRow. Kept for tests / callers. */
+export function asanaTaskToRecord(
+  task: AsanaTask,
+  project: SyncProjectConfig,
+  syncedAt: string,
+) {
+  const row = asanaTaskToSyncedRow(task, project, syncedAt);
+  return {
+    id: `asana_${task.gid}`,
+    asana_task_gid: row.asana_task_gid,
+    asana_project_gid: row.asana_project_gid,
+    asana_project_name: row.asana_project_name,
+    asana_section_name: row.asana_section_name,
+    pitching_code: `ASANA-${task.gid.slice(-8)}`,
+    client_name: row.client_name,
+    display_name: row.display_name,
+    inquiry_date: row.inquiry_date,
+    description: row.description,
+    project_types: row.project_types,
+    assigned_pm: row.assigned_pm,
+    assigned_pm_name: row.assigned_pm_name,
+    status: row.mapped_status,
+    asana_link: row.asana_link,
+    synced_at: row.synced_at,
+    updated_at: row.updated_at,
   };
 }

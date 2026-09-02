@@ -23,6 +23,7 @@ import {
   type ProjectRelatedType,
 } from '@/hooks/useProjects';
 import { ProjectCategoryBadge } from '@/components/ui/project-category-badge';
+import { BrandFieldBadge, CompanyFieldBadge, EmptyDash, StatusFieldBadge } from '@/components/ui/nullable-badge';
 import { DeleteConfirmModal } from '@/components/ui/crud-modal';
 
 type KindFilter = 'all' | ProjectKind;
@@ -90,8 +91,11 @@ const kindTabs: { key: KindFilter; label: string; icon?: ReactNode }[] = [
 ];
 
 function statusDisplay(status: string) {
-  return statusLabelMap[status] || {
-    label: status || '—',
+  const mapped = statusLabelMap[status];
+  if (mapped) return mapped;
+  if (!status?.trim()) return null;
+  return {
+    label: status,
     color: 'text-slate-600',
     bgColor: 'bg-slate-50',
   };
@@ -106,6 +110,7 @@ function KindBadge({ kind }: { kind: ProjectKind }) {
     manual: { className: 'bg-slate-100 text-slate-700 border-slate-200', icon: <FolderKanban size={10} /> },
   };
   const config = styles[kind];
+  if (!config) return <EmptyDash />;
   return (
     <span className={cn('text-[10px] font-bold rounded-sm border inline-flex items-center gap-1 px-1.5 py-0.5', config.className)}>
       {config.icon}
@@ -114,8 +119,9 @@ function KindBadge({ kind }: { kind: ProjectKind }) {
   );
 }
 
-function LevelBadge({ level }: { level: ProjectLevel }) {
-  const config = levelConfig[level];
+function LevelBadge({ level }: { level?: ProjectLevel | null }) {
+  const config = level != null ? levelConfig[level] : undefined;
+  if (!config) return <EmptyDash />;
   return (
     <span className={cn('text-[10px] px-1.5 py-0.5 font-bold rounded-sm border inline-flex items-center gap-0.5', config.className)}>
       {level === 1 && <Star size={10} className="fill-amber-400 text-amber-500" />}
@@ -630,22 +636,16 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
                         <ProjectCategoryBadge category={category} clientName={project.clientName} size="sm" />
                       </td>
                       <td className="px-4 py-3 cursor-pointer" onClick={() => onSelectProject?.(project.id)}>
-                        {level ? <LevelBadge level={level} /> : <span className="text-[11px] text-muted-foreground">—</span>}
+                        <LevelBadge level={level} />
                       </td>
                       <td className="px-4 py-3 cursor-pointer" onClick={() => onSelectProject?.(project.id)}>
-                        {brandLabel(project.brandListId)
-                          ? <span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{brandLabel(project.brandListId)}</span>
-                          : <span className="text-[11px] text-muted-foreground">—</span>}
+                        <BrandFieldBadge value={brandLabel(project.brandListId)} />
                       </td>
                       <td className="px-4 py-3 cursor-pointer" onClick={() => onSelectProject?.(project.id)}>
-                        {companyLabel(project.companyListId)
-                          ? <span className="text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{companyLabel(project.companyListId)}</span>
-                          : <span className="text-[11px] text-muted-foreground">—</span>}
+                        <CompanyFieldBadge value={companyLabel(project.companyListId)} />
                       </td>
                       <td className="px-4 py-3 cursor-pointer" onClick={() => onSelectProject?.(project.id)}>
-                        <span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', status.bgColor, status.color)}>
-                          {status.label}
-                        </span>
+                        <StatusFieldBadge config={status} />
                       </td>
                       <td className="px-4 py-3 text-[13px] font-medium cursor-pointer" onClick={() => onSelectProject?.(project.id)}>
                         {hours}h

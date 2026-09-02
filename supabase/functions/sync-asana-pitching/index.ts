@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   corsHeaders,
-  asanaTaskToRecord,
+  asanaTaskToSyncedRow,
   getAsanaUser,
   isTaskInSyncRange,
   listProjectTasks,
@@ -150,7 +150,6 @@ Deno.serve(async (req) => {
     let tasksSkipped = 0;
     let recordsUpserted = 0;
     const errors: string[] = [];
-    const staffs = await loadStaffCandidates(supabase);
 
     for (const project of projects) {
       try {
@@ -168,26 +167,14 @@ Deno.serve(async (req) => {
           }
 
           try {
-            const row = asanaTaskToRecord(task, project, syncedAt);
+            const row = asanaTaskToSyncedRow(task, project, syncedAt);
             const { error: upsertErr } = await supabase
-              .from("quotation_client_project")
+              .from("asana_synced_tasks")
               .upsert(row, { onConflict: "asana_task_gid" });
             if (upsertErr) {
               errors.push(`${task.gid}: ${upsertErr.message}`);
             } else {
               recordsUpserted += 1;
-              const mainPmId = resolveMainPmId(staffs, {
-                email: task.assignee?.email,
-                name: task.assignee?.name,
-              });
-              if (mainPmId) {
-                const { error: pmErr } = await supabase
-                  .from("quotation_client_project")
-                  .update({ main_pm_id: mainPmId })
-                  .eq("asana_task_gid", task.gid)
-                  .is("main_pm_id", null);
-                if (pmErr) errors.push(`${task.gid} main_pm: ${pmErr.message}`);
-              }
             }
           } catch (e) {
             errors.push(`${task.gid}: ${(e as Error).message}`);

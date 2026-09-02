@@ -8,6 +8,7 @@ import { QuotationItemsManagement } from '@/components/quotation/QuotationItemsM
 import { QuotationPreview } from '@/components/quotation/QuotationPreview';
 import { PitchingModule } from '@/components/quotation/PitchingModule';
 import { ProjectModule } from '@/components/quotation/ProjectModule';
+import { AsanaPendingModule } from '@/components/quotation/AsanaPendingModule';
 import {
   quotationTypes,
   quotationEntries,
@@ -1649,6 +1650,10 @@ export function QuotationModule({ subModule }: { subModule?: string }) {
   const previewOverlay = previewQuote ? (
     <QuotationPreview quote={previewQuote} onClose={() => setPreviewQuote(null)} />
   ) : null;
+
+  if (subModule === 'asana-pending') {
+    return <AsanaPendingModule />;
+  }
 
   if (subModule === 'pitching') {
     return <PitchingModule />;

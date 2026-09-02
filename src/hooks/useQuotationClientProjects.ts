@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { autoSyncAsanaPitchingIfNeeded } from '@/lib/asanaPitchingApi';
 import { PITCHING_CURRENCY, optionalIsoDate, type PitchingExpenseItem, type PitchingProjectType, type PitchingRecord, type PitchingStatus } from '@/data/pitchingData';
 
 /** Supabase table shared by Pitching and Project pages */
@@ -191,18 +190,11 @@ export function useQuotationClientProjects() {
     void refresh();
   }, [session, refresh]);
 
-  useEffect(() => {
-    if (!session) return;
-    void (async () => {
-      await autoSyncAsanaPitchingIfNeeded();
-      await refresh();
-    })();
-  }, [session, refresh]);
-
   const addRecord = useCallback(
     async (
       data: Omit<PitchingRecord, 'id' | 'pitchingId' | 'followUps' | 'createdAt' | 'updatedAt'> & {
         pitchingId?: string;
+        asanaSectionName?: string;
       },
     ) => {
       const id = `pitch_${Date.now()}`;
@@ -222,6 +214,10 @@ export function useQuotationClientProjects() {
         assigned_pm_name: data.assignedPmName || '',
         main_pm_id: data.mainPmId?.trim() || null,
         status: data.status,
+        asana_task_gid: data.asanaTaskGid?.trim() || null,
+        asana_project_gid: data.asanaProjectGid?.trim() || null,
+        asana_project_name: data.asanaProjectName?.trim() || null,
+        asana_section_name: data.asanaSectionName?.trim() || null,
         asana_link: data.asanaLink ?? null,
         webandsystem_list_id: data.webandsystemListId?.trim() || null,
         notes: data.notes ?? null,

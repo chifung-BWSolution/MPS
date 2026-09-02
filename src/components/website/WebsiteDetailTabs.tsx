@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, X, ExternalLink, Video, Share2, Megaphone, TrendingUp, Mail, Puzzle, Link2, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Loader2, Unlink, Search, Edit, Trash2, MapPin, RefreshCw } from 'lucide-react';
 import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
+import { BrandFieldBadge, MutedFieldBadge, NullableBadge, StatusFieldBadge, displayText } from '@/components/ui/nullable-badge';
 import { WebsiteProfileFull, SocialPost, EdmCampaign } from '@/types/app';
 import {
   getVideosForWebsite,
@@ -314,9 +315,7 @@ export function WebsiteVideosTab({
                         {platforms.length > 0 ? (
                           <div className="flex gap-1 flex-wrap">
                             {platforms.map(key => (
-                              <span key={key} className="text-[10px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">
-                                {PLATFORM_PUBLISH_LABELS[key]}
-                              </span>
+                              <NullableBadge key={key} value={PLATFORM_PUBLISH_LABELS[key]} className="text-[10px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded" />
                             ))}
                           </div>
                         ) : (
@@ -520,8 +519,8 @@ export function WebsiteSocialTab({ site }: { site: WebsiteProfileFull }) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2">
                       <span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded', platCfg.bgColor, platCfg.color)}>{platCfg.label}</span>
-                      <span className="text-[11px] bg-muted px-1.5 py-0.5 rounded capitalize">{post.postType}</span>
-                      <span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', statusCfg.bgColor, statusCfg.color)}>{statusCfg.label}</span>
+                      <MutedFieldBadge value={post.postType} className="capitalize" />
+                      <StatusFieldBadge config={statusCfg} />
                     </div>
                     <p className="text-[13px] text-foreground line-clamp-2">{post.content}</p>
                     <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
@@ -559,7 +558,7 @@ export function WebsiteSocialTab({ site }: { site: WebsiteProfileFull }) {
             </div>
             <div className="px-6 py-4 space-y-4">
               <div className="bg-muted/30 rounded-md p-3 text-[12px] text-muted-foreground">
-                公司：<span className="font-medium text-foreground">{site.company}</span> · 品牌：<span className="font-medium text-foreground">{site.brand}</span>
+                公司：<span className="font-medium text-foreground">{displayText(site.company)}</span> · 品牌：<span className="font-medium text-foreground">{displayText(site.brand)}</span>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1009,7 +1008,7 @@ export function WebsiteSeoTab({ site }: { site: WebsiteProfileFull }) {
                         <span className="text-[11px] text-muted-foreground">{difficultyScore ?? '—'}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3"><span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', statusCfg.bgColor, statusCfg.color)}>{statusCfg.label}</span></td>
+                    <td className="px-4 py-3"><StatusFieldBadge config={statusCfg} /></td>
                   </tr>
                 );
               })}
@@ -1134,7 +1133,7 @@ export function WebsiteEdmTab({ site }: { site: WebsiteProfileFull }) {
                     <td className="px-4 py-3 text-[13px] font-medium">{edm.openRate ? `${edm.openRate}%` : '—'}</td>
                     <td className="px-4 py-3 text-[13px] font-medium">{edm.clickRate ? `${edm.clickRate}%` : '—'}</td>
                     <td className="px-4 py-3 text-[13px]">{edm.hoursSpent ? `${edm.hoursSpent}h` : '—'}</td>
-                    <td className="px-4 py-3"><span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded-sm', statusCfg.bgColor, statusCfg.color)}>{statusCfg.label}</span></td>
+                    <td className="px-4 py-3"><StatusFieldBadge config={statusCfg} /></td>
                   </tr>
                 );
               })}
@@ -1153,7 +1152,7 @@ export function WebsiteEdmTab({ site }: { site: WebsiteProfileFull }) {
             </div>
             <div className="px-6 py-4 space-y-4">
               <div className="bg-muted/30 rounded-md p-3 text-[12px] text-muted-foreground">
-                公司：<span className="font-medium text-foreground">{site.company}</span> · 品牌：<span className="font-medium text-foreground">{site.brand}</span>
+                公司：<span className="font-medium text-foreground">{displayText(site.company)}</span> · 品牌：<span className="font-medium text-foreground">{displayText(site.brand)}</span>
               </div>
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">主題 *</label>
@@ -1278,7 +1277,7 @@ export function WebsitePluginsTab({ site }: { site: WebsiteProfileFull }) {
             </div>
             <div className="px-6 py-4 space-y-4">
               <div className="bg-muted/30 rounded-md p-3 text-[12px] text-muted-foreground">
-                公司：<span className="font-medium text-foreground">{site.company}</span> · 品牌：<span className="font-medium text-foreground">{site.brand}</span>
+                公司：<span className="font-medium text-foreground">{displayText(site.company)}</span> · 品牌：<span className="font-medium text-foreground">{displayText(site.brand)}</span>
               </div>
               <div>
                 <label className="text-[12px] font-medium text-muted-foreground block mb-1">插件名稱 *</label>
@@ -1779,11 +1778,7 @@ export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
                 return (
                   <tr key={record.id} className="border-t border-border/50 hover:bg-muted/10">
                     <td className="px-4 py-3">
-                      {siteBrandLabel ? (
-                        <span className="text-[11px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded">{siteBrandLabel}</span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                      <BrandFieldBadge value={siteBrandLabel} />
                     </td>
                     <td className="px-4 py-3 break-all">{supplier?.url || '—'}</td>
                     <td className="px-4 py-3 text-muted-foreground">{supplier?.name || '—'}</td>

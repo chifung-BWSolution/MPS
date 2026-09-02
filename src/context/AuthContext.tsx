@@ -119,11 +119,6 @@ function lookupHardcodedBypass(email: string): { email: string; profile: Hardcod
   return profile ? { email: normalized, profile } : null;
 }
 
-export const DEV_BYPASS_PRESETS = Object.entries(HARDCODED_BYPASS_USERS).map(([email, profile]) => ({
-  email,
-  displayName: profile.display_name,
-}));
-
 function fallbackFromHardcoded(
   email: string,
   profile: HardcodedBypassProfile,
@@ -491,31 +486,50 @@ function normalizeRestoredUserInfo(raw: any, staffUuid: string): UserInfoProfile
   };
 }
 
+type AuthProfileKind = 'dev_bypass' | 'google';
+
+function loadStoredAuthProfile(): {
+  systemUser: SystemUserProfile | null;
+  userInfo: UserInfoProfile | null;
+  kind: AuthProfileKind;
+} {
+  try {
+    const raw = localStorage.getItem(DEV_BYPASS_STORAGE_KEY);
+    if (!raw) return { systemUser: null, userInfo: null, kind: 'dev_bypass' };
+    const parsed = JSON.parse(raw);
+    const systemUser = normalizeRestoredSystemUser(parsed.systemUser);
+    return {
+      systemUser,
+      userInfo: systemUser ? normalizeRestoredUserInfo(parsed.userInfo, systemUser.staff_id) : null,
+      kind: parsed.kind === 'google' ? 'google' : 'dev_bypass',
+    };
+  } catch {
+    return { systemUser: null, userInfo: null, kind: 'dev_bypass' };
+  }
+}
+
+function clearStoredAuthProfile() {
+  try { localStorage.removeItem(DEV_BYPASS_STORAGE_KEY); } catch {}
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const storedAuthRef = useRef<ReturnType<typeof loadStoredAuthProfile> | undefined>(undefined);
+  if (storedAuthRef.current === undefined) {
+    storedAuthRef.current = loadStoredAuthProfile();
+  }
+  const storedAuth = storedAuthRef.current;
+
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [systemUser, setSystemUser] = useState<SystemUserProfile | null>(() => {
-    try {
-      const raw = localStorage.getItem(DEV_BYPASS_STORAGE_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      return normalizeRestoredSystemUser(parsed.systemUser);
-    } catch { return null; }
-  });
-  const [userInfo, setUserInfo] = useState<UserInfoProfile | null>(() => {
-    try {
-      const raw = localStorage.getItem(DEV_BYPASS_STORAGE_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      const normalized = normalizeRestoredSystemUser(parsed.systemUser);
-      return normalizeRestoredUserInfo(parsed.userInfo, normalized?.staff_id || '');
-    } catch { return null; }
-  });
-  const [loading, setLoading] = useState(true);
+  const [systemUser, setSystemUser] = useState<SystemUserProfile | null>(storedAuth.systemUser);
+  const [userInfo, setUserInfo] = useState<UserInfoProfile | null>(storedAuth.userInfo);
+  // Cached Google / bypass profile paints immediately; cold start still shows the spinner.
+  const [loading, setLoading] = useState(!storedAuth.systemUser);
   const [authError, setAuthError] = useState<string | null>(null);
   const verifyInProgressRef = useRef(false);
   // Track whether we've already successfully authenticated to prevent state clearing
-  const authSucceededRef = useRef(typeof window !== 'undefined' && !!localStorage.getItem(DEV_BYPASS_STORAGE_KEY));
+  const authSucceededRef = useRef(!!storedAuth.systemUser);
+  const authKindRef = useRef<AuthProfileKind>(storedAuth.kind);
   const staffUuidMigrateRef = useRef(false);
 
   useEffect(() => {
@@ -538,7 +552,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }, 15000);
     };
 
-    startLoadingTimeout();
+    if (!authSucceededRef.current) {
+      startLoadingTimeout();
+    }
 
     // Get initial session (with 8s timeout protection — increased for OAuth callback)
     Promise.race([
@@ -555,10 +571,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        // Same delay as SIGNED_IN so the client JWT is attached before whitelist queries.
-        await new Promise(resolve => setTimeout(resolve, 300));
+        const sessionEmail = normalizeLoginEmail(session.user.email || '');
+        const cachedEmail = normalizeLoginEmail(storedAuth.systemUser?.email || '');
+        if (
+          authSucceededRef.current &&
+          authKindRef.current === 'google' &&
+          cachedEmail &&
+          sessionEmail &&
+          cachedEmail !== sessionEmail
+        ) {
+          console.warn('[Auth] Cached profile email mismatch. Re-verifying.');
+          authSucceededRef.current = false;
+          setLoading(true);
+        }
+        // JWT-attach delay only on cold start / OAuth callback — not on cached refresh.
+        if (!authSucceededRef.current) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
         verifyAndFetchUser(session.user.email, session.user.id);
       } else {
+        if (authKindRef.current === 'google' && storedAuth.systemUser) {
+          console.warn('[Auth] Google session missing on refresh. Clearing cached profile.');
+          authSucceededRef.current = false;
+          authKindRef.current = 'dev_bypass';
+          clearStoredAuthProfile();
+          setSystemUser(null);
+          setUserInfo(null);
+        }
         setLoading(false);
         if (loadingTimeoutId) clearTimeout(loadingTimeoutId);
       }
@@ -577,7 +616,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(session?.user ?? null);
 
           if (session?.user) {
-            // Only verify if not already in progress AND not already authenticated
+            // Only show the spinner when we do not already have a cached profile.
             if (!verifyInProgressRef.current && !authSucceededRef.current) {
               // Reset timeout since we're starting a new verification
               startLoadingTimeout();
@@ -590,6 +629,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               await verifyAndFetchUser(session.user.email, session.user.id);
               // Clear timeout on success
               if (loadingTimeoutId) clearTimeout(loadingTimeoutId);
+            } else if (!verifyInProgressRef.current && authSucceededRef.current) {
+              console.log('[Auth] Cached session — background re-verify');
+              await verifyAndFetchUser(session.user.email, session.user.id);
             }
           } else {
             // Session became null — BUT don't clear state if:
@@ -619,19 +661,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Persist dev-bypass session (no Supabase session, only local systemUser) to localStorage
-  // so F5 / refresh keeps the user logged in.
+  // Persist authorized profile (Google + bypass) so F5 can paint immediately.
   useEffect(() => {
     try {
-      if (systemUser && !session) {
-        localStorage.setItem(DEV_BYPASS_STORAGE_KEY, JSON.stringify({ systemUser, userInfo }));
+      if (systemUser) {
+        localStorage.setItem(DEV_BYPASS_STORAGE_KEY, JSON.stringify({
+          kind: authKindRef.current,
+          systemUser,
+          userInfo,
+        }));
       }
     } catch {}
-  }, [systemUser, userInfo, session]);
+  }, [systemUser, userInfo]);
 
-  // If we restored a dev-bypass session from localStorage, stop loading immediately.
+  // If we restored a cached profile, stop loading immediately.
   useEffect(() => {
-    if (systemUser && !session && loading) {
+    if (systemUser && loading) {
       setLoading(false);
     }
   }, []);
@@ -658,8 +703,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const verifyAndFetchUser = async (email?: string | null, authUserId?: string) => {
     if (!email) {
-      setSystemUser(null);
-      setUserInfo(null);
+      if (!authSucceededRef.current) {
+        setSystemUser(null);
+        setUserInfo(null);
+      }
       setAuthError(null);
       setLoading(false);
       return;
@@ -671,6 +718,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     verifyInProgressRef.current = true;
+    const isBackgroundRefresh = authSucceededRef.current;
 
     // Per-function timeout: if this function takes more than 12s, abort gracefully
     // Increased from 6s because OAuth callback can add latency
@@ -686,8 +734,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, 12000);
 
     try {
-      // Keep loading=true during the entire verification
-      setLoading(true);
+      // Cold start keeps the spinner; cached refresh re-verifies without blocking the UI.
+      if (!isBackgroundRefresh) {
+        setLoading(true);
+      }
       const normalizedEmail = normalizeLoginEmail(email);
       console.log('[Auth] verifyAndFetchUser called with email:', normalizedEmail, '| authUserId:', authUserId);
 
@@ -708,6 +758,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUserInfo(fallback.userInfo);
         setAuthError(null);
         authSucceededRef.current = true;
+        authKindRef.current = 'google';
+        setLoading(false);
 
         try {
           const { data: sysUser } = await findSystemUser({
@@ -753,7 +805,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.warn('[Auth] 🔑 Master bypass: DB lookup threw error:', dbErr);
         }
 
-        void logLoginEvent(normalizedEmail, true, 'google', null);
+        if (!isBackgroundRefresh) {
+          void logLoginEvent(normalizedEmail, true, 'google', null);
+        }
         clearTimeout(functionTimeout);
         verifyInProgressRef.current = false;
         setLoading(false);
@@ -782,6 +836,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSystemUser(enrichedUser);
         setAuthError(null);
         authSucceededRef.current = true; // CRITICAL: Mark auth as succeeded IMMEDIATELY
+        authKindRef.current = 'google';
 
         // Enrich phone / profile pic from staffs.id — fire and forget
         (async () => {
@@ -828,16 +883,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUserInfo(null);
         }
 
-        void logLoginEvent(normalizedEmail, true, 'google', sysUser.id);
+        if (!isBackgroundRefresh) {
+          void logLoginEvent(normalizedEmail, true, 'google', sysUser.id);
+        }
         return;
       }
 
       // findSystemUser already checks users.auth_user_id + staffs.
       // No additional fallback queries needed — they were causing 502 by cascading timeouts.
 
-      // All lookups failed — NOT authorized
-      if (authSucceededRef.current) {
-        console.log('[Auth] Lookup missed but auth already succeeded — keeping session.');
+      // Timeout during background refresh: keep the cached profile.
+      const lookupTimedOut = /timeout|timed out/i.test(String(sysError?.message || ''));
+      if (isBackgroundRefresh && lookupTimedOut) {
+        console.log('[Auth] Background lookup timed out — keeping cached profile.');
         return;
       }
 
@@ -849,16 +907,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUserInfo(fallback.userInfo);
         setAuthError(null);
         authSucceededRef.current = true;
-        void logLoginEvent(normalizedEmail, true);
+        authKindRef.current = 'google';
+        if (!isBackgroundRefresh) {
+          void logLoginEvent(normalizedEmail, true);
+        }
         return;
       }
 
       const failMsg = `Auth FAILED: No public.users row for auth_user_id "${authUserId || ''}" / email "${normalizedEmail}".`;
       console.error('[Auth] ❌', failMsg);
+      authSucceededRef.current = false;
+      authKindRef.current = 'dev_bypass';
+      clearStoredAuthProfile();
       setSystemUser(null);
       setUserInfo(null);
       setAuthError(`登入失敗：您的 Google 電郵 ${normalizedEmail} 未在系統使用者白名單中，請聯絡管理員。`);
-      void logLoginEvent(normalizedEmail, false);
+      if (!isBackgroundRefresh) {
+        void logLoginEvent(normalizedEmail, false);
+      }
       try {
         await Promise.race([
           supabase.auth.signOut(),
@@ -882,6 +948,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn('[Auth] Verification timed out — user will see login page.');
         setAuthError(`登入超時：驗證流程逾時，請重新嘗試。(${email})`);
       } else {
+        clearStoredAuthProfile();
         setSystemUser(null);
         setUserInfo(null);
         setAuthError(`登入失敗：系統驗證出錯，請稍後再試。(${email})`);
@@ -947,6 +1014,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setAuthError(null);
     authSucceededRef.current = false; // Reset before attempting
+    authKindRef.current = 'dev_bypass';
 
     const hardcodedBypass = lookupHardcodedBypass(email);
     const DEV_BYPASS_TIMEOUT = 8000; // 8s hard timeout for the entire devBypassLogin
@@ -966,6 +1034,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUserInfo(immediate.userInfo);
           setAuthError(null);
           authSucceededRef.current = true;
+          authKindRef.current = 'dev_bypass';
 
           // Try DB lookup first, but don't block on failure
           let sysUser: SystemUserProfile | null = null;
@@ -1038,6 +1107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSystemUser({ ...sysUser, phone: sysUser.phone || null });
         setAuthError(null);
         authSucceededRef.current = true;
+        authKindRef.current = 'dev_bypass';
 
         // Enrich phone / profile pic from staffs.id — fire and forget
         (async () => {
@@ -1108,6 +1178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUserInfo(fallback.userInfo);
           setAuthError(null);
           authSucceededRef.current = true;
+          authKindRef.current = 'dev_bypass';
         } else {
           setAuthError('登入超時：資料庫無回應，請稍後再試。');
         }
@@ -1119,7 +1190,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     authSucceededRef.current = false; // Reset auth success flag on sign out
-    try { localStorage.removeItem(DEV_BYPASS_STORAGE_KEY); } catch {}
+    authKindRef.current = 'dev_bypass';
+    clearStoredAuthProfile();
     await supabase.auth.signOut();
     setSession(null);
     setUser(null);
