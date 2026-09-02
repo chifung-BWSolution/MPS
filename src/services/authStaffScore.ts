@@ -1,3 +1,11 @@
+export function normalizeLoginEmail(email: string | null | undefined): string {
+  return (email || '')
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
 export function scoreWhitelistCandidate(opts: {
   staffActive: boolean;
   emailMatch?: boolean;

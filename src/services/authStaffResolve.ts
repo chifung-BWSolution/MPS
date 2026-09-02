@@ -1,11 +1,13 @@
 import { supabase } from '@/lib/supabase';
 import { remapStaleStaffUuid } from '@/services/staffIdentity';
 import {
+  normalizeLoginEmail,
   pickPreferredWhitelistRow,
   scoreWhitelistCandidate,
 } from '@/services/authStaffScore';
 
 export {
+  normalizeLoginEmail,
   pickPreferredWhitelistRow,
   scoreWhitelistCandidate,
 } from '@/services/authStaffScore';
@@ -34,13 +36,14 @@ export async function fetchUsersByAuthUserId(
 export async function fetchUsersCandidatesByEmail(
   email: string,
 ): Promise<{ data: UsersWhitelistRow[]; error: unknown }> {
-  const normalized = email.toLowerCase().trim();
+  const normalized = normalizeLoginEmail(email);
   if (!normalized) return { data: [], error: null };
 
+  // Use eq (not ilike): emails contain `.` which PostgREST can misread in LIKE filters.
   const { data, error } = await supabase
     .from('users')
     .select('*')
-    .ilike('email', normalized);
+    .eq('email', normalized);
 
   return { data: (data as UsersWhitelistRow[] | null) || [], error };
 }

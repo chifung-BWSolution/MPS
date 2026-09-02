@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict';
 import {
+  normalizeLoginEmail,
   pickPreferredWhitelistRow,
   scoreWhitelistCandidate,
 } from '../src/services/authStaffScore.ts';
+
+assert.equal(normalizeLoginEmail('  brandingworks.online@gmail.com  '), 'brandingworks.online@gmail.com');
+assert.equal(
+  normalizeLoginEmail('\u200BBrandingWorks.Online@gmail.com\u00A0'),
+  'brandingworks.online@gmail.com',
+);
 
 assert.equal(
   scoreWhitelistCandidate({ staffActive: true, emailMatch: true }),

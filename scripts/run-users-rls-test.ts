@@ -27,7 +27,13 @@ const authResolve = read('src/services/authStaffResolve.ts');
 assert.match(authResolve, /from\('users'\)/);
 assert.match(authResolve, /rpc\('resolve_users_for_auth'\)/);
 assert.match(authResolve, /\.eq\('auth_user_id'/);
-assert.match(authResolve, /\.ilike\('email'/);
+assert.match(authResolve, /\.eq\('email'/);
+assert.doesNotMatch(authResolve, /\.ilike\('email'/);
+
+const resolveEmail = read('supabase/migrations/20260902080614_users_resolve_auth_by_email.sql');
+assert.match(resolveEmail, /CREATE OR REPLACE FUNCTION public\.resolve_users_for_auth/);
+assert.match(resolveEmail, /lower\(trim\(coalesce\(u\.email, ''\)\)\) = auth_email/);
+assert.match(resolveEmail, /AND auth_user_id IS NULL/);
 
 const userMgmt = read('src/components/settings/UserManagement.tsx');
 assert.match(userMgmt, /from\('users'\)/);

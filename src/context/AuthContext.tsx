@@ -5,6 +5,7 @@ import { isStaffUuid, remapStaleStaffUuid, resolveStaffUuid } from '@/services/r
 import {
   fetchUsersByAuthUserId,
   fetchUsersCandidatesByEmail,
+  normalizeLoginEmail,
   pickPreferredWhitelistRow,
   resolveUsersRowForAuthUid,
   scoreWhitelistCandidate,
@@ -113,10 +114,15 @@ const HARDCODED_BYPASS_USERS: Record<string, HardcodedBypassProfile> = {
 };
 
 function lookupHardcodedBypass(email: string): { email: string; profile: HardcodedBypassProfile } | null {
-  const normalized = email.toLowerCase().trim();
+  const normalized = normalizeLoginEmail(email);
   const profile = HARDCODED_BYPASS_USERS[normalized];
   return profile ? { email: normalized, profile } : null;
 }
+
+export const DEV_BYPASS_PRESETS = Object.entries(HARDCODED_BYPASS_USERS).map(([email, profile]) => ({
+  email,
+  displayName: profile.display_name,
+}));
 
 function fallbackFromHardcoded(
   email: string,
@@ -216,7 +222,7 @@ async function findSystemUser(opts: {
   email: string;
   authUserId?: string | null;
 }): Promise<{ data: SystemUserProfile | null; error: any }> {
-  const normalizedEmail = (opts.email || '').toLowerCase().trim();
+  const normalizedEmail = normalizeLoginEmail(opts.email);
   const authUserId = (opts.authUserId || '').trim() || null;
   console.log('[Auth:findSystemUser] Starting lookup', {
     email: normalizedEmail || null,
@@ -278,13 +284,28 @@ async function findSystemUser(opts: {
 
       if (timedOut) return { data: null, error: new Error('Timed out') };
 
+      if (userMatches.length === 0 && authUserId) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        if (timedOut) return { data: null, error: new Error('Timed out') };
+        const retryById = await fetchUsersByAuthUserId(authUserId);
+        if (retryById.data) {
+          return { data: await profileFromUsersRow(retryById.data, normalizedEmail), error: null };
+        }
+        const retryEmail = await fetchUsersCandidatesByEmail(normalizedEmail);
+        if (retryEmail.data.length > 0) {
+          userMatches.push(...retryEmail.data);
+        }
+      }
+
+      if (timedOut) return { data: null, error: new Error('Timed out') };
+
       const staffIds = userMatches.map((r) => r.staff_id).filter(Boolean);
       const staffMap = await loadStaffStatusMap(staffIds);
       const picked = pickPreferredWhitelistRow(userMatches, (row) => {
         const staff = staffMap.get(row.staff_id) || null;
         return scoreWhitelistCandidate({
           staffActive: isStaffActive(staff?.status),
-          emailMatch: (row.email || '').toLowerCase().trim() === normalizedEmail,
+          emailMatch: normalizeLoginEmail(row.email) === normalizedEmail,
         });
       });
 
@@ -523,7 +544,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     Promise.race([
       supabase.auth.getSession(),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error('getSession timeout')), 8000))
-    ]).then(({ data: { session }, error }: any) => {
+    ]).then(async ({ data: { session }, error }: any) => {
       if (error) {
         console.warn('[Auth] Failed to get session:', error.message);
         setLoading(false);
@@ -534,6 +555,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
+        // Same delay as SIGNED_IN so the client JWT is attached before whitelist queries.
+        await new Promise(resolve => setTimeout(resolve, 300));
         verifyAndFetchUser(session.user.email, session.user.id);
       } else {
         setLoading(false);
@@ -567,11 +590,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               await verifyAndFetchUser(session.user.email, session.user.id);
               // Clear timeout on success
               if (loadingTimeoutId) clearTimeout(loadingTimeoutId);
-            }
-
-            // Log the login event (fire and forget)
-            if (event === 'SIGNED_IN' && !authSucceededRef.current) {
-              void logLoginEvent(session.user.email || '', true);
             }
           } else {
             // Session became null — BUT don't clear state if:
@@ -670,7 +688,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       // Keep loading=true during the entire verification
       setLoading(true);
-      const normalizedEmail = email.toLowerCase().trim();
+      const normalizedEmail = normalizeLoginEmail(email);
       console.log('[Auth] verifyAndFetchUser called with email:', normalizedEmail, '| authUserId:', authUserId);
 
       if (!normalizedEmail) {
@@ -681,13 +699,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // ====== MASTER BYPASS: Hardcoded developer/super-admin for OAuth troubleshooting ======
+      // ====== MASTER BYPASS: apply immediately so a later failed lookup cannot bounce the user ======
       const oauthBypass = lookupHardcodedBypass(normalizedEmail);
       if (oauthBypass) {
         console.log('[Auth] 🔑🔑 MASTER BYPASS triggered in verifyAndFetchUser for:', normalizedEmail);
-        
-        // Try DB lookup first, but don't block on failure
-        let foundInDB = false;
+        const fallback = fallbackFromHardcoded(oauthBypass.email, oauthBypass.profile, authUserId || null);
+        setSystemUser(fallback.systemUser);
+        setUserInfo(fallback.userInfo);
+        setAuthError(null);
+        authSucceededRef.current = true;
+
         try {
           const { data: sysUser } = await findSystemUser({
             email: normalizedEmail,
@@ -696,12 +717,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (sysUser) {
             console.log('[Auth] 🔑 Master bypass: Found in DB:', sysUser.display_name);
             setSystemUser({ ...sysUser, phone: sysUser.phone || null });
-            setAuthError(null);
-            authSucceededRef.current = true;
-            foundInDB = true;
 
-
-            // Enrich phone / profile pic from staffs.id — fire and forget
             (async () => {
               try {
                 const staff = await fetchStaffLiteById(sysUser.staff_id);
@@ -709,7 +725,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               } catch {}
             })();
 
-            // Fetch users row
             try {
               const { data: uInfo } = await supabase
                 .from('users')
@@ -729,24 +744,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setSystemUser(prev => prev ? { ...prev, role: enrichedRole } : prev);
               }
             } catch {
-              setUserInfo(null);
+              // keep hardcoded userInfo
             }
+          } else {
+            console.warn('[Auth] 🔑 Master bypass: DB lookup missed. Keeping hardcoded profile for', oauthBypass.profile.display_name);
           }
         } catch (dbErr) {
           console.warn('[Auth] 🔑 Master bypass: DB lookup threw error:', dbErr);
         }
 
-        // If DB lookup failed, use hardcoded fallback
-        if (!foundInDB) {
-          console.warn('[Auth] 🔑 Master bypass: DB lookup failed. Using HARDCODED fallback for', oauthBypass.profile.display_name);
-          const fallback = fallbackFromHardcoded(oauthBypass.email, oauthBypass.profile, authUserId || null);
-          setSystemUser(fallback.systemUser);
-          setUserInfo(fallback.userInfo);
-          setAuthError(null);
-          authSucceededRef.current = true;
-        }
-
-        void logLoginEvent(normalizedEmail, true);
+        void logLoginEvent(normalizedEmail, true, 'google', null);
         clearTimeout(functionTimeout);
         verifyInProgressRef.current = false;
         setLoading(false);
@@ -829,14 +836,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // No additional fallback queries needed — they were causing 502 by cascading timeouts.
 
       // All lookups failed — NOT authorized
+      if (authSucceededRef.current) {
+        console.log('[Auth] Lookup missed but auth already succeeded — keeping session.');
+        return;
+      }
+
+      const lastChance = lookupHardcodedBypass(normalizedEmail);
+      if (lastChance) {
+        console.warn('[Auth] 🔑 Last-chance hardcoded bypass after whitelist miss for', lastChance.email);
+        const fallback = fallbackFromHardcoded(lastChance.email, lastChance.profile, authUserId || null);
+        setSystemUser(fallback.systemUser);
+        setUserInfo(fallback.userInfo);
+        setAuthError(null);
+        authSucceededRef.current = true;
+        void logLoginEvent(normalizedEmail, true);
+        return;
+      }
+
       const failMsg = `Auth FAILED: No public.users row for auth_user_id "${authUserId || ''}" / email "${normalizedEmail}".`;
       console.error('[Auth] ❌', failMsg);
       setSystemUser(null);
       setUserInfo(null);
       setAuthError(`登入失敗：您的 Google 電郵 ${normalizedEmail} 未在系統使用者白名單中，請聯絡管理員。`);
-      // Log the failed attempt
       void logLoginEvent(normalizedEmail, false);
-      // Sign out — with timeout protection so it doesn't hang
       try {
         await Promise.race([
           supabase.auth.signOut(),
@@ -884,10 +906,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const { data: matches } = await fetchUsersCandidatesByEmail(email);
           const picked = pickPreferredWhitelistRow(matches, (row) => {
-            const normalized = email.toLowerCase().trim();
+            const normalized = normalizeLoginEmail(email);
             return scoreWhitelistCandidate({
               staffActive: true,
-              emailMatch: (row.email || '').toLowerCase().trim() === normalized,
+              emailMatch: normalizeLoginEmail(row.email) === normalized,
             });
           });
           if (isUsersUuid(picked?.id)) resolvedUserId = picked.id;

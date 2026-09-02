@@ -20,7 +20,7 @@ function saveEmailToHistory(email: string) {
     /* ignore */
   }
 }
-import { useAuth } from '@/context/AuthContext';
+import { DEV_BYPASS_PRESETS, useAuth } from '@/context/AuthContext';
 import { Chrome, Shield, AlertCircle, Code2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -132,6 +132,33 @@ export function LoginPage({ authError }: { authError?: string | null }) {
                 <p className="text-[11px] text-amber-600 font-medium text-center">
                   ⚠️ 開發模式 — 輸入已授權的電郵地址
                 </p>
+                <div className="flex flex-col gap-2">
+                  {DEV_BYPASS_PRESETS.map((preset) => (
+                    <button
+                      key={preset.email}
+                      type="button"
+                      disabled={devLoading}
+                      onClick={async () => {
+                        setDevEmail(preset.email);
+                        setDevLoading(true);
+                        setError('');
+                        try {
+                          await devBypassLogin(preset.email);
+                          saveEmailToHistory(preset.email);
+                          setEmailHistory(loadEmailHistory());
+                        } catch (err: any) {
+                          console.error('Dev bypass failed:', err);
+                          setError(err.message || '驗證失敗');
+                        } finally {
+                          setDevLoading(false);
+                        }
+                      }}
+                      className="w-full px-3 py-2 bg-amber-500 text-white rounded-lg text-[12px] font-medium hover:bg-amber-600 transition-all disabled:opacity-50"
+                    >
+                      {devLoading ? '驗證中...' : `以 ${preset.displayName} 登入`}
+                    </button>
+                  ))}
+                </div>
                 <input
                   type="email"
                   name="email"
