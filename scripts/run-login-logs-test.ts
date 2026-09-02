@@ -76,6 +76,7 @@ assert.match(auth, /void logLoginEvent\(email, true, hardcodedBypass\.profile\.l
 assert.match(auth, /void logLoginEvent\(email, true, 'dev_bypass', sysUser\.id\)/);
 assert.match(auth, /Last-chance hardcoded bypass/);
 assert.match(auth, /DEV_BYPASS_PRESETS/);
+assert.match(auth, /Hardcoded bypass failsafe triggered/);
 assert.match(auth, /authSucceededRef\.current = true/);
 assert.doesNotMatch(auth, /event === 'SIGNED_IN' && !authSucceededRef\.current/);
 assert.doesNotMatch(auth, /\.then\(\(\) => \{\}\)\.catch\(\(\) => \{\}\)/);

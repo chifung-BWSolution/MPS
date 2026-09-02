@@ -35,6 +35,13 @@ assert.match(resolveEmail, /CREATE OR REPLACE FUNCTION public\.resolve_users_for
 assert.match(resolveEmail, /lower\(trim\(coalesce\(u\.email, ''\)\)\) = auth_email/);
 assert.match(resolveEmail, /AND auth_user_id IS NULL/);
 
+const legacyViews = read('supabase/migrations/20260902083308_auth_legacy_table_views.sql');
+assert.match(legacyViews, /CREATE OR REPLACE VIEW public\.system_users/);
+assert.match(legacyViews, /CREATE OR REPLACE VIEW public\.user_info/);
+assert.match(legacyViews, /CREATE OR REPLACE VIEW public\.staff_directory/);
+assert.match(legacyViews, /security_invoker = true/);
+assert.match(legacyViews, /GRANT SELECT ON public\.system_users TO anon, authenticated/);
+
 const userMgmt = read('src/components/settings/UserManagement.tsx');
 assert.match(userMgmt, /from\('users'\)/);
 assert.match(userMgmt, /\.upsert\(/);

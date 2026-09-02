@@ -961,7 +961,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // ====== FAILSAFE: Hardcoded developer / super-admin bypass ======
         if (hardcodedBypass) {
           console.log('[Auth] 🔑 Hardcoded bypass failsafe triggered for:', hardcodedBypass.email);
-          
+          const immediate = fallbackFromHardcoded(hardcodedBypass.email, hardcodedBypass.profile);
+          setSystemUser(immediate.systemUser);
+          setUserInfo(immediate.userInfo);
+          setAuthError(null);
+          authSucceededRef.current = true;
+
           // Try DB lookup first, but don't block on failure
           let sysUser: SystemUserProfile | null = null;
           try {
@@ -974,8 +979,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (sysUser) {
             setSystemUser({ ...sysUser, phone: sysUser.phone || null });
-            setAuthError(null);
-            authSucceededRef.current = true;
 
             // Enrich phone / profile pic from staffs.id — fire and forget
             (async () => {
@@ -1005,16 +1008,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setSystemUser(prev => prev ? { ...prev, role: enrichedRole } : prev);
               }
             } catch {
-              setUserInfo(null);
+              // keep hardcoded userInfo
             }
           } else {
-            // DB lookup failed — use hardcoded fallback immediately
-            console.warn('[Auth] ⚠️ DB lookup failed for hardcoded bypass, using fallback for', hardcodedBypass.profile.display_name);
-            const fallback = fallbackFromHardcoded(hardcodedBypass.email, hardcodedBypass.profile);
-            setSystemUser(fallback.systemUser);
-            setUserInfo(fallback.userInfo);
-            setAuthError(null);
-            authSucceededRef.current = true;
+            console.warn('[Auth] ⚠️ DB lookup failed for hardcoded bypass, keeping fallback for', hardcodedBypass.profile.display_name);
           }
 
           void logLoginEvent(email, true, hardcodedBypass.profile.login_method, sysUser?.id);
