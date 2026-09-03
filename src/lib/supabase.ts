@@ -12,6 +12,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    // Navigator locks serialize getSession() across every PostgREST call.
+    // Google login has a JWT so every list query waited on that lock; bypass does not.
+    lock: async (_name, _timeout, fn) => fn(),
   },
   global: {
     fetch: (input: RequestInfo | URL, init?: RequestInit) =>

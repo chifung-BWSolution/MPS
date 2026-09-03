@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 
 export type ProjectRelatedType = 'quotation_client' | 'webandsystem' | 'vchannel' | 'manual';
 export type ProjectCategory = 'internal' | 'client';
@@ -164,7 +163,7 @@ export type UseProjectsOptions = {
 };
 
 export function useProjects(options: UseProjectsOptions = {}) {
-  const { session } = useAuth();
+  
   const { relatedType, activeOnly = false } = options;
   const [projects, setProjects] = useState<MasterProject[]>([]);
   const [loading, setLoading] = useState(true);
@@ -208,7 +207,7 @@ export function useProjects(options: UseProjectsOptions = {}) {
 
   useEffect(() => {
     void reload();
-  }, [reload, session]);
+  }, [reload]);
 
   const getById = useCallback(
     (id: string | undefined | null) => (id ? projects.find(p => p.id === id) : undefined),

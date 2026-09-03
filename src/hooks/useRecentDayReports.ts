@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
 
 export type RecentDayReportEntry = {
@@ -30,7 +29,7 @@ function addDays(base: Date, delta: number): Date {
 
 /** Company-wide day report entries for the last N days (inclusive of today). */
 export function useRecentDayReports(days = 7) {
-  const { session } = useAuth();
+  
   const [entries, setEntries] = useState<RecentDayReportEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -132,7 +131,7 @@ export function useRecentDayReports(days = 7) {
     return () => {
       cancelled = true;
     };
-  }, [session, range.start, range.end]);
+  }, [range.start, range.end]);
 
   return { entries, loading, error, range };
 }

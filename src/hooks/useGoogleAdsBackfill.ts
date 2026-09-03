@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import { invokeGoogleAdsBackfill } from '@/lib/googleAdsApi';
 import type { GoogleAdsBackfillJob } from '@/types/googleAds';
 
@@ -63,7 +62,7 @@ function mapJobFromApi(raw: Record<string, unknown>): GoogleAdsBackfillJob {
 }
 
 export function useGoogleAdsBackfill() {
-  const { session } = useAuth();
+  
   const [job, setJob] = useState<GoogleAdsBackfillJob | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
@@ -90,7 +89,7 @@ export function useGoogleAdsBackfill() {
 
   useEffect(() => {
     void refreshJob().finally(() => setLoading(false));
-  }, [session, refreshJob]);
+  }, [refreshJob]);
 
   useEffect(() => {
     if (!job || !['running', 'paused'].includes(job.status)) return;

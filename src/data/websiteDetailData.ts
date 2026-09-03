@@ -1,12 +1,12 @@
 /**
  * ============================================================
- * Website Detail Data — Videos, Social Posts, Ads, SEO, EDM, Plugins
+ * Website Detail Data — Videos, Ads, SEO, Plugins
  * ============================================================
  * ⚠️ 所有記錄帶有 __sampleData: true 標記
  * ⚠️ 清除方法: 使用 isSampleData() 判斷
  * ============================================================
  */
-import { SocialPost, PaidAd, SeoKeyword, EdmCampaign, Video } from '@/types/app';
+import { PaidAd, SeoKeyword, Video } from '@/types/app';
 
 // === Videos per website (模擬數據 — all records have __sampleData: true) ===
 export const websiteVideos: Record<string, (Video & { __sampleData: true })[]> = {
@@ -30,27 +30,6 @@ export const websiteVideos: Record<string, (Video & { __sampleData: true })[]> =
   ],
 };
 
-// === Social Posts per website (模擬數據) ===
-export const websiteSocialPosts: Record<string, (SocialPost & { __sampleData: true })[]> = {
-  ws1: [
-    { __sampleData: true, id: 'sp1', websiteProfileId: 'ws1', platform: 'facebook', platforms: ['facebook', 'instagram'], topic: '客戶案例', postType: 'image', content: '🎨 全新網站設計案例分享！看看我們如何為客戶打造現代感十足的企業官網。', scheduledDate: '2024-12-15T10:00:00', status: 'published', publishedDate: '2024-12-15', hoursSpent: 1.5, postUrl: 'https://fb.com/bwdesign/post1', engagementData: { likes: 45, comments: 8, shares: 12, reach: 2400, impressions: 3100 } },
-    { __sampleData: true, id: 'sp2', websiteProfileId: 'ws1', platform: 'instagram', platforms: ['instagram', 'xiaohongshu'], topic: '教學內容', postType: 'carousel', content: '📱 響應式設計的 5 大秘訣！滑動查看完整攻略 →', scheduledDate: '2024-12-18T14:00:00', status: 'published', publishedDate: '2024-12-18', hoursSpent: 2, postUrl: 'https://instagram.com/bwdesign/p/1', engagementData: { likes: 128, comments: 15, shares: 32, reach: 4500, impressions: 5800 } },
-    { __sampleData: true, id: 'sp3', websiteProfileId: 'ws1', platform: 'facebook', platforms: ['facebook', 'youtube'], topic: '教學內容', postType: 'video', content: '🎬 新影片上線！WordPress SEO 快速教學，5分鐘學會基礎設定。', scheduledDate: '2024-12-22T09:00:00', status: 'scheduled', hoursSpent: 1, engagementData: { likes: 0, comments: 0, shares: 0, reach: 0, impressions: 0 } },
-    { __sampleData: true, id: 'sp4', websiteProfileId: 'ws1', platform: 'xiaohongshu', platforms: ['xiaohongshu'], topic: '行業趨勢', postType: 'image', content: '【小紅書獨家】2025年網站設計趨勢預測 🔮', scheduledDate: '2025-01-05T11:00:00', status: 'draft', hoursSpent: 0.5 },
-  ],
-  ws2: [
-    { __sampleData: true, id: 'sp5', websiteProfileId: 'ws2', platform: 'linkedin', platforms: ['linkedin', 'facebook'], topic: '品牌形象', postType: 'image', content: 'ACI Global 助力企業數碼轉型，了解我們的全方位諮詢服務。', scheduledDate: '2024-12-20T08:00:00', status: 'published', publishedDate: '2024-12-20', hoursSpent: 1, postUrl: 'https://linkedin.com/aci/post1', engagementData: { likes: 67, comments: 5, shares: 18, reach: 3200, impressions: 4100 } },
-    { __sampleData: true, id: 'sp6', websiteProfileId: 'ws2', platform: 'facebook', platforms: ['facebook', 'instagram', 'linkedin'], topic: '產品推廣', postType: 'image', content: '📊 企業品牌建設完整攻略即將上線！敬請期待。', scheduledDate: '2025-01-08T10:00:00', status: 'scheduled', hoursSpent: 0.5 },
-  ],
-  ws3: [
-    { __sampleData: true, id: 'sp7', websiteProfileId: 'ws3', platform: 'instagram', platforms: ['instagram', 'tiktok', 'facebook'], topic: '教學內容', postType: 'reel', content: '🍷 30秒學會品酒！法國波爾多紅酒的品鑑技巧', scheduledDate: '2024-12-12T18:00:00', status: 'published', publishedDate: '2024-12-12', hoursSpent: 2.5, postUrl: 'https://instagram.com/fccmedia/reel/1', engagementData: { likes: 340, comments: 42, shares: 78, reach: 12000, impressions: 18000 } },
-    { __sampleData: true, id: 'sp8', websiteProfileId: 'ws3', platform: 'xiaohongshu', platforms: ['xiaohongshu', 'instagram'], topic: '產品推廣', postType: 'carousel', content: '【紅酒入門】適合初學者的5款法國紅酒推薦 🇫🇷', scheduledDate: '2024-12-16T12:00:00', status: 'published', publishedDate: '2024-12-16', hoursSpent: 1.5, postUrl: '', engagementData: { likes: 520, comments: 65, shares: 120, reach: 15000, impressions: 22000 } },
-  ],
-  ws5: [
-    { __sampleData: true, id: 'sp9', websiteProfileId: 'ws5', platform: 'facebook', platforms: ['facebook', 'instagram'], topic: '節日活動', postType: 'image', content: '🛒 聖誕限定紅酒禮盒套裝，立即選購！', scheduledDate: '2024-12-20T10:00:00', status: 'published', publishedDate: '2024-12-20', hoursSpent: 1, postUrl: 'https://fb.com/wineclubhk/post1', engagementData: { likes: 89, comments: 12, shares: 25, reach: 5600, impressions: 7200 } },
-  ],
-};
-
 // === Paid Ads per website (模擬數據) ===
 export const websitePaidAds: Record<string, (PaidAd & { __sampleData: true })[]> = {
   ws1: [
@@ -70,22 +49,6 @@ export const websitePaidAds: Record<string, (PaidAd & { __sampleData: true })[]>
 
 // === SEO Keywords per website (real data via Supabase / GSC — no sample seeds) ===
 export const websiteSeoKeywords: Record<string, (SeoKeyword & { __sampleData: true })[]> = {};
-
-// === EDM Campaigns per website (模擬數據) ===
-export const websiteEdmCampaigns: Record<string, (EdmCampaign & { __sampleData: true })[]> = {
-  ws1: [
-    { __sampleData: true, id: 'edm1', websiteProfileId: 'ws1', campaignType: 'email', subject: '【BW Design】12月電子報 — 最新設計趨勢', templateName: '月度電子報', recipientType: '全部訂閱者', recipientCount: 1200, sendDate: '2024-12-01', status: 'sent', hoursSpent: 2, openRate: 28.5, clickRate: 4.2 },
-    { __sampleData: true, id: 'edm2', websiteProfileId: 'ws1', campaignType: 'email', subject: '【聖誕優惠】網站建設 8 折限時優惠', templateName: '促銷模板', recipientType: '潛在客戶', recipientCount: 800, sendDate: '2024-12-15', status: 'sent', hoursSpent: 1.5, openRate: 35.2, clickRate: 8.1 },
-    { __sampleData: true, id: 'edm3', websiteProfileId: 'ws1', campaignType: 'email', subject: '【BW Design】1月電子報', templateName: '月度電子報', recipientType: '全部訂閱者', recipientCount: 1250, sendDate: '2025-01-01', status: 'scheduled', hoursSpent: 1 },
-  ],
-  ws2: [
-    { __sampleData: true, id: 'edm4', websiteProfileId: 'ws2', campaignType: 'email', subject: 'ACI Insights: 2025 企業發展策略', templateName: 'Insights Newsletter', recipientType: '企業訂閱者', recipientCount: 650, sendDate: '2024-12-20', status: 'sent', hoursSpent: 3, openRate: 42.1, clickRate: 6.8 },
-  ],
-  ws5: [
-    { __sampleData: true, id: 'edm5', websiteProfileId: 'ws5', campaignType: 'email', subject: '🍷 聖誕限定紅酒禮盒 — 最後機會！', templateName: '產品推廣', recipientType: '會員', recipientCount: 2100, sendDate: '2024-12-18', status: 'sent', hoursSpent: 2, openRate: 38.7, clickRate: 12.3 },
-    { __sampleData: true, id: 'edm6', websiteProfileId: 'ws5', campaignType: 'sms', subject: '【Wine Club HK】新年特惠 — 全場 85 折', recipientType: 'VIP 會員', recipientCount: 450, sendDate: '2024-12-28', status: 'scheduled', hoursSpent: 0.5 },
-  ],
-};
 
 // === Plugins per website ===
 export interface Plugin {
@@ -167,20 +130,12 @@ export function getVideosForWebsite(websiteId: string): Video[] {
   return websiteVideos[websiteId] || [];
 }
 
-export function getSocialPostsForWebsite(websiteId: string): SocialPost[] {
-  return websiteSocialPosts[websiteId] || [];
-}
-
 export function getPaidAdsForWebsite(websiteId: string): PaidAd[] {
   return websitePaidAds[websiteId] || [];
 }
 
 export function getSeoKeywordsForWebsite(websiteId: string): SeoKeyword[] {
   return websiteSeoKeywords[websiteId] || [];
-}
-
-export function getEdmCampaignsForWebsite(websiteId: string): EdmCampaign[] {
-  return websiteEdmCampaigns[websiteId] || [];
 }
 
 export function getPluginsForWebsite(websiteId: string): Plugin[] {

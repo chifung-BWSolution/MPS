@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import { invokeGa4Backfill } from '@/lib/ga4Api';
 import type { Ga4BackfillJob } from '@/types/ga4';
 
@@ -63,7 +62,7 @@ function mapJobFromApi(raw: Record<string, unknown>): Ga4BackfillJob {
 }
 
 export function useGa4Backfill() {
-  const { session } = useAuth();
+  
   const [job, setJob] = useState<Ga4BackfillJob | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
@@ -90,7 +89,7 @@ export function useGa4Backfill() {
 
   useEffect(() => {
     void refreshJob().finally(() => setLoading(false));
-  }, [session, refreshJob]);
+  }, [refreshJob]);
 
   useEffect(() => {
     if (!job || !['running', 'paused'].includes(job.status)) return;

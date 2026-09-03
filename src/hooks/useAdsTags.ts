@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import type { AdsCampaignTagAssignment, AdsPlatform, AdsTag } from '@/types/adsTags';
 
 type TagRow = {
@@ -40,7 +39,6 @@ function mapAssignment(row: AssignmentRow): AdsCampaignTagAssignment {
 }
 
 export function useAdsTags() {
-  const { session } = useAuth();
   const [tags, setTags] = useState<AdsTag[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +65,7 @@ export function useAdsTags() {
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   const addTag = useCallback(
     async (input: { name: string; color?: string | null; isActive?: boolean }) => {
@@ -120,7 +118,6 @@ export function useAdsTags() {
 }
 
 export function useAdsCampaignTags(platform: AdsPlatform) {
-  const { session } = useAuth();
   const [tags, setTags] = useState<AdsTag[]>([]);
   const [assignments, setAssignments] = useState<AdsCampaignTagAssignment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -156,7 +153,7 @@ export function useAdsCampaignTags(platform: AdsPlatform) {
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   const tagsByCampaignId = useMemo(() => {
     const tagById = new Map(tags.map((tag) => [tag.id, tag]));

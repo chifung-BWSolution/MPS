@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import { mergeWebsitesByDomain } from '@/lib/adsWebsiteDisplay';
 import { normalizeGoogleAdsObjectives, type GoogleAdsCampaignDetail, type GoogleAdsDailyMetricPoint, type GoogleAdsMatchedWebsite, type GoogleAdsMetricTotals } from '@/types/googleAds';
 
@@ -159,7 +158,7 @@ export function useGoogleAdsCampaignDetail(
   dateFrom: string,
   dateTo: string,
 ) {
-  const { session } = useAuth();
+  
   const [detail, setDetail] = useState<GoogleAdsCampaignDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -244,7 +243,7 @@ export function useGoogleAdsCampaignDetail(
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   return { detail, loading, error, refresh };
 }

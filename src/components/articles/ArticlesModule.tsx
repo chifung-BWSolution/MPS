@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Plus, ExternalLink, Sparkles, ArrowLeft, Globe, X, Check, Trash2, Clock, Star } from 'lucide-react';
+import { Search, Plus, ExternalLink, ArrowLeft, Globe, X, Check, Trash2, Clock, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Article, WebsiteProfileFull, WebsiteLevel } from '@/types/app';
 import {
@@ -48,22 +48,6 @@ function ArticleLevelBadge({ level }: { level?: WebsiteLevel | null }) {
     </span>
   );
 }
-
-interface ContentEntry {
-  id: string;
-  title: string;
-  website: string;
-  source: string;
-  status: 'planned' | 'in_progress' | 'completed';
-  aiGenerated: boolean;
-}
-
-const contentEntries: ContentEntry[] = [
-  { id: '1', title: '電商網站轉換率優化 5 大秘訣', website: 'BW Design', source: 'AI 生成', status: 'planned', aiGenerated: true },
-  { id: '2', title: '如何選擇適合的網站主機', website: 'BW Design', source: 'AI 生成', status: 'planned', aiGenerated: true },
-  { id: '3', title: 'Google Ads vs Facebook Ads 比較分析', website: 'ACI Global', source: 'AI 生成', status: 'in_progress', aiGenerated: true },
-  { id: '4', title: '品牌形象設計的重要性', website: 'FCC Media', source: '手動新增', status: 'planned', aiGenerated: false },
-];
 
 // ===== Add Website Modal =====
 function AddWebsiteModal({
@@ -438,53 +422,6 @@ function ArticleList({ onSelectArticle }: { onSelectArticle: (article: Article) 
   );
 }
 
-// ===== Content Plan =====
-function ContentPlan() {
-  const entryStatusConfig = {
-    planned: { label: '待跟進', color: 'text-amber-700', bgColor: 'bg-amber-50' },
-    in_progress: { label: '撰寫中', color: 'text-blue-700', bgColor: 'bg-blue-50' },
-    completed: { label: '已完成', color: 'text-teal-700', bgColor: 'bg-teal-50' },
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="bg-gradient-to-r from-teal-50 to-cyan-50 rounded-md border border-teal-200 p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Sparkles size={14} className="text-teal-600" />
-          <span className="text-[13px] font-bold text-teal-800">AI 建議的文章主題</span>
-        </div>
-        <p className="text-[12px] text-teal-700">系統根據 SEO 關鍵字庫生成的文章建議。點擊「開始撰寫」轉為正式文章。</p>
-      </div>
-
-      <div className="space-y-3">
-        {contentEntries.map(entry => {
-          const config = entryStatusConfig[entry.status];
-          return (
-            <div key={entry.id} className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {entry.aiGenerated && <Sparkles size={12} className="text-teal-600" />}
-                <div>
-                  <span className="text-[13px] font-medium">{entry.title}</span>
-                  <span className="text-[11px] text-muted-foreground block">{entry.website} • {entry.source}</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <StatusFieldBadge config={config} />
-                {entry.status === 'planned' && (
-                  <button className="text-[12px] px-3 py-1 bg-teal-600 text-white rounded hover:bg-teal-700">開始撰寫</button>
-                )}
-                {entry.status === 'in_progress' && (
-                  <button className="text-[12px] px-3 py-1 border border-teal-600 text-teal-600 rounded hover:bg-teal-50">提交完成</button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 // ===== Add Article Modal =====
 function AddArticleModal({ onClose, onAdd }: { onClose: () => void; onAdd: (article: Article) => void }) {
   const [companyId, setCompanyId] = useState('');
@@ -749,7 +686,7 @@ function AddArticleModal({ onClose, onAdd }: { onClose: () => void; onAdd: (arti
 }
 
 // ===== Main Export =====
-export function ArticlesModule({ subModule }: { subModule?: string }) {
+export function ArticlesModule() {
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [, setRefresh] = useState(0);
@@ -767,25 +704,18 @@ export function ArticlesModule({ subModule }: { subModule?: string }) {
     );
   }
 
-  const renderContent = () => {
-    switch (subModule) {
-      case 'content-plan': return <ContentPlan />;
-      default: return <ArticleList onSelectArticle={setSelectedArticle} />;
-    }
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-[32px] font-bold tracking-tight">文章管理</h1>
-          <p className="text-[14px] text-muted-foreground mt-1">管理 SEO 文章、內容發佈及 AI 待跟進計劃。</p>
+          <p className="text-[14px] text-muted-foreground mt-1">管理 SEO 文章及內容發佈。</p>
         </div>
         <button onClick={() => setShowAddModal(true)} className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-sm font-medium hover:bg-teal-700 transition-colors active:scale-[0.97]">
           <Plus size={14} />新增文章
         </button>
       </div>
-      {renderContent()}
+      <ArticleList onSelectArticle={setSelectedArticle} />
       {showAddModal && (
         <AddArticleModal onClose={() => setShowAddModal(false)} onAdd={handleAddArticle} />
       )}

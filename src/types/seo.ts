@@ -20,17 +20,6 @@ export type SeoKeywordRow = {
   brand?: string;
 };
 
-export type SeoRankingHistoryRow = {
-  id: string;
-  keyword_id: string;
-  metric_date: string;
-  ranking_position: number | null;
-  clicks: number;
-  impressions: number;
-  ctr: number | null;
-  source: string;
-};
-
 export type SeoUpgradeRow = {
   id: string;
   website_profile_id: string;

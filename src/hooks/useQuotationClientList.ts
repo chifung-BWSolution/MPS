@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import { QUOTATION_CLIENT_PROJECT_TABLE } from '@/hooks/useQuotationClientProjects';
 import {
   composeClientDisplayName,
@@ -103,7 +102,7 @@ async function fetchLatestProjects(
 }
 
 export function useQuotationClientList() {
-  const { session } = useAuth();
+  
   const [records, setRecords] = useState<QuotationClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -132,7 +131,7 @@ export function useQuotationClientList() {
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   const addClient = useCallback(
     async (input: QuotationClientInput): Promise<QuotationClient | null> => {

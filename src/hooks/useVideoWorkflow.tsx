@@ -67,7 +67,7 @@ function toWorkflowList(rows: VideoOutput[]): VideoWorkflowMock[] {
 }
 
 export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
-  const { session, systemUser } = useAuth();
+  const { systemUser } = useAuth();
   const [rawVideos, setRawVideos] = useState<VideoOutput[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +91,7 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refreshVideos();
-  }, [session, refreshVideos]);
+  }, [refreshVideos]);
 
   const videos = useMemo(() => toWorkflowList(rawVideos), [rawVideos]);
 

@@ -1,13 +1,28 @@
 /** Marketing ops entities persisted in Supabase */
 
+export const SUPPLIER_TYPE_CATEGORIES = ['網站', '活動', '影片'] as const;
+export type SupplierTypeCategory = (typeof SUPPLIER_TYPE_CATEGORIES)[number];
+
+export interface SupplierType {
+  id: string;
+  categories: SupplierTypeCategory;
+  displayName: string;
+  isActive: boolean;
+  createdAt?: string;
+}
+
 export interface WebPageSupplier {
   id: string;
-  name: string;
-  platform: string;
+  supplierTypesId: string | null;
+  displayName: string;
+  description: string;
+  companyName: string;
+  contactPerson: string;
+  phone: string;
+  email: string;
+  remarks: string;
   url: string;
-  cost: number;
-  currency: 'USD' | 'HKD';
-  rating: number;
+  isActive: boolean;
   createdAt?: string;
 }
 
@@ -39,29 +54,3 @@ export interface GoogleBusinessRegistration {
   content: string;
 }
 
-export type SocialPostStatus = 'draft' | 'scheduled' | 'published' | 'archived';
-
-export interface SocialPostRecord {
-  id: string;
-  websiteProfileId: string;
-  platform: 'facebook' | 'instagram' | 'xiaohongshu' | 'linkedin' | 'youtube' | 'tiktok' | 'twitter' | 'other';
-  platforms?: string[];
-  topic?: string;
-  postType: 'image' | 'video' | 'carousel' | 'story' | 'reel';
-  content: string;
-  mediaUrls?: string[];
-  scheduledDate?: string;
-  publishedDate?: string;
-  publishTime?: string;
-  status: SocialPostStatus;
-  engagementData?: { likes: number; comments: number; shares: number; reach: number; impressions: number };
-  authorId?: string;
-  hoursSpent?: number;
-  postUrl?: string;
-  tags?: string[];
-}
-
-/** Final calendar date for a social post: published first, else scheduled */
-export function socialPostFinalDate(post: Pick<SocialPostRecord, 'publishedDate' | 'scheduledDate'>): string | undefined {
-  return post.publishedDate || post.scheduledDate || undefined;
-}

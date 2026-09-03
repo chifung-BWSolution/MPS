@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import { normalizeBacklinkCosts } from '@/lib/backlinkCurrency';
 import { toBacklinkCostPatch, toBacklinkInsertRow } from '@/lib/backlinkPurchaseDb';
 import type { BacklinkBrand, BacklinkPurchase } from '@/types/marketingOps';
@@ -70,7 +69,7 @@ function toDbCosts(data: Pick<BacklinkPurchase, 'costUsd' | 'costHkd'>) {
 }
 
 export function useBacklinkPurchases() {
-  const { session } = useAuth();
+  
   const [purchases, setPurchases] = useState<BacklinkPurchase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -93,7 +92,7 @@ export function useBacklinkPurchases() {
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   const addPurchase = useCallback(async (data: Omit<BacklinkPurchase, 'id'> & { id?: string }) => {
     const id = data.id || `bl_${Date.now()}`;

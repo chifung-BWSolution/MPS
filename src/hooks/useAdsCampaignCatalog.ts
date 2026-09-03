@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import type { AdsCompareCampaignOption, AdsCompareCatalog, AdsComparePlatform } from '@/types/adsComparison';
 
 type GoogleCampaignRow = {
@@ -71,7 +70,7 @@ const emptyCatalog: AdsCompareCatalog = {
 };
 
 export function useAdsCampaignCatalog() {
-  const { session } = useAuth();
+  
   const [catalog, setCatalog] = useState<AdsCompareCatalog>(emptyCatalog);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -201,7 +200,7 @@ export function useAdsCampaignCatalog() {
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   return { catalog, loading, error, refresh };
 }

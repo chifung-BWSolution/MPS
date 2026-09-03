@@ -170,7 +170,7 @@ export function useQuotations() {
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   const saveQuotation = useCallback(
     async (input: QuotationSaveInput): Promise<{ id: string; quoteCode: string } | null> => {

@@ -78,7 +78,7 @@ function relatedTypeOf(raw: string | null | undefined): ProjectRelatedType | 'un
 }
 
 export function useMyProjectsFromDayReports() {
-  const { session, systemUser } = useAuth();
+  const { systemUser } = useAuth();
   const [projects, setProjects] = useState<MyProjectRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -266,7 +266,7 @@ export function useMyProjectsFromDayReports() {
     return () => {
       cancelled = true;
     };
-  }, [session, systemUser, recentCutoff]);
+  }, [systemUser?.staff_id, recentCutoff]);
 
   const stats: MyProjectsSummary = useMemo(() => {
     return {

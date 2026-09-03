@@ -132,20 +132,22 @@ export function useAsanaSyncedTasks() {
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    if (!session) return;
-    void refresh();
-  }, [session, refresh]);
+  const sessionUserId = session?.user?.id ?? null;
 
   useEffect(() => {
-    if (!session) return;
+    if (!sessionUserId) return;
+    void refresh();
+  }, [sessionUserId, refresh]);
+
+  useEffect(() => {
+    if (!sessionUserId) return;
     void (async () => {
       setSyncing(true);
       await autoSyncAsanaPitchingIfNeeded();
       await refresh();
       setSyncing(false);
     })();
-  }, [session, refresh]);
+  }, [sessionUserId, refresh]);
 
   const syncNow = useCallback(async () => {
     setSyncing(true);

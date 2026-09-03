@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import type { Vchannel, VchannelImportance, VchannelStatus } from '@/types/vchannel';
 import { mapVchannelRow, vchannelToDbRow } from '@/lib/vchannelMappers';
 import type { PlatformStatusValue } from '@/lib/vchannelPlatformStatus';
@@ -8,7 +7,7 @@ import type { PlatformStatusValue } from '@/lib/vchannelPlatformStatus';
 const VCHANNEL_SELECT = '*, brand_list ( brand_code )';
 
 export function useVchannels() {
-  const { session } = useAuth();
+  
   const [channels, setChannels] = useState<Vchannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +31,7 @@ export function useVchannels() {
 
   useEffect(() => {
     fetchChannels();
-  }, [session, fetchChannels]);
+  }, [fetchChannels]);
 
   const addChannel = useCallback(async (input: {
     channelCode: string;

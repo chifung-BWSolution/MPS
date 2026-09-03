@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { WorkCategoryConfig, CategoryRelationType, ProjectModuleGroup } from '@/components/day-report/WorkCategoriesManager';
-import { useAuth } from '@/context/AuthContext';
 import { categoryConfig } from '@/data/dayReportDataV2';
 
 const defaultRelation: Record<string, CategoryRelationType> = {
@@ -98,7 +97,7 @@ function mapRow(row: DbRow): WorkCategoryConfig {
 }
 
 export function useDayReportTypes() {
-  const { session } = useAuth();
+  
   const [types, setTypes] = useState<WorkCategoryConfig[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -116,7 +115,7 @@ export function useDayReportTypes() {
         }
         setLoading(false);
       });
-  }, [session]);
+  }, []);
 
   const addType = useCallback(async (item: WorkCategoryConfig) => {
     const row = {

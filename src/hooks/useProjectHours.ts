@@ -13,7 +13,7 @@ export type ProjectHoursStat = {
 export type ProjectHoursMap = Record<string, ProjectHoursStat>;
 
 export function useProjectHours(windowDays: number) {
-  const { session, systemUser } = useAuth();
+  const { systemUser } = useAuth();
   const [data, setData] = useState<ProjectHoursMap>({});
   const [loading, setLoading] = useState(true);
 
@@ -66,7 +66,7 @@ export function useProjectHours(windowDays: number) {
     return () => {
       cancelled = true;
     };
-  }, [windowDays, session, systemUser]);
+  }, [windowDays, systemUser?.staff_id]);
 
   return { data, loading };
 }

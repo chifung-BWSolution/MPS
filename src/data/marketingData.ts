@@ -2,32 +2,14 @@
  * Marketing Module Data — Unified data source for Marketing pages
  * Pulls from the same websiteDetailData used by Website tabs to enable data interconnection
  */
-import { SocialPost, PaidAd, SeoKeyword, EdmCampaign, Video } from '@/types/app';
+import { PaidAd, SeoKeyword, Video } from '@/types/app';
 import {
   websiteVideos,
-  websiteSocialPosts,
   websitePaidAds,
-  websiteEdmCampaigns,
 } from '@/data/websiteDetailData';
 import { websiteProfiles } from '@/data/websiteData';
 
 // === Flatten all data for global Marketing views ===
-
-export function getAllSocialPosts(): (SocialPost & { websiteName: string; company: string; brand: string })[] {
-  const result: (SocialPost & { websiteName: string; company: string; brand: string })[] = [];
-  for (const [wsId, posts] of Object.entries(websiteSocialPosts)) {
-    const profile = websiteProfiles.find(p => p.id === wsId);
-    for (const post of posts) {
-      result.push({
-        ...post,
-        websiteName: profile?.websiteName || wsId,
-        company: profile?.company || '',
-        brand: profile?.brand || '',
-      });
-    }
-  }
-  return result;
-}
 
 export function getAllPaidAds(): (PaidAd & { websiteName: string; company: string; brand: string })[] {
   const result: (PaidAd & { websiteName: string; company: string; brand: string })[] = [];
@@ -48,22 +30,6 @@ export function getAllPaidAds(): (PaidAd & { websiteName: string; company: strin
 /** Sample SEO seeds cleared — real data loads via useSeoKeywords / Supabase. */
 export function getAllSeoKeywords(): (SeoKeyword & { websiteName: string; company: string; brand: string })[] {
   return [];
-}
-
-export function getAllEdmCampaigns(): (EdmCampaign & { websiteName: string; company: string; brand: string })[] {
-  const result: (EdmCampaign & { websiteName: string; company: string; brand: string })[] = [];
-  for (const [wsId, campaigns] of Object.entries(websiteEdmCampaigns)) {
-    const profile = websiteProfiles.find(p => p.id === wsId);
-    for (const campaign of campaigns) {
-      result.push({
-        ...campaign,
-        websiteName: profile?.websiteName || wsId,
-        company: profile?.company || '',
-        brand: profile?.brand || '',
-      });
-    }
-  }
-  return result;
 }
 
 export function getAllVideos(): (Video & { websiteName: string; company: string; brand: string })[] {
@@ -125,27 +91,6 @@ export function parseVideoCalendarTheme(input: {
 export function getCalendarEventsForMonth(year: number, month: number): CalendarEvent[] {
   const events: CalendarEvent[] = [];
 
-  // Social posts with scheduled or published dates in target month
-  getAllSocialPosts().forEach(post => {
-    const dateStr = post.publishedDate || post.scheduledDate;
-    if (!dateStr) return;
-    const date = new Date(dateStr);
-    if (date.getFullYear() === year && date.getMonth() === month) {
-      events.push({
-        id: `social-${post.id}`,
-        day: date.getDate(),
-        title: post.content?.substring(0, 30) + '...' || '社交帖文',
-        type: 'social',
-        platform: post.platform,
-        company: post.company,
-        brand: post.brand,
-        websiteName: post.websiteName,
-        hours: post.hoursSpent,
-        sourceId: post.id,
-      });
-    }
-  });
-
   // Paid ads with start dates in target month
   getAllPaidAds().forEach(ad => {
     if (!ad.startDate) return;
@@ -161,25 +106,6 @@ export function getCalendarEventsForMonth(year: number, month: number): Calendar
         brand: ad.brand,
         websiteName: ad.websiteName,
         sourceId: ad.id,
-      });
-    }
-  });
-
-  // EDM campaigns
-  getAllEdmCampaigns().forEach(edm => {
-    if (!edm.sendDate) return;
-    const date = new Date(edm.sendDate);
-    if (date.getFullYear() === year && date.getMonth() === month) {
-      events.push({
-        id: `edm-${edm.id}`,
-        day: date.getDate(),
-        title: edm.subject,
-        type: 'edm',
-        company: edm.company,
-        brand: edm.brand,
-        websiteName: edm.websiteName,
-        hours: edm.hoursSpent,
-        sourceId: edm.id,
       });
     }
   });

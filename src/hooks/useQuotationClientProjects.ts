@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import { PITCHING_CURRENCY, optionalIsoDate, type PitchingExpenseItem, type PitchingProjectType, type PitchingRecord, type PitchingStatus } from '@/data/pitchingData';
 
 /** Supabase table shared by Pitching and Project pages */
@@ -160,7 +159,7 @@ export type QuotationClientProjectUpdate = Partial<
 
 /** Load all client projects from quotation_client_project (Pitching + Project pages). */
 export function useQuotationClientProjects() {
-  const { session } = useAuth();
+  
   const [records, setRecords] = useState<PitchingRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -188,7 +187,7 @@ export function useQuotationClientProjects() {
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   const addRecord = useCallback(
     async (

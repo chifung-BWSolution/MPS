@@ -40,6 +40,10 @@ export function resolveRoute(module: string, sub?: string): { module: string; su
   if (module === 'settings' && sub === 'talent-form') {
     return { module: 'talent', subModule: 'invite' };
   }
+  // Removed: 待跟進項目 was a mock-only website page
+  if (module === 'website' && sub === 'pending') {
+    return { module: 'website', subModule: resolveSubModule('website', 'list') };
+  }
   return { module, subModule: resolveSubModule(module, sub) };
 }
 
@@ -100,7 +104,6 @@ export const mainMenuItems: MainMenuItem[] = [
     subMenus: [
       { id: 'list', label: '網站列表' },
       { id: 'traffic', label: '網站流量' },
-      { id: 'pending', label: '待跟進項目' },
       { id: 'articles-list', label: '文章列表' },
     ],
   },

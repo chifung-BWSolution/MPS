@@ -47,16 +47,14 @@ assert.match(restore, /CREATE TABLE IF NOT EXISTS public\.seo_ranking_history/);
 
 assert.ok(used.has('upcoming_event'), 'dashboard still queries upcoming_event');
 assert.ok(used.has('gsc_sync_runs'), 'SEO page still queries gsc_sync_runs');
-assert.ok(used.has('seo_ranking_history'), 'SEO page still queries seo_ranking_history');
+assert.ok(used.has('seo_keywords'), 'SEO page still queries seo_keywords');
 
 const stillReferencedAfterDrop = [...used].filter((t) => dropped.has(t)).sort();
 const allowedRestored = new Set([
   'upcoming_event',
   'gsc_sync_runs',
-  'seo_ranking_history',
   'system_users',
   'user_info',
-  'staff_directory',
 ]);
 const unrestored = stillReferencedAfterDrop.filter((t) => !allowedRestored.has(t));
 assert.deepEqual(

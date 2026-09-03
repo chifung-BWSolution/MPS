@@ -181,9 +181,6 @@ function SeoTitleAI() {
                   <button className="p-1.5 rounded hover:bg-white text-muted-foreground hover:text-foreground transition-colors" title="複製">
                     <Copy size={14} />
                   </button>
-                  <button className="text-[11px] px-2 py-1 bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors">
-                    加入待跟進
-                  </button>
                 </div>
               </div>
             ))}

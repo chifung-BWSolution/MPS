@@ -6,6 +6,7 @@ import { projects, yearPlans } from '@/data/mockData';
 import { Brand, Company } from '@/types/app';
 import { useBrands } from '@/hooks/useBrands';
 import { useCompanies } from '@/hooks/useCompanies';
+import { Switch } from '@/components/ui/switch';
 import {
   Search,
   Plus,
@@ -71,6 +72,16 @@ export function BrandManagementSettings() {
   const handleEdit = (brand: Brand) => { setEditingBrand(brand); setIsModalOpen(true); };
   const handleDeleteClick = (brand: Brand) => setDeleteTarget(brand);
 
+  const handleToggleActive = async (brand: Brand) => {
+    const next = !brand.isActive;
+    const err = await updateBrand(brand.id, { isActive: next });
+    if (err) {
+      toast.error('更新狀態失敗', { description: err.message });
+      return;
+    }
+    toast.success(next ? '品牌已啟用' : '品牌已停用');
+  };
+
   const handleSave = async (formData: Partial<Brand>) => {
     if (editingBrand) {
       const err = await updateBrand(editingBrand.id, formData);
@@ -85,7 +96,7 @@ export function BrandManagementSettings() {
         companyId: formData.companyId || '',
         brandCode: formData.brandCode || '',
         displayName: formData.displayName || formData.brandCode || '',
-        isActive: true,
+        isActive: formData.isActive ?? true,
         projectCount: 0,
       };
       const err = await addBrand(newBrand);
@@ -196,6 +207,7 @@ export function BrandManagementSettings() {
           getYearPlanProgress={getYearPlanProgress}
           onEdit={handleEdit}
           onDelete={handleDeleteClick}
+          onToggleActive={handleToggleActive}
         />
       ) : (
         <BrandTableView
@@ -206,6 +218,7 @@ export function BrandManagementSettings() {
           getYearPlanProgress={getYearPlanProgress}
           onEdit={handleEdit}
           onDelete={handleDeleteClick}
+          onToggleActive={handleToggleActive}
         />
       )}
 
@@ -286,6 +299,27 @@ function DeleteConfirmModal({
   );
 }
 
+function BrandStatusToggle({
+  brand,
+  onToggle,
+}: {
+  brand: Brand;
+  onToggle: (brand: Brand) => void;
+}) {
+  return (
+    <div className="flex items-center justify-center gap-2">
+      <Switch
+        checked={brand.isActive}
+        onCheckedChange={() => onToggle(brand)}
+        aria-label={brand.isActive ? '停用品牌' : '啟用品牌'}
+      />
+      <span className={cn('text-[12px] font-medium', brand.isActive ? 'text-teal-700' : 'text-amber-700')}>
+        {brand.isActive ? '啟用' : '停用'}
+      </span>
+    </div>
+  );
+}
+
 function BrandCardView({
   brands,
   getCompanyName,
@@ -294,6 +328,7 @@ function BrandCardView({
   getYearPlanProgress,
   onEdit,
   onDelete,
+  onToggleActive,
 }: {
   brands: Brand[];
   getCompanyName: (id: string) => string;
@@ -302,6 +337,7 @@ function BrandCardView({
   getYearPlanProgress: (id: string) => { progress: number; target: number } | null;
   onEdit: (brand: Brand) => void;
   onDelete: (brand: Brand) => void;
+  onToggleActive: (brand: Brand) => void;
 }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -327,13 +363,11 @@ function BrandCardView({
                     <span className="text-[12px] font-mono font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded">
                       {brand.brandCode}
                     </span>
-                    {!brand.isActive && (
-                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">已停用</span>
-                    )}
                   </div>
                   <h3 className="text-[14px] font-bold text-[#0d1a2d] mt-1 leading-tight">{brand.displayName}</h3>
                 </div>
               </div>
+              <BrandStatusToggle brand={brand} onToggle={onToggleActive} />
             </div>
 
             <div className="space-y-2.5 mb-4">
@@ -402,6 +436,7 @@ function BrandTableView({
   getYearPlanProgress,
   onEdit,
   onDelete,
+  onToggleActive,
 }: {
   brands: Brand[];
   getCompanyName: (id: string) => string;
@@ -410,6 +445,7 @@ function BrandTableView({
   getYearPlanProgress: (id: string) => { progress: number; target: number } | null;
   onEdit: (brand: Brand) => void;
   onDelete: (brand: Brand) => void;
+  onToggleActive: (brand: Brand) => void;
 }) {
   return (
     <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] overflow-hidden">
@@ -456,9 +492,7 @@ function BrandTableView({
                     )}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium', brand.isActive ? 'bg-teal-50 text-teal-700' : 'bg-amber-50 text-amber-700')}>
-                      {brand.isActive ? '啟用' : '停用'}
-                    </span>
+                    <BrandStatusToggle brand={brand} onToggle={onToggleActive} />
                   </td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center gap-2">
@@ -596,6 +630,24 @@ function BrandModal({
                 )}
               />
               {errors.displayName && <p className="text-[11px] text-rose-500 mt-1">{errors.displayName}</p>}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
+            <div>
+              <div className="text-[13px] font-medium text-[#0d1a2d]">狀態</div>
+              <div className="text-[11px] text-muted-foreground">
+                {form.isActive ? '啟用中，可在各模組選用此品牌' : '已停用，不會出現在新的品牌選單'}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={cn('text-[12px] font-medium', form.isActive ? 'text-teal-700' : 'text-amber-700')}>
+                {form.isActive ? '啟用' : '停用'}
+              </span>
+              <Switch
+                checked={form.isActive ?? true}
+                onCheckedChange={(checked) => updateField('isActive', checked)}
+              />
             </div>
           </div>
         </div>

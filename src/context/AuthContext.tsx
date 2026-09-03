@@ -512,6 +512,15 @@ function clearStoredAuthProfile() {
   try { localStorage.removeItem(DEV_BYPASS_STORAGE_KEY); } catch {}
 }
 
+function isSameSession(a: Session | null, b: Session | null): boolean {
+  return (a?.access_token ?? null) === (b?.access_token ?? null)
+    && (a?.user?.id ?? null) === (b?.user?.id ?? null);
+}
+
+function isSameAuthUser(a: SupabaseUser | null, b: SupabaseUser | null): boolean {
+  return (a?.id ?? null) === (b?.id ?? null) && (a?.email ?? null) === (b?.email ?? null);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const storedAuthRef = useRef<ReturnType<typeof loadStoredAuthProfile> | undefined>(undefined);
   if (storedAuthRef.current === undefined) {
@@ -568,8 +577,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       console.log('[Auth] getSession result:', { hasSession: !!session, email: session?.user?.email });
-      setSession(session);
-      setUser(session?.user ?? null);
+      setSession((prev) => (isSameSession(prev, session) ? prev : session));
+      setUser((prev) => {
+        const nextUser = session?.user ?? null;
+        return isSameAuthUser(prev, nextUser) ? prev : nextUser;
+      });
       if (session?.user) {
         const sessionEmail = normalizeLoginEmail(session.user.email || '');
         const cachedEmail = normalizeLoginEmail(storedAuth.systemUser?.email || '');
@@ -612,8 +624,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data } = supabase.auth.onAuthStateChange(
         async (event, session) => {
           console.log('[Auth] onAuthStateChange:', event, session?.user?.email, '| authSucceeded:', authSucceededRef.current);
-          setSession(session);
-          setUser(session?.user ?? null);
+          setSession((prev) => (isSameSession(prev, session) ? prev : session));
+          setUser((prev) => {
+            const nextUser = session?.user ?? null;
+            return isSameAuthUser(prev, nextUser) ? prev : nextUser;
+          });
 
           if (session?.user) {
             // Only show the spinner when we do not already have a cached profile.
@@ -629,7 +644,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               await verifyAndFetchUser(session.user.email, session.user.id);
               // Clear timeout on success
               if (loadingTimeoutId) clearTimeout(loadingTimeoutId);
-            } else if (!verifyInProgressRef.current && authSucceededRef.current) {
+            } else if (
+              !verifyInProgressRef.current &&
+              authSucceededRef.current &&
+              (event === 'INITIAL_SESSION' || event === 'SIGNED_IN')
+            ) {
               console.log('[Auth] Cached session — background re-verify');
               await verifyAndFetchUser(session.user.email, session.user.id);
             }

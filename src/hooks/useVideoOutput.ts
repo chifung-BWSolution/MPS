@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import type { VideoOutput, VideoOutputInput } from '@/types/videoOutput';
 import { mapVideoOutputRow, videoOutputToDbRow } from '@/lib/videoOutputUtils';
 
@@ -10,7 +9,7 @@ const SELECT_QUERY = `
 `;
 
 export function useVideoOutput() {
-  const { session } = useAuth();
+  
   const [videos, setVideos] = useState<VideoOutput[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +34,7 @@ export function useVideoOutput() {
 
   useEffect(() => {
     fetchVideos();
-  }, [session, fetchVideos]);
+  }, [fetchVideos]);
 
   const addVideo = useCallback(async (input: VideoOutputInput) => {
     const row = videoOutputToDbRow(input);

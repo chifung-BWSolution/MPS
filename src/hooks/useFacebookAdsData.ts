@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import { invokeFacebookAdsIncrementalSync } from '@/lib/facebookAdsApi';
 import { resolveFacebookBrandListId } from '@/lib/facebookAdsBrand';
 import { parseActionBreakdown } from '@/lib/facebookAdsConversions';
@@ -115,7 +114,7 @@ export function resolveDateRange(
 }
 
 export function useFacebookAdsData(dateFrom: string, dateTo: string) {
-  const { session } = useAuth();
+  
   const [accounts, setAccounts] = useState<FacebookAdsAccount[]>([]);
   const [campaigns, setCampaigns] = useState<FacebookAdsCampaign[]>([]);
   const [lastSync, setLastSync] = useState<FacebookAdsSyncRun | null>(null);
@@ -261,7 +260,7 @@ export function useFacebookAdsData(dateFrom: string, dateTo: string) {
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   const triggerSync = useCallback(async () => {
     setSyncing(true);

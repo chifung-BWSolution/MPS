@@ -2766,7 +2766,7 @@ function WorkCalendar() {
           ? (selectedDepartment === '__ALL__' ? null : selectedDepartment)
           : ownDepartment; // non-super-admin locked to own department
 
-        // 1) Resolve staff scope via user_info department, then fetch staff_directory profiles
+        // 1) Resolve staff scope via users department, then fetch staffs profiles
         let allowedStaffIds: string[] | null = null;
         if (activeDept) {
           allowedStaffIds = await fetchStaffIdsByDepartment(activeDept);

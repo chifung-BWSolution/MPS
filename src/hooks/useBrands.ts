@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Brand } from '@/types/app';
-import { useAuth } from '@/context/AuthContext';
 import { brands as staticBrands } from '@/data/mockData';
 
 type DbRow = {
@@ -29,7 +28,7 @@ function noRowError(action: string): WriteError {
 }
 
 export function useBrands() {
-  const { session } = useAuth();
+  
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +50,7 @@ export function useBrands() {
         }
         setLoading(false);
       });
-  }, [session]);
+  }, []);
 
   const addBrand = useCallback(async (brand: Brand) => {
     const row = {

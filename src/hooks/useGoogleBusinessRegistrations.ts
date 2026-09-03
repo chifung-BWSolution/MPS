@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import type { GoogleBusinessRegistration } from '@/types/marketingOps';
 
 type DbRow = {
@@ -22,7 +21,7 @@ function mapRow(row: DbRow): GoogleBusinessRegistration {
 }
 
 export function useGoogleBusinessRegistrations() {
-  const { session } = useAuth();
+  
   const [registrations, setRegistrations] = useState<GoogleBusinessRegistration[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +44,7 @@ export function useGoogleBusinessRegistrations() {
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   const addRegistration = useCallback(
     async (data: Omit<GoogleBusinessRegistration, 'id'> & { id?: string }) => {

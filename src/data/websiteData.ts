@@ -1929,13 +1929,6 @@ export let allArticles: (Article & { __sampleData: true })[] = [];
 export let websiteArticles: WebsiteArticle[] = [];
 
 // Helper functions for many-to-many queries
-export function getArticlesForWebsite(websiteId: string): Article[] {
-  const articleIds = websiteArticles
-    .filter(wa => wa.websiteProfileId === websiteId)
-    .map(wa => wa.articleId);
-  return allArticles.filter(a => articleIds.includes(a.id));
-}
-
 export function getWebsitesForArticle(articleId: string): WebsiteProfileFull[] {
   const websiteIds = websiteArticles
     .filter(wa => wa.articleId === articleId)

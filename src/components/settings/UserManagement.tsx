@@ -483,7 +483,7 @@ function StaffPickerModal({
 
         setStaffList((data || []) as StaffPickerItem[]);
       } catch (err: any) {
-        console.warn('[UserManagement] staff_directory load failed:', err?.message || err);
+        console.warn('[UserManagement] staffs load failed:', err?.message || err);
         if (!cancelled) setStaffList([]);
       } finally {
         if (!cancelled) setLoading(false);

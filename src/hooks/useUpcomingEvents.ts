@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 
 export type UpcomingEventStatus = 'pending_publish' | 'published';
 
@@ -53,7 +52,7 @@ const mapRow = (row: DbRow): UpcomingEvent => ({
 });
 
 export function useUpcomingEvents() {
-  const { session } = useAuth();
+  
   const [events, setEvents] = useState<UpcomingEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +72,7 @@ export function useUpcomingEvents() {
         }
         setLoading(false);
       });
-  }, [session]);
+  }, []);
 
   const addEvent = useCallback(async (event: UpcomingEvent) => {
     const row = {

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import { mergeWebsitesByDomain } from '@/lib/adsWebsiteDisplay';
 import { resolveFacebookBrandListId } from '@/lib/facebookAdsBrand';
 import { todayIso } from '@/lib/adsDailySeries';
@@ -131,7 +130,7 @@ export function useAdsCostTrend(query: {
   monthFrom: string;
   monthTo: string;
 }) {
-  const { session } = useAuth();
+  
   const [campaigns, setCampaigns] = useState<AdsCostTrendCampaign[]>([]);
   const [tags, setTags] = useState<AdsTag[]>([]);
   const [asOf, setAsOf] = useState(() => todayIso());
@@ -445,7 +444,7 @@ export function useAdsCostTrend(query: {
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   return { campaigns, tags, asOf, ranges, loading, error, refresh };
 }

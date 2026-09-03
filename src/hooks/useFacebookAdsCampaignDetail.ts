@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import { resolveFacebookBrandListId } from '@/lib/facebookAdsBrand';
 import {
   mergeActionBreakdowns,
@@ -173,7 +172,7 @@ export function useFacebookAdsCampaignDetail(
   dateFrom: string,
   dateTo: string,
 ) {
-  const { session } = useAuth();
+  
   const [detail, setDetail] = useState<FacebookAdsCampaignDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -267,7 +266,7 @@ export function useFacebookAdsCampaignDetail(
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   return { detail, loading, error, refresh };
 }

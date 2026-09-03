@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useApp } from '@/context/AppContext';
-import { useAuth } from '@/context/AuthContext';
 import { deriveVideoOutputStatus } from '@/lib/videoOutputUtils';
 import type { PlatformPublishMap } from '@/types/videoOutput';
 
@@ -41,7 +40,7 @@ function inRange(dateStr: string | null | undefined, start: string, end: string)
 }
 
 export function useDashboardOverviewStats(): DashboardOverviewStats {
-  const { session } = useAuth();
+  
   const { selectedCompanyId, selectedBrandId } = useApp();
   const [liveWebsiteCount, setLiveWebsiteCount] = useState(0);
   const [publishedVideoCount, setPublishedVideoCount] = useState(0);
@@ -241,7 +240,7 @@ export function useDashboardOverviewStats(): DashboardOverviewStats {
     return () => {
       cancelled = true;
     };
-  }, [session, selectedCompanyId, selectedBrandId, monthRanges]);
+  }, [selectedCompanyId, selectedBrandId, monthRanges]);
 
   return {
     liveWebsiteCount,

@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import type { VchannelAccount, VchannelAccountLinkedLoginMethod } from '@/types/vchannel';
 import { accountToDbRow, mapAccountRow } from '@/lib/vchannelMappers';
 
@@ -93,7 +92,7 @@ async function syncAccountLoginMethods(accountId: string, loginMethodIds: string
 }
 
 export function useVchannelAccounts() {
-  const { session } = useAuth();
+  
   const [accounts, setAccounts] = useState<VchannelAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -129,7 +128,7 @@ export function useVchannelAccounts() {
 
   useEffect(() => {
     fetchAccounts();
-  }, [session, fetchAccounts]);
+  }, [fetchAccounts]);
 
   const addAccount = useCallback(async (input: Omit<VchannelAccount, 'id' | 'createdAt' | 'updatedAt' | 'linkedLoginMethods'> & { loginMethodIds?: string[] }) => {
     const row = accountToDbRow(input);

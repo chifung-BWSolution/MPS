@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
-import { Globe, Plus, Search, ExternalLink, FileText, Video, Share2, Mail, TrendingUp, Puzzle, Link2, Calendar, X, Check, Trash2, LayoutGrid, List, ArrowLeft, Megaphone, Star, Sparkles, ChevronDown, Pencil, Monitor, Server, MapPin, RefreshCw, BarChart3 } from 'lucide-react';
+import { Globe, Plus, Search, ExternalLink, FileText, Video, TrendingUp, Puzzle, Link2, Calendar, X, Check, Trash2, LayoutGrid, List, ArrowLeft, Megaphone, Star, ChevronDown, Pencil, Monitor, Server, MapPin, RefreshCw, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WebsiteProfileFull, Article, WebsiteLevel, ProfileType, SystemType } from '@/types/app';
 import {
@@ -12,9 +12,7 @@ import {
 } from '@/components/website/WebsiteFormModal';
 import {
   allArticles,
-  getArticlesForWebsite,
   addArticleToWebsite,
-  removeArticleFromWebsite,
   getWebsitesForArticle,
   addWebsiteToArticle,
   removeWebsiteFromArticle,
@@ -48,10 +46,8 @@ import {
 import { toExternalHref } from '@/lib/externalUrl';
 import {
   WebsiteVideosTab,
-  WebsiteSocialTab,
   WebsiteAdsTab,
   WebsiteSeoTab,
-  WebsiteEdmTab,
   WebsitePluginsTab,
   WebsiteBacklinkTab,
   WebsiteGoogleBusinessTab,
@@ -65,13 +61,6 @@ const statusConfig = {
   live: { label: '已上線', color: 'text-teal-700', bgColor: 'bg-teal-50' },
   maintenance: { label: '維護中', color: 'text-amber-700', bgColor: 'bg-amber-50' },
   archived: { label: '已封存', color: 'text-slate-700', bgColor: 'bg-slate-50' },
-};
-
-const articleStatusConfig = {
-  draft: { label: '草稿', color: 'text-slate-700', bgColor: 'bg-slate-50' },
-  writing: { label: '撰寫中', color: 'text-blue-700', bgColor: 'bg-blue-50' },
-  review: { label: '審核中', color: 'text-amber-700', bgColor: 'bg-amber-50' },
-  published: { label: '已發佈', color: 'text-teal-700', bgColor: 'bg-teal-50' },
 };
 
 // ===== Level Config =====
@@ -186,14 +175,10 @@ function WebsiteCard({ site, onClick }: { site: WebsiteProfileFull; onClick: () 
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-2 mb-3 pt-3 border-t border-border/50">
+      <div className="grid grid-cols-3 gap-2 mb-3 pt-3 border-t border-border/50">
         <div className="text-center">
           <span className="text-[14px] font-bold block">{site.pagesCount}</span>
           <span className="text-[10px] text-muted-foreground">頁面</span>
-        </div>
-        <div className="text-center">
-          <span className="text-[14px] font-bold block">{site.articlesCount}</span>
-          <span className="text-[10px] text-muted-foreground">文章</span>
         </div>
         <div className="text-center">
           <span className="text-[14px] font-bold block">{site.videosCount}</span>
@@ -237,337 +222,9 @@ function WebsiteTableRow({ site, onClick }: { site: WebsiteProfileFull; onClick:
       <td className="px-4 py-3"><BrandFieldBadge value={site.brand} /></td>
       <td className="px-4 py-3"><CompanyFieldBadge value={site.company} /></td>
       <td className="px-4 py-3"><StatusFieldBadge config={config} /></td>
-      <td className="px-4 py-3 text-[13px]">{site.articlesCount}</td>
       <td className="px-4 py-3 text-[13px]">{site.videosCount}</td>
       <td className="px-4 py-3 text-[13px] font-medium">{site.totalHours}h</td>
     </tr>
-  );
-}
-
-// ===== Add Article Modal =====
-function AddArticleModal({
-  websiteId,
-  existingArticleIds,
-  onClose,
-  onAdd,
-}: {
-  websiteId: string;
-  existingArticleIds: string[];
-  onClose: () => void;
-  onAdd: (articleIds: string[]) => void;
-}) {
-  const [mode, setMode] = useState<'existing' | 'new'>('existing');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [newArticle, setNewArticle] = useState({ title: '', channel: 'website_article', authorName: '' });
-
-  const availableArticles = allArticles.filter(a => !existingArticleIds.includes(a.id));
-  const filteredArticles = availableArticles.filter(a =>
-    !searchQuery || a.title.toLowerCase().includes(searchQuery.toLowerCase()) || (a.brand || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const toggleSelect = (id: string) => {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  };
-
-  const handleSubmit = () => {
-    if (mode === 'existing') {
-      onAdd(selectedIds);
-    } else {
-      onAdd([`new_${Date.now()}`]);
-    }
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[80vh] flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h3 className="text-[16px] font-bold">新增文章到此網站</h3>
-          <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
-        </div>
-
-        {/* Mode Toggle */}
-        <div className="flex items-center gap-2 px-6 pt-4">
-          <button
-            onClick={() => setMode('existing')}
-            className={cn('px-3 py-1.5 text-[13px] font-medium rounded-md transition-colors', mode === 'existing' ? 'bg-teal-600 text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80')}
-          >
-            從現有文章加入
-          </button>
-          <button
-            onClick={() => setMode('new')}
-            className={cn('px-3 py-1.5 text-[13px] font-medium rounded-md transition-colors', mode === 'new' ? 'bg-teal-600 text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80')}
-          >
-            新建文章
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
-          {mode === 'existing' ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm bg-white">
-                <Search size={14} className="text-muted-foreground" />
-                <input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground"
-                  placeholder="搜尋文章標題或品牌..."
-                />
-              </div>
-              {selectedIds.length > 0 && (
-                <div className="text-[12px] text-teal-600 font-medium">已選擇 {selectedIds.length} 篇文章</div>
-              )}
-              <div className="space-y-1 max-h-[350px] overflow-y-auto">
-                {filteredArticles.length === 0 ? (
-                  <div className="text-center py-6 text-[13px] text-muted-foreground">沒有可加入的文章</div>
-                ) : (
-                  filteredArticles.map(article => {
-                    const isSelected = selectedIds.includes(article.id);
-                    const statusCfg = articleStatusConfig[article.contentStatus];
-                    return (
-                      <div
-                        key={article.id}
-                        onClick={() => toggleSelect(article.id)}
-                        className={cn(
-                          'flex items-center gap-3 p-3 rounded-md border cursor-pointer transition-all',
-                          isSelected ? 'border-teal-600 bg-teal-50' : 'border-border hover:bg-muted/30'
-                        )}
-                      >
-                        <div className={cn('w-5 h-5 rounded border-2 flex items-center justify-center shrink-0', isSelected ? 'border-teal-600 bg-teal-600' : 'border-muted-foreground/30')}>
-                          {isSelected && <Check size={12} className="text-white" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <span className="text-[13px] font-medium block truncate">{article.title}</span>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[11px] text-muted-foreground">{article.authorName}</span>
-                            <BrandFieldBadge value={article.brand} className="px-1 py-0.5" />
-                            {article.publishDate && <span className="text-[11px] text-muted-foreground">{article.publishDate}</span>}
-                          </div>
-                        </div>
-                        <StatusFieldBadge config={statusCfg} className="text-[10px] shrink-0" />
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div>
-                <label className="text-[12px] font-medium text-muted-foreground block mb-1">文章標題 *</label>
-                <input
-                  value={newArticle.title}
-                  onChange={(e) => setNewArticle(prev => ({ ...prev, title: e.target.value }))}
-                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-                  placeholder="輸入文章標題"
-                />
-              </div>
-              <div>
-                <label className="text-[12px] font-medium text-muted-foreground block mb-1">渠道</label>
-                <select
-                  value={newArticle.channel}
-                  onChange={(e) => setNewArticle(prev => ({ ...prev, channel: e.target.value }))}
-                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-                >
-                  <option value="website_article">網站文章</option>
-                  <option value="youtube">YouTube</option>
-                  <option value="facebook">Facebook</option>
-                  <option value="instagram">Instagram</option>
-                  <option value="xiaohongshu">小紅書</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[12px] font-medium text-muted-foreground block mb-1">作者</label>
-                <input
-                  value={newArticle.authorName}
-                  onChange={(e) => setNewArticle(prev => ({ ...prev, authorName: e.target.value }))}
-                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-                  placeholder="撰稿人名稱"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
-          <button onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted rounded-md">取消</button>
-          <button
-            onClick={handleSubmit}
-            disabled={mode === 'existing' ? selectedIds.length === 0 : !newArticle.title}
-            className="px-4 py-2 text-[13px] font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {mode === 'existing' ? `加入 ${selectedIds.length} 篇文章` : '新建並關聯'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ===== Website Detail — Articles Tab =====
-function WebsiteArticlesTab({ site }: { site: WebsiteProfileFull }) {
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [articles, setArticles] = useState<Article[]>(() => getArticlesForWebsite(site.id));
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
-
-  const existingArticleIds = articles.map(a => a.id);
-
-  const handleAddArticles = (articleIds: string[]) => {
-    articleIds.forEach(id => {
-      if (!id.startsWith('new_')) {
-        addArticleToWebsite(site.id, id);
-      }
-    });
-    setArticles(getArticlesForWebsite(site.id));
-  };
-
-  const handleRemoveArticle = (articleId: string) => {
-    removeArticleFromWebsite(site.id, articleId);
-    setArticles(getArticlesForWebsite(site.id));
-    setSelectedIds(prev => prev.filter(id => id !== articleId));
-    setRemoveConfirmId(null);
-  };
-
-  const toggleSelect = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  const toggleAll = () => setSelectedIds(prev => prev.length === articles.length ? [] : articles.map(a => a.id));
-  const allSelected = articles.length > 0 && selectedIds.length === articles.length;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h4 className="text-[15px] font-bold">文章列表</h4>
-          <p className="text-[12px] text-muted-foreground mt-0.5">已關聯 {articles.length} 篇文章（多對多關聯）</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {selectedIds.length > 0 && (
-            <button
-              onClick={() => { selectedIds.forEach(id => { removeArticleFromWebsite(site.id, id); }); setArticles(getArticlesForWebsite(site.id)); setSelectedIds([]); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 border border-rose-300 text-rose-600 rounded-md text-[12px] font-medium hover:bg-rose-100 transition-colors"
-            >
-              <Trash2 size={12} />移除 {selectedIds.length} 篇
-            </button>
-          )}
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-medium hover:bg-teal-700 transition-colors"
-          >
-            <Plus size={13} />新增文章到此網站
-          </button>
-        </div>
-      </div>
-
-      {articles.length === 0 ? (
-        <div className="text-center py-12 border border-dashed border-border rounded-md">
-          <FileText size={32} className="text-muted-foreground mx-auto mb-3" />
-          <p className="text-[14px] font-medium text-muted-foreground">尚未關聯任何文章</p>
-          <p className="text-[12px] text-muted-foreground mt-1">點擊「新增文章到此網站」開始關聯</p>
-        </div>
-      ) : (
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="px-4 py-3 w-8">
-                  <div onClick={toggleAll} className={cn('w-4 h-4 rounded border-2 flex items-center justify-center cursor-pointer', allSelected ? 'border-teal-600 bg-teal-600' : 'border-muted-foreground/40')}>
-                    {allSelected && <Check size={10} className="text-white" />}
-                  </div>
-                </th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">標題</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">作者</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">發佈日期</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">工時</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">SEO Tags</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">成果</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {articles.map(article => {
-                const statusCfg = articleStatusConfig[article.contentStatus];
-                const isSelected = selectedIds.includes(article.id);
-                return (
-                  <tr key={article.id} className={cn('border-b border-border/50 hover:bg-muted/20 transition-colors', isSelected && 'bg-rose-50/30')}>
-                    <td className="px-4 py-3" onClick={() => toggleSelect(article.id)}>
-                      <div className={cn('w-4 h-4 rounded border-2 flex items-center justify-center cursor-pointer', isSelected ? 'border-rose-500 bg-rose-500' : 'border-muted-foreground/40')}>
-                        {isSelected && <Check size={10} className="text-white" />}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-[13px] font-medium max-w-[200px] truncate block">{article.title}</span>
-                    </td>
-                    <td className="px-4 py-3 text-[13px]">{article.authorName || '—'}</td>
-                    <td className="px-4 py-3 text-[12px] text-muted-foreground">{article.publishDate || '—'}</td>
-                    <td className="px-4 py-3 text-[13px] font-medium">{article.hoursSpent ? `${article.hoursSpent}h` : '—'}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1 flex-wrap">
-                        {article.targetKeywords?.slice(0, 2).map((kw, i) => (
-                          <span key={i} className={cn('text-[10px] px-1.5 py-0.5 rounded-sm font-bold border',
-                            kw.level === 'S1' ? 'bg-rose-50 text-rose-700 border-rose-200' :
-                            kw.level === 'S2' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                            'bg-green-50 text-green-700 border-green-200'
-                          )}>
-                            {kw.level}<span className="font-normal ml-0.5">{kw.keyword}</span>
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusFieldBadge config={statusCfg} />
-                    </td>
-                    <td className="px-4 py-3">
-                      {article.url ? (
-                        <a href={article.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[11px] text-teal-600 hover:underline font-medium">
-                          <ExternalLink size={11} />查看文章
-                        </a>
-                      ) : <span className="text-[11px] text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => setRemoveConfirmId(article.id)}
-                        className="p-1 text-rose-500 hover:bg-rose-50 rounded transition-colors"
-                        title="移除關聯"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {showAddModal && (
-        <AddArticleModal
-          websiteId={site.id}
-          existingArticleIds={existingArticleIds}
-          onClose={() => setShowAddModal(false)}
-          onAdd={handleAddArticles}
-        />
-      )}
-
-      {/* Remove confirm dialog */}
-      {removeConfirmId && (
-        <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-[380px]">
-            <h3 className="text-[16px] font-bold mb-2">確認移除關聯</h3>
-            <p className="text-[13px] text-muted-foreground mb-4">確定要移除此文章與網站的關聯嗎？此操作不會刪除文章本身。</p>
-            <div className="flex items-center justify-end gap-2">
-              <button onClick={() => setRemoveConfirmId(null)} className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted rounded-md">取消</button>
-              <button onClick={() => handleRemoveArticle(removeConfirmId)} className="px-4 py-2 text-[13px] font-medium bg-rose-600 text-white rounded-md hover:bg-rose-700">確認移除</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -626,13 +283,10 @@ function WebsiteDetail({
 
   const tabs = [
     { id: 'overview', label: '概覽', icon: Globe },
-    { id: 'articles', label: '文章列表', icon: FileText },
     { id: 'videos', label: '影片列表', icon: Video },
-    { id: 'social', label: '社交帖文', icon: Share2 },
     { id: 'ads', label: '付費廣告', icon: Megaphone },
     { id: 'seo', label: 'SEO 關鍵字', icon: TrendingUp },
     { id: 'traffic', label: '網站流量', icon: BarChart3 },
-    { id: 'edm', label: 'EDM', icon: Mail },
     { id: 'plugins', label: '插件/工具', icon: Puzzle },
     { id: 'backlink', label: '反向連結', icon: Link2 },
     { id: 'google-business', label: 'Google Business', icon: MapPin },
@@ -693,9 +347,8 @@ function WebsiteDetail({
               <StatusFieldBadge config={statusConfig[site.status]} className="text-[10px]" />
             </div>
           </div>
-          <div className="grid grid-cols-5 gap-4 text-center">
+          <div className="grid grid-cols-4 gap-4 text-center">
             <div><span className="text-[18px] font-bold block">{site.pagesCount}</span><span className="text-[10px] text-muted-foreground">頁面</span></div>
-            <div><span className="text-[18px] font-bold block">{site.articlesCount}</span><span className="text-[10px] text-muted-foreground">文章</span></div>
             <div><span className="text-[18px] font-bold block">{site.videosCount}</span><span className="text-[10px] text-muted-foreground">影片</span></div>
             <div><span className="text-[18px] font-bold block">{site.keywordsCount}</span><span className="text-[10px] text-muted-foreground">關鍵字</span></div>
             <div><span className="text-[18px] font-bold block">{site.totalHours}h</span><span className="text-[10px] text-muted-foreground">工時</span></div>
@@ -727,18 +380,14 @@ function WebsiteDetail({
         {activeTab === 'overview' && (
           <div className="space-y-6">
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-teal-50 rounded-md p-4 text-center">
-                <span className="text-[24px] font-bold text-teal-700 block">{site.articlesCount}</span>
-                <span className="text-[12px] text-teal-600">文章數</span>
-              </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div className="bg-blue-50 rounded-md p-4 text-center">
                 <span className="text-[24px] font-bold text-blue-700 block">{site.videosCount}</span>
                 <span className="text-[12px] text-blue-600">影片數</span>
               </div>
-              <div className="bg-purple-50 rounded-md p-4 text-center">
-                <span className="text-[24px] font-bold text-purple-700 block">{site.socialPostsCount}</span>
-                <span className="text-[12px] text-purple-600">社交帖數</span>
+              <div className="bg-teal-50 rounded-md p-4 text-center">
+                <span className="text-[24px] font-bold text-teal-700 block">{site.keywordsCount}</span>
+                <span className="text-[12px] text-teal-600">關鍵字</span>
               </div>
               <div className="bg-amber-50 rounded-md p-4 text-center">
                 <span className="text-[24px] font-bold text-amber-700 block">{budgetPercent}%</span>
@@ -828,19 +477,15 @@ function WebsiteDetail({
           </div>
         )}
 
-        {activeTab === 'articles' && <WebsiteArticlesTab site={site} />}
-
         {activeTab === 'videos' && (
           <WebsiteVideosTab
             site={site}
             onVideosCountChange={count => onSitePatch?.({ videosCount: count })}
           />
         )}
-        {activeTab === 'social' && <WebsiteSocialTab site={site} />}
         {activeTab === 'ads' && <WebsiteAdsTab site={site} />}
         {activeTab === 'seo' && <WebsiteSeoTab site={site} />}
         {activeTab === 'traffic' && <WebsiteTrafficTab site={site} />}
-        {activeTab === 'edm' && <WebsiteEdmTab site={site} />}
         {activeTab === 'plugins' && <WebsitePluginsTab site={site} />}
         {activeTab === 'backlink' && <WebsiteBacklinkTab site={site} />}
         {activeTab === 'google-business' && <WebsiteGoogleBusinessTab site={site} />}
@@ -1508,16 +1153,6 @@ function FeaturedWebsiteCard({ site, onClick }: { site: WebsiteProfileFull; onCl
   const budgetPercent = site.budgetTotal ? Math.round((site.budgetUsed || 0) / site.budgetTotal * 100) : 0;
   const lastUpdate = '2024-12-01';
 
-  // Mock last article title
-  const lastArticleTitles: Record<string, string> = {
-    'w1': '紅酒保存的10個技巧',
-    'w2': '活動策劃完整指南 2025',
-    'w3': 'Web Design Trends 2025',
-    'w4': '品酒入門 — 法國波爾多篇',
-    'w5': 'BSC 品牌設計案例分享',
-  };
-  const lastArticleTitle = lastArticleTitles[site.id];
-
   return (
     <div
       onClick={onClick}
@@ -1549,18 +1184,14 @@ function FeaturedWebsiteCard({ site, onClick }: { site: WebsiteProfileFull; onCl
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-3 gap-2 mb-4 pb-4 border-b border-border/50">
-        <div className="text-center">
-          <span className="text-[16px] font-bold text-teal-700 block">{site.articlesCount}</span>
-          <span className="text-[10px] text-muted-foreground">文章</span>
-        </div>
+      <div className="grid grid-cols-2 gap-2 mb-4 pb-4 border-b border-border/50">
         <div className="text-center">
           <span className="text-[16px] font-bold text-blue-700 block">{site.videosCount}</span>
           <span className="text-[10px] text-muted-foreground">影片</span>
         </div>
         <div className="text-center">
-          <span className="text-[16px] font-bold text-purple-700 block">{site.socialPostsCount}</span>
-          <span className="text-[10px] text-muted-foreground">社交帖</span>
+          <span className="text-[16px] font-bold text-teal-700 block">{site.keywordsCount}</span>
+          <span className="text-[10px] text-muted-foreground">關鍵字</span>
         </div>
       </div>
 
@@ -1579,14 +1210,6 @@ function FeaturedWebsiteCard({ site, onClick }: { site: WebsiteProfileFull; onCl
           </div>
         </div>
       ) : null}
-
-      {/* Last article title */}
-      {lastArticleTitle && (
-        <div className="mb-2 px-2 py-1.5 bg-muted/40 rounded text-[11px] truncate">
-          <span className="text-muted-foreground">最新文章：</span>
-          <span className="font-medium">{lastArticleTitle}</span>
-        </div>
-      )}
 
       {/* Last update */}
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
@@ -1607,7 +1230,7 @@ function FeaturedWebsites({ onSelectSite }: { onSelectSite: (site: WebsiteProfil
   const filters: { id: FeaturedFilter; label: string; desc: string }[] = [
     { id: 'level_1_2', label: '主打 + 重要', desc: 'Level 1-2' },
     { id: 'all', label: '全部網站', desc: '' },
-    { id: 'high_articles', label: '高活躍度', desc: '文章數 > 10' },
+    { id: 'high_articles', label: '高活躍度', desc: '影片數 > 0' },
     { id: 'high_budget', label: '高預算使用率', desc: '預算使用 > 70%' },
     { id: 'recently_updated', label: '最近更新', desc: '近期有新內容' },
     { id: 'live_maintenance', label: '已上線/維護中', desc: '' },
@@ -1616,9 +1239,9 @@ function FeaturedWebsites({ onSelectSite }: { onSelectSite: (site: WebsiteProfil
   const applyFilter = (sites: WebsiteProfileFull[]) => {
     switch (activeFilter) {
       case 'level_1_2': return sites.filter(ws => ws.level === 1 || ws.level === 2);
-      case 'high_articles': return sites.filter(ws => ws.articlesCount > 10);
+      case 'high_articles': return sites.filter(ws => ws.videosCount > 0);
       case 'high_budget': return sites.filter(ws => ws.budgetTotal ? (ws.budgetUsed || 0) / ws.budgetTotal > 0.7 : false);
-      case 'recently_updated': return sites.filter(ws => ws.articlesCount > 0 || ws.videosCount > 0);
+      case 'recently_updated': return sites.filter(ws => ws.videosCount > 0);
       case 'live_maintenance': return sites.filter(ws => ws.status === 'live' || ws.status === 'maintenance');
       default: return sites;
     }
@@ -2446,352 +2069,6 @@ function GlobalArticleList({ onSelectArticle }: { onSelectArticle: (a: Article) 
   );
 }
 
-// ===== Pending Content (待跟進項目) =====
-const mockPendingEntries = [
-  { id: '1', title: '電商網站轉換率優化 5 大秘訣', brand: 'BW Design', plannedDate: '2025-01-15', source: 'AI 生成', status: 'planned' as const, aiGenerated: true, notes: '根據 S1 關鍵字「轉換率」自動生成' },
-  { id: '2', title: '如何選擇適合的網站主機', brand: 'BW Design', plannedDate: '2025-01-18', source: 'AI 生成', status: 'planned' as const, aiGenerated: true, notes: '根據 S2 關鍵字「網站主機」自動生成' },
-  { id: '3', title: 'Google Ads vs Facebook Ads 比較分析', brand: 'ACI Global', plannedDate: '2025-01-20', source: 'AI 生成', status: 'in_progress' as const, aiGenerated: true, notes: '' },
-  { id: '4', title: '品牌形象設計的重要性', brand: 'FCC Media', plannedDate: '2025-01-22', source: '手動新增', status: 'planned' as const, aiGenerated: false, notes: '客戶要求主題' },
-  { id: '5', title: '小紅書行銷攻略 2025', brand: 'BW Design', plannedDate: '2025-01-25', source: 'AI 生成', status: 'planned' as const, aiGenerated: true, notes: '根據社交媒體關鍵字生成' },
-];
-
-function SubmitCompleteModal({
-  entry,
-  onClose,
-  onDone,
-}: {
-  entry: typeof mockPendingEntries[0];
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const { profiles: websiteProfiles } = useWebsiteProfiles();
-  // Pre-select recommended website based on brand matching
-  const recommended = websiteProfiles.filter(ws =>
-    ws.brand === entry.brand || (ws.brand || '').toLowerCase().includes(entry.brand.toLowerCase().split(' ')[0])
-  );
-  const [selectedWebsiteIds, setSelectedWebsiteIds] = useState<string[]>(recommended.map(r => r.id));
-  const [search, setSearch] = useState('');
-
-  const filtered = websiteProfiles.filter(ws =>
-    !search || ws.websiteName.toLowerCase().includes(search.toLowerCase()) || (ws.brand || '').toLowerCase().includes(search.toLowerCase())
-  );
-  const toggle = (id: string) => setSelectedWebsiteIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-
-  const handleSubmit = () => {
-    // Create article record linked to selected websites
-    onDone();
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[540px] max-h-[75vh] flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <div>
-            <h3 className="text-[16px] font-bold">提交完成</h3>
-            <p className="text-[12px] text-muted-foreground mt-0.5 max-w-[360px] truncate">「{entry.title}」</p>
-          </div>
-          <button onClick={onClose} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
-        </div>
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
-          <div className="bg-teal-50 rounded-md p-3 border border-teal-200">
-            <p className="text-[12px] text-teal-700">選擇要將此文章關聯到的網站，系統將自動建立文章記錄並關聯。</p>
-          </div>
-
-          {/* Recommended sites */}
-          {recommended.length > 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-md p-3">
-              <p className="text-[11px] font-bold text-amber-700 mb-1">⭐ 推薦網站（根據品牌「{entry.brand}」自動匹配）</p>
-              <div className="flex items-center gap-2">
-                {recommended.map(ws => (
-                  <span key={ws.id} className="text-[11px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-medium">{ws.websiteName}</span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-2">選擇網站（可多選）</label>
-            <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm mb-3 bg-white">
-              <Search size={14} className="text-muted-foreground" />
-              <input value={search} onChange={e => setSearch(e.target.value)} className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground" placeholder="搜尋網站..." />
-            </div>
-            {selectedWebsiteIds.length > 0 && <div className="text-[12px] text-teal-600 font-medium mb-2">已選擇 {selectedWebsiteIds.length} 個網站</div>}
-            <div className="space-y-1 max-h-[260px] overflow-y-auto">
-              {filtered.map(ws => {
-                const isSel = selectedWebsiteIds.includes(ws.id);
-                const cfg = statusConfig[ws.status];
-                const isRecommended = recommended.some(r => r.id === ws.id);
-                return (
-                  <div key={ws.id} onClick={() => toggle(ws.id)} className={cn('flex items-center gap-3 p-3 rounded-md border cursor-pointer transition-all', isSel ? 'border-teal-600 bg-teal-50' : 'border-border hover:bg-muted/30')}>
-                    <div className={cn('w-5 h-5 rounded border-2 flex items-center justify-center shrink-0', isSel ? 'border-teal-600 bg-teal-600' : 'border-muted-foreground/30')}>
-                      {isSel && <Check size={12} className="text-white" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[13px] font-medium block">{ws.websiteName}</span>
-                        {isRecommended && <span className="text-[9px] bg-amber-100 text-amber-600 px-1 py-0.5 rounded font-bold">推薦</span>}
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[11px] text-teal-600">{ws.domainUrl}</span>
-                        <BrandFieldBadge value={ws.brand} className="px-1 py-0.5" />
-                      </div>
-                    </div>
-                    <StatusFieldBadge config={cfg} className="text-[10px] shrink-0" />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
-          <button onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted rounded-md">取消</button>
-          <button
-            onClick={handleSubmit}
-            className="px-4 py-2 text-[13px] font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700"
-          >
-            <Check size={13} className="inline mr-1" />建立文章記錄{selectedWebsiteIds.length > 0 ? `（關聯 ${selectedWebsiteIds.length} 個網站）` : ''}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PendingContent() {
-  const [entries, setEntries] = useState(mockPendingEntries);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [submitEntry, setSubmitEntry] = useState<typeof mockPendingEntries[0] | null>(null);
-  const [showBatchStartConfirm, setShowBatchStartConfirm] = useState(false);
-  const [showBatchCompleteModal, setShowBatchCompleteModal] = useState(false);
-
-  const statusCfgMap = {
-    planned: { label: '待跟進', color: 'text-amber-700', bgColor: 'bg-amber-50' },
-    in_progress: { label: '撰寫中', color: 'text-blue-700', bgColor: 'bg-blue-50' },
-    completed: { label: '已完成', color: 'text-teal-700', bgColor: 'bg-teal-50' },
-  };
-
-  const toggleSelect = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  const toggleAll = () => setSelectedIds(prev => prev.length === entries.length ? [] : entries.map(e => e.id));
-  const allSelected = entries.length > 0 && selectedIds.length === entries.length;
-
-  const handleStart = (id: string) => {
-    setEntries(prev => prev.map(e => e.id === id ? { ...e, status: 'in_progress' as const } : e));
-  };
-
-  const handleComplete = (entry: typeof mockPendingEntries[0]) => {
-    setSubmitEntry(entry);
-  };
-
-  const handleCompleted = (id: string) => {
-    setEntries(prev => prev.map(e => e.id === id ? { ...e, status: 'completed' as const } : e));
-  };
-
-  const handleBatchStart = () => {
-    setEntries(prev => prev.map(e => selectedIds.includes(e.id) && e.status === 'planned' ? { ...e, status: 'in_progress' as const } : e));
-    setSelectedIds([]);
-    setShowBatchStartConfirm(false);
-  };
-
-  const pendingCount = entries.filter(e => e.status === 'planned').length;
-  const inProgressCount = entries.filter(e => e.status === 'in_progress').length;
-  const completedCount = entries.filter(e => e.status === 'completed').length;
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-[32px] font-bold tracking-tight">待跟進項目</h1>
-          <p className="text-[14px] text-muted-foreground mt-1">AI 建議文章主題及待轉為正式文章的記錄。</p>
-        </div>
-        {selectedIds.length > 0 && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowBatchStartConfirm(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-medium hover:bg-teal-700"
-            >
-              <FileText size={13} />批量開始撰寫（{selectedIds.length}）
-            </button>
-            <button
-              onClick={() => setShowBatchCompleteModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 border-2 border-teal-600 text-teal-700 rounded-md text-[12px] font-medium hover:bg-teal-50"
-            >
-              <Check size={13} />批量提交完成（{selectedIds.length}）
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Stats row */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-center">
-          <span className="text-[22px] font-bold text-amber-700 block">{pendingCount}</span>
-          <span className="text-[12px] text-amber-600">待跟進</span>
-        </div>
-        <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-center">
-          <span className="text-[22px] font-bold text-blue-700 block">{inProgressCount}</span>
-          <span className="text-[12px] text-blue-600">撰寫中</span>
-        </div>
-        <div className="bg-teal-50 border border-teal-200 rounded-md p-3 text-center">
-          <span className="text-[22px] font-bold text-teal-700 block">{completedCount}</span>
-          <span className="text-[12px] text-teal-600">已完成</span>
-        </div>
-      </div>
-
-      <div className="bg-gradient-to-r from-teal-50 to-cyan-50 rounded-md border border-teal-200 p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Sparkles size={14} className="text-teal-600" />
-          <span className="text-[13px] font-bold text-teal-800">AI 建議的文章主題</span>
-        </div>
-        <p className="text-[12px] text-teal-700">系統根據 SEO 關鍵字庫生成的文章建議。「開始撰寫」→ 更新狀態並跳轉新增文章表單；「提交完成」→ 建立文章記錄並關聯網站。</p>
-      </div>
-
-      {/* Select all bar */}
-      <div className="flex items-center justify-between">
-        <button onClick={toggleAll} className="flex items-center gap-2 text-[12px] text-teal-600 hover:underline">
-          <div className={cn('w-4 h-4 rounded border-2 flex items-center justify-center', allSelected ? 'border-teal-600 bg-teal-600' : 'border-muted-foreground/40')}>
-            {allSelected && <Check size={10} className="text-white" />}
-          </div>
-          {allSelected ? '取消全選' : '全選'}
-        </button>
-        {selectedIds.length > 0 && <span className="text-[12px] text-teal-600 font-medium">已選 {selectedIds.length} 項</span>}
-      </div>
-
-      <div className="space-y-3">
-        {entries.map(entry => {
-          const config = statusCfgMap[entry.status];
-          const isSelected = selectedIds.includes(entry.id);
-          return (
-            <div
-              key={entry.id}
-              className={cn(
-                'bg-white rounded-md border shadow-[0_2px_6px_rgba(0,20,40,0.05)] p-4 transition-all',
-                isSelected ? 'border-teal-400 bg-teal-50/30' : 'border-[rgba(13,26,45,0.08)]'
-              )}
-            >
-              <div className="flex items-start gap-3">
-                {/* Checkbox */}
-                <div
-                  onClick={() => toggleSelect(entry.id)}
-                  className={cn('w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 cursor-pointer mt-0.5', isSelected ? 'border-teal-600 bg-teal-600' : 'border-muted-foreground/40')}
-                >
-                  {isSelected && <Check size={12} className="text-white" />}
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        {entry.aiGenerated && <Sparkles size={12} className="text-teal-600 shrink-0" />}
-                        <span className="text-[14px] font-semibold">{entry.title}</span>
-                      </div>
-                      <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                        <BrandFieldBadge value={entry.brand} className="font-medium" />
-                        <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                          <Calendar size={10} />計劃日期：{entry.plannedDate}
-                        </span>
-                        <span className={cn('text-[10px] px-1 py-0.5 rounded', entry.aiGenerated ? 'bg-violet-50 text-violet-700 border border-violet-200' : 'bg-muted text-muted-foreground')}>
-                          {entry.source}
-                        </span>
-                      </div>
-                      {entry.notes && (
-                        <p className="text-[11px] text-muted-foreground mt-1.5 italic">{entry.notes}</p>
-                      )}
-                    </div>
-
-                    {/* Status & Actions */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      <StatusFieldBadge config={config} className="px-2 py-1" />
-                      {entry.status === 'planned' && (
-                        <button
-                          onClick={() => handleStart(entry.id)}
-                          className="text-[12px] px-3 py-1.5 bg-teal-600 text-white rounded-md hover:bg-teal-700 font-medium transition-colors flex items-center gap-1"
-                        >
-                          <FileText size={12} />開始撰寫
-                        </button>
-                      )}
-                      {entry.status === 'in_progress' && (
-                        <button
-                          onClick={() => handleComplete(entry)}
-                          className="text-[12px] px-3 py-1.5 border-2 border-teal-600 text-teal-700 rounded-md hover:bg-teal-50 font-medium transition-colors flex items-center gap-1"
-                        >
-                          <Check size={12} />提交完成
-                        </button>
-                      )}
-                      {entry.status === 'completed' && (
-                        <span className="text-[12px] text-teal-600 flex items-center gap-1">
-                          <Check size={12} />已建立
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Batch start confirm */}
-      {showBatchStartConfirm && (
-        <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-[380px]">
-            <h3 className="text-[16px] font-bold mb-2">批量開始撰寫</h3>
-            <p className="text-[13px] text-muted-foreground mb-4">將 {selectedIds.length} 個「待跟進」項目的狀態更新為「撰寫中」？</p>
-            <div className="flex items-center justify-end gap-2">
-              <button onClick={() => setShowBatchStartConfirm(false)} className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted rounded-md">取消</button>
-              <button onClick={handleBatchStart} className="px-4 py-2 text-[13px] font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700">確認</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Submit complete modal */}
-      {submitEntry && (
-        <SubmitCompleteModal
-          entry={submitEntry}
-          onClose={() => setSubmitEntry(null)}
-          onDone={() => { handleCompleted(submitEntry.id); setSubmitEntry(null); }}
-        />
-      )}
-
-      {/* Batch complete modal */}
-      {showBatchCompleteModal && selectedIds.length > 0 && (
-        <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-[420px]">
-            <h3 className="text-[16px] font-bold mb-2">批量提交完成</h3>
-            <p className="text-[13px] text-muted-foreground mb-3">將以下 {selectedIds.length} 個項目標記為已完成並建立文章記錄：</p>
-            <div className="space-y-1 max-h-[180px] overflow-y-auto mb-4">
-              {entries.filter(e => selectedIds.includes(e.id)).map(e => (
-                <div key={e.id} className="flex items-center gap-2 text-[12px]">
-                  <Check size={11} className="text-teal-600" />
-                  <span className="truncate">{e.title}</span>
-                  <BrandFieldBadge value={e.brand} className="text-[10px] px-1 py-0.5 shrink-0" />
-                </div>
-              ))}
-            </div>
-            <p className="text-[12px] text-amber-600 bg-amber-50 px-3 py-2 rounded mb-4">系統將根據各項目的品牌自動推薦並關聯到最相關的網站。</p>
-            <div className="flex items-center justify-end gap-2">
-              <button onClick={() => setShowBatchCompleteModal(false)} className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted rounded-md">取消</button>
-              <button
-                onClick={() => {
-                  setEntries(prev => prev.map(e => selectedIds.includes(e.id) ? { ...e, status: 'completed' as const } : e));
-                  setSelectedIds([]);
-                  setShowBatchCompleteModal(false);
-                }}
-                className="px-4 py-2 text-[13px] font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700"
-              >
-                確認批量完成
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ===== Main Export =====
 export function WebsiteModule({ subModule }: { subModule?: string }) {
   const { profiles } = useWebsiteProfiles();
@@ -2847,8 +2124,6 @@ export function WebsiteModule({ subModule }: { subModule?: string }) {
       return <FeaturedWebsites onSelectSite={setSelectedSite} />;
     case 'articles-list':
       return <GlobalArticleList onSelectArticle={setSelectedArticle} />;
-    case 'pending':
-      return <PendingContent />;
     case 'traffic':
       return <Ga4TrafficModule />;
     case 'list':

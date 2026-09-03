@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import { invokeGscSync } from '@/lib/gscApi';
-import type { GscSyncRunRow, SeoKeywordRow, SeoRankingHistoryRow } from '@/types/seo';
+import type { GscSyncRunRow, SeoKeywordRow } from '@/types/seo';
 
 type WebsiteJoin = {
   website_name: string | null;
@@ -73,7 +72,7 @@ export type AddSeoKeywordInput = {
 };
 
 export function useSeoKeywords() {
-  const { session } = useAuth();
+  
   const [keywords, setKeywords] = useState<SeoKeywordRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -128,7 +127,7 @@ export function useSeoKeywords() {
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   const syncGsc = useCallback(async () => {
     setSyncing(true);
@@ -193,22 +192,6 @@ export function useSeoKeywords() {
     return err;
   }, []);
 
-  const fetchRankingHistory = useCallback(async (keywordId: string): Promise<SeoRankingHistoryRow[]> => {
-    const { data, error: err } = await supabase
-      .from('seo_ranking_history')
-      .select('id, keyword_id, metric_date, ranking_position, clicks, impressions, ctr, source')
-      .eq('keyword_id', keywordId)
-      .order('metric_date', { ascending: true });
-    if (err) return [];
-    return ((data as SeoRankingHistoryRow[] | null) ?? []).map((r) => ({
-      ...r,
-      ranking_position: r.ranking_position == null ? null : Number(r.ranking_position),
-      clicks: Number(r.clicks) || 0,
-      impressions: Number(r.impressions) || 0,
-      ctr: r.ctr == null ? null : Number(r.ctr),
-    }));
-  }, []);
-
   return {
     keywords,
     loading,
@@ -219,6 +202,5 @@ export function useSeoKeywords() {
     lastSyncRun,
     addKeyword,
     deleteKeyword,
-    fetchRankingHistory,
   };
 }

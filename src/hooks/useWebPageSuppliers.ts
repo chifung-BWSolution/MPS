@@ -1,28 +1,35 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import type { WebPageSupplier } from '@/types/marketingOps';
 
 type DbRow = {
   id: string;
-  name: string;
-  platform: string;
+  supplier_types_id: string | null;
+  display_name: string;
+  description: string | null;
+  company_name: string | null;
+  contact_person: string | null;
+  phone: string | null;
+  email: string | null;
+  remarks: string | null;
   url: string;
-  cost: number | string;
-  currency: string;
-  rating: number | string;
+  is_active: boolean | null;
   created_at: string | null;
 };
 
 function mapRow(row: DbRow): WebPageSupplier {
   return {
     id: row.id,
-    name: row.name,
-    platform: row.platform ?? '',
-    url: row.url,
-    cost: Number(row.cost) || 0,
-    currency: row.currency === 'HKD' ? 'HKD' : 'USD',
-    rating: Number(row.rating) || 0,
+    supplierTypesId: row.supplier_types_id,
+    displayName: row.display_name,
+    description: row.description ?? '',
+    companyName: row.company_name ?? '',
+    contactPerson: row.contact_person ?? '',
+    phone: row.phone ?? '',
+    email: row.email ?? '',
+    remarks: row.remarks ?? '',
+    url: row.url ?? '',
+    isActive: row.is_active !== false,
     createdAt: row.created_at ?? undefined,
   };
 }
@@ -30,18 +37,21 @@ function mapRow(row: DbRow): WebPageSupplier {
 function toRow(data: Omit<WebPageSupplier, 'id' | 'createdAt'> & { id: string }) {
   return {
     id: data.id,
-    name: data.name,
-    platform: data.platform,
+    supplier_types_id: data.supplierTypesId || null,
+    display_name: data.displayName,
+    description: data.description,
+    company_name: data.companyName,
+    contact_person: data.contactPerson,
+    phone: data.phone,
+    email: data.email,
+    remarks: data.remarks,
     url: data.url,
-    cost: data.cost,
-    currency: data.currency,
-    rating: data.rating,
+    is_active: data.isActive,
     updated_at: new Date().toISOString(),
   };
 }
 
 export function useWebPageSuppliers() {
-  const { session } = useAuth();
   const [suppliers, setSuppliers] = useState<WebPageSupplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,9 +59,9 @@ export function useWebPageSuppliers() {
   const refresh = useCallback(async () => {
     setLoading(true);
     const { data, error: err } = await supabase
-      .from('web_page_suppliers')
+      .from('suppliers')
       .select('*')
-      .order('name', { ascending: true });
+      .order('display_name', { ascending: true });
     if (err) {
       setError(err.message);
       setSuppliers([]);
@@ -64,12 +74,12 @@ export function useWebPageSuppliers() {
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   const addSupplier = useCallback(async (data: Omit<WebPageSupplier, 'id' | 'createdAt'>) => {
     const id = `wps_${Date.now()}`;
     const row = { ...toRow({ ...data, id }), created_at: new Date().toISOString() };
-    const { error: err } = await supabase.from('web_page_suppliers').insert(row);
+    const { error: err } = await supabase.from('suppliers').insert(row);
     if (!err) {
       setSuppliers(prev => [...prev, { ...data, id, createdAt: row.created_at }]);
     }
@@ -78,13 +88,17 @@ export function useWebPageSuppliers() {
 
   const updateSupplier = useCallback(async (id: string, data: Partial<WebPageSupplier>) => {
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (data.name !== undefined) patch.name = data.name;
-    if (data.platform !== undefined) patch.platform = data.platform;
+    if (data.supplierTypesId !== undefined) patch.supplier_types_id = data.supplierTypesId || null;
+    if (data.displayName !== undefined) patch.display_name = data.displayName;
+    if (data.description !== undefined) patch.description = data.description;
+    if (data.companyName !== undefined) patch.company_name = data.companyName;
+    if (data.contactPerson !== undefined) patch.contact_person = data.contactPerson;
+    if (data.phone !== undefined) patch.phone = data.phone;
+    if (data.email !== undefined) patch.email = data.email;
+    if (data.remarks !== undefined) patch.remarks = data.remarks;
     if (data.url !== undefined) patch.url = data.url;
-    if (data.cost !== undefined) patch.cost = data.cost;
-    if (data.currency !== undefined) patch.currency = data.currency;
-    if (data.rating !== undefined) patch.rating = data.rating;
-    const { error: err } = await supabase.from('web_page_suppliers').update(patch).eq('id', id);
+    if (data.isActive !== undefined) patch.is_active = data.isActive;
+    const { error: err } = await supabase.from('suppliers').update(patch).eq('id', id);
     if (!err) {
       setSuppliers(prev => prev.map(s => (s.id === id ? { ...s, ...data } : s)));
     }
@@ -92,7 +106,7 @@ export function useWebPageSuppliers() {
   }, []);
 
   const deleteSupplier = useCallback(async (id: string) => {
-    const { error: err } = await supabase.from('web_page_suppliers').delete().eq('id', id);
+    const { error: err } = await supabase.from('suppliers').delete().eq('id', id);
     if (!err) {
       setSuppliers(prev => prev.filter(s => s.id !== id));
     }

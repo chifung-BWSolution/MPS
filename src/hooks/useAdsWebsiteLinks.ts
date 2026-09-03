@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import type { AdsAppliedStatus, AdsDiscoveredDomain, AdsSourceRef } from '@/types/adsWebsiteLink';
 
 function mapSourceRefs(raw: unknown): AdsSourceRef[] {
@@ -40,7 +39,7 @@ import {
 export type WebsiteAdsStatusMap = Record<string, AdsAppliedStatus>;
 
 export function useAdsWebsiteLinks() {
-  const { session } = useAuth();
+  
   const [statusByWebsiteId, setStatusByWebsiteId] = useState<WebsiteAdsStatusMap>({});
   const [unmatched, setUnmatched] = useState<AdsDiscoveredDomain[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,7 +97,7 @@ export function useAdsWebsiteLinks() {
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   const syncDomains = useCallback(async () => {
     setSyncing(true);

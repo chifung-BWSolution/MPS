@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import {
   isVideoLoginMethodKind,
   normalizeTwoFaMethods,
@@ -66,7 +65,7 @@ function toDbRow(input: VideoLoginMethodInput) {
 }
 
 export function useVideoLoginMethods() {
-  const { session } = useAuth();
+  
   const [items, setItems] = useState<VideoLoginMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +91,7 @@ export function useVideoLoginMethods() {
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   const addItem = useCallback(async (input: VideoLoginMethodInput) => {
     const displayName = input.displayName.trim();

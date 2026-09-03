@@ -116,33 +116,25 @@ Deno.serve(async (req) => {
 
       if (!match?.website_profile_id) continue;
 
-      // Aggregate impressions by query over the window; upsert keywords + history
+      // Aggregate impressions by query over the window; upsert managed keywords
       const byQuery = new Map<
         string,
-        { impressions: number; clicks: number; positionWeighted: number; lastDate: string; lastPos: number; lastClicks: number; lastImpr: number; lastCtr: number }
+        { impressions: number; positionWeighted: number; lastDate: string; lastPos: number }
       >();
       for (const m of metrics) {
         const key = normalizeKeyword(m.query);
         if (!key) continue;
         const prev = byQuery.get(key) || {
           impressions: 0,
-          clicks: 0,
           positionWeighted: 0,
           lastDate: m.metric_date,
           lastPos: m.position,
-          lastClicks: m.clicks,
-          lastImpr: m.impressions,
-          lastCtr: m.ctr,
         };
         prev.impressions += m.impressions;
-        prev.clicks += m.clicks;
         prev.positionWeighted += m.position * m.impressions;
         if (m.metric_date >= prev.lastDate) {
           prev.lastDate = m.metric_date;
           prev.lastPos = m.position;
-          prev.lastClicks = m.clicks;
-          prev.lastImpr = m.impressions;
-          prev.lastCtr = m.ctr;
         }
         byQuery.set(key, prev);
       }
@@ -179,7 +171,7 @@ Deno.serve(async (req) => {
             continue;
           }
         } else {
-          const { data: inserted, error: insErr } = await supabase
+          const { error: insErr } = await supabase
             .from("seo_keywords")
             .insert({
               website_profile_id: match.website_profile_id,
@@ -192,42 +184,15 @@ Deno.serve(async (req) => {
               gsc_site_url: site.siteUrl,
               last_gsc_sync_at: nowIso,
               updated_at: nowIso,
-            })
-            .select("id")
-            .maybeSingle();
-          if (insErr || !inserted?.id) {
+            });
+          if (insErr) {
             siteErrors.push(
-              `${site.siteUrl} keyword insert ${normalized}: ${insErr?.message || "no id"}`,
+              `${site.siteUrl} keyword insert ${normalized}: ${insErr.message}`,
             );
             continue;
           }
-          keywordId = inserted.id as string;
         }
 
-        // Full daily history for charts (not only latest day)
-        const dailyForKeyword = metrics.filter(
-          (m) => normalizeKeyword(m.query) === normalized,
-        );
-        for (let i = 0; i < dailyForKeyword.length; i += 200) {
-          const chunk = dailyForKeyword.slice(i, i + 200).map((m) => ({
-            keyword_id: keywordId,
-            metric_date: m.metric_date,
-            ranking_position: m.position,
-            clicks: m.clicks,
-            impressions: m.impressions,
-            ctr: m.ctr,
-            source: "gsc",
-          }));
-          const { error: histErr } = await supabase
-            .from("seo_ranking_history")
-            .upsert(chunk, { onConflict: "keyword_id,metric_date,source" });
-          if (histErr) {
-            siteErrors.push(
-              `${site.siteUrl} history ${normalized}: ${histErr.message}`,
-            );
-            break;
-          }
-        }
         keywordsUpserted += 1;
       }
     }

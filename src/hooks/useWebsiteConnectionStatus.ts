@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import {
   ga4LinkedWebsiteIds,
   googleAdsStatusByWebsiteId,
@@ -28,7 +27,7 @@ type Ga4PropertyRow = {
 };
 
 export function useWebsiteConnectionStatus() {
-  const { session } = useAuth();
+  
   const [googleAdsByWebsiteId, setGoogleAdsByWebsiteId] = useState<
     Record<string, GoogleAdsConnectionStatus>
   >({});
@@ -83,7 +82,7 @@ export function useWebsiteConnectionStatus() {
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   const ga4StatusFor = useCallback(
     (websiteId: string): Ga4ConnectionStatus =>

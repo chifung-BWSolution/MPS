@@ -110,7 +110,6 @@ if (!wasCompleted && isCompleted) {
 | 行銷 · 廣告 | `marketing` | `paid_ad` | `status → completed`（首次） | `paid_ads` | `updatePaidAd()` | `hoursSpent` | ⏳ |
 | 影片製作 | `video` | `video_demo_done` | 保存時有工時（操作者） | `video_editing` | `VideoManagementModule` · EditVideoModal | `video_output_work_logs` | ✅ |
 | 影片製作 | `video` | `video_published` | 有 `published_date` 且保存時有工時 | `video_editing` | 同上 | 同上 | ✅ |
-| 網站+系統 | `website` | `pending_article` | 待跟進提交完成 | `article_writing` | `WebsiteModule` · SubmitCompleteModal | 需新增 | ⏳ |
 | 網站+系統 | `website` | `article_published` | `contentStatus → published` | `article_writing` | 文章更新 Handler | 需新增 | ⏳ |
 | 專案策劃 | `project` | `kanban_task` | 看板拖至 `done`（首次） | 依 task 映射 | `ProjectDetail.handleDragEnd` | `estimatedHours` 或新增 | ⏳ |
 
@@ -179,7 +178,7 @@ if (!wasCompleted && isCompleted) {
 | Phase 1a | 基礎設施（pending 表、reportLinkService、匯報頁合併） | ✅ |
 | Phase 1 · 藝人 | 面試完成 | ✅ |
 | Phase 1 · 行銷+影片 | 社媒 / EDM / SEO / 廣告 / 影片 | ⏳ |
-| Phase 1 · 網站+藝人擴展 | 待跟進 / 文章發佈 | ⏳ |
+| Phase 1 · 網站+藝人擴展 | 文章發佈 | ⏳ |
 | Phase 1 · 專案 | 看板 done + 補充匯報 | ⏳ |
 | Phase 2 | 跨日任務拆分 | ⏳ |
 

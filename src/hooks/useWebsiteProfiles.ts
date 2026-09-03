@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { WebsiteProfileFull, WebsiteLevel, ProfileType, ProjectCategory } from '@/types/app';
-import { useAuth } from '@/context/AuthContext';
 import { websiteProfiles as staticWebsiteProfiles } from '@/data/websiteData';
 
 type DbRow = {
@@ -60,7 +59,7 @@ function mapRow(row: DbRow): WebsiteProfileFull {
 }
 
 export function useWebsiteProfiles() {
-  const { session } = useAuth();
+  
   const [profiles, setProfiles] = useState<WebsiteProfileFull[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +81,7 @@ export function useWebsiteProfiles() {
         }
         setLoading(false);
       });
-  }, [session]);
+  }, []);
 
   const addProfile = useCallback(async (site: WebsiteProfileFull) => {
     const row = {

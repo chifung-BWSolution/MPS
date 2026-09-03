@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Company } from '@/types/app';
-import { useAuth } from '@/context/AuthContext';
 import { companies as staticCompanies } from '@/data/mockData';
 
 type DbRow = {
@@ -45,7 +44,6 @@ function mapRow(row: DbRow): Company {
 }
 
 export function useCompanies() {
-  const { session } = useAuth();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +65,7 @@ export function useCompanies() {
         }
         setLoading(false);
       });
-  }, [session]);
+  }, []);
 
   const addCompany = useCallback(async (company: Company) => {
     const row = {

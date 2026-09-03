@@ -207,7 +207,7 @@ function ProfileSection() {
     };
 
     loadProfile();
-  }, [systemUser, session]);
+  }, [systemUser?.id, systemUser?.staff_id, systemUser?.phone, session?.user?.id]);
 
   // Additional safety: if systemUser.phone gets enriched AFTER initial load, sync it
   useEffect(() => {

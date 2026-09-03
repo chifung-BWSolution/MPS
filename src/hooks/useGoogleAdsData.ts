@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import { invokeGoogleAdsIncrementalSync } from '@/lib/googleAdsApi';
 import { mergeWebsitesByDomain } from '@/lib/adsWebsiteDisplay';
 import { normalizeGoogleAdsObjectives, type DateRangePreset, type GoogleAdsAccount, type GoogleAdsCampaign, type GoogleAdsSyncRun } from '@/types/googleAds';
@@ -114,7 +113,6 @@ export function useGoogleAdsData(
   dateFrom: string,
   dateTo: string,
 ) {
-  const { session } = useAuth();
   const [accounts, setAccounts] = useState<GoogleAdsAccount[]>([]);
   const [campaigns, setCampaigns] = useState<GoogleAdsCampaign[]>([]);
   const [lastSync, setLastSync] = useState<GoogleAdsSyncRun | null>(null);
@@ -281,7 +279,7 @@ export function useGoogleAdsData(
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   const triggerSync = useCallback(async () => {
     setSyncing(true);

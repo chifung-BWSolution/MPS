@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, X, ExternalLink, Video, Share2, Megaphone, TrendingUp, Mail, Puzzle, Link2, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Loader2, Unlink, Search, Edit, Trash2, MapPin, RefreshCw } from 'lucide-react';
+import { Plus, X, ExternalLink, Video, Megaphone, TrendingUp, Puzzle, Link2, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Loader2, Unlink, Search, Edit, Trash2, MapPin, RefreshCw } from 'lucide-react';
 import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
 import { BrandFieldBadge, MutedFieldBadge, NullableBadge, StatusFieldBadge, displayText } from '@/components/ui/nullable-badge';
-import { WebsiteProfileFull, SocialPost, EdmCampaign } from '@/types/app';
+import { WebsiteProfileFull } from '@/types/app';
 import {
   getVideosForWebsite,
-  getSocialPostsForWebsite,
-  getEdmCampaignsForWebsite,
   getPluginsForWebsite,
   getExternalLinksForWebsite,
   Plugin,
@@ -61,23 +59,6 @@ import { Input } from '@/components/ui/input';
 // ============================================================
 
 
-const socialPlatformConfig: Record<string, { label: string; color: string; bgColor: string }> = {
-  facebook: { label: 'Facebook', color: 'text-blue-700', bgColor: 'bg-blue-50' },
-  instagram: { label: 'Instagram', color: 'text-pink-700', bgColor: 'bg-pink-50' },
-  xiaohongshu: { label: '小紅書', color: 'text-red-700', bgColor: 'bg-red-50' },
-  linkedin: { label: 'LinkedIn', color: 'text-sky-700', bgColor: 'bg-sky-50' },
-  youtube: { label: 'YouTube', color: 'text-red-700', bgColor: 'bg-red-50' },
-  twitter: { label: 'Twitter', color: 'text-sky-700', bgColor: 'bg-sky-50' },
-  other: { label: '其他', color: 'text-slate-700', bgColor: 'bg-slate-50' },
-};
-
-const socialStatusConfig = {
-  draft: { label: '草稿', color: 'text-slate-700', bgColor: 'bg-slate-50' },
-  scheduled: { label: '已排期', color: 'text-amber-700', bgColor: 'bg-amber-50' },
-  published: { label: '已發佈', color: 'text-teal-700', bgColor: 'bg-teal-50' },
-  archived: { label: '已封存', color: 'text-slate-700', bgColor: 'bg-slate-50' },
-};
-
 const seoLevelConfig = {
   level_1: { label: 'S1 核心', color: 'text-rose-700', bgColor: 'bg-rose-50', borderColor: 'border-rose-200' },
   level_2: { label: 'S2 重要', color: 'text-amber-700', bgColor: 'bg-amber-50', borderColor: 'border-amber-200' },
@@ -89,13 +70,6 @@ const seoStatusConfig = {
   optimizing: { label: '優化中', color: 'text-amber-700', bgColor: 'bg-amber-50' },
   achieved: { label: '已達標', color: 'text-teal-700', bgColor: 'bg-teal-50' },
   paused: { label: '已暫停', color: 'text-slate-700', bgColor: 'bg-slate-50' },
-};
-
-const edmStatusConfig = {
-  draft: { label: '草稿', color: 'text-slate-700', bgColor: 'bg-slate-50' },
-  scheduled: { label: '已排期', color: 'text-amber-700', bgColor: 'bg-amber-50' },
-  sent: { label: '已發送', color: 'text-teal-700', bgColor: 'bg-teal-50' },
-  cancelled: { label: '已取消', color: 'text-rose-700', bgColor: 'bg-rose-50' },
 };
 
 const linkTypeConfig: Record<string, { label: string; icon: string; color: string }> = {
@@ -483,116 +457,6 @@ export function WebsiteVideosTab({
   );
 }
 
-// ============================================================
-// SOCIAL POSTS TAB
-// ============================================================
-export function WebsiteSocialTab({ site }: { site: WebsiteProfileFull }) {
-  const [posts] = useState<SocialPost[]>(() => getSocialPostsForWebsite(site.id));
-  const [showModal, setShowModal] = useState(false);
-  const [newPost, setNewPost] = useState({ platform: 'facebook', content: '', scheduledDate: '' });
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h4 className="text-[15px] font-bold">社交帖文</h4>
-          <p className="text-[12px] text-muted-foreground mt-0.5">共 {posts.length} 篇社交帖文</p>
-        </div>
-        <button onClick={() => setShowModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-medium hover:bg-teal-700 transition-colors">
-          <Plus size={13} />新增帖文
-        </button>
-      </div>
-
-      {posts.length === 0 ? (
-        <div className="text-center py-12 border border-dashed border-border rounded-md">
-          <Share2 size={32} className="text-muted-foreground mx-auto mb-3" />
-          <p className="text-[14px] font-medium text-muted-foreground">尚未有社交帖文</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {posts.map(post => {
-            const platCfg = socialPlatformConfig[post.platform] || socialPlatformConfig.other;
-            const statusCfg = socialStatusConfig[post.status];
-            return (
-              <div key={post.id} className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded', platCfg.bgColor, platCfg.color)}>{platCfg.label}</span>
-                      <MutedFieldBadge value={post.postType} className="capitalize" />
-                      <StatusFieldBadge config={statusCfg} />
-                    </div>
-                    <p className="text-[13px] text-foreground line-clamp-2">{post.content}</p>
-                    <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
-                      {post.scheduledDate && <span>📅 {post.scheduledDate.split('T')[0]}</span>}
-                      {post.hoursSpent && <span>⏱️ {post.hoursSpent}h</span>}
-                      {post.postUrl && (
-                        <a href={post.postUrl} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline flex items-center gap-0.5">
-                          <ExternalLink size={10} />查看帖文
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                  {/* Engagement Data */}
-                  {post.engagementData && post.status === 'published' && (
-                    <div className="grid grid-cols-3 gap-2 text-center shrink-0">
-                      <div><span className="text-[14px] font-bold block">{post.engagementData.likes}</span><span className="text-[9px] text-muted-foreground">讚好</span></div>
-                      <div><span className="text-[14px] font-bold block">{post.engagementData.comments}</span><span className="text-[9px] text-muted-foreground">留言</span></div>
-                      <div><span className="text-[14px] font-bold block">{post.engagementData.shares}</span><span className="text-[9px] text-muted-foreground">分享</span></div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Add Social Post Modal */}
-      {showModal && (
-        <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-[540px]">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h3 className="text-[16px] font-bold">新增社交帖文</h3>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
-            </div>
-            <div className="px-6 py-4 space-y-4">
-              <div className="bg-muted/30 rounded-md p-3 text-[12px] text-muted-foreground">
-                公司：<span className="font-medium text-foreground">{displayText(site.company)}</span> · 品牌：<span className="font-medium text-foreground">{displayText(site.brand)}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[12px] font-medium text-muted-foreground block mb-1">平台 *</label>
-                  <select value={newPost.platform} onChange={e => setNewPost(p => ({ ...p, platform: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white">
-                    <option value="facebook">Facebook</option>
-                    <option value="instagram">Instagram</option>
-                    <option value="xiaohongshu">小紅書</option>
-                    <option value="linkedin">LinkedIn</option>
-                    <option value="youtube">YouTube</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[12px] font-medium text-muted-foreground block mb-1">排期日期</label>
-                  <input type="date" value={newPost.scheduledDate} onChange={e => setNewPost(p => ({ ...p, scheduledDate: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" />
-                </div>
-              </div>
-              <div>
-                <label className="text-[12px] font-medium text-muted-foreground block mb-1">內容 *</label>
-                <textarea value={newPost.content} onChange={e => setNewPost(p => ({ ...p, content: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 h-24 resize-none bg-white" placeholder="輸入帖文內容..." />
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted rounded-md">取消</button>
-              <button onClick={() => setShowModal(false)} disabled={!newPost.content} className="px-4 py-2 text-[13px] font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed">新增帖文</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============================================================
 // PAID ADS TAB
 // ============================================================
 function adsApiStatusBadge(status: string) {
@@ -1081,113 +945,6 @@ export function WebsiteSeoTab({ site }: { site: WebsiteProfileFull }) {
   );
 }
 
-// ============================================================
-// EDM TAB
-// ============================================================
-export function WebsiteEdmTab({ site }: { site: WebsiteProfileFull }) {
-  const [campaigns] = useState<EdmCampaign[]>(() => getEdmCampaignsForWebsite(site.id));
-  const [showModal, setShowModal] = useState(false);
-  const [newEdm, setNewEdm] = useState({ subject: '', campaignType: 'email', sendDate: '', recipientType: '' });
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h4 className="text-[15px] font-bold">EDM 電郵/短訊管理</h4>
-          <p className="text-[12px] text-muted-foreground mt-0.5">共 {campaigns.length} 個 EDM 活動</p>
-        </div>
-        <button onClick={() => setShowModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-medium hover:bg-teal-700 transition-colors">
-          <Plus size={13} />新增 EDM
-        </button>
-      </div>
-
-      {campaigns.length === 0 ? (
-        <div className="text-center py-12 border border-dashed border-border rounded-md">
-          <Mail size={32} className="text-muted-foreground mx-auto mb-3" />
-          <p className="text-[14px] font-medium text-muted-foreground">尚未有 EDM 記錄</p>
-        </div>
-      ) : (
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">主題</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">類型</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">發送日期</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">收件人數</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">開信率</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">點擊率</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">工時</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
-              </tr>
-            </thead>
-            <tbody>
-              {campaigns.map(edm => {
-                const statusCfg = edmStatusConfig[edm.status];
-                return (
-                  <tr key={edm.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3 text-[13px] font-medium max-w-[240px] truncate">{edm.subject}</td>
-                    <td className="px-4 py-3"><span className={cn('text-[11px] px-1.5 py-0.5 rounded', edm.campaignType === 'email' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700')}>{edm.campaignType === 'email' ? '電郵' : '短訊'}</span></td>
-                    <td className="px-4 py-3 text-[12px] text-muted-foreground">{edm.sendDate || '—'}</td>
-                    <td className="px-4 py-3 text-[13px]">{edm.recipientCount?.toLocaleString() || '—'}</td>
-                    <td className="px-4 py-3 text-[13px] font-medium">{edm.openRate ? `${edm.openRate}%` : '—'}</td>
-                    <td className="px-4 py-3 text-[13px] font-medium">{edm.clickRate ? `${edm.clickRate}%` : '—'}</td>
-                    <td className="px-4 py-3 text-[13px]">{edm.hoursSpent ? `${edm.hoursSpent}h` : '—'}</td>
-                    <td className="px-4 py-3"><StatusFieldBadge config={statusCfg} /></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Add EDM Modal */}
-      {showModal && (
-        <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-[540px]">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h3 className="text-[16px] font-bold">新增 EDM 活動</h3>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
-            </div>
-            <div className="px-6 py-4 space-y-4">
-              <div className="bg-muted/30 rounded-md p-3 text-[12px] text-muted-foreground">
-                公司：<span className="font-medium text-foreground">{displayText(site.company)}</span> · 品牌：<span className="font-medium text-foreground">{displayText(site.brand)}</span>
-              </div>
-              <div>
-                <label className="text-[12px] font-medium text-muted-foreground block mb-1">主題 *</label>
-                <input value={newEdm.subject} onChange={e => setNewEdm(p => ({ ...p, subject: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="EDM 主題" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[12px] font-medium text-muted-foreground block mb-1">類型</label>
-                  <select value={newEdm.campaignType} onChange={e => setNewEdm(p => ({ ...p, campaignType: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white">
-                    <option value="email">電郵</option>
-                    <option value="sms">短訊</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[12px] font-medium text-muted-foreground block mb-1">發送日期</label>
-                  <input type="date" value={newEdm.sendDate} onChange={e => setNewEdm(p => ({ ...p, sendDate: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" />
-                </div>
-              </div>
-              <div>
-                <label className="text-[12px] font-medium text-muted-foreground block mb-1">收件人類別</label>
-                <input value={newEdm.recipientType} onChange={e => setNewEdm(p => ({ ...p, recipientType: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="例如：全部訂閱者、VIP 會員" />
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted rounded-md">取消</button>
-              <button onClick={() => setShowModal(false)} disabled={!newEdm.subject} className="px-4 py-2 text-[13px] font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed">新增 EDM</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============================================================
 // PLUGINS TAB
 // ============================================================
 export function WebsitePluginsTab({ site }: { site: WebsiteProfileFull }) {
@@ -1412,34 +1169,20 @@ export function WebsiteCalendarTab({ site }: { site: WebsiteProfileFull }) {
 
   // Collect all content with dates for this website
   const videos = getVideosForWebsite(site.id);
-  const posts = getSocialPostsForWebsite(site.id);
-  const edms = getEdmCampaignsForWebsite(site.id);
 
   interface CalendarEvent {
     id: string;
     title: string;
     date: string;
-    type: 'article' | 'video' | 'social' | 'edm';
+    type: 'video';
     color: string;
   }
 
   const events: CalendarEvent[] = [];
 
-  // Videos
   videos.forEach(v => {
     if (v.publishDate) events.push({ id: v.id, title: v.title, date: v.publishDate, type: 'video', color: 'bg-blue-500' });
     if (v.shootDate) events.push({ id: `${v.id}-shoot`, title: `📹 ${v.title}`, date: v.shootDate, type: 'video', color: 'bg-blue-300' });
-  });
-
-  // Social posts
-  posts.forEach(p => {
-    const date = p.publishedDate || p.scheduledDate?.split('T')[0];
-    if (date) events.push({ id: p.id, title: p.content.slice(0, 30), date, type: 'social', color: 'bg-purple-500' });
-  });
-
-  // EDM
-  edms.forEach(e => {
-    if (e.sendDate) events.push({ id: e.id, title: e.subject, date: e.sendDate, type: 'edm', color: 'bg-amber-500' });
   });
 
   // Calendar helpers
@@ -1466,7 +1209,7 @@ export function WebsiteCalendarTab({ site }: { site: WebsiteProfileFull }) {
       <div className="flex items-center justify-between">
         <div>
           <h4 className="text-[15px] font-bold">內容日曆</h4>
-          <p className="text-[12px] text-muted-foreground mt-0.5">查看文章、影片、社交帖文的發佈計劃</p>
+          <p className="text-[12px] text-muted-foreground mt-0.5">查看影片發佈與拍攝計劃</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center border border-border rounded-md overflow-hidden">
@@ -1479,8 +1222,6 @@ export function WebsiteCalendarTab({ site }: { site: WebsiteProfileFull }) {
       {/* Legend */}
       <div className="flex items-center gap-4 text-[11px]">
         <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-blue-500" /><span>影片</span></div>
-        <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-purple-500" /><span>社交帖文</span></div>
-        <div className="flex items-center gap-1"><div className="w-2.5 h-2.5 rounded-sm bg-amber-500" /><span>EDM</span></div>
       </div>
 
       {/* Calendar Header */}
@@ -1540,8 +1281,8 @@ export function WebsiteCalendarTab({ site }: { site: WebsiteProfileFull }) {
           ) : (
             <div className="space-y-2">
               {selectedEvents.map(ev => {
-                const typeLabels = { article: '文章', video: '影片', social: '社交', edm: 'EDM' };
-                const typeColors = { article: 'bg-teal-50 text-teal-700', video: 'bg-blue-50 text-blue-700', social: 'bg-purple-50 text-purple-700', edm: 'bg-amber-50 text-amber-700' };
+                const typeLabels = { video: '影片' };
+                const typeColors = { video: 'bg-blue-50 text-blue-700' };
                 return (
                   <div key={ev.id} className="flex items-center gap-2 p-2 bg-muted/20 rounded">
                     <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded', typeColors[ev.type])}>{typeLabels[ev.type]}</span>
@@ -1669,7 +1410,7 @@ export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
             <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="從網頁供應商選擇" /></SelectTrigger>
             <SelectContent>
               {webPageSuppliers.map((s) => (
-                <SelectItem key={s.id} value={s.id}>{s.url}（{s.name}）</SelectItem>
+                <SelectItem key={s.id} value={s.id}>{s.url}（{s.displayName}）</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -1679,7 +1420,7 @@ export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
         </div>
         <div>
           <label className="text-[12px] font-medium text-muted-foreground block mb-1">供應商</label>
-          <Input value={supplier?.name || ''} readOnly className="h-9 text-[13px] bg-muted/40" placeholder="選擇後自動帶出" />
+          <Input value={supplier?.displayName || ''} readOnly className="h-9 text-[13px] bg-muted/40" placeholder="選擇後自動帶出" />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -1781,7 +1522,7 @@ export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
                       <BrandFieldBadge value={siteBrandLabel} />
                     </td>
                     <td className="px-4 py-3 break-all">{supplier?.url || '—'}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{supplier?.name || '—'}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{supplier?.displayName || '—'}</td>
                     <td className="px-4 py-3 tabular-nums">{formatBacklinkUsd(record.costUsd)}</td>
                     <td className="px-4 py-3 tabular-nums">{formatBacklinkHkd(record.costHkd)}</td>
                     <td className="px-4 py-3">{record.purchaseDate}</td>
@@ -1836,7 +1577,7 @@ export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
           }
           setDeleteTarget(null);
         }}
-        itemName={supplierMap.get(deleteTarget?.webSupplierId || '')?.name || '反向連結紀錄'}
+        itemName={supplierMap.get(deleteTarget?.webSupplierId || '')?.displayName || '反向連結紀錄'}
         canDelete
         reasons={[]}
       />

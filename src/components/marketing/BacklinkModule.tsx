@@ -211,8 +211,8 @@ export function BacklinkModule() {
   const supplierOptions = useMemo((): SearchableSelectOption[] => {
     return webPageSuppliers.map((s) => ({
       value: s.id,
-      label: s.name,
-      keywords: [s.name, s.platform, s.url].filter(Boolean).join(' '),
+      label: s.displayName,
+      keywords: [s.displayName, s.url].filter(Boolean).join(' '),
     }));
   }, [webPageSuppliers]);
 
@@ -270,9 +270,8 @@ export function BacklinkModule() {
       const brandLabel = resolveBacklinkBrandLabel(p, websites, brands);
       return {
         ...p,
-        supplierName: supplier?.name || '—',
+        supplierName: supplier?.displayName || '—',
         supplierUrl: formatSupplierUrl(supplier?.url),
-        platform: supplier?.platform || '—',
         siteName: relatedSite?.websiteName || site?.websiteName || '—',
         siteLabel,
         resolvedSiteName,
@@ -304,7 +303,6 @@ export function BacklinkModule() {
           return (
             r.supplierName.toLowerCase().includes(q) ||
             r.supplierUrl.toLowerCase().includes(q) ||
-            r.platform.toLowerCase().includes(q) ||
             r.siteName.toLowerCase().includes(q) ||
             (r.resolvedSiteName || r.googleAdsAccountName || '').toLowerCase().includes(q) ||
             (r.sourceDomain || '').toLowerCase().includes(q) ||
@@ -435,7 +433,7 @@ export function BacklinkModule() {
     return (
       <BacklinkDetail
         record={selectedRecord}
-        supplierName={supplier?.name || '—'}
+        supplierName={supplier?.displayName || '—'}
         supplierUrl={formatSupplierUrl(supplier?.url) || '—'}
         siteLabel={siteLabel}
         brandLabel={resolveBacklinkBrandLabel(selectedRecord, websites, brands)}
@@ -721,7 +719,7 @@ export function BacklinkModule() {
         {renderPurchaseFields(form, (next) => setForm(next as PurchaseForm))}
         {selectedSupplier && (
           <p className="text-[11px] text-muted-foreground mt-2">
-            已選：{selectedSupplier.name} · {selectedSupplier.platform || '無平台'}
+            已選：{selectedSupplier.displayName}
           </p>
         )}
         <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
@@ -746,7 +744,7 @@ export function BacklinkModule() {
         onConfirm={confirmDelete}
         itemName={
           deleteTarget
-            ? `${supplierMap.get(deleteTarget.webSupplierId)?.name || '紀錄'} · ${deleteTarget.purchaseDate}`
+            ? `${supplierMap.get(deleteTarget.webSupplierId)?.displayName || '紀錄'} · ${deleteTarget.purchaseDate}`
             : ''
         }
         canDelete={true}

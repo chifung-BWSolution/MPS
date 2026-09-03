@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import {
   buildAdsCompareKpis,
   emptyTotals,
@@ -94,7 +93,7 @@ export function useAdsComparisonSeries(
   dateFrom: string,
   dateTo: string,
 ) {
-  const { session } = useAuth();
+  
   const [series, setSeries] = useState<AdsCompareSeriesPoint[]>([]);
   const [previousSeries, setPreviousSeries] = useState<AdsCompareSeriesPoint[]>([]);
   const [loading, setLoading] = useState(false);
@@ -146,7 +145,7 @@ export function useAdsComparisonSeries(
     return () => {
       cancelled = true;
     };
-  }, [session, platform, accountId, campaignId, dateFrom, dateTo]);
+  }, [platform, accountId, campaignId, dateFrom, dateTo]);
 
   const totals = useMemo(() => (series.length ? sumSeries(series) : emptyTotals()), [series]);
   const previousTotals = useMemo(

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '@/context/AuthContext';
 import { resolveDateRange } from '@/hooks/useGoogleAdsData';
 import { fetchWebsitePaidAds } from '@/services/websitePaidAdsService';
 import type { DateRangePreset } from '@/types/googleAds';
@@ -22,7 +21,7 @@ export function useWebsitePaidAds(
   preset: DateRangePreset = '30d',
   brandListId?: string | null,
 ) {
-  const { session } = useAuth();
+  
   const [data, setData] = useState<WebsitePaidAdsData>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +54,7 @@ export function useWebsitePaidAds(
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   return {
     googleCampaigns: data.googleCampaigns,

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 
 export interface GoogleAdsAccountOption {
   customerId: string;
@@ -23,7 +22,7 @@ function mapRow(row: AccountRow): GoogleAdsAccountOption {
 }
 
 export function useGoogleAdsAccounts() {
-  const { session } = useAuth();
+  
   const [accounts, setAccounts] = useState<GoogleAdsAccountOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +46,7 @@ export function useGoogleAdsAccounts() {
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   const clientAccounts = accounts.filter((a) => !a.isManager);
 

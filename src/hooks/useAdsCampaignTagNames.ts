@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import type { AdsPlatform } from '@/types/adsTags';
 
 export function useAdsCampaignTagNames(
   platform: AdsPlatform | null,
   campaignRowId: string | null,
 ) {
-  const { session } = useAuth();
+  
   const [tagNames, setTagNames] = useState<string[]>([]);
 
   const refresh = useCallback(async () => {
@@ -47,7 +46,7 @@ export function useAdsCampaignTagNames(
 
   useEffect(() => {
     void refresh();
-  }, [session, refresh]);
+  }, [refresh]);
 
   return { tagNames, refresh };
 }
