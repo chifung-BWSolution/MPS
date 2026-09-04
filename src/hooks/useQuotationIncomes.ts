@@ -22,7 +22,7 @@ type DbRow = {
   due_date: string | null;
   payment_amount: number | string;
   payment_method: string | null;
-  payment_status: string;
+  payment_status: string | null;
   outstanding: number | string;
   bad_debt: number | string;
   remarks: string | null;
@@ -67,7 +67,7 @@ function mapRow(row: DbRow): QuotationIncome {
     dueDate: optionalIsoDate(row.due_date),
     paymentAmount: toAmount(row.payment_amount),
     paymentMethod: isIncomePaymentMethod(row.payment_method) ? row.payment_method : undefined,
-    paymentStatus: isIncomePaymentStatus(row.payment_status) ? row.payment_status : 'Not Received',
+    paymentStatus: isIncomePaymentStatus(row.payment_status) ? row.payment_status : undefined,
     outstanding: toAmount(row.outstanding),
     badDebt: toAmount(row.bad_debt),
     remarks: optionalText(row.remarks),
@@ -104,7 +104,7 @@ function inputToRow(
     due_date: optionalIsoDate(input.dueDate ?? undefined) ?? null,
     payment_amount: input.paymentAmount,
     payment_method: input.paymentMethod ?? null,
-    payment_status: input.paymentStatus,
+    payment_status: input.paymentStatus ?? null,
     bad_debt: input.badDebt,
     remarks: input.remarks?.trim() || null,
     updated_at: new Date().toISOString(),

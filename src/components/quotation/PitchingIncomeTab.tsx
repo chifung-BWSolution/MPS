@@ -10,6 +10,7 @@ import {
   INCOME_PAYMENT_STATUS_STYLES,
   INCOME_PAYMENT_STATUSES,
   INCOME_TYPE_PRESETS,
+  DEFAULT_INCOME_TYPE,
   computeOutstanding,
   formatIncomeDate,
   formatIncomeDateTime,
@@ -36,19 +37,19 @@ type Draft = {
   dueDate: string;
   paymentAmount: string;
   paymentMethod: string;
-  paymentStatus: IncomePaymentStatus;
+  paymentStatus: IncomePaymentStatus | '';
   badDebt: string;
   remarks: string;
 };
 
-const emptyDraft = (nextInstallment = 1): Draft => ({
-  type: '',
+const emptyDraft = (nextInstallment = 1, type = DEFAULT_INCOME_TYPE): Draft => ({
+  type,
   installmentNumber: String(nextInstallment),
   billedAmount: '',
   dueDate: '',
   paymentAmount: '',
   paymentMethod: '',
-  paymentStatus: 'Not Received',
+  paymentStatus: '',
   badDebt: '',
   remarks: '',
 });
@@ -61,7 +62,7 @@ function draftFromRow(row: QuotationIncome): Draft {
     dueDate: row.dueDate ?? '',
     paymentAmount: String(row.paymentAmount),
     paymentMethod: row.paymentMethod ?? '',
-    paymentStatus: row.paymentStatus,
+    paymentStatus: row.paymentStatus ?? '',
     badDebt: String(row.badDebt),
     remarks: row.remarks ?? '',
   };
@@ -125,7 +126,7 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
 
   const openCreate = () => {
     setEditing(null);
-    setDraft(emptyDraft(nextInstallmentNumber(rows)));
+    setDraft(emptyDraft(nextInstallmentNumber(rows, DEFAULT_INCOME_TYPE), DEFAULT_INCOME_TYPE));
     setPaymentRecordFile(null);
     setClearPaymentRecord(false);
     setModalOpen(true);
@@ -166,7 +167,7 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
       dueDate: draft.dueDate || null,
       paymentAmount,
       paymentMethod: (draft.paymentMethod || null) as IncomePaymentMethod | null,
-      paymentStatus: draft.paymentStatus,
+      paymentStatus: draft.paymentStatus || null,
       badDebt,
       remarks: draft.remarks.trim() || null,
       file: paymentRecordFile,
@@ -215,7 +216,7 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
           onClick={openCreate}
           className="flex items-center gap-1.5 px-3 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors active:scale-[0.97]"
         >
-          <Plus size={14} /> 新增收入
+          <Plus size={14} /> 新增單項收入
         </button>
       </div>
 
@@ -295,14 +296,18 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span
-                        className={cn(
-                          'inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border',
-                          INCOME_PAYMENT_STATUS_STYLES[row.paymentStatus],
-                        )}
-                      >
-                        {INCOME_PAYMENT_STATUS_LABELS[row.paymentStatus]}
-                      </span>
+                      {row.paymentStatus ? (
+                        <span
+                          className={cn(
+                            'inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border',
+                            INCOME_PAYMENT_STATUS_STYLES[row.paymentStatus],
+                          )}
+                        >
+                          {INCOME_PAYMENT_STATUS_LABELS[row.paymentStatus]}
+                        </span>
+                      ) : (
+                        <span className="text-[13px] text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-[13px] tabular-nums text-right whitespace-nowrap">
                       {formatIncomeMoney(row.outstanding)}
@@ -345,7 +350,7 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
       <CrudModal
         isOpen={modalOpen}
         onClose={closeModal}
-        title={editing ? '編輯收入' : '新增收入'}
+        title={editing ? '編輯收入' : '新增單項收入'}
         size="lg"
         footer={
           <CrudModalFooter className="flex justify-end gap-2">
@@ -370,14 +375,24 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
         <div className="space-y-4">
           <div>
             <span className="text-[12px] text-muted-foreground block mb-1">類型 Type *</span>
-            <div className="flex flex-wrap gap-2 mb-2">
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="收入類型">
               {INCOME_TYPE_PRESETS.map((type) => {
                 const selected = draft.type === type;
                 return (
                   <button
                     key={type}
                     type="button"
-                    onClick={() => setDraft((prev) => ({ ...prev, type }))}
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        type,
+                        installmentNumber: editing
+                          ? prev.installmentNumber
+                          : String(nextInstallmentNumber(rows, type)),
+                      }))
+                    }
                     className={cn(
                       'px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors',
                       selected
@@ -390,13 +405,6 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
                 );
               })}
             </div>
-            <Input
-              value={draft.type}
-              onChange={(e) => setDraft((prev) => ({ ...prev, type: e.target.value }))}
-              placeholder="選擇上方類型，或自行輸入"
-              className="text-[13px]"
-              aria-label="收入類型"
-            />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -493,7 +501,12 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
               value={draft.paymentStatus}
               options={INCOME_PAYMENT_STATUSES}
               labels={INCOME_PAYMENT_STATUS_LABELS}
-              onChange={(paymentStatus) => setDraft((prev) => ({ ...prev, paymentStatus }))}
+              onChange={(paymentStatus) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  paymentStatus: prev.paymentStatus === paymentStatus ? '' : paymentStatus,
+                }))
+              }
               ariaLabel="收款狀態"
             />
           </div>

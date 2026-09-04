@@ -34,7 +34,7 @@ assert.match(
   isAllowedPaymentRecordFile({ name: 'virus.exe', type: 'application/x-msdownload', size: 10 }) ?? '',
   /不支援/,
 );
-assert.deepEqual([...INCOME_TYPE_PRESETS], ['訂金', '分期', '尾款', '全額']);
+assert.deepEqual([...INCOME_TYPE_PRESETS], ['主要收入', '後加項目', '代付項目']);
 assert.deepEqual([...INCOME_PAYMENT_METHODS], ['Transfer', 'Cash', 'Cheque']);
 assert.deepEqual([...INCOME_PAYMENT_STATUSES], ['Pending Check', 'Received', 'Not Received']);
 
@@ -47,6 +47,17 @@ assert.equal(parseInstallmentNumber('0'), null);
 assert.equal(computeOutstanding(10000, 3000, 500), 6500);
 assert.equal(computeOutstanding(1000, 1200, 0), 0);
 assert.equal(nextInstallmentNumber([{ installmentNumber: 1 }, { installmentNumber: 3 }]), 4);
+assert.equal(
+  nextInstallmentNumber(
+    [
+      { type: '主要收入', installmentNumber: 2 },
+      { type: '後加項目', installmentNumber: 5 },
+    ],
+    '主要收入',
+  ),
+  3,
+);
+assert.equal(nextInstallmentNumber([], '後加項目'), 1);
 assert.equal(formatIncomeMoney(1200), '$1,200.00 HKD');
 assert.equal(formatIncomeDate('2026-09-04'), '2026/09/04');
 
@@ -58,15 +69,15 @@ assert.equal(validateIncomeInput({
   badDebt: '0',
   paymentMethod: '',
   paymentStatus: 'Not Received',
-}), '請填寫收入類型');
+}), '請選擇收入類型');
 assert.equal(validateIncomeInput({
-  type: '訂金',
+  type: '主要收入',
   installmentNumber: '1',
   billedAmount: '100',
   paymentAmount: '0',
   badDebt: '0',
   paymentMethod: 'Transfer',
-  paymentStatus: 'Pending Check',
+  paymentStatus: '',
 }), null);
 
 assert.deepEqual(
@@ -119,6 +130,11 @@ assert.match(fileMigration, /payment_record_storage_path text/);
 assert.match(fileMigration, /INSERT INTO storage\.buckets/);
 assert.match(fileMigration, /'income-payment-records'/);
 
+const statusMigration = read('supabase/migrations/20260904055557_incomes_optional_status_and_types.sql');
+assert.match(statusMigration, /ALTER COLUMN payment_status DROP NOT NULL/);
+assert.match(statusMigration, /payment_status IS NULL OR payment_status IN/);
+assert.match(statusMigration, /'主要收入', '後加項目', '代付項目'/);
+
 const hook = read('src/hooks/useQuotationIncomes.ts');
 assert.match(hook, /INCOMES_TABLE/);
 assert.match(hook, /INCOME_PAYMENT_RECORDS_BUCKET/);
@@ -141,6 +157,9 @@ assert.match(tab, /ariaLabel="收款狀態"/);
 assert.match(tab, /aria-label="備註"/);
 assert.match(tab, /aria-label="收款紀錄檔案"/);
 assert.match(tab, /paymentRecordAction/);
+assert.match(tab, /新增單項收入/);
+assert.match(tab, /DEFAULT_INCOME_TYPE/);
+assert.match(tab, /nextInstallmentNumber\(rows, type\)/);
 
 const pitching = read('src/components/quotation/PitchingModule.tsx');
 assert.match(pitching, /PitchingIncomeTab/);

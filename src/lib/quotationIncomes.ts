@@ -3,7 +3,9 @@ export const INCOME_PAYMENT_RECORDS_BUCKET = 'income-payment-records';
 export const INCOME_PAYMENT_RECORD_MAX_SIZE_MB = 50;
 export const INCOME_PAYMENT_RECORD_MAX_SIZE_BYTES = INCOME_PAYMENT_RECORD_MAX_SIZE_MB * 1024 * 1024;
 
-export const INCOME_TYPE_PRESETS = ['訂金', '分期', '尾款', '全額'] as const;
+export const INCOME_TYPE_PRESETS = ['主要收入', '後加項目', '代付項目'] as const;
+export type IncomeType = (typeof INCOME_TYPE_PRESETS)[number];
+export const DEFAULT_INCOME_TYPE: IncomeType = '主要收入';
 
 export const INCOME_PAYMENT_METHODS = ['Transfer', 'Cash', 'Cheque'] as const;
 
@@ -39,7 +41,7 @@ export type QuotationIncome = {
   dueDate?: string;
   paymentAmount: number;
   paymentMethod?: IncomePaymentMethod;
-  paymentStatus: IncomePaymentStatus;
+  paymentStatus?: IncomePaymentStatus;
   outstanding: number;
   badDebt: number;
   remarks?: string;
@@ -59,7 +61,7 @@ export type QuotationIncomeInput = {
   dueDate?: string | null;
   paymentAmount: number;
   paymentMethod?: IncomePaymentMethod | null;
-  paymentStatus: IncomePaymentStatus;
+  paymentStatus?: IncomePaymentStatus | null;
   badDebt: number;
   remarks?: string | null;
   paymentRecordFileName?: string | null;
@@ -110,8 +112,18 @@ export function computeOutstanding(billedAmount: number, paymentAmount: number, 
   return Math.max(0, Math.round((billed - paid - writtenOff) * 100) / 100);
 }
 
-export function nextInstallmentNumber(rows: Array<{ installmentNumber?: number }>): number {
-  return rows.reduce((max, row) => Math.max(max, row.installmentNumber ?? 0), 0) + 1;
+export function isIncomeType(value: string | null | undefined): value is IncomeType {
+  return INCOME_TYPE_PRESETS.includes(value as IncomeType);
+}
+
+export function nextInstallmentNumber(
+  rows: Array<{ type?: string; installmentNumber?: number }>,
+  type?: string | null,
+): number {
+  const scoped = type
+    ? rows.filter((row) => (row.type ?? '') === type)
+    : rows;
+  return scoped.reduce((max, row) => Math.max(max, row.installmentNumber ?? 0), 0) + 1;
 }
 
 export function formatIncomeMoney(amount: number, currency = 'HKD'): string {
@@ -144,7 +156,7 @@ export function validateIncomeInput(input: {
   paymentMethod: string;
   paymentStatus: string;
 }): string | null {
-  if (!input.type.trim()) return '請填寫收入類型';
+  if (!isIncomeType(input.type.trim())) return '請選擇收入類型';
   if (input.installmentNumber?.trim() && parseInstallmentNumber(input.installmentNumber) == null) {
     return '期數須為 1 或以上的整數';
   }
@@ -152,7 +164,7 @@ export function validateIncomeInput(input: {
   if (parseMoney(input.paymentAmount) == null) return '實收金額須為 0 或以上的數字';
   if (parseMoney(input.badDebt) == null) return '壞帳須為 0 或以上的數字';
   if (input.paymentMethod && !isIncomePaymentMethod(input.paymentMethod)) return '請選擇有效的收款方式';
-  if (!isIncomePaymentStatus(input.paymentStatus)) return '請選擇收款狀態';
+  if (input.paymentStatus && !isIncomePaymentStatus(input.paymentStatus)) return '請選擇有效的收款狀態';
   return null;
 }
 
