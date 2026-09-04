@@ -1,4 +1,7 @@
 export const INCOMES_TABLE = 'incomes';
+export const INCOME_PAYMENT_RECORDS_BUCKET = 'income-payment-records';
+export const INCOME_PAYMENT_RECORD_MAX_SIZE_MB = 50;
+export const INCOME_PAYMENT_RECORD_MAX_SIZE_BYTES = INCOME_PAYMENT_RECORD_MAX_SIZE_MB * 1024 * 1024;
 
 export const INCOME_TYPE_PRESETS = ['訂金', '分期', '尾款', '全額'] as const;
 
@@ -40,6 +43,11 @@ export type QuotationIncome = {
   outstanding: number;
   badDebt: number;
   remarks?: string;
+  paymentRecordFileName?: string;
+  paymentRecordFileUrl?: string;
+  paymentRecordStoragePath?: string;
+  paymentRecordFileSize?: number;
+  paymentRecordMimeType?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -54,7 +62,14 @@ export type QuotationIncomeInput = {
   paymentStatus: IncomePaymentStatus;
   badDebt: number;
   remarks?: string | null;
+  paymentRecordFileName?: string | null;
+  paymentRecordFileUrl?: string | null;
+  paymentRecordStoragePath?: string | null;
+  paymentRecordFileSize?: number | null;
+  paymentRecordMimeType?: string | null;
 };
+
+export type PaymentRecordFileAction = 'keep' | 'replace' | 'clear';
 
 export function isIncomePaymentMethod(value: string | null | undefined): value is IncomePaymentMethod {
   return INCOME_PAYMENT_METHODS.includes(value as IncomePaymentMethod);
@@ -139,6 +154,59 @@ export function validateIncomeInput(input: {
   if (input.paymentMethod && !isIncomePaymentMethod(input.paymentMethod)) return '請選擇有效的付款方式';
   if (!isIncomePaymentStatus(input.paymentStatus)) return '請選擇收款狀態';
   return null;
+}
+
+const PAYMENT_RECORD_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/avif',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
+
+const PAYMENT_RECORD_EXTENSIONS = new Set([
+  'pdf', 'jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'doc', 'docx', 'xls', 'xlsx',
+]);
+
+export function sanitizePaymentRecordFileName(name: string): string {
+  const trimmed = name.trim() || 'file';
+  const cleaned = trimmed.replace(/[^\w.\-\u4e00-\u9fff]+/g, '_').replace(/_+/g, '_');
+  return cleaned.slice(0, 180) || 'file';
+}
+
+export function paymentRecordFileExtension(name: string): string {
+  const match = name.trim().toLowerCase().match(/\.([a-z0-9]+)$/);
+  return match?.[1] ?? '';
+}
+
+export function isAllowedPaymentRecordFile(file: Pick<File, 'name' | 'type' | 'size'>): string | null {
+  if (file.size > INCOME_PAYMENT_RECORD_MAX_SIZE_BYTES) {
+    return `檔案不可超過 ${INCOME_PAYMENT_RECORD_MAX_SIZE_MB}MB`;
+  }
+  const ext = paymentRecordFileExtension(file.name);
+  if (file.type && PAYMENT_RECORD_MIME_TYPES.has(file.type)) return null;
+  if (ext && PAYMENT_RECORD_EXTENSIONS.has(ext)) return null;
+  return '不支援此檔案格式（可用 PDF、圖片、Word、Excel）';
+}
+
+export function incomePaymentRecordStoragePath(
+  projectId: string,
+  fileName: string,
+  uniqueId: string,
+): string {
+  return `${projectId.trim()}/${uniqueId}/${sanitizePaymentRecordFileName(fileName)}`;
+}
+
+export function formatPaymentRecordFileSize(bytes: number | null | undefined): string {
+  if (bytes == null || !Number.isFinite(bytes) || bytes < 0) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function summarizeIncomes(rows: QuotationIncome[]) {

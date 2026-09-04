@@ -4,12 +4,15 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   INCOMES_TABLE,
+  INCOME_PAYMENT_RECORDS_BUCKET,
   INCOME_PAYMENT_METHODS,
   INCOME_PAYMENT_STATUSES,
   INCOME_TYPE_PRESETS,
   computeOutstanding,
   formatIncomeDate,
   formatIncomeMoney,
+  incomePaymentRecordStoragePath,
+  isAllowedPaymentRecordFile,
   nextInstallmentNumber,
   parseInstallmentNumber,
   parseMoney,
@@ -21,6 +24,16 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
 
 assert.equal(INCOMES_TABLE, 'incomes');
+assert.equal(INCOME_PAYMENT_RECORDS_BUCKET, 'income-payment-records');
+assert.equal(
+  incomePaymentRecordStoragePath('proj-1', '收據 (v2).pdf', 'abc'),
+  'proj-1/abc/收據_v2_.pdf',
+);
+assert.equal(isAllowedPaymentRecordFile({ name: 'slip.pdf', type: 'application/pdf', size: 10 }), null);
+assert.match(
+  isAllowedPaymentRecordFile({ name: 'virus.exe', type: 'application/x-msdownload', size: 10 }) ?? '',
+  /不支援/,
+);
 assert.deepEqual([...INCOME_TYPE_PRESETS], ['訂金', '分期', '尾款', '全額']);
 assert.deepEqual([...INCOME_PAYMENT_METHODS], ['Transfer', 'Cash', 'Cheque']);
 assert.deepEqual([...INCOME_PAYMENT_STATUSES], ['Pending Check', 'Received', 'Not Received']);
@@ -99,9 +112,19 @@ assert.match(migration, /'Pending Check', 'Received', 'Not Received'/);
 assert.match(migration, /outstanding numeric\(14, 2\) GENERATED ALWAYS AS/);
 assert.match(migration, /ENABLE ROW LEVEL SECURITY/);
 
+const fileMigration = read('supabase/migrations/20260904033535_incomes_payment_record_file.sql');
+assert.match(fileMigration, /payment_record_file_name text/);
+assert.match(fileMigration, /payment_record_file_url text/);
+assert.match(fileMigration, /payment_record_storage_path text/);
+assert.match(fileMigration, /INSERT INTO storage\.buckets/);
+assert.match(fileMigration, /'income-payment-records'/);
+
 const hook = read('src/hooks/useQuotationIncomes.ts');
 assert.match(hook, /INCOMES_TABLE/);
+assert.match(hook, /INCOME_PAYMENT_RECORDS_BUCKET/);
 assert.match(hook, /quotation_client_project_id/);
+assert.match(hook, /payment_record_storage_path/);
+assert.match(hook, /uploadIncomePaymentRecordFile/);
 assert.match(hook, /const addIncome/);
 assert.match(hook, /const updateIncome/);
 assert.match(hook, /const deleteIncome/);
@@ -116,6 +139,8 @@ assert.match(tab, /rounded-full/);
 assert.match(tab, /ariaLabel="付款方式"/);
 assert.match(tab, /ariaLabel="收款狀態"/);
 assert.match(tab, /aria-label="備註"/);
+assert.match(tab, /aria-label="付款紀錄檔案"/);
+assert.match(tab, /paymentRecordAction/);
 
 const pitching = read('src/components/quotation/PitchingModule.tsx');
 assert.match(pitching, /PitchingIncomeTab/);

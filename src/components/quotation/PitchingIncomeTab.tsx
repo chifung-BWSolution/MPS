@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Pencil, Plus, Trash2, Wallet } from 'lucide-react';
+import { ExternalLink, Pencil, Plus, Trash2, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useQuotationIncomes } from '@/hooks/useQuotationIncomes';
@@ -14,6 +14,8 @@ import {
   formatIncomeDate,
   formatIncomeDateTime,
   formatIncomeMoney,
+  formatPaymentRecordFileSize,
+  INCOME_PAYMENT_RECORD_MAX_SIZE_MB,
   nextInstallmentNumber,
   parseInstallmentNumber,
   parseMoney,
@@ -111,6 +113,8 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
   const [draft, setDraft] = useState<Draft>(emptyDraft());
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<QuotationIncome | null>(null);
+  const [paymentRecordFile, setPaymentRecordFile] = useState<File | null>(null);
+  const [clearPaymentRecord, setClearPaymentRecord] = useState(false);
 
   const summary = useMemo(() => summarizeIncomes(rows), [rows]);
   const outstandingPreview = computeOutstanding(
@@ -122,12 +126,16 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
   const openCreate = () => {
     setEditing(null);
     setDraft(emptyDraft(nextInstallmentNumber(rows)));
+    setPaymentRecordFile(null);
+    setClearPaymentRecord(false);
     setModalOpen(true);
   };
 
   const openEdit = (row: QuotationIncome) => {
     setEditing(row);
     setDraft(draftFromRow(row));
+    setPaymentRecordFile(null);
+    setClearPaymentRecord(false);
     setModalOpen(true);
   };
 
@@ -135,6 +143,8 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
     setModalOpen(false);
     setEditing(null);
     setDraft(emptyDraft());
+    setPaymentRecordFile(null);
+    setClearPaymentRecord(false);
   };
 
   const handleSave = async () => {
@@ -159,6 +169,8 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
       paymentStatus: draft.paymentStatus,
       badDebt,
       remarks: draft.remarks.trim() || null,
+      file: paymentRecordFile,
+      paymentRecordAction: clearPaymentRecord && !paymentRecordFile ? 'clear' : undefined,
     };
     const result = editing
       ? await updateIncome(editing.id, payload)
@@ -235,6 +247,7 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
                   <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">到期日</th>
                   <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">實收</th>
                   <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">付款方式</th>
+                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">付款紀錄</th>
                   <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
                   <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">未收</th>
                   <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">壞帳</th>
@@ -265,6 +278,21 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
                     </td>
                     <td className="px-4 py-3 text-[13px] whitespace-nowrap">
                       {row.paymentMethod ? INCOME_PAYMENT_METHOD_LABELS[row.paymentMethod] : '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.paymentRecordFileUrl ? (
+                        <a
+                          href={row.paymentRecordFileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[13px] font-medium text-teal-700 hover:text-teal-800 max-w-[160px]"
+                        >
+                          <ExternalLink size={12} className="shrink-0" />
+                          <span className="truncate">{row.paymentRecordFileName || '付款紀錄'}</span>
+                        </a>
+                      ) : (
+                        <span className="text-[13px] text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span
@@ -468,6 +496,46 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
               onChange={(paymentStatus) => setDraft((prev) => ({ ...prev, paymentStatus }))}
               ariaLabel="收款狀態"
             />
+          </div>
+
+          <div>
+            <span className="text-[12px] text-muted-foreground block mb-1">付款紀錄 Payment record</span>
+            <Input
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.avif,.doc,.docx,.xls,.xlsx"
+              onChange={(e) => {
+                setPaymentRecordFile(e.target.files?.[0] ?? null);
+                setClearPaymentRecord(false);
+              }}
+              className="text-[13px]"
+              aria-label="付款紀錄檔案"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1.5">
+              {paymentRecordFile
+                ? `${paymentRecordFile.name}（${formatPaymentRecordFileSize(paymentRecordFile.size)}）`
+                : editing?.paymentRecordFileUrl && !clearPaymentRecord
+                  ? `目前：${editing.paymentRecordFileName || '已上傳檔案'}`
+                  : `支援 PDF、圖片、Word、Excel，上限 ${INCOME_PAYMENT_RECORD_MAX_SIZE_MB}MB`}
+            </p>
+            {editing?.paymentRecordFileUrl && !clearPaymentRecord && !paymentRecordFile && (
+              <div className="flex items-center gap-3 mt-1.5">
+                <a
+                  href={editing.paymentRecordFileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[12px] text-teal-700 hover:text-teal-800"
+                >
+                  開啟現有檔案
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setClearPaymentRecord(true)}
+                  className="text-[12px] text-rose-600 hover:text-rose-700"
+                >
+                  移除檔案
+                </button>
+              </div>
+            )}
           </div>
 
           <div>
