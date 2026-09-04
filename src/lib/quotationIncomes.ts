@@ -238,7 +238,20 @@ export function formatPaymentRecordFileSize(bytes: number | null | undefined): s
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function summarizeIncomes(rows: QuotationIncome[]) {
+export type IncomeSummary = {
+  billed: number;
+  received: number;
+  outstanding: number;
+  badDebt: number;
+};
+
+export type IncomeTypeGroup = {
+  type: string;
+  rows: QuotationIncome[];
+  summary: IncomeSummary;
+};
+
+export function summarizeIncomes(rows: QuotationIncome[]): IncomeSummary {
   return rows.reduce(
     (acc, row) => ({
       billed: acc.billed + row.billedAmount,
@@ -248,4 +261,30 @@ export function summarizeIncomes(rows: QuotationIncome[]) {
     }),
     { billed: 0, received: 0, outstanding: 0, badDebt: 0 },
   );
+}
+
+export function groupIncomesByType(rows: QuotationIncome[]): IncomeTypeGroup[] {
+  const byType = new Map<string, QuotationIncome[]>();
+  for (const row of rows) {
+    const type = row.type?.trim() || '未分類';
+    const list = byType.get(type);
+    if (list) list.push(row);
+    else byType.set(type, [row]);
+  }
+
+  const presetOrder = new Map(INCOME_TYPE_PRESETS.map((type, index) => [type, index]));
+  return [...byType.entries()]
+    .sort(([a], [b]) => {
+      const ai = presetOrder.get(a as IncomeType);
+      const bi = presetOrder.get(b as IncomeType);
+      if (ai != null && bi != null) return ai - bi;
+      if (ai != null) return -1;
+      if (bi != null) return 1;
+      return a.localeCompare(b, 'zh-Hant');
+    })
+    .map(([type, typeRows]) => ({
+      type,
+      rows: typeRows,
+      summary: summarizeIncomes(typeRows),
+    }));
 }

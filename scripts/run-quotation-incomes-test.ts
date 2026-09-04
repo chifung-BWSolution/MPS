@@ -17,6 +17,7 @@ import {
   parseInstallmentNumber,
   hasFilledPaymentAmount,
   parseMoney,
+  groupIncomesByType,
   summarizeIncomes,
   validateIncomeInput,
 } from '../src/lib/quotationIncomes.ts';
@@ -135,6 +136,46 @@ assert.deepEqual(
   { billed: 3000, received: 400, outstanding: 2400, badDebt: 200 },
 );
 
+const grouped = groupIncomesByType([
+  {
+    id: 'b',
+    quotationClientProjectId: 'p1',
+    type: '後加項目',
+    billedAmount: 800,
+    paymentAmount: 200,
+    outstanding: 600,
+    badDebt: 0,
+    createdAt: '2026-09-02',
+    updatedAt: '2026-09-02',
+  },
+  {
+    id: 'a1',
+    quotationClientProjectId: 'p1',
+    type: '主要收入',
+    billedAmount: 1000,
+    paymentAmount: 400,
+    outstanding: 600,
+    badDebt: 0,
+    createdAt: '2026-09-01',
+    updatedAt: '2026-09-01',
+  },
+  {
+    id: 'a2',
+    quotationClientProjectId: 'p1',
+    type: '主要收入',
+    billedAmount: 2000,
+    paymentAmount: 0,
+    outstanding: 1800,
+    badDebt: 200,
+    createdAt: '2026-09-03',
+    updatedAt: '2026-09-03',
+  },
+]);
+assert.deepEqual(grouped.map((group) => group.type), ['主要收入', '後加項目']);
+assert.deepEqual(grouped[0].rows.map((row) => row.id), ['a1', 'a2']);
+assert.deepEqual(grouped[0].summary, { billed: 3000, received: 400, outstanding: 2400, badDebt: 200 });
+assert.deepEqual(grouped[1].summary, { billed: 800, received: 200, outstanding: 600, badDebt: 0 });
+
 const migration = read('supabase/migrations/20260904025648_create_incomes.sql');
 assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.incomes/);
 assert.match(migration, /quotation_client_project_id text NOT NULL/);
@@ -193,6 +234,8 @@ assert.match(tab, /款項資訊/);
 assert.match(tab, /完成收款/);
 assert.match(tab, /於完成收款時填寫/);
 assert.match(tab, /aria-label="收款日期"/);
+assert.match(tab, /groupIncomesByType/);
+assert.match(tab, /應收合計/);
 
 const pitching = read('src/components/quotation/PitchingModule.tsx');
 assert.match(pitching, /PitchingIncomeTab/);

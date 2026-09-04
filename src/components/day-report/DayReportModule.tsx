@@ -3246,6 +3246,7 @@ export function DayReportModule({ subModule }: { subModule?: string }) {
       case 'team-view': return { title: '匯報統計', subtitle: '工作檢查查看填寫情況 · 工時分析統計類別工時與占比。' };
       case 'monthly': return { title: '月度報告', subtitle: '本月工時排名、AI 使用統計及類別分佈分析。' };
       case 'analytics': return { title: '項目分析', subtitle: '按系統／網站項目統計人員投入工時與占比 — 支援按天／週／月篩選。' };
+      case 'work-report': return { title: '工作報表', subtitle: '按個人統計參與的系統／網站項目工時與占比 — 依部門分組顯示。' };
       case 'work-categories': return { title: '工作類型管理', subtitle: '管理匯報工作類別的關聯規則 — 網站/系統、客戶項目、影片頻道、可選關聯或無需關聯。' };
       case 'holiday-settings': return { title: '假期設定', subtitle: '自動載入香港及深圳公眾假期 · Admin 可設定星期六上班人員、公司活動日、免匯報日。' };
       default: return { title: '提交匯報', subtitle: '支援香港/深圳雙辦公室 · 本週與上週匯報總覽 · 常用項目快速填入 · 週六加班匯報 · 多日假期申報 · AI 追蹤 · 8h驗證。' };
@@ -3261,15 +3262,16 @@ export function DayReportModule({ subModule }: { subModule?: string }) {
       case 'calendar': return <WorkCalendar />;
       case 'monthly': return <MonthlyReport />;
       case 'team-view': return <TeamDashboard />;
-      case 'analytics': return <ProjectAnalysis />;
+      case 'analytics': return <ProjectAnalysis mode="team" />;
+      case 'work-report': return <ProjectAnalysis mode="personal" />;
       case 'work-categories': return <WorkCategoriesManager />;
       case 'holiday-settings': return <HolidaySettings />;
       default: return <SubmitReportPage />;
     }
   };
 
-  // team-view / analytics 自行渲染 sticky 標題列，避免重複
-  if (subModule === 'team-view' || subModule === 'analytics') {
+  // team-view / analytics / work-report 自行渲染 sticky 標題列，避免重複
+  if (subModule === 'team-view' || subModule === 'analytics' || subModule === 'work-report') {
     return renderContent();
   }
 

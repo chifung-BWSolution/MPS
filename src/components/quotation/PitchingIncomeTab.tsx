@@ -21,6 +21,7 @@ import {
   nextInstallmentNumber,
   parseInstallmentNumber,
   parseMoney,
+  groupIncomesByType,
   summarizeIncomes,
   validateIncomeInput,
   type IncomePaymentMethod,
@@ -122,6 +123,7 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
   const [clearPaymentRecord, setClearPaymentRecord] = useState(false);
 
   const summary = useMemo(() => summarizeIncomes(rows), [rows]);
+  const groups = useMemo(() => groupIncomesByType(rows), [rows]);
   const outstandingPreview = computeOutstanding(
     parseMoney(draft.billedAmount) ?? 0,
     parseMoney(draft.paymentAmount) ?? 0,
@@ -243,117 +245,142 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
           <p className="text-[12px] text-muted-foreground/70 mt-1">可記錄分期應收、實收、未收與壞帳</p>
         </div>
       ) : (
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">類型</th>
-                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">期數</th>
-                  <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">應收</th>
-                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">到期日</th>
-                  <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">實收</th>
-                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">收款日期</th>
-                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">收款方式</th>
-                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">收款紀錄</th>
-                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
-                  <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">未收</th>
-                  <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">壞帳</th>
-                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">建立 / 修改</th>
-                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id} className="border-b border-border/50 hover:bg-muted/20">
-                    <td className="px-4 py-3 text-[13px] font-medium whitespace-nowrap">
-                      {row.type}
-                      {row.remarks && (
-                        <p className="text-[11px] text-muted-foreground font-normal truncate max-w-[160px] mt-0.5">
-                          {row.remarks}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-[13px] tabular-nums">{row.installmentNumber ?? '—'}</td>
-                    <td className="px-4 py-3 text-[13px] tabular-nums text-right whitespace-nowrap">
-                      {formatIncomeMoney(row.billedAmount)}
-                    </td>
-                    <td className="px-4 py-3 text-[13px] tabular-nums text-muted-foreground whitespace-nowrap">
-                      {formatIncomeDate(row.dueDate)}
-                    </td>
-                    <td className="px-4 py-3 text-[13px] tabular-nums text-right whitespace-nowrap">
-                      {formatIncomeMoney(row.paymentAmount)}
-                    </td>
-                    <td className="px-4 py-3 text-[13px] tabular-nums text-muted-foreground whitespace-nowrap">
-                      {formatIncomeDate(row.paymentDate)}
-                    </td>
-                    <td className="px-4 py-3 text-[13px] whitespace-nowrap">
-                      {row.paymentMethod ? INCOME_PAYMENT_METHOD_LABELS[row.paymentMethod] : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      {row.paymentRecordFileUrl ? (
-                        <a
-                          href={row.paymentRecordFileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[13px] font-medium text-teal-700 hover:text-teal-800 max-w-[160px]"
-                        >
-                          <ExternalLink size={12} className="shrink-0" />
-                          <span className="truncate">{row.paymentRecordFileName || '收款紀錄'}</span>
-                        </a>
-                      ) : (
-                        <span className="text-[13px] text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {row.paymentStatus ? (
-                        <span
-                          className={cn(
-                            'inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border',
-                            INCOME_PAYMENT_STATUS_STYLES[row.paymentStatus],
+        <div className="space-y-3">
+          {groups.map((group) => (
+            <section
+              key={group.type}
+              className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-hidden"
+            >
+              <header className="flex items-center justify-between gap-4 flex-wrap px-4 py-3 bg-muted/30 border-b border-border">
+                <div className="min-w-0">
+                  <h3 className="text-[14px] font-semibold">{group.type}</h3>
+                  <p className="text-[12px] text-muted-foreground">{group.rows.length} 筆</p>
+                </div>
+                <div className="flex items-end gap-4 sm:gap-6">
+                  <SectionSum label="應收合計" value={formatIncomeMoney(group.summary.billed)} />
+                  <SectionSum label="實收合計" value={formatIncomeMoney(group.summary.received)} />
+                  <SectionSum
+                    label="未收合計"
+                    value={formatIncomeMoney(group.summary.outstanding)}
+                    accent="text-amber-700"
+                  />
+                  <SectionSum
+                    label="壞帳合計"
+                    value={formatIncomeMoney(group.summary.badDebt)}
+                    accent="text-rose-700"
+                  />
+                </div>
+              </header>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/10">
+                      <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">期數</th>
+                      <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">應收</th>
+                      <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">到期日</th>
+                      <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">實收</th>
+                      <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">收款日期</th>
+                      <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">收款方式</th>
+                      <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">收款紀錄</th>
+                      <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
+                      <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">未收</th>
+                      <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">壞帳</th>
+                      <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">建立 / 修改</th>
+                      <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {group.rows.map((row) => (
+                      <tr key={row.id} className="border-b border-border/50 last:border-b-0 hover:bg-muted/20">
+                        <td className="px-4 py-3 text-[13px] tabular-nums">
+                          {row.installmentNumber ?? '—'}
+                          {row.remarks && (
+                            <p className="text-[11px] text-muted-foreground font-normal truncate max-w-[160px] mt-0.5">
+                              {row.remarks}
+                            </p>
                           )}
-                        >
-                          {INCOME_PAYMENT_STATUS_LABELS[row.paymentStatus]}
-                        </span>
-                      ) : (
-                        <span className="text-[13px] text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-[13px] tabular-nums text-right whitespace-nowrap">
-                      {formatIncomeMoney(row.outstanding)}
-                    </td>
-                    <td className="px-4 py-3 text-[13px] tabular-nums text-right whitespace-nowrap">
-                      {formatIncomeMoney(row.badDebt)}
-                    </td>
-                    <td className="px-4 py-3 text-[11px] text-muted-foreground whitespace-nowrap">
-                      <div>{formatIncomeDateTime(row.createdAt)}</div>
-                      <div>{formatIncomeDateTime(row.updatedAt)}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => openEdit(row)}
-                          className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                          aria-label={`編輯 ${row.type}`}
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleting(row)}
-                          className="p-1.5 rounded-md text-muted-foreground hover:bg-rose-50 hover:text-rose-600 transition-colors"
-                          aria-label={`刪除 ${row.type}`}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        </td>
+                        <td className="px-4 py-3 text-[13px] tabular-nums text-right whitespace-nowrap">
+                          {formatIncomeMoney(row.billedAmount)}
+                        </td>
+                        <td className="px-4 py-3 text-[13px] tabular-nums text-muted-foreground whitespace-nowrap">
+                          {formatIncomeDate(row.dueDate)}
+                        </td>
+                        <td className="px-4 py-3 text-[13px] tabular-nums text-right whitespace-nowrap">
+                          {formatIncomeMoney(row.paymentAmount)}
+                        </td>
+                        <td className="px-4 py-3 text-[13px] tabular-nums text-muted-foreground whitespace-nowrap">
+                          {formatIncomeDate(row.paymentDate)}
+                        </td>
+                        <td className="px-4 py-3 text-[13px] whitespace-nowrap">
+                          {row.paymentMethod ? INCOME_PAYMENT_METHOD_LABELS[row.paymentMethod] : '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          {row.paymentRecordFileUrl ? (
+                            <a
+                              href={row.paymentRecordFileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[13px] font-medium text-teal-700 hover:text-teal-800 max-w-[160px]"
+                            >
+                              <ExternalLink size={12} className="shrink-0" />
+                              <span className="truncate">{row.paymentRecordFileName || '收款紀錄'}</span>
+                            </a>
+                          ) : (
+                            <span className="text-[13px] text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {row.paymentStatus ? (
+                            <span
+                              className={cn(
+                                'inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border',
+                                INCOME_PAYMENT_STATUS_STYLES[row.paymentStatus],
+                              )}
+                            >
+                              {INCOME_PAYMENT_STATUS_LABELS[row.paymentStatus]}
+                            </span>
+                          ) : (
+                            <span className="text-[13px] text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-[13px] tabular-nums text-right whitespace-nowrap">
+                          {formatIncomeMoney(row.outstanding)}
+                        </td>
+                        <td className="px-4 py-3 text-[13px] tabular-nums text-right whitespace-nowrap">
+                          {formatIncomeMoney(row.badDebt)}
+                        </td>
+                        <td className="px-4 py-3 text-[11px] text-muted-foreground whitespace-nowrap">
+                          <div>{formatIncomeDateTime(row.createdAt)}</div>
+                          <div>{formatIncomeDateTime(row.updatedAt)}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openEdit(row)}
+                              className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                              aria-label={`編輯 ${row.type}`}
+                            >
+                              <Pencil size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleting(row)}
+                              className="p-1.5 rounded-md text-muted-foreground hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                              aria-label={`刪除 ${row.type}`}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ))}
         </div>
       )}
 
@@ -615,6 +642,23 @@ function SummaryCard({
     <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-4">
       <span className="text-[12px] text-muted-foreground block">{label}</span>
       <span className={cn('text-[16px] font-semibold tabular-nums mt-1 block', accent)}>{value}</span>
+    </div>
+  );
+}
+
+function SectionSum({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+}) {
+  return (
+    <div className="text-right">
+      <span className="text-[11px] text-muted-foreground block">{label}</span>
+      <span className={cn('text-[13px] font-semibold tabular-nums whitespace-nowrap', accent)}>{value}</span>
     </div>
   );
 }

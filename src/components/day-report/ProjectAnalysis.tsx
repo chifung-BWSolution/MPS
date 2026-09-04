@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import {
   Calendar, ChevronLeft, ChevronRight, Loader2, RefreshCw, Globe, Monitor,
-  Users, User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -204,8 +203,7 @@ function HoursBarRow({
 // ============================
 // Component
 // ============================
-export function ProjectAnalysis() {
-  const [mode, setMode] = useState<Mode>('team');
+export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
   const [periodType, setPeriodType] = useState<PeriodType>('week');
   const [typeFilter, setTypeFilter] = useState<ProfileTypeFilter>('all');
   const [anchorDate, setAnchorDate] = useState(() => new Date());
@@ -466,36 +464,14 @@ export function ProjectAnalysis() {
     <div>
       <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
         <div className="text-center">
-          <h1 className="text-[24px] font-bold tracking-tight">項目分析</h1>
+          <h1 className="text-[24px] font-bold tracking-tight">
+            {mode === 'team' ? '項目分析' : '工作報表'}
+          </h1>
           <p className="text-[13px] text-muted-foreground mt-0.5">
             {mode === 'team'
               ? '按系統／網站項目統計人員投入工時與占比 — 支援按天／週／月篩選。'
               : '按個人統計參與的系統／網站項目工時與占比 — 依部門分組顯示。'}
           </p>
-        </div>
-
-        <div className="flex justify-center">
-          <div className="inline-flex rounded-lg border border-[rgba(13,26,45,0.08)] bg-white p-0.5">
-            {([
-              { id: 'team' as const, label: '團隊', icon: Users },
-              { id: 'personal' as const, label: '個人', icon: User },
-            ]).map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setMode(id)}
-                className={cn(
-                  'inline-flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors',
-                  mode === id
-                    ? 'bg-teal-50 text-teal-700 border border-teal-100'
-                    : 'text-muted-foreground hover:text-[#0d1a2d]',
-                )}
-              >
-                <Icon size={14} />
-                {label}
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
