@@ -16,6 +16,7 @@ import {
   formatIncomeDateTime,
   formatIncomeMoney,
   formatPaymentRecordFileSize,
+  hasFilledPaymentAmount,
   INCOME_PAYMENT_RECORD_MAX_SIZE_MB,
   nextInstallmentNumber,
   parseInstallmentNumber,
@@ -36,6 +37,7 @@ type Draft = {
   billedAmount: string;
   dueDate: string;
   paymentAmount: string;
+  paymentDate: string;
   paymentMethod: string;
   paymentStatus: IncomePaymentStatus | '';
   badDebt: string;
@@ -48,6 +50,7 @@ const emptyDraft = (nextInstallment = 1, type = DEFAULT_INCOME_TYPE): Draft => (
   billedAmount: '',
   dueDate: '',
   paymentAmount: '',
+  paymentDate: '',
   paymentMethod: '',
   paymentStatus: '',
   badDebt: '',
@@ -60,7 +63,8 @@ function draftFromRow(row: QuotationIncome): Draft {
     installmentNumber: row.installmentNumber != null ? String(row.installmentNumber) : '',
     billedAmount: String(row.billedAmount),
     dueDate: row.dueDate ?? '',
-    paymentAmount: String(row.paymentAmount),
+    paymentAmount: row.paymentAmount ? String(row.paymentAmount) : '',
+    paymentDate: row.paymentDate ?? '',
     paymentMethod: row.paymentMethod ?? '',
     paymentStatus: row.paymentStatus ?? '',
     badDebt: String(row.badDebt),
@@ -123,6 +127,7 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
     parseMoney(draft.paymentAmount) ?? 0,
     parseMoney(draft.badDebt) ?? 0,
   );
+  const paymentRequired = hasFilledPaymentAmount(draft.paymentAmount);
 
   const openCreate = () => {
     setEditing(null);
@@ -166,6 +171,7 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
       billedAmount,
       dueDate: draft.dueDate || null,
       paymentAmount,
+      paymentDate: draft.paymentDate || null,
       paymentMethod: (draft.paymentMethod || null) as IncomePaymentMethod | null,
       paymentStatus: draft.paymentStatus || null,
       badDebt,
@@ -247,6 +253,7 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
                   <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">應收</th>
                   <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">到期日</th>
                   <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">實收</th>
+                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">收款日期</th>
                   <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">收款方式</th>
                   <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">收款紀錄</th>
                   <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
@@ -276,6 +283,9 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
                     </td>
                     <td className="px-4 py-3 text-[13px] tabular-nums text-right whitespace-nowrap">
                       {formatIncomeMoney(row.paymentAmount)}
+                    </td>
+                    <td className="px-4 py-3 text-[13px] tabular-nums text-muted-foreground whitespace-nowrap">
+                      {formatIncomeDate(row.paymentDate)}
                     </td>
                     <td className="px-4 py-3 text-[13px] whitespace-nowrap">
                       {row.paymentMethod ? INCOME_PAYMENT_METHOD_LABELS[row.paymentMethod] : '—'}
@@ -372,146 +382,160 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
           </CrudModalFooter>
         }
       >
-        <div className="space-y-4">
-          <div>
-            <span className="text-[12px] text-muted-foreground block mb-1">類型 Type *</span>
-            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="收入類型">
-              {INCOME_TYPE_PRESETS.map((type) => {
-                const selected = draft.type === type;
-                return (
-                  <button
-                    key={type}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    onClick={() =>
-                      setDraft((prev) => ({
-                        ...prev,
-                        type,
-                        installmentNumber: editing
-                          ? prev.installmentNumber
-                          : String(nextInstallmentNumber(rows, type)),
-                      }))
-                    }
-                    className={cn(
-                      'px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors',
-                      selected
-                        ? 'bg-teal-50 border-teal-300 text-teal-800'
-                        : 'bg-white border-border text-muted-foreground hover:bg-muted/40',
-                    )}
-                  >
-                    {type}
-                  </button>
-                );
-              })}
+        <div className="space-y-6">
+          <section className="space-y-4">
+            <h3 className="text-[14px] font-semibold">款項資訊</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <span className="text-[12px] text-muted-foreground block mb-1">類型 Type *</span>
+                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="收入類型">
+                  {INCOME_TYPE_PRESETS.map((type) => {
+                    const selected = draft.type === type;
+                    return (
+                      <button
+                        key={type}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() =>
+                          setDraft((prev) => ({
+                            ...prev,
+                            type,
+                            installmentNumber: editing
+                              ? prev.installmentNumber
+                              : String(nextInstallmentNumber(rows, type)),
+                          }))
+                        }
+                        className={cn(
+                          'px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors',
+                          selected
+                            ? 'bg-teal-50 border-teal-300 text-teal-800'
+                            : 'bg-white border-border text-muted-foreground hover:bg-muted/40',
+                        )}
+                      >
+                        {type}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <span className="text-[12px] text-muted-foreground block mb-1">期數 Installment *</span>
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={draft.installmentNumber}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, installmentNumber: e.target.value }))}
+                  className="text-[13px]"
+                  aria-label="期數"
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <span className="text-[12px] text-muted-foreground block mb-1">應收金額 Billed *</span>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={draft.billedAmount}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, billedAmount: e.target.value }))}
+                  placeholder="0.00"
+                  className="text-[13px]"
+                  aria-label="應收金額"
+                />
+              </div>
+              <div>
+                <span className="text-[12px] text-muted-foreground block mb-1">到期日 Due date *</span>
+                <Input
+                  type="date"
+                  value={draft.dueDate}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, dueDate: e.target.value }))}
+                  className="text-[13px]"
+                  aria-label="到期日"
+                />
+              </div>
+            </div>
+
+            <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2.5 flex items-center justify-between">
+              <span className="text-[12px] text-muted-foreground">未收 Outstanding（應收 − 實收 − 壞帳）</span>
+              <span className="text-[14px] font-semibold tabular-nums">{formatIncomeMoney(outstandingPreview)}</span>
+            </div>
+          </section>
+
+          <section className="space-y-4 pt-2 border-t border-border/60">
             <div>
-              <span className="text-[12px] text-muted-foreground block mb-1">期數 Installment</span>
-              <Input
-                type="number"
-                min="1"
-                step="1"
-                value={draft.installmentNumber}
-                onChange={(e) => setDraft((prev) => ({ ...prev, installmentNumber: e.target.value }))}
-                className="text-[13px]"
-                aria-label="期數"
+              <h3 className="text-[14px] font-semibold">完成收款</h3>
+              <p className="text-[12px] text-muted-foreground mt-0.5">於完成收款時填寫</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <span className="text-[12px] text-muted-foreground block mb-1">實收金額 Payment</span>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={draft.paymentAmount}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, paymentAmount: e.target.value }))}
+                  placeholder="0.00"
+                  className="text-[13px]"
+                  aria-label="實收金額"
+                />
+              </div>
+              <div>
+                <span className="text-[12px] text-muted-foreground block mb-1">
+                  收款日期 Payment date{paymentRequired ? ' *' : ''}
+                </span>
+                <Input
+                  type="date"
+                  value={draft.paymentDate}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, paymentDate: e.target.value }))}
+                  className="text-[13px]"
+                  aria-label="收款日期"
+                />
+              </div>
+            </div>
+
+            <div>
+              <span className="text-[12px] text-muted-foreground block mb-1.5">
+                收款方式 Payment method{paymentRequired ? ' *' : ''}
+              </span>
+              <PillOptions
+                value={draft.paymentMethod}
+                options={INCOME_PAYMENT_METHODS}
+                labels={INCOME_PAYMENT_METHOD_LABELS}
+                onChange={(paymentMethod) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    paymentMethod: prev.paymentMethod === paymentMethod ? '' : paymentMethod,
+                  }))
+                }
+                ariaLabel="收款方式"
               />
             </div>
+
             <div>
-              <span className="text-[12px] text-muted-foreground block mb-1">到期日 Due date</span>
-              <Input
-                type="date"
-                value={draft.dueDate}
-                onChange={(e) => setDraft((prev) => ({ ...prev, dueDate: e.target.value }))}
-                className="text-[13px]"
-                aria-label="到期日"
+              <span className="text-[12px] text-muted-foreground block mb-1.5">
+                收款狀態 Payment status{paymentRequired ? ' *' : ''}
+              </span>
+              <PillOptions
+                value={draft.paymentStatus}
+                options={INCOME_PAYMENT_STATUSES}
+                labels={INCOME_PAYMENT_STATUS_LABELS}
+                onChange={(paymentStatus) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    paymentStatus: prev.paymentStatus === paymentStatus ? '' : paymentStatus,
+                  }))
+                }
+                ariaLabel="收款狀態"
               />
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <span className="text-[12px] text-muted-foreground block mb-1">應收金額 Billed *</span>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={draft.billedAmount}
-                onChange={(e) => setDraft((prev) => ({ ...prev, billedAmount: e.target.value }))}
-                placeholder="0.00"
-                className="text-[13px]"
-                aria-label="應收金額"
-              />
-            </div>
-            <div>
-              <span className="text-[12px] text-muted-foreground block mb-1">實收金額 Payment</span>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={draft.paymentAmount}
-                onChange={(e) => setDraft((prev) => ({ ...prev, paymentAmount: e.target.value }))}
-                placeholder="0.00"
-                className="text-[13px]"
-                aria-label="實收金額"
-              />
-            </div>
-            <div>
-              <span className="text-[12px] text-muted-foreground block mb-1">壞帳 Bad debt</span>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={draft.badDebt}
-                onChange={(e) => setDraft((prev) => ({ ...prev, badDebt: e.target.value }))}
-                placeholder="0.00"
-                className="text-[13px]"
-                aria-label="壞帳"
-              />
-            </div>
-          </div>
-
-          <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2.5 flex items-center justify-between">
-            <span className="text-[12px] text-muted-foreground">未收 Outstanding（應收 − 實收 − 壞帳）</span>
-            <span className="text-[14px] font-semibold tabular-nums">{formatIncomeMoney(outstandingPreview)}</span>
-          </div>
-
-          <div>
-            <span className="text-[12px] text-muted-foreground block mb-1.5">收款方式 Payment method</span>
-            <PillOptions
-              value={draft.paymentMethod}
-              options={INCOME_PAYMENT_METHODS}
-              labels={INCOME_PAYMENT_METHOD_LABELS}
-              onChange={(paymentMethod) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  paymentMethod: prev.paymentMethod === paymentMethod ? '' : paymentMethod,
-                }))
-              }
-              ariaLabel="收款方式"
-            />
-          </div>
-
-          <div>
-            <span className="text-[12px] text-muted-foreground block mb-1.5">收款狀態 Payment status</span>
-            <PillOptions
-              value={draft.paymentStatus}
-              options={INCOME_PAYMENT_STATUSES}
-              labels={INCOME_PAYMENT_STATUS_LABELS}
-              onChange={(paymentStatus) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  paymentStatus: prev.paymentStatus === paymentStatus ? '' : paymentStatus,
-                }))
-              }
-              ariaLabel="收款狀態"
-            />
-          </div>
-
-          <div>
             <span className="text-[12px] text-muted-foreground block mb-1">收款紀錄 Payment record</span>
             <Input
               type="file"
@@ -562,6 +586,7 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
               aria-label="備註"
             />
           </div>
+          </section>
         </div>
       </CrudModal>
 

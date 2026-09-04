@@ -40,6 +40,7 @@ export type QuotationIncome = {
   billedAmount: number;
   dueDate?: string;
   paymentAmount: number;
+  paymentDate?: string;
   paymentMethod?: IncomePaymentMethod;
   paymentStatus?: IncomePaymentStatus;
   outstanding: number;
@@ -60,6 +61,7 @@ export type QuotationIncomeInput = {
   billedAmount: number;
   dueDate?: string | null;
   paymentAmount: number;
+  paymentDate?: string | null;
   paymentMethod?: IncomePaymentMethod | null;
   paymentStatus?: IncomePaymentStatus | null;
   badDebt: number;
@@ -96,6 +98,11 @@ export function parseMoney(raw: string | number | null | undefined): number | nu
   const value = Number(trimmed);
   if (!Number.isFinite(value) || value < 0) return null;
   return Math.round(value * 100) / 100;
+}
+
+export function hasFilledPaymentAmount(raw: string | number | null | undefined): boolean {
+  if (typeof raw === 'number') return Number.isFinite(raw);
+  return Boolean(raw?.trim());
 }
 
 export function parseInstallmentNumber(raw: string | number | null | undefined): number | null {
@@ -151,20 +158,30 @@ export function validateIncomeInput(input: {
   type: string;
   installmentNumber?: string;
   billedAmount: string;
+  dueDate?: string;
   paymentAmount: string;
-  badDebt: string;
+  paymentDate?: string;
+  badDebt?: string;
   paymentMethod: string;
   paymentStatus: string;
 }): string | null {
   if (!isIncomeType(input.type.trim())) return '請選擇收入類型';
-  if (input.installmentNumber?.trim() && parseInstallmentNumber(input.installmentNumber) == null) {
-    return '期數須為 1 或以上的整數';
-  }
+  if (parseInstallmentNumber(input.installmentNumber) == null) return '請填寫期數';
+  if (!input.billedAmount?.trim()) return '請填寫應收金額';
   if (parseMoney(input.billedAmount) == null) return '應收金額須為 0 或以上的數字';
-  if (parseMoney(input.paymentAmount) == null) return '實收金額須為 0 或以上的數字';
-  if (parseMoney(input.badDebt) == null) return '壞帳須為 0 或以上的數字';
-  if (input.paymentMethod && !isIncomePaymentMethod(input.paymentMethod)) return '請選擇有效的收款方式';
-  if (input.paymentStatus && !isIncomePaymentStatus(input.paymentStatus)) return '請選擇有效的收款狀態';
+  if (!optionalIsoDate(input.dueDate)) return '請選擇到期日';
+  if (input.paymentAmount.trim() && parseMoney(input.paymentAmount) == null) {
+    return '實收金額須為 0 或以上的數字';
+  }
+  if (input.badDebt?.trim() && parseMoney(input.badDebt) == null) return '壞帳須為 0 或以上的數字';
+  if (hasFilledPaymentAmount(input.paymentAmount)) {
+    if (!optionalIsoDate(input.paymentDate)) return '請選擇收款日期';
+    if (!isIncomePaymentMethod(input.paymentMethod)) return '請選擇收款方式';
+    if (!isIncomePaymentStatus(input.paymentStatus)) return '請選擇收款狀態';
+  } else {
+    if (input.paymentMethod && !isIncomePaymentMethod(input.paymentMethod)) return '請選擇有效的收款方式';
+    if (input.paymentStatus && !isIncomePaymentStatus(input.paymentStatus)) return '請選擇有效的收款狀態';
+  }
   return null;
 }
 

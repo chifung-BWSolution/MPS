@@ -15,6 +15,7 @@ import {
   isAllowedPaymentRecordFile,
   nextInstallmentNumber,
   parseInstallmentNumber,
+  hasFilledPaymentAmount,
   parseMoney,
   summarizeIncomes,
   validateIncomeInput,
@@ -38,6 +39,8 @@ assert.deepEqual([...INCOME_TYPE_PRESETS], ['主要收入', '後加項目', '代
 assert.deepEqual([...INCOME_PAYMENT_METHODS], ['Transfer', 'Cash', 'Cheque']);
 assert.deepEqual([...INCOME_PAYMENT_STATUSES], ['Pending Check', 'Received', 'Not Received']);
 
+assert.equal(hasFilledPaymentAmount(''), false);
+assert.equal(hasFilledPaymentAmount('0'), true);
 assert.equal(parseMoney(''), 0);
 assert.equal(parseMoney('12000.5'), 12000.5);
 assert.equal(parseMoney(-1), null);
@@ -74,10 +77,32 @@ assert.equal(validateIncomeInput({
   type: '主要收入',
   installmentNumber: '1',
   billedAmount: '100',
-  paymentAmount: '0',
+  dueDate: '2026-09-04',
+  paymentAmount: '',
+  paymentDate: '',
   badDebt: '0',
-  paymentMethod: 'Transfer',
+  paymentMethod: '',
   paymentStatus: '',
+}), null);
+assert.equal(validateIncomeInput({
+  type: '主要收入',
+  installmentNumber: '1',
+  billedAmount: '100',
+  dueDate: '2026-09-04',
+  paymentAmount: '500',
+  paymentDate: '',
+  paymentMethod: 'Transfer',
+  paymentStatus: 'Received',
+}), '請選擇收款日期');
+assert.equal(validateIncomeInput({
+  type: '主要收入',
+  installmentNumber: '1',
+  billedAmount: '100',
+  dueDate: '2026-09-04',
+  paymentAmount: '500',
+  paymentDate: '2026-09-10',
+  paymentMethod: 'Transfer',
+  paymentStatus: 'Received',
 }), null);
 
 assert.deepEqual(
@@ -135,11 +160,15 @@ assert.match(statusMigration, /ALTER COLUMN payment_status DROP NOT NULL/);
 assert.match(statusMigration, /payment_status IS NULL OR payment_status IN/);
 assert.match(statusMigration, /'主要收入', '後加項目', '代付項目'/);
 
+const paymentDateMigration = read('supabase/migrations/20260904060756_incomes_payment_date.sql');
+assert.match(paymentDateMigration, /ADD COLUMN IF NOT EXISTS payment_date date/);
+
 const hook = read('src/hooks/useQuotationIncomes.ts');
 assert.match(hook, /INCOMES_TABLE/);
 assert.match(hook, /INCOME_PAYMENT_RECORDS_BUCKET/);
 assert.match(hook, /quotation_client_project_id/);
 assert.match(hook, /payment_record_storage_path/);
+assert.match(hook, /payment_date/);
 assert.match(hook, /uploadIncomePaymentRecordFile/);
 assert.match(hook, /const addIncome/);
 assert.match(hook, /const updateIncome/);
@@ -160,6 +189,10 @@ assert.match(tab, /paymentRecordAction/);
 assert.match(tab, /新增單項收入/);
 assert.match(tab, /DEFAULT_INCOME_TYPE/);
 assert.match(tab, /nextInstallmentNumber\(rows, type\)/);
+assert.match(tab, /款項資訊/);
+assert.match(tab, /完成收款/);
+assert.match(tab, /於完成收款時填寫/);
+assert.match(tab, /aria-label="收款日期"/);
 
 const pitching = read('src/components/quotation/PitchingModule.tsx');
 assert.match(pitching, /PitchingIncomeTab/);
