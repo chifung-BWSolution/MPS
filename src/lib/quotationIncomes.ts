@@ -151,7 +151,7 @@ export function validateIncomeInput(input: {
   if (parseMoney(input.billedAmount) == null) return '應收金額須為 0 或以上的數字';
   if (parseMoney(input.paymentAmount) == null) return '實收金額須為 0 或以上的數字';
   if (parseMoney(input.badDebt) == null) return '壞帳須為 0 或以上的數字';
-  if (input.paymentMethod && !isIncomePaymentMethod(input.paymentMethod)) return '請選擇有效的付款方式';
+  if (input.paymentMethod && !isIncomePaymentMethod(input.paymentMethod)) return '請選擇有效的收款方式';
   if (!isIncomePaymentStatus(input.paymentStatus)) return '請選擇收款狀態';
   return null;
 }

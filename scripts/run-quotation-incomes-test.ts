@@ -136,10 +136,10 @@ assert.match(tab, /updateIncome/);
 assert.match(tab, /deleteIncome/);
 assert.match(tab, /DeleteConfirmModal/);
 assert.match(tab, /rounded-full/);
-assert.match(tab, /ariaLabel="付款方式"/);
+assert.match(tab, /ariaLabel="收款方式"/);
 assert.match(tab, /ariaLabel="收款狀態"/);
 assert.match(tab, /aria-label="備註"/);
-assert.match(tab, /aria-label="付款紀錄檔案"/);
+assert.match(tab, /aria-label="收款紀錄檔案"/);
 assert.match(tab, /paymentRecordAction/);
 
 const pitching = read('src/components/quotation/PitchingModule.tsx');

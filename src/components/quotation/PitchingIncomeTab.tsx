@@ -246,8 +246,8 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
                   <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">應收</th>
                   <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">到期日</th>
                   <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">實收</th>
-                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">付款方式</th>
-                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">付款紀錄</th>
+                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">收款方式</th>
+                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">收款紀錄</th>
                   <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
                   <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">未收</th>
                   <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">壞帳</th>
@@ -288,7 +288,7 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
                           className="inline-flex items-center gap-1 text-[13px] font-medium text-teal-700 hover:text-teal-800 max-w-[160px]"
                         >
                           <ExternalLink size={12} className="shrink-0" />
-                          <span className="truncate">{row.paymentRecordFileName || '付款紀錄'}</span>
+                          <span className="truncate">{row.paymentRecordFileName || '收款紀錄'}</span>
                         </a>
                       ) : (
                         <span className="text-[13px] text-muted-foreground">—</span>
@@ -472,7 +472,7 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
           </div>
 
           <div>
-            <span className="text-[12px] text-muted-foreground block mb-1.5">付款方式 Payment method</span>
+            <span className="text-[12px] text-muted-foreground block mb-1.5">收款方式 Payment method</span>
             <PillOptions
               value={draft.paymentMethod}
               options={INCOME_PAYMENT_METHODS}
@@ -483,7 +483,7 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
                   paymentMethod: prev.paymentMethod === paymentMethod ? '' : paymentMethod,
                 }))
               }
-              ariaLabel="付款方式"
+              ariaLabel="收款方式"
             />
           </div>
 
@@ -499,7 +499,7 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
           </div>
 
           <div>
-            <span className="text-[12px] text-muted-foreground block mb-1">付款紀錄 Payment record</span>
+            <span className="text-[12px] text-muted-foreground block mb-1">收款紀錄 Payment record</span>
             <Input
               type="file"
               accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.avif,.doc,.docx,.xls,.xlsx"
@@ -508,7 +508,7 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
                 setClearPaymentRecord(false);
               }}
               className="text-[13px]"
-              aria-label="付款紀錄檔案"
+              aria-label="收款紀錄檔案"
             />
             <p className="text-[11px] text-muted-foreground mt-1.5">
               {paymentRecordFile
