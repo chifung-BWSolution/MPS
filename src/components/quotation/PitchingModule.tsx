@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, ChevronRight, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil, Clock, FolderOpen } from 'lucide-react';
+import { Search, Plus, ChevronRight, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil, Clock, FolderOpen, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
@@ -37,6 +37,7 @@ import {
 } from '@/data/pitchingData';
 import { PitchingBudgetTab } from '@/components/quotation/PitchingBudgetTab';
 import { PitchingDocsTab } from '@/components/quotation/PitchingDocsTab';
+import { PitchingIncomeTab } from '@/components/quotation/PitchingIncomeTab';
 import { PitchingFollowUpsTab } from '@/components/quotation/PitchingFollowUpsTab';
 import { PitchingWorkHoursTab } from '@/components/quotation/PitchingWorkHoursTab';
 import { QuotationBvCard } from '@/components/quotation/QuotationBvCard';
@@ -931,7 +932,7 @@ export function PitchingDetail({
   onConvertToQuote: () => void;
   onSave: (id: string, data: QuotationClientProjectUpdate) => Promise<{ error: { message: string } | null }>;
 }) {
-  const [activeTab, setActiveTab] = useState<'info' | 'followups' | 'hours' | 'quotation' | 'docs' | 'budget'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'followups' | 'hours' | 'quotation' | 'docs' | 'income' | 'budget'>('info');
   const [draft, setDraft] = useState<DetailDraft>(() => draftFromRecord(record, clientOptions));
   const [saving, setSaving] = useState(false);
   const clientCompany = companyNamesForClient(draft.clientId, clientOptions);
@@ -1016,6 +1017,7 @@ export function PitchingDetail({
     { id: 'hours', label: '工作時數', icon: Clock },
     { id: 'quotation', label: '關聯報價單', icon: FileText },
     { id: 'docs', label: '項目文件', icon: FolderOpen },
+    { id: 'income', label: '收入', icon: Wallet },
     { id: 'budget', label: '預計收入支出', icon: DollarSign },
   ] as const;
 
@@ -1228,6 +1230,10 @@ export function PitchingDetail({
 
       {activeTab === 'docs' && (
         <PitchingDocsTab projectId={record.id} />
+      )}
+
+      {activeTab === 'income' && (
+        <PitchingIncomeTab projectId={record.id} />
       )}
 
       {activeTab === 'budget' && (
