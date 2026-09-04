@@ -459,9 +459,16 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
               </div>
             </div>
 
-            <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2.5 flex items-center justify-between">
-              <span className="text-[12px] text-muted-foreground">未收 Outstanding（應收 − 實收 − 壞帳）</span>
-              <span className="text-[14px] font-semibold tabular-nums">{formatIncomeMoney(outstandingPreview)}</span>
+            <div>
+              <span className="text-[12px] text-muted-foreground block mb-1">備註 Remarks</span>
+              <Textarea
+                value={draft.remarks}
+                onChange={(e) => setDraft((prev) => ({ ...prev, remarks: e.target.value }))}
+                placeholder="補充說明"
+                rows={3}
+                className="text-[13px]"
+                aria-label="備註"
+              />
             </div>
           </section>
 
@@ -497,6 +504,11 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
                   aria-label="收款日期"
                 />
               </div>
+            </div>
+
+            <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2.5 flex items-center justify-between">
+              <span className="text-[12px] text-muted-foreground">未收 Outstanding（應收 − 實收 − 壞帳）</span>
+              <span className="text-[14px] font-semibold tabular-nums">{formatIncomeMoney(outstandingPreview)}</span>
             </div>
 
             <div>
@@ -573,18 +585,6 @@ export function PitchingIncomeTab({ projectId }: { projectId: string }) {
                 </button>
               </div>
             )}
-          </div>
-
-          <div>
-            <span className="text-[12px] text-muted-foreground block mb-1">備註 Remarks</span>
-            <Textarea
-              value={draft.remarks}
-              onChange={(e) => setDraft((prev) => ({ ...prev, remarks: e.target.value }))}
-              placeholder="補充說明"
-              rows={3}
-              className="text-[13px]"
-              aria-label="備註"
-            />
           </div>
           </section>
         </div>
