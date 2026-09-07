@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { Search, RefreshCw, Users, Phone, Mail, Building2, Briefcase, UserCheck, UserX, Tag, ChevronDown, Shield, Ban, CheckSquare, Square, MinusSquare, CloudDownload, CheckCircle2, AlertCircle, Loader2, ArrowUpDown, Database, Save, Chrome, Edit } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { invokeProvisionStaffAuth } from '@/lib/provisionStaffAuthApi';
 
 const STAFF_SELECT =
   'id, display_name, full_name, chinese_name, position, user_role, status, work_email, private_email, work_phone, private_phone, profile_pic_url, base_location, team_name, company_list_id, brand_list_id, entry_date, termination_date';
@@ -207,6 +208,13 @@ export function StaffDirectory() {
 
       // Delete records that are back to "other_staff"
       if (otherStaffUuids.length > 0) {
+        for (const staffId of otherStaffUuids) {
+          try {
+            await invokeProvisionStaffAuth({ mode: 'disable', staffId });
+          } catch (provisionErr) {
+            console.warn('[StaffDirectory] disable Auth user failed:', provisionErr);
+          }
+        }
         const { error: deleteErr } = await supabase
           .from('users')
           .delete()
@@ -227,6 +235,13 @@ export function StaffDirectory() {
           setSaveResult({ success: false, message: `儲存失敗: ${upsertErr.message}` });
           setSaving(false);
           return;
+        }
+        for (const rec of records) {
+          try {
+            await invokeProvisionStaffAuth({ mode: 'provision', staffId: rec.staff_id });
+          } catch (provisionErr) {
+            console.warn('[StaffDirectory] provision Auth user failed:', provisionErr);
+          }
         }
       }
 

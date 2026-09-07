@@ -42,11 +42,27 @@ assert.match(legacyViews, /CREATE OR REPLACE VIEW public\.staff_directory/);
 assert.match(legacyViews, /security_invoker = true/);
 assert.match(legacyViews, /GRANT SELECT ON public\.system_users TO anon, authenticated/);
 
+const revokeAnon = read('supabase/migrations/20260907023109_revoke_anon_internal_tables.sql');
+assert.match(revokeAnon, /REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon/);
+assert.match(revokeAnon, /REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC/);
+assert.match(revokeAnon, /GRANT EXECUTE ON FUNCTION public\.submit_artist_apply\(jsonb, jsonb\) TO anon/);
+assert.match(revokeAnon, /GRANT EXECUTE ON FUNCTION public\.get_volunteer_campaign_public\(text\) TO anon/);
+assert.match(revokeAnon, /GRANT EXECUTE ON FUNCTION public\.submit_volunteer_apply\(jsonb\) TO anon/);
+assert.match(revokeAnon, /GRANT INSERT ON TABLE public\.kol_apply TO anon/);
+assert.match(revokeAnon, /DROP POLICY IF EXISTS "Allow anon select on kol_apply"/);
+assert.doesNotMatch(revokeAnon, /GRANT SELECT ON TABLE public\.users TO anon/);
+
+const loginPage = read('src/components/auth/LoginPage.tsx');
+assert.match(loginPage, /signInWithEmailPhone/);
+assert.doesNotMatch(loginPage, /devBypassLogin/);
+assert.doesNotMatch(loginPage, /Developer Bypass/);
+
 const userMgmt = read('src/components/settings/UserManagement.tsx');
 assert.match(userMgmt, /from\('users'\)/);
 assert.match(userMgmt, /\.upsert\(/);
 assert.match(userMgmt, /\.update\(/);
 assert.match(userMgmt, /\.delete\(\)/);
+assert.match(userMgmt, /invokeProvisionStaffAuth/);
 
 const staffDir = read('src/components/settings/StaffDirectory.tsx');
 assert.match(staffDir, /from\('users'\)/);
@@ -77,18 +93,14 @@ const headers = (key: string, extra: Record<string, string> = {}) => ({
 const selectRes = await fetch(`${url}/rest/v1/users?select=id,email,staff_id&limit=1`, {
   headers: headers(anonKey),
 });
-if (selectRes.status === 401) {
-  const body = await selectRes.text();
-  if (body.includes('Invalid API key')) {
-    console.log('users RLS REST checks skipped (anon key rejected by API)');
-    process.exit(0);
-  }
-  assert.fail(`anon SELECT users HTTP 401: ${body}`);
+if (selectRes.status === 401 && (await selectRes.clone().text()).includes('Invalid API key')) {
+  console.log('users RLS REST checks skipped (anon key rejected by API)');
+  process.exit(0);
 }
-assert.equal(selectRes.ok, true, `anon SELECT users HTTP ${selectRes.status}`);
-const selectRows = await selectRes.json();
-assert.ok(Array.isArray(selectRows), 'anon SELECT returns an array');
-assert.ok(selectRows.length >= 1, 'anon SELECT can read the login allowlist');
+assert.ok(
+  selectRes.status === 401 || selectRes.status === 403,
+  `anon SELECT users must fail after JWT-only login, got ${selectRes.status}`,
+);
 
 const insertRes = await fetch(`${url}/rest/v1/users`, {
   method: 'POST',
@@ -131,9 +143,9 @@ const loginLookup = await fetch(
   `${url}/rest/v1/users?select=id,email,staff_id&email=eq.${encodeURIComponent(leoEmail)}`,
   { headers: headers(anonKey) },
 );
-assert.equal(loginLookup.ok, true, `anon email whitelist lookup HTTP ${loginLookup.status}`);
-const leoRows = await loginLookup.json();
-assert.equal(leoRows.length, 1, 'anon can resolve Leo for login');
-assert.equal(leoRows[0].email, leoEmail);
+assert.ok(
+  loginLookup.status === 401 || loginLookup.status === 403,
+  `anon email whitelist lookup must fail, got ${loginLookup.status}`,
+);
 
 console.log('users RLS REST checks: ok');

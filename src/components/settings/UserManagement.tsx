@@ -7,6 +7,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { invokeProvisionStaffAuth } from '@/lib/provisionStaffAuthApi';
 
 // Role labels matching PRD
 const ROLE_OPTIONS: { value: string; label: string; color: string }[] = [
@@ -146,6 +147,18 @@ export function UserManagement() {
 
       if (error) throw error;
       const mapped = mapUsersRow(data);
+      try {
+        const provisioned = await invokeProvisionStaffAuth({
+          mode: 'provision',
+          staffId: staff.id,
+        });
+        if (provisioned?.action === 'skipped' && provisioned.reason === 'no_phone') {
+          toast.warning('已加入白名單，但尚未設定私人電話，暫時無法用電郵登入');
+        }
+      } catch (provisionErr) {
+        console.warn('Failed to provision Auth user:', provisionErr);
+        toast.warning('已加入白名單，但 Auth 帳號尚未建立，請稍後再試電郵登入');
+      }
       setSystemUsers(prev => {
         const without = prev.filter(u => u.staff_id !== mapped.staff_id);
         return [mapped, ...without];
@@ -179,6 +192,13 @@ export function UserManagement() {
         .single();
 
       if (error) throw error;
+      if (updates.email !== undefined) {
+        try {
+          await invokeProvisionStaffAuth({ mode: 'provision', usersId: userId });
+        } catch (provisionErr) {
+          console.warn('Failed to update Auth login after email change:', provisionErr);
+        }
+      }
       setSystemUsers(prev => prev.map(u => u.id === userId ? mapUsersRow(data) : u));
       toast.success('已更新使用者資料');
       setShowEditModal(false);
@@ -192,6 +212,11 @@ export function UserManagement() {
   const handleRemoveUser = async (user: SystemUser) => {
     if (!confirm(`確定要移除「${user.display_name}」的系統存取權限嗎？\n此操作不會影響員工列表中的資料。`)) return;
     try {
+      try {
+        await invokeProvisionStaffAuth({ mode: 'disable', usersId: user.id });
+      } catch (provisionErr) {
+        console.warn('Failed to disable Auth user:', provisionErr);
+      }
       const { error } = await supabase
         .from('users')
         .delete()

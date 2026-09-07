@@ -94,17 +94,30 @@ async function lookupLoginStaffIdByAuthUserId(authUserId: string): Promise<strin
   return isStaffUuid(id) ? id : null;
 }
 
+/** Sync staffs.id from the already-verified session profile. No network. */
+export function staffUuidFromSession(systemUser: SystemUserLike): string | null {
+  if (!systemUser) return null;
+  const sessionStaffId = remapStaleStaffUuid(systemUser.staff_id);
+  return isStaffUuid(sessionStaffId) ? sessionStaffId : null;
+}
+
 /**
  * Resolve staffs.id for report load/save.
- * Source of truth is users.staff_id via users.auth_user_id (Auth UID).
- * Does not join on email, staffs.work_email, or staffs.bubble_staff_id.
+ * Default: trust the session staff_id (Google / bypass already verified at login).
+ * Pass `{ refreshFromLogin: true }` to re-read users.staff_id via auth_user_id.
  */
-export async function resolveStaffUuid(systemUser: SystemUserLike): Promise<string | null> {
+export async function resolveStaffUuid(
+  systemUser: SystemUserLike,
+  options?: { refreshFromLogin?: boolean },
+): Promise<string | null> {
   if (!systemUser) return null;
 
   const sessionStaffId = remapStaleStaffUuid(systemUser.staff_id);
-  const authUserId = (systemUser.auth_user_id || '').trim();
+  if (!options?.refreshFromLogin && isStaffUuid(sessionStaffId)) {
+    return sessionStaffId;
+  }
 
+  const authUserId = (systemUser.auth_user_id || '').trim();
   let loginStaffId: string | null = null;
   if (authUserId) {
     loginStaffId = await lookupLoginStaffIdByAuthUserId(authUserId);

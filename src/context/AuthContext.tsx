@@ -12,6 +12,7 @@ import {
   type UsersWhitelistRow,
 } from '@/services/authStaffResolve';
 import { isUsersUuid } from '@/lib/loginLogs';
+import { normalizePhonePassword } from '@/lib/phonePassword';
 import type { User as SupabaseUser, Session } from '@supabase/supabase-js';
 
 interface SystemUserProfile {
@@ -44,8 +45,8 @@ interface AuthContextType {
   userInfo: UserInfoProfile | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
+  signInWithEmailPhone: (email: string, phone: string) => Promise<void>;
   signOut: () => Promise<void>;
-  devBypassLogin: (email: string) => Promise<void>;
   isAuthenticated: boolean;
   isAuthorized: boolean;
   authError: string | null;
@@ -87,7 +88,7 @@ type HardcodedBypassProfile = {
   login_method: 'dev_bypass_super_admin' | 'dev_bypass_developer';
 };
 
-/** Hardcoded Developer Bypass Login allowlist. Works even if DB lookup times out. */
+/** Legacy Bubble staff ids still present in old localStorage session JSON. */
 const HARDCODED_BYPASS_USERS: Record<string, HardcodedBypassProfile> = {
   'brandingworks.ebiz@gmail.com': {
     staff_id: MANUAL_SUPER_ADMIN_STAFF_UUID,
@@ -112,42 +113,6 @@ const HARDCODED_BYPASS_USERS: Record<string, HardcodedBypassProfile> = {
     login_method: 'dev_bypass_developer',
   },
 };
-
-function lookupHardcodedBypass(email: string): { email: string; profile: HardcodedBypassProfile } | null {
-  const normalized = normalizeLoginEmail(email);
-  const profile = HARDCODED_BYPASS_USERS[normalized];
-  return profile ? { email: normalized, profile } : null;
-}
-
-function fallbackFromHardcoded(
-  email: string,
-  profile: HardcodedBypassProfile,
-  authUserId: string | null = null
-): { systemUser: SystemUserProfile; userInfo: UserInfoProfile } {
-  return {
-    systemUser: {
-      id: `fallback-${profile.staff_id}`,
-      auth_user_id: authUserId,
-      staff_id: profile.staff_id,
-      display_name: profile.display_name,
-      email,
-      role: profile.role,
-      department: profile.department,
-      office: null,
-      position: profile.position,
-      phone: null,
-      profile_pic_url: null,
-      is_active: true,
-    },
-    userInfo: {
-      id: `fallback-user-info-${profile.staff_id}`,
-      staff_id: profile.staff_id,
-      auth_user_id: authUserId,
-      role_tag: profile.role_tag,
-      email,
-    },
-  };
-}
 
 function staffPhone(staff?: { work_phone?: string | null; private_phone?: string | null } | null): string | null {
   return staff?.work_phone || staff?.private_phone || null;
@@ -532,8 +497,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [systemUser, setSystemUser] = useState<SystemUserProfile | null>(storedAuth.systemUser);
   const [userInfo, setUserInfo] = useState<UserInfoProfile | null>(storedAuth.userInfo);
-  // Cached Google / bypass profile paints immediately; cold start still shows the spinner.
-  const [loading, setLoading] = useState(!storedAuth.systemUser);
+  // Wait for getSession() so a cached profile cannot enter without a JWT.
+  const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const verifyInProgressRef = useRef(false);
   // Track whether we've already successfully authenticated to prevent state clearing
@@ -602,8 +567,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         verifyAndFetchUser(session.user.email, session.user.id);
       } else {
-        if (authKindRef.current === 'google' && storedAuth.systemUser) {
-          console.warn('[Auth] Google session missing on refresh. Clearing cached profile.');
+        if (storedAuth.systemUser) {
+          console.warn('[Auth] No Auth session on refresh. Clearing cached profile.');
           authSucceededRef.current = false;
           authKindRef.current = 'dev_bypass';
           clearStoredAuthProfile();
@@ -693,13 +658,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [systemUser, userInfo]);
 
-  // If we restored a cached profile, stop loading immediately.
-  useEffect(() => {
-    if (systemUser && loading) {
-      setLoading(false);
-    }
-  }, []);
-
   // Heal stale sessions: leftover manual UUID, or a session staff_id that
   // no longer matches users.auth_user_id.
   useEffect(() => {
@@ -711,7 +669,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const uuid = await resolveStaffUuid({
         staff_id: systemUser.staff_id,
         auth_user_id: systemUser.auth_user_id,
-      });
+      }, { refreshFromLogin: true });
       if (cancelled || !uuid || uuid === systemUser.staff_id) return;
       setSystemUser(prev => (prev ? { ...prev, staff_id: uuid } : prev));
       setUserInfo(prev => (prev ? { ...prev, staff_id: uuid } : prev));
@@ -767,73 +725,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearTimeout(functionTimeout);
         return;
       }
-
-      // ====== MASTER BYPASS: apply immediately so a later failed lookup cannot bounce the user ======
-      const oauthBypass = lookupHardcodedBypass(normalizedEmail);
-      if (oauthBypass) {
-        console.log('[Auth] 🔑🔑 MASTER BYPASS triggered in verifyAndFetchUser for:', normalizedEmail);
-        const fallback = fallbackFromHardcoded(oauthBypass.email, oauthBypass.profile, authUserId || null);
-        setSystemUser(fallback.systemUser);
-        setUserInfo(fallback.userInfo);
-        setAuthError(null);
-        authSucceededRef.current = true;
-        authKindRef.current = 'google';
-        setLoading(false);
-
-        try {
-          const { data: sysUser } = await findSystemUser({
-            email: normalizedEmail,
-            authUserId: authUserId || null,
-          });
-          if (sysUser) {
-            console.log('[Auth] 🔑 Master bypass: Found in DB:', sysUser.display_name);
-            setSystemUser({ ...sysUser, phone: sysUser.phone || null });
-
-            (async () => {
-              try {
-                const staff = await fetchStaffLiteById(sysUser.staff_id);
-                if (staff) setSystemUser(prev => prev ? applyStaffEnrichment(prev, staff) : prev);
-              } catch {}
-            })();
-
-            try {
-              const { data: uInfo } = await supabase
-                .from('users')
-                .select('*')
-                .eq('staff_id', sysUser.staff_id)
-                .limit(1)
-                .maybeSingle();
-              setUserInfo(uInfo ? {
-                id: uInfo.id,
-                staff_id: uInfo.staff_id,
-                auth_user_id: uInfo.auth_user_id ?? null,
-                role_tag: uInfo.role_tag ?? null,
-                email: uInfo.email ?? null,
-              } : null);
-              if (uInfo?.role_tag) {
-                const enrichedRole = mapRoleToInternal(uInfo.role_tag);
-                setSystemUser(prev => prev ? { ...prev, role: enrichedRole } : prev);
-              }
-            } catch {
-              // keep hardcoded userInfo
-            }
-          } else {
-            console.warn('[Auth] 🔑 Master bypass: DB lookup missed. Keeping hardcoded profile for', oauthBypass.profile.display_name);
-          }
-        } catch (dbErr) {
-          console.warn('[Auth] 🔑 Master bypass: DB lookup threw error:', dbErr);
-        }
-
-        if (!isBackgroundRefresh) {
-          void logLoginEvent(normalizedEmail, true, 'google', null);
-        }
-        clearTimeout(functionTimeout);
-        verifyInProgressRef.current = false;
-        setLoading(false);
-        console.log('[Auth] 🔑 Master bypass COMPLETE. authSucceeded:', authSucceededRef.current);
-        return;
-      }
-      // ====== END MASTER BYPASS ======
 
       // Check if aborted
       if (abortController.signal.aborted) throw new Error('Verification timed out');
@@ -915,21 +806,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const lookupTimedOut = /timeout|timed out/i.test(String(sysError?.message || ''));
       if (isBackgroundRefresh && lookupTimedOut) {
         console.log('[Auth] Background lookup timed out — keeping cached profile.');
-        return;
-      }
-
-      const lastChance = lookupHardcodedBypass(normalizedEmail);
-      if (lastChance) {
-        console.warn('[Auth] 🔑 Last-chance hardcoded bypass after whitelist miss for', lastChance.email);
-        const fallback = fallbackFromHardcoded(lastChance.email, lastChance.profile, authUserId || null);
-        setSystemUser(fallback.systemUser);
-        setUserInfo(fallback.userInfo);
-        setAuthError(null);
-        authSucceededRef.current = true;
-        authKindRef.current = 'google';
-        if (!isBackgroundRefresh) {
-          void logLoginEvent(normalizedEmail, true);
-        }
         return;
       }
 
@@ -1029,182 +905,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const devBypassLogin = useCallback(async (email: string) => {
+  const signInWithEmailPhone = useCallback(async (email: string, phone: string) => {
     setLoading(true);
     setAuthError(null);
-    authSucceededRef.current = false; // Reset before attempting
-    authKindRef.current = 'dev_bypass';
+    authSucceededRef.current = false;
 
-    const hardcodedBypass = lookupHardcodedBypass(email);
-    const DEV_BYPASS_TIMEOUT = 8000; // 8s hard timeout for the entire devBypassLogin
-
-    // Wrap the entire login in a timeout guard
-    const timeoutPromise = new Promise<'timeout'>((resolve) =>
-      setTimeout(() => resolve('timeout'), DEV_BYPASS_TIMEOUT)
-    );
-
-    const loginLogic = async (): Promise<'done'> => {
-      try {
-        // ====== FAILSAFE: Hardcoded developer / super-admin bypass ======
-        if (hardcodedBypass) {
-          console.log('[Auth] 🔑 Hardcoded bypass failsafe triggered for:', hardcodedBypass.email);
-          const immediate = fallbackFromHardcoded(hardcodedBypass.email, hardcodedBypass.profile);
-          setSystemUser(immediate.systemUser);
-          setUserInfo(immediate.userInfo);
-          setAuthError(null);
-          authSucceededRef.current = true;
-          authKindRef.current = 'dev_bypass';
-
-          // Try DB lookup first, but don't block on failure
-          let sysUser: SystemUserProfile | null = null;
-          try {
-            const result = await findSystemUser({ email });
-            sysUser = result.data;
-            console.log('[Auth] DB lookup result:', { found: !!sysUser, error: result.error?.message });
-          } catch (lookupErr) {
-            console.warn('[Auth] 🔑 Hardcoded bypass DB lookup threw:', lookupErr);
-          }
-
-          if (sysUser) {
-            setSystemUser({ ...sysUser, phone: sysUser.phone || null });
-
-            // Enrich phone / profile pic from staffs.id — fire and forget
-            (async () => {
-              try {
-                const staff = await fetchStaffLiteById(sysUser.staff_id);
-                if (staff) setSystemUser(prev => prev ? applyStaffEnrichment(prev, staff) : prev);
-              } catch {}
-            })();
-
-            // Fetch users row — non-blocking with try-catch
-            try {
-              const { data: uInfo } = await supabase
-                .from('users')
-                .select('*')
-                .eq('staff_id', sysUser.staff_id)
-                .limit(1)
-                .maybeSingle();
-              setUserInfo(uInfo ? {
-                id: uInfo.id,
-                staff_id: uInfo.staff_id,
-                auth_user_id: uInfo.auth_user_id ?? null,
-                role_tag: uInfo.role_tag ?? null,
-                email: uInfo.email ?? null,
-              } : null);
-              if (uInfo?.role_tag) {
-                const enrichedRole = mapRoleToInternal(uInfo.role_tag);
-                setSystemUser(prev => prev ? { ...prev, role: enrichedRole } : prev);
-              }
-            } catch {
-              // keep hardcoded userInfo
-            }
-          } else {
-            console.warn('[Auth] ⚠️ DB lookup failed for hardcoded bypass, keeping fallback for', hardcodedBypass.profile.display_name);
-          }
-
-          void logLoginEvent(email, true, hardcodedBypass.profile.login_method, sysUser?.id);
-
-          return 'done';
-        }
-
-        // ====== Normal dev bypass flow ======
-        console.log('[Auth] Dev bypass: querying users for email:', email);
-        const { data: sysUser, error: sysError } = await findSystemUser({ email });
-        
-        console.log('[Auth] Dev bypass lookup result:', { found: !!sysUser, error: sysError?.message });
-
-        if (sysError || !sysUser) {
-          console.error('[Auth] ❌ Whitelist rejection. Email:', email);
-          setSystemUser(null);
-          setUserInfo(null);
-          setAuthError(`登入失敗：您的電郵 ${email} 未在系統使用者白名單中，請聯絡管理員。`);
-          return 'done';
-        }
-
-        // Authorized — set system user immediately
-        console.log('[Auth] ✅ Dev bypass authorized:', sysUser.display_name, sysUser.role);
-        setSystemUser({ ...sysUser, phone: sysUser.phone || null });
-        setAuthError(null);
-        authSucceededRef.current = true;
-        authKindRef.current = 'dev_bypass';
-
-        // Enrich phone / profile pic from staffs.id — fire and forget
-        (async () => {
-          try {
-            const staff = await fetchStaffLiteById(sysUser.staff_id);
-            if (staff) {
-              console.log('[Auth] 📞 Dev bypass phone enriched:', staffPhone(staff));
-              setSystemUser(prev => prev ? applyStaffEnrichment(prev, staff) : prev);
-            }
-          } catch (err) {
-            console.warn('[Auth] Dev bypass phone enrichment failed:', err);
-          }
-        })();
-
-        // Step 2: Fetch users row for role_tag — with try-catch
-        try {
-          const { data: uInfo } = await supabase
-            .from('users')
-            .select('*')
-            .eq('staff_id', sysUser.staff_id)
-            .limit(1)
-            .maybeSingle();
-
-          setUserInfo(uInfo ? {
-            id: uInfo.id,
-            staff_id: uInfo.staff_id,
-            auth_user_id: uInfo.auth_user_id ?? null,
-            role_tag: uInfo.role_tag ?? null,
-            email: uInfo.email ?? null,
-          } : null);
-
-          if (uInfo?.role_tag) {
-            const enrichedRole = mapRoleToInternal(uInfo.role_tag);
-            console.log('[Auth] Dev bypass: enriching role from users:', uInfo.role_tag, '->', enrichedRole);
-            setSystemUser(prev => prev ? { ...prev, role: enrichedRole } : prev);
-          }
-        } catch (uiErr) {
-          console.warn('[Auth] users fetch failed (non-blocking):', uiErr);
-          setUserInfo(null);
-        }
-
-        void logLoginEvent(email, true, 'dev_bypass', sysUser.id);
-
-        return 'done';
-      } catch (err) {
-        console.error('[Auth] Dev bypass login failed:', err);
-        // If auth already succeeded before the error, don't wipe state
-        if (!authSucceededRef.current) {
-          setSystemUser(null);
-          setUserInfo(null);
-          setAuthError('登入失敗：系統驗證出錯，請稍後再試。');
-        }
-        return 'done';
-      }
-    };
-
-    // Race login logic against hard timeout
-    const result = await Promise.race([loginLogic(), timeoutPromise]);
-
-    if (result === 'timeout') {
-      console.error('[Auth] ⏰ devBypassLogin: 8s hard timeout reached.');
-      if (!authSucceededRef.current) {
-        // Use hardcoded fallback for developer / super-admin on timeout
-        if (hardcodedBypass) {
-          console.warn('[Auth] Timeout fallback: Using hardcoded profile for', hardcodedBypass.profile.display_name);
-          const fallback = fallbackFromHardcoded(hardcodedBypass.email, hardcodedBypass.profile);
-          setSystemUser(fallback.systemUser);
-          setUserInfo(fallback.userInfo);
-          setAuthError(null);
-          authSucceededRef.current = true;
-          authKindRef.current = 'dev_bypass';
-        } else {
-          setAuthError('登入超時：資料庫無回應，請稍後再試。');
-        }
-      }
+    const normalizedEmail = normalizeLoginEmail(email);
+    const password = normalizePhonePassword(phone);
+    if (!normalizedEmail || !password) {
+      setAuthError('請輸入電郵及私人電話。');
+      setLoading(false);
+      return;
     }
 
-    setLoading(false);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
+    if (error) {
+      console.warn('[Auth] Email/phone login failed:', error.message);
+      setAuthError('登入失敗：電郵或私人電話不正確，請聯絡管理員。');
+      setLoading(false);
+    }
   }, []);
 
   const signOut = async () => {
@@ -1219,7 +941,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthError(null);
   };
 
-  const isAuthenticated = !!session?.user || !!systemUser; // Dev bypass sets systemUser without session
+  const isAuthenticated = !!session?.user;
   // is_active might be null in some records found via fallback — treat null as active (authorized)
   const isAuthorized = !!systemUser && (systemUser.is_active === true || systemUser.is_active === null);
 
@@ -1231,8 +953,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       userInfo,
       loading,
       signInWithGoogle,
+      signInWithEmailPhone,
       signOut,
-      devBypassLogin,
       isAuthenticated,
       isAuthorized,
       authError,

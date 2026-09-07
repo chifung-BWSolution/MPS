@@ -387,6 +387,16 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    let authProvisioned = 0;
+    try {
+      const { provisionAllStaffAuth } = await import("../_shared/provisionStaffAuth.ts");
+      const provisionResults = await provisionAllStaffAuth(supabaseAdmin);
+      authProvisioned = provisionResults.filter((r) => r.action === "created" || r.action === "updated").length;
+      console.log("[sync-otc2-staff] Auth provision:", provisionResults.length, "whitelist,", authProvisioned, "updated");
+    } catch (provisionErr) {
+      console.warn("[sync-otc2-staff] Auth provision failed:", provisionErr);
+    }
+
     const activeCount = syncable.filter((s) => isActiveStatus(s.status)).length;
     const inactiveCount = syncable.length - activeCount;
     const teams = new Set(syncable.map((s) => s.team_name).filter(Boolean));
@@ -406,6 +416,7 @@ Deno.serve(async (req: Request) => {
           inactive: inactiveCount,
           teams: teams.size,
           skipped_no_id: otc2Staff.length - syncable.length,
+          auth_provisioned: authProvisioned,
         },
         synced_at: new Date().toISOString(),
       }),
