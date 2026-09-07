@@ -41,7 +41,9 @@ import {
 } from '@/lib/adsWebsiteDisplay';
 import {
   readSelectedWebsiteId,
+  setWebsiteDetailHash,
   writeSelectedWebsiteId,
+  type WebsiteListPage,
 } from '@/lib/websiteNavigation';
 import { toExternalHref } from '@/lib/externalUrl';
 import {
@@ -2069,31 +2071,58 @@ function GlobalArticleList({ onSelectArticle }: { onSelectArticle: (a: Article) 
   );
 }
 
+function websiteListPageOf(subModule?: string): WebsiteListPage {
+  if (subModule === 'system-list' || subModule === 'featured') return subModule;
+  return 'list';
+}
+
 // ===== Main Export =====
 export function WebsiteModule({ subModule }: { subModule?: string }) {
-  const { profiles } = useWebsiteProfiles();
+  const { profiles, loading } = useWebsiteProfiles();
+  const listPage = websiteListPageOf(subModule);
   const [selectedSite, setSelectedSite] = useState<WebsiteProfileFull | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(() => {
+    if (subModule === 'traffic' || subModule === 'articles-list') return null;
+    return readSelectedWebsiteId();
+  });
 
-  // Reset selections when sub-module changes (fixes sidebar nav bug),
-  // but keep a pending deep-link website id from other modules.
   useEffect(() => {
     setSelectedArticle(null);
-    const pendingId = readSelectedWebsiteId();
-    if (!pendingId) setSelectedSite(null);
   }, [subModule]);
 
-  // Open website detail when navigated here with a selected website id.
   useEffect(() => {
-    const pendingId = readSelectedWebsiteId();
-    if (!pendingId || profiles.length === 0) return;
-    const site = profiles.find((p) => p.id === pendingId);
-    if (site) setSelectedSite(site);
-    else writeSelectedWebsiteId(null);
+    const sync = () => {
+      if (subModule === 'traffic' || subModule === 'articles-list') {
+        setDetailId(null);
+        setSelectedSite(null);
+        return;
+      }
+      const id = readSelectedWebsiteId();
+      setDetailId(id);
+      if (!id) {
+        setSelectedSite(null);
+        return;
+      }
+      const site = profiles.find((p) => p.id === id) ?? null;
+      setSelectedSite(site);
+    };
+    sync();
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
   }, [profiles, subModule]);
+
+  const handleSelectSite = (site: WebsiteProfileFull) => {
+    writeSelectedWebsiteId(site.id);
+    setWebsiteDetailHash(listPage, site.id);
+    setDetailId(site.id);
+    setSelectedSite(site);
+  };
 
   const handleBackFromSite = () => {
     writeSelectedWebsiteId(null);
+    setWebsiteDetailHash(listPage, null);
+    setDetailId(null);
     setSelectedSite(null);
   };
 
@@ -2106,8 +2135,26 @@ export function WebsiteModule({ subModule }: { subModule?: string }) {
     return <ArticleDetailView article={selectedArticle} onBack={() => setSelectedArticle(null)} />;
   }
 
-  // Website detail view (from list or featured)
-  if (selectedSite) {
+  if (detailId) {
+    if (loading && !selectedSite) {
+      return <div className="text-[13px] text-muted-foreground py-12 text-center">載入中…</div>;
+    }
+    if (!selectedSite) {
+      return (
+        <div className="space-y-4">
+          <button
+            type="button"
+            onClick={handleBackFromSite}
+            className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft size={14} /> 返回網站列表
+          </button>
+          <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-[13px] text-rose-700">
+            找不到此網站 / 系統紀錄（id: {detailId}）
+          </div>
+        </div>
+      );
+    }
     return (
       <WebsiteDetail
         site={selectedSite}
@@ -2119,16 +2166,16 @@ export function WebsiteModule({ subModule }: { subModule?: string }) {
 
   switch (subModule) {
     case 'system-list':
-      return <WebsiteList onSelectSite={setSelectedSite} profileTypeFilter="system" />;
+      return <WebsiteList onSelectSite={handleSelectSite} profileTypeFilter="system" />;
     case 'featured':
-      return <FeaturedWebsites onSelectSite={setSelectedSite} />;
+      return <FeaturedWebsites onSelectSite={handleSelectSite} />;
     case 'articles-list':
       return <GlobalArticleList onSelectArticle={setSelectedArticle} />;
     case 'traffic':
       return <Ga4TrafficModule />;
     case 'list':
-      return <WebsiteList onSelectSite={setSelectedSite} />;
+      return <WebsiteList onSelectSite={handleSelectSite} />;
     default:
-      return <WebsiteList onSelectSite={setSelectedSite} />;
+      return <WebsiteList onSelectSite={handleSelectSite} />;
   }
 }

@@ -1,22 +1,38 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-  INCOMES_TABLE,
-  INCOME_PAYMENT_RECORDS_BUCKET,
-  incomePaymentRecordStoragePath,
+  EXPENSES_TABLE,
+  EXPENSE_PAYMENT_RECORDS_BUCKET,
+  EXPENSE_RELATED_TYPE_PROJECT,
+  expenseGroupKey,
+  expensePaymentRecordStoragePath,
   isAllowedPaymentRecordFile,
-  isIncomePaymentMethod,
-  isIncomePaymentStatus,
+  isExpensePaymentMethod,
+  isExpensePaymentStatus,
   optionalIsoDate,
   type PaymentRecordFileAction,
-  type QuotationIncome,
-  type QuotationIncomeInput,
-} from '@/lib/quotationIncomes';
+  type QuotationExpense,
+  type QuotationExpenseInput,
+} from '@/lib/quotationExpenses';
+
+type SupplierTypeJoin = {
+  id: string;
+  display_name: string | null;
+  categories?: string | null;
+} | null;
+
+type SupplierJoin = {
+  id: string;
+  display_name: string | null;
+  supplier_types_id: string | null;
+} | null;
 
 type DbRow = {
   id: string;
-  quotation_client_project_id: string;
-  type: string;
+  related_type: string;
+  related_id: string;
+  supplier_types_id: string;
+  supplier_id: string;
   installment_number: number | null;
   billed_amount: number | string;
   due_date: string | null;
@@ -34,14 +50,22 @@ type DbRow = {
   payment_record_mime_type: string | null;
   created_at: string;
   updated_at: string;
+  supplier_types?: SupplierTypeJoin | SupplierTypeJoin[];
+  suppliers?: SupplierJoin | SupplierJoin[];
 };
 
-export type QuotationIncomeWriteInput = QuotationIncomeInput & {
+export type QuotationExpenseWriteInput = QuotationExpenseInput & {
   file?: File | null;
   paymentRecordAction?: PaymentRecordFileAction;
 };
 
-function compareIncomes(a: QuotationIncome, b: QuotationIncome): number {
+const EXPENSE_SELECT = `
+  *,
+  supplier_types:supplier_types_id (id, display_name, categories),
+  suppliers:supplier_id (id, display_name, supplier_types_id)
+`;
+
+function compareExpenses(a: QuotationExpense, b: QuotationExpense): number {
   const aN = a.installmentNumber ?? Number.MAX_SAFE_INTEGER;
   const bN = b.installmentNumber ?? Number.MAX_SAFE_INTEGER;
   if (aN !== bN) return aN - bN;
@@ -58,18 +82,32 @@ function optionalText(value: string | null | undefined): string | undefined {
   return trimmed || undefined;
 }
 
-function mapRow(row: DbRow): QuotationIncome {
+function firstJoin<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
+
+function mapRow(row: DbRow): QuotationExpense {
+  const typeJoin = firstJoin(row.supplier_types);
+  const supplierJoin = firstJoin(row.suppliers);
+  const supplierTypesId = row.supplier_types_id;
+  const supplierId = row.supplier_id;
   return {
     id: row.id,
-    quotationClientProjectId: row.quotation_client_project_id,
-    type: row.type,
+    relatedType: row.related_type,
+    relatedId: row.related_id,
+    supplierTypesId,
+    supplierId,
+    typeLabel: optionalText(typeJoin?.display_name) ?? '未分類',
+    supplierLabel: optionalText(supplierJoin?.display_name) ?? '未指定供應商',
+    groupKey: expenseGroupKey(supplierTypesId, supplierId),
     installmentNumber: row.installment_number ?? undefined,
     billedAmount: toAmount(row.billed_amount),
     dueDate: optionalIsoDate(row.due_date),
     paymentAmount: toAmount(row.payment_amount),
     paymentDate: optionalIsoDate(row.payment_date),
-    paymentMethod: isIncomePaymentMethod(row.payment_method) ? row.payment_method : undefined,
-    paymentStatus: isIncomePaymentStatus(row.payment_status) ? row.payment_status : undefined,
+    paymentMethod: isExpensePaymentMethod(row.payment_method) ? row.payment_method : undefined,
+    paymentStatus: isExpensePaymentStatus(row.payment_status) ? row.payment_status : undefined,
     outstanding: toAmount(row.outstanding),
     badDebt: toAmount(row.bad_debt),
     remarks: optionalText(row.remarks),
@@ -83,7 +121,7 @@ function mapRow(row: DbRow): QuotationIncome {
   };
 }
 
-function fileMetaColumns(input: QuotationIncomeInput) {
+function fileMetaColumns(input: QuotationExpenseInput) {
   return {
     payment_record_file_name: input.paymentRecordFileName?.trim() || null,
     payment_record_file_url: input.paymentRecordFileUrl?.trim() || null,
@@ -94,13 +132,15 @@ function fileMetaColumns(input: QuotationIncomeInput) {
 }
 
 function inputToRow(
-  input: QuotationIncomeInput,
-  projectId: string,
+  input: QuotationExpenseInput,
+  relatedId: string,
   fileAction: PaymentRecordFileAction,
 ) {
   const row: Record<string, unknown> = {
-    quotation_client_project_id: projectId,
-    type: input.type.trim(),
+    related_type: EXPENSE_RELATED_TYPE_PROJECT,
+    related_id: relatedId,
+    supplier_types_id: input.supplierTypesId.trim(),
+    supplier_id: input.supplierId.trim(),
     installment_number: input.installmentNumber ?? null,
     billed_amount: input.billedAmount,
     due_date: optionalIsoDate(input.dueDate ?? undefined) ?? null,
@@ -121,10 +161,24 @@ function inputToRow(
 async function removeStorageObject(path: string | undefined) {
   const trimmed = path?.trim();
   if (!trimmed) return;
-  await supabase.storage.from(INCOME_PAYMENT_RECORDS_BUCKET).remove([trimmed]);
+  await supabase.storage.from(EXPENSE_PAYMENT_RECORDS_BUCKET).remove([trimmed]);
 }
 
-export async function uploadIncomePaymentRecordFile(
+export async function resolveExpenseProjectId(
+  quotationClientProjectId: string,
+): Promise<{ data: string | null; error: { message: string } | null }> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id')
+    .eq('related_type', 'quotation_client')
+    .eq('related_id', quotationClientProjectId)
+    .maybeSingle();
+  if (error) return { data: null, error: { message: error.message } };
+  if (!data?.id) return { data: null, error: { message: '找不到對應的 projects 紀錄' } };
+  return { data: data.id as string, error: null };
+}
+
+export async function uploadExpensePaymentRecordFile(
   projectId: string,
   file: File,
 ): Promise<{ data: { path: string; url: string } | null; error: { message: string } | null }> {
@@ -135,14 +189,14 @@ export async function uploadIncomePaymentRecordFile(
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
       : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  const path = incomePaymentRecordStoragePath(projectId, file.name, uniqueId);
-  const { error } = await supabase.storage.from(INCOME_PAYMENT_RECORDS_BUCKET).upload(path, file, {
+  const path = expensePaymentRecordStoragePath(projectId, file.name, uniqueId);
+  const { error } = await supabase.storage.from(EXPENSE_PAYMENT_RECORDS_BUCKET).upload(path, file, {
     upsert: false,
     contentType: file.type || undefined,
   });
   if (error) return { data: null, error: { message: error.message } };
 
-  const { data: urlData } = supabase.storage.from(INCOME_PAYMENT_RECORDS_BUCKET).getPublicUrl(path);
+  const { data: urlData } = supabase.storage.from(EXPENSE_PAYMENT_RECORDS_BUCKET).getPublicUrl(path);
   return { data: { path, url: urlData.publicUrl }, error: null };
 }
 
@@ -150,7 +204,7 @@ async function attachPaymentRecord(
   projectId: string,
   file: File | null | undefined,
   action: PaymentRecordFileAction,
-): Promise<{ data: Partial<QuotationIncomeInput>; error: { message: string } | null; uploadedPath?: string }> {
+): Promise<{ data: Partial<QuotationExpenseInput>; error: { message: string } | null; uploadedPath?: string }> {
   if (action === 'clear') {
     return {
       data: {
@@ -167,7 +221,7 @@ async function attachPaymentRecord(
     return { data: {}, error: null };
   }
 
-  const uploaded = await uploadIncomePaymentRecordFile(projectId, file);
+  const uploaded = await uploadExpensePaymentRecordFile(projectId, file);
   if (uploaded.error || !uploaded.data) {
     return { data: {}, error: uploaded.error ?? { message: '上傳失敗' } };
   }
@@ -184,22 +238,35 @@ async function attachPaymentRecord(
   };
 }
 
-export function useQuotationIncomes(projectId: string | undefined) {
-  const [rows, setRows] = useState<QuotationIncome[]>([]);
-  const [loading, setLoading] = useState(Boolean(projectId));
+export function useQuotationExpenses(quotationClientProjectId: string | undefined) {
+  const [rows, setRows] = useState<QuotationExpense[]>([]);
+  const [projectId, setProjectId] = useState<string | undefined>();
+  const [loading, setLoading] = useState(Boolean(quotationClientProjectId));
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!projectId) {
+    if (!quotationClientProjectId) {
       setRows([]);
+      setProjectId(undefined);
       setLoading(false);
       return;
     }
     setLoading(true);
+    const resolved = await resolveExpenseProjectId(quotationClientProjectId);
+    if (resolved.error || !resolved.data) {
+      setError(resolved.error?.message ?? '找不到對應的 projects 紀錄');
+      setProjectId(undefined);
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+    setProjectId(resolved.data);
+
     const { data, error: err } = await supabase
-      .from(INCOMES_TABLE)
-      .select('*')
-      .eq('quotation_client_project_id', projectId)
+      .from(EXPENSES_TABLE)
+      .select(EXPENSE_SELECT)
+      .eq('related_type', EXPENSE_RELATED_TYPE_PROJECT)
+      .eq('related_id', resolved.data)
       .order('created_at', { ascending: true });
 
     if (err) {
@@ -207,39 +274,39 @@ export function useQuotationIncomes(projectId: string | undefined) {
       setRows([]);
     } else {
       setError(null);
-      setRows(((data as DbRow[] | null) ?? []).map(mapRow).sort(compareIncomes));
+      setRows(((data as DbRow[] | null) ?? []).map(mapRow).sort(compareExpenses));
     }
     setLoading(false);
-  }, [projectId]);
+  }, [quotationClientProjectId]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  const addIncome = useCallback(
-    async (input: QuotationIncomeWriteInput) => {
+  const addExpense = useCallback(
+    async (input: QuotationExpenseWriteInput) => {
       if (!projectId) return { data: null, error: { message: '缺少項目' } };
       const fileAction: PaymentRecordFileAction = input.file ? 'replace' : 'keep';
       const attached = await attachPaymentRecord(projectId, input.file, fileAction);
       if (attached.error) return { data: null, error: attached.error };
 
       const { data, error: err } = await supabase
-        .from(INCOMES_TABLE)
+        .from(EXPENSES_TABLE)
         .insert(inputToRow({ ...input, ...attached.data }, projectId, fileAction))
-        .select('*')
+        .select(EXPENSE_SELECT)
         .single();
       if (err) {
         await removeStorageObject(attached.uploadedPath);
         return { data: null, error: { message: err.message } };
       }
       const mapped = mapRow(data as DbRow);
-      setRows((prev) => [...prev, mapped].sort(compareIncomes));
+      setRows((prev) => [...prev, mapped].sort(compareExpenses));
       return { data: mapped, error: null };
     },
     [projectId],
   );
 
-  const updateIncome = useCallback(async (id: string, input: QuotationIncomeWriteInput) => {
+  const updateExpense = useCallback(async (id: string, input: QuotationExpenseWriteInput) => {
     if (!projectId) return { data: null, error: { message: '缺少項目' } };
     const current = rows.find((row) => row.id === id);
     const fileAction: PaymentRecordFileAction = input.file
@@ -251,10 +318,10 @@ export function useQuotationIncomes(projectId: string | undefined) {
     if (attached.error) return { data: null, error: attached.error };
 
     const { data, error: err } = await supabase
-      .from(INCOMES_TABLE)
+      .from(EXPENSES_TABLE)
       .update(inputToRow({ ...input, ...attached.data }, projectId, fileAction))
       .eq('id', id)
-      .select('*')
+      .select(EXPENSE_SELECT)
       .single();
     if (err) {
       await removeStorageObject(attached.uploadedPath);
@@ -266,52 +333,52 @@ export function useQuotationIncomes(projectId: string | undefined) {
     }
 
     const mapped = mapRow(data as DbRow);
-    setRows((prev) => prev.map((row) => (row.id === id ? mapped : row)).sort(compareIncomes));
+    setRows((prev) => prev.map((row) => (row.id === id ? mapped : row)).sort(compareExpenses));
     return { data: mapped, error: null };
   }, [projectId, rows]);
 
-  const deleteIncome = useCallback(async (id: string) => {
+  const deleteExpense = useCallback(async (id: string) => {
     const current = rows.find((row) => row.id === id);
-    const { error: err } = await supabase.from(INCOMES_TABLE).delete().eq('id', id);
+    const { error: err } = await supabase.from(EXPENSES_TABLE).delete().eq('id', id);
     if (err) return { error: { message: err.message } };
     await removeStorageObject(current?.paymentRecordStoragePath);
     setRows((prev) => prev.filter((row) => row.id !== id));
     return { error: null };
   }, [rows]);
 
-  const saveBulkIncomes = useCallback(async (
-    items: Array<{ id?: string; input: QuotationIncomeWriteInput }>,
+  const saveBulkExpenses = useCallback(async (
+    items: Array<{ id?: string; input: QuotationExpenseWriteInput }>,
     deleteIds: string[] = [],
   ) => {
     if (!projectId) return { data: null, error: { message: '缺少項目' } };
 
-    const updated: QuotationIncome[] = [];
+    const updated: QuotationExpense[] = [];
     for (const item of items) {
       if (!item.id) continue;
       const { data, error: err } = await supabase
-        .from(INCOMES_TABLE)
+        .from(EXPENSES_TABLE)
         .update(inputToRow(item.input, projectId, 'keep'))
         .eq('id', item.id)
-        .select('*')
+        .select(EXPENSE_SELECT)
         .single();
       if (err) return { data: null, error: { message: err.message } };
       updated.push(mapRow(data as DbRow));
     }
 
     const creates = items.filter((item) => !item.id);
-    let created: QuotationIncome[] = [];
+    let created: QuotationExpense[] = [];
     if (creates.length > 0) {
       const { data, error: err } = await supabase
-        .from(INCOMES_TABLE)
+        .from(EXPENSES_TABLE)
         .insert(creates.map((item) => inputToRow(item.input, projectId, 'keep')))
-        .select('*');
+        .select(EXPENSE_SELECT);
       if (err) return { data: null, error: { message: err.message } };
       created = ((data as DbRow[] | null) ?? []).map(mapRow);
     }
 
     if (deleteIds.length > 0) {
       const removing = rows.filter((row) => deleteIds.includes(row.id));
-      const { error: err } = await supabase.from(INCOMES_TABLE).delete().in('id', deleteIds);
+      const { error: err } = await supabase.from(EXPENSES_TABLE).delete().in('id', deleteIds);
       if (err) return { data: null, error: { message: err.message } };
       await Promise.all(removing.map((row) => removeStorageObject(row.paymentRecordStoragePath)));
     }
@@ -321,10 +388,20 @@ export function useQuotationIncomes(projectId: string | undefined) {
     setRows((prev) => [
       ...prev.filter((row) => !deleted.has(row.id)).map((row) => byId.get(row.id) ?? row),
       ...created,
-    ].sort(compareIncomes));
+    ].sort(compareExpenses));
 
     return { data: [...updated, ...created], error: null };
   }, [projectId, rows]);
 
-  return { rows, loading, error, refresh, addIncome, updateIncome, deleteIncome, saveBulkIncomes };
+  return {
+    rows,
+    projectId,
+    loading,
+    error,
+    refresh,
+    addExpense,
+    updateExpense,
+    deleteExpense,
+    saveBulkExpenses,
+  };
 }

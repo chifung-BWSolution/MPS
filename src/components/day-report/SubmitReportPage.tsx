@@ -10,7 +10,6 @@ import { Calendar as DayPickerCalendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   addCalendarDays,
-  clampLaterWeekSunday,
   formatCompactWeekLabel,
   formatWeekRangeLabel,
   getTwoWeekWindow,
@@ -277,6 +276,7 @@ export function SubmitReportPage() {
   const isDayOff = hoursPreset === 'off' || targetHours === 0;
   const targetHoursDirty = targetHours !== savedTargetHours || hoursPreset !== savedHoursPreset;
   const isTodaySelected = selectedDate === todayStr;
+  const isFutureSelected = selectedDate > todayStr;
 
   const resolveRelationType = useCallback((category: string): CategoryRelationType => {
     const dyn = dynamicTypes.find(t => t.id === category);
@@ -682,7 +682,6 @@ export function SubmitReportPage() {
   }, []);
 
   const selectDate = (date: string) => {
-    if (date > todayStr) return;
     if (date === selectedDate) {
       if (!existingReportId && currentStaffId) {
         skipEnsureKeyRef.current = null;
@@ -844,6 +843,13 @@ export function SubmitReportPage() {
   const isOT = totalHours > fullDayHours;
   const hoursMatch = hoursEqual(totalHours, targetHours);
   const isReportComplete = hoursMatch || isDayOff;
+  const nextEntryHours = editingEntryId
+    ? totalHours - (savedEntries.find((e) => e.id === editingEntryId)?.hours ?? 0) + (form.hours || 0)
+    : totalHours + (form.hours || 0);
+  const hoursExceedTarget = !isDayOff && (
+    (totalHours > targetHours && !hoursEqual(totalHours, targetHours))
+    || (!editingEntryId && form.hours > 0 && nextEntryHours > targetHours && !hoursEqual(nextEntryHours, targetHours))
+  );
   const aiUsedInEntries = savedEntries.some(e =>
     e.isAiAssisted
     || e.aiToolsV2.copywriting.length > 0
@@ -857,7 +863,7 @@ export function SubmitReportPage() {
   const formRelationType = form.category ? resolveRelationType(form.category) : 'none';
   const formMissingRelated = isRelationRequired(formRelationType) && !form.relatedId;
   const formHasAsana = form.outcomeType === 'url' && /app\.asana\.com/i.test(form.outcomeUrl);
-  const canSaveTask = !!form.category && form.hours > 0 && !formMissingRelated && !formHasAsana && !!existingReportId && !isSavingTask && !isLoadingExisting && (!isReportComplete || !!editingEntryId);
+  const canSaveTask = !!form.category && form.hours > 0 && !formMissingRelated && !formHasAsana && !!existingReportId && !isSavingTask && !isLoadingExisting && (!isReportComplete || !!editingEntryId) && (!hoursExceedTarget || !!editingEntryId);
 
   const updateForm = <K extends keyof ReportFormEntry>(field: K, value: ReportFormEntry[K]) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -927,6 +933,10 @@ export function SubmitReportPage() {
     }
     if (isReportComplete && !editingEntryId) {
       setFormError('工作匯報已完成，無法再新增任務。');
+      return;
+    }
+    if (hoursExceedTarget && !editingEntryId) {
+      setFormError('已超出目標工時，無法再新增任務。');
       return;
     }
     if (!form.category || !(form.hours > 0)) {
@@ -1002,8 +1012,11 @@ export function SubmitReportPage() {
     }
   };
 
-  const handleUpdateTargetHours = async () => {
+  const hoursSaveSeqRef = useRef(0);
+  const handleUpdateTargetHours = useCallback(async () => {
     if (!existingReportId) return;
+    if (hoursPreset === 'custom' && !(targetHours > 0)) return;
+    const seq = ++hoursSaveSeqRef.current;
     setIsUpdatingHours(true);
     setFormError(null);
     try {
@@ -1018,30 +1031,58 @@ export function SubmitReportPage() {
         })
         .eq('id', existingReportId);
       if (error) throw new Error(error.message);
+      if (seq !== hoursSaveSeqRef.current) return;
       setSavedTargetHours(targetHours);
       setSavedHoursPreset(hoursPreset);
       currentReportRef.current = {
         ...currentReportRef.current,
         isLeave: isDayOff,
       };
-      if (existingReportId) {
-        upsertLocalDbReport({
-          id: existingReportId,
-          total_hours: totalHours,
-          target_hours: targetHours,
-          office_location: office,
-          status: 'submitted',
-          is_leave: isDayOff,
-          is_half_day: hoursPreset === 'half',
-        }, selectedDate, totalHours);
-      }
+      upsertLocalDbReport({
+        id: existingReportId,
+        total_hours: totalHours,
+        target_hours: targetHours,
+        office_location: office,
+        status: 'submitted',
+        is_leave: isDayOff,
+        is_half_day: hoursPreset === 'half',
+      }, selectedDate, totalHours);
       await loadDbReports({ silent: true });
     } catch (err) {
+      if (seq !== hoursSaveSeqRef.current) return;
       setFormError(err instanceof Error ? err.message : '更新目標工時失敗，請重試。');
     } finally {
-      setIsUpdatingHours(false);
+      if (seq === hoursSaveSeqRef.current) setIsUpdatingHours(false);
     }
-  };
+  }, [
+    existingReportId,
+    fullDayHours,
+    hoursPreset,
+    isDayOff,
+    loadDbReports,
+    office,
+    selectedDate,
+    targetHours,
+    totalHours,
+    upsertLocalDbReport,
+  ]);
+
+  useEffect(() => {
+    if (!existingReportId || isLoadingExisting || !targetHoursDirty) return;
+    if (hoursPreset === 'custom' && !(targetHours > 0)) return;
+    const delay = hoursPreset === 'custom' ? 450 : 80;
+    const timer = window.setTimeout(() => {
+      void handleUpdateTargetHours();
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [
+    existingReportId,
+    handleUpdateTargetHours,
+    hoursPreset,
+    isLoadingExisting,
+    targetHours,
+    targetHoursDirty,
+  ]);
 
   const switchOffice = async (next: OfficeLocation) => {
     setOffice(next);
@@ -1195,7 +1236,7 @@ export function SubmitReportPage() {
 
   const shiftWeekWindow = useCallback((dir: -1 | 1) => {
     const nextSunday = addCalendarDays(parseLocalDateStr(laterWeekSunday), dir * 7);
-    setLaterWeekSunday(toLocalDateStr(clampLaterWeekSunday(nextSunday)));
+    setLaterWeekSunday(toLocalDateStr(nextSunday));
   }, [laterWeekSunday]);
 
   const resetToCurrentWeeks = useCallback(() => {
@@ -1204,7 +1245,7 @@ export function SubmitReportPage() {
   }, [currentWeekSunday]);
 
   const applyWeekFromDate = useCallback((date: Date) => {
-    setLaterWeekSunday(toLocalDateStr(clampLaterWeekSunday(startOfWeekSunday(date))));
+    setLaterWeekSunday(toLocalDateStr(startOfWeekSunday(date)));
     setWeekPickerOpen(false);
   }, []);
 
@@ -1218,11 +1259,9 @@ export function SubmitReportPage() {
       <button
         key={d.date}
         type="button"
-        disabled={d.isFuture}
         onClick={() => selectDate(d.date)}
         className={cn(
           'px-1.5 py-2 rounded-lg border text-[13px] font-medium transition-all relative flex flex-col items-center gap-1',
-          d.isFuture && 'opacity-50 cursor-not-allowed',
           selectedDate === d.date
             ? isIncomplete
               ? 'bg-amber-50 border-amber-400 text-amber-800 shadow-sm ring-2 ring-amber-200'
@@ -1243,6 +1282,7 @@ export function SubmitReportPage() {
         <span className={cn('text-[13px]', d.isToday && 'font-bold')}>{d.label}</span>
         <div className="flex items-center gap-0.5 flex-wrap justify-center min-h-[18px]">
           {d.isToday && <span className="text-[12px] px-1 py-0 rounded bg-teal-100 text-teal-700 font-semibold">今天</span>}
+          {d.isFuture && <span className="text-[12px] px-1 py-0 rounded bg-sky-100 text-sky-700">未來</span>}
           {d.isSat && <span className="text-[12px] px-1 py-0 rounded bg-amber-100 text-amber-600">六</span>}
           {d.isSun && <span className="text-[12px] px-1 py-0 rounded bg-gray-100 text-gray-500">日</span>}
         </div>
@@ -1258,14 +1298,12 @@ export function SubmitReportPage() {
             </span>
             <span className="text-[12px] px-1.5 py-0 rounded-full font-medium bg-amber-100 text-amber-700">未完成</span>
           </div>
-        ) : (d.isSun || d.isFuture) ? (
-          <span className="text-[12px] text-gray-400">—</span>
-        ) : d.isSat ? (
-          <span className="text-[12px] text-amber-500/70">可匯報</span>
         ) : isLoadingDbReports ? (
           <span className="text-[12px] text-muted-foreground">...</span>
-        ) : (
+        ) : isMissing ? (
           <span className="text-[12px] text-rose-500 font-medium">未匯報</span>
+        ) : (
+          <span className="text-[12px] min-h-[15px]">&nbsp;</span>
         )}
       </button>
     );
@@ -1324,7 +1362,7 @@ export function SubmitReportPage() {
         )}
         <p className="text-[13px] text-teal-600/70 mt-2">
           {office === 'hk' ? '🇭🇰 香港辦公室' : '🇨🇳 深圳辦公室'} ·
-          可按週瀏覽並補交未匯報的工作日（含週六加班）
+          可按週瀏覽並補交未匯報的工作日（含週六加班），亦可點選未來日期預先填寫
         </p>
       </div>
 
@@ -1359,7 +1397,7 @@ export function SubmitReportPage() {
               <PopoverContent className="w-auto p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()} onCloseAutoFocus={(e) => e.preventDefault()}>
                 <div className="px-3 pt-3 pb-1">
                   <p className="text-[12px] font-medium text-[#0d1a2d]">選擇週範圍</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">週日–週六 · 點選任一日期即可跳至該週及上一週</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">週日–週六 · 點選任一日期即可跳至該週並開始填寫（含未來日期）</p>
                 </div>
                 <DayPickerCalendar
                   mode="single"
@@ -1367,12 +1405,11 @@ export function SubmitReportPage() {
                   weekStartsOn={0}
                   numberOfMonths={2}
                   selected={parseLocalDateStr(weekWindow.later.end)}
-                  onDayClick={(date, modifiers) => {
-                    if (modifiers.disabled) return;
+                  onDayClick={(date) => {
                     applyWeekFromDate(date);
+                    selectDate(toLocalDateStr(date));
                   }}
                   defaultMonth={parseLocalDateStr(weekWindow.windowStart)}
-                  disabled={{ after: addCalendarDays(parseLocalDateStr(currentWeekSunday), 6) }}
                   modifiers={{ weekRange: weekPickerRange }}
                   modifiersClassNames={{ weekRange: 'bg-teal-100 text-teal-900' }}
                 />
@@ -1385,8 +1422,7 @@ export function SubmitReportPage() {
             <button
               type="button"
               onClick={() => shiftWeekWindow(1)}
-              disabled={isCurrentWeekWindow}
-              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground disabled:opacity-40 disabled:hover:bg-transparent"
+              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
               aria-label="下一週"
             >
               <ChevronRight size={16} />
@@ -1442,6 +1478,12 @@ export function SubmitReportPage() {
             )}
           </div>
 
+          {isFutureSelected && (
+            <div className="mt-2.5 px-3 py-2 rounded-md text-[14px] font-medium flex items-center gap-2 bg-sky-50 text-sky-700 border border-sky-200">
+              <Calendar size={12} />
+              {formatDateShort(selectedDate)} 尚未到，可預先填寫此日匯報
+            </div>
+          )}
           {(selectedDateIsSat || selectedDateIsSun) && (
             <div className={cn(
               'mt-2.5 px-3 py-2 rounded-md text-[14px] font-medium flex items-center gap-2',
@@ -1622,15 +1664,11 @@ export function SubmitReportPage() {
                     className="w-16 px-2 py-1 border border-rose-200 rounded-md text-[13px] bg-white"
                   />
                 )}
-                {targetHoursDirty && existingReportId && (
-                  <button
-                    type="button"
-                    onClick={() => void handleUpdateTargetHours()}
-                    disabled={isUpdatingHours}
-                    className="px-2.5 py-1 rounded-md text-[13px] font-medium bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50"
-                  >
-                    {isUpdatingHours ? '更新中...' : '更新'}
-                  </button>
+                {isUpdatingHours && (
+                  <span className="inline-flex items-center gap-1 text-[12px] text-rose-500">
+                    <Loader2 size={12} className="animate-spin" />
+                    儲存中
+                  </span>
                 )}
               </div>
             </div>
@@ -2109,14 +2147,16 @@ export function SubmitReportPage() {
               <button
                 type="button"
                 onClick={() => void handleSaveTask()}
-                disabled={!canSaveTask || (isReportComplete && !editingEntryId)}
+                disabled={!canSaveTask || (isReportComplete && !editingEntryId) || (hoursExceedTarget && !editingEntryId)}
                 className={cn(
                   'px-6 py-2.5 rounded-md text-[16px] font-medium text-white active:scale-[0.97] transition-all shadow-sm flex items-center gap-2',
                   isReportComplete && !editingEntryId
                     ? 'bg-green-600 text-white opacity-50 cursor-not-allowed shadow-none'
-                    : canSaveTask
-                      ? 'bg-teal-600 hover:bg-teal-700'
-                      : 'bg-gray-300 cursor-not-allowed',
+                    : hoursExceedTarget && !editingEntryId
+                      ? 'bg-rose-600 text-white opacity-50 cursor-not-allowed shadow-none'
+                      : canSaveTask
+                        ? 'bg-teal-600 hover:bg-teal-700'
+                        : 'bg-gray-300 cursor-not-allowed',
                 )}
               >
                 {isSavingTask && <Loader2 size={14} className="animate-spin" />}
@@ -2126,7 +2166,9 @@ export function SubmitReportPage() {
                     ? '更新任務'
                     : isReportComplete
                       ? '工作匯報已完成'
-                      : '新增任務'}
+                      : hoursExceedTarget
+                        ? '超出目標工時'
+                        : '新增任務'}
               </button>
             </div>
           </div>

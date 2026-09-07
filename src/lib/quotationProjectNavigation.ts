@@ -23,12 +23,17 @@ function hashPathAndQuery(hash: string): { path: string; params: URLSearchParams
 }
 
 function projectIdFromHash(hash: string): string | null {
-  const { params } = hashPathAndQuery(hash);
+  const { path, params } = hashPathAndQuery(hash);
   const id =
     params.get(QUOTATION_PROJECT_QUERY_KEY)?.trim() ||
     params.get(QUOTATION_PROJECT_QUERY_KEY_LEGACY)?.trim() ||
     '';
-  return id || null;
+  if (id) return id;
+  const parts = path.split('/');
+  if ((parts[1] === 'pitching' || parts[1] === 'projects') && parts[2]?.trim()) {
+    return parts[2].trim();
+  }
+  return null;
 }
 
 function pageFromHash(hash: string): QuotationClientPage | null {
@@ -74,6 +79,8 @@ export function readSelectedQuotationProjectId(
 ): string | null {
   const fromHash = projectIdFromHash(hash);
   if (fromHash) return fromHash;
+  // List hashes (#quotation/projects) must not reopen a previous detail from session.
+  if (pageFromHash(hash)) return null;
   try {
     return sessionStorage.getItem(SELECTED_QUOTATION_PROJECT_KEY);
   } catch {

@@ -19,7 +19,6 @@ export function useQuotationClientDetailId(page: QuotationClientPage) {
       const hash = globalThis.window?.location?.hash ?? '';
       const hashPage = readQuotationClientPage(hash);
       if (hashPage && hashPage !== page) {
-        setDetailId(null);
         return;
       }
       setDetailId(readSelectedQuotationProjectId(hash));

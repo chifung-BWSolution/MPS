@@ -57,6 +57,7 @@ assert.match(hookSrc, /display_name, status, inquiry_date, updated_at, created_a
 assert.doesNotMatch(hookSrc, /fetchProjectCounts/);
 
 assert.match(pitchingSrc, /useQuotationClientDetailId\('pitching'\)/);
+assert.match(pitchingSrc, /openQuotationProjectDetail\(record\.id, record\.status\)/);
 assert.match(pitchingSrc, /openDetail\(record\.id\)/);
 assert.match(pitchingSrc, /staffOptions=\{staffOptions\}/);
 assert.match(pitchingSrc, /toQuotationClientSelectOption/);
@@ -70,6 +71,7 @@ assert.doesNotMatch(
   /公司名稱來自客戶列表/,
 );
 assert.match(projectSrc, /useQuotationClientDetailId\('projects'\)/);
+assert.match(projectSrc, /openQuotationProjectDetail\(record\.id, record\.status\)/);
 assert.match(projectSrc, /openDetail\(record\.id\)/);
 assert.match(projectSrc, /staffOptions=\{staffOptions\}/);
 assert.match(projectSrc, /toQuotationClientSelectOption/);
@@ -328,5 +330,9 @@ assert.equal(
   readSelectedQuotationProjectId('#quotation/projects?project=legacy-id'),
   'legacy-id',
 );
+assert.equal(readSelectedQuotationProjectId('#quotation/projects/path-id'), 'path-id');
+store.set(SELECTED_QUOTATION_PROJECT_KEY, 'session-only');
+assert.equal(readSelectedQuotationProjectId('#quotation/projects'), null);
+assert.equal(readSelectedQuotationProjectId('#quotation/pitching'), null);
 
 console.log('quotation client list columns: ok');

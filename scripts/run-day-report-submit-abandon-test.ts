@@ -30,5 +30,15 @@ assert.match(submitSrc, /upsertLocalDbReport/);
 assert.match(submitSrc, /abandonEmptyReport/);
 assert.match(submitSrc, /isAbandonedEmptyDayReport/);
 assert.match(submitSrc, /loadDbReports\(\{ silent: true \}\)/);
+assert.doesNotMatch(submitSrc, /if \(date > todayStr\) return/);
+assert.doesNotMatch(submitSrc, /disabled=\{d\.isFuture\}/);
+assert.match(submitSrc, /onClick=\{\(\) => selectDate\(d\.date\)\}/);
+assert.match(submitSrc, /selectDate\(toLocalDateStr\(date\)\)/);
+assert.doesNotMatch(submitSrc, /可匯報/);
+assert.doesNotMatch(submitSrc, /text-gray-400">—</);
+assert.match(submitSrc, /超出目標工時/);
+assert.match(submitSrc, /hoursExceedTarget/);
+assert.doesNotMatch(submitSrc, /targetHoursDirty && existingReportId/);
+assert.match(submitSrc, /void handleUpdateTargetHours\(\)/);
 
 console.log('day report submit abandon: ok');

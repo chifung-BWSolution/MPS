@@ -20,6 +20,16 @@ import {
   groupIncomesByType,
   summarizeIncomes,
   validateIncomeInput,
+  validateBulkIncomeInput,
+  BULK_BILLED_TOTAL_MISMATCH,
+  billedSumMatchesTotal,
+  DEFAULT_BULK_INSTALLMENT_COUNT,
+  defaultBulkDateRange,
+  findInstallmentCollision,
+  formatMoneyInput,
+  planBulkInstallmentNumbers,
+  spreadDueDates,
+  splitBilledAmounts,
 } from '../src/lib/quotationIncomes.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -29,7 +39,7 @@ assert.equal(INCOMES_TABLE, 'incomes');
 assert.equal(INCOME_PAYMENT_RECORDS_BUCKET, 'income-payment-records');
 assert.equal(
   incomePaymentRecordStoragePath('proj-1', '收據 (v2).pdf', 'abc'),
-  'proj-1/abc/收據_v2_.pdf',
+  'proj-1/abc/v2.pdf',
 );
 assert.equal(isAllowedPaymentRecordFile({ name: 'slip.pdf', type: 'application/pdf', size: 10 }), null);
 assert.match(
@@ -62,6 +72,100 @@ assert.equal(
   3,
 );
 assert.equal(nextInstallmentNumber([], '後加項目'), 1);
+assert.equal(DEFAULT_BULK_INSTALLMENT_COUNT, 2);
+assert.deepEqual(defaultBulkDateRange('2026-03-01', '2026-09-01'), { start: '2026-03-01', end: '2026-09-01' });
+assert.deepEqual(defaultBulkDateRange('2026-09-01', '2026-03-01'), { start: '2026-03-01', end: '2026-09-01' });
+assert.deepEqual(spreadDueDates('2026-01-01', '2026-04-01', 2), ['2026-01-01', '2026-04-01']);
+assert.deepEqual(spreadDueDates('2026-01-01', '2026-01-31', 3), ['2026-01-01', '2026-01-16', '2026-01-31']);
+assert.deepEqual(spreadDueDates('2026-01-01', '2026-01-01', 2), ['2026-01-01', '2026-01-01']);
+assert.deepEqual(splitBilledAmounts(10000, 2), [5000, 5000]);
+assert.deepEqual(splitBilledAmounts(10000, 3), [3333.33, 3333.33, 3333.34]);
+assert.equal(formatMoneyInput(3333.34), '3333.34');
+assert.deepEqual(
+  planBulkInstallmentNumbers({
+    projectRows: [{ type: '主要收入', installmentNumber: 2 }],
+    type: '主要收入',
+    count: 2,
+  }),
+  [3, 4],
+);
+assert.deepEqual(
+  planBulkInstallmentNumbers({
+    projectRows: [
+      { id: 'a', type: '主要收入', installmentNumber: 3 },
+      { id: 'b', type: '主要收入', installmentNumber: 4 },
+    ],
+    type: '主要收入',
+    count: 3,
+    editingIds: ['a', 'b'],
+    keepNumbers: [3, 4],
+  }),
+  [3, 4, 5],
+);
+assert.equal(
+  findInstallmentCollision(
+    [{ id: 'x', type: '主要收入', installmentNumber: 2 }],
+    '主要收入',
+    [2, 3],
+  ),
+  2,
+);
+assert.equal(
+  findInstallmentCollision(
+    [{ id: 'x', type: '主要收入', installmentNumber: 2 }],
+    '主要收入',
+    [2, 3],
+    ['x'],
+  ),
+  null,
+);
+assert.equal(validateBulkIncomeInput({
+  type: '主要收入',
+  totalAmount: '',
+  startDate: '',
+  endDate: '',
+  installmentCount: '2',
+  rows: [
+    { dueDate: '2026-01-01', installmentNumber: '1', billedAmount: '100' },
+    { dueDate: '2026-02-01', installmentNumber: '2', billedAmount: '100' },
+  ],
+}), null);
+assert.equal(validateBulkIncomeInput({
+  type: '主要收入',
+  totalAmount: '200',
+  startDate: '2026-01-01',
+  endDate: '2026-02-01',
+  installmentCount: '2',
+  rows: [
+    { dueDate: '2026-01-01', installmentNumber: '1', billedAmount: '100' },
+    { dueDate: '2026-02-01', installmentNumber: '2', billedAmount: '100' },
+  ],
+}), null);
+assert.equal(billedSumMatchesTotal('200', [{ billedAmount: '100' }, { billedAmount: '100' }]), true);
+assert.equal(billedSumMatchesTotal('200', [{ billedAmount: '80' }, { billedAmount: '100' }]), false);
+assert.equal(validateBulkIncomeInput({
+  type: '主要收入',
+  totalAmount: '200',
+  startDate: '2026-01-01',
+  endDate: '2026-02-01',
+  installmentCount: '2',
+  rows: [
+    { dueDate: '2026-01-01', installmentNumber: '1', billedAmount: '80' },
+    { dueDate: '2026-02-01', installmentNumber: '2', billedAmount: '100' },
+  ],
+}), BULK_BILLED_TOTAL_MISMATCH);
+assert.equal(validateBulkIncomeInput({
+  type: '主要收入',
+  totalAmount: '',
+  installmentCount: '1',
+  rows: [{ dueDate: '', installmentNumber: '1', billedAmount: '100' }],
+}), '第 1 期請選擇到期日');
+assert.equal(validateBulkIncomeInput({
+  type: '主要收入',
+  totalAmount: '',
+  installmentCount: '1',
+  rows: [{ dueDate: '2026-01-01', installmentNumber: '1', billedAmount: '' }],
+}), '第 1 期請填寫應收金額');
 assert.equal(formatIncomeMoney(1200), '$1,200.00 HKD');
 assert.equal(formatIncomeDate('2026-09-04'), '2026/09/04');
 
@@ -214,6 +318,7 @@ assert.match(hook, /uploadIncomePaymentRecordFile/);
 assert.match(hook, /const addIncome/);
 assert.match(hook, /const updateIncome/);
 assert.match(hook, /const deleteIncome/);
+assert.match(hook, /const saveBulkIncomes/);
 
 const tab = read('src/components/quotation/PitchingIncomeTab.tsx');
 assert.match(tab, /useQuotationIncomes/);
@@ -228,6 +333,12 @@ assert.match(tab, /aria-label="備註"/);
 assert.match(tab, /aria-label="收款紀錄檔案"/);
 assert.match(tab, /paymentRecordAction/);
 assert.match(tab, /新增單項收入/);
+assert.match(tab, /新增整項收入/);
+assert.match(tab, /編輯整項/);
+assert.match(tab, /PitchingBulkIncomeDialog/);
+assert.match(tab, /signedDate/);
+assert.match(tab, /handoverDate/);
+assert.match(tab, /saveBulkIncomes/);
 assert.match(tab, /DEFAULT_INCOME_TYPE/);
 assert.match(tab, /nextInstallmentNumber\(rows, type\)/);
 assert.match(tab, /款項資訊/);
@@ -236,11 +347,38 @@ assert.match(tab, /於完成收款時填寫/);
 assert.match(tab, /aria-label="收款日期"/);
 assert.match(tab, /groupIncomesByType/);
 assert.match(tab, /應收合計/);
+assert.match(tab, /查看附件/);
+assert.match(tab, /paymentRecordFileUrl/);
+assert.match(tab, /FileText/);
 
 const pitching = read('src/components/quotation/PitchingModule.tsx');
 assert.match(pitching, /PitchingIncomeTab/);
-assert.match(pitching, /id: 'income', label: '收入'/);
-assert.match(pitching, /<PitchingIncomeTab projectId=\{record\.id\} \/>/);
+assert.match(pitching, /id: 'budget', label: '預計收入支出'[\s\S]*id: 'income', label: '收入'/);
+assert.match(pitching, /<PitchingIncomeTab/);
+assert.match(pitching, /signedDate=\{draft\.signedDate\}/);
+assert.match(pitching, /handoverDate=\{draft\.handoverDate\}/);
+
+const bulk = read('src/components/quotation/PitchingBulkIncomeDialog.tsx');
+assert.match(bulk, /新增整項收入/);
+assert.match(bulk, /編輯整項收入/);
+assert.match(bulk, /DEFAULT_BULK_INSTALLMENT_COUNT/);
+assert.match(bulk, /spreadDueDates/);
+assert.match(bulk, /planBulkInstallmentNumbers/);
+assert.match(bulk, /mode="range"/);
+assert.match(bulk, /setPickingEnd\(true\)/);
+assert.match(bulk, /to: undefined/);
+assert.match(bulk, /triggerDate/);
+assert.match(bulk, /BULK_BILLED_TOTAL_MISMATCH/);
+assert.match(bulk, /billedMismatch/);
+assert.match(bulk, /role="alert"/);
+assert.match(bulk, /aria-label="日期範圍"/);
+assert.match(bulk, /aria-label="總金額"/);
+assert.match(bulk, /aria-label="期數數量"/);
+assert.match(bulk, /到期日 Due date \*/);
+assert.match(bulk, /應收金額 Billed \*/);
+assert.doesNotMatch(bulk, /總金額 Total \*/);
+assert.doesNotMatch(bulk, /日期範圍 Date range \*/);
+assert.doesNotMatch(bulk, /第 \$\{index \+ 1\} 期期數/);
 
 const project = read('src/components/quotation/ProjectModule.tsx');
 assert.match(project, /PitchingDetail/);

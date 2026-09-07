@@ -31,6 +31,7 @@ export function ClientWebsiteSelectField({
   displayName,
   projectTypes,
   showOpenLink = false,
+  disabled = false,
 }: {
   value: string;
   onChange: (webandsystemListId: string) => void;
@@ -41,6 +42,7 @@ export function ClientWebsiteSelectField({
   displayName?: string;
   projectTypes: PitchingProjectType[];
   showOpenLink?: boolean;
+  disabled?: boolean;
 }) {
   const { navigateTo } = useApp();
   const { profiles, addProfile } = useWebsiteProfiles();
@@ -94,12 +96,14 @@ export function ClientWebsiteSelectField({
               placeholder="搜尋客戶網站/系統..."
               searchPlaceholder="搜尋名稱或網域..."
               emptyText="找不到客戶網站/系統"
+              disabled={disabled}
             />
           </div>
           <Button
             type="button"
             variant="outline"
             onClick={handleQuickAdd}
+            disabled={disabled}
             className="h-9 shrink-0 gap-1.5 text-[13px] border-teal-200 text-teal-700 bg-teal-50 hover:bg-teal-100"
           >
             <Plus size={14} /> 新增網站/系統

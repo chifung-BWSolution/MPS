@@ -133,6 +133,139 @@ export function nextInstallmentNumber(
   return scoped.reduce((max, row) => Math.max(max, row.installmentNumber ?? 0), 0) + 1;
 }
 
+export const DEFAULT_BULK_INSTALLMENT_COUNT = 2;
+export const MAX_BULK_INSTALLMENT_COUNT = 24;
+
+export function parseLocalIsoDate(value: string | null | undefined): Date | null {
+  const iso = optionalIsoDate(value);
+  if (!iso) return null;
+  const [year, month, day] = iso.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null;
+  }
+  return date;
+}
+
+export function formatLocalIsoDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function normalizeDateRange(
+  start?: string | null,
+  end?: string | null,
+): { start: string; end: string } {
+  const a = optionalIsoDate(start) ?? '';
+  const b = optionalIsoDate(end) ?? '';
+  if (a && b && a > b) return { start: b, end: a };
+  return { start: a, end: b };
+}
+
+export function defaultBulkDateRange(
+  signedDate?: string | null,
+  handoverDate?: string | null,
+): { start: string; end: string } {
+  return normalizeDateRange(signedDate, handoverDate);
+}
+
+export function spreadDueDates(start: string, end: string, count: number): string[] {
+  if (count < 1) return [];
+  const startDate = parseLocalIsoDate(start);
+  const endDate = parseLocalIsoDate(end);
+  if (!startDate && !endDate) return Array.from({ length: count }, () => '');
+  if (!startDate || !endDate) {
+    const only = formatLocalIsoDate(startDate ?? endDate as Date);
+    return Array.from({ length: count }, () => only);
+  }
+  if (count === 1) return [formatLocalIsoDate(startDate)];
+  const totalDays = Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000);
+  return Array.from({ length: count }, (_, i) => {
+    const offset = Math.round((totalDays * i) / (count - 1));
+    const next = new Date(startDate);
+    next.setDate(startDate.getDate() + offset);
+    return formatLocalIsoDate(next);
+  });
+}
+
+export function splitBilledAmounts(total: number, count: number): number[] {
+  if (count < 1) return [];
+  const cents = Math.round(total * 100);
+  if (!Number.isFinite(cents) || cents < 0) return Array.from({ length: count }, () => 0);
+  const base = Math.floor(cents / count);
+  const remainder = cents - base * count;
+  return Array.from({ length: count }, (_, i) => (base + (i >= count - remainder ? 1 : 0)) / 100);
+}
+
+export function formatMoneyInput(amount: number): string {
+  return (Math.round(amount * 100) / 100).toFixed(2);
+}
+
+export function planBulkInstallmentNumbers(input: {
+  projectRows: Array<{ id?: string; type?: string; installmentNumber?: number }>;
+  type: string;
+  count: number;
+  editingIds?: Iterable<string>;
+  keepNumbers?: Array<number | null | undefined>;
+}): number[] {
+  if (input.count < 1) return [];
+  const exclude = new Set(input.editingIds ?? []);
+  const others = input.projectRows.filter((row) => !row.id || !exclude.has(row.id));
+  const kept = (input.keepNumbers ?? [])
+    .slice(0, input.count)
+    .map((value) => (typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : null))
+    .filter((value): value is number => value != null);
+  const startAfter = Math.max(nextInstallmentNumber(others, input.type) - 1, ...kept, 0);
+  const result = [...kept];
+  let next = startAfter + 1;
+  while (result.length < input.count) {
+    result.push(next);
+    next += 1;
+  }
+  return result;
+}
+
+export function findInstallmentCollision(
+  projectRows: Array<{ id?: string; type?: string; installmentNumber?: number }>,
+  type: string,
+  numbers: Array<number | null>,
+  excludeIds?: Iterable<string>,
+): number | null {
+  const exclude = new Set(excludeIds ?? []);
+  const taken = new Set(
+    projectRows
+      .filter((row) => (row.type ?? '') === type && (!row.id || !exclude.has(row.id)))
+      .map((row) => row.installmentNumber)
+      .filter((value): value is number => value != null),
+  );
+  for (const number of numbers) {
+    if (number != null && taken.has(number)) return number;
+  }
+  return null;
+}
+
+export function incomeToWriteInput(
+  row: QuotationIncome,
+  overrides: Partial<QuotationIncomeInput> = {},
+): QuotationIncomeInput {
+  return {
+    type: row.type,
+    installmentNumber: row.installmentNumber ?? null,
+    billedAmount: row.billedAmount,
+    dueDate: row.dueDate ?? null,
+    paymentAmount: row.paymentAmount,
+    paymentDate: row.paymentDate ?? null,
+    paymentMethod: row.paymentMethod ?? null,
+    paymentStatus: row.paymentStatus ?? null,
+    badDebt: row.badDebt,
+    remarks: row.remarks ?? null,
+    ...overrides,
+  };
+}
+
 export function formatIncomeMoney(amount: number, currency = 'HKD'): string {
   return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
@@ -185,6 +318,54 @@ export function validateIncomeInput(input: {
   return null;
 }
 
+export function validateBulkIncomeInput(input: {
+  type: string;
+  totalAmount: string;
+  startDate?: string;
+  endDate?: string;
+  installmentCount: string;
+  rows: Array<{ dueDate?: string; installmentNumber?: string; billedAmount: string }>;
+}): string | null {
+  if (!isIncomeType(input.type.trim())) return '請選擇收入類型';
+  if (input.totalAmount?.trim() && parseMoney(input.totalAmount) == null) {
+    return '總金額須為 0 或以上的數字';
+  }
+  const count = parseInstallmentNumber(input.installmentCount);
+  if (count == null) return '請填寫期數數量';
+  if (count > MAX_BULK_INSTALLMENT_COUNT) return `期數數量不可超過 ${MAX_BULK_INSTALLMENT_COUNT}`;
+  if (input.rows.length !== count) return '期數列表與期數數量不一致';
+  const seen = new Set<number>();
+  for (let i = 0; i < input.rows.length; i += 1) {
+    const row = input.rows[i];
+    const installment = parseInstallmentNumber(row.installmentNumber);
+    if (installment == null) return `第 ${i + 1} 期缺少期數`;
+    if (seen.has(installment)) return `期數 ${installment} 重複`;
+    seen.add(installment);
+    if (!row.billedAmount?.trim()) return `第 ${i + 1} 期請填寫應收金額`;
+    if (parseMoney(row.billedAmount) == null) return `第 ${i + 1} 期應收金額須為 0 或以上的數字`;
+    if (!optionalIsoDate(row.dueDate)) return `第 ${i + 1} 期請選擇到期日`;
+  }
+  if (input.totalAmount?.trim() && !billedSumMatchesTotal(input.totalAmount, input.rows)) {
+    return BULK_BILLED_TOTAL_MISMATCH;
+  }
+  return null;
+}
+
+export const BULK_BILLED_TOTAL_MISMATCH = '應收合計須等於總金額';
+
+export function sumBulkBilledAmounts(rows: Array<{ billedAmount: string }>): number {
+  return rows.reduce((sum, row) => sum + (parseMoney(row.billedAmount) ?? 0), 0);
+}
+
+export function billedSumMatchesTotal(
+  totalAmount: string,
+  rows: Array<{ billedAmount: string }>,
+): boolean {
+  const total = parseMoney(totalAmount);
+  if (total == null || !totalAmount.trim()) return false;
+  return Math.round(sumBulkBilledAmounts(rows) * 100) === Math.round(total * 100);
+}
+
 const PAYMENT_RECORD_MIME_TYPES = new Set([
   'application/pdf',
   'image/jpeg',
@@ -202,9 +383,21 @@ const PAYMENT_RECORD_EXTENSIONS = new Set([
   'pdf', 'jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'doc', 'docx', 'xls', 'xlsx',
 ]);
 
+/** Storage keys must be S3-safe ASCII. The original display name is stored separately. */
 export function sanitizePaymentRecordFileName(name: string): string {
   const trimmed = name.trim() || 'file';
-  const cleaned = trimmed.replace(/[^\w.\-\u4e00-\u9fff]+/g, '_').replace(/_+/g, '_');
+  const lastDot = trimmed.lastIndexOf('.');
+  const hasExt = lastDot > 0 && lastDot < trimmed.length - 1;
+  const rawBase = hasExt ? trimmed.slice(0, lastDot) : trimmed;
+  const rawExt = hasExt ? trimmed.slice(lastDot + 1) : '';
+
+  const base = rawBase
+    .normalize('NFKD')
+    .replace(/[^A-Za-z0-9._-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+  const ext = rawExt.normalize('NFKD').replace(/[^A-Za-z0-9]+/g, '');
+  const cleaned = ext ? `${base || 'file'}.${ext}` : base || 'file';
   return cleaned.slice(0, 180) || 'file';
 }
 

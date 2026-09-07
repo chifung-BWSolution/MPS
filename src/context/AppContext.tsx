@@ -45,6 +45,10 @@ export function resolveRoute(module: string, sub?: string): { module: string; su
   if (module === 'website' && sub === 'pending') {
     return { module: 'website', subModule: resolveSubModule('website', 'list') };
   }
+  // Removed: in-app quotation generation. Documents are uploaded to quotation_docs.
+  if (module === 'quotation' && (sub === 'new' || sub === 'items')) {
+    return { module: 'quotation', subModule: 'list' };
+  }
   return { module, subModule: resolveSubModule(module, sub) };
 }
 
@@ -82,10 +86,9 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'asana-pending', label: 'Asana 待匯入' },
       { id: 'pitching', label: 'Pitching' },
       { id: 'projects', label: 'Project' },
-      { id: 'new', label: '新建報價單' },
       { id: 'list', label: '報價單列表' },
-      { id: 'items', label: '報價項目' },
       { id: 'clients', label: '客戶列表' },
+      { id: 'doc-types', label: '文件類型', section: '設置' },
     ],
   },
   {

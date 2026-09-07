@@ -1,53 +1,56 @@
 import { useMemo, useState } from 'react';
-import { ExternalLink, FileText, Pencil, Plus, Trash2, Wallet } from 'lucide-react';
+import { Banknote, ExternalLink, FileText, Pencil, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { useQuotationIncomes } from '@/hooks/useQuotationIncomes';
+import { useQuotationExpenses } from '@/hooks/useQuotationExpenses';
+import { useSupplierTypes } from '@/hooks/useSupplierTypes';
+import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
 import {
-  INCOME_PAYMENT_METHOD_LABELS,
-  INCOME_PAYMENT_METHODS,
-  INCOME_PAYMENT_STATUS_LABELS,
-  INCOME_PAYMENT_STATUS_STYLES,
-  INCOME_PAYMENT_STATUSES,
-  INCOME_TYPE_PRESETS,
-  DEFAULT_INCOME_TYPE,
+  EXPENSE_PAYMENT_METHOD_LABELS,
+  EXPENSE_PAYMENT_METHODS,
+  EXPENSE_PAYMENT_RECORD_MAX_SIZE_MB,
+  EXPENSE_PAYMENT_STATUS_LABELS,
+  EXPENSE_PAYMENT_STATUS_STYLES,
+  EXPENSE_PAYMENT_STATUSES,
   computeOutstanding,
-  formatIncomeDate,
-  formatIncomeDateTime,
-  formatIncomeMoney,
+  formatExpenseDate,
+  formatExpenseDateTime,
+  formatExpenseMoney,
   formatPaymentRecordFileSize,
+  groupExpensesByType,
   hasFilledPaymentAmount,
-  INCOME_PAYMENT_RECORD_MAX_SIZE_MB,
-  nextInstallmentNumber,
+  nextExpenseInstallmentNumber,
   parseInstallmentNumber,
   parseMoney,
-  groupIncomesByType,
-  summarizeIncomes,
-  validateIncomeInput,
-  type IncomePaymentMethod,
-  type IncomePaymentStatus,
-  type QuotationIncome,
-} from '@/lib/quotationIncomes';
-import { PitchingBulkIncomeDialog } from '@/components/quotation/PitchingBulkIncomeDialog';
+  summarizeExpenses,
+  validateExpenseInput,
+  type ExpensePaymentMethod,
+  type ExpensePaymentStatus,
+  type QuotationExpense,
+} from '@/lib/quotationExpenses';
+import { PitchingBulkExpenseDialog } from '@/components/quotation/PitchingBulkExpenseDialog';
 import { CrudModal, CrudModalFooter, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Input } from '@/components/ui/input';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
 
 type Draft = {
-  type: string;
+  supplierTypesId: string;
+  supplierId: string;
   installmentNumber: string;
   billedAmount: string;
   dueDate: string;
   paymentAmount: string;
   paymentDate: string;
   paymentMethod: string;
-  paymentStatus: IncomePaymentStatus | '';
+  paymentStatus: ExpensePaymentStatus | '';
   badDebt: string;
   remarks: string;
 };
 
-const emptyDraft = (nextInstallment = 1, type = DEFAULT_INCOME_TYPE): Draft => ({
-  type,
+const emptyDraft = (nextInstallment = 1, supplierTypesId = '', supplierId = ''): Draft => ({
+  supplierTypesId,
+  supplierId,
   installmentNumber: String(nextInstallment),
   billedAmount: '',
   dueDate: '',
@@ -59,9 +62,10 @@ const emptyDraft = (nextInstallment = 1, type = DEFAULT_INCOME_TYPE): Draft => (
   remarks: '',
 });
 
-function draftFromRow(row: QuotationIncome): Draft {
+function draftFromRow(row: QuotationExpense): Draft {
   return {
-    type: row.type,
+    supplierTypesId: row.supplierTypesId,
+    supplierId: row.supplierId,
     installmentNumber: row.installmentNumber != null ? String(row.installmentNumber) : '',
     billedAmount: String(row.billedAmount),
     dueDate: row.dueDate ?? '',
@@ -113,7 +117,7 @@ function PillOptions<T extends string>({
   );
 }
 
-export function PitchingIncomeTab({
+export function PitchingExpenseTab({
   projectId,
   signedDate,
   handoverDate,
@@ -122,36 +126,61 @@ export function PitchingIncomeTab({
   signedDate?: string;
   handoverDate?: string;
 }) {
-  const { rows, loading, error, addIncome, updateIncome, deleteIncome, saveBulkIncomes } = useQuotationIncomes(projectId);
+  const { rows, loading, error, addExpense, updateExpense, deleteExpense, saveBulkExpenses } =
+    useQuotationExpenses(projectId);
+  const { types: supplierTypes } = useSupplierTypes();
+  const { suppliers } = useWebPageSuppliers();
   const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<QuotationIncome | null>(null);
+  const [editing, setEditing] = useState<QuotationExpense | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft());
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState<QuotationIncome | null>(null);
+  const [deleting, setDeleting] = useState<QuotationExpense | null>(null);
   const [paymentRecordFile, setPaymentRecordFile] = useState<File | null>(null);
   const [clearPaymentRecord, setClearPaymentRecord] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkEditing, setBulkEditing] = useState<QuotationIncome[] | null>(null);
+  const [bulkEditing, setBulkEditing] = useState<QuotationExpense[] | null>(null);
   const [bulkSaving, setBulkSaving] = useState(false);
 
-  const summary = useMemo(() => summarizeIncomes(rows), [rows]);
-  const groups = useMemo(() => groupIncomesByType(rows), [rows]);
+  const summary = useMemo(() => summarizeExpenses(rows), [rows]);
+  const groups = useMemo(() => groupExpensesByType(rows), [rows]);
   const outstandingPreview = computeOutstanding(
     parseMoney(draft.billedAmount) ?? 0,
     parseMoney(draft.paymentAmount) ?? 0,
     parseMoney(draft.badDebt) ?? 0,
   );
   const paymentRequired = hasFilledPaymentAmount(draft.paymentAmount);
+  const defaultTypeId = supplierTypes.find((type) => type.isActive)?.id ?? '';
+  const typeOptions = useMemo(
+    () => supplierTypes.filter((type) => type.isActive || type.id === draft.supplierTypesId),
+    [supplierTypes, draft.supplierTypesId],
+  );
+  const supplierOptions = useMemo(
+    () =>
+      suppliers
+        .filter((supplier) =>
+          supplier.supplierTypesId === draft.supplierTypesId
+          && (supplier.isActive || supplier.id === draft.supplierId),
+        )
+        .map((supplier) => ({
+          value: supplier.id,
+          label: supplier.displayName,
+          keywords: [supplier.companyName, supplier.url].filter(Boolean).join(' '),
+        })),
+    [suppliers, draft.supplierTypesId, draft.supplierId],
+  );
 
   const openCreate = () => {
     setEditing(null);
-    setDraft(emptyDraft(nextInstallmentNumber(rows, DEFAULT_INCOME_TYPE), DEFAULT_INCOME_TYPE));
+    setDraft(emptyDraft(
+      nextExpenseInstallmentNumber(rows, defaultTypeId, ''),
+      defaultTypeId,
+    ));
     setPaymentRecordFile(null);
     setClearPaymentRecord(false);
     setModalOpen(true);
   };
 
-  const openEdit = (row: QuotationIncome) => {
+  const openEdit = (row: QuotationExpense) => {
     setEditing(row);
     setDraft(draftFromRow(row));
     setPaymentRecordFile(null);
@@ -172,7 +201,7 @@ export function PitchingIncomeTab({
     setBulkOpen(true);
   };
 
-  const openBulkEdit = (groupRows: QuotationIncome[]) => {
+  const openBulkEdit = (groupRows: QuotationExpense[]) => {
     setBulkEditing(groupRows);
     setBulkOpen(true);
   };
@@ -183,22 +212,22 @@ export function PitchingIncomeTab({
   };
 
   const handleBulkSave = async (
-    items: Parameters<typeof saveBulkIncomes>[0],
+    items: Parameters<typeof saveBulkExpenses>[0],
     deleteIds: string[],
   ) => {
     setBulkSaving(true);
-    const result = await saveBulkIncomes(items, deleteIds);
+    const result = await saveBulkExpenses(items, deleteIds);
     setBulkSaving(false);
     if (result.error) {
       toast.error(`${bulkEditing?.length ? '更新' : '新增'}失敗：${result.error.message}`);
       return;
     }
-    toast.success(bulkEditing?.length ? '已更新整項收入' : '已新增整項收入');
+    toast.success(bulkEditing?.length ? '已更新整項支出' : '已新增整項支出');
     closeBulk();
   };
 
   const handleSave = async () => {
-    const validationError = validateIncomeInput(draft);
+    const validationError = validateExpenseInput(draft);
     if (validationError) {
       toast.error(validationError);
       return;
@@ -210,53 +239,56 @@ export function PitchingIncomeTab({
 
     setSaving(true);
     const payload = {
-      type: draft.type.trim(),
+      supplierTypesId: draft.supplierTypesId.trim(),
+      supplierId: draft.supplierId.trim(),
       installmentNumber: parseInstallmentNumber(draft.installmentNumber),
       billedAmount,
       dueDate: draft.dueDate || null,
       paymentAmount,
       paymentDate: draft.paymentDate || null,
-      paymentMethod: (draft.paymentMethod || null) as IncomePaymentMethod | null,
+      paymentMethod: (draft.paymentMethod || null) as ExpensePaymentMethod | null,
       paymentStatus: draft.paymentStatus || null,
       badDebt,
       remarks: draft.remarks.trim() || null,
       file: paymentRecordFile,
-      paymentRecordAction: clearPaymentRecord && !paymentRecordFile ? 'clear' : undefined,
+      paymentRecordAction: (clearPaymentRecord && !paymentRecordFile ? 'clear' : undefined) as
+        | 'clear'
+        | undefined,
     };
     const result = editing
-      ? await updateIncome(editing.id, payload)
-      : await addIncome(payload);
+      ? await updateExpense(editing.id, payload)
+      : await addExpense(payload);
     setSaving(false);
     if (result.error) {
       toast.error(`${editing ? '更新' : '新增'}失敗：${result.error.message}`);
       return;
     }
-    toast.success(editing ? '已更新收入' : '已新增收入');
+    toast.success(editing ? '已更新支出' : '已新增支出');
     closeModal();
   };
 
   const handleDelete = async () => {
     if (!deleting) return;
-    const { error: delErr } = await deleteIncome(deleting.id);
+    const { error: delErr } = await deleteExpense(deleting.id);
     if (delErr) {
       toast.error(`刪除失敗：${delErr.message}`);
       return;
     }
-    toast.success('已刪除收入');
+    toast.success('已刪除支出');
     setDeleting(null);
   };
 
   const deleteLabel = deleting
-    ? `${deleting.type}${deleting.installmentNumber != null ? ` #${deleting.installmentNumber}` : ''}`
-    : '收入';
+    ? `${deleting.typeLabel} ${deleting.supplierLabel}${deleting.installmentNumber != null ? ` #${deleting.installmentNumber}` : ''}`
+    : '支出';
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-        <SummaryCard label="應收合計" value={formatIncomeMoney(summary.billed)} />
-        <SummaryCard label="實收合計" value={formatIncomeMoney(summary.received)} />
-        <SummaryCard label="未收合計" value={formatIncomeMoney(summary.outstanding)} accent="text-amber-700" />
-        <SummaryCard label="壞帳合計" value={formatIncomeMoney(summary.badDebt)} accent="text-rose-700" />
+        <SummaryCard label="應付合計" value={formatExpenseMoney(summary.billed)} />
+        <SummaryCard label="實付合計" value={formatExpenseMoney(summary.paid)} />
+        <SummaryCard label="未付合計" value={formatExpenseMoney(summary.outstanding)} accent="text-amber-700" />
+        <SummaryCard label="壞帳合計" value={formatExpenseMoney(summary.badDebt)} accent="text-rose-700" />
       </div>
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -267,67 +299,67 @@ export function PitchingIncomeTab({
             onClick={openBulkCreate}
             className="flex items-center gap-1.5 px-3 py-2 border border-teal-200 text-teal-700 bg-teal-50 rounded-md text-[13px] font-medium hover:bg-teal-100 transition-colors active:scale-[0.97]"
           >
-            <Plus size={14} /> 新增整項收入
+            <Plus size={14} /> 新增整項支出
           </button>
           <button
             type="button"
             onClick={openCreate}
             className="flex items-center gap-1.5 px-3 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors active:scale-[0.97]"
           >
-            <Plus size={14} /> 新增單項收入
+            <Plus size={14} /> 新增單項支出
           </button>
         </div>
       </div>
 
       {error && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
-          無法載入收入：{error}
+          無法載入支出：{error}
         </div>
       )}
 
       {loading ? (
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-10 text-center text-[13px] text-muted-foreground">
-          載入收入中…
+          載入支出中…
         </div>
       ) : rows.length === 0 ? (
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-8 text-center">
-          <Wallet size={24} className="mx-auto text-muted-foreground/50 mb-2" />
-          <p className="text-[13px] text-muted-foreground">尚未新增收入</p>
-          <p className="text-[12px] text-muted-foreground/70 mt-1">可記錄分期應收、實收、未收與壞帳</p>
+          <Banknote size={24} className="mx-auto text-muted-foreground/50 mb-2" />
+          <p className="text-[13px] text-muted-foreground">尚未新增支出</p>
+          <p className="text-[12px] text-muted-foreground/70 mt-1">可記錄分期應付、實付、未付與壞帳</p>
         </div>
       ) : (
         <div className="space-y-3">
           {groups.map((group) => (
             <section
-              key={group.type}
+              key={group.key}
               className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-hidden"
             >
               <header className="flex items-center justify-between gap-4 flex-wrap px-4 py-3 bg-muted/30 border-b border-border">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-[14px] font-semibold">{group.type}</h3>
+                    <h3 className="text-[14px] font-semibold">{group.typeLabel}</h3>
                     <button
                       type="button"
                       onClick={() => openBulkEdit(group.rows)}
                       className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[12px] font-medium text-teal-700 hover:bg-teal-50 transition-colors"
-                      aria-label={`編輯整項 ${group.type}`}
+                      aria-label={`編輯整項 ${group.typeLabel}`}
                     >
                       <Pencil size={12} /> 編輯整項
                     </button>
                   </div>
-                  <p className="text-[12px] text-muted-foreground">{group.rows.length} 筆</p>
+                  <p className="text-[12px] text-muted-foreground">{group.supplierLabel} · {group.rows.length} 筆</p>
                 </div>
                 <div className="flex items-end gap-4 sm:gap-6">
-                  <SectionSum label="應收合計" value={formatIncomeMoney(group.summary.billed)} />
-                  <SectionSum label="實收合計" value={formatIncomeMoney(group.summary.received)} />
+                  <SectionSum label="應付合計" value={formatExpenseMoney(group.summary.billed)} />
+                  <SectionSum label="實付合計" value={formatExpenseMoney(group.summary.paid)} />
                   <SectionSum
-                    label="未收合計"
-                    value={formatIncomeMoney(group.summary.outstanding)}
+                    label="未付合計"
+                    value={formatExpenseMoney(group.summary.outstanding)}
                     accent="text-amber-700"
                   />
                   <SectionSum
                     label="壞帳合計"
-                    value={formatIncomeMoney(group.summary.badDebt)}
+                    value={formatExpenseMoney(group.summary.badDebt)}
                     accent="text-rose-700"
                   />
                 </div>
@@ -337,14 +369,14 @@ export function PitchingIncomeTab({
                   <thead>
                     <tr className="border-b border-border bg-muted/10">
                       <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">期數</th>
-                      <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">應收</th>
+                      <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">應付</th>
                       <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">到期日</th>
-                      <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">實收</th>
-                      <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">收款日期</th>
-                      <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">收款方式</th>
-                      <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">收款紀錄</th>
+                      <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">實付</th>
+                      <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">付款日期</th>
+                      <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">付款方式</th>
+                      <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">付款紀錄</th>
                       <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
-                      <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">未收</th>
+                      <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">未付</th>
                       <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">壞帳</th>
                       <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">建立 / 修改</th>
                       <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">操作</th>
@@ -362,19 +394,19 @@ export function PitchingIncomeTab({
                           )}
                         </td>
                         <td className="px-4 py-3 text-[13px] tabular-nums text-right whitespace-nowrap">
-                          {formatIncomeMoney(row.billedAmount)}
+                          {formatExpenseMoney(row.billedAmount)}
                         </td>
                         <td className="px-4 py-3 text-[13px] tabular-nums text-muted-foreground whitespace-nowrap">
-                          {formatIncomeDate(row.dueDate)}
+                          {formatExpenseDate(row.dueDate)}
                         </td>
                         <td className="px-4 py-3 text-[13px] tabular-nums text-right whitespace-nowrap">
-                          {formatIncomeMoney(row.paymentAmount)}
+                          {formatExpenseMoney(row.paymentAmount)}
                         </td>
                         <td className="px-4 py-3 text-[13px] tabular-nums text-muted-foreground whitespace-nowrap">
-                          {formatIncomeDate(row.paymentDate)}
+                          {formatExpenseDate(row.paymentDate)}
                         </td>
                         <td className="px-4 py-3 text-[13px] whitespace-nowrap">
-                          {row.paymentMethod ? INCOME_PAYMENT_METHOD_LABELS[row.paymentMethod] : '—'}
+                          {row.paymentMethod ? EXPENSE_PAYMENT_METHOD_LABELS[row.paymentMethod] : '—'}
                         </td>
                         <td className="px-4 py-3">
                           {row.paymentRecordFileUrl ? (
@@ -385,7 +417,7 @@ export function PitchingIncomeTab({
                               className="inline-flex items-center gap-1 text-[13px] font-medium text-teal-700 hover:text-teal-800 max-w-[160px]"
                             >
                               <ExternalLink size={12} className="shrink-0" />
-                              <span className="truncate">{row.paymentRecordFileName || '收款紀錄'}</span>
+                              <span className="truncate">{row.paymentRecordFileName || '付款紀錄'}</span>
                             </a>
                           ) : (
                             <span className="text-[13px] text-muted-foreground">—</span>
@@ -396,24 +428,24 @@ export function PitchingIncomeTab({
                             <span
                               className={cn(
                                 'inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium border',
-                                INCOME_PAYMENT_STATUS_STYLES[row.paymentStatus],
+                                EXPENSE_PAYMENT_STATUS_STYLES[row.paymentStatus],
                               )}
                             >
-                              {INCOME_PAYMENT_STATUS_LABELS[row.paymentStatus]}
+                              {EXPENSE_PAYMENT_STATUS_LABELS[row.paymentStatus]}
                             </span>
                           ) : (
                             <span className="text-[13px] text-muted-foreground">—</span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-[13px] tabular-nums text-right whitespace-nowrap">
-                          {formatIncomeMoney(row.outstanding)}
+                          {formatExpenseMoney(row.outstanding)}
                         </td>
                         <td className="px-4 py-3 text-[13px] tabular-nums text-right whitespace-nowrap">
-                          {formatIncomeMoney(row.badDebt)}
+                          {formatExpenseMoney(row.badDebt)}
                         </td>
                         <td className="px-4 py-3 text-[11px] text-muted-foreground whitespace-nowrap">
-                          <div>{formatIncomeDateTime(row.createdAt)}</div>
-                          <div>{formatIncomeDateTime(row.updatedAt)}</div>
+                          <div>{formatExpenseDateTime(row.createdAt)}</div>
+                          <div>{formatExpenseDateTime(row.updatedAt)}</div>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1">
@@ -423,7 +455,7 @@ export function PitchingIncomeTab({
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="p-1.5 rounded-md text-muted-foreground hover:bg-teal-50 hover:text-teal-700 transition-colors"
-                                aria-label={`查看附件 ${row.paymentRecordFileName || row.type}`}
+                                aria-label={`查看附件 ${row.paymentRecordFileName || row.typeLabel}`}
                                 title={row.paymentRecordFileName || '查看附件'}
                               >
                                 <FileText size={13} />
@@ -441,7 +473,7 @@ export function PitchingIncomeTab({
                               type="button"
                               onClick={() => openEdit(row)}
                               className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                              aria-label={`編輯 ${row.type}`}
+                              aria-label={`編輯 ${row.typeLabel}`}
                             >
                               <Pencil size={13} />
                             </button>
@@ -449,7 +481,7 @@ export function PitchingIncomeTab({
                               type="button"
                               onClick={() => setDeleting(row)}
                               className="p-1.5 rounded-md text-muted-foreground hover:bg-rose-50 hover:text-rose-600 transition-colors"
-                              aria-label={`刪除 ${row.type}`}
+                              aria-label={`刪除 ${row.typeLabel}`}
                             >
                               <Trash2 size={13} />
                             </button>
@@ -468,7 +500,7 @@ export function PitchingIncomeTab({
       <CrudModal
         isOpen={modalOpen}
         onClose={closeModal}
-        title={editing ? '編輯收入' : '新增單項收入'}
+        title={editing ? '編輯支出' : '新增單項支出'}
         size="lg"
         footer={
           <CrudModalFooter className="flex justify-end gap-2">
@@ -493,39 +525,65 @@ export function PitchingIncomeTab({
         <div className="space-y-6">
           <section className="space-y-4">
             <h3 className="text-[14px] font-semibold">款項資訊</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <span className="text-[12px] text-muted-foreground block mb-1">類型 Type *</span>
-                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="收入類型">
-                  {INCOME_TYPE_PRESETS.map((type) => {
-                    const selected = draft.type === type;
-                    return (
-                      <button
-                        key={type}
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        onClick={() =>
-                          setDraft((prev) => ({
+            <div>
+              <span className="text-[12px] text-muted-foreground block mb-1">類型 Type *</span>
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="支出類型">
+                {typeOptions.map((type) => {
+                  const selected = draft.supplierTypesId === type.id;
+                  return (
+                    <button
+                      key={type.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() =>
+                        setDraft((prev) => {
+                          const nextType = type.id;
+                          const nextSupplier = prev.supplierTypesId === nextType ? prev.supplierId : '';
+                          return {
                             ...prev,
-                            type,
+                            supplierTypesId: nextType,
+                            supplierId: nextSupplier,
                             installmentNumber: editing
                               ? prev.installmentNumber
-                              : String(nextInstallmentNumber(rows, type)),
-                          }))
-                        }
-                        className={cn(
-                          'px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors',
-                          selected
-                            ? 'bg-teal-50 border-teal-300 text-teal-800'
-                            : 'bg-white border-border text-muted-foreground hover:bg-muted/40',
-                        )}
-                      >
-                        {type}
-                      </button>
-                    );
-                  })}
-                </div>
+                              : String(nextExpenseInstallmentNumber(rows, nextType, nextSupplier)),
+                          };
+                        })
+                      }
+                      className={cn(
+                        'px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors',
+                        selected
+                          ? 'bg-teal-50 border-teal-300 text-teal-800'
+                          : 'bg-white border-border text-muted-foreground hover:bg-muted/40',
+                      )}
+                    >
+                      {type.displayName}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <span className="text-[12px] text-muted-foreground block mb-1">供應商 Supplier *</span>
+                <SearchableSelect
+                  value={draft.supplierId}
+                  onValueChange={(supplierId) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      supplierId,
+                      installmentNumber: editing
+                        ? prev.installmentNumber
+                        : String(nextExpenseInstallmentNumber(rows, prev.supplierTypesId, supplierId)),
+                    }))
+                  }
+                  options={supplierOptions}
+                  placeholder={draft.supplierTypesId ? '選擇供應商' : '請先選擇支出類型'}
+                  searchPlaceholder="搜尋供應商…"
+                  emptyText={draft.supplierTypesId ? '此類型沒有供應商' : '請先選擇支出類型'}
+                  disabled={!draft.supplierTypesId}
+                />
               </div>
               <div>
                 <span className="text-[12px] text-muted-foreground block mb-1">期數 Installment *</span>
@@ -543,7 +601,7 @@ export function PitchingIncomeTab({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <span className="text-[12px] text-muted-foreground block mb-1">應收金額 Billed *</span>
+                <span className="text-[12px] text-muted-foreground block mb-1">應付金額 Billed *</span>
                 <Input
                   type="number"
                   min="0"
@@ -552,7 +610,7 @@ export function PitchingIncomeTab({
                   onChange={(e) => setDraft((prev) => ({ ...prev, billedAmount: e.target.value }))}
                   placeholder="0.00"
                   className="text-[13px]"
-                  aria-label="應收金額"
+                  aria-label="應付金額"
                 />
               </div>
               <div>
@@ -582,13 +640,13 @@ export function PitchingIncomeTab({
 
           <section className="space-y-4 pt-2 border-t border-border/60">
             <div>
-              <h3 className="text-[14px] font-semibold">完成收款</h3>
-              <p className="text-[12px] text-muted-foreground mt-0.5">於完成收款時填寫</p>
+              <h3 className="text-[14px] font-semibold">完成付款</h3>
+              <p className="text-[12px] text-muted-foreground mt-0.5">於完成付款時填寫</p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <span className="text-[12px] text-muted-foreground block mb-1">實收金額 Payment</span>
+                <span className="text-[12px] text-muted-foreground block mb-1">實付金額 Payment</span>
                 <Input
                   type="number"
                   min="0"
@@ -597,114 +655,116 @@ export function PitchingIncomeTab({
                   onChange={(e) => setDraft((prev) => ({ ...prev, paymentAmount: e.target.value }))}
                   placeholder="0.00"
                   className="text-[13px]"
-                  aria-label="實收金額"
+                  aria-label="實付金額"
                 />
               </div>
               <div>
                 <span className="text-[12px] text-muted-foreground block mb-1">
-                  收款日期 Payment date{paymentRequired ? ' *' : ''}
+                  付款日期 Payment date{paymentRequired ? ' *' : ''}
                 </span>
                 <Input
                   type="date"
                   value={draft.paymentDate}
                   onChange={(e) => setDraft((prev) => ({ ...prev, paymentDate: e.target.value }))}
                   className="text-[13px]"
-                  aria-label="收款日期"
+                  aria-label="付款日期"
                 />
               </div>
             </div>
 
             <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2.5 flex items-center justify-between">
-              <span className="text-[12px] text-muted-foreground">未收 Outstanding（應收 − 實收 − 壞帳）</span>
-              <span className="text-[14px] font-semibold tabular-nums">{formatIncomeMoney(outstandingPreview)}</span>
+              <span className="text-[12px] text-muted-foreground">未付 Outstanding（應付 − 實付 − 壞帳）</span>
+              <span className="text-[14px] font-semibold tabular-nums">{formatExpenseMoney(outstandingPreview)}</span>
             </div>
 
             <div>
               <span className="text-[12px] text-muted-foreground block mb-1.5">
-                收款方式 Payment method{paymentRequired ? ' *' : ''}
+                付款方式 Payment method{paymentRequired ? ' *' : ''}
               </span>
               <PillOptions
                 value={draft.paymentMethod}
-                options={INCOME_PAYMENT_METHODS}
-                labels={INCOME_PAYMENT_METHOD_LABELS}
+                options={EXPENSE_PAYMENT_METHODS}
+                labels={EXPENSE_PAYMENT_METHOD_LABELS}
                 onChange={(paymentMethod) =>
                   setDraft((prev) => ({
                     ...prev,
                     paymentMethod: prev.paymentMethod === paymentMethod ? '' : paymentMethod,
                   }))
                 }
-                ariaLabel="收款方式"
+                ariaLabel="付款方式"
               />
             </div>
 
             <div>
               <span className="text-[12px] text-muted-foreground block mb-1.5">
-                收款狀態 Payment status{paymentRequired ? ' *' : ''}
+                付款狀態 Payment status{paymentRequired ? ' *' : ''}
               </span>
               <PillOptions
                 value={draft.paymentStatus}
-                options={INCOME_PAYMENT_STATUSES}
-                labels={INCOME_PAYMENT_STATUS_LABELS}
+                options={EXPENSE_PAYMENT_STATUSES}
+                labels={EXPENSE_PAYMENT_STATUS_LABELS}
                 onChange={(paymentStatus) =>
                   setDraft((prev) => ({
                     ...prev,
                     paymentStatus: prev.paymentStatus === paymentStatus ? '' : paymentStatus,
                   }))
                 }
-                ariaLabel="收款狀態"
+                ariaLabel="付款狀態"
               />
             </div>
 
             <div>
-            <span className="text-[12px] text-muted-foreground block mb-1">收款紀錄 Payment record</span>
-            <Input
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.avif,.doc,.docx,.xls,.xlsx"
-              onChange={(e) => {
-                setPaymentRecordFile(e.target.files?.[0] ?? null);
-                setClearPaymentRecord(false);
-              }}
-              className="text-[13px]"
-              aria-label="收款紀錄檔案"
-            />
-            <p className="text-[11px] text-muted-foreground mt-1.5">
-              {paymentRecordFile
-                ? `${paymentRecordFile.name}（${formatPaymentRecordFileSize(paymentRecordFile.size)}）`
-                : editing?.paymentRecordFileUrl && !clearPaymentRecord
-                  ? `目前：${editing.paymentRecordFileName || '已上傳檔案'}`
-                  : `支援 PDF、圖片、Word、Excel，上限 ${INCOME_PAYMENT_RECORD_MAX_SIZE_MB}MB`}
-            </p>
-            {editing?.paymentRecordFileUrl && !clearPaymentRecord && !paymentRecordFile && (
-              <div className="flex items-center gap-3 mt-1.5">
-                <a
-                  href={editing.paymentRecordFileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[12px] text-teal-700 hover:text-teal-800"
-                >
-                  開啟現有檔案
-                </a>
-                <button
-                  type="button"
-                  onClick={() => setClearPaymentRecord(true)}
-                  className="text-[12px] text-rose-600 hover:text-rose-700"
-                >
-                  移除檔案
-                </button>
-              </div>
-            )}
-          </div>
+              <span className="text-[12px] text-muted-foreground block mb-1">付款紀錄 Payment record</span>
+              <Input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.avif,.doc,.docx,.xls,.xlsx"
+                onChange={(e) => {
+                  setPaymentRecordFile(e.target.files?.[0] ?? null);
+                  setClearPaymentRecord(false);
+                }}
+                className="text-[13px]"
+                aria-label="付款紀錄檔案"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                {paymentRecordFile
+                  ? `${paymentRecordFile.name}（${formatPaymentRecordFileSize(paymentRecordFile.size)}）`
+                  : editing?.paymentRecordFileUrl && !clearPaymentRecord
+                    ? `目前：${editing.paymentRecordFileName || '已上傳檔案'}`
+                    : `支援 PDF、圖片、Word、Excel，上限 ${EXPENSE_PAYMENT_RECORD_MAX_SIZE_MB}MB`}
+              </p>
+              {editing?.paymentRecordFileUrl && !clearPaymentRecord && !paymentRecordFile && (
+                <div className="flex items-center gap-3 mt-1.5">
+                  <a
+                    href={editing.paymentRecordFileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[12px] text-teal-700 hover:text-teal-800"
+                  >
+                    開啟現有檔案
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setClearPaymentRecord(true)}
+                    className="text-[12px] text-rose-600 hover:text-rose-700"
+                  >
+                    移除檔案
+                  </button>
+                </div>
+              )}
+            </div>
           </section>
         </div>
       </CrudModal>
 
-      <PitchingBulkIncomeDialog
+      <PitchingBulkExpenseDialog
         open={bulkOpen}
         editingRows={bulkEditing}
         projectRows={rows}
         signedDate={signedDate}
         handoverDate={handoverDate}
         saving={bulkSaving}
+        supplierTypes={supplierTypes}
+        suppliers={suppliers}
         onClose={closeBulk}
         onSave={handleBulkSave}
       />
@@ -715,7 +775,7 @@ export function PitchingIncomeTab({
         onConfirm={() => void handleDelete()}
         itemName={deleteLabel}
         canDelete
-        description={`確定要刪除「${deleteLabel}」這筆收入嗎？`}
+        description={`確定要刪除「${deleteLabel}」這筆支出嗎？`}
       />
     </div>
   );

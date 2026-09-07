@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import {
   DollarSign,
   BarChart3,
@@ -28,13 +28,16 @@ function totalExpenses(expenses: PitchingExpenseItem[]) {
 export function PitchingBudgetTab({
   income,
   expenses,
-  onIncomeChange,
-  onExpensesChange,
+  saving = false,
+  onPersist,
 }: {
   income: number | undefined;
   expenses: PitchingExpenseItem[];
-  onIncomeChange: (income: number | undefined) => void;
-  onExpensesChange: (next: PitchingExpenseItem[]) => void;
+  saving?: boolean;
+  onPersist: (patch: {
+    estimatedIncome?: number;
+    estimatedExpenses?: PitchingExpenseItem[];
+  }) => Promise<boolean>;
 }) {
   const [showIncomeModal, setShowIncomeModal] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -64,10 +67,12 @@ export function PitchingBudgetTab({
     setShowIncomeModal(true);
   };
 
-  const saveIncome = () => {
+  const handleIncomeSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
     const parsed = parseFloat(incomeDraft);
-    onIncomeChange(Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined);
-    setShowIncomeModal(false);
+    const next = Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+    const ok = await onPersist({ estimatedIncome: next });
+    if (ok) setShowIncomeModal(false);
   };
 
   const openExpenseModal = () => {
@@ -75,24 +80,30 @@ export function PitchingBudgetTab({
     setShowExpenseModal(true);
   };
 
-  const saveExpense = () => {
+  const handleExpenseSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
     const amount = parseFloat(expenseDraft.amount);
     if (!expenseDraft.name.trim() || !Number.isFinite(amount) || amount < 0) return;
-    onExpensesChange([
-      ...expenses,
-      {
-        id: `exp_${Date.now()}`,
-        name: expenseDraft.name.trim(),
-        amount,
-        currency: PITCHING_CURRENCY,
-        notes: expenseDraft.notes.trim() || undefined,
-      },
-    ]);
-    setShowExpenseModal(false);
+    const ok = await onPersist({
+      estimatedExpenses: [
+        ...expenses,
+        {
+          id: `exp_${Date.now()}`,
+          name: expenseDraft.name.trim(),
+          amount,
+          currency: PITCHING_CURRENCY,
+          notes: expenseDraft.notes.trim() || undefined,
+        },
+      ],
+    });
+    if (ok) {
+      setShowExpenseModal(false);
+      setExpenseDraft({ name: '', amount: '', notes: '' });
+    }
   };
 
-  const removeExpense = (id: string) => {
-    onExpensesChange(expenses.filter((item) => item.id !== id));
+  const removeExpense = async (id: string) => {
+    await onPersist({ estimatedExpenses: expenses.filter((item) => item.id !== id) });
   };
 
   return (
@@ -112,7 +123,8 @@ export function PitchingBudgetTab({
             <button
               type="button"
               onClick={openIncomeModal}
-              className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-teal-600 transition-colors"
+              disabled={saving}
+              className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-teal-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Pencil size={13} /> 編輯
             </button>
@@ -139,7 +151,8 @@ export function PitchingBudgetTab({
             <button
               type="button"
               onClick={openExpenseModal}
-              className="flex items-center gap-1 px-3 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-medium hover:bg-teal-700 transition-colors"
+              disabled={saving}
+              className="flex items-center gap-1 px-3 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-medium hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus size={13} /> 新增費用
             </button>
@@ -174,8 +187,9 @@ export function PitchingBudgetTab({
                     </span>
                     <button
                       type="button"
-                      onClick={() => removeExpense(item.id)}
-                      className="p-1 rounded hover:bg-rose-50 text-muted-foreground hover:text-rose-600 transition-colors"
+                      onClick={() => void removeExpense(item.id)}
+                      disabled={saving}
+                      className="p-1 rounded hover:bg-rose-50 text-muted-foreground hover:text-rose-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       title="刪除"
                     >
                       <Trash2 size={13} />
@@ -309,8 +323,28 @@ export function PitchingBudgetTab({
         </div>
       </div>
 
-      <CrudModal isOpen={showIncomeModal} onClose={() => setShowIncomeModal(false)} title="編輯預計收入" size="sm">
-        <div className="space-y-4">
+      <CrudModal
+        isOpen={showIncomeModal}
+        onClose={() => setShowIncomeModal(false)}
+        title="編輯預計收入"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setShowIncomeModal(false)} disabled={saving}>
+              取消
+            </Button>
+            <Button
+              type="submit"
+              form="budget-income-form"
+              className="bg-teal-600 hover:bg-teal-700 text-white"
+              disabled={saving}
+            >
+              {saving ? '儲存中…' : '確認'}
+            </Button>
+          </div>
+        }
+      >
+        <form id="budget-income-form" onSubmit={(e) => void handleIncomeSubmit(e)} className="space-y-4">
           <div>
             <Label className="text-[12px]">金額（{PITCHING_CURRENCY}）</Label>
             <Input
@@ -321,21 +355,34 @@ export function PitchingBudgetTab({
               onChange={(e) => setIncomeDraft(e.target.value)}
               placeholder="20000"
               className="mt-1 h-9 text-[13px]"
+              disabled={saving}
             />
           </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setShowIncomeModal(false)}>
-              取消
-            </Button>
-            <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={saveIncome}>
-              確認
-            </Button>
-          </div>
-        </div>
+        </form>
       </CrudModal>
 
-      <CrudModal isOpen={showExpenseModal} onClose={() => setShowExpenseModal(false)} title="新增費用" size="sm">
-        <div className="space-y-4">
+      <CrudModal
+        isOpen={showExpenseModal}
+        onClose={() => setShowExpenseModal(false)}
+        title="新增費用"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setShowExpenseModal(false)} disabled={saving}>
+              取消
+            </Button>
+            <Button
+              type="submit"
+              form="budget-expense-form"
+              className="bg-teal-600 hover:bg-teal-700 text-white"
+              disabled={saving || !expenseDraft.name.trim() || !expenseDraft.amount}
+            >
+              {saving ? '儲存中…' : '新增'}
+            </Button>
+          </div>
+        }
+      >
+        <form id="budget-expense-form" onSubmit={(e) => void handleExpenseSubmit(e)} className="space-y-4">
           <div>
             <Label className="text-[12px]">費用名稱</Label>
             <Input
@@ -343,6 +390,7 @@ export function PitchingBudgetTab({
               onChange={(e) => setExpenseDraft((p) => ({ ...p, name: e.target.value }))}
               placeholder="例如：設計外包"
               className="mt-1 h-9 text-[13px]"
+              disabled={saving}
             />
           </div>
           <div>
@@ -355,6 +403,7 @@ export function PitchingBudgetTab({
               onChange={(e) => setExpenseDraft((p) => ({ ...p, amount: e.target.value }))}
               placeholder="5000"
               className="mt-1 h-9 text-[13px]"
+              disabled={saving}
             />
           </div>
           <div>
@@ -363,21 +412,10 @@ export function PitchingBudgetTab({
               value={expenseDraft.notes}
               onChange={(e) => setExpenseDraft((p) => ({ ...p, notes: e.target.value }))}
               className="mt-1 h-9 text-[13px]"
+              disabled={saving}
             />
           </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setShowExpenseModal(false)}>
-              取消
-            </Button>
-            <Button
-              className="bg-teal-600 hover:bg-teal-700 text-white"
-              onClick={saveExpense}
-              disabled={!expenseDraft.name.trim() || !expenseDraft.amount}
-            >
-              新增
-            </Button>
-          </div>
-        </div>
+        </form>
       </CrudModal>
     </div>
   );

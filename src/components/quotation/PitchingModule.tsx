@@ -1,8 +1,7 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, ChevronRight, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil, Clock, FolderOpen, Wallet } from 'lucide-react';
+import { useState, useMemo, useEffect, type ReactNode } from 'react';
+import { Search, Plus, ChevronRight, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil, Clock, FolderOpen, Wallet, Banknote } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
@@ -14,6 +13,7 @@ import {
   type QuotationClientSelectOption,
 } from '@/data/quotationClientList';
 import { useQuotationClientDetailId } from '@/hooks/useQuotationClientDetailId';
+import { openQuotationProjectDetail } from '@/lib/quotationProjectNavigation';
 import { ClientFormModal } from '@/components/crm/ClientFormModal';
 import { ClientWebsiteSelectField } from '@/components/quotation/ClientWebsiteSelectField';
 import { CrudModal } from '@/components/ui/crud-modal';
@@ -38,6 +38,7 @@ import {
 import { PitchingBudgetTab } from '@/components/quotation/PitchingBudgetTab';
 import { PitchingDocsTab } from '@/components/quotation/PitchingDocsTab';
 import { PitchingIncomeTab } from '@/components/quotation/PitchingIncomeTab';
+import { PitchingExpenseTab } from '@/components/quotation/PitchingExpenseTab';
 import { PitchingFollowUpsTab } from '@/components/quotation/PitchingFollowUpsTab';
 import { PitchingWorkHoursTab } from '@/components/quotation/PitchingWorkHoursTab';
 import { QuotationBvCard } from '@/components/quotation/QuotationBvCard';
@@ -748,171 +749,19 @@ function draftFromRecord(record: PitchingRecord, clientOptions: ClientOption[]):
   };
 }
 
-function EditableTextField({
+function ReadOnlyField({
   label,
-  value,
-  onChange,
-  placeholder,
+  children,
 }: {
   label: string;
-  value: string;
-  onChange: (next: string) => void;
-  placeholder?: string;
+  children: ReactNode;
 }) {
-  const [editing, setEditing] = useState(false);
-
-  if (editing) {
-    return (
-      <div className="min-w-0">
-        <span className="text-[12px] text-muted-foreground block mb-1">{label}</span>
-        <Input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={() => setEditing(false)}
-          autoFocus
-          placeholder={placeholder}
-          className="text-[14px] h-9 min-w-0"
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="min-w-0">
       <span className="text-[12px] text-muted-foreground block">{label}</span>
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        className="text-left text-[14px] font-medium rounded px-1 -mx-1 py-0.5 hover:bg-muted/50 transition-colors w-full min-w-0 max-w-full break-all whitespace-normal"
-      >
-        {value.trim() || <span className="text-muted-foreground font-normal italic">點擊編輯</span>}
-      </button>
-    </div>
-  );
-}
-
-function EditableDateField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (next: string) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-
-  if (editing) {
-    return (
-      <div>
-        <span className="text-[12px] text-muted-foreground block mb-1">{label}</span>
-        <Input
-          type="date"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={() => setEditing(false)}
-          autoFocus
-          className="text-[14px] h-9 w-auto"
-        />
+      <div className="text-[14px] font-medium mt-0.5 min-w-0 max-w-full break-all whitespace-normal">
+        {children}
       </div>
-    );
-  }
-
-  return (
-    <div>
-      <span className="text-[12px] text-muted-foreground block">{label}</span>
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        className="text-left text-[14px] rounded px-1 -mx-1 py-0.5 hover:bg-muted/50 transition-colors"
-      >
-        {value || '—'}
-      </button>
-    </div>
-  );
-}
-
-function EditableTextAreaField({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (next: string) => void;
-  placeholder?: string;
-}) {
-  const [editing, setEditing] = useState(false);
-
-  if (editing) {
-    return (
-      <div>
-        <span className="text-[12px] text-muted-foreground block mb-1">{label}</span>
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={() => setEditing(false)}
-          autoFocus
-          rows={5}
-          placeholder={placeholder}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-[14px] leading-relaxed focus:outline-none focus:ring-1 focus:ring-teal-500"
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <span className="text-[12px] text-muted-foreground block mb-1">{label}</span>
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        className="text-left text-[14px] leading-relaxed text-foreground/80 whitespace-pre-wrap rounded px-1 -mx-1 py-0.5 hover:bg-muted/50 transition-colors w-full"
-      >
-        {value.trim() || <span className="text-muted-foreground italic">點擊新增描述</span>}
-      </button>
-    </div>
-  );
-}
-
-function EditableProjectTypesField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: PitchingProjectType[];
-  onChange: (next: PitchingProjectType[]) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-
-  if (editing) {
-    return (
-      <div>
-        <span className="text-[12px] text-muted-foreground block mb-1">{label}</span>
-        <ProjectTypeMultiSelect value={value} onChange={onChange} />
-        <button
-          type="button"
-          onClick={() => setEditing(false)}
-          className="mt-2 text-[12px] text-teal-600 hover:text-teal-700"
-        >
-          完成
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <span className="text-[12px] text-muted-foreground block">{label}</span>
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        className="text-left text-[14px] font-medium rounded px-1 -mx-1 py-0.5 hover:bg-muted/50 transition-colors"
-      >
-        {formatProjectTypes(value)}
-      </button>
     </div>
   );
 }
@@ -922,17 +771,15 @@ export function PitchingDetail({
   clientOptions,
   onBack,
   onEdit,
-  onConvertToQuote,
   onSave,
 }: {
   record: PitchingRecord;
   clientOptions: ClientOption[];
   onBack: () => void;
   onEdit: () => void;
-  onConvertToQuote: () => void;
   onSave: (id: string, data: QuotationClientProjectUpdate) => Promise<{ error: { message: string } | null }>;
 }) {
-  const [activeTab, setActiveTab] = useState<'info' | 'followups' | 'hours' | 'quotation' | 'docs' | 'income' | 'budget'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'followups' | 'hours' | 'docs' | 'income' | 'budget' | 'expense'>('info');
   const [draft, setDraft] = useState<DetailDraft>(() => draftFromRecord(record, clientOptions));
   const [saving, setSaving] = useState(false);
   const clientCompany = companyNamesForClient(draft.clientId, clientOptions);
@@ -945,80 +792,52 @@ export function PitchingDetail({
 
   const remaining = calcRemainingDays(draft.inquiryDate, draft.status);
 
-  const hasChanges = useMemo(() => {
-    const initial = draftFromRecord(record, clientOptions);
-    const typesChanged =
-      draft.projectTypes.length !== initial.projectTypes.length ||
-      [...draft.projectTypes].sort().join(',') !== [...initial.projectTypes].sort().join(',');
-    const expensesChanged =
-      draft.estimatedExpenses.length !== initial.estimatedExpenses.length ||
-      JSON.stringify(draft.estimatedExpenses) !== JSON.stringify(initial.estimatedExpenses);
-    return (
-      draft.clientId !== initial.clientId ||
-      draft.clientName !== initial.clientName ||
-      draft.displayName !== initial.displayName ||
-      draft.inquiryDate !== initial.inquiryDate ||
-      draft.signedDate !== initial.signedDate ||
-      draft.handoverDate !== initial.handoverDate ||
-      draft.description !== initial.description ||
-      draft.webandsystemListId !== initial.webandsystemListId ||
-      draft.asanaLink !== initial.asanaLink ||
-      draft.status !== initial.status ||
-      draft.estimatedIncome !== initial.estimatedIncome ||
-      expensesChanged ||
-      typesChanged
-    );
-  }, [draft, record, clientOptions]);
-
-  const patchDraft = (patch: Partial<DetailDraft>) => {
-    setDraft((prev) => ({ ...prev, ...patch }));
-  };
-
-  const handleSave = async () => {
-    if (!draft.clientId.trim()) {
-      toast.error('請選擇客戶');
-      return;
-    }
-    if (!draft.displayName.trim()) {
-      toast.error('提案顯示名稱不可為空');
-      return;
-    }
-    if (!draft.inquiryDate) {
-      toast.error('請選擇查詢日期');
-      return;
-    }
-
+  const persist = async (data: QuotationClientProjectUpdate, successMessage?: string) => {
     setSaving(true);
-    const payload: QuotationClientProjectUpdate = {
-      clientId: draft.clientId.trim(),
-      clientName: draft.clientName,
-      displayName: draft.displayName.trim(),
-      inquiryDate: draft.inquiryDate,
-      signedDate: draft.signedDate,
-      handoverDate: draft.handoverDate,
-      description: draft.description.trim() || undefined,
-      projectTypes: draft.projectTypes,
-      webandsystemListId: draft.webandsystemListId.trim(),
-      asanaLink: draft.asanaLink.trim() || undefined,
-      status: draft.status,
-      estimatedIncome: draft.estimatedIncome,
-      estimatedExpenses: draft.estimatedExpenses,
-    };
-    const { error } = await onSave(record.id, payload);
+    const { error } = await onSave(record.id, data);
     setSaving(false);
     if (error) {
       toast.error(`儲存失敗：${error.message}`);
+      return false;
+    }
+    if (successMessage) toast.success(successMessage);
+    return true;
+  };
+
+  const handleWebsiteChange = async (webandsystemListId: string) => {
+    if (webandsystemListId === (record.webandsystemListId ?? '')) return;
+    setDraft((prev) => ({ ...prev, webandsystemListId }));
+    const ok = await persist(
+      { webandsystemListId: webandsystemListId.trim() },
+      '網站 / 系統已更新',
+    );
+    if (!ok) {
+      setDraft((prev) => ({ ...prev, webandsystemListId: record.webandsystemListId ?? '' }));
     }
   };
+
+  const handleStatusChange = async (status: PitchingStatus) => {
+    if (status === record.status) return;
+    setDraft((prev) => ({ ...prev, status }));
+    const ok = await persist({ status });
+    if (!ok) {
+      setDraft((prev) => ({ ...prev, status: record.status }));
+    }
+  };
+
+  const handleBudgetPersist = async (patch: {
+    estimatedIncome?: number;
+    estimatedExpenses?: PitchingExpenseItem[];
+  }) => persist(patch, '預計收入支出已更新');
 
   const tabs = [
     { id: 'info', label: '基本資訊', icon: FileText },
     { id: 'followups', label: '跟進記錄', icon: MessageSquare },
     { id: 'hours', label: '工作時數', icon: Clock },
-    { id: 'quotation', label: '關聯報價單', icon: FileText },
     { id: 'docs', label: '項目文件', icon: FolderOpen },
-    { id: 'income', label: '收入', icon: Wallet },
     { id: 'budget', label: '預計收入支出', icon: DollarSign },
+    { id: 'income', label: '收入', icon: Wallet },
+    { id: 'expense', label: '支出', icon: Banknote },
   ] as const;
 
   return (
@@ -1052,28 +871,11 @@ export function PitchingDetail({
           >
             <Pencil size={14} /> 編輯
           </button>
-          <button
-            type="button"
-            onClick={() => void handleSave()}
-            disabled={saving || !hasChanges}
-            className="flex items-center gap-1.5 px-4 py-2 border border-teal-200 text-teal-700 bg-teal-50 rounded-md text-[13px] font-medium hover:bg-teal-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97]"
-          >
-            <Save size={14} className={saving ? 'animate-pulse' : ''} />
-            {saving ? '儲存中…' : '儲存'}
-          </button>
           <PitchingStatusSelect
             value={draft.status}
-            onChange={(status) => patchDraft({ status })}
+            onChange={(status) => void handleStatusChange(status)}
             className="text-[13px] px-3 py-1.5"
           />
-          {draft.status !== 'closed' && (
-            <button
-              onClick={onConvertToQuote}
-              className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors active:scale-[0.97]"
-            >
-              <FileText size={14} /> 生成報價單
-            </button>
-          )}
         </div>
       </div>
 
@@ -1099,98 +901,77 @@ export function PitchingDetail({
             <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6 space-y-5 min-w-0 overflow-hidden">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-w-0">
                 <div className="space-y-4 min-w-0">
-                  <div>
-                    <span className="text-[12px] text-muted-foreground block mb-1">客戶 Customer</span>
-                    <SearchableSelect
-                      value={draft.clientId}
-                      onValueChange={(clientId) => {
-                        const client = clientOptions.find((c) => c.value === clientId);
-                        patchDraft({
-                          clientId,
-                          clientName: client?.label ?? '',
-                        });
-                      }}
-                      options={clientOptions}
-                      placeholder="搜尋客戶..."
-                      searchPlaceholder="搜尋客戶名稱..."
-                      emptyText="找不到客戶"
-                    />
-                  </div>
-                  <EditableTextField
-                    label="提案顯示名稱"
-                    value={draft.displayName}
-                    onChange={(displayName) => patchDraft({ displayName })}
-                  />
+                  <ReadOnlyField label="客戶 Customer">
+                    {draft.clientName || '—'}
+                  </ReadOnlyField>
+                  <ReadOnlyField label="提案顯示名稱">
+                    {draft.displayName.trim() || '—'}
+                  </ReadOnlyField>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-[12px] text-muted-foreground block">公司名稱 (中文)</span>
-                      <p className="text-[14px] font-medium mt-0.5">{clientCompany.companyNameZh || '—'}</p>
-                    </div>
-                    <div>
-                      <span className="text-[12px] text-muted-foreground block">公司名稱 (Eng)</span>
-                      <p className="text-[14px] font-medium mt-0.5">{clientCompany.companyNameEn || '—'}</p>
-                    </div>
+                    <ReadOnlyField label="公司名稱 (中文)">
+                      {clientCompany.companyNameZh || '—'}
+                    </ReadOnlyField>
+                    <ReadOnlyField label="公司名稱 (Eng)">
+                      {clientCompany.companyNameEn || '—'}
+                    </ReadOnlyField>
                   </div>
-                  <EditableDateField
-                    label="查詢日期"
-                    value={draft.inquiryDate}
-                    onChange={(inquiryDate) => patchDraft({ inquiryDate })}
-                  />
-                  <EditableDateField
-                    label="簽約日期"
-                    value={draft.signedDate}
-                    onChange={(signedDate) => patchDraft({ signedDate })}
-                  />
-                  <EditableDateField
-                    label="交付日期"
-                    value={draft.handoverDate}
-                    onChange={(handoverDate) => patchDraft({ handoverDate })}
-                  />
-                  <div>
-                    <span className="text-[12px] text-muted-foreground block">剩餘天數</span>
-                    <span className="text-[14px]">
-                      {remaining === null ? '—' : remaining <= 0 ? `逾期 ${Math.abs(remaining)} 天` : `${remaining} 天`}
-                    </span>
-                  </div>
+                  <ReadOnlyField label="查詢日期">{draft.inquiryDate || '—'}</ReadOnlyField>
+                  <ReadOnlyField label="簽約日期">{draft.signedDate || '—'}</ReadOnlyField>
+                  <ReadOnlyField label="交付日期">{draft.handoverDate || '—'}</ReadOnlyField>
+                  <ReadOnlyField label="剩餘天數">
+                    {remaining === null ? '—' : remaining <= 0 ? `逾期 ${Math.abs(remaining)} 天` : `${remaining} 天`}
+                  </ReadOnlyField>
                 </div>
                 <div className="space-y-4 min-w-0">
-                  <EditableProjectTypesField
-                    label="項目類型"
-                    value={draft.projectTypes}
-                    onChange={(projectTypes) => patchDraft({ projectTypes })}
-                  />
+                  <ReadOnlyField label="項目類型">
+                    {formatProjectTypes(draft.projectTypes) || '—'}
+                  </ReadOnlyField>
+                  <ReadOnlyField label="負責 PM">{formatMainPmName(record)}</ReadOnlyField>
                   <div>
-                    <span className="text-[12px] text-muted-foreground block">負責 PM</span>
-                    <p className="text-[14px] font-medium mt-0.5">{formatMainPmName(record)}</p>
+                    <ClientWebsiteSelectField
+                      value={draft.webandsystemListId}
+                      onChange={(webandsystemListId) => void handleWebsiteChange(webandsystemListId)}
+                      clientId={draft.clientId}
+                      companyNameZh={clientCompany.companyNameZh}
+                      companyNameEn={clientCompany.companyNameEn}
+                      clientName={draft.clientName}
+                      displayName={draft.displayName}
+                      projectTypes={draft.projectTypes}
+                      showOpenLink
+                      disabled={saving}
+                    />
+                    {saving && activeTab === 'info' && (
+                      <p className="text-[11px] text-muted-foreground mt-1">儲存中…</p>
+                    )}
                   </div>
-                  <ClientWebsiteSelectField
-                    value={draft.webandsystemListId}
-                    onChange={(webandsystemListId) => patchDraft({ webandsystemListId })}
-                    clientId={draft.clientId}
-                    companyNameZh={clientCompany.companyNameZh}
-                    companyNameEn={clientCompany.companyNameEn}
-                    clientName={draft.clientName}
-                    displayName={draft.displayName}
-                    projectTypes={draft.projectTypes}
-                    showOpenLink
-                  />
-                  <EditableTextField
-                    label="Asana 連結"
-                    value={draft.asanaLink}
-                    onChange={(asanaLink) => patchDraft({ asanaLink })}
-                    placeholder="https://app.asana.com/..."
-                  />
+                  <ReadOnlyField label="Asana 連結">
+                    {draft.asanaLink.trim() ? (
+                      /^https?:\/\//i.test(draft.asanaLink) ? (
+                        <a
+                          href={draft.asanaLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-teal-700 hover:text-teal-800"
+                        >
+                          {draft.asanaLink}
+                        </a>
+                      ) : (
+                        draft.asanaLink
+                      )
+                    ) : (
+                      '—'
+                    )}
+                  </ReadOnlyField>
                 </div>
               </div>
             </div>
             <QuotationBvCard projectId={record.id} />
           </div>
           <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6">
-            <EditableTextAreaField
-              label="提案描述"
-              value={draft.description}
-              onChange={(description) => patchDraft({ description })}
-            />
+            <span className="text-[12px] text-muted-foreground block mb-1">提案描述</span>
+            <p className="text-[14px] leading-relaxed text-foreground/80 whitespace-pre-wrap">
+              {draft.description.trim() || '—'}
+            </p>
           </div>
         </div>
       )}
@@ -1207,41 +988,32 @@ export function PitchingDetail({
         <PitchingWorkHoursTab projectId={record.id} />
       )}
 
-      {activeTab === 'quotation' && (
-        <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6 text-center py-8">
-          {record.linkedQuotationNumber ? (
-            <p className="text-[14px] font-medium text-emerald-700">{record.linkedQuotationNumber}</p>
-          ) : (
-            <>
-              <FileText size={24} className="mx-auto text-muted-foreground/50 mb-2" />
-              <p className="text-[13px] text-muted-foreground mb-3">此 Pitching 尚未生成報價單</p>
-              {draft.status !== 'closed' && (
-                <button
-                  onClick={onConvertToQuote}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors mx-auto active:scale-[0.97]"
-                >
-                  <FileText size={13} /> 立即生成報價單
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
       {activeTab === 'docs' && (
         <PitchingDocsTab projectId={record.id} />
       )}
 
       {activeTab === 'income' && (
-        <PitchingIncomeTab projectId={record.id} />
+        <PitchingIncomeTab
+          projectId={record.id}
+          signedDate={draft.signedDate}
+          handoverDate={draft.handoverDate}
+        />
+      )}
+
+      {activeTab === 'expense' && (
+        <PitchingExpenseTab
+          projectId={record.id}
+          signedDate={draft.signedDate}
+          handoverDate={draft.handoverDate}
+        />
       )}
 
       {activeTab === 'budget' && (
         <PitchingBudgetTab
-          income={draft.estimatedIncome}
-          expenses={draft.estimatedExpenses}
-          onIncomeChange={(estimatedIncome) => patchDraft({ estimatedIncome })}
-          onExpensesChange={(estimatedExpenses) => patchDraft({ estimatedExpenses })}
+          income={record.estimatedIncome}
+          expenses={record.estimatedExpenses ?? []}
+          saving={saving}
+          onPersist={handleBudgetPersist}
         />
       )}
     </div>
@@ -1249,9 +1021,8 @@ export function PitchingDetail({
 }
 
 export function PitchingModule() {
-  const { navigateTo } = useApp();
   const { systemUser } = useAuth();
-  const { records, loading, error, lastSyncedAt, addRecord, updateStatus, updateRecord } = useQuotationClientProjects();
+  const { records, loading, error, lastSyncedAt, refresh, addRecord, updateStatus, updateRecord } = useQuotationClientProjects();
   const { records: clientListRecords, addClient } = useQuotationClientList();
   const { detailId, openDetail, closeDetail } = useQuotationClientDetailId('pitching');
   const selectedRecord = useMemo(
@@ -1270,8 +1041,14 @@ export function PitchingModule() {
     [clientListRecords],
   );
 
+  useEffect(() => {
+    if (!selectedRecord) return;
+    openQuotationProjectDetail(selectedRecord.id, selectedRecord.status);
+  }, [selectedRecord]);
+
   const handleView = (record: PitchingRecord) => {
-    openDetail(record.id);
+    openQuotationProjectDetail(record.id, record.status);
+    if (record.status !== 'confirmed') openDetail(record.id);
   };
 
   const openCreateModal = () => {
@@ -1338,15 +1115,15 @@ export function PitchingModule() {
       toast.error(`狀態更新失敗：${updateErr.message}`);
       return;
     }
+    if (detailId === id) openQuotationProjectDetail(id, status);
   };
 
   const handleSaveRecord = async (id: string, data: QuotationClientProjectUpdate) => {
-    return updateRecord(id, data);
-  };
-
-  const handleConvertToQuote = () => {
-    toast.success('已將 Pitching 資料帶入新建報價單');
-    navigateTo('quotation', 'new');
+    const result = await updateRecord(id, data);
+    if (!result.error) {
+      await refresh();
+    }
+    return result;
   };
 
   const formModal = (
@@ -1389,7 +1166,6 @@ export function PitchingModule() {
           clientOptions={pitchingClientOptions}
           onBack={closeDetail}
           onEdit={() => openEditModal(selectedRecord)}
-          onConvertToQuote={handleConvertToQuote}
           onSave={handleSaveRecord}
         />
         {formModal}

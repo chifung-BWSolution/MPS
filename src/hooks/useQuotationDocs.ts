@@ -4,12 +4,27 @@ import { useAuth } from '@/context/AuthContext';
 import {
   QUOTATION_DOCS_BUCKET,
   QUOTATION_DOCS_TABLE,
+  QUOTATION_LIST_DOC_TYPE_IDS,
   isAllowedQuotationDocFile,
   optionalIsoDate,
   quotationDocStoragePath,
   type QuotationDoc,
   type QuotationDocInput,
+  type QuotationListDoc,
 } from '@/lib/quotationDocs';
+
+type DocTypeEmbed = {
+  id: string;
+  display: string;
+  is_active: boolean;
+} | null;
+
+type ProjectEmbed = {
+  id: string;
+  display_name: string | null;
+  client_name: string | null;
+  status: string | null;
+} | null;
 
 type DbRow = {
   id: string;
@@ -25,13 +40,20 @@ type DbRow = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  quotation_doc_types?: DocTypeEmbed;
+  quotation_client_project?: ProjectEmbed;
 };
+
+function embedDisplay(row: DbRow): string {
+  return row.quotation_doc_types?.display?.trim() || '';
+}
 
 function mapRow(row: DbRow): QuotationDoc {
   return {
     id: row.id,
     quotationClientProjectId: row.quotation_client_project_id,
-    docType: row.doc_type,
+    docTypeId: row.doc_type,
+    docTypeDisplay: embedDisplay(row),
     fileName: row.file_name,
     fileUrl: row.file_url,
     storagePath: row.storage_path,
@@ -45,10 +67,20 @@ function mapRow(row: DbRow): QuotationDoc {
   };
 }
 
+function mapListRow(row: DbRow): QuotationListDoc {
+  const project = row.quotation_client_project;
+  return {
+    ...mapRow(row),
+    projectDisplayName: project?.display_name?.trim() || '—',
+    projectClientName: project?.client_name?.trim() || '—',
+    projectStatus: project?.status?.trim() || '',
+  };
+}
+
 function inputToRow(input: QuotationDocInput, projectId: string) {
   return {
     quotation_client_project_id: projectId,
-    doc_type: input.docType.trim(),
+    doc_type: input.docTypeId.trim(),
     file_name: input.fileName.trim(),
     file_url: input.fileUrl.trim(),
     storage_path: input.storagePath.trim(),
@@ -66,6 +98,10 @@ async function removeStorageObject(path: string | undefined) {
   if (!trimmed) return;
   await supabase.storage.from(QUOTATION_DOCS_BUCKET).remove([trimmed]);
 }
+
+const DOC_SELECT = '*, quotation_doc_types!quotation_docs_doc_type_fkey ( id, display, is_active )';
+const LIST_SELECT =
+  `${DOC_SELECT}, quotation_client_project!quotation_client_project_id ( id, display_name, client_name, status )`;
 
 export async function uploadQuotationDocFile(
   projectId: string,
@@ -104,7 +140,7 @@ export function useQuotationDocs(projectId: string | undefined) {
     setLoading(true);
     const { data, error: err } = await supabase
       .from(QUOTATION_DOCS_TABLE)
-      .select('*')
+      .select(DOC_SELECT)
       .eq('quotation_client_project_id', projectId)
       .order('created_at', { ascending: false });
 
@@ -125,8 +161,8 @@ export function useQuotationDocs(projectId: string | undefined) {
   const addDoc = useCallback(
     async (input: Omit<QuotationDocInput, 'createdBy'> & { file: File }) => {
       if (!projectId) return { data: null, error: { message: '缺少項目' } };
-      const docType = input.docType.trim();
-      if (!docType) return { data: null, error: { message: '請填寫文件類型' } };
+      const docTypeId = input.docTypeId.trim();
+      if (!docTypeId) return { data: null, error: { message: '請選擇文件類型' } };
 
       const uploaded = await uploadQuotationDocFile(projectId, input.file);
       if (uploaded.error || !uploaded.data) {
@@ -136,6 +172,7 @@ export function useQuotationDocs(projectId: string | undefined) {
       const row = inputToRow(
         {
           ...input,
+          docTypeId,
           fileName: input.file.name,
           fileUrl: uploaded.data.url,
           storagePath: uploaded.data.path,
@@ -149,7 +186,7 @@ export function useQuotationDocs(projectId: string | undefined) {
       const { data, error: err } = await supabase
         .from(QUOTATION_DOCS_TABLE)
         .insert(row)
-        .select('*')
+        .select(DOC_SELECT)
         .single();
 
       if (err || !data) {
@@ -174,10 +211,10 @@ export function useQuotationDocs(projectId: string | undefined) {
       const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
       let uploadedPath: string | undefined;
 
-      if (input.docType !== undefined) {
-        const docType = input.docType.trim();
-        if (!docType) return { error: { message: '請填寫文件類型' } };
-        patch.doc_type = docType;
+      if (input.docTypeId !== undefined) {
+        const docTypeId = input.docTypeId.trim();
+        if (!docTypeId) return { error: { message: '請選擇文件類型' } };
+        patch.doc_type = docTypeId;
       }
       if (input.documentDate !== undefined) patch.document_date = optionalIsoDate(input.documentDate ?? undefined) ?? null;
       if (input.expiryDate !== undefined) patch.expiry_date = optionalIsoDate(input.expiryDate ?? undefined) ?? null;
@@ -203,7 +240,7 @@ export function useQuotationDocs(projectId: string | undefined) {
         .from(QUOTATION_DOCS_TABLE)
         .update(patch)
         .eq('id', id)
-        .select('*')
+        .select(DOC_SELECT)
         .single();
 
       if (err || !data) {
@@ -232,4 +269,36 @@ export function useQuotationDocs(projectId: string | undefined) {
   }, [rows]);
 
   return { rows, loading, error, refresh, addDoc, updateDoc, deleteDoc };
+}
+
+export function useQuotationDocsList(
+  docTypeIds: readonly string[] = QUOTATION_LIST_DOC_TYPE_IDS,
+) {
+  const [rows, setRows] = useState<QuotationListDoc[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const { data, error: err } = await supabase
+      .from(QUOTATION_DOCS_TABLE)
+      .select(LIST_SELECT)
+      .in('doc_type', [...docTypeIds])
+      .order('created_at', { ascending: false });
+
+    if (err) {
+      setError(err.message);
+      setRows([]);
+    } else {
+      setError(null);
+      setRows(((data as DbRow[] | null) ?? []).map(mapListRow));
+    }
+    setLoading(false);
+  }, [docTypeIds]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  return { rows, loading, error, refresh };
 }

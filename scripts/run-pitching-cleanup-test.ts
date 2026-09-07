@@ -21,6 +21,12 @@ const budget = readFileSync(
   'utf8',
 );
 assert.doesNotMatch(budget, /currencyDraft/);
+assert.doesNotMatch(budget, /onIncomeChange/);
 assert.match(budget, /PITCHING_CURRENCY/);
+assert.match(budget, /onPersist/);
+assert.match(budget, /<form/);
+assert.match(budget, /onSubmit/);
+assert.match(budget, /budget-income-form/);
+assert.match(budget, /budget-expense-form/);
 
 console.log('pitching cleanup: ok');

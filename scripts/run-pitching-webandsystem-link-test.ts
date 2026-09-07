@@ -118,6 +118,10 @@ assert.ok(
 
 assert.match(detailSrc, /ClientWebsiteSelectField/);
 assert.match(detailSrc, /showOpenLink/);
+assert.match(detailSrc, /handleWebsiteChange/);
+assert.match(detailSrc, /webandsystemListId: webandsystemListId.trim\(\)/);
+assert.doesNotMatch(detailSrc, /onClick=\{\(\) => void handleSave\(\)\}/);
+assert.doesNotMatch(detailSrc, /\{saving \? '儲存中…' : '儲存'\}/);
 assert.ok(
   detailSrc.indexOf('ClientWebsiteSelectField') < detailSrc.indexOf('Asana 連結'),
   'detail website field must appear before Asana',

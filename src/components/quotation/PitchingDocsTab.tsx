@@ -3,9 +3,9 @@ import { ExternalLink, FileText, FolderOpen, Pencil, Plus, Trash2 } from 'lucide
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useQuotationDocs } from '@/hooks/useQuotationDocs';
+import { useQuotationDocTypes } from '@/hooks/useQuotationDocTypes';
 import {
   QUOTATION_DOC_MAX_SIZE_MB,
-  QUOTATION_DOC_TYPE_PRESETS,
   formatDocDate,
   formatFileSize,
   isImageDoc,
@@ -17,14 +17,14 @@ import { CrudModal, CrudModalFooter, DeleteConfirmModal } from '@/components/ui/
 import { Input } from '@/components/ui/input';
 
 type Draft = {
-  docType: string;
+  docTypeId: string;
   documentDate: string;
   expiryDate: string;
   file: File | null;
 };
 
 const emptyDraft = (): Draft => ({
-  docType: '',
+  docTypeId: '',
   documentDate: '',
   expiryDate: '',
   file: null,
@@ -38,6 +38,7 @@ function expiryBadge(status: ReturnType<typeof quotationDocExpiryStatus>) {
 
 export function PitchingDocsTab({ projectId }: { projectId: string }) {
   const { rows, loading, error, addDoc, updateDoc, deleteDoc } = useQuotationDocs(projectId);
+  const { types } = useQuotationDocTypes();
   const [typeFilter, setTypeFilter] = useState('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<QuotationDoc | null>(null);
@@ -45,17 +46,34 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<QuotationDoc | null>(null);
 
-  const typeOptions = useMemo(() => {
-    const seen = new Set<string>(QUOTATION_DOC_TYPE_PRESETS);
-    for (const row of rows) {
-      if (row.docType.trim()) seen.add(row.docType.trim());
+  const typeById = useMemo(() => new Map(types.map((type) => [type.id, type])), [types]);
+
+  const dialogTypes = useMemo(() => {
+    const active = types.filter((type) => type.isActive);
+    if (draft.docTypeId && !active.some((type) => type.id === draft.docTypeId)) {
+      const current = typeById.get(draft.docTypeId);
+      if (current) return [current, ...active];
     }
-    return [...seen];
-  }, [rows]);
+    return active;
+  }, [draft.docTypeId, typeById, types]);
+
+  const typeOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const options: { id: string; display: string }[] = [];
+    for (const row of rows) {
+      if (!row.docTypeId || seen.has(row.docTypeId)) continue;
+      seen.add(row.docTypeId);
+      options.push({
+        id: row.docTypeId,
+        display: typeById.get(row.docTypeId)?.display || row.docTypeDisplay || '—',
+      });
+    }
+    return options;
+  }, [rows, typeById]);
 
   const filtered = useMemo(() => {
     if (typeFilter === 'all') return rows;
-    return rows.filter((row) => row.docType === typeFilter);
+    return rows.filter((row) => row.docTypeId === typeFilter);
   }, [rows, typeFilter]);
 
   const openCreate = () => {
@@ -67,7 +85,7 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
   const openEdit = (row: QuotationDoc) => {
     setEditing(row);
     setDraft({
-      docType: row.docType,
+      docTypeId: row.docTypeId,
       documentDate: row.documentDate ?? '',
       expiryDate: row.expiryDate ?? '',
       file: null,
@@ -82,9 +100,9 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
   };
 
   const handleSave = async () => {
-    const docType = draft.docType.trim();
-    if (!docType) {
-      toast.error('請填寫文件類型');
+    const docTypeId = draft.docTypeId.trim();
+    if (!docTypeId) {
+      toast.error('請選擇文件類型');
       return;
     }
     if (!editing && !draft.file) {
@@ -100,7 +118,7 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
     setSaving(true);
     if (editing) {
       const { error: saveErr } = await updateDoc(editing.id, {
-        docType,
+        docTypeId,
         documentDate: draft.documentDate,
         expiryDate: draft.expiryDate,
         file: draft.file ?? undefined,
@@ -113,7 +131,7 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
       toast.success('已更新文件');
     } else if (draft.file) {
       const { error: addErr } = await addDoc({
-        docType,
+        docTypeId,
         fileName: draft.file.name,
         fileUrl: '',
         storagePath: '',
@@ -154,8 +172,8 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
           >
             <option value="all">全部類型</option>
             {typeOptions.map((type) => (
-              <option key={type} value={type}>
-                {type}
+              <option key={type.id} value={type.id}>
+                {type.display}
               </option>
             ))}
           </select>
@@ -205,7 +223,9 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
                   const badge = expiryBadge(status);
                   return (
                     <tr key={row.id} className="border-b border-border/50 hover:bg-muted/20">
-                      <td className="px-4 py-3 text-[13px] font-medium whitespace-nowrap">{row.docType}</td>
+                      <td className="px-4 py-3 text-[13px] font-medium whitespace-nowrap">
+                        {typeById.get(row.docTypeId)?.display || row.docTypeDisplay || '—'}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 min-w-0">
                           {isImageDoc(row.mimeType, row.fileName) ? (
@@ -311,33 +331,25 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
         <div className="space-y-4">
           <div>
             <span className="text-[12px] text-muted-foreground block mb-1">文件類型 *</span>
-            <div className="flex flex-wrap gap-2 mb-2">
-              {QUOTATION_DOC_TYPE_PRESETS.map((type) => {
-                const selected = draft.docType === type;
-                return (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => setDraft((prev) => ({ ...prev, docType: type }))}
-                    className={cn(
-                      'px-3 py-1.5 rounded-md text-[12px] font-medium border transition-colors',
-                      selected
-                        ? 'bg-teal-50 border-teal-300 text-teal-800'
-                        : 'bg-white border-border text-muted-foreground hover:bg-muted/40',
-                    )}
-                  >
-                    {type}
-                  </button>
-                );
-              })}
-            </div>
-            <Input
-              value={draft.docType}
-              onChange={(e) => setDraft((prev) => ({ ...prev, docType: e.target.value }))}
-              placeholder="選擇上方類型，或自行輸入"
-              className="text-[13px]"
-              aria-label="文件類型"
-            />
+            {dialogTypes.length === 0 ? (
+              <p className="text-[12px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                尚未設定可用的文件類型。請到項目管理 → 設置 → 文件類型新增。
+              </p>
+            ) : (
+              <select
+                value={draft.docTypeId}
+                onChange={(e) => setDraft((prev) => ({ ...prev, docTypeId: e.target.value }))}
+                aria-label="文件類型"
+                className="w-full text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
+              >
+                <option value="">請選擇文件類型</option>
+                {dialogTypes.map((type) => (
+                  <option key={type.id} value={type.id}>
+                    {type.display}{type.isActive ? '' : '（已停用）'}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <div>
             <span className="text-[12px] text-muted-foreground block mb-1">

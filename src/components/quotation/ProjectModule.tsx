@@ -1,12 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Search, ChevronRight, Pencil, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
-import { useApp } from '@/context/AppContext';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
 import { useActiveStaffOptions } from '@/hooks/useActiveStaffOptions';
 import { toQuotationClientSelectOption } from '@/data/quotationClientList';
 import { useQuotationClientDetailId } from '@/hooks/useQuotationClientDetailId';
+import { openQuotationProjectDetail } from '@/lib/quotationProjectNavigation';
 import {
   PitchingDetail,
   PitchingFormModal,
@@ -191,8 +191,7 @@ function ProjectList({
 }
 
 export function ProjectModule() {
-  const { navigateTo } = useApp();
-  const { records, loading, error, lastSyncedAt, updateStatus, updateRecord } = useQuotationClientProjects();
+  const { records, loading, error, lastSyncedAt, refresh, updateStatus, updateRecord } = useQuotationClientProjects();
   const { records: clientListRecords, addClient } = useQuotationClientList();
   const { detailId, openDetail, closeDetail } = useQuotationClientDetailId('projects');
   const selectedRecord = useMemo(
@@ -216,8 +215,14 @@ export function ProjectModule() {
     [clientListRecords],
   );
 
+  useEffect(() => {
+    if (!selectedRecord) return;
+    openQuotationProjectDetail(selectedRecord.id, selectedRecord.status);
+  }, [selectedRecord]);
+
   const handleView = (record: PitchingRecord) => {
-    openDetail(record.id);
+    openQuotationProjectDetail(record.id, record.status);
+    if (record.status === 'confirmed') openDetail(record.id);
   };
 
   const openEditModal = (record: PitchingRecord) => {
@@ -253,15 +258,15 @@ export function ProjectModule() {
       toast.error(`狀態更新失敗：${updateErr.message}`);
       return;
     }
+    if (detailId === id) openQuotationProjectDetail(id, status);
   };
 
   const handleSaveRecord = async (id: string, data: QuotationClientProjectUpdate) => {
-    return updateRecord(id, data);
-  };
-
-  const handleConvertToQuote = () => {
-    toast.success('已將 Project 資料帶入新建報價單');
-    navigateTo('quotation', 'new');
+    const result = await updateRecord(id, data);
+    if (!result.error) {
+      await refresh();
+    }
+    return result;
   };
 
   const formModal = (
@@ -303,7 +308,6 @@ export function ProjectModule() {
           clientOptions={pitchingClientOptions}
           onBack={closeDetail}
           onEdit={() => openEditModal(selectedRecord)}
-          onConvertToQuote={handleConvertToQuote}
           onSave={handleSaveRecord}
         />
         {formModal}

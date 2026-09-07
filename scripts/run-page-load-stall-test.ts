@@ -62,20 +62,19 @@ assert.equal(beginPageNavigation('quotation/pitching'), false);
 assert.equal(beginPageNavigation('#quotation/projects'), true);
 
 const quotation = read('src/components/quotation/QuotationModule.tsx');
-const router = quotation.slice(
-  quotation.indexOf('export function QuotationModule'),
-  quotation.indexOf('function QuotationEntriesSection'),
-);
-assert.match(router, /if \(subModule === 'pitching'\)/);
-assert.match(router, /return <PitchingModule/);
-assert.doesNotMatch(router, /useQuotations\(/);
-assert.match(quotation, /function QuotationEntriesSection/);
-assert.match(quotation.slice(quotation.indexOf('function QuotationEntriesSection')), /useQuotations\(/);
+assert.match(quotation, /if \(subModule === 'pitching'\)/);
+assert.match(quotation, /return <PitchingModule/);
+assert.match(quotation, /subModule === 'doc-types'/);
+assert.match(quotation, /QuotationDocsList/);
+assert.doesNotMatch(quotation, /useQuotations\(/);
+assert.doesNotMatch(quotation, /QuotationEntriesSection/);
+assert.doesNotMatch(quotation, /NewQuotationWizard/);
+assert.doesNotMatch(quotation, /QuotationItemsManagement/);
 
 const app = read('src/context/AppContext.tsx');
 assert.match(app, /beginPageNavigation/);
 assert.match(read('src/lib/supabase.ts'), /supabaseBoundedFetch/);
 assert.match(read('src/hooks/useCompanies.ts'), /cachedQuery/);
-assert.match(read('src/hooks/useQuotations.ts'), /isAbortError/);
+assert.match(read('src/hooks/useQuotationDocs.ts'), /useQuotationDocsList/);
 
 console.log('page load stall: ok');
