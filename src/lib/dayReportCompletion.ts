@@ -46,3 +46,57 @@ export function getDayReportCompletionStatus(
   if (report.is_leave) return 'complete';
   return hoursEqual(entryHoursSum, getRequiredDayHours(report)) ? 'complete' : 'incomplete';
 }
+
+/**
+ * Date-open auto-creates a header. If the user leaves without any entries,
+ * that empty non-leave header is an abandoned draft and should be deleted.
+ * Leave days are kept — they are a completed report with no tasks.
+ */
+export function isAbandonedEmptyDayReport(
+  report: { is_leave?: boolean | null } | null | undefined,
+  entryCount: number,
+): boolean {
+  if (!report) return false;
+  if (report.is_leave) return false;
+  return !Number.isFinite(entryCount) || entryCount <= 0;
+}
+
+export type DayReportWeekCard = {
+  id: string;
+  report_date: string;
+  total_hours: number;
+  target_hours: number;
+  status: string;
+  is_leave: boolean;
+  entryHours: number;
+  fillStatus: DayReportCompletionStatus;
+};
+
+export function toDayReportWeekCard(
+  report: {
+    id: string;
+    report_date: string;
+    total_hours?: number | null;
+    target_hours?: number | null;
+    status?: string | null;
+    is_leave?: boolean | null;
+  },
+  entryHours: number,
+): DayReportWeekCard {
+  const header = {
+    total_hours: Number(report.total_hours) || 0,
+    target_hours: Number(report.target_hours) || 0,
+    is_leave: !!report.is_leave,
+  };
+  const reportDate = report.report_date ? String(report.report_date).substring(0, 10) : '';
+  return {
+    id: report.id,
+    report_date: reportDate,
+    total_hours: header.total_hours,
+    target_hours: header.target_hours,
+    status: report.status || 'submitted',
+    is_leave: header.is_leave,
+    entryHours,
+    fillStatus: getDayReportCompletionStatus(header, entryHours),
+  };
+}

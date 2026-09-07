@@ -33,11 +33,13 @@ import { useProjects, type ProjectRelatedType } from '@/hooks/useProjects';
 import type { ProjectSelectItem } from '@/lib/searchableProjectSelect';
 import { usePendingReportItems } from '@/hooks/usePendingReportItems';
 import {
-  getDayReportCompletionStatus,
   getRequiredDayHours,
   hoursEqual,
+  isAbandonedEmptyDayReport,
   sumEntryHours,
+  toDayReportWeekCard,
   type DayReportCompletionStatus,
+  type DayReportWeekCard,
 } from '@/lib/dayReportCompletion';
 import {
   consumePendingItems,
@@ -192,6 +194,9 @@ const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/web
 const MAX_IMAGE_SIZE_MB = 5;
 const MAX_IMAGES_PER_ENTRY = 5;
 
+/** Survives Strict Mode remount so unmount-abandon can be cancelled. */
+let pendingAbandonTimer: ReturnType<typeof setTimeout> | null = null;
+
 const QUICK_TEMPLATES = [
   { category: 'website_design' as WorkCategory, title: '網站設計及更新', hours: 2, relatedName: '' },
   { category: 'social_media' as WorkCategory, title: '社媒內容製作', hours: 1.5, relatedName: '' },
@@ -239,22 +244,26 @@ export function SubmitReportPage() {
   const [staffIdResolved, setStaffIdResolved] = useState(false);
   const { count: pendingCount, refresh: refreshPendingCount } = usePendingReportItems(currentStaffId, selectedDate);
 
-  type DbWeekReport = {
-    id: string;
-    report_date: string;
-    total_hours: number;
-    target_hours: number;
-    status: string;
-    is_leave: boolean;
-    entryHours: number;
-    fillStatus: DayReportCompletionStatus;
-  };
-  const [dbReports, setDbReports] = useState<DbWeekReport[]>([]);
+  const [dbReports, setDbReports] = useState<DayReportWeekCard[]>([]);
   const [isLoadingDbReports, setIsLoadingDbReports] = useState(true);
 
   const skipEnsureKeyRef = useRef<string | null>(null);
+  const openSeqRef = useRef(0);
   const officeRef = useRef(office);
   officeRef.current = office;
+
+  type CurrentReportSnap = {
+    id: string | null;
+    staffId: string | null;
+    date: string;
+    isLeave: boolean;
+  };
+  const currentReportRef = useRef<CurrentReportSnap>({
+    id: null,
+    staffId: null,
+    date: '',
+    isLeave: false,
+  });
 
   const todayStr = toLocalDateStr(new Date());
   const currentWeekSunday = toLocalDateStr(startOfWeekSunday(new Date()));
@@ -313,7 +322,7 @@ export function SubmitReportPage() {
     setFormError(null);
   }, []);
 
-  const applyHeader = useCallback((report: DayReportHeader) => {
+  const applyHeader = useCallback((report: DayReportHeader, staffId: string, date: string) => {
     const loadedOffice = (report.office_location as OfficeLocation) || officeRef.current;
     if (report.office_location === 'hk' || report.office_location === 'sz') {
       setOffice(loadedOffice);
@@ -325,6 +334,12 @@ export function SubmitReportPage() {
     setSavedTargetHours(hours);
     setSavedHoursPreset(preset);
     setExistingReportId(report.id);
+    currentReportRef.current = {
+      id: report.id,
+      staffId,
+      date,
+      isLeave: !!report.is_leave,
+    };
   }, []);
 
   const loadEntries = useCallback(async (reportId: string): Promise<SavedEntry[]> => {
@@ -340,12 +355,34 @@ export function SubmitReportPage() {
     });
   }, [resolveRelationType]);
 
-  const loadDbReports = useCallback(async () => {
+  const upsertLocalDbReport = useCallback((
+    header: DayReportHeader,
+    date: string,
+    entryHours: number,
+  ) => {
+    const next = toDayReportWeekCard({
+      id: header.id,
+      report_date: date,
+      total_hours: header.total_hours,
+      target_hours: header.target_hours,
+      status: header.status,
+      is_leave: header.is_leave,
+    }, entryHours);
+    setDbReports((prev) => {
+      const idx = prev.findIndex((r) => r.id === header.id || r.report_date === date);
+      if (idx === -1) return [...prev, next];
+      const copy = prev.slice();
+      copy[idx] = next;
+      return copy;
+    });
+  }, []);
+
+  const loadDbReports = useCallback(async (opts?: { silent?: boolean }) => {
     if (!currentStaffId) {
       setIsLoadingDbReports(false);
       return;
     }
-    setIsLoadingDbReports(true);
+    if (!opts?.silent) setIsLoadingDbReports(true);
     try {
       const { data, error } = await supabase
         .from('day_reports')
@@ -359,27 +396,19 @@ export function SubmitReportPage() {
       }
       setDbReports((data || []).map((r) => {
         const entries = (r as { day_report_entries?: Array<{ hours?: number | null }> }).day_report_entries || [];
-        const entryHours = sumEntryHours(entries);
-        const header = {
-          total_hours: Number(r.total_hours) || 0,
-          target_hours: Number(r.target_hours) || 0,
-          is_leave: !!r.is_leave,
-        };
-        return {
+        return toDayReportWeekCard({
           id: r.id,
-          report_date: r.report_date ? String(r.report_date).substring(0, 10) : r.report_date,
-          total_hours: header.total_hours,
-          target_hours: header.target_hours,
+          report_date: r.report_date,
+          total_hours: r.total_hours,
+          target_hours: r.target_hours,
           status: r.status,
-          is_leave: header.is_leave,
-          entryHours,
-          fillStatus: getDayReportCompletionStatus(header, entryHours),
-        };
+          is_leave: r.is_leave,
+        }, sumEntryHours(entries));
       }));
     } catch (err) {
       console.error('[SubmitReport] Exception loading dbReports:', err);
     } finally {
-      setIsLoadingDbReports(false);
+      if (!opts?.silent) setIsLoadingDbReports(false);
     }
   }, [currentStaffId, weekWindow.windowStart, weekWindow.windowEnd]);
 
@@ -395,8 +424,17 @@ export function SubmitReportPage() {
       })
       .eq('id', reportId);
     if (error) throw new Error(error.message);
-    await loadDbReports();
-  }, [fullDayHours, isDayOff, loadDbReports]);
+    upsertLocalDbReport({
+      id: reportId,
+      total_hours: sum,
+      target_hours: targetHours,
+      office_location: office,
+      status: 'submitted',
+      is_leave: isDayOff,
+      is_half_day: hoursPreset === 'half',
+    }, selectedDate, sum);
+    await loadDbReports({ silent: true });
+  }, [fullDayHours, hoursPreset, isDayOff, loadDbReports, office, selectedDate, targetHours, upsertLocalDbReport]);
 
   const selectReportWithEntries = useCallback(async (
     staffId: string,
@@ -461,7 +499,59 @@ export function SubmitReportPage() {
     return data as DayReportHeader;
   }, [selectReportWithEntries]);
 
+  const deleteEmptyReportById = useCallback(async (reportId: string, staffId: string) => {
+    const [{ count, error: countError }, { data: header, error: headerError }] = await Promise.all([
+      supabase
+        .from('day_report_entries')
+        .select('id', { count: 'exact', head: true })
+        .eq('day_report_id', reportId),
+      supabase
+        .from('day_reports')
+        .select('is_leave')
+        .eq('id', reportId)
+        .eq('staff_id', staffId)
+        .maybeSingle(),
+    ]);
+    if (countError) {
+      console.error('[SubmitReport] abandon entry count failed:', countError);
+      return false;
+    }
+    if (headerError) {
+      console.error('[SubmitReport] abandon header lookup failed:', headerError);
+      return false;
+    }
+    if (!isAbandonedEmptyDayReport(header, count ?? 0)) return false;
+    const { error } = await supabase
+      .from('day_reports')
+      .delete()
+      .eq('id', reportId)
+      .eq('staff_id', staffId);
+    if (error) {
+      console.error('[SubmitReport] abandon delete failed:', error);
+      return false;
+    }
+    setDbReports((prev) => prev.filter((r) => r.id !== reportId));
+    return true;
+  }, []);
+
+  const abandonEmptyReport = useCallback(async (snapshot: CurrentReportSnap) => {
+    if (!snapshot.id || !snapshot.staffId) return;
+    if (snapshot.isLeave) return;
+    const deleted = await deleteEmptyReportById(snapshot.id, snapshot.staffId);
+    if (deleted && currentReportRef.current.id === snapshot.id) {
+      currentReportRef.current = {
+        id: null,
+        staffId: snapshot.staffId,
+        date: snapshot.date,
+        isLeave: false,
+      };
+      setExistingReportId(null);
+      setSavedEntries([]);
+    }
+  }, [deleteEmptyReportById]);
+
   const openDate = useCallback(async (staffId: string, date: string) => {
+    const seq = ++openSeqRef.current;
     const key = `${staffId}:${date}`;
     if (skipEnsureKeyRef.current === key) {
       setExistingReportId(null);
@@ -474,24 +564,49 @@ export function SubmitReportPage() {
     resetForm();
     try {
       const existing = await selectReportWithEntries(staffId, date);
+      if (seq !== openSeqRef.current) return;
       if (existing) {
-        applyHeader(existing.header);
+        applyHeader(existing.header, staffId, date);
         setSavedEntries(existing.entries);
+        upsertLocalDbReport(existing.header, date, sumEntryHours(existing.entries));
       } else {
         const report = await insertReport(staffId, date);
-        applyHeader(report);
+        if (seq !== openSeqRef.current) {
+          if (currentReportRef.current.id !== report.id) {
+            await abandonEmptyReport({
+              id: report.id,
+              staffId,
+              date,
+              isLeave: !!report.is_leave,
+            });
+          }
+          return;
+        }
+        applyHeader(report, staffId, date);
         setSavedEntries([]);
+        upsertLocalDbReport(report, date, 0);
       }
       void refreshPendingCount();
+      void loadDbReports({ silent: true });
     } catch (err) {
+      if (seq !== openSeqRef.current) return;
       console.error('[SubmitReport] ensure day report failed:', err);
       setFormError(err instanceof Error ? err.message : '無法載入或建立當日匯報');
       setExistingReportId(null);
       setSavedEntries([]);
     } finally {
-      setIsLoadingExisting(false);
+      if (seq === openSeqRef.current) setIsLoadingExisting(false);
     }
-  }, [applyHeader, insertReport, refreshPendingCount, resetForm, selectReportWithEntries]);
+  }, [
+    abandonEmptyReport,
+    applyHeader,
+    insertReport,
+    loadDbReports,
+    refreshPendingCount,
+    resetForm,
+    selectReportWithEntries,
+    upsertLocalDbReport,
+  ]);
 
   useEffect(() => {
     if (!systemUser) {
@@ -542,6 +657,30 @@ export function SubmitReportPage() {
     void openDateRef.current(currentStaffId, selectedDate);
   }, [currentStaffId, selectedDate, staffIdResolved]);
 
+  const abandonEmptyReportRef = useRef(abandonEmptyReport);
+  abandonEmptyReportRef.current = abandonEmptyReport;
+
+  useEffect(() => {
+    if (pendingAbandonTimer != null) {
+      clearTimeout(pendingAbandonTimer);
+      pendingAbandonTimer = null;
+    }
+    const onPageHide = () => {
+      openSeqRef.current += 1;
+      void abandonEmptyReportRef.current({ ...currentReportRef.current });
+    };
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      const snapshot = { ...currentReportRef.current };
+      pendingAbandonTimer = setTimeout(() => {
+        pendingAbandonTimer = null;
+        openSeqRef.current += 1;
+        void abandonEmptyReportRef.current(snapshot);
+      }, 0);
+    };
+  }, []);
+
   const selectDate = (date: string) => {
     if (date > todayStr) return;
     if (date === selectedDate) {
@@ -551,6 +690,14 @@ export function SubmitReportPage() {
       }
       return;
     }
+    const previous = { ...currentReportRef.current };
+    currentReportRef.current = {
+      id: null,
+      staffId: currentStaffId,
+      date,
+      isLeave: false,
+    };
+    void abandonEmptyReport(previous);
     setSelectedDate(date);
   };
 
@@ -873,7 +1020,22 @@ export function SubmitReportPage() {
       if (error) throw new Error(error.message);
       setSavedTargetHours(targetHours);
       setSavedHoursPreset(hoursPreset);
-      await loadDbReports();
+      currentReportRef.current = {
+        ...currentReportRef.current,
+        isLeave: isDayOff,
+      };
+      if (existingReportId) {
+        upsertLocalDbReport({
+          id: existingReportId,
+          total_hours: totalHours,
+          target_hours: targetHours,
+          office_location: office,
+          status: 'submitted',
+          is_leave: isDayOff,
+          is_half_day: hoursPreset === 'half',
+        }, selectedDate, totalHours);
+      }
+      await loadDbReports({ silent: true });
     } catch (err) {
       setFormError(err instanceof Error ? err.message : '更新目標工時失敗，請重試。');
     } finally {
@@ -958,13 +1120,20 @@ export function SubmitReportPage() {
         .eq('staff_id', currentStaffId);
       if (error) throw new Error(error.message);
       skipEnsureKeyRef.current = `${currentStaffId}:${selectedDate}`;
+      currentReportRef.current = {
+        id: null,
+        staffId: currentStaffId,
+        date: selectedDate,
+        isLeave: false,
+      };
       setExistingReportId(null);
       setSavedEntries([]);
       resetForm();
       applyHoursPreset('full', office);
       setSavedTargetHours(getFullDayHours(office));
       setSavedHoursPreset('full');
-      await loadDbReports();
+      setDbReports((prev) => prev.filter((r) => r.id !== existingReportId));
+      await loadDbReports({ silent: true });
       void loadRecentFrequentItems();
       await refreshPendingCount();
     } catch (err) {
