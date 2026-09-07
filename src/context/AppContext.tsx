@@ -161,6 +161,7 @@ export const mainMenuItems: MainMenuItem[] = [
     label: '供應商',
     subMenus: [
       { id: 'web-suppliers', label: '網頁供應商' },
+      { id: 'supplier-types', label: '供應商類型', section: '設置' },
     ],
   },
   {

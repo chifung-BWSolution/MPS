@@ -1,27 +1,33 @@
 import { WebPageSupplierModule } from './WebPageSupplierModule';
+import { SupplierTypesSettings } from './SupplierTypesSettings';
 
-/** Supplier hub — only real-data modules remain (網頁供應商). */
 export function SupplierModule({ subModule }: { subModule?: string }) {
   const active = subModule || 'web-suppliers';
 
-  if (active !== 'web-suppliers') {
-    return (
-      <div className="space-y-2">
-        <h1 className="text-[32px] font-bold tracking-tight">供應商</h1>
-        <p className="text-[14px] text-muted-foreground">此供應商子頁面已移除。</p>
-      </div>
-    );
-  }
+  const getTitle = () => {
+    switch (active) {
+      case 'supplier-types':
+        return {
+          title: '供應商類型',
+          subtitle: '管理供應商類型分類與顯示名稱，供供應商名單與支出選用。',
+        };
+      default:
+        return {
+          title: '網頁供應商',
+          subtitle: '管理可購買反向連結的網站／供應商名單。',
+        };
+    }
+  };
+
+  const { title, subtitle } = getTitle();
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-[32px] font-bold tracking-tight">網頁供應商</h1>
-        <p className="text-[14px] text-muted-foreground mt-1">
-          管理可購買反向連結的網站／供應商名單。
-        </p>
+        <h1 className="text-[32px] font-bold tracking-tight">{title}</h1>
+        <p className="text-[14px] text-muted-foreground mt-1">{subtitle}</p>
       </div>
-      <WebPageSupplierModule />
+      {active === 'supplier-types' ? <SupplierTypesSettings /> : <WebPageSupplierModule />}
     </div>
   );
 }
