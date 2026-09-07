@@ -72,7 +72,6 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'analytics', label: '項目分析', section: '管理分析' },
       { id: 'work-report', label: '工作報表', section: '管理分析' },
       { id: 'work-categories', label: '工作類型', section: '設置' },
-      { id: 'holiday-settings', label: '假期設定', section: '設置' },
     ],
   },
   {

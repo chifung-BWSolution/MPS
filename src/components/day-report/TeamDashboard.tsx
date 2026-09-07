@@ -19,6 +19,7 @@ import { Calendar as DayPickerCalendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { SearchableProjectSelect } from '@/components/day-report/SearchableProjectSelect';
 import { WorkInspection } from '@/components/day-report/WorkInspection';
+import { getDayReportCompletionStatus, sumEntryHours } from '@/lib/dayReportCompletion';
 import { StaffOrgFilterSelects } from '@/components/day-report/StaffOrgFilterSelects';
 import {
   STAFF_ORG_ALL,
@@ -52,11 +53,9 @@ interface DayReport {
   staff_id: string;
   report_date: string;
   total_hours: number;
+  target_hours: number;
   is_leave: boolean;
   leave_type: string | null;
-  office_location: string;
-  is_holiday: boolean;
-  is_weekend: boolean;
 }
 
 interface DayReportEntry {
@@ -76,50 +75,8 @@ type CategoryMeta = { id: string; label: string; icon: string; color: string; bg
 type ViewTab = 'inspection' | 'analysis';
 type Mode = 'team' | 'personal';
 type PeriodType = 'week' | 'month';
-type OfficeLocation = 'hk' | 'sz';
 
 const UNASSIGNED_LABEL = '未分組';
-
-// ============================
-// Date / Holiday Helpers
-// ============================
-const hkPublicHolidays2025 = [
-  '2025-01-01',
-  '2025-01-29', '2025-01-30', '2025-01-31', '2025-02-01',
-  '2025-04-04',
-  '2025-04-18', '2025-04-19',
-  '2025-04-21',
-  '2025-05-01',
-  '2025-05-05',
-  '2025-05-31',
-  '2025-07-01',
-  '2025-10-01',
-  '2025-10-07',
-  '2025-12-25', '2025-12-26',
-  '2026-01-01',
-  '2026-02-17', '2026-02-18', '2026-02-19',
-  '2026-04-03', '2026-04-04', '2026-04-06',
-  '2026-05-01', '2026-05-25',
-  '2026-07-01',
-  '2026-09-26',
-  '2026-10-01', '2026-10-19',
-  '2026-12-25', '2026-12-26',
-];
-
-const szPublicHolidays2025 = [
-  '2025-01-01',
-  '2025-01-28', '2025-01-29', '2025-01-30', '2025-01-31', '2025-02-01', '2025-02-02', '2025-02-03', '2025-02-04',
-  '2025-04-04', '2025-04-05', '2025-04-06',
-  '2025-05-01', '2025-05-02', '2025-05-03', '2025-05-04', '2025-05-05',
-  '2025-05-31', '2025-06-01', '2025-06-02',
-  '2025-10-01', '2025-10-02', '2025-10-03', '2025-10-04', '2025-10-05', '2025-10-06', '2025-10-07',
-  '2026-01-01', '2026-01-02', '2026-01-03',
-  '2026-02-15', '2026-02-16', '2026-02-17', '2026-02-18', '2026-02-19', '2026-02-20', '2026-02-21', '2026-02-22', '2026-02-23',
-  '2026-04-04', '2026-04-05', '2026-04-06',
-  '2026-05-01', '2026-05-02', '2026-05-03', '2026-05-04', '2026-05-05',
-  '2026-06-19', '2026-06-20', '2026-06-21',
-  '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07',
-];
 
 const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
 
@@ -189,22 +146,13 @@ type PersonalDayData = {
   isOff: boolean;
   hoursByCategory: Record<string, number>;
   totalHours: number;
+  requiredHours: number;
+  fillStatus: 'complete' | 'incomplete' | 'missing';
 };
 
 function isWeekend(dateStr: string): boolean {
   const day = parseDateStr(dateStr).getDay();
   return day === 0 || day === 6;
-}
-
-function isPublicHoliday(dateStr: string, office: OfficeLocation): boolean {
-  const list = office === 'sz' ? szPublicHolidays2025 : hkPublicHolidays2025;
-  return list.includes(dateStr);
-}
-
-function resolveOffice(baseLocation: string | null | undefined, officeLocation?: string | null): OfficeLocation {
-  const raw = `${officeLocation || ''} ${baseLocation || ''}`.toLowerCase();
-  if (raw.includes('sz') || raw.includes('深圳') || raw.includes('shenzhen')) return 'sz';
-  return 'hk';
 }
 
 function formatDayLabel(dateStr: string): string {
@@ -545,7 +493,7 @@ export function TeamDashboard() {
 
       const { data: reportData } = await supabase
         .from('day_reports')
-        .select('id, staff_id, report_date, total_hours, is_leave, leave_type, office_location, is_holiday, is_weekend')
+        .select('id, staff_id, report_date, total_hours, target_hours, is_leave, leave_type')
         .gte('report_date', dateRange.start)
         .lte('report_date', dateRange.end)
         .in('staff_id', allowedStaffIds)
@@ -579,6 +527,7 @@ export function TeamDashboard() {
         ...r,
         report_date: r.report_date ? String(r.report_date).substring(0, 10) : r.report_date,
         total_hours: Number(r.total_hours) || 0,
+        target_hours: Number(r.target_hours) || 0,
       }));
 
       setStaff(staffData);
@@ -758,7 +707,14 @@ export function TeamDashboard() {
   const teamGroups = useMemo(() => {
     const groups = new Map<string, StaffMember[]>();
     const sorted = [...filteredStaff].sort((a, b) => getStaffName(a.id).localeCompare(getStaffName(b.id), 'zh-Hant'));
-    const staffWithReports = new Set(reports.map((r) => r.staff_id));
+    const staffWithCompleteReports = new Set(
+      reports
+        .filter((r) => {
+          const logged = sumEntryHours(entries.filter((e) => e.day_report_id === r.id));
+          return getDayReportCompletionStatus(r, logged) === 'complete';
+        })
+        .map((r) => r.staff_id),
+    );
 
     sorted.forEach((s) => {
       const team = (s.team_name || '').trim() || UNASSIGNED_LABEL;
@@ -769,21 +725,17 @@ export function TeamDashboard() {
     return Array.from(groups.entries()).sort(([a, aMembers], [b, bMembers]) => {
       if (a === UNASSIGNED_LABEL) return 1;
       if (b === UNASSIGNED_LABEL) return -1;
-      const aCount = aMembers.reduce((n, m) => n + (staffWithReports.has(m.id) ? 1 : 0), 0);
-      const bCount = bMembers.reduce((n, m) => n + (staffWithReports.has(m.id) ? 1 : 0), 0);
+      const aCount = aMembers.reduce((n, m) => n + (staffWithCompleteReports.has(m.id) ? 1 : 0), 0);
+      const bCount = bMembers.reduce((n, m) => n + (staffWithCompleteReports.has(m.id) ? 1 : 0), 0);
       if (bCount !== aCount) return bCount - aCount;
       return a.localeCompare(b, 'zh-Hant');
     });
-  }, [filteredStaff, getStaffName, reports]);
+  }, [filteredStaff, getStaffName, reports, entries]);
 
   // Personal: daily breakdown (week = 7 days; month = all days in month)
   const personalDayByDate = useMemo(() => {
     const map = new Map<string, PersonalDayData>();
     if (mode !== 'personal' || !selectedStaffId) return map;
-
-    const person = pickerStaff.find((s) => s.id === selectedStaffId)
-      || staff.find((s) => s.id === selectedStaffId);
-    const office = resolveOffice(person?.base_location);
 
     const dates = periodType === 'week'
       ? weekDates
@@ -791,7 +743,6 @@ export function TeamDashboard() {
 
     dates.forEach((dateStr) => {
       const report = reports.find((r) => r.staff_id === selectedStaffId && r.report_date === dateStr);
-      const dayOffice = resolveOffice(person?.base_location, report?.office_location);
       const hoursByCategory: Record<string, number> = {};
       categories.forEach((c) => { hoursByCategory[c.id] = 0; });
 
@@ -805,8 +756,8 @@ export function TeamDashboard() {
 
       const totalHours = Object.values(hoursByCategory).reduce((s, h) => s + h, 0);
       const isLeave = !!report?.is_leave;
-      const offDay = isWeekend(dateStr) || isPublicHoliday(dateStr, dayOffice) || isPublicHoliday(dateStr, office);
-      const isOff = !isLeave && offDay && totalHours === 0;
+      const isOff = !isLeave && isWeekend(dateStr) && totalHours === 0;
+      const fillStatus = getDayReportCompletionStatus(report, totalHours);
 
       map.set(dateStr, {
         dateStr,
@@ -816,6 +767,8 @@ export function TeamDashboard() {
         isOff,
         hoursByCategory,
         totalHours,
+        requiredHours: report ? Number(report.target_hours) || 0 : 0,
+        fillStatus,
       });
     });
 
@@ -841,7 +794,11 @@ export function TeamDashboard() {
         'bg-white rounded-lg border shadow-sm p-2.5 space-y-2 min-w-0 text-left w-full transition-colors cursor-pointer',
         selected
           ? 'border-teal-500 ring-2 ring-teal-100 bg-teal-50/40'
-          : 'border-[rgba(13,26,45,0.08)] hover:border-teal-300 hover:shadow',
+          : day.fillStatus === 'incomplete'
+            ? 'border-amber-200 hover:border-amber-300 hover:shadow bg-amber-50/20'
+            : day.fillStatus === 'missing' && !day.isOff
+              ? 'border-rose-100 hover:border-rose-200 hover:shadow bg-rose-50/20'
+              : 'border-[rgba(13,26,45,0.08)] hover:border-teal-300 hover:shadow',
       )}
     >
       <div className="space-y-1">
@@ -857,8 +814,24 @@ export function TeamDashboard() {
               放假
             </span>
           )}
+          {day.fillStatus === 'incomplete' && !day.isLeave && (
+            <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
+              未完成
+            </span>
+          )}
+          {day.fillStatus === 'missing' && !day.isOff && !day.isLeave && (
+            <span className="text-[9px] px-1 py-0.5 rounded bg-rose-50 text-rose-500 font-medium">
+              未提交
+            </span>
+          )}
           {!day.isLeave && !day.isOff && (
-            <span className="text-[11px] font-bold text-teal-700 tabular-nums">{day.totalHours}h</span>
+            <span className={cn(
+              'text-[11px] font-bold tabular-nums',
+              day.fillStatus === 'incomplete' ? 'text-amber-700' : day.fillStatus === 'missing' ? 'text-rose-500' : 'text-teal-700',
+            )}>
+              {day.totalHours}h
+              {day.fillStatus === 'incomplete' && day.requiredHours > 0 ? `/${day.requiredHours}h` : ''}
+            </span>
           )}
         </div>
       </div>
@@ -1266,6 +1239,15 @@ export function TeamDashboard() {
                               <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
                                 請假{day.report.leave_type ? ` · ${day.report.leave_type}` : ''}
                               </span>
+                            )}
+                            {day.report && !day.report.is_leave && getDayReportCompletionStatus(
+                              day.report,
+                              day.items.reduce((s, e) => s + (Number(e.hours) || 0), 0),
+                            ) === 'incomplete' && (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">未完成</span>
+                            )}
+                            {!day.report && (
+                              <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-500">未提交</span>
                             )}
                             <span className="font-semibold text-teal-700 tabular-nums">
                               {roundHours(day.items.reduce((s, e) => s + (Number(e.hours) || 0), 0))}h

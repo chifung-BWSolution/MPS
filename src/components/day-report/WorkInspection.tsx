@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Check, ChevronLeft, ChevronRight, Loader2, RefreshCw, Search, Minus,
+  Check, ChevronLeft, ChevronRight, Loader2, RefreshCw, Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -21,13 +21,13 @@ import {
   nextBrandAfterCompanyChange,
   nextTeamAfterScopeChange,
 } from '@/components/day-report/staffOrgFilter';
+import { getDayReportCompletionStatus } from '@/lib/dayReportCompletion';
 
 // ============================
 // Types
 // ============================
 type PeriodType = 'week' | 'month';
-type OfficeLocation = 'hk' | 'sz';
-type DayStatus = 'filled' | 'draft' | 'leave' | 'rest' | 'holiday' | 'missing' | 'future' | 'empty';
+type DayStatus = 'filled' | 'incomplete' | 'leave' | 'rest' | 'missing' | 'future' | 'empty';
 
 interface StaffMember {
   id: string;
@@ -46,53 +46,13 @@ interface DayReportLite {
   report_date: string;
   is_leave: boolean;
   leave_type: string | null;
-  is_holiday: boolean;
-  is_weekend: boolean;
-  office_location: string | null;
   status: string | null;
+  total_hours: number;
+  target_hours: number;
 }
 
 const UNASSIGNED_LABEL = '未分組';
 const WEEKDAY_HEADERS = ['一', '二', '三', '四', '五', '六', '日'];
-
-// ============================
-// Date / Holiday Helpers
-// ============================
-const hkPublicHolidays = [
-  // 2025
-  '2025-01-01',
-  '2025-01-29', '2025-01-30', '2025-01-31', '2025-02-01',
-  '2025-04-04', '2025-04-18', '2025-04-19', '2025-04-21',
-  '2025-05-01', '2025-05-05', '2025-05-31',
-  '2025-07-01', '2025-10-01', '2025-10-07',
-  '2025-12-25', '2025-12-26',
-  // 2026
-  '2026-01-01',
-  '2026-02-17', '2026-02-18', '2026-02-19',
-  '2026-04-03', '2026-04-04', '2026-04-06',
-  '2026-05-01', '2026-05-25',
-  '2026-07-01',
-  '2026-09-26',
-  '2026-10-01', '2026-10-19',
-  '2026-12-25', '2026-12-26',
-];
-
-const szPublicHolidays = [
-  // 2025
-  '2025-01-01',
-  '2025-01-28', '2025-01-29', '2025-01-30', '2025-01-31', '2025-02-01', '2025-02-02', '2025-02-03', '2025-02-04',
-  '2025-04-04', '2025-04-05', '2025-04-06',
-  '2025-05-01', '2025-05-02', '2025-05-03', '2025-05-04', '2025-05-05',
-  '2025-05-31', '2025-06-01', '2025-06-02',
-  '2025-10-01', '2025-10-02', '2025-10-03', '2025-10-04', '2025-10-05', '2025-10-06', '2025-10-07',
-  // 2026
-  '2026-01-01', '2026-01-02', '2026-01-03',
-  '2026-02-15', '2026-02-16', '2026-02-17', '2026-02-18', '2026-02-19', '2026-02-20', '2026-02-21', '2026-02-22', '2026-02-23',
-  '2026-04-04', '2026-04-05', '2026-04-06',
-  '2026-05-01', '2026-05-02', '2026-05-03', '2026-05-04', '2026-05-05',
-  '2026-06-19', '2026-06-20', '2026-06-21',
-  '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07',
-];
 
 function toDateStr(d: Date): string {
   const y = d.getFullYear();
@@ -155,17 +115,6 @@ function isWeekend(dateStr: string): boolean {
   return day === 0 || day === 6;
 }
 
-function isPublicHoliday(dateStr: string, office: OfficeLocation): boolean {
-  const list = office === 'sz' ? szPublicHolidays : hkPublicHolidays;
-  return list.includes(dateStr);
-}
-
-function resolveOffice(baseLocation: string | null | undefined, officeLocation?: string | null): OfficeLocation {
-  const raw = `${officeLocation || ''} ${baseLocation || ''}`.toLowerCase();
-  if (raw.includes('sz') || raw.includes('深圳') || raw.includes('shenzhen')) return 'sz';
-  return 'hk';
-}
-
 function formatPeriodLabel(periodType: PeriodType, anchor: Date): string {
   if (periodType === 'week') {
     const { start, end } = getWeekRange(anchor);
@@ -188,17 +137,18 @@ function leaveShortLabel(leaveType: string | null | undefined): string {
 function resolveDayStatus(
   dateStr: string | null,
   report: DayReportLite | undefined,
-  office: OfficeLocation,
   todayStr: string,
+  entryHoursSum = 0,
 ): DayStatus {
   if (!dateStr) return 'empty';
   if (dateStr > todayStr) return 'future';
   if (report?.is_leave) return 'leave';
-  if (report && !report.is_leave) {
-    return report.status === 'draft' ? 'draft' : 'filled';
+  if (report) {
+    return getDayReportCompletionStatus(report, entryHoursSum) === 'complete'
+      ? 'filled'
+      : 'incomplete';
   }
-  if (report?.is_weekend || isWeekend(dateStr)) return 'rest';
-  if (report?.is_holiday || isPublicHoliday(dateStr, office)) return 'holiday';
+  if (isWeekend(dateStr)) return 'rest';
   return 'missing';
 }
 
@@ -223,10 +173,9 @@ function StatusCell({
       status === 'missing' && 'border-rose-100 bg-rose-50/40',
       status === 'future' && 'border-transparent bg-slate-50/60',
       status === 'filled' && 'border-emerald-100 bg-emerald-50/50',
-      status === 'draft' && 'border-amber-100 bg-amber-50/50',
+      status === 'incomplete' && 'border-amber-100 bg-amber-50/50',
       status === 'leave' && 'border-amber-100 bg-amber-50/50',
       status === 'rest' && 'border-violet-100 bg-violet-50/40',
-      status === 'holiday' && 'border-slate-100 bg-slate-50',
     )}>
       <span className="text-[9px] text-muted-foreground leading-none tabular-nums">{dayNum}</span>
       {status === 'filled' && (
@@ -234,9 +183,9 @@ function StatusCell({
           <Check size={9} strokeWidth={3} />
         </span>
       )}
-      {status === 'draft' && (
+      {status === 'incomplete' && (
         <span className="w-3.5 h-3.5 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
-          暫
+          未
         </span>
       )}
       {status === 'leave' && (
@@ -248,9 +197,6 @@ function StatusCell({
         <span className="w-3.5 h-3.5 rounded-full bg-violet-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
           休
         </span>
-      )}
-      {status === 'holiday' && (
-        <span className="text-slate-400"><Minus size={12} strokeWidth={2.5} /></span>
       )}
       {(status === 'missing' || status === 'future') && (
         <span className="w-3.5 h-3.5" />
@@ -275,6 +221,7 @@ export function WorkInspection() {
   const [selectedTeam, setSelectedTeam] = useState(STAFF_ORG_ALL);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [reports, setReports] = useState<DayReportLite[]>([]);
+  const [entryHoursByReport, setEntryHoursByReport] = useState<Record<string, number>>({});
   const [staffNameById, setStaffNameById] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -347,7 +294,7 @@ export function WorkInspection() {
           const chunk = staffIds.slice(i, i + chunkSize);
           const { data } = await supabase
             .from('day_reports')
-            .select('id, staff_id, report_date, is_leave, leave_type, is_holiday, is_weekend, office_location, status')
+            .select('id, staff_id, report_date, is_leave, leave_type, status, total_hours, target_hours')
             .in('staff_id', chunk)
             .gte('report_date', dateRange.start)
             .lte('report_date', dateRange.end)
@@ -358,18 +305,36 @@ export function WorkInspection() {
                 ...r,
                 report_date: r.report_date ? String(r.report_date).substring(0, 10) : r.report_date,
                 is_leave: !!r.is_leave,
-                is_holiday: !!r.is_holiday,
-                is_weekend: !!r.is_weekend,
                 status: r.status || 'submitted',
+                total_hours: Number(r.total_hours) || 0,
+                target_hours: Number(r.target_hours) || 0,
               })),
             );
           }
         }
       }
 
+      const hoursByReport: Record<string, number> = {};
+      if (reportData.length > 0) {
+        const reportIds = reportData.map((r) => r.id);
+        const chunkSize = 200;
+        for (let i = 0; i < reportIds.length; i += chunkSize) {
+          const idChunk = reportIds.slice(i, i + chunkSize);
+          const { data: entryData } = await supabase
+            .from('day_report_entries')
+            .select('day_report_id, hours')
+            .in('day_report_id', idChunk)
+            .limit(20000);
+          (entryData || []).forEach((e) => {
+            hoursByReport[e.day_report_id] = (hoursByReport[e.day_report_id] || 0) + (Number(e.hours) || 0);
+          });
+        }
+      }
+
       const nameMap = await fetchStaffNameMap(staffIds);
       setStaff(staffData);
       setReports(reportData);
+      setEntryHoursByReport(hoursByReport);
       setStaffNameById(nameMap);
     } catch (err) {
       console.error('[WorkInspection] Failed to fetch:', err);
@@ -406,14 +371,19 @@ export function WorkInspection() {
       || staffId;
   }, [staffNameById, staff]);
 
-  const staffWithReports = useMemo(
-    () => new Set(reports.map((r) => r.staff_id)),
-    [reports],
-  );
+  const staffWithCompleteReports = useMemo(() => {
+    const ids = new Set<string>();
+    reports.forEach((r) => {
+      if (getDayReportCompletionStatus(r, entryHoursByReport[r.id] || 0) === 'complete') {
+        ids.add(r.staff_id);
+      }
+    });
+    return ids;
+  }, [reports, entryHoursByReport]);
 
   const countReportedMembers = useCallback((members: StaffMember[]) => (
-    members.reduce((n, m) => n + (staffWithReports.has(m.id) ? 1 : 0), 0)
-  ), [staffWithReports]);
+    members.reduce((n, m) => n + (staffWithCompleteReports.has(m.id) ? 1 : 0), 0)
+  ), [staffWithCompleteReports]);
 
   const teamOptions = useMemo(() => {
     const scoped = staff.filter((s) => (
@@ -486,22 +456,27 @@ export function WorkInspection() {
     });
   };
 
-  const staffMissingCount = useCallback((member: StaffMember) => {
-    const office = resolveOffice(member.base_location);
+  const staffDayCounts = useCallback((member: StaffMember) => {
     const dates = periodType === 'week'
       ? weekDates
       : monthWeekRows.flatMap((row) => row.filter((d): d is string => !!d));
 
     let missing = 0;
+    let incomplete = 0;
     dates.forEach((dateStr) => {
       if (dateStr > todayStr) return;
       const report = reportByStaffDate.get(`${member.id}__${dateStr}`);
-      const status = resolveDayStatus(dateStr, report, office, todayStr);
-      // Draft is incomplete — still count toward missing for inspection
-      if (status === 'missing' || status === 'draft') missing += 1;
+      const status = resolveDayStatus(
+        dateStr,
+        report,
+        todayStr,
+        report ? (entryHoursByReport[report.id] || 0) : 0,
+      );
+      if (status === 'missing') missing += 1;
+      if (status === 'incomplete') incomplete += 1;
     });
-    return missing;
-  }, [periodType, weekDates, monthWeekRows, reportByStaffDate, todayStr]);
+    return { missing, incomplete };
+  }, [periodType, weekDates, monthWeekRows, reportByStaffDate, entryHoursByReport, todayStr]);
 
   const teamGroups = useMemo(() => {
     const groups = new Map<string, StaffMember[]>();
@@ -520,8 +495,7 @@ export function WorkInspection() {
   }, [filteredStaff, countReportedMembers]);
 
   const renderPersonCard = (member: StaffMember) => {
-    const office = resolveOffice(member.base_location);
-    const missing = staffMissingCount(member);
+    const { missing, incomplete } = staffDayCounts(member);
     const name = getStaffName(member.id);
     const rows: (string | null)[][] = periodType === 'week' ? [weekDates] : monthWeekRows;
 
@@ -542,10 +516,19 @@ export function WorkInspection() {
               </p>
             </div>
           </div>
-          {missing > 0 ? (
-            <span className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded shrink-0">
-              缺 {missing}
-            </span>
+          {missing > 0 || incomplete > 0 ? (
+            <div className="flex items-center gap-1 shrink-0">
+              {missing > 0 && (
+                <span className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded">
+                  缺 {missing}
+                </span>
+              )}
+              {incomplete > 0 && (
+                <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded">
+                  未齊 {incomplete}
+                </span>
+              )}
+            </div>
           ) : (
             <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded shrink-0">
               齊全
@@ -571,8 +554,12 @@ export function WorkInspection() {
                 const report = dateStr
                   ? reportByStaffDate.get(`${member.id}__${dateStr}`)
                   : undefined;
-                const dayOffice = resolveOffice(member.base_location, report?.office_location);
-                const status = resolveDayStatus(dateStr, report, dayOffice || office, todayStr);
+                const status = resolveDayStatus(
+                  dateStr,
+                  report,
+                  todayStr,
+                  report ? (entryHoursByReport[report.id] || 0) : 0,
+                );
                 return (
                   <StatusCell
                     key={key}
@@ -685,8 +672,8 @@ export function WorkInspection() {
           已填
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="w-3.5 h-3.5 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center">暫</span>
-          暫存
+          <span className="w-3.5 h-3.5 rounded-full bg-amber-500 text-white text-[8px] font-bold flex items-center justify-center">未</span>
+          未完成
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="w-3.5 h-3.5 rounded-full bg-amber-600 text-white text-[8px] font-bold flex items-center justify-center">假</span>
@@ -695,10 +682,6 @@ export function WorkInspection() {
         <span className="inline-flex items-center gap-1.5">
           <span className="w-3.5 h-3.5 rounded-full bg-violet-500 text-white text-[8px] font-bold flex items-center justify-center">休</span>
           休
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <Minus size={12} className="text-slate-400" />
-          假日 / 公眾假
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="w-3.5 h-3.5 rounded border border-rose-100 bg-rose-50/40" />

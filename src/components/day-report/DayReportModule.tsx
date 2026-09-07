@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Plus, Check, X, AlertTriangle, ChevronLeft, ChevronRight, Link, Sparkles, Clock, Users, BarChart3, Calendar, FileText, Zap, Bot, Trash2, RefreshCw, Eye, MapPin, CalendarDays, Loader2, Shield, Upload, Image as ImageIcon } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { AlertTriangle, ChevronLeft, ChevronRight, Link, Sparkles, Users, BarChart3, Calendar, FileText, Bot, Eye, Loader2, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -7,12 +7,7 @@ import { Calendar as DayPickerCalendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   addCalendarDays,
-  clampLaterWeekSunday,
-  formatCompactWeekLabel,
-  formatWeekRangeLabel,
-  getTwoWeekWindow,
   parseLocalDateStr as parseWeekDateStr,
-  startOfWeekSunday,
   toLocalDateStr,
 } from '@/lib/sundayWeek';
 import {
@@ -21,30 +16,16 @@ import {
   categoryConfig,
   outcomeTypeConfigV2,
   getTopProjectsByHoursV2,
-  WorkCategory,
-  OutcomeType,
-  AITool,
 } from '@/data/dayReportDataV2';
-import { WorkCategoriesManager, defaultCategoryRelationMap, isRelationRequired, type CategoryRelationType } from '@/components/day-report/WorkCategoriesManager';
-import { HolidaySettings } from '@/components/day-report/HolidaySettings';
+import { WorkCategoriesManager } from '@/components/day-report/WorkCategoriesManager';
+import { SubmitReportPage } from '@/components/day-report/SubmitReportPage';
 import { TeamDashboard } from '@/components/day-report/TeamDashboard';
 import { ProjectAnalysis } from '@/components/day-report/ProjectAnalysis';
-import { SearchableProjectSelect } from '@/components/day-report/SearchableProjectSelect';
-import { useDayReportTypes } from '@/hooks/useDayReportTypes';
 import { useCategoryLookup } from '@/hooks/useCategoryLookup';
-import { useProjects, type ProjectRelatedType } from '@/hooks/useProjects';
-import type { ProjectSelectItem } from '@/lib/searchableProjectSelect';
-import { usePendingReportItems } from '@/hooks/usePendingReportItems';
 import {
-  consumePendingItems,
-  dismissPendingItem,
   isPlaceholderStaff,
-  isStaffUuid,
   localDateString,
-  mergePendingIntoReportEntries,
-  remapStaleStaffUuid,
   resolveStaffUuid,
-  type ReportFormEntry,
 } from '@/services/reportLinkService';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
 import { fetchUserStaffIds, filterStaffInUsers } from '@/components/day-report/userStaffLookup';
@@ -67,2151 +48,7 @@ import {
   nextBrandAfterCompanyChange,
   nextTeamAfterScopeChange,
 } from '@/components/day-report/staffOrgFilter';
-
-// ============================
-// Office Location & Holiday Config
-// ============================
-type OfficeLocation = 'hk' | 'sz';
-type HoursPreset = 'full' | 'half' | 'custom' | 'off';
-
-function officeFromBaseLocation(baseLocation: string | null | undefined): OfficeLocation {
-  const raw = (baseLocation || '').toLowerCase();
-  if (raw.includes('sz') || raw.includes('深圳') || raw.includes('shenzhen')) return 'sz';
-  return 'hk';
-}
-
-function getFullDayHours(office: OfficeLocation): number {
-  return office === 'sz' ? 7.5 : 8;
-}
-
-function inferHoursPreset(hours: number, office: OfficeLocation): HoursPreset {
-  const full = getFullDayHours(office);
-  if (hours === 0) return 'off';
-  if (hours === 4) return 'half';
-  if (hours === full) return 'full';
-  return 'custom';
-}
-
-// HK Public Holidays (must stay in sync with WorkInspection)
-const hkPublicHolidays2025 = [
-  '2025-01-01', // New Year
-  '2025-01-29', '2025-01-30', '2025-01-31', '2025-02-01', // CNY
-  '2025-04-04', // Ching Ming
-  '2025-04-18', '2025-04-19', // Good Friday + Saturday
-  '2025-04-21', // Easter Monday
-  '2025-05-01', // Labour Day
-  '2025-05-05', // Buddha's Birthday
-  '2025-05-31', // Tuen Ng
-  '2025-07-01', // HKSAR Day
-  '2025-10-01', // National Day
-  '2025-10-07', // Chung Yeung
-  '2025-12-25', '2025-12-26', // Christmas
-  // 2026
-  '2026-01-01',
-  '2026-02-17', '2026-02-18', '2026-02-19',
-  '2026-04-03', '2026-04-04', '2026-04-06',
-  '2026-05-01', '2026-05-25',
-  '2026-07-01',
-  '2026-09-26',
-  '2026-10-01', '2026-10-19',
-  '2026-12-25', '2026-12-26',
-];
-
-// Shenzhen/China Public Holidays (must stay in sync with WorkInspection)
-const szPublicHolidays2025 = [
-  '2025-01-01', // New Year
-  '2025-01-28', '2025-01-29', '2025-01-30', '2025-01-31', '2025-02-01', '2025-02-02', '2025-02-03', '2025-02-04', // CNY extended
-  '2025-04-04', '2025-04-05', '2025-04-06', // Qingming
-  '2025-05-01', '2025-05-02', '2025-05-03', '2025-05-04', '2025-05-05', // Labour Day extended
-  '2025-05-31', '2025-06-01', '2025-06-02', // Dragon Boat
-  '2025-10-01', '2025-10-02', '2025-10-03', '2025-10-04', '2025-10-05', '2025-10-06', '2025-10-07', // National Day
-  // 2026
-  '2026-01-01', '2026-01-02', '2026-01-03',
-  '2026-02-15', '2026-02-16', '2026-02-17', '2026-02-18', '2026-02-19', '2026-02-20', '2026-02-21', '2026-02-22', '2026-02-23',
-  '2026-04-04', '2026-04-05', '2026-04-06',
-  '2026-05-01', '2026-05-02', '2026-05-03', '2026-05-04', '2026-05-05',
-  '2026-06-19', '2026-06-20', '2026-06-21',
-  '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07',
-];
-
-function getPublicHolidays(office: OfficeLocation): string[] {
-  return office === 'hk' ? hkPublicHolidays2025 : szPublicHolidays2025;
-}
-
-function isPublicHoliday(dateStr: string, office: OfficeLocation): boolean {
-  return getPublicHolidays(office).includes(dateStr);
-}
-
-function parseLocalDateStr(dateStr: string): Date {
-  return parseWeekDateStr(dateStr);
-}
-
-function isWeekend(dateStr: string): boolean {
-  const day = parseLocalDateStr(dateStr).getDay();
-  return day === 0 || day === 6;
-}
-
-function isSaturday(dateStr: string): boolean {
-  return parseLocalDateStr(dateStr).getDay() === 6;
-}
-
-function formatDateShort(dateStr: string): string {
-  const d = parseLocalDateStr(dateStr);
-  const days = ['日', '一', '二', '三', '四', '五', '六'];
-  return `${d.getMonth() + 1}/${d.getDate()} (${days[d.getDay()]})`;
-}
-
-function formatDateFull(dateStr: string): string {
-  return parseLocalDateStr(dateStr).toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' });
-}
-
-function getDateRange(startDate: string, endDate: string): string[] {
-  const dates: string[] = [];
-  const current = new Date(startDate);
-  const end = new Date(endDate);
-  while (current <= end) {
-    dates.push(current.toISOString().split('T')[0]);
-    current.setDate(current.getDate() + 1);
-  }
-  return dates;
-}
-
-// ============================
-// Submit Report Page (Redesigned)
-// ============================
-type AiToolsSelection = {
-  copywriting: string[];
-  copywritingOther: string;
-  image: string[];
-  imageOther: string;
-  video: string[];
-  videoOther: string;
-};
-
-const EMPTY_AI_TOOLS: AiToolsSelection = {
-  copywriting: [],
-  copywritingOther: '',
-  image: [],
-  imageOther: '',
-  video: [],
-  videoOther: '',
-};
-
-function createBlankReportEntry(): ReportFormEntry {
-  return {
-    category: '',
-    relatedId: '',
-    relatedName: '',
-    title: '',
-    hours: 0,
-    outcomeType: '',
-    outcomeUrl: '',
-    outcomeImages: [],
-    outcomeImageFiles: [],
-    growthExperience: '',
-    isAiAssisted: false,
-    aiTools: [],
-    aiToolsV2: { ...EMPTY_AI_TOOLS },
-  };
-}
-
-function SubmitReportPage() {
-  const { projects: masterProjects } = useProjects({ activeOnly: true });
-  const { types: dynamicTypes } = useDayReportTypes();
-  const categoryLookup = useCategoryLookup();
-  const [office, setOffice] = useState<OfficeLocation>('hk');
-  
-  // Date selection — week grid is current + previous Sun–Sat weeks
-  const [selectedDate, setSelectedDate] = useState<string>(() => toLocalDateStr(new Date()));
-  const [laterWeekSunday, setLaterWeekSunday] = useState<string>(() =>
-    toLocalDateStr(startOfWeekSunday(new Date())),
-  );
-  const [weekPickerOpen, setWeekPickerOpen] = useState(false);
-  
-  // AI Tools category structure — use module-level EMPTY_AI_TOOLS for stable refs
-  const emptyAiTools = EMPTY_AI_TOOLS;
-
-  const { systemUser } = useAuth();
-
-  // Work entries
-  const [entries, setEntries] = useState<ReportFormEntry[]>([createBlankReportEntry()]);
-  const imageInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
-
-  const [targetHours, setTargetHours] = useState<number>(8);
-  const [hoursPreset, setHoursPreset] = useState<HoursPreset>('full');
-  const [underHoursReason, setUnderHoursReason] = useState('');
-  const fullDayHours = getFullDayHours(office);
-
-  const applyHoursPreset = useCallback((preset: HoursPreset, officeLoc: OfficeLocation = office) => {
-    setHoursPreset(preset);
-    if (preset === 'full') setTargetHours(getFullDayHours(officeLoc));
-    else if (preset === 'half') setTargetHours(4);
-    else if (preset === 'off') setTargetHours(0);
-    else if (preset === 'custom') {
-      setTargetHours((prev) => {
-        if (prev === 0 || prev === 4 || prev === getFullDayHours(officeLoc)) {
-          return getFullDayHours(officeLoc);
-        }
-        return prev;
-      });
-    }
-  }, [office]);
-
-  const switchOffice = useCallback((next: OfficeLocation) => {
-    setOffice(next);
-    if (hoursPreset === 'full') {
-      setTargetHours(getFullDayHours(next));
-    }
-  }, [hoursPreset]);
-  const [isPulling, setIsPulling] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [tempSaved, setTempSaved] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isTempSaving, setIsTempSaving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [existingReportId, setExistingReportId] = useState<string | null>(null);
-  const [existingReportStatus, setExistingReportStatus] = useState<string | null>(null);
-  // Start as `true` so the draft-hydrated gate stays closed until
-  // loadExistingReport has actually finished (its setIsLoadingExisting(true)
-  // happens inside an async function and would otherwise miss the first
-  // commit, letting the persist effect wipe localStorage before restore).
-  const [isLoadingExisting, setIsLoadingExisting] = useState(true);
-  const isUpdateMode = !!existingReportId;
-  const isDraftReport = existingReportStatus === 'draft';
-
-  const getRelatedItemsForRelation = useCallback((relationType: CategoryRelationType | undefined): ProjectSelectItem[] => {
-    if (!relationType || relationType === 'none') return [];
-    if (relationType === 'optional') {
-      return masterProjects.map(p => ({
-        id: p.id,
-        name: p.name,
-        relatedType: p.relatedType,
-      }));
-    }
-    if (relationType === 'webandsystem' || relationType === 'quotation_client' || relationType === 'vchannel') {
-      return masterProjects
-        .filter(p => p.relatedType === (relationType as ProjectRelatedType))
-        .map(p => ({ id: p.id, name: p.name, relatedType: p.relatedType }));
-    }
-    return [];
-  }, [masterProjects]);
-
-  // Current staff — derived from the authenticated user resolved above
-  const [currentStaffId, setCurrentStaffId] = useState<string | null>(null);
-  const [currentStaffName, setCurrentStaffName] = useState<string>('');
-  const [staffIdResolved, setStaffIdResolved] = useState(false);
-  const { count: pendingCount, refresh: refreshPendingCount } = usePendingReportItems(currentStaffId, selectedDate);
-
-  const applyPendingMerge = useCallback(async (baseEntries: ReportFormEntry[]) => {
-    if (!currentStaffId) return baseEntries;
-    try {
-      const { entries: merged } = await mergePendingIntoReportEntries(
-        currentStaffId,
-        selectedDate,
-        baseEntries,
-        EMPTY_AI_TOOLS,
-        createBlankReportEntry,
-      );
-      return merged;
-    } catch (err) {
-      console.warn('[SubmitReport] pending merge failed:', err);
-      return baseEntries;
-    }
-  }, [currentStaffId, selectedDate]);
-
-  // Database reports for the visible two-week window (to show reported status)
-  const [dbReports, setDbReports] = useState<Array<{ report_date: string; total_hours: number; status: string }>>([]);
-  const [isLoadingDbReports, setIsLoadingDbReports] = useState(true);
-
-  const todayStr = toLocalDateStr(new Date());
-  const currentWeekSunday = toLocalDateStr(startOfWeekSunday(new Date()));
-  const weekWindow = useMemo(
-    () => getTwoWeekWindow(parseLocalDateStr(laterWeekSunday)),
-    [laterWeekSunday],
-  );
-  const isCurrentWeekWindow = laterWeekSunday === currentWeekSunday;
-
-  // Set current staff from authenticated user (staffs.id uuid). Falls back to email/bubble lookup.
-  useEffect(() => {
-    let aborted = false;
-    async function resolveStaffId() {
-      if (!systemUser) {
-        if (!aborted) setStaffIdResolved(false);
-        return;
-      }
-      setCurrentStaffName(systemUser.display_name);
-      const realId = await resolveStaffUuid(systemUser);
-      if (aborted) return;
-      console.log('[SubmitReport] resolved staff_id:', realId);
-      setCurrentStaffId(realId);
-      setStaffIdResolved(true);
-    }
-    resolveStaffId();
-    return () => { aborted = true; };
-  }, [systemUser]);
-
-  // Fetch office from staffs.base_location (users.staff_id), never bubble_staff_id / work_email
-  useEffect(() => {
-    async function initOfficeFromProfile() {
-      const staffId = remapStaleStaffUuid(systemUser?.staff_id);
-      if (!isStaffUuid(staffId)) return;
-      try {
-        const { data: staffRow, error } = await supabase
-          .from('staffs')
-          .select('base_location')
-          .eq('id', staffId)
-          .maybeSingle();
-
-        if (error) {
-          console.error('[SubmitReport] Error fetching staff base_location:', error);
-          // Fallback to HK defaults
-          setOffice('hk');
-          applyHoursPreset('full', 'hk');
-          return;
-        }
-
-        const derived = officeFromBaseLocation(staffRow?.base_location);
-        console.log('[SubmitReport] Staff office from base_location:', staffRow?.base_location, '→', derived);
-        setOffice(derived);
-        applyHoursPreset('full', derived);
-      } catch (err) {
-        console.error('[SubmitReport] Exception fetching staff base_location:', err);
-        // Graceful fallback
-        setOffice('hk');
-        applyHoursPreset('full', 'hk');
-      }
-    }
-
-    initOfficeFromProfile();
-  }, [systemUser?.staff_id]);
-
-  // Load existing day_reports for this staff in the visible two-week window
-  const loadDbReports = useCallback(async () => {
-    if (!currentStaffId) {
-      setIsLoadingDbReports(false);
-      return;
-    }
-    setIsLoadingDbReports(true);
-    try {
-      const startStr = weekWindow.windowStart;
-      const endStr = weekWindow.windowEnd;
-
-      console.log('[SubmitReport] Loading dbReports for staff:', currentStaffId, 'range:', startStr, '->', endStr);
-
-      const { data, error } = await supabase
-        .from('day_reports')
-        .select('report_date, total_hours, status')
-        .eq('staff_id', currentStaffId)
-        .gte('report_date', startStr)
-        .lte('report_date', endStr);
-
-      if (error) {
-        console.error('[SubmitReport] Error loading dbReports:', error);
-      }
-
-      if (data) {
-        // Normalize report_date to YYYY-MM-DD format and total_hours to number
-        const normalized = data.map(r => ({
-          ...r,
-          report_date: r.report_date ? r.report_date.substring(0, 10) : r.report_date,
-          total_hours: Number(r.total_hours) || 0,
-        }));
-        console.log('[SubmitReport] Loaded dbReports:', normalized.length, 'records', normalized);
-        setDbReports(normalized);
-      } else {
-        setDbReports([]);
-      }
-    } catch (err) {
-      console.error('[SubmitReport] Exception loading dbReports:', err);
-    } finally {
-      setIsLoadingDbReports(false);
-    }
-  }, [currentStaffId, weekWindow.windowStart, weekWindow.windowEnd]);
-
-  useEffect(() => {
-    loadDbReports();
-  }, [loadDbReports]);
-
-  // Load existing report & entries when selectedDate changes (for edit/update mode)
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadExistingReport() {
-      if (!currentStaffId) {
-        setExistingReportId(null);
-        setExistingReportStatus(null);
-        if (!staffIdResolved) return;
-        setIsLoadingExisting(false);
-        return;
-      }
-      setIsLoadingExisting(true);
-      try {
-        console.log('[SubmitReport] Loading existing report for date:', selectedDate, 'staff:', currentStaffId);
-
-        // Check if a report exists for this date
-        const { data: reportData, error: reportError } = await supabase
-          .from('day_reports')
-          .select('id, total_hours, target_hours, office_location, under_hours_reason, status')
-          .eq('staff_id', currentStaffId)
-          .eq('report_date', selectedDate)
-          .maybeSingle();
-
-        if (cancelled) return;
-
-        if (reportError) {
-          console.error('[SubmitReport] Error querying existing report:', reportError);
-        }
-
-        if (reportData) {
-          console.log('[SubmitReport] Found existing report:', reportData.id, 'hours:', reportData.total_hours, 'status:', reportData.status);
-          setExistingReportId(reportData.id);
-          setExistingReportStatus(reportData.status || 'submitted');
-          const loadedOffice = (reportData.office_location as OfficeLocation) || office;
-          if (reportData.office_location) setOffice(loadedOffice);
-          if (reportData.target_hours != null) {
-            const hours = Number(reportData.target_hours);
-            setTargetHours(hours);
-            setHoursPreset(inferHoursPreset(hours, loadedOffice));
-          }
-          if (reportData.under_hours_reason) {
-            setUnderHoursReason(reportData.under_hours_reason);
-          } else {
-            setUnderHoursReason('');
-          }
-
-          // Load the entries for this report
-          const { data: entriesData, error: entriesError } = await supabase
-            .from('day_report_entries')
-            .select('*')
-            .eq('day_report_id', reportData.id)
-            .order('sort_order', { ascending: true });
-
-          if (cancelled) return;
-
-          if (entriesError) {
-            console.error('[SubmitReport] Error loading entries:', entriesError);
-          }
-
-          if (entriesData && entriesData.length > 0) {
-            console.log('[SubmitReport] Loaded', entriesData.length, 'entries for report');
-            const loadedEntries = entriesData.map((e: any) => {
-              const category = (e.category || '') as WorkCategory | '';
-              // Only strip related_* when we positively know relation_type is none.
-              // If dynamicTypes has not loaded yet for a custom category, keep DB values.
-              const knownRelation = category
-                ? (dynamicTypes.find(t => t.id === category)?.relationType
-                  ?? defaultCategoryRelationMap[category as WorkCategory])
-                : undefined;
-              const dropRelation = knownRelation === 'none';
-              return {
-                category,
-                relatedId: dropRelation ? '' : (e.related_id || ''),
-                relatedName: dropRelation ? '' : (e.related_name || ''),
-                title: e.title || '',
-                hours: Number(e.hours) || 0,
-                outcomeType: (e.outcome_type || '') as OutcomeType | '',
-                outcomeUrl: e.outcome_url || '',
-                outcomeImages: e.outcome_images || [],
-                outcomeImageFiles: [] as File[],
-                growthExperience: e.growth_experience || '',
-                isAiAssisted: e.is_ai_assisted || false,
-                aiTools: (e.ai_tools || []) as AITool[],
-                aiToolsV2: (e.ai_tools_v2 || { ...emptyAiTools }) as AiToolsSelection,
-              };
-            });
-            const mergedEntries = await applyPendingMerge(loadedEntries);
-            if (!cancelled) setEntries(mergedEntries);
-          } else {
-            const mergedEntries = await applyPendingMerge([createBlankReportEntry()]);
-            if (!cancelled) setEntries(mergedEntries);
-          }
-        } else {
-          // No existing report — restore from localStorage draft if present,
-          // otherwise reset to blank. We do this here (not just in the
-          // separate restore effect) because loadExistingReport runs async
-          // and would otherwise overwrite a freshly-restored draft.
-          console.log('[SubmitReport] No existing report for date:', selectedDate);
-          setExistingReportId(null);
-          setExistingReportStatus(null);
-          const draftKey = `mps:day-report-draft:${currentStaffId}:${selectedDate}`;
-          let draftRestored = false;
-          let restoredEntries: ReportFormEntry[] | null = null;
-          try {
-            const raw = localStorage.getItem(draftKey);
-            if (raw) {
-              const draft = JSON.parse(raw) as {
-                entries?: ReportFormEntry[];
-                targetHours?: number;
-                hoursPreset?: HoursPreset;
-                underHoursReason?: string;
-                office?: OfficeLocation;
-              };
-              if (draft.entries && draft.entries.length > 0) {
-                restoredEntries = draft.entries;
-                draftRestored = true;
-              }
-              const draftOffice = draft.office || office;
-              if (draft.office) setOffice(draft.office);
-              if (typeof draft.targetHours === 'number') {
-                setTargetHours(draft.targetHours);
-                setHoursPreset(
-                  draft.hoursPreset && ['full', 'half', 'custom', 'off'].includes(draft.hoursPreset)
-                    ? draft.hoursPreset
-                    : inferHoursPreset(draft.targetHours, draftOffice),
-                );
-              } else {
-                applyHoursPreset('full', draftOffice);
-              }
-              setUnderHoursReason(typeof draft.underHoursReason === 'string' ? draft.underHoursReason : '');
-            }
-          } catch (err) {
-            console.warn('[SubmitReport] failed to restore draft inside loadExistingReport:', err);
-          }
-          if (!draftRestored) {
-            setUnderHoursReason('');
-            applyHoursPreset('full', office);
-          }
-          const baseEntries = restoredEntries && restoredEntries.length > 0
-            ? restoredEntries
-            : [createBlankReportEntry()];
-          const mergedEntries = await applyPendingMerge(baseEntries);
-          if (!cancelled) setEntries(mergedEntries);
-        }
-      } catch (err) {
-        console.error('[SubmitReport] Error loading existing report:', err);
-        if (!cancelled) {
-          setExistingReportId(null);
-          setExistingReportStatus(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoadingExisting(false);
-          refreshPendingCount();
-        }
-      }
-    }
-    loadExistingReport();
-
-    return () => { cancelled = true; };
-  }, [selectedDate, currentStaffId, staffIdResolved, applyPendingMerge]);
-
-  // ---- Draft persistence (localStorage) -----------------------------------
-  // Keep unsubmitted edits across reloads / page navigation. Draft is keyed
-  // per (staff, date) and cleared automatically once the form submits.
-  const draftStorageKey = useMemo(
-    () => (currentStaffId ? `mps:day-report-draft:${currentStaffId}:${selectedDate}` : null),
-    [currentStaffId, selectedDate],
-  );
-
-  // Persist only after loadExistingReport has finished for THIS (staff, date)
-  // key. Comparing keys (not a boolean) avoids the date-switch race where
-  // persist still thought the previous date was hydrated and deleted the
-  // destination draft.
-  const [hydratedDraftKey, setHydratedDraftKey] = useState<string | null>(null);
-  useEffect(() => {
-    if (!draftStorageKey || isLoadingExisting) return;
-    setHydratedDraftKey(draftStorageKey);
-  }, [draftStorageKey, isLoadingExisting]);
-
-  // Persist draft as the user edits. Skip if a saved report exists.
-  useEffect(() => {
-    if (!draftStorageKey || hydratedDraftKey !== draftStorageKey || existingReportId) return;
-    const hasContent = entries.some(e => e.category || e.title || e.hours > 0 || e.relatedName)
-      || underHoursReason.length > 0
-      || hoursPreset !== 'full'
-      || targetHours !== fullDayHours;
-    try {
-      if (hasContent) {
-        localStorage.setItem(
-          draftStorageKey,
-          JSON.stringify({ entries, targetHours, hoursPreset, underHoursReason, office }),
-        );
-      } else {
-        localStorage.removeItem(draftStorageKey);
-      }
-    } catch (err) {
-      console.warn('[SubmitReport] failed to persist draft:', err);
-    }
-  }, [draftStorageKey, hydratedDraftKey, existingReportId, entries, targetHours, hoursPreset, underHoursReason, office, fullDayHours]);
-
-  type WeekDateCard = {
-    date: string;
-    label: string;
-    isToday: boolean;
-    isFuture: boolean;
-    isHoliday: boolean;
-    isSat: boolean;
-    isSun: boolean;
-    reported: boolean;
-    reportedHours: number;
-    reportStatus: string;
-  };
-
-  const buildWeekDateCard = useCallback((dateStr: string): WeekDateCard => {
-    const d = parseLocalDateStr(dateStr);
-    const dbReport = dbReports.find(r => {
-      const rDate = r.report_date ? r.report_date.substring(0, 10) : '';
-      return rDate === dateStr;
-    });
-    return {
-      date: dateStr,
-      label: formatDateShort(dateStr),
-      isToday: dateStr === todayStr,
-      isFuture: dateStr > todayStr,
-      isHoliday: isPublicHoliday(dateStr, office),
-      isSat: isSaturday(dateStr),
-      isSun: d.getDay() === 0,
-      reported: !!dbReport,
-      reportedHours: dbReport ? Number(dbReport.total_hours) || 0 : 0,
-      reportStatus: dbReport?.status || '',
-    };
-  }, [dbReports, office, todayStr]);
-
-  const laterWeekDates = useMemo(
-    () => weekWindow.later.dates.map(buildWeekDateCard),
-    [weekWindow.later.dates, buildWeekDateCard],
-  );
-  const earlierWeekDates = useMemo(
-    () => weekWindow.earlier.dates.map(buildWeekDateCard),
-    [weekWindow.earlier.dates, buildWeekDateCard],
-  );
-  const availableDates = useMemo(
-    () => [...earlierWeekDates, ...laterWeekDates],
-    [laterWeekDates, earlierWeekDates],
-  );
-
-  const weekPickerRange = useMemo(() => ({
-    from: parseLocalDateStr(weekWindow.windowStart),
-    to: parseLocalDateStr(weekWindow.windowEnd),
-  }), [weekWindow.windowStart, weekWindow.windowEnd]);
-
-  const shiftWeekWindow = useCallback((dir: -1 | 1) => {
-    const nextSunday = addCalendarDays(parseLocalDateStr(laterWeekSunday), dir * 7);
-    const clamped = clampLaterWeekSunday(nextSunday);
-    setLaterWeekSunday(toLocalDateStr(clamped));
-  }, [laterWeekSunday]);
-
-  const resetToCurrentWeeks = useCallback(() => {
-    setLaterWeekSunday(currentWeekSunday);
-    setWeekPickerOpen(false);
-  }, [currentWeekSunday]);
-
-  const applyWeekFromDate = useCallback((date: Date) => {
-    const sunday = clampLaterWeekSunday(startOfWeekSunday(date));
-    setLaterWeekSunday(toLocalDateStr(sunday));
-    setWeekPickerOpen(false);
-  }, []);
-
-  // Recent frequent items from the user's real past reports (for quick selection).
-  // Aggregates day_report_entries by related_id + category over the last ~90 days,
-  // then resolves display names from projects.name (never related_name).
-  // Categories with relation_type=none have no linked system — always show "N/A".
-  type FrequentItem = {
-    relatedId: string;
-    relatedName: string;
-    category: WorkCategory;
-    count: number;
-    lastUsed: string;
-    totalHours: number;
-  };
-  const [recentFrequentItems, setRecentFrequentItems] = useState<FrequentItem[]>([]);
-
-  const resolveRelationType = useCallback((category: string): CategoryRelationType => {
-    const dyn = dynamicTypes.find(t => t.id === category);
-    if (dyn?.relationType) return dyn.relationType;
-    return defaultCategoryRelationMap[category as WorkCategory] ?? 'none';
-  }, [dynamicTypes]);
-
-  const loadRecentFrequentItems = useCallback(async () => {
-    if (!currentStaffId) {
-      setRecentFrequentItems([]);
-      return;
-    }
-    try {
-      const today = new Date();
-      const start = new Date(today);
-      start.setDate(start.getDate() - 89);
-      const toLocalDateStr = (d: Date) =>
-        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-      // Prefer non-leave reports in the lookback window so leave days don't
-      // dilute recommendations. Fall back to entries-by-staff if the join path fails.
-      const { data: reports, error: reportErr } = await supabase
-        .from('day_reports')
-        .select('id')
-        .eq('staff_id', currentStaffId)
-        .eq('is_leave', false)
-        .gte('report_date', toLocalDateStr(start))
-        .lte('report_date', toLocalDateStr(today));
-
-      if (reportErr) {
-        console.warn('[SubmitReport] load frequent reports failed:', reportErr.message);
-      }
-
-      type EntryRow = {
-        related_id: string | null;
-        category: string;
-        hours: number | null;
-        created_at: string | null;
-      };
-      let entryRows: EntryRow[] = [];
-
-      if (reports && reports.length > 0) {
-        const reportIds = reports.map(r => r.id);
-        const chunkSize = 200;
-        for (let i = 0; i < reportIds.length; i += chunkSize) {
-          const chunk = reportIds.slice(i, i + chunkSize);
-          const { data, error } = await supabase
-            .from('day_report_entries')
-            .select('related_id, category, hours, created_at')
-            .in('day_report_id', chunk);
-          if (error) {
-            console.warn('[SubmitReport] load frequent entries failed:', error.message);
-            continue;
-          }
-          if (data) entryRows = entryRows.concat(data as EntryRow[]);
-        }
-      } else if (!reportErr) {
-        // No reports in window — keep empty recommendations.
-        entryRows = [];
-      } else {
-        // Report query failed; fall back to recent entries by staff_id.
-        const { data, error } = await supabase
-          .from('day_report_entries')
-          .select('related_id, category, hours, created_at')
-          .eq('staff_id', currentStaffId)
-          .order('created_at', { ascending: false })
-          .limit(300);
-        if (error) {
-          console.warn('[SubmitReport] frequent entries fallback failed:', error.message);
-          setRecentFrequentItems([]);
-          return;
-        }
-        entryRows = (data || []) as EntryRow[];
-      }
-
-      // Only resolve names for categories that actually link to a system/project.
-      // Stale related_id on relation_type=none entries must be ignored (see N/A below).
-      const relatedIds = Array.from(
-        new Set(
-          entryRows
-            .filter(e => {
-              const category = (e.category || '').trim();
-              return !!category && resolveRelationType(category) !== 'none';
-            })
-            .map(e => (e.related_id || '').trim())
-            .filter(Boolean),
-        ),
-      );
-
-      // Latest canonical names from projects master — never use denormalized related_name.
-      const projectNameById = new Map<string, string>();
-      if (relatedIds.length > 0) {
-        const chunkSize = 200;
-        for (let i = 0; i < relatedIds.length; i += chunkSize) {
-          const chunk = relatedIds.slice(i, i + chunkSize);
-          const { data: projectRows, error: projectErr } = await supabase
-            .from('projects')
-            .select('id, name')
-            .in('id', chunk);
-          if (projectErr) {
-            console.warn('[SubmitReport] load project names failed:', projectErr.message);
-          } else {
-            (projectRows || []).forEach(row => {
-              const name = ((row.name as string) || '').trim();
-              if (row.id && name) projectNameById.set(row.id as string, name);
-            });
-          }
-        }
-      }
-
-      const itemMap: Record<string, FrequentItem> = {};
-      entryRows.forEach(entry => {
-        const category = (entry.category || '') as WorkCategory;
-        if (!category) return;
-
-        const relationType = resolveRelationType(category);
-        const hours = Number(entry.hours) || 0;
-        const createdAt = entry.created_at || '';
-
-        // relation_type=none: no linked project — aggregate by category only, show N/A.
-        // Ignore any leftover related_id from when the user switched categories before save.
-        if (relationType === 'none') {
-          const key = `__none__${category}`;
-          if (!itemMap[key]) {
-            itemMap[key] = {
-              relatedId: '',
-              relatedName: 'N/A',
-              category,
-              count: 0,
-              lastUsed: createdAt,
-              totalHours: 0,
-            };
-          }
-          itemMap[key].count += 1;
-          itemMap[key].totalHours += hours;
-          itemMap[key].relatedName = 'N/A';
-          if (createdAt && createdAt > itemMap[key].lastUsed) {
-            itemMap[key].lastUsed = createdAt;
-          }
-          return;
-        }
-
-        // optional with no project selected: allow category-only quick add
-        const relatedId = (entry.related_id || '').trim();
-        if (!relatedId) {
-          if (relationType !== 'optional') return;
-          const key = `__optional_empty__${category}`;
-          if (!itemMap[key]) {
-            itemMap[key] = {
-              relatedId: '',
-              relatedName: '（未選項目）',
-              category,
-              count: 0,
-              lastUsed: createdAt,
-              totalHours: 0,
-            };
-          }
-          itemMap[key].count += 1;
-          itemMap[key].totalHours += hours;
-          if (createdAt && createdAt > itemMap[key].lastUsed) {
-            itemMap[key].lastUsed = createdAt;
-          }
-          return;
-        }
-        const relatedName = projectNameById.get(relatedId) || '';
-        // Skip orphans that no longer exist in master data.
-        if (!relatedName) return;
-        const key = `${relatedId}__${category}`;
-        if (!itemMap[key]) {
-          itemMap[key] = {
-            relatedId,
-            relatedName,
-            category,
-            count: 0,
-            lastUsed: createdAt,
-            totalHours: 0,
-          };
-        }
-        itemMap[key].count += 1;
-        itemMap[key].totalHours += hours;
-        itemMap[key].relatedName = relatedName;
-        if (createdAt && createdAt > itemMap[key].lastUsed) {
-          itemMap[key].lastUsed = createdAt;
-        }
-      });
-
-      const ranked = Object.values(itemMap)
-        .map(item => ({
-          ...item,
-          totalHours: Math.round(item.totalHours * 10) / 10,
-        }))
-        .sort((a, b) => {
-          if (b.count !== a.count) return b.count - a.count;
-          return (b.lastUsed || '').localeCompare(a.lastUsed || '');
-        })
-        .slice(0, 8);
-
-      setRecentFrequentItems(ranked);
-    } catch (err) {
-      console.error('[SubmitReport] Exception loading frequent items:', err);
-      setRecentFrequentItems([]);
-    }
-  }, [currentStaffId, resolveRelationType]);
-
-  useEffect(() => {
-    loadRecentFrequentItems();
-  }, [loadRecentFrequentItems]);
-
-  const totalHours = entries.reduce((sum, e) => sum + (e.hours || 0), 0);
-  const otHours = Math.max(0, totalHours - fullDayHours);
-  const isOT = totalHours > fullDayHours;
-  const selectedDateIsHoliday = isPublicHoliday(selectedDate, office);
-  const selectedDateIsSat = isSaturday(selectedDate);
-  const selectedDateIsSun = parseLocalDateStr(selectedDate).getDay() === 0;
-  const isDayOff = hoursPreset === 'off' || targetHours === 0;
-  
-  // On holidays/weekends, minimum hours = 0 (any hours count as OT)
-  const isUnderHours = !isDayOff && !selectedDateIsHoliday && !selectedDateIsSun && !selectedDateIsSat && totalHours < targetHours && totalHours > 0;
-  
-  // Cross-field validation: sum of task hours must equal declared target
-  const hoursMatch = totalHours === targetHours;
-  const missingRequiredRelated = entries.some((e) => {
-    if (!e.category || !(e.hours > 0)) return false;
-    const relationType = resolveRelationType(e.category);
-    return isRelationRequired(relationType) && !e.relatedId;
-  });
-  const canSubmitWork = (
-    hoursMatch || 
-    (isUnderHours && underHoursReason.length > 0)
-  ) && totalHours > 0 && !missingRequiredRelated;
-  // 放假：允許以 0 工時正式提交（無需工作項目）
-  const canSubmitLeave = isDayOff && totalHours === 0;
-  
-  const canSubmit = canSubmitWork || canSubmitLeave;
-  const hasTempSaveContent = entries.some(e => e.category && e.hours > 0) || isDayOff;
-  // After formal submit, use「更新匯報」; 暫存 is for incomplete drafts only
-  const canTempSave = hasTempSaveContent
-    && !isSubmitting
-    && !isTempSaving
-    && existingReportStatus !== 'submitted';
-  
-  const aiUsedInEntries = entries.some(e => e.isAiAssisted || e.aiToolsV2.copywriting.length > 0 || e.aiToolsV2.image.length > 0 || e.aiToolsV2.video.length > 0 || !!e.aiToolsV2.copywritingOther || !!e.aiToolsV2.imageOther || !!e.aiToolsV2.videoOther);
-
-  const addEntry = () => {
-    setEntries([...entries, createBlankReportEntry()]);
-  };
-  const removeEntry = async (idx: number) => {
-    const entry = entries[idx];
-    if (entry?.pendingReportItemId && entry.isAutoPulled) {
-      try {
-        await dismissPendingItem(entry.pendingReportItemId);
-        await refreshPendingCount();
-      } catch (err) {
-        console.warn('[SubmitReport] dismiss pending failed:', err);
-      }
-    }
-    if (entries.length > 1) {
-      setEntries(entries.filter((_, i) => i !== idx));
-    } else {
-      setEntries([createBlankReportEntry()]);
-    }
-  };
-  const updateEntry = (idx: number, field: string, value: any) => {
-    const newEntries = [...entries];
-    (newEntries[idx] as any)[field] = value;
-    setEntries(newEntries);
-  };
-
-  const handleRefreshPending = async () => {
-    if (!currentStaffId) {
-      alert('無法識別當前用戶，請確認員工資料已同步。');
-      return;
-    }
-    setIsPulling(true);
-    try {
-      const { entries: merged, mergedCount } = await mergePendingIntoReportEntries(
-        currentStaffId,
-        selectedDate,
-        entries,
-        EMPTY_AI_TOOLS,
-        createBlankReportEntry,
-      );
-      setEntries(merged);
-      await refreshPendingCount();
-      if (mergedCount === 0) {
-        alert('目前沒有新的待匯報工作。');
-      }
-    } catch (err) {
-      console.error('[SubmitReport] refresh pending failed:', err);
-      alert(`刷新失敗：${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setIsPulling(false);
-    }
-  };
-
-  const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/avif'];
-  const MAX_IMAGE_SIZE_MB = 5;
-  const MAX_IMAGES_PER_ENTRY = 5;
-
-  const handleImageFileSelect = (idx: number, files: FileList | null) => {
-    if (!files) return;
-    const existing = entries[idx].outcomeImageFiles || [];
-    const candidates = Array.from(files);
-    const errors: string[] = [];
-    const valid: File[] = [];
-    for (const f of candidates) {
-      if (!ACCEPTED_IMAGE_TYPES.includes(f.type)) { errors.push(`${f.name} 格式不支援`); continue; }
-      if (f.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) { errors.push(`${f.name} 超過 ${MAX_IMAGE_SIZE_MB}MB`); continue; }
-      valid.push(f);
-    }
-    const merged = [...existing, ...valid].slice(0, MAX_IMAGES_PER_ENTRY);
-    if (errors.length) alert(errors.join('\n'));
-    updateEntry(idx, 'outcomeImageFiles', merged);
-  };
-
-  const removeImageFile = (entryIdx: number, fileIdx: number) => {
-    const files = [...(entries[entryIdx].outcomeImageFiles || [])];
-    files.splice(fileIdx, 1);
-    updateEntry(entryIdx, 'outcomeImageFiles', files);
-  };
-
-  const removeExistingImage = (entryIdx: number, imgIdx: number) => {
-    const imgs = [...entries[entryIdx].outcomeImages];
-    imgs.splice(imgIdx, 1);
-    updateEntry(entryIdx, 'outcomeImages', imgs);
-  };
-
-  const uploadEntryImages = async (entryIdx: number, reportId: string): Promise<string[]> => {
-    const files = entries[entryIdx].outcomeImageFiles || [];
-    if (files.length === 0) return [];
-    const urls: string[] = [];
-    for (const file of files) {
-      const ext = file.name.split('.').pop() || 'jpg';
-      const path = `${reportId}/${entryIdx}_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error } = await supabase.storage.from('day-report-images').upload(path, file, { upsert: false });
-      if (error) { console.error('[ImageUpload] failed:', error.message); continue; }
-      const { data: urlData } = supabase.storage.from('day-report-images').getPublicUrl(path);
-      if (urlData?.publicUrl) urls.push(urlData.publicUrl);
-    }
-    return urls;
-  };
-
-  const saveReport = async (saveMode: 'draft' | 'submitted') => {
-    if (!currentStaffId) {
-      setSubmitError('無法識別當前用戶，請確認員工資料已同步。');
-      return;
-    }
-    if (saveMode === 'submitted' && !canSubmit) {
-      setSubmitError('請先滿足提交條件（工時達標或填寫未達標原因）。');
-      return;
-    }
-    if (saveMode === 'draft' && !hasTempSaveContent) {
-      setSubmitError(isDayOff ? '暫存失敗，請重試。' : '暫存前請至少填寫一個有工時的工作項目。');
-      return;
-    }
-    const asanaEntry = entries.find(e => e.outcomeType === 'url' && /app\.asana\.com/i.test(e.outcomeUrl));
-    if (asanaEntry) {
-      setSubmitError('成果連結不允許使用 Asana 連結，請移除後再提交。');
-      return;
-    }
-
-    if (saveMode === 'draft') setIsTempSaving(true);
-    else setIsSubmitting(true);
-    setSubmitError(null);
-    setTempSaved(false);
-    setSubmitted(false);
-
-    try {
-      let reportId: string;
-      const reportPayload = {
-        total_hours: totalHours,
-        target_hours: targetHours,
-        ot_hours: isDayOff ? 0 : otHours,
-        is_leave: isDayOff,
-        is_half_day: hoursPreset === 'half',
-        office_location: office,
-        is_holiday: selectedDateIsHoliday,
-        is_weekend: selectedDateIsSat || selectedDateIsSun,
-        under_hours_reason: isUnderHours ? (underHoursReason || null) : null,
-        status: saveMode,
-        submitted_at: saveMode === 'submitted' ? new Date().toISOString() : null,
-      };
-
-      if (existingReportId) {
-        const { error: updateError } = await supabase
-          .from('day_reports')
-          .update(reportPayload)
-          .eq('id', existingReportId);
-
-        if (updateError) {
-          throw new Error(updateError.message);
-        }
-        reportId = existingReportId;
-      } else {
-        const { data: reportData, error: reportError } = await supabase
-          .from('day_reports')
-          .insert({
-            staff_id: currentStaffId,
-            report_date: selectedDate,
-            ...reportPayload,
-          })
-          .select('id')
-          .single();
-
-        if (reportError) {
-          throw new Error(reportError.message);
-        }
-        reportId = reportData.id;
-      }
-
-      const filteredEntries = entries.filter(e => e.category && e.hours > 0);
-      const uploadedUrlsPerEntry = await Promise.all(
-        filteredEntries.map((_, i) => {
-          const origIdx = entries.indexOf(filteredEntries[i]);
-          return uploadEntryImages(origIdx, reportId);
-        })
-      );
-
-      const entryRecords = filteredEntries
-        .map((e, idx) => {
-          const allImages = [...e.outcomeImages, ...uploadedUrlsPerEntry[idx]];
-          const relationType = resolveRelationType(e.category);
-          const hasRelation = relationType !== 'none';
-          return ({
-          day_report_id: reportId,
-          staff_id: currentStaffId,
-          category: e.category,
-          // Strip stale related_* when the work type has no system/project link.
-          related_id: hasRelation ? (e.relatedId || null) : null,
-          related_name: hasRelation ? (e.relatedName || null) : null,
-          title: e.title || '',
-          hours: e.hours,
-          outcome_type: e.outcomeType || null,
-          outcome_url: e.outcomeUrl || null,
-          outcome_images: allImages.length > 0 ? allImages : null,
-          growth_experience: e.growthExperience || null,
-          is_ai_assisted: e.aiToolsV2.copywriting.length > 0 || e.aiToolsV2.image.length > 0 || e.aiToolsV2.video.length > 0 || !!e.aiToolsV2.copywritingOther || !!e.aiToolsV2.imageOther || !!e.aiToolsV2.videoOther,
-          ai_tools: e.aiTools.length > 0 ? e.aiTools : null,
-          ai_tools_v2: (e.aiToolsV2.copywriting.length > 0 || e.aiToolsV2.image.length > 0 || e.aiToolsV2.video.length > 0 || !!e.aiToolsV2.copywritingOther || !!e.aiToolsV2.imageOther || !!e.aiToolsV2.videoOther) ? e.aiToolsV2 : null,
-          sort_order: idx,
-        });
-        });
-
-      // Replace entries in one DB transaction so a failed insert cannot
-      // leave the report header with zero line items.
-      const { error: entriesError } = await supabase.rpc('replace_day_report_entries', {
-        p_report_id: reportId,
-        p_staff_id: currentStaffId,
-        p_entries: entryRecords.map((r) => ({
-          category: r.category,
-          related_id: r.related_id,
-          related_name: r.related_name,
-          title: r.title,
-          hours: r.hours,
-          outcome_type: r.outcome_type,
-          outcome_url: r.outcome_url,
-          outcome_images: r.outcome_images,
-          growth_experience: r.growth_experience,
-          is_ai_assisted: r.is_ai_assisted,
-          ai_tools: r.ai_tools,
-          ai_tools_v2: r.ai_tools_v2,
-          sort_order: r.sort_order,
-        })),
-      });
-
-      if (entriesError) {
-        throw new Error(entriesError.message);
-      }
-
-      // Only consume pending items on final submit
-      if (saveMode === 'submitted') {
-        const consumedIds = entries
-          .filter(e => e.pendingReportItemId && e.category && e.hours > 0)
-          .map(e => e.pendingReportItemId!);
-        if (consumedIds.length > 0) {
-          await consumePendingItems(consumedIds);
-        }
-        await refreshPendingCount();
-      }
-
-      // Website total_hours is maintained by DB trigger via projects mapping.
-
-      if (draftStorageKey) {
-        try { localStorage.removeItem(draftStorageKey); } catch {}
-      }
-      setExistingReportId(reportId);
-      setExistingReportStatus(saveMode);
-      loadDbReports();
-      // Refresh quick-add recommendations so the just-saved items appear.
-      void loadRecentFrequentItems();
-
-      if (saveMode === 'draft') {
-        setTempSaved(true);
-        setTimeout(() => setTempSaved(false), 4000);
-      } else {
-        setSubmitted(true);
-        setTimeout(() => setSubmitted(false), 4000);
-      }
-    } catch (err: any) {
-      setSubmitError(err.message || (saveMode === 'draft' ? '暫存失敗，請重試。' : '提交失敗，請重試。'));
-    } finally {
-      setIsSubmitting(false);
-      setIsTempSaving(false);
-    }
-  };
-
-  const handleTempSave = () => saveReport('draft');
-  const handleSubmit = () => saveReport('submitted');
-
-  const handleDeleteReport = async () => {
-    if (!existingReportId || !currentStaffId) return;
-    const dateLabel = formatDateFull(selectedDate);
-    if (!confirm(`確定要刪除 ${dateLabel} 的整份匯報嗎？\n此操作無法復原，所有工作項目將一併移除。`)) {
-      return;
-    }
-
-    setIsDeleting(true);
-    setSubmitError(null);
-    try {
-      // Entries cascade via ON DELETE CASCADE on day_report_id.
-      // Website total_hours is maintained by DB trigger via projects mapping.
-      const { error: deleteError } = await supabase
-        .from('day_reports')
-        .delete()
-        .eq('id', existingReportId)
-        .eq('staff_id', currentStaffId);
-
-      if (deleteError) {
-        throw new Error(deleteError.message);
-      }
-
-      if (draftStorageKey) {
-        try { localStorage.removeItem(draftStorageKey); } catch {}
-      }
-
-      setExistingReportId(null);
-      setExistingReportStatus(null);
-      setUnderHoursReason('');
-      applyHoursPreset('full', office);
-      setSubmitted(false);
-      setTempSaved(false);
-      const mergedEntries = await applyPendingMerge([createBlankReportEntry()]);
-      setEntries(mergedEntries);
-      await loadDbReports();
-      void loadRecentFrequentItems();
-      await refreshPendingCount();
-    } catch (err: any) {
-      setSubmitError(err.message || '刪除匯報失敗，請重試。');
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  const quickTemplates = [
-    { category: 'website_design' as WorkCategory, title: '網站設計及更新', hours: 2, relatedName: '' },
-    { category: 'social_media' as WorkCategory, title: '社媒內容製作', hours: 1.5, relatedName: '' },
-    { category: 'video_editing' as WorkCategory, title: '影片剪輯', hours: 3, relatedName: '' },
-    { category: 'article_writing' as WorkCategory, title: '文章撰寫', hours: 2, relatedName: '' },
-    { category: 'client_meeting' as WorkCategory, title: '客戶會議', hours: 1, relatedName: '' },
-    { category: 'paid_ads' as WorkCategory, title: '廣告投放', hours: 1.5, relatedName: '' },
-  ];
-
-  // Handle quick template click — auto-fill into an empty entry or add new
-  const applyQuickTemplate = (tpl: typeof quickTemplates[0]) => {
-    // Check if the first entry is empty (no category set), fill it; otherwise add new
-    const firstEmpty = entries.findIndex(e => !e.category && !e.title && e.hours === 0);
-    if (firstEmpty >= 0) {
-      const newEntries = [...entries];
-      newEntries[firstEmpty] = {
-        category: tpl.category,
-        relatedId: '',
-        relatedName: tpl.relatedName,
-        title: tpl.title,
-        hours: tpl.hours,
-        outcomeType: '',
-        outcomeUrl: '',
-        outcomeImages: [],
-        outcomeImageFiles: [],
-        growthExperience: '',
-        isAiAssisted: false,
-        aiTools: [],
-        aiToolsV2: { ...emptyAiTools },
-      };
-      setEntries(newEntries);
-    } else {
-      setEntries([...entries, {
-        category: tpl.category,
-        relatedId: '',
-        relatedName: tpl.relatedName,
-        title: tpl.title,
-        hours: tpl.hours,
-        outcomeType: '',
-        outcomeUrl: '',
-        outcomeImages: [],
-        outcomeImageFiles: [],
-        growthExperience: '',
-        isAiAssisted: false,
-        aiTools: [],
-        aiToolsV2: { ...emptyAiTools },
-      }]);
-    }
-  };
-
-  const renderDateCard = (d: WeekDateCard) => {
-    const isWorkday = !d.isHoliday && !d.isSun;
-    const needsReport = isWorkday && !d.isSat && !d.isFuture;
-    const isMissing = needsReport && !d.reported && !isLoadingDbReports;
-    return (
-      <button
-        key={d.date}
-        type="button"
-        disabled={d.isFuture}
-        onClick={() => {
-          if (!d.isFuture) setSelectedDate(d.date);
-        }}
-        className={cn(
-          'px-1.5 py-2 rounded-lg border text-[13px] font-medium transition-all relative flex flex-col items-center gap-1',
-          d.isFuture && 'opacity-50 cursor-not-allowed',
-          selectedDate === d.date
-            ? 'bg-teal-50 border-teal-400 text-teal-800 shadow-sm ring-2 ring-teal-200'
-            : d.reported && d.reportStatus === 'draft'
-              ? 'bg-amber-50/50 border-amber-200 text-amber-700'
-            : d.reported
-              ? 'bg-teal-50/50 border-teal-200 text-teal-700'
-              : d.isHoliday
-                ? 'bg-red-50/40 border-red-200 text-red-600 hover:bg-red-50'
-                : d.isSun
-                  ? 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
-                  : d.isSat
-                    ? 'bg-amber-50/30 border-amber-200 text-amber-600 hover:bg-amber-50'
-                    : isMissing
-                      ? 'bg-rose-50/40 border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-300'
-                      : 'bg-white border-border hover:border-teal-300 hover:bg-teal-50/30'
-        )}
-      >
-        <span className={cn('text-[13px]', d.isToday && 'font-bold')}>{d.label}</span>
-
-        <div className="flex items-center gap-0.5 flex-wrap justify-center min-h-[18px]">
-          {d.isToday && <span className="text-[12px] px-1 py-0 rounded bg-teal-100 text-teal-700 font-semibold">今天</span>}
-          {d.isHoliday && <span className="text-[12px] px-1 py-0 rounded bg-red-100 text-red-600">假日</span>}
-          {d.isSat && !d.isHoliday && <span className="text-[12px] px-1 py-0 rounded bg-amber-100 text-amber-600">六</span>}
-          {d.isSun && !d.isHoliday && <span className="text-[12px] px-1 py-0 rounded bg-gray-100 text-gray-500">日</span>}
-        </div>
-
-        {d.reported ? (
-          <div className="flex flex-col items-center gap-0.5">
-            <span className={cn(
-              'text-[15px] font-bold',
-              d.reportStatus === 'draft' ? 'text-amber-600' : 'text-teal-600',
-            )}>
-              {d.reportedHours}h
-            </span>
-            <span className={cn(
-              'text-[12px] px-1.5 py-0 rounded-full font-medium',
-              d.reportStatus === 'draft'
-                ? 'bg-amber-100 text-amber-700'
-                : 'bg-teal-100 text-teal-700',
-            )}>
-              {d.reportStatus === 'draft' ? '暫存' : '✓ 已匯報'}
-            </span>
-          </div>
-        ) : (d.isHoliday || d.isSun || d.isFuture) ? (
-          <span className="text-[12px] text-gray-400">—</span>
-        ) : d.isSat ? (
-          <span className="text-[12px] text-amber-500/70">可匯報</span>
-        ) : isLoadingDbReports ? (
-          <span className="text-[12px] text-muted-foreground">...</span>
-        ) : (
-          <span className="text-[12px] text-rose-500 font-medium">未匯報</span>
-        )}
-      </button>
-    );
-  };
-
-  if (submitted) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 space-y-4">
-        <div className="w-16 h-16 rounded-full bg-teal-100 flex items-center justify-center">
-          <Check size={32} className="text-teal-600" />
-        </div>
-        <h3 className="text-[22px] font-bold text-teal-700">
-          匯報已{isUpdateMode ? '更新' : '提交'}！
-        </h3>
-        <p className="text-[16px] text-muted-foreground">
-          {`${formatDateFull(selectedDate)} 的工作匯報已成功${isUpdateMode ? '更新' : '提交'}。`}
-        </p>
-        {currentStaffName && (
-          <p className="text-[14px] text-teal-600">
-            提交者：{currentStaffName}
-          </p>
-        )}
-        <button onClick={() => {
-          setSubmitted(false);
-          setSubmitError(null);
-        }} className="px-4 py-2 rounded-md border border-teal-200 text-teal-700 text-[15px] font-medium hover:bg-teal-50 transition-colors">
-          返回匯報
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Step 1: Office Selection & Header */}
-      <div className="bg-gradient-to-r from-teal-50/80 to-white rounded-lg border border-teal-100 px-5 py-4">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-4">
-            {/* Office Location Toggle */}
-            <div className="flex items-center gap-2">
-              <MapPin size={14} className="text-teal-600" />
-              <span className="text-[14px] font-semibold text-teal-700">辦公室：</span>
-              <div className="flex items-center gap-0.5 p-0.5 bg-teal-100/60 rounded-md">
-                <button 
-                  onClick={() => switchOffice('hk')} 
-                  className={cn('px-3 py-1.5 rounded text-[14px] font-medium transition-all', office === 'hk' ? 'bg-white shadow-sm text-teal-800' : 'text-teal-600 hover:text-teal-800')}
-                >
-                  🇭🇰 香港
-                </button>
-                <button 
-                  onClick={() => switchOffice('sz')} 
-                  className={cn('px-3 py-1.5 rounded text-[14px] font-medium transition-all', office === 'sz' ? 'bg-white shadow-sm text-teal-800' : 'text-teal-600 hover:text-teal-800')}
-                >
-                  🇨🇳 深圳
-                </button>
-              </div>
-            </div>
-            
-            {/* Mode Label */}
-            <div className="flex items-center gap-2">
-              <FileText size={14} className="text-teal-600" />
-              <span className="text-[14px] font-semibold text-teal-700">📝 工作匯報</span>
-            </div>
-          </div>
-          
-          <button onClick={handleRefreshPending} disabled={isPulling || isLoadingExisting} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-teal-200 bg-white text-teal-700 text-[14px] font-medium hover:bg-teal-50 transition-all disabled:opacity-50">
-            <RefreshCw size={12} className={isPulling ? 'animate-spin' : ''} />
-            {isPulling ? '刷新中...' : '刷新待匯報'}
-          </button>
-        </div>
-
-        {pendingCount > 0 && (
-          <p className="text-[13px] text-teal-700 bg-teal-50 border border-teal-100 rounded-md px-3 py-2 mt-2">
-            此日期有 <strong>{pendingCount}</strong> 項待匯報工作，開啟頁面時已自動加入表單；可點「刷新待匯報」手動同步。
-          </p>
-        )}
-        
-        <p className="text-[13px] text-teal-600/70 mt-2">
-          {office === 'hk' ? '🇭🇰 香港辦公室 · 依據香港公眾假期' : '🇨🇳 深圳辦公室 · 依據中國法定假日'} · 
-          可按週瀏覽並補交未匯報的工作日（含週六加班）
-        </p>
-      </div>
-
-      {/* Step 2: Date Selection — current week + previous week (Sun–Sat) */}
-        <div className="space-y-3">
-          <div className="bg-white rounded-lg border border-border/60 px-4 py-3">
-            <div className="flex items-center gap-2 mb-3 flex-wrap">
-              <CalendarDays size={14} className="text-teal-600" />
-              <span className="text-[14px] font-bold text-foreground">選擇匯報日期</span>
-              <span className="text-[13px] text-muted-foreground">（本週與上週 · 週日至週六）</span>
-              <div className="ml-auto flex items-center gap-3 text-[13px] text-muted-foreground">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-500 inline-block" /> 已報 ≥ 8h</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> 已報 &lt; 8h</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block" /> 未匯報</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-300 inline-block" /> 假日/週末</span>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 mb-3">
-              <button
-                type="button"
-                onClick={() => shiftWeekWindow(-1)}
-                className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
-                aria-label="上一週"
-              >
-                <ChevronLeft size={16} />
-              </button>
-
-              <Popover open={weekPickerOpen} onOpenChange={setWeekPickerOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1.5 text-[13px] font-medium min-w-[200px] justify-center px-2.5 py-1.5 rounded-md border border-teal-200 bg-teal-50/40 text-teal-800 hover:bg-teal-50 transition-colors"
-                    title="選擇週範圍"
-                  >
-                    <Calendar size={14} className="text-teal-600" />
-                    {formatWeekRangeLabel(weekWindow.windowStart, weekWindow.windowEnd)}
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent
-                  className="w-auto p-0"
-                  align="start"
-                  onOpenAutoFocus={(e) => e.preventDefault()}
-                  onCloseAutoFocus={(e) => e.preventDefault()}
-                >
-                  <div className="px-3 pt-3 pb-1">
-                    <p className="text-[12px] font-medium text-[#0d1a2d]">選擇週範圍</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">週日–週六 · 點選任一日期即可跳至該週及上一週</p>
-                  </div>
-                  <DayPickerCalendar
-                    mode="single"
-                    required
-                    weekStartsOn={0}
-                    numberOfMonths={2}
-                    selected={parseLocalDateStr(weekWindow.later.end)}
-                    onDayClick={(date, modifiers) => {
-                      if (modifiers.disabled) return;
-                      applyWeekFromDate(date);
-                    }}
-                    defaultMonth={parseLocalDateStr(weekWindow.windowStart)}
-                    disabled={{ after: addCalendarDays(parseLocalDateStr(currentWeekSunday), 6) }}
-                    modifiers={{ weekRange: weekPickerRange }}
-                    modifiersClassNames={{
-                      weekRange: 'bg-teal-100 text-teal-900',
-                    }}
-                  />
-                  <div className="flex items-center justify-between gap-2 px-3 pb-3">
-                    <button
-                      type="button"
-                      className="text-[12px] text-teal-700 hover:underline"
-                      onClick={resetToCurrentWeeks}
-                    >
-                      重設為本週及上週
-                    </button>
-                    <button
-                      type="button"
-                      className="text-[12px] text-muted-foreground hover:text-[#0d1a2d]"
-                      onClick={() => setWeekPickerOpen(false)}
-                    >
-                      關閉
-                    </button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-
-              <button
-                type="button"
-                onClick={() => shiftWeekWindow(1)}
-                disabled={isCurrentWeekWindow}
-                className="p-1.5 rounded-md hover:bg-muted text-muted-foreground disabled:opacity-40 disabled:hover:bg-transparent"
-                aria-label="下一週"
-              >
-                <ChevronRight size={16} />
-              </button>
-
-              {!isCurrentWeekWindow && (
-                <button
-                  type="button"
-                  onClick={resetToCurrentWeeks}
-                  className="text-[12px] text-teal-700 hover:underline"
-                >
-                  回到本週
-                </button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-[3.5rem_1fr] gap-x-2 gap-y-2 mb-2 items-start">
-              <span />
-              <div className="grid grid-cols-7 gap-1.5 text-center text-[11px] text-muted-foreground">
-                {['日', '一', '二', '三', '四', '五', '六'].map((day) => (
-                  <span key={day}>{day}</span>
-                ))}
-              </div>
-              <div className="pt-1 leading-tight">
-                <div className="text-[12px] font-semibold text-muted-foreground">{isCurrentWeekWindow ? '上週' : '前週'}</div>
-                <div className="text-[10px] text-muted-foreground">{formatCompactWeekLabel(weekWindow.earlier.start, weekWindow.earlier.end)}</div>
-              </div>
-              <div className={cn('grid grid-cols-7 gap-1.5', isLoadingDbReports && 'opacity-50 pointer-events-none')}>
-                {earlierWeekDates.map(renderDateCard)}
-              </div>
-              <div className="pt-1 leading-tight">
-                <div className="text-[12px] font-semibold text-teal-700">{isCurrentWeekWindow ? '本週' : '該週'}</div>
-                <div className="text-[10px] text-muted-foreground">{formatCompactWeekLabel(weekWindow.later.start, weekWindow.later.end)}</div>
-              </div>
-              <div className={cn('grid grid-cols-7 gap-1.5', isLoadingDbReports && 'opacity-50 pointer-events-none')}>
-                {laterWeekDates.map(renderDateCard)}
-              </div>
-            </div>
-
-            {isLoadingDbReports && (
-              <div className="flex items-center justify-center py-2">
-                <Loader2 size={16} className="animate-spin text-teal-600 mr-2" />
-                <span className="text-[14px] text-muted-foreground">載入匯報狀態...</span>
-              </div>
-            )}
-            
-            {/* Two-week summary stats */}
-            {(() => {
-              const reportedDays = availableDates.filter(d => d.reported && d.reportStatus !== 'draft');
-              const draftDays = availableDates.filter(d => d.reported && d.reportStatus === 'draft');
-              const workdays = availableDates.filter(d => !d.isHoliday && !d.isSun && !d.isSat && !d.isFuture);
-              const missingDays = workdays.filter(d => !d.reported || d.reportStatus === 'draft');
-              const totalReportedHours = reportedDays.reduce((s, d) => s + d.reportedHours, 0);
-              return (
-                <div className="flex items-center gap-4 mt-2 pt-2 border-t border-border/30 text-[13px]">
-                  <span className="text-muted-foreground">
-                    兩週匯報率：<strong className="text-teal-700">{reportedDays.length}/{workdays.length}</strong> 工作日
-                  </span>
-                  <span className="text-muted-foreground">
-                    累計：<strong className="text-teal-700">{totalReportedHours}h</strong>
-                  </span>
-                  <span className="text-muted-foreground">
-                    已匯報：<strong className="text-teal-700">{reportedDays.length}</strong>
-                  </span>
-                  {draftDays.length > 0 && (
-                    <span className="text-amber-600 font-medium">
-                      暫存：{draftDays.length}
-                    </span>
-                  )}
-                  {missingDays.length > 0 && (
-                    <span className="text-rose-500 font-medium">
-                      ⚠️ {missingDays.length} 天未匯報
-                    </span>
-                  )}
-                </div>
-              );
-            })()}
-          
-            {/* Status info for selected date */}
-            {(selectedDateIsHoliday || selectedDateIsSat || selectedDateIsSun) && (
-              <div className={cn('mt-2.5 px-3 py-2 rounded-md text-[14px] font-medium flex items-center gap-2',
-                selectedDateIsHoliday ? 'bg-red-50 text-red-700 border border-red-200' :
-                selectedDateIsSun ? 'bg-gray-50 text-gray-600 border border-gray-200' :
-                'bg-amber-50 text-amber-700 border border-amber-200'
-              )}>
-                <AlertTriangle size={12} />
-                {selectedDateIsHoliday && `${formatDateShort(selectedDate)} 為${office === 'hk' ? '香港' : '深圳'}公眾假期，此日工作全部計為加班（OT）`}
-                {selectedDateIsSat && !selectedDateIsHoliday && `${formatDateShort(selectedDate)} 為星期六，此日工作可如常匯報（無最低工時要求）`}
-                {selectedDateIsSun && !selectedDateIsHoliday && `${formatDateShort(selectedDate)} 為星期日，此日工作全部計為加班（OT）`}
-              </div>
-            )}
-          </div>
-
-          {/* Recent Frequent Items — Quick Add from past reports */}
-          {recentFrequentItems.length > 0 && (
-            <div className="bg-white rounded-lg border border-border/60 px-4 py-3">
-              <div className="flex items-center gap-2 mb-2.5">
-                <Sparkles size={14} className="text-amber-500" />
-                <span className="text-[14px] font-bold text-foreground">常用匯報項目</span>
-                <span className="text-[13px] text-muted-foreground">（根據你的歷史匯報自動推薦，點擊快速填入）</span>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {recentFrequentItems.map((item) => {
-                  const config = categoryLookup[item.category] || {
-                    bg: 'bg-gray-50',
-                    color: 'text-gray-600',
-                    icon: '📋',
-                    label: item.category,
-                  };
-                  const systemLabel = item.relatedName?.trim() ? item.relatedName : 'N/A';
-                  const isNoRelation = resolveRelationType(item.category) === 'none' || systemLabel === 'N/A';
-                  return (
-                    <button
-                      key={`${item.relatedId || 'none'}__${item.category}`}
-                      type="button"
-                      onClick={() => {
-                        // Auto-fill: use applyQuickTemplate style — fill empty or add new
-                        const firstEmpty = entries.findIndex(e => !e.category && !e.title && e.hours === 0);
-                        const relatedId = isNoRelation ? '' : item.relatedId;
-                        const relatedName = isNoRelation ? '' : item.relatedName;
-                        const newEntry = {
-                          category: item.category,
-                          relatedId,
-                          relatedName,
-                          // Pre-fill title with linked system/project name when available
-                          title: relatedName,
-                          hours: Math.round((item.totalHours / item.count) * 2) / 2, // average hours rounded to 0.5
-                          outcomeType: '' as OutcomeType | '',
-                          outcomeUrl: '',
-                          outcomeImages: [] as string[],
-                          outcomeImageFiles: [] as File[],
-                          growthExperience: '',
-                          isAiAssisted: false,
-                          aiTools: [] as AITool[],
-                          aiToolsV2: { ...emptyAiTools },
-                        };
-                        if (firstEmpty >= 0) {
-                          const newEntries = [...entries];
-                          newEntries[firstEmpty] = newEntry;
-                          setEntries(newEntries);
-                        } else {
-                          setEntries([...entries, newEntry]);
-                        }
-                      }}
-                      className={cn(
-                        'flex items-start gap-2 px-3 py-2.5 rounded-lg border text-left transition-all hover:shadow-sm hover:scale-[1.01]',
-                        'bg-white border-border/60 hover:border-teal-300 hover:bg-teal-50/20'
-                      )}
-                    >
-                      <span className={cn('text-[12px] px-1.5 py-0.5 rounded shrink-0 mt-0.5', config.bg, config.color)}>
-                        {config.icon}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[14px] font-medium text-foreground truncate">{config.label}</div>
-                        <div className="text-[12px] text-muted-foreground truncate">{systemLabel} · {item.count}次 · {item.totalHours}h</div>
-                      </div>
-                      <Plus size={12} className="text-teal-500 shrink-0 mt-1" />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
-      {/* Hours Status & Entries */}
-          {isLoadingExisting ? (
-            <div className="flex flex-col items-center justify-center py-12 space-y-3">
-              <Loader2 size={24} className="animate-spin text-teal-600" />
-              <p className="text-[15px] text-muted-foreground">載入匯報資料中...</p>
-            </div>
-          ) : (
-          <>
-          {/* Update mode indicator */}
-          {isUpdateMode && (
-            <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-[14px] font-medium">
-              <RefreshCw size={13} />
-              此日期已有匯報記錄，修改後點擊「更新匯報」即可覆蓋保存。
-            </div>
-          )}
-          {/* Hours Status Bar */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-border/60 shrink-0">
-              <span className="text-[14px] font-medium text-muted-foreground">{formatDateShort(selectedDate)}</span>
-              {(selectedDateIsHoliday || selectedDateIsSun) && <span className="text-[12px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">OT 日</span>}
-              {selectedDateIsSat && !selectedDateIsHoliday && <span className="text-[12px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 font-medium">星期六</span>}
-            </div>
-
-            {/* Target Hours option field — between date and filled progress */}
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-rose-50 border-2 border-rose-300 flex-wrap min-w-0">
-              <span className="text-[13px] font-semibold text-rose-700 shrink-0">目標工時：</span>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {([
-                  { id: 'full' as const, label: `全日 (${fullDayHours === 7.5 ? '7.5' : '8'}h)` },
-                  { id: 'half' as const, label: '半日 (4h)' },
-                  { id: 'custom' as const, label: '自訂工作時數' },
-                  { id: 'off' as const, label: '放假 (0h)' },
-                ]).map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => applyHoursPreset(opt.id)}
-                    className={cn(
-                      'px-3 py-1.5 rounded-full text-[13px] font-medium transition-all border',
-                      hoursPreset === opt.id
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                        : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300 hover:text-blue-700',
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              {hoursPreset === 'custom' && (
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0.5"
-                    max="16"
-                    value={targetHours}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value);
-                      if (!isNaN(val) && val >= 0.5 && val <= 16) {
-                        setTargetHours(Math.round(val * 2) / 2);
-                      }
-                    }}
-                    className="w-14 px-2 py-1 border border-rose-300 rounded-md text-[16px] font-bold text-rose-700 text-center bg-white focus:ring-2 focus:ring-rose-200 focus:border-rose-400"
-                  />
-                  <span className="text-[16px] font-bold text-rose-700">h</span>
-                </div>
-              )}
-            </div>
-
-            {/* Total Filled Progress */}
-            <div className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-border/60 shrink-0">
-              <Clock size={14} className="text-muted-foreground" />
-              <span className="text-[14px] text-muted-foreground">已填：</span>
-              <span className={cn('text-[20px] font-bold',
-                hoursMatch || isDayOff ? 'text-teal-600' :
-                (selectedDateIsHoliday || selectedDateIsSun) ? 'text-amber-600' :
-                isOT ? 'text-amber-600' :
-                totalHours > 0 ? 'text-rose-500' : 'text-gray-400'
-              )}>
-                {totalHours}h
-                {(hoursMatch || isDayOff) && <span className="text-[13px] font-normal ml-1 text-teal-600">✓</span>}
-                {!isDayOff && (isOT || ((selectedDateIsHoliday || selectedDateIsSun) && totalHours > 0)) &&
-                  <span className="text-[13px] font-normal ml-1">
-                    OT {selectedDateIsHoliday || selectedDateIsSun ? `+${totalHours}h` : `+${otHours}h`}
-                  </span>
-                }
-              </span>
-              {!isDayOff && (
-                <div className="w-24 h-2.5 bg-muted rounded-full overflow-hidden">
-                  <div className={cn('h-full rounded-full transition-all',
-                    hoursMatch ? 'bg-teal-500' :
-                    (selectedDateIsHoliday || selectedDateIsSun) ? 'bg-amber-500' :
-                    isOT ? 'bg-amber-500' :
-                    totalHours >= targetHours ? 'bg-teal-500' : 'bg-rose-400'
-                  )} style={{ width: `${Math.min((totalHours / Math.max(targetHours, 1)) * 100, 100)}%` }} />
-                </div>
-              )}
-              {!isDayOff && !hoursMatch && totalHours > 0 && (
-                <span className="text-[13px] text-rose-500 font-medium">
-                  {totalHours < targetHours ? `差 ${(targetHours - totalHours).toFixed(1)}h` : `超出 ${(totalHours - targetHours).toFixed(1)}h`}
-                </span>
-              )}
-              {isDayOff && (
-                <span className="text-[13px] text-slate-600 font-medium">放假日</span>
-              )}
-              {aiUsedInEntries && (<span className="flex items-center gap-1 text-[13px] px-2 py-1 rounded-full bg-purple-50 text-purple-700 font-medium"><Bot size={11} /> AI 輔助</span>)}
-            </div>
-
-            {/* Delete entire report — shown only when a saved report exists for this date */}
-            {isUpdateMode && (
-              <button
-                type="button"
-                onClick={handleDeleteReport}
-                disabled={isDeleting || isSubmitting || isTempSaving}
-                title="刪除整份匯報"
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-2 rounded-lg border text-[14px] font-medium transition-all',
-                  isDeleting || isSubmitting || isTempSaving
-                    ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
-                    : 'bg-white text-rose-600 border-rose-300 hover:bg-rose-50 hover:border-rose-400',
-                )}
-              >
-                {isDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                {isDeleting ? '刪除中...' : '刪除匯報'}
-              </button>
-            )}
-          </div>
-
-          {/* Quick Templates */}
-          <div className="bg-white rounded-lg border border-border/60 px-4 py-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="flex items-center gap-1 text-[14px] font-medium text-muted-foreground shrink-0"><Zap size={11} className="text-amber-500" />快速填入：</span>
-              {quickTemplates.map((tpl, idx) => {
-                const config = categoryLookup[tpl.category];
-                return (
-                  <button key={idx} onClick={() => applyQuickTemplate(tpl)} className={cn('flex items-center gap-1 px-2.5 py-1.5 rounded-md border text-[14px] hover:shadow-sm transition-all', config.bg, config.color, 'border-current/20 hover:scale-[1.02]')}>
-                    <span>{config.icon}</span>
-                    <span className="font-medium">{tpl.title}</span>
-                    <span className="opacity-60">+</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Work Entries */}
-          <div className="space-y-3">
-            {entries.map((entry, idx) => (
-              <div key={idx} className={cn('p-4 rounded-lg border hover:border-teal-200 transition-colors shadow-sm', entry.isAutoPulled ? 'border-teal-300 bg-teal-50/40' : 'border-border/60 bg-white')}>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[14px] font-bold text-teal-600 uppercase tracking-wide flex items-center gap-1.5">
-                    <span className="w-6 h-6 rounded-full bg-teal-100 flex items-center justify-center text-[14px]">{idx + 1}</span>
-                    工作項目
-                    {entry.isAutoPulled && (
-                      <span className="text-[11px] font-semibold normal-case tracking-normal bg-teal-600 text-white px-2 py-0.5 rounded-full">
-                        自動
-                      </span>
-                    )}
-                  </span>
-                  {entries.length > 1 && (
-                    <button onClick={() => removeEntry(idx)} className="text-rose-500 hover:text-rose-700 p-1.5 rounded hover:bg-rose-50"><Trash2 size={13} /></button>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2.5 mb-3">
-                  <div className="lg:col-span-2">
-                    <label className="text-[13px] font-semibold text-muted-foreground block mb-1">工作類別 *</label>
-                    <select
-                      value={entry.category}
-                      onChange={(e) => {
-                        const newCategory = e.target.value;
-                        const newEntries = [...entries];
-                        const next = { ...newEntries[idx], category: newCategory };
-                        // relation_type=none has no linked system — clear any leftover related_*
-                        // from a previous category so it is not saved / recommended later.
-                        const nextRelation = newCategory
-                          ? (dynamicTypes.find(t => t.id === newCategory)?.relationType
-                            ?? defaultCategoryRelationMap[newCategory as WorkCategory]
-                            ?? 'none')
-                          : 'none';
-                        if (!newCategory || nextRelation === 'none') {
-                          next.relatedId = '';
-                          next.relatedName = '';
-                        }
-                        newEntries[idx] = next;
-                        setEntries(newEntries);
-                      }}
-                      className="w-full px-2.5 py-2 border border-border rounded-md text-[15px] bg-white focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
-                    >
-                      <option value="">選擇類別...</option>
-                      {(dynamicTypes.length > 0
-                        ? dynamicTypes.filter(t => t.isActive)
-                        : Object.entries(categoryConfig).map(([k, v]) => ({ id: k, icon: v.icon, label: v.label }))
-                      ).map(t => (<option key={t.id} value={t.id}>{t.icon} {t.label}</option>))}
-                    </select>
-                  </div>
-                  <div className="lg:col-span-2">
-                    {(() => {
-                      const dynType = entry.category ? dynamicTypes.find(t => t.id === entry.category) : null;
-                      const relationType = dynType?.relationType
-                        ?? (entry.category ? defaultCategoryRelationMap[entry.category as WorkCategory] : undefined)
-                        ?? 'none';
-                      const required = isRelationRequired(relationType);
-                      const label =
-                        relationType === 'none' ? '關聯項目'
-                        : relationType === 'optional' ? '關聯項目（選填）'
-                        : relationType === 'webandsystem' ? '關聯網站/系統 *'
-                        : relationType === 'quotation_client' ? '關聯客戶項目 *'
-                        : relationType === 'vchannel' ? '關聯影片頻道 *'
-                        : '關聯項目 *';
-                      const placeholder =
-                        relationType === 'optional' ? '可選：搜尋任一類型項目...'
-                        : relationType === 'webandsystem' ? '搜尋網站/系統...'
-                        : relationType === 'quotation_client' ? '搜尋客戶項目...'
-                        : relationType === 'vchannel' ? '搜尋影片頻道...'
-                        : '搜尋項目...';
-                      return (
-                        <>
-                          <label className="text-[13px] font-semibold text-muted-foreground block mb-1">
-                            {label}
-                          </label>
-                          {relationType === 'none' ? (
-                            <SearchableProjectSelect items={[]} value="" onChange={() => {}} disabled={true} />
-                          ) : (
-                            <SearchableProjectSelect
-                              items={getRelatedItemsForRelation(relationType)}
-                              value={entry.relatedId}
-                              onChange={(id, name) => {
-                                updateEntry(idx, 'relatedId', id);
-                                updateEntry(idx, 'relatedName', name);
-                              }}
-                              disabled={!entry.category}
-                              placeholder={placeholder}
-                              className={required && !entry.relatedId ? 'border-amber-200 bg-amber-50/20' : undefined}
-                            />
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
-                  <div className="lg:col-span-1">
-                    <label className="text-[13px] font-semibold text-muted-foreground block mb-1">工時(h) *</label>
-                    <input type="number" step="0.5" min="0.5" max="12" value={entry.hours || ''} onChange={(e) => { const val = parseFloat(e.target.value); updateEntry(idx, 'hours', isNaN(val) ? 0 : Math.round(val * 2) / 2); }} className="w-full px-2.5 py-2 border border-border rounded-md text-[15px]" placeholder="0" />
-                  </div>
-                  <div className="lg:col-span-3">
-                    <label className="text-[13px] font-semibold text-muted-foreground block mb-1">工作內容 *</label>
-                    <textarea
-                      value={entry.title}
-                      onChange={(e) => updateEntry(idx, 'title', e.target.value)}
-                      rows={3}
-                      className="w-full px-2.5 py-2 border border-border rounded-md text-[15px] resize-y leading-relaxed"
-                      placeholder="簡述工作內容...（可換行）"
-                    />
-                  </div>
-                </div>
-                {/* AI Tools - Permanent Three-Category Layout */}
-                <div className="mb-3 p-3 rounded-md bg-purple-50/50 border border-purple-100">
-                  <div className="flex items-center gap-1.5 mb-2.5">
-                    <Bot size={13} className="text-purple-600" />
-                    <span className="text-[14px] font-bold text-purple-700">AI 工具</span>
-                  </div>
-                  {/* Category 1: 文案工具 */}
-                  <div className="mb-2">
-                    <span className="text-[13px] font-semibold text-purple-600 block mb-1.5">1. 文案工具：</span>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                      {['Perplexity', 'Grok', 'Gemini', 'Deepseek', '豆包', 'Claude', 'GPT', 'Skywork'].map((tool) => (
-                        <label key={tool} className="flex items-center gap-1 cursor-pointer">
-                          <input type="checkbox" checked={entry.aiToolsV2.copywriting.includes(tool)} onChange={(e) => { const tools = e.target.checked ? [...entry.aiToolsV2.copywriting, tool] : entry.aiToolsV2.copywriting.filter(t => t !== tool); updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, copywriting: tools }); }} className="rounded w-3 h-3 accent-purple-500" />
-                          <span className="text-[13px] text-purple-700">{tool}</span>
-                        </label>
-                      ))}
-                      <label className="flex items-center gap-1 cursor-pointer">
-                        <input type="checkbox" checked={entry.aiToolsV2.copywriting.includes('其他')} onChange={(e) => { const tools = e.target.checked ? [...entry.aiToolsV2.copywriting, '其他'] : entry.aiToolsV2.copywriting.filter(t => t !== '其他'); updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, copywriting: tools, copywritingOther: e.target.checked ? entry.aiToolsV2.copywritingOther : '' }); }} className="rounded w-3 h-3 accent-purple-500" />
-                        <span className="text-[13px] text-purple-700">其他:</span>
-                      </label>
-                      {entry.aiToolsV2.copywriting.includes('其他') && (
-                        <input value={entry.aiToolsV2.copywritingOther} onChange={(e) => { if (e.target.value.length <= 30) updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, copywritingOther: e.target.value }); }} className="px-2 py-0.5 border border-purple-200 rounded text-[13px] w-28 bg-white" placeholder="自定義工具..." maxLength={30} />
-                      )}
-                    </div>
-                  </div>
-                  {/* Category 2: 圖片工具 */}
-                  <div className="mb-2">
-                    <span className="text-[13px] font-semibold text-purple-600 block mb-1.5">2. 圖片工具：</span>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                      {['Magnific(Freepik)', 'Genspark (Image2)', 'Gemini (Nano banana)', 'Skywork'].map((tool) => (
-                        <label key={tool} className="flex items-center gap-1 cursor-pointer">
-                          <input type="checkbox" checked={entry.aiToolsV2.image.includes(tool)} onChange={(e) => { const tools = e.target.checked ? [...entry.aiToolsV2.image, tool] : entry.aiToolsV2.image.filter(t => t !== tool); updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, image: tools }); }} className="rounded w-3 h-3 accent-purple-500" />
-                          <span className="text-[13px] text-purple-700">{tool}</span>
-                        </label>
-                      ))}
-                      <label className="flex items-center gap-1 cursor-pointer">
-                        <input type="checkbox" checked={entry.aiToolsV2.image.includes('其他')} onChange={(e) => { const tools = e.target.checked ? [...entry.aiToolsV2.image, '其他'] : entry.aiToolsV2.image.filter(t => t !== '其他'); updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, image: tools, imageOther: e.target.checked ? entry.aiToolsV2.imageOther : '' }); }} className="rounded w-3 h-3 accent-purple-500" />
-                        <span className="text-[13px] text-purple-700">其他:</span>
-                      </label>
-                      {entry.aiToolsV2.image.includes('其他') && (
-                        <input value={entry.aiToolsV2.imageOther} onChange={(e) => { if (e.target.value.length <= 30) updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, imageOther: e.target.value }); }} className="px-2 py-0.5 border border-purple-200 rounded text-[13px] w-28 bg-white" placeholder="自定義工具..." maxLength={30} />
-                      )}
-                    </div>
-                  </div>
-                  {/* Category 3: 影片工具 */}
-                  <div>
-                    <span className="text-[13px] font-semibold text-purple-600 block mb-1.5">3. 影片工具：</span>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                      {['Capcut', 'Seedance', 'Kling', 'Magnific AI'].map((tool) => (
-                        <label key={tool} className="flex items-center gap-1 cursor-pointer">
-                          <input type="checkbox" checked={entry.aiToolsV2.video.includes(tool)} onChange={(e) => { const tools = e.target.checked ? [...entry.aiToolsV2.video, tool] : entry.aiToolsV2.video.filter(t => t !== tool); updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, video: tools }); }} className="rounded w-3 h-3 accent-purple-500" />
-                          <span className="text-[13px] text-purple-700">{tool}</span>
-                        </label>
-                      ))}
-                      <label className="flex items-center gap-1 cursor-pointer">
-                        <input type="checkbox" checked={entry.aiToolsV2.video.includes('其他')} onChange={(e) => { const tools = e.target.checked ? [...entry.aiToolsV2.video, '其他'] : entry.aiToolsV2.video.filter(t => t !== '其他'); updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, video: tools, videoOther: e.target.checked ? entry.aiToolsV2.videoOther : '' }); }} className="rounded w-3 h-3 accent-purple-500" />
-                        <span className="text-[13px] text-purple-700">其他:</span>
-                      </label>
-                      {entry.aiToolsV2.video.includes('其他') && (
-                        <input value={entry.aiToolsV2.videoOther} onChange={(e) => { if (e.target.value.length <= 30) updateEntry(idx, 'aiToolsV2', { ...entry.aiToolsV2, videoOther: e.target.value }); }} className="px-2 py-0.5 border border-purple-200 rounded text-[13px] w-28 bg-white" placeholder="自定義工具..." maxLength={30} />
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 pt-3 border-t border-border/30">
-                  <span className="text-[14px] font-bold text-teal-700 shrink-0">📌 成果：</span>
-                  <select value={entry.outcomeType} onChange={(e) => updateEntry(idx, 'outcomeType', e.target.value)} className="px-2.5 py-1.5 border border-border rounded-md text-[15px] bg-white w-32">
-                    <option value="">類型...</option>
-                    {Object.entries(outcomeTypeConfigV2).map(([k, v]) => (<option key={k} value={k}>{v.icon} {v.label}</option>))}
-                  </select>
-                  {entry.outcomeType === 'url' && (
-                    <div className="flex-1 flex flex-col gap-1">
-                      <input
-                        value={entry.outcomeUrl}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          updateEntry(idx, 'outcomeUrl', val);
-                        }}
-                        className={cn('flex-1 w-full px-2.5 py-1.5 border rounded-md text-[15px]', entry.outcomeUrl && /app\.asana\.com/i.test(entry.outcomeUrl) ? 'border-rose-400 bg-rose-50' : 'border-border')}
-                        placeholder="輸入成果URL連結，不要貼上ASANA 連結"
-                      />
-                      {entry.outcomeUrl && /app\.asana\.com/i.test(entry.outcomeUrl) && (
-                        <span className="text-[12px] text-rose-600">不允許貼上 Asana 連結，請改用其他成果連結。</span>
-                      )}
-                    </div>
-                  )}
-                  {entry.outcomeType === 'image' && (
-                    <div className="flex-1">
-                      {/* Hidden file input */}
-                      <input
-                        ref={el => { imageInputRefs.current[idx] = el; }}
-                        type="file"
-                        accept=".png,.jpg,.jpeg,.webp,.avif,image/png,image/jpeg,image/webp,image/avif"
-                        multiple
-                        className="hidden"
-                        onChange={e => handleImageFileSelect(idx, e.target.files)}
-                        onClick={e => { (e.target as HTMLInputElement).value = ''; }}
-                      />
-                      {/* Upload trigger row */}
-                      <div
-                        className="flex items-center gap-2 px-2.5 py-1.5 border border-dashed border-border rounded-md cursor-pointer hover:bg-muted/30 transition-colors select-none bg-white"
-                        onClick={() => imageInputRefs.current[idx]?.click()}
-                      >
-                        <Upload size={13} className="text-muted-foreground shrink-0" />
-                        <span className="text-[13px] text-muted-foreground">
-                          點擊上傳圖片（PNG / JPG / WEBP / AVIF，每張≤5MB，最多5張）
-                        </span>
-                        {((entry.outcomeImageFiles?.length || 0) + entry.outcomeImages.length) > 0 && (
-                          <span className="ml-auto text-[12px] font-medium text-teal-600 shrink-0">
-                            {(entry.outcomeImageFiles?.length || 0) + entry.outcomeImages.length} / {MAX_IMAGES_PER_ENTRY}
-                          </span>
-                        )}
-                      </div>
-                      {/* Thumbnail previews */}
-                      {(entry.outcomeImages.length > 0 || (entry.outcomeImageFiles?.length || 0) > 0) && (
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {entry.outcomeImages.map((url, imgIdx) => (
-                            <div key={`existing-${imgIdx}`} className="relative group w-16 h-16">
-                              <img src={url} alt="" className="w-16 h-16 object-cover rounded border border-border" />
-                              <button
-                                type="button"
-                                onClick={() => removeExistingImage(idx, imgIdx)}
-                                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                              ><X size={9} /></button>
-                            </div>
-                          ))}
-                          {(entry.outcomeImageFiles || []).map((file, fileIdx) => (
-                            <div key={`new-${fileIdx}`} className="relative group w-16 h-16">
-                              <img src={URL.createObjectURL(file)} alt="" className="w-16 h-16 object-cover rounded border border-teal-300" />
-                              <div className="absolute bottom-0 left-0 right-0 text-[8px] text-center bg-black/40 text-white rounded-b truncate px-0.5">新</div>
-                              <button
-                                type="button"
-                                onClick={() => removeImageFile(idx, fileIdx)}
-                                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                              ><X size={9} /></button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {entry.outcomeType === 'growth_experience' && (<input value={entry.growthExperience} onChange={(e) => updateEntry(idx, 'growthExperience', e.target.value)} className="flex-1 px-2.5 py-1.5 border border-border rounded-md text-[15px]" placeholder="描述成長經驗與技能提升..." />)}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Under Hours Warning */}
-          {isUnderHours && (
-            <div className="p-4 rounded-lg bg-rose-50 border border-rose-200">
-              <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle size={14} className="text-rose-600" />
-                <span className="text-[15px] font-bold text-rose-700">⚠️ 工時未達標（需 = {targetHours}h，目前 {totalHours}h）</span>
-              </div>
-              <input value={underHoursReason} onChange={(e) => setUnderHoursReason(e.target.value)} className="w-full px-3 py-2 border border-rose-200 rounded-md text-[15px] bg-white" placeholder="請填寫未達標原因（必填方可提交）..." />
-            </div>
-          )}
-
-      {/* Action Bar */}
-      <div className="flex flex-col gap-2 pt-4 border-t border-border/40 bg-white rounded-lg px-5 py-4 border border-border/60 shadow-sm sticky bottom-0">
-        {submitError && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-rose-50 border border-rose-200 text-rose-700 text-[14px] font-medium">
-            <AlertTriangle size={12} />
-            {submitError}
-          </div>
-        )}
-        {tempSaved && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[14px] font-medium">
-            <Check size={12} />
-            已暫存！可稍後繼續填寫並正式提交。
-          </div>
-        )}
-        {isDraftReport && !tempSaved && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-amber-50/80 border border-amber-200 text-amber-800 text-[13px]">
-            目前為暫存狀態 — 工時未達標亦可暫存；達標後請點「提交匯報」完成正式提交。
-          </div>
-        )}
-        {currentStaffId && (
-          <div className="text-[13px] text-muted-foreground">
-            提交者：<span className="font-medium text-teal-700">{currentStaffName || currentStaffId}</span>
-          </div>
-        )}
-        <div className="flex items-center justify-between">
-        <button onClick={addEntry} className="text-[15px] text-teal-600 font-medium hover:text-teal-700 flex items-center gap-1 px-3 py-2 rounded-md hover:bg-teal-50 transition-colors border border-teal-200">
-          <Plus size={13} /> 新增工作項目
-        </button>
-        <div className="flex items-center gap-3">
-          {!canSubmit && !isDayOff && totalHours > 0 && missingRequiredRelated && (
-            <span className="text-[14px] text-amber-600 font-medium bg-amber-50 px-3 py-1.5 rounded-md border border-amber-200">
-              請為必填關聯類型選擇項目
-            </span>
-          )}
-          {!canSubmit && !isDayOff && totalHours > 0 && !hoursMatch && !missingRequiredRelated && (
-            <span className="text-[14px] text-rose-500 font-medium bg-rose-50 px-3 py-1.5 rounded-md border border-rose-200">
-              ⚠️ 正式提交需工時 = {targetHours}h（目前 {totalHours}h）；可先暫存
-            </span>
-          )}
-          {!canSubmit && !isDayOff && totalHours === 0 && (
-            <span className="text-[14px] text-gray-500 font-medium">
-              請填寫至少一個工作項目
-            </span>
-          )}
-          {isDayOff && canSubmit && (
-            <span className="text-[14px] text-slate-600 font-medium bg-slate-50 px-3 py-1.5 rounded-md border border-slate-200">
-              已選擇放假（0h），可直接提交
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={handleTempSave}
-            disabled={!canTempSave}
-            className={cn(
-              'px-5 py-2.5 rounded-md text-[16px] font-medium active:scale-[0.97] transition-all shadow-sm flex items-center gap-2 border',
-              canTempSave
-                ? 'bg-white text-amber-700 border-amber-300 hover:bg-amber-50'
-                : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed',
-            )}
-          >
-            {isTempSaving && <Loader2 size={14} className="animate-spin" />}
-            {isTempSaving ? '暫存中...' : '暫存'}
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={!canSubmit || isSubmitting || isTempSaving}
-            className={cn('px-6 py-2.5 rounded-md text-[16px] font-medium text-white active:scale-[0.97] transition-all shadow-sm flex items-center gap-2', canSubmit && !isSubmitting && !isTempSaving ? 'bg-teal-600 hover:bg-teal-700' : 'bg-gray-300 cursor-not-allowed')}
-          >
-            {isSubmitting && <Loader2 size={14} className="animate-spin" />}
-            {isSubmitting ? '提交中...' : (isUpdateMode && !isDraftReport) ? '更新匯報' : '提交匯報'}
-          </button>
-        </div>
-        </div>
-      </div>
-      </>
-      )}
-    </div>
-  );
-}
+import { getDayReportCompletionStatus, sumEntryHours } from '@/lib/dayReportCompletion';
 
 // ============================
 // Today Team Reports (Read-Only)
@@ -2246,7 +83,7 @@ function TodayTeamReports() {
   };
 
   const [dbStaff, setDbStaff] = useState<TodayStaff[]>([]);
-  const [dbReports, setDbReports] = useState<Array<{ id: string; staff_id: string; report_date: string; total_hours: number; ot_hours: number; is_leave: boolean; leave_type: string | null; status: string }>>([]);
+  const [dbReports, setDbReports] = useState<Array<{ id: string; staff_id: string; report_date: string; total_hours: number; target_hours: number; ot_hours: number; is_leave: boolean; leave_type: string | null; status: string }>>([]);
   const [dbEntries, setDbEntries] = useState<Array<{ id: string; day_report_id: string; staff_id: string; category: string; title: string; hours: number; outcome_url: string | null; growth_experience: string | null; is_ai_assisted: boolean; ai_tools: any; related_name: string | null }>>([]);
   const [staffLoading, setStaffLoading] = useState(true);
   const [reportsLoading, setReportsLoading] = useState(true);
@@ -2326,14 +163,20 @@ function TodayTeamReports() {
       try {
         const { data: reportData, error: reportErr } = await supabase
           .from('day_reports')
-          .select('id, staff_id, report_date, total_hours, ot_hours, is_leave, leave_type, status')
+          .select('id, staff_id, report_date, total_hours, target_hours, ot_hours, is_leave, leave_type, status')
           .eq('report_date', targetDate);
 
         if (reportErr) {
           console.error('[TodayTeamReports] Reports query error:', reportErr);
         }
 
-        const reports = reportData || [];
+        const reports = (reportData || []).map((r) => ({
+          ...r,
+          total_hours: Number(r.total_hours) || 0,
+          target_hours: Number(r.target_hours) || 0,
+          ot_hours: Number(r.ot_hours) || 0,
+          is_leave: !!r.is_leave,
+        }));
         if (cancelled) return;
         setDbReports(reports);
 
@@ -2423,27 +266,41 @@ function TodayTeamReports() {
     return staffNameById[staffId] || staffId;
   }, [staffNameById]);
 
-  const formalReports = useMemo(
-    () => todayReports.filter(r => r.status !== 'draft'),
-    [todayReports],
+  const reportFillStatus = useCallback((report: typeof dbReports[number]) => {
+    const entries = entriesByReport.get(report.id) || [];
+    return getDayReportCompletionStatus(
+      { total_hours: report.total_hours, target_hours: report.target_hours, is_leave: report.is_leave },
+      sumEntryHours(entries),
+    );
+  }, [entriesByReport]);
+
+  const completedReports = useMemo(
+    () => todayReports.filter(r => reportFillStatus(r) === 'complete'),
+    [todayReports, reportFillStatus],
   );
-  const submittedCount = formalReports.length;
+  const incompleteReports = useMemo(
+    () => todayReports.filter(r => reportFillStatus(r) === 'incomplete'),
+    [todayReports, reportFillStatus],
+  );
+  const completedCount = completedReports.length;
+  const incompleteCount = incompleteReports.length;
   const totalStaff = filteredStaff.length;
-  const totalHoursToday = formalReports.reduce((s, r) => s + Number(r.total_hours || 0), 0);
-  const otCount = formalReports.filter(r => Number(r.ot_hours) > 0).length;
+  const totalHoursToday = todayReports.reduce((s, r) => {
+    const entries = entriesByReport.get(r.id) || [];
+    return s + sumEntryHours(entries);
+  }, 0);
+  const otCount = todayReports.filter(r => Number(r.ot_hours) > 0).length;
   const aiUsedCount = useMemo(() => {
-    // Count reports that have at least one AI-assisted entry
-    return formalReports.filter(r => {
+    return todayReports.filter(r => {
       const entries = entriesByReport.get(r.id) || [];
       return entries.some(e => e.is_ai_assisted);
     }).length;
-  }, [formalReports, entriesByReport]);
-  
-  // Staff who haven't formally submitted today (draft-only still counts as not submitted)
+  }, [todayReports, entriesByReport]);
+
   const notSubmittedStaff = useMemo(() => {
-    const submittedStaffIds = new Set(formalReports.map(r => r.staff_id));
+    const submittedStaffIds = new Set(todayReports.map(r => r.staff_id));
     return filteredStaff.filter(s => !submittedStaffIds.has(s.id));
-  }, [filteredStaff, formalReports]);
+  }, [filteredStaff, todayReports]);
 
   return (
     <div className="space-y-4">
@@ -2451,7 +308,7 @@ function TodayTeamReports() {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: '已提交', value: `${submittedCount}/${totalStaff}`, icon: <Users size={14} />, color: submittedCount === totalStaff && totalStaff > 0 ? 'text-teal-600' : 'text-amber-600', bgColor: submittedCount === totalStaff && totalStaff > 0 ? 'bg-teal-50' : 'bg-amber-50' },
+          { label: '已完成', value: `${completedCount}/${totalStaff}`, icon: <Users size={14} />, color: completedCount === totalStaff && totalStaff > 0 ? 'text-teal-600' : 'text-amber-600', bgColor: completedCount === totalStaff && totalStaff > 0 ? 'bg-teal-50' : 'bg-amber-50' },
           { label: '當日總工時', value: `${totalHoursToday}h`, icon: <BarChart3 size={14} />, color: 'text-blue-600', bgColor: 'bg-blue-50' },
           { label: 'OT 人數', value: `${otCount}`, icon: <AlertTriangle size={14} />, color: otCount > 0 ? 'text-amber-600' : 'text-teal-600', bgColor: otCount > 0 ? 'bg-amber-50' : 'bg-teal-50' },
           { label: 'AI 使用', value: `${aiUsedCount}人`, icon: <Bot size={14} />, color: 'text-purple-600', bgColor: 'bg-purple-50' },
@@ -2538,7 +395,11 @@ function TodayTeamReports() {
                 <ChevronRight size={14} />
               </button>
             </div>
-            <p className="text-[12px] text-muted-foreground mt-1">{submittedCount} 人已提交</p>
+            <p className="text-[12px] text-muted-foreground mt-1">
+              {completedCount} 人已完成
+              {incompleteCount > 0 && <span className="text-amber-600"> · {incompleteCount} 人未完成</span>}
+              {notSubmittedStaff.length > 0 && <span className="text-rose-500"> · {notSubmittedStaff.length} 人未提交</span>}
+            </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3">
             <StaffOrgFilterSelects
@@ -2556,9 +417,9 @@ function TodayTeamReports() {
               {filteredStaff.length}人
             </span>
             <div className="flex items-center gap-2">
-              <span className="text-[12px] text-muted-foreground">提交率</span>
-              <div className="w-24 h-2 bg-muted rounded-full overflow-hidden"><div className="h-full bg-teal-500 rounded-full transition-all" style={{ width: `${totalStaff > 0 ? (submittedCount / totalStaff) * 100 : 0}%` }} /></div>
-              <span className="text-[12px] font-bold text-teal-600">{totalStaff > 0 ? Math.round((submittedCount / totalStaff) * 100) : 0}%</span>
+              <span className="text-[12px] text-muted-foreground">完成率</span>
+              <div className="w-24 h-2 bg-muted rounded-full overflow-hidden"><div className="h-full bg-teal-500 rounded-full transition-all" style={{ width: `${totalStaff > 0 ? (completedCount / totalStaff) * 100 : 0}%` }} /></div>
+              <span className="text-[12px] font-bold text-teal-600">{totalStaff > 0 ? Math.round((completedCount / totalStaff) * 100) : 0}%</span>
             </div>
           </div>
         </div>
@@ -2589,6 +450,8 @@ function TodayTeamReports() {
               const entries = entriesByReport.get(report.id) || [];
               const staffName = resolveStaffName(report.staff_id);
               const hasAi = entries.some(e => e.is_ai_assisted);
+              const fillStatus = reportFillStatus(report);
+              const loggedHours = sumEntryHours(entries);
               return (
                 <div key={report.id} className="px-5 py-3.5 hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => setExpandedId(expandedId === report.id ? null : report.id)}>
                   <div className="flex items-center justify-between mb-2">
@@ -2596,14 +459,20 @@ function TodayTeamReports() {
                       <div className="w-9 h-9 rounded-full bg-gradient-to-br from-teal-100 to-teal-200 flex items-center justify-center text-[13px] font-bold text-teal-700">{staffName.slice(0, 1)}</div>
                       <div className="flex items-center gap-2">
                         <span className="text-[14px] font-bold">{staffName}</span>
-                        {report.status === 'draft' && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">暫存</span>}
+                        {fillStatus === 'incomplete' && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">未完成</span>}
                         {report.is_leave && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">{report.leave_type || '請假'}</span>}
                         {hasAi && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 flex items-center gap-0.5"><Bot size={9} />AI</span>}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-[12px] text-muted-foreground">{entries.length} 項工作</span>
-                      <span className={cn('text-[15px] font-bold', Number(report.ot_hours) > 0 ? 'text-amber-600' : 'text-foreground')}>{report.total_hours}h {Number(report.ot_hours) > 0 && <span className="text-[11px] font-normal">OT</span>}</span>
+                      <span className={cn('text-[15px] font-bold', fillStatus === 'incomplete' ? 'text-amber-600' : Number(report.ot_hours) > 0 ? 'text-amber-600' : 'text-foreground')}>
+                        {loggedHours}h
+                        {fillStatus === 'incomplete' && Number(report.target_hours) > 0 && (
+                          <span className="text-[11px] font-normal text-amber-600"> / {report.target_hours}h</span>
+                        )}
+                        {Number(report.ot_hours) > 0 && <span className="text-[11px] font-normal"> OT</span>}
+                      </span>
                     </div>
                   </div>
                   {/* Entry summary */}
@@ -2675,7 +544,7 @@ function TodayTeamReports() {
 // Work Calendar
 // ============================
 interface WCStaff { id: string; display_name: string; department: string | null; }
-interface WCReport { id: string; staff_id: string; report_date: string; total_hours: number; ot_hours: number; is_leave: boolean; status: string; }
+interface WCReport { id: string; staff_id: string; report_date: string; total_hours: number; target_hours: number; ot_hours: number; is_leave: boolean; status: string; }
 interface WCEntry { id: string; day_report_id: string; category: string; title: string | null; hours: number; outcome_url: string | null; growth_experience: string | null; is_ai_assisted: boolean | null; related_name: string | null; }
 
 const WC_DEPARTMENT_OPTIONS = [
@@ -2821,7 +690,7 @@ function WorkCalendar() {
         const monthEndExclusive = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
         let rQuery = supabase
           .from('day_reports')
-          .select('id, staff_id, report_date, total_hours, ot_hours, is_leave, status')
+          .select('id, staff_id, report_date, total_hours, target_hours, ot_hours, is_leave, status')
           .gte('report_date', monthStart)
           .lt('report_date', monthEndExclusive)
           .limit(5000);
@@ -2833,6 +702,7 @@ function WorkCalendar() {
           ...r,
           report_date: r.report_date ? String(r.report_date).substring(0, 10) : r.report_date,
           total_hours: Number(r.total_hours) || 0,
+          target_hours: Number(r.target_hours) || 0,
           ot_hours: Number(r.ot_hours) || 0,
           is_leave: !!r.is_leave,
         }));
@@ -2884,7 +754,7 @@ function WorkCalendar() {
   }, [entries]);
 
   const selectedDayReports = selectedDate ? (reportsByDate[selectedDate] || []) : [];
-  const monthTotalHours = reports.reduce((s, r) => s + r.total_hours, 0);
+  const monthTotalHours = reports.reduce((s, r) => s + sumEntryHours(entriesByReport[r.id] || []), 0);
   const monthWorkDays = new Set(reports.map(r => r.report_date)).size;
 
   return (
@@ -2933,7 +803,13 @@ function WorkCalendar() {
                 const day = i + 1;
                 const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                 const dayReports = reportsByDate[dateStr] || [];
-                const totalHours = dayReports.reduce((s, r) => s + r.total_hours, 0);
+                const totalHours = dayReports.reduce((s, r) => {
+                  const logged = sumEntryHours(entriesByReport[r.id] || []);
+                  return s + logged;
+                }, 0);
+                const hasIncomplete = dayReports.some(r => (
+                  getDayReportCompletionStatus(r, sumEntryHours(entriesByReport[r.id] || [])) === 'incomplete'
+                ));
                 const hasOT = dayReports.some(r => r.ot_hours > 0);
                 const hasLeave = dayReports.some(r => r.is_leave);
                 const dayReportIds = new Set(dayReports.map(r => r.id));
@@ -2941,10 +817,11 @@ function WorkCalendar() {
                 const isSelected = selectedDate === dateStr;
                 const isWeekend = (firstDayOfWeek + i) % 7 === 0 || (firstDayOfWeek + i) % 7 === 6;
                 return (
-                  <div key={day} onClick={() => setSelectedDate(dateStr)} className={cn('p-1.5 border-b border-r border-border/30 min-h-[76px] cursor-pointer transition-all', isSelected && 'ring-2 ring-teal-500 bg-teal-50/40 z-10', !isSelected && 'hover:bg-muted/30', hasLeave && !isSelected && 'bg-amber-50/30', isWeekend && !isSelected && !hasLeave && 'bg-gray-50/50')}>
+                  <div key={day} onClick={() => setSelectedDate(dateStr)} className={cn('p-1.5 border-b border-r border-border/30 min-h-[76px] cursor-pointer transition-all', isSelected && 'ring-2 ring-teal-500 bg-teal-50/40 z-10', !isSelected && 'hover:bg-muted/30', hasIncomplete && !isSelected && 'bg-amber-50/30', hasLeave && !isSelected && !hasIncomplete && 'bg-amber-50/30', isWeekend && !isSelected && !hasLeave && !hasIncomplete && 'bg-gray-50/50')}>
                     <div className="flex items-center justify-between">
                       <span className={cn('text-[12px] font-medium', isWeekend && 'text-muted-foreground')}>{day}</span>
-                      {totalHours > 0 && <span className={cn('text-[11px] font-bold', totalHours >= 8 ? 'text-teal-600' : 'text-rose-500')}>{totalHours}h</span>}
+                      {totalHours > 0 && <span className={cn('text-[11px] font-bold', hasIncomplete ? 'text-amber-600' : totalHours >= 8 ? 'text-teal-600' : 'text-rose-500')}>{totalHours}h</span>}
+                      {hasIncomplete && totalHours === 0 && <span className="text-[10px] font-bold text-amber-600">未齊</span>}
                     </div>
                     {dayReports.length > 0 && (
                       <div className="mt-0.5 space-y-0.5">
@@ -2982,6 +859,8 @@ function WorkCalendar() {
               .map(s => s[0]?.toUpperCase())
               .join('') || userName.slice(0, 2).toUpperCase();
             const usedAI = reportEntries.some(e => e.is_ai_assisted);
+            const loggedHours = sumEntryHours(reportEntries);
+            const fillStatus = getDayReportCompletionStatus(report, loggedHours);
             return (
               <div
                 key={report.id}
@@ -2997,10 +876,12 @@ function WorkCalendar() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-[15px] font-bold text-[#0d1a2d] leading-tight">{userName}</span>
+                      {fillStatus === 'incomplete' && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">未完成</span>}
                       {usedAI && <Bot size={13} className="text-purple-500" />}
                     </div>
                     <div className="text-[12px] text-muted-foreground mt-0.5">
-                      共 {reportEntries.length} 項 · <span className="text-teal-600 font-semibold">{report.total_hours}h</span>
+                      共 {reportEntries.length} 項 · <span className={cn('font-semibold', fillStatus === 'incomplete' ? 'text-amber-600' : 'text-teal-600')}>{loggedHours}h</span>
+                      {fillStatus === 'incomplete' && report.target_hours > 0 && <span className="text-amber-600"> / {report.target_hours}h</span>}
                       {report.ot_hours > 0 && <span className="text-rose-500 ml-1.5">+{report.ot_hours}h OT</span>}
                     </div>
                   </div>
@@ -3241,14 +1122,13 @@ export function DayReportModule({ subModule }: { subModule?: string }) {
   const getTitle = () => {
     switch (subModule) {
       case 'submit': return { title: '提交匯報', subtitle: '支援香港/深圳雙辦公室 · 本週與上週匯報總覽 · 常用項目快速填入 · 週六加班匯報 · 多日假期申報 · AI 追蹤 · 8h驗證。' };
-      case 'today-team': return { title: '今日團隊', subtitle: '查看指定日期提交狀況 — 可依公司、品牌與團隊篩選。' };
+      case 'today-team': return { title: '今日團隊', subtitle: '查看指定日期完成狀況 — 工時未齊為未完成，尚未開表為未提交。可依公司、品牌與團隊篩選。' };
       case 'calendar': return { title: '工作日曆', subtitle: '以日曆視圖查看歷史工作記錄，13種工作類型顏色標記。' };
       case 'team-view': return { title: '匯報統計', subtitle: '工作檢查查看填寫情況 · 工時分析統計類別工時與占比。' };
       case 'monthly': return { title: '月度報告', subtitle: '本月工時排名、AI 使用統計及類別分佈分析。' };
       case 'analytics': return { title: '項目分析', subtitle: '按系統／網站項目統計人員投入工時與占比 — 支援按天／週／月篩選。' };
       case 'work-report': return { title: '工作報表', subtitle: '按個人統計參與的系統／網站項目工時與占比 — 依部門分組顯示。' };
       case 'work-categories': return { title: '工作類型管理', subtitle: '管理匯報工作類別的關聯規則 — 網站/系統、客戶項目、影片頻道、可選關聯或無需關聯。' };
-      case 'holiday-settings': return { title: '假期設定', subtitle: '自動載入香港及深圳公眾假期 · Admin 可設定星期六上班人員、公司活動日、免匯報日。' };
       default: return { title: '提交匯報', subtitle: '支援香港/深圳雙辦公室 · 本週與上週匯報總覽 · 常用項目快速填入 · 週六加班匯報 · 多日假期申報 · AI 追蹤 · 8h驗證。' };
     }
   };
@@ -3265,7 +1145,6 @@ export function DayReportModule({ subModule }: { subModule?: string }) {
       case 'analytics': return <ProjectAnalysis mode="team" />;
       case 'work-report': return <ProjectAnalysis mode="personal" />;
       case 'work-categories': return <WorkCategoriesManager />;
-      case 'holiday-settings': return <HolidaySettings />;
       default: return <SubmitReportPage />;
     }
   };
