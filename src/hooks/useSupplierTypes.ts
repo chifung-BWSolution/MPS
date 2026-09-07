@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, peekCachedQuery } from '@/lib/queryCache';
 import type { SupplierType, SupplierTypeCategory } from '@/types/marketingOps';
 import { SUPPLIER_TYPE_CATEGORIES } from '@/types/marketingOps';
 
@@ -59,24 +60,33 @@ async function countExact(table: string, id: string): Promise<{ count: number; e
   return { count: count ?? 0, error: null };
 }
 
+async function fetchSupplierTypes(): Promise<SupplierType[]> {
+  const { data, error: err } = await supabase
+    .from('supplier_types')
+    .select(SELECT_COLUMNS)
+    .order('categories', { ascending: true })
+    .order('display_name', { ascending: true });
+  if (err) throw err;
+  return (data as DbRow[] | null)?.map(mapRow) ?? [];
+}
+
 export function useSupplierTypes() {
-  const [types, setTypes] = useState<SupplierType[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cached = peekCachedQuery<SupplierType[]>(QUERY_CACHE_KEYS.supplierTypes);
+  const [types, setTypes] = useState<SupplierType[]>(cached ?? []);
+  const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    const { data, error: err } = await supabase
-      .from('supplier_types')
-      .select(SELECT_COLUMNS)
-      .order('categories', { ascending: true })
-      .order('display_name', { ascending: true });
-    if (err) {
-      setError(err.message);
-      setTypes([]);
-    } else {
+  const refresh = useCallback(async (force = false) => {
+    if (force) invalidateCachedQuery(QUERY_CACHE_KEYS.supplierTypes);
+    if (!peekCachedQuery(QUERY_CACHE_KEYS.supplierTypes)) setLoading(true);
+    try {
+      const rows = await cachedQuery(QUERY_CACHE_KEYS.supplierTypes, fetchSupplierTypes);
       setError(null);
-      setTypes((data as DbRow[] | null)?.map(mapRow) ?? []);
+      setTypes(rows);
+    } catch (err) {
+      if (isAbortError(err)) return;
+      setError(err instanceof Error ? err.message : String(err));
+      setTypes([]);
     }
     setLoading(false);
   }, []);
@@ -101,6 +111,7 @@ export function useSupplierTypes() {
       .single();
 
     if (insertError) return { ok: false as const, error: uniqueConstraintMessage(insertError.message) };
+    invalidateCachedQuery(QUERY_CACHE_KEYS.supplierTypes);
     if (data) setTypes((prev) => [...prev, mapRow(data as DbRow)]);
     return { ok: true as const };
   }, []);
@@ -120,6 +131,7 @@ export function useSupplierTypes() {
 
     const { error: updateError } = await supabase.from('supplier_types').update(row).eq('id', id);
     if (updateError) return { ok: false as const, error: uniqueConstraintMessage(updateError.message) };
+    invalidateCachedQuery(QUERY_CACHE_KEYS.supplierTypes);
     setTypes((prev) =>
       prev.map((type) =>
         type.id === id
@@ -138,6 +150,7 @@ export function useSupplierTypes() {
   const deleteType = useCallback(async (id: string) => {
     const { error: deleteError } = await supabase.from('supplier_types').delete().eq('id', id);
     if (deleteError) return { ok: false as const, error: deleteError.message };
+    invalidateCachedQuery(QUERY_CACHE_KEYS.supplierTypes);
     setTypes((prev) => prev.filter((type) => type.id !== id));
     return { ok: true as const };
   }, []);

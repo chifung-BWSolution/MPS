@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, peekCachedQuery } from '@/lib/queryCache';
 import type { WorkCategoryConfig, CategoryRelationType, ProjectModuleGroup } from '@/components/day-report/WorkCategoriesManager';
 import { categoryConfig } from '@/data/dayReportDataV2';
 
@@ -96,25 +97,36 @@ function mapRow(row: DbRow): WorkCategoryConfig {
   };
 }
 
+async function fetchDayReportTypes(): Promise<WorkCategoryConfig[]> {
+  const { data, error } = await supabase
+    .from('day_report_type')
+    .select('*')
+    .order('sort_order');
+  if (error || !data || data.length === 0) return staticTypes;
+  return (data as DbRow[]).map(mapRow);
+}
+
 export function useDayReportTypes() {
-  
-  const [types, setTypes] = useState<WorkCategoryConfig[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cached = peekCachedQuery<WorkCategoryConfig[]>(QUERY_CACHE_KEYS.dayReportTypes);
+  const [types, setTypes] = useState<WorkCategoryConfig[]>(cached ?? []);
+  const [loading, setLoading] = useState(!cached);
 
   useEffect(() => {
-    setLoading(true);
-    supabase
-      .from('day_report_type')
-      .select('*')
-      .order('sort_order')
-      .then(({ data, error }) => {
-        if (error || !data || data.length === 0) {
-          setTypes(staticTypes);
-        } else {
-          setTypes((data as DbRow[]).map(mapRow));
-        }
+    let cancelled = false;
+    void cachedQuery(QUERY_CACHE_KEYS.dayReportTypes, fetchDayReportTypes)
+      .then((rows) => {
+        if (cancelled) return;
+        setTypes(rows);
+        setLoading(false);
+      })
+      .catch((err: Error) => {
+        if (cancelled || isAbortError(err)) return;
+        setTypes(staticTypes);
         setLoading(false);
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const addType = useCallback(async (item: WorkCategoryConfig) => {
@@ -131,7 +143,10 @@ export function useDayReportTypes() {
       associated_modules: item.associatedModules,
     };
     const { error } = await supabase.from('day_report_type').insert(row);
-    if (!error) setTypes(prev => [...prev, item]);
+    if (!error) {
+      invalidateCachedQuery(QUERY_CACHE_KEYS.dayReportTypes);
+      setTypes(prev => [...prev, item]);
+    }
     return error;
   }, []);
 
@@ -148,13 +163,19 @@ export function useDayReportTypes() {
     if (updates.associatedModules !== undefined) row.associated_modules = updates.associatedModules;
 
     const { error } = await supabase.from('day_report_type').update(row).eq('id', id);
-    if (!error) setTypes(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    if (!error) {
+      invalidateCachedQuery(QUERY_CACHE_KEYS.dayReportTypes);
+      setTypes(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    }
     return error;
   }, []);
 
   const deleteType = useCallback(async (id: string) => {
     const { error } = await supabase.from('day_report_type').delete().eq('id', id);
-    if (!error) setTypes(prev => prev.filter(t => t.id !== id));
+    if (!error) {
+      invalidateCachedQuery(QUERY_CACHE_KEYS.dayReportTypes);
+      setTypes(prev => prev.filter(t => t.id !== id));
+    }
     return error;
   }, []);
 

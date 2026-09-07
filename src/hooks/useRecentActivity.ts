@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { isAbortError } from '@/lib/queryCache';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
 
 export type RecentActivityItem = {
@@ -39,32 +40,38 @@ export function useRecentActivity() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
+    const { signal } = controller;
 
     const load = async () => {
       setLoading(true);
 
+      try {
       const [dayReportsRes, confirmedRes, rejectedRes, eventsRes] = await Promise.all([
         supabase
           .from('day_reports')
           .select('id, staff_id, report_date, submitted_at, status')
           .order('submitted_at', { ascending: false })
-          .limit(ACTIVITY_LIMIT),
+          .limit(ACTIVITY_LIMIT)
+          .abortSignal(signal),
         supabase
           .from('confirmed_artist')
           .select('id, name_zh, name_en, confirmed_at')
           .order('confirmed_at', { ascending: false })
-          .limit(ACTIVITY_LIMIT),
+          .limit(ACTIVITY_LIMIT)
+          .abortSignal(signal),
         supabase
           .from('rejected_artist')
           .select('id, name_zh, name_en, rejected_at')
           .order('rejected_at', { ascending: false })
-          .limit(ACTIVITY_LIMIT),
+          .limit(ACTIVITY_LIMIT)
+          .abortSignal(signal),
         supabase
           .from('upcoming_event')
           .select('id, title, type, brand, created_at')
           .order('created_at', { ascending: false })
-          .limit(ACTIVITY_LIMIT),
+          .limit(ACTIVITY_LIMIT)
+          .abortSignal(signal),
       ]);
 
       // Resolve staff display names for any staff_id we encountered.
@@ -137,15 +144,19 @@ export function useRecentActivity() {
 
       merged.sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1));
 
-      if (!cancelled) {
+      if (!signal.aborted) {
         setItems(merged.slice(0, ACTIVITY_LIMIT));
+        setLoading(false);
+      }
+      } catch (err) {
+        if (signal.aborted || isAbortError(err)) return;
         setLoading(false);
       }
     };
 
-    load();
+    void load();
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, []);
 

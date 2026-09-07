@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, peekCachedQuery } from '@/lib/queryCache';
 import { QUOTATION_CLIENT_PROJECT_TABLE } from '@/hooks/useQuotationClientProjects';
 import {
   composeClientDisplayName,
@@ -101,31 +102,35 @@ async function fetchLatestProjects(
   );
 }
 
+async function fetchQuotationClients(): Promise<QuotationClient[]> {
+  const { data, error: err } = await supabase
+    .from(QUOTATION_CLIENT_LIST_TABLE)
+    .select('*')
+    .order('updated_at', { ascending: false });
+  if (err) throw err;
+  const rows = (data as DbRow[] | null) ?? [];
+  const latest = await fetchLatestProjects(rows.map((r) => r.id));
+  return rows.map((row) => mapRow(row, latest[row.id] ?? null));
+}
+
 export function useQuotationClientList() {
-  
-  const [records, setRecords] = useState<QuotationClient[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cached = peekCachedQuery<QuotationClient[]>(QUERY_CACHE_KEYS.quotationClientList);
+  const [records, setRecords] = useState<QuotationClient[]>(cached ?? []);
+  const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    const { data, error: err } = await supabase
-      .from(QUOTATION_CLIENT_LIST_TABLE)
-      .select('*')
-      .order('updated_at', { ascending: false });
-
-    if (err) {
-      setError(err.message);
+  const refresh = useCallback(async (force = false) => {
+    if (force) invalidateCachedQuery(QUERY_CACHE_KEYS.quotationClientList);
+    if (!peekCachedQuery(QUERY_CACHE_KEYS.quotationClientList)) setLoading(true);
+    try {
+      const next = await cachedQuery(QUERY_CACHE_KEYS.quotationClientList, fetchQuotationClients, 30_000);
+      setError(null);
+      setRecords(next);
+    } catch (err) {
+      if (isAbortError(err)) return;
+      setError(err instanceof Error ? err.message : String(err));
       setRecords([]);
-      setLoading(false);
-      return;
     }
-
-    const rows = (data as DbRow[] | null) ?? [];
-    const ids = rows.map((r) => r.id);
-    const latest = await fetchLatestProjects(ids);
-    setError(null);
-    setRecords(rows.map((row) => mapRow(row, latest[row.id] ?? null)));
     setLoading(false);
   }, []);
 
@@ -147,6 +152,7 @@ export function useQuotationClientList() {
         return null;
       }
       const client = mapRow(data as DbRow, null);
+      invalidateCachedQuery(QUERY_CACHE_KEYS.quotationClientList);
       setRecords((prev) => [client, ...prev]);
       return client;
     },
@@ -168,6 +174,7 @@ export function useQuotationClientList() {
       }
       const existing = records.find((r) => r.id === id);
       const client = mapRow(data as DbRow, existing?.latestProject ?? null);
+      invalidateCachedQuery(QUERY_CACHE_KEYS.quotationClientList);
       setRecords((prev) => prev.map((r) => (r.id === id ? client : r)));
       return client;
     },
@@ -180,6 +187,7 @@ export function useQuotationClientList() {
       setError(err.message);
       return false;
     }
+    invalidateCachedQuery(QUERY_CACHE_KEYS.quotationClientList);
     setRecords((prev) => prev.filter((r) => r.id !== id));
     return true;
   }, []);

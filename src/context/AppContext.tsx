@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useMemo, ReactNode, useCallback, useEffect } from 'react';
 import { User, UserRole } from '@/types/app';
 import { useAuth } from '@/context/AuthContext';
+import { beginPageNavigation } from '@/lib/supabaseFetch';
 
 export interface SubMenuItem {
   id: string;
@@ -76,7 +77,7 @@ export const mainMenuItems: MainMenuItem[] = [
   },
   {
     id: 'quotation',
-    label: '客戶報價',
+    label: '項目管理',
     subMenus: [
       { id: 'asana-pending', label: 'Asana 待匯入' },
       { id: 'pitching', label: 'Pitching' },
@@ -247,6 +248,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return { mod: mod || 'dashboard', sub: sub || '' };
   };
 
+  const hashRouteKey = (module: string, subModule: string, hash = window.location.hash) => {
+    const raw = hash.replace(/^#/, '');
+    const qIndex = raw.indexOf('?');
+    const query = qIndex >= 0 ? raw.slice(qIndex) : '';
+    return `${module}/${subModule}${query}`;
+  };
+
   const [currentModule, setCurrentModule] = useState(() => {
     const { mod, sub } = parseHash();
     return resolveRoute(mod, sub || undefined).module;
@@ -276,6 +284,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const onHashChange = () => {
       const { mod, sub } = parseHash();
       const resolved = resolveRoute(mod, sub || undefined);
+      beginPageNavigation(hashRouteKey(resolved.module, resolved.subModule));
       setCurrentModule(resolved.module);
       setCurrentSubModule(resolved.subModule);
       const raw = window.location.hash.replace(/^#/, '');
@@ -316,6 +325,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const navigateTo = useCallback((module: string, subModule?: string) => {
     const resolved = resolveRoute(module, subModule);
+    beginPageNavigation(`${resolved.module}/${resolved.subModule}`);
     setCurrentModule(resolved.module);
     setCurrentSubModule(resolved.subModule);
     // Update the URL hash so refresh restores the same page
@@ -325,12 +335,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Hash-aware wrappers so any direct setCurrentModule/setCurrentSubModule call also updates the URL
   const setModuleWithHash = useCallback((module: string) => {
     const resolved = resolveRoute(module);
+    beginPageNavigation(`${resolved.module}/${resolved.subModule}`);
     setCurrentModule(resolved.module);
     setCurrentSubModule(resolved.subModule);
     window.location.hash = `${resolved.module}/${resolved.subModule}`;
   }, []);
 
   const setSubModuleWithHash = useCallback((subModule: string) => {
+    beginPageNavigation(`${currentModule}/${subModule}`);
     setCurrentSubModule(subModule);
     window.location.hash = `${currentModule}/${subModule}`;
   }, [currentModule]);

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Brand } from '@/types/app';
 import { brands as staticBrands } from '@/data/mockData';
+import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, peekCachedQuery } from '@/lib/queryCache';
 
 type DbRow = {
   id: string;
@@ -27,29 +28,39 @@ function noRowError(action: string): WriteError {
   return { message: `${action}未寫入資料庫（0 列）。請重新整理後再試。` };
 }
 
+async function fetchBrands(): Promise<Brand[]> {
+  const { data, error } = await supabase
+    .from('brand_list')
+    .select('id, company_id, brand_code, display_name, is_active')
+    .order('brand_code');
+  if (error) throw error;
+  if (!data || data.length === 0) return staticBrands as Brand[];
+  return (data as DbRow[]).map(mapRow);
+}
+
 export function useBrands() {
-  
-  const [brands, setBrands] = useState<Brand[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cached = peekCachedQuery<Brand[]>(QUERY_CACHE_KEYS.brands);
+  const [brands, setBrands] = useState<Brand[]>(cached ?? []);
+  const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    supabase
-      .from('brand_list')
-      .select('id, company_id, brand_code, display_name, is_active')
-      .order('brand_code')
-      .then(({ data, error }) => {
-        if (error) {
-          setError(error.message);
-          setBrands(staticBrands as Brand[]);
-        } else if (!data || data.length === 0) {
-          setBrands(staticBrands as Brand[]);
-        } else {
-          setBrands((data as DbRow[]).map(mapRow));
-        }
+    let cancelled = false;
+    void cachedQuery(QUERY_CACHE_KEYS.brands, fetchBrands)
+      .then((rows) => {
+        if (cancelled) return;
+        setBrands(rows);
+        setLoading(false);
+      })
+      .catch((err: Error) => {
+        if (cancelled || isAbortError(err)) return;
+        setError(err.message);
+        setBrands(staticBrands as Brand[]);
         setLoading(false);
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const addBrand = useCallback(async (brand: Brand) => {
@@ -63,6 +74,7 @@ export function useBrands() {
     const { data, error } = await supabase.from('brand_list').insert(row).select('id').maybeSingle();
     if (error) return error;
     if (!data) return noRowError('新增');
+    invalidateCachedQuery(QUERY_CACHE_KEYS.brands);
     setBrands(prev => [...prev, brand]);
     return null;
   }, []);
@@ -82,6 +94,7 @@ export function useBrands() {
       .maybeSingle();
     if (error) return error;
     if (!data) return noRowError('更新');
+    invalidateCachedQuery(QUERY_CACHE_KEYS.brands);
     setBrands(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
     return null;
   }, []);
@@ -95,6 +108,7 @@ export function useBrands() {
       .maybeSingle();
     if (error) return error;
     if (!data) return noRowError('刪除');
+    invalidateCachedQuery(QUERY_CACHE_KEYS.brands);
     setBrands(prev => prev.filter(b => b.id !== id));
     return null;
   }, []);

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Company } from '@/types/app';
 import { companies as staticCompanies } from '@/data/mockData';
+import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, peekCachedQuery } from '@/lib/queryCache';
 
 type DbRow = {
   id: string;
@@ -43,28 +44,39 @@ function mapRow(row: DbRow): Company {
   };
 }
 
+async function fetchCompanies(): Promise<Company[]> {
+  const { data, error } = await supabase
+    .from('company_list')
+    .select('*')
+    .order('company_code');
+  if (error) throw error;
+  if (!data || data.length === 0) return staticCompanies as Company[];
+  return (data as DbRow[]).map(mapRow);
+}
+
 export function useCompanies() {
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cached = peekCachedQuery<Company[]>(QUERY_CACHE_KEYS.companies);
+  const [companies, setCompanies] = useState<Company[]>(cached ?? []);
+  const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    supabase
-      .from('company_list')
-      .select('*')
-      .order('company_code')
-      .then(({ data, error }) => {
-        if (error) {
-          setError(error.message);
-          setCompanies(staticCompanies as Company[]);
-        } else if (!data || data.length === 0) {
-          setCompanies(staticCompanies as Company[]);
-        } else {
-          setCompanies((data as DbRow[]).map(mapRow));
-        }
+    let cancelled = false;
+    void cachedQuery(QUERY_CACHE_KEYS.companies, fetchCompanies)
+      .then((rows) => {
+        if (cancelled) return;
+        setCompanies(rows);
+        setLoading(false);
+      })
+      .catch((err: Error) => {
+        if (cancelled || isAbortError(err)) return;
+        setError(err.message);
+        setCompanies(staticCompanies as Company[]);
         setLoading(false);
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const addCompany = useCallback(async (company: Company) => {
@@ -85,7 +97,10 @@ export function useCompanies() {
       is_active: company.isActive,
     };
     const { error } = await supabase.from('company_list').insert(row);
-    if (!error) setCompanies(prev => [...prev, company]);
+    if (!error) {
+      invalidateCachedQuery(QUERY_CACHE_KEYS.companies);
+      setCompanies(prev => [...prev, company]);
+    }
     return error;
   }, []);
 
@@ -104,13 +119,19 @@ export function useCompanies() {
     if (updates.isActive !== undefined) row.is_active = updates.isActive;
 
     const { error } = await supabase.from('company_list').update(row).eq('id', id);
-    if (!error) setCompanies(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+    if (!error) {
+      invalidateCachedQuery(QUERY_CACHE_KEYS.companies);
+      setCompanies(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+    }
     return error;
   }, []);
 
   const deleteCompany = useCallback(async (id: string) => {
     const { error } = await supabase.from('company_list').delete().eq('id', id);
-    if (!error) setCompanies(prev => prev.filter(c => c.id !== id));
+    if (!error) {
+      invalidateCachedQuery(QUERY_CACHE_KEYS.companies);
+      setCompanies(prev => prev.filter(c => c.id !== id));
+    }
     return error;
   }, []);
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, peekCachedQuery } from '@/lib/queryCache';
 import type { ClientRequirementsForm } from '@/data/clientRequirementsQuestionnaire';
 import type {
   CostStructure,
@@ -137,33 +138,46 @@ function generateQuoteCode(existingCodes: string[]): string {
   return `${prefix}${String(next).padStart(3, '0')}`;
 }
 
+type QuotationsCache = {
+  records: QuotationEntry[];
+  payloadById: Record<string, QuotationWizardPayload>;
+};
+
+async function fetchQuotations(): Promise<QuotationsCache> {
+  const { data, error: err } = await supabase
+    .from(QUOTATION_ENTRY_TABLE)
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (err) throw err;
+  const rows = (data as DbRow[] | null) ?? [];
+  const payloadById: Record<string, QuotationWizardPayload> = {};
+  rows.forEach((row) => {
+    if (row.wizard_payload) payloadById[row.id] = row.wizard_payload;
+  });
+  return { records: rows.map(mapQuotationRow), payloadById };
+}
+
 export function useQuotations() {
   const { session, systemUser } = useAuth();
-  const [records, setRecords] = useState<QuotationEntry[]>([]);
-  const [payloadById, setPayloadById] = useState<Record<string, QuotationWizardPayload>>({});
-  const [loading, setLoading] = useState(true);
+  const cached = peekCachedQuery<QuotationsCache>(QUERY_CACHE_KEYS.quotations);
+  const [records, setRecords] = useState<QuotationEntry[]>(cached?.records ?? []);
+  const [payloadById, setPayloadById] = useState<Record<string, QuotationWizardPayload>>(cached?.payloadById ?? {});
+  const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    const { data, error: err } = await supabase
-      .from(QUOTATION_ENTRY_TABLE)
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (err) {
-      setError(err.message);
+  const refresh = useCallback(async (force = false) => {
+    if (force) invalidateCachedQuery(QUERY_CACHE_KEYS.quotations);
+    if (!peekCachedQuery(QUERY_CACHE_KEYS.quotations)) setLoading(true);
+    try {
+      const next = await cachedQuery(QUERY_CACHE_KEYS.quotations, fetchQuotations, 30_000);
+      setError(null);
+      setRecords(next.records);
+      setPayloadById(next.payloadById);
+    } catch (err) {
+      if (isAbortError(err)) return;
+      setError(err instanceof Error ? err.message : String(err));
       setRecords([]);
       setPayloadById({});
-    } else {
-      setError(null);
-      const rows = (data as DbRow[] | null) ?? [];
-      const payloads: Record<string, QuotationWizardPayload> = {};
-      rows.forEach((row) => {
-        if (row.wizard_payload) payloads[row.id] = row.wizard_payload;
-      });
-      setPayloadById(payloads);
-      setRecords(rows.map(mapQuotationRow));
     }
     setLoading(false);
   }, []);
@@ -193,7 +207,7 @@ export function useQuotations() {
           setError(err.message);
           return null;
         }
-        await refresh();
+        await refresh(true);
         return { id: data.id, quoteCode: data.quote_code };
       }
 
@@ -209,7 +223,7 @@ export function useQuotations() {
         setError(err.message);
         return null;
       }
-      await refresh();
+      await refresh(true);
       return { id: data.id, quoteCode: data.quote_code };
     },
     [refresh, session, systemUser],

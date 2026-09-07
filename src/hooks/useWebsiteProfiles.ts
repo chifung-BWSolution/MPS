@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, peekCachedQuery } from '@/lib/queryCache';
 import { WebsiteProfileFull, WebsiteLevel, ProfileType, ProjectCategory } from '@/types/app';
 import { websiteProfiles as staticWebsiteProfiles } from '@/data/websiteData';
 
@@ -58,29 +59,39 @@ function mapRow(row: DbRow): WebsiteProfileFull {
   };
 }
 
+async function fetchWebsiteProfiles(): Promise<WebsiteProfileFull[]> {
+  const { data, error } = await supabase
+    .from('webandsystem_list')
+    .select('*')
+    .order('level', { ascending: true });
+  if (error) throw error;
+  if (!data || data.length === 0) return staticWebsiteProfiles as WebsiteProfileFull[];
+  return (data as DbRow[]).map(mapRow);
+}
+
 export function useWebsiteProfiles() {
-  
-  const [profiles, setProfiles] = useState<WebsiteProfileFull[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cached = peekCachedQuery<WebsiteProfileFull[]>(QUERY_CACHE_KEYS.websiteProfiles);
+  const [profiles, setProfiles] = useState<WebsiteProfileFull[]>(cached ?? []);
+  const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    supabase
-      .from('webandsystem_list')
-      .select('*')
-      .order('level', { ascending: true })
-      .then(({ data, error }) => {
-        if (error) {
-          setError(error.message);
-          setProfiles(staticWebsiteProfiles as WebsiteProfileFull[]);
-        } else if (!data || data.length === 0) {
-          setProfiles(staticWebsiteProfiles as WebsiteProfileFull[]);
-        } else {
-          setProfiles((data as DbRow[]).map(mapRow));
-        }
+    let cancelled = false;
+    void cachedQuery(QUERY_CACHE_KEYS.websiteProfiles, fetchWebsiteProfiles, 30_000)
+      .then((rows) => {
+        if (cancelled) return;
+        setProfiles(rows);
+        setLoading(false);
+      })
+      .catch((err: Error) => {
+        if (cancelled || isAbortError(err)) return;
+        setError(err.message);
+        setProfiles(staticWebsiteProfiles as WebsiteProfileFull[]);
         setLoading(false);
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const addProfile = useCallback(async (site: WebsiteProfileFull) => {
@@ -109,6 +120,7 @@ export function useWebsiteProfiles() {
     };
     const { error } = await supabase.from('webandsystem_list').insert(row);
     if (!error) {
+      invalidateCachedQuery(QUERY_CACHE_KEYS.websiteProfiles);
       setProfiles(prev => [...prev, site]);
     }
     return error;
@@ -143,6 +155,7 @@ export function useWebsiteProfiles() {
 
     const { error } = await supabase.from('webandsystem_list').update(row).eq('id', id);
     if (!error) {
+      invalidateCachedQuery(QUERY_CACHE_KEYS.websiteProfiles);
       setProfiles(prev =>
         prev.map(p => (p.id === id ? { ...p, ...updates } : p))
       );

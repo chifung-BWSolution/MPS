@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, peekCachedQuery } from '@/lib/queryCache';
 
 export type OptionCategory = 'platform';
 
@@ -26,27 +27,36 @@ function mapRow(row: DbRow): SystemOption {
   };
 }
 
+async function fetchSystemOptions(): Promise<SystemOption[]> {
+  const { data, error } = await supabase
+    .from('system_options')
+    .select('*')
+    .eq('category', 'platform')
+    .order('sort_order');
+  if (error) throw error;
+  return ((data as DbRow[]) ?? []).map(mapRow);
+}
+
 export function useSystemOptions() {
-  const [options, setOptions] = useState<SystemOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cached = peekCachedQuery<SystemOption[]>(QUERY_CACHE_KEYS.systemOptions);
+  const [options, setOptions] = useState<SystemOption[]>(cached ?? []);
+  const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('system_options')
-      .select('*')
-      .eq('category', 'platform')
-      .order('sort_order');
-    if (error) {
-      setError(error.message);
-    } else {
-      setOptions((data as DbRow[]).map(mapRow));
+  const refresh = useCallback(async (force = false) => {
+    if (force) invalidateCachedQuery(QUERY_CACHE_KEYS.systemOptions);
+    try {
+      const rows = await cachedQuery(QUERY_CACHE_KEYS.systemOptions, fetchSystemOptions);
+      setOptions(rows);
+    } catch (err) {
+      if (isAbortError(err)) return;
+      setError(err instanceof Error ? err.message : String(err));
     }
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [refresh]);
 
   const byCategory = useCallback(
@@ -64,6 +74,7 @@ export function useSystemOptions() {
       .select()
       .single();
     if (!error && data) {
+      invalidateCachedQuery(QUERY_CACHE_KEYS.systemOptions);
       setOptions(prev => [...prev, mapRow(data as DbRow)]);
     }
     return error;
@@ -77,6 +88,7 @@ export function useSystemOptions() {
       .update({ value: trimmed, updated_at: new Date().toISOString() })
       .eq('id', id);
     if (!error) {
+      invalidateCachedQuery(QUERY_CACHE_KEYS.systemOptions);
       setOptions(prev => prev.map(o => o.id === id ? { ...o, value: trimmed } : o));
     }
     return error;
@@ -85,6 +97,7 @@ export function useSystemOptions() {
   const deleteOption = useCallback(async (id: string) => {
     const { error } = await supabase.from('system_options').delete().eq('id', id);
     if (!error) {
+      invalidateCachedQuery(QUERY_CACHE_KEYS.systemOptions);
       setOptions(prev => prev.filter(o => o.id !== id));
     }
     return error;

@@ -1626,6 +1626,30 @@ function ClientProjectsList({ onPreviewQuote }: { onPreviewQuote?: (quote: Quota
 
 // ===== MAIN MODULE =====
 export function QuotationModule({ subModule }: { subModule?: string }) {
+  if (subModule === 'asana-pending') {
+    return <AsanaPendingModule />;
+  }
+
+  if (subModule === 'pitching') {
+    return <PitchingModule />;
+  }
+
+  if (subModule === 'projects') {
+    return <ProjectModule />;
+  }
+
+  if (subModule === 'items') {
+    return <QuotationItemsManagement />;
+  }
+
+  if (subModule === 'clients') {
+    return <CRMModule subModule="list" />;
+  }
+
+  return <QuotationEntriesSection subModule={subModule} />;
+}
+
+function QuotationEntriesSection({ subModule }: { subModule?: string }) {
   const { navigateTo } = useApp();
   const { records: dbQuotes, loading: quotesLoading, saveQuotation, getPayload, refresh: refreshQuotes } = useQuotations();
   const [viewingQuoteId, setViewingQuoteId] = useState<string | null>(null);
@@ -1650,26 +1674,6 @@ export function QuotationModule({ subModule }: { subModule?: string }) {
   const previewOverlay = previewQuote ? (
     <QuotationPreview quote={previewQuote} onClose={() => setPreviewQuote(null)} />
   ) : null;
-
-  if (subModule === 'asana-pending') {
-    return <AsanaPendingModule />;
-  }
-
-  if (subModule === 'pitching') {
-    return <PitchingModule />;
-  }
-
-  if (subModule === 'projects') {
-    return <ProjectModule />;
-  }
-
-  if (subModule === 'items') {
-    return <>{previewOverlay}<QuotationItemsManagement /></>;
-  }
-
-  if (subModule === 'clients') {
-    return <>{previewOverlay}<CRMModule subModule="list" /></>;
-  }
 
   if (viewingQuoteId) {
     const editQuote = dbQuotes.find((q) => q.id === viewingQuoteId);

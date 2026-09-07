@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { supabaseBoundedFetch } from '@/lib/supabaseFetch';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -17,10 +18,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     lock: async (_name, _timeout, fn) => fn(),
   },
   global: {
-    fetch: (input: RequestInfo | URL, init?: RequestInit) =>
-      fetch(input, init).catch((err) => {
-        console.warn('[Supabase] Network error:', err.message);
-        throw err;
-      }),
+    fetch: supabaseBoundedFetch,
   },
 });

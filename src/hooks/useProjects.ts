@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { isAbortError } from '@/lib/queryCache';
 
 export type ProjectRelatedType = 'quotation_client' | 'webandsystem' | 'vchannel' | 'manual';
 export type ProjectCategory = 'internal' | 'client';
@@ -196,6 +197,7 @@ export function useProjects(options: UseProjectsOptions = {}) {
 
     const { data, error: qError } = await query;
     if (qError) {
+      if (isAbortError(qError)) return;
       setError(qError.message);
       setProjects([]);
     } else {

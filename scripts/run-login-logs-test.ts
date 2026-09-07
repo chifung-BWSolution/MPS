@@ -86,6 +86,7 @@ assert.doesNotMatch(auth, /event === 'SIGNED_IN' && !authSucceededRef\.current/)
 
 const supabaseClient = read('src/lib/supabase.ts');
 assert.match(supabaseClient, /lock: async \(_name, _timeout, fn\) => fn\(\)/);
+assert.match(supabaseClient, /supabaseBoundedFetch/);
 assert.doesNotMatch(auth, /\.then\(\(\) => \{\}\)\.catch\(\(\) => \{\}\)/);
 
 const loginPage = read('src/components/auth/LoginPage.tsx');

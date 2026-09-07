@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { isAbortError } from '@/lib/queryCache';
 import { useApp } from '@/context/AppContext';
 import { deriveVideoOutputStatus } from '@/lib/videoOutputUtils';
 import type { PlatformPublishMap } from '@/types/videoOutput';
@@ -60,7 +61,8 @@ export function useDashboardOverviewStats(): DashboardOverviewStats {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
+    const { signal } = controller;
 
     const load = async () => {
       setLoading(true);
@@ -75,7 +77,8 @@ export function useDashboardOverviewStats(): DashboardOverviewStats {
         const websiteQuery = supabase
           .from('webandsystem_list')
           .select('id, status, company_list_id, brand_list_id, company_id, brand_id')
-          .eq('status', 'live');
+          .eq('status', 'live')
+          .abortSignal(signal);
 
         // --- Videos (published + MoM via published_date) ---
         const videosQuery = supabase
@@ -91,7 +94,8 @@ export function useDashboardOverviewStats(): DashboardOverviewStats {
             needs_editing,
             demo_done,
             vchannels ( brand_list_id )
-          `);
+          `)
+          .abortSignal(signal);
 
         const needsProjectFilter = !!(selectedCompanyId || selectedBrandId);
 
@@ -102,16 +106,18 @@ export function useDashboardOverviewStats(): DashboardOverviewStats {
             .from('day_reports')
             .select('id, report_date')
             .gte('report_date', hoursStart)
-            .lte('report_date', hoursEnd),
+            .lte('report_date', hoursEnd)
+            .abortSignal(signal),
           needsProjectFilter
             ? supabase
                 .from('projects')
                 .select('id, company_list_id, brand_list_id')
                 .eq('is_active', true)
+                .abortSignal(signal)
             : Promise.resolve({ data: null as { id: string; company_list_id: string | null; brand_list_id: string | null }[] | null, error: null }),
         ]);
 
-        if (cancelled) return;
+        if (signal.aborted) return;
 
         if (websitesRes.error) throw new Error(websitesRes.error.message);
         if (videosRes.error) throw new Error(videosRes.error.message);
@@ -201,8 +207,9 @@ export function useDashboardOverviewStats(): DashboardOverviewStats {
             const { data: entryRows, error: entryErr } = await supabase
               .from('day_report_entries')
               .select('hours, related_id, day_report_id')
-              .in('day_report_id', chunk);
-            if (cancelled) return;
+              .in('day_report_id', chunk)
+              .abortSignal(signal);
+            if (signal.aborted) return;
             if (entryErr) throw new Error(entryErr.message);
 
             for (const row of entryRows ?? []) {
@@ -225,7 +232,7 @@ export function useDashboardOverviewStats(): DashboardOverviewStats {
         setLastMonthHours(Math.round(lastHours * 10) / 10);
         setLoading(false);
       } catch (e) {
-        if (cancelled) return;
+        if (signal.aborted || isAbortError(e)) return;
         setError(e instanceof Error ? e.message : 'Failed to load overview stats');
         setLiveWebsiteCount(0);
         setPublishedVideoCount(0);
@@ -238,7 +245,7 @@ export function useDashboardOverviewStats(): DashboardOverviewStats {
 
     void load();
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [selectedCompanyId, selectedBrandId, monthRanges]);
 

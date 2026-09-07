@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, peekCachedQuery } from '@/lib/queryCache';
 import { PITCHING_CURRENCY, optionalIsoDate, type PitchingExpenseItem, type PitchingProjectType, type PitchingRecord, type PitchingStatus } from '@/data/pitchingData';
 
 /** Supabase table shared by Pitching and Project pages */
@@ -158,29 +159,42 @@ export type QuotationClientProjectUpdate = Partial<
 >;
 
 /** Load all client projects from quotation_client_project (Pitching + Project pages). */
+async function fetchQuotationClientProjects(): Promise<PitchingRecord[]> {
+  const { data, error: err } = await supabase
+    .from(QUOTATION_CLIENT_PROJECT_TABLE)
+    .select('*, quotation_client_list ( company_name_zh, company_name_en ), main_pm:staffs!main_pm_id ( display_name ), webandsystem_list ( website_name, domain_url, profile_type )')
+    .order('inquiry_date', { ascending: false });
+  if (err) throw err;
+  return ((data as DbRow[] | null) ?? []).map(mapRow);
+}
+
 export function useQuotationClientProjects() {
-  
-  const [records, setRecords] = useState<PitchingRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cached = peekCachedQuery<PitchingRecord[]>(QUERY_CACHE_KEYS.quotationClientProjects);
+  const [records, setRecords] = useState<PitchingRecord[]>(cached ?? []);
+  const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
-  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(() => {
+    const latest = cached?.map((r) => r.updatedAt).filter(Boolean).sort().pop();
+    return latest ?? null;
+  });
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    const { data, error: err } = await supabase
-      .from(QUOTATION_CLIENT_PROJECT_TABLE)
-      .select('*, quotation_client_list ( company_name_zh, company_name_en ), main_pm:staffs!main_pm_id ( display_name ), webandsystem_list ( website_name, domain_url, profile_type )')
-      .order('inquiry_date', { ascending: false });
-
-    if (err) {
-      setError(err.message);
-      setRecords([]);
-    } else {
+  const refresh = useCallback(async (force = false) => {
+    if (force) invalidateCachedQuery(QUERY_CACHE_KEYS.quotationClientProjects);
+    if (!peekCachedQuery(QUERY_CACHE_KEYS.quotationClientProjects)) setLoading(true);
+    try {
+      const mapped = await cachedQuery(
+        QUERY_CACHE_KEYS.quotationClientProjects,
+        fetchQuotationClientProjects,
+        30_000,
+      );
       setError(null);
-      const mapped = ((data as DbRow[] | null) ?? []).map(mapRow);
       setRecords(mapped);
       const latest = mapped.map((r) => r.updatedAt).filter(Boolean).sort().pop();
       setLastSyncedAt(latest ?? null);
+    } catch (err) {
+      if (isAbortError(err)) return;
+      setError(err instanceof Error ? err.message : String(err));
+      setRecords([]);
     }
     setLoading(false);
   }, []);
@@ -233,7 +247,10 @@ export function useQuotationClientProjects() {
         createdAt: now,
         updatedAt: now,
       };
-      if (!err) setRecords((prev) => [record, ...prev]);
+      if (!err) {
+        invalidateCachedQuery(QUERY_CACHE_KEYS.quotationClientProjects);
+        setRecords((prev) => [record, ...prev]);
+      }
       return { data: err ? null : record, error: err };
     },
     [],
@@ -247,6 +264,7 @@ export function useQuotationClientProjects() {
       .eq('id', id);
 
     if (!err) {
+      invalidateCachedQuery(QUERY_CACHE_KEYS.quotationClientProjects);
       setRecords((prev) =>
         prev.map((r) => (r.id === id ? { ...r, status, updatedAt: now } : r)),
       );
@@ -282,6 +300,7 @@ export function useQuotationClientProjects() {
       .eq('id', id);
 
     if (!err) {
+      invalidateCachedQuery(QUERY_CACHE_KEYS.quotationClientProjects);
       setRecords((prev) =>
         prev.map((r) => (r.id === id ? { ...r, ...data, updatedAt: now } : r)),
       );

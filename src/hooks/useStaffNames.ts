@@ -1,30 +1,44 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { QUERY_CACHE_KEYS, cachedQuery, isAbortError, peekCachedQuery } from '@/lib/queryCache';
+
+async function fetchStaffNames(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('staffs')
+    .select('display_name')
+    .order('display_name', { ascending: true });
+  if (error) throw error;
+  return Array.from(
+    new Set(
+      (data || [])
+        .map((r) => (r.display_name || '').trim())
+        .filter(Boolean),
+    ),
+  );
+}
 
 export function useStaffNames() {
-  const [names, setNames] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cached = peekCachedQuery<string[]>(QUERY_CACHE_KEYS.staffNames);
+  const [names, setNames] = useState<string[]>(cached ?? []);
+  const [loading, setLoading] = useState(!cached);
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const { data, error } = await supabase
-        .from('staffs')
-        .select('display_name')
-        .order('display_name', { ascending: true });
-      if (cancelled) return;
-      if (error) {
-        console.warn('[useStaffNames] failed:', error.message);
+    void cachedQuery(QUERY_CACHE_KEYS.staffNames, fetchStaffNames)
+      .then((list) => {
+        if (cancelled) return;
+        setNames(list);
+        setLoading(false);
+      })
+      .catch((err: Error) => {
+        if (cancelled || isAbortError(err)) return;
+        console.warn('[useStaffNames] failed:', err.message);
         setNames([]);
-      } else {
-        const list = (data || [])
-          .map(r => (r.display_name || '').trim())
-          .filter(Boolean);
-        setNames(Array.from(new Set(list)));
-      }
-      setLoading(false);
-    })();
-    return () => { cancelled = true; };
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return { names, loading };
