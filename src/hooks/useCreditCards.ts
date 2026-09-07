@@ -16,6 +16,12 @@ type CompanyEmbed = {
   company_name_en: string | null;
 } | null;
 
+type BrandEmbed = {
+  id: string;
+  brand_code: string | null;
+  display_name: string | null;
+} | null;
+
 type StaffEmbed = {
   id: string;
   display_name: string | null;
@@ -23,7 +29,9 @@ type StaffEmbed = {
 
 type DbRow = {
   id: string;
+  label: string | null;
   company_list_id: string;
+  brand_list_id: string;
   last_four: string;
   bank: string;
   purpose: string | null;
@@ -35,12 +43,15 @@ type DbRow = {
   created_at: string;
   updated_at: string;
   company?: CompanyEmbed;
+  brand?: BrandEmbed;
   custodian?: StaffEmbed;
 };
 
 const SELECT_WITH_LABELS = [
   'id',
+  'label',
   'company_list_id',
+  'brand_list_id',
   'last_four',
   'bank',
   'purpose',
@@ -52,6 +63,7 @@ const SELECT_WITH_LABELS = [
   'created_at',
   'updated_at',
   'company:company_list!credit_cards_company_list_id_fkey ( uuid, company_code, company_name_zh, company_name_en )',
+  'brand:brand_list!credit_cards_brand_list_id_fkey ( id, brand_code, display_name )',
   'custodian:staffs!credit_cards_custodian_id_fkey ( id, display_name )',
 ].join(', ');
 
@@ -63,8 +75,12 @@ function companyNameFromEmbed(company: CompanyEmbed): string {
 function mapRow(row: DbRow): CreditCardRecord {
   return {
     id: row.id,
+    label: (row.label || '').trim(),
     companyListId: row.company_list_id,
+    companyCode: (row.company?.company_code || '').trim(),
     companyName: companyNameFromEmbed(row.company),
+    brandListId: row.brand_list_id,
+    brandCode: (row.brand?.brand_code || '').trim(),
     lastFour: row.last_four,
     bank: row.bank,
     purpose: row.purpose || '',
@@ -80,7 +96,9 @@ function mapRow(row: DbRow): CreditCardRecord {
 }
 
 function validateInput(input: CreditCardInput): string | null {
+  if (!input.label.trim()) return '請輸入卡片名稱';
   if (!input.companyListId.trim()) return '請選擇所屬公司';
+  if (!input.brandListId.trim()) return '請選擇品牌';
   const lastFour = normalizeLastFour(input.lastFour);
   if (!isValidLastFour(lastFour)) return '卡號末四位須為 4 位數字';
   if (!input.bank.trim()) return '請選擇銀行';
@@ -90,7 +108,9 @@ function validateInput(input: CreditCardInput): string | null {
 
 function toWriteRow(input: CreditCardInput): Record<string, unknown> {
   return {
+    label: input.label.trim(),
     company_list_id: input.companyListId.trim(),
+    brand_list_id: input.brandListId.trim(),
     last_four: normalizeLastFour(input.lastFour),
     bank: input.bank.trim(),
     purpose: (input.purpose || '').trim(),
@@ -112,7 +132,8 @@ export function useCreditCards() {
     const { data, error: err } = await supabase
       .from(CREDIT_CARDS_TABLE)
       .select(SELECT_WITH_LABELS)
-      .order('created_at', { ascending: false });
+      .order('is_active', { ascending: false })
+      .order('label', { ascending: true });
 
     if (err) {
       setError(err.message);

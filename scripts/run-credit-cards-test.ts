@@ -3,12 +3,16 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  cardTitle,
   creditCardYearOptions,
+  formatBrandOptionLabel,
   formatCompanyOptionLabel,
   isCardExpiringSoon,
   isValidExpiry,
   isValidLastFour,
   joinExpiry,
+  mapCsvIssuer,
+  mapCsvPaymentUnit,
   normalizeLastFour,
   splitExpiry,
 } from '../src/lib/creditCards';
@@ -34,6 +38,17 @@ assert.equal(
   }),
   'BWD - BWDesign Centre Limited',
 );
+assert.equal(formatBrandOptionLabel({ brandCode: 'BWF', displayName: 'BWF' }), 'BWF');
+assert.equal(formatBrandOptionLabel({ brandCode: 'BSC', displayName: 'Attitude Beauty' }), 'BSC - Attitude Beauty');
+assert.equal(cardTitle({ label: "Franco's card - BWF", lastFour: '4268' }), "Franco's card - BWF");
+assert.equal(cardTitle({ label: '  ', lastFour: '4268' }), '•••• 4268');
+assert.equal(mapCsvIssuer('SC'), 'Standard Chartered');
+assert.equal(mapCsvIssuer('HSBC'), 'HSBC');
+assert.deepEqual(mapCsvPaymentUnit('BWF'), { companyCode: 'BWD', brandCode: 'BWF' });
+assert.deepEqual(mapCsvPaymentUnit('BWE'), { companyCode: 'BWA', brandCode: 'BWE' });
+assert.deepEqual(mapCsvPaymentUnit('Wine'), { companyCode: 'WP', brandCode: 'Wine' });
+assert.deepEqual(mapCsvPaymentUnit('BW'), { companyCode: 'BWA', brandCode: 'BWA' });
+assert.deepEqual(mapCsvPaymentUnit('ASX'), { companyCode: 'BSC', brandCode: 'BSC' });
 
 const now = new Date('2026-08-26T00:00:00Z');
 assert.equal(isCardExpiringSoon('2026-08', now), true);
@@ -48,31 +63,49 @@ assert.match(migration, /REFERENCES public\.staffs\(id\)/);
 assert.match(migration, /last_four text NOT NULL/);
 assert.doesNotMatch(migration, /BW Enterprise/);
 
+const importMigration = read('supabase/migrations/20260907103454_credit_cards_label_brand.sql');
+assert.match(importMigration, /ADD COLUMN IF NOT EXISTS label text NOT NULL DEFAULT ''/);
+assert.match(importMigration, /ADD COLUMN IF NOT EXISTS brand_list_id uuid/);
+assert.match(importMigration, /REFERENCES public\.brand_list\(id\)/);
+assert.match(importMigration, /BWF  : BWD , BWF/);
+assert.match(importMigration, /BWE  : BWA , BWE/);
+assert.match(importMigration, /Wine : WP  , Wine/);
+assert.match(importMigration, /BW   : BWA , BWA/);
+assert.match(importMigration, /ASX  : BSC , BSC/);
+assert.match(importMigration, /ALTER COLUMN brand_list_id SET NOT NULL/);
+
 const hook = read('src/hooks/useCreditCards.ts');
 assert.match(hook, /CREDIT_CARDS_TABLE/);
 assert.match(hook, /company_list!credit_cards_company_list_id_fkey/);
+assert.match(hook, /brand_list!credit_cards_brand_list_id_fkey/);
 assert.match(hook, /staffs!credit_cards_custodian_id_fkey/);
 assert.match(hook, /const addCard/);
 assert.match(hook, /const updateCard/);
 assert.match(hook, /const deleteCard/);
+assert.match(hook, /請輸入卡片名稱/);
+assert.match(hook, /請選擇品牌/);
 
 const settings = read('src/components/settings/CreditCardsSettings.tsx');
 assert.match(settings, /useCompanies/);
+assert.match(settings, /useBrands/);
 assert.match(settings, /useActiveStaffOptions/);
 assert.match(settings, /useCreditCards/);
 assert.match(settings, /所屬公司 \*/);
+assert.match(settings, /品牌 \*/);
+assert.match(settings, /卡片名稱 \*/);
 assert.match(settings, /保管人/);
+assert.match(settings, /已停用/);
+assert.match(settings, /cardTitle/);
 assert.match(settings, /SearchableSelect/);
 assert.match(settings, /creditCardYearOptions/);
 assert.match(settings, /CREDIT_CARD_MONTHS/);
 assert.match(settings, /joinExpiry/);
 assert.match(settings, /splitExpiry/);
-assert.match(settings, /status\.toLowerCase\(\) === 'active'/);
+assert.match(settings, /useActiveStaffOptions\(\[draft\.custodianId\]\)/);
 assert.match(settings, /type="text"/);
 assert.doesNotMatch(settings, /type="password"/);
 assert.doesNotMatch(settings, /EyeOff/);
 assert.doesNotMatch(settings, /showCardNumber/);
-assert.doesNotMatch(settings, /useActiveStaffOptions\(\[draft\.custodianId\]\)/);
 assert.doesNotMatch(settings, /BW Enterprise/);
 assert.doesNotMatch(settings, /companyOptions = \['BW/);
 
