@@ -10,6 +10,7 @@ import type {
   AdsAdvisorSnapshot,
   AdsAdvisorToolCall,
 } from '@/types/adsAdvisor';
+import { AdvisorMarkdown } from './AdvisorMarkdown';
 
 export type AdsCampaignAdvisorChatProps = {
   snapshot: AdsAdvisorSnapshot | null;
@@ -158,10 +159,14 @@ export function AdsCampaignAdvisorChat({
                 className={
                   message.role === 'user'
                     ? 'max-w-[85%] rounded-lg bg-teal-600 px-3 py-2 text-[13px] text-white'
-                    : 'max-w-[85%] rounded-lg border border-[rgba(13,26,45,0.08)] bg-slate-50 px-3 py-2 text-[13px] text-slate-800'
+                    : 'max-w-[92%] min-w-0 rounded-lg border border-[rgba(13,26,45,0.08)] bg-slate-50 px-3 py-2 text-[13px] text-slate-800'
                 }
               >
-                <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                {message.role === 'assistant' ? (
+                  <AdvisorMarkdown content={message.content} />
+                ) : (
+                  <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                )}
                 {message.role === 'assistant' && message.toolsUsed?.length ? (
                   <div className="mt-2 flex flex-wrap gap-1">
                     {message.toolsUsed.map((tool, toolIndex) => (

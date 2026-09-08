@@ -118,6 +118,13 @@ function buildSystemPrompt(snapshot: AdsAdvisorSnapshot): string {
 - 不可建議或執行任何寫回 Google Ads／Meta 的操作（不可改預算、出價、狀態、素材）。
 - 語氣務實、可執行，避免空泛口號。引用數字時附上日期區間。
 
+回覆格式（Markdown，前端會渲染）：
+- 用 ## 作為段落標題，### 作為小節標題。
+- 正文用短段落。行動建議用編號清單（1. 2. 3.）。
+- 比較 KPI／關鍵字／廣告時用 Markdown 表格。
+- 重點數字用 **粗體**。活動名稱可用 \`code\`。
+- 不要輸出 HTML，不要用程式碼圍欄包住整篇回覆。
+
 目前活動 snapshot（JSON）：
 ${JSON.stringify(snapshot, null, 2)}`;
 }
