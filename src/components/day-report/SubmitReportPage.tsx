@@ -28,7 +28,7 @@ import { defaultCategoryRelationMap, isRelationRequired, type CategoryRelationTy
 import { SearchableProjectSelect } from '@/components/day-report/SearchableProjectSelect';
 import { useDayReportTypes } from '@/hooks/useDayReportTypes';
 import { useCategoryLookup } from '@/hooks/useCategoryLookup';
-import { useProjects, type ProjectRelatedType } from '@/hooks/useProjects';
+import { toProjectSelectItem, useProjects, type ProjectRelatedType } from '@/hooks/useProjects';
 import type { ProjectSelectItem } from '@/lib/searchableProjectSelect';
 import { usePendingReportItems } from '@/hooks/usePendingReportItems';
 import {
@@ -286,19 +286,13 @@ export function SubmitReportPage() {
 
   const getRelatedItemsForRelation = useCallback((relationType: CategoryRelationType | undefined): ProjectSelectItem[] => {
     if (!relationType || relationType === 'none') return [];
-    if (relationType === 'optional') {
-      return masterProjects.map(p => ({
-        id: p.id,
-        name: p.name,
-        relatedType: p.relatedType,
-      }));
-    }
-    if (relationType === 'webandsystem' || relationType === 'quotation_client' || relationType === 'vchannel') {
-      return masterProjects
-        .filter(p => p.relatedType === (relationType as ProjectRelatedType))
-        .map(p => ({ id: p.id, name: p.name, relatedType: p.relatedType }));
-    }
-    return [];
+    const mapped = (relationType === 'optional'
+      ? masterProjects
+      : relationType === 'webandsystem' || relationType === 'quotation_client' || relationType === 'vchannel'
+        ? masterProjects.filter(p => p.relatedType === (relationType as ProjectRelatedType))
+        : []
+    ).map(toProjectSelectItem).filter((item): item is ProjectSelectItem => item != null);
+    return mapped;
   }, [masterProjects]);
 
   const applyHoursPreset = useCallback((preset: HoursPreset, officeLoc: OfficeLocation = office) => {

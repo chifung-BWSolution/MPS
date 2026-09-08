@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { isAbortError } from '@/lib/queryCache';
+import type { ProjectSelectItem, ProjectSelectKind } from '@/lib/searchableProjectSelect';
 
 export type ProjectRelatedType = 'quotation_client' | 'webandsystem' | 'vchannel' | 'manual';
 export type ProjectCategory = 'internal' | 'client';
@@ -129,6 +130,17 @@ export function projectKindLabel(kind: ProjectKind): string {
   }
 }
 
+export function toProjectSelectItem(project: MasterProject): ProjectSelectItem | null {
+  const kind = projectKindOf(project);
+  if (kind === 'manual') return null;
+  return {
+    id: project.id,
+    name: project.name,
+    kind: kind as ProjectSelectKind,
+    relatedId: project.relatedId,
+  };
+}
+
 function isActiveStatus(status: string): boolean {
   return !INACTIVE_STATUSES.has(status);
 }
@@ -217,7 +229,7 @@ export function useProjects(options: UseProjectsOptions = {}) {
   );
 
   const asSelectItems = useMemo(
-    () => projects.map(p => ({ id: p.id, name: p.name })),
+    () => projects.map(toProjectSelectItem).filter((item): item is ProjectSelectItem => item != null),
     [projects],
   );
 

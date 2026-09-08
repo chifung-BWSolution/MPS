@@ -1,52 +1,55 @@
-export type ProjectSelectRelatedType =
-  | 'quotation_client'
-  | 'webandsystem'
-  | 'vchannel'
-  | 'manual';
-
-export type ProjectSelectRelatedTypeFilter = 'all' | ProjectSelectRelatedType;
+export type ProjectSelectKind = 'website' | 'system' | 'quotation_client' | 'vchannel';
+export type ProjectSelectKindFilter = 'all' | ProjectSelectKind;
 
 export type ProjectSelectItem = {
   id: string;
   name: string;
-  relatedType?: ProjectSelectRelatedType;
+  kind?: ProjectSelectKind;
+  relatedId?: string;
 };
 
-export const PROJECT_RELATED_TYPE_ORDER: ProjectSelectRelatedType[] = [
-  'webandsystem',
+export const PROJECT_SELECT_KIND_ORDER: ProjectSelectKind[] = [
+  'website',
+  'system',
   'quotation_client',
   'vchannel',
-  'manual',
 ];
 
-export const PROJECT_SELECT_TYPE_LABELS: Record<ProjectSelectRelatedType, string> = {
-  webandsystem: '網站/系統',
+export const PROJECT_SELECT_KIND_LABELS: Record<ProjectSelectKind, string> = {
+  website: '網站',
+  system: '系統',
   quotation_client: '客戶項目',
   vchannel: '影片頻道',
-  manual: '自訂',
 };
 
-export function relatedTypesInItems(items: ProjectSelectItem[]): ProjectSelectRelatedType[] {
-  const present = new Set<ProjectSelectRelatedType>();
+export const PROJECT_SELECT_KIND_BADGE_CLASS: Record<ProjectSelectKind, string> = {
+  website: 'bg-teal-50 text-teal-700 border-teal-200',
+  system: 'bg-purple-50 text-purple-700 border-purple-200',
+  quotation_client: 'bg-amber-50 text-amber-700 border-amber-200',
+  vchannel: 'bg-violet-50 text-violet-700 border-violet-200',
+};
+
+export function kindsInItems(items: ProjectSelectItem[]): ProjectSelectKind[] {
+  const present = new Set<ProjectSelectKind>();
   for (const item of items) {
-    if (item.relatedType) present.add(item.relatedType);
+    if (item.kind) present.add(item.kind);
   }
-  return PROJECT_RELATED_TYPE_ORDER.filter((type) => present.has(type));
+  return PROJECT_SELECT_KIND_ORDER.filter((kind) => present.has(kind));
 }
 
 export function filterProjectSelectItems(
   items: ProjectSelectItem[],
   searchTerm: string,
-  relatedType: ProjectSelectRelatedTypeFilter,
+  kind: ProjectSelectKindFilter,
 ): ProjectSelectItem[] {
   const query = searchTerm.trim().toLowerCase();
   return items.filter((item) => {
-    if (relatedType !== 'all' && item.relatedType !== relatedType) return false;
+    if (kind !== 'all' && item.kind !== kind) return false;
     if (query && !item.name.toLowerCase().includes(query)) return false;
     return true;
   });
 }
 
-export function projectSelectTypeLabel(type: ProjectSelectRelatedTypeFilter): string {
-  return type === 'all' ? '全部' : PROJECT_SELECT_TYPE_LABELS[type];
+export function projectSelectKindLabel(type: ProjectSelectKindFilter): string {
+  return type === 'all' ? '全部' : PROJECT_SELECT_KIND_LABELS[type];
 }

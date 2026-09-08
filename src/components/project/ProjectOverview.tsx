@@ -26,8 +26,7 @@ import { ProjectCategoryBadge } from '@/components/ui/project-category-badge';
 import { BrandFieldBadge, CompanyFieldBadge, EmptyDash, StatusFieldBadge } from '@/components/ui/nullable-badge';
 import { DeleteConfirmModal } from '@/components/ui/crud-modal';
 
-type KindFilter = 'all' | ProjectKind;
-type CategoryFilter = 'all' | 'internal' | 'client';
+type KindFilter = 'all' | Exclude<ProjectKind, 'manual'>;
 
 const levelConfig: Record<ProjectLevel, { label: string; className: string }> = {
   1: { label: '主打', className: 'border-amber-500 bg-gradient-to-r from-amber-50 to-yellow-50 text-amber-800' },
@@ -87,7 +86,6 @@ const kindTabs: { key: KindFilter; label: string; icon?: ReactNode }[] = [
   { key: 'system', label: '系統', icon: <Server size={11} /> },
   { key: 'quotation_client', label: '客戶項目', icon: <Users size={11} /> },
   { key: 'vchannel', label: '影片頻道', icon: <Video size={11} /> },
-  { key: 'manual', label: '自訂', icon: <FolderKanban size={11} /> },
 ];
 
 function statusDisplay(status: string) {
@@ -191,7 +189,6 @@ function ProjectFormModal({
     return b.companyId === form.companyListId || b.companyId === selectedCompany?.uuid || b.companyId === selectedCompany?.id;
   });
   const showClientFields = relatedType === 'manual' || relatedType === 'quotation_client' || form.projectCategory === 'client';
-  const showCategory = relatedType === 'manual' || relatedType === 'webandsystem';
   const showLevel = relatedType !== 'quotation_client';
 
   const handleChange = <K extends keyof FormState>(field: K, value: FormState[K]) => {
@@ -207,28 +204,6 @@ function ProjectFormModal({
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
-          {showCategory && (
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">項目類型 *</label>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleChange('projectCategory', 'internal')}
-                  className={cn('flex items-center gap-1.5 px-3 py-2 rounded-md border text-[13px] font-medium transition-all', form.projectCategory === 'internal' ? 'border-teal-600 bg-teal-50 text-teal-700' : 'border-border text-muted-foreground hover:bg-muted/50')}
-                >
-                  <FolderKanban size={13} /> 內部項目
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleChange('projectCategory', 'client')}
-                  className={cn('flex items-center gap-1.5 px-3 py-2 rounded-md border text-[13px] font-medium transition-all', form.projectCategory === 'client' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-border text-muted-foreground hover:bg-muted/50')}
-                >
-                  <Users size={13} /> 客戶項目
-                </button>
-              </div>
-            </div>
-          )}
-
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1">項目名稱 *</label>
             <input
@@ -353,7 +328,6 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
   const { data: hoursMap } = useProjectHours(30);
 
   const [kindFilter, setKindFilter] = useState<KindFilter>('all');
-  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [companyFilter, setCompanyFilter] = useState('all');
   const [brandFilter, setBrandFilter] = useState('all');
@@ -386,7 +360,6 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
       if (selectedCompanyId && p.companyListId !== selectedCompanyId) return false;
       if (selectedBrandId && p.brandListId !== selectedBrandId) return false;
       if (kindFilter !== 'all' && projectKindOf(p) !== kindFilter) return false;
-      if (categoryFilter !== 'all' && projectCategoryOf(p) !== categoryFilter) return false;
       if (companyFilter !== 'all' && p.companyListId !== companyFilter) return false;
       if (brandFilter !== 'all' && p.brandListId !== brandFilter) return false;
       if (statusFilter !== 'all' && p.status !== statusFilter) return false;
@@ -409,7 +382,7 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
       const hb = hoursMap[b.id]?.totalHours ?? 0;
       return hb - ha || a.name.localeCompare(b.name, 'zh-HK');
     });
-  }, [projects, hoursMap, kindFilter, categoryFilter, companyFilter, brandFilter, statusFilter, levelFilter, searchQuery, selectedCompanyId, selectedBrandId, companyLabel, brandLabel]);
+  }, [projects, hoursMap, kindFilter, companyFilter, brandFilter, statusFilter, levelFilter, searchQuery, selectedCompanyId, selectedBrandId, companyLabel, brandLabel]);
 
   const toggleLevelFilter = (lvl: ProjectLevel) => {
     setLevelFilter(prev => prev.includes(lvl) ? prev.filter(x => x !== lvl) : [...prev, lvl]);
@@ -498,22 +471,6 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
             >
               {tab.icon}
               {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          {(['all', 'internal', 'client'] as const).map(cat => (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => setCategoryFilter(cat)}
-              className={cn(
-                'px-3 py-1.5 rounded text-[12px] font-medium transition-colors duration-200',
-                categoryFilter === cat ? 'bg-teal-600 text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80',
-              )}
-            >
-              {cat === 'all' ? '全部' : cat === 'internal' ? '內部項目' : '客戶項目'}
             </button>
           ))}
         </div>
