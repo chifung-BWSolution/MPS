@@ -153,6 +153,39 @@ export function formatRelatedClientName(record: Pick<PitchingRecord, 'clientName
   return !name || name === '—' ? '—' : name;
 }
 
+/** Stored customer label, or empty when the project has no customer. */
+export function storedPitchingClientName(clientName: string | undefined): string {
+  const name = clientName?.trim();
+  return !name || name === '—' ? '' : name;
+}
+
+export type PitchingClientOptionRef = {
+  value: string;
+  label: string;
+};
+
+/**
+ * Customer picker value for a client project / pitching row.
+ * Only a real `client_id` that exists in 客戶列表 counts. Name-only matches are
+ * ignored — leftover `client_name` / backfilled FKs often copy the project title
+ * and would otherwise look like a selected customer.
+ */
+export function resolvePitchingFormClient(
+  record: Pick<PitchingRecord, 'clientId' | 'clientName'>,
+  clientOptions: PitchingClientOptionRef[],
+): { clientId: string; clientName: string } {
+  const clientId = record.clientId?.trim() ?? '';
+  const storedName = storedPitchingClientName(record.clientName);
+  if (!clientId || !storedName) {
+    return { clientId: '', clientName: '' };
+  }
+  const matched = clientOptions.find((c) => c.value === clientId);
+  if (!matched) {
+    return { clientId: '', clientName: '' };
+  }
+  return { clientId: matched.value, clientName: matched.label };
+}
+
 export function formatProjectTypes(types: PitchingProjectType[]): string {
   if (!types.length) return '—';
   return types

@@ -15,9 +15,21 @@ export type QuotationListSortKey =
   | 'displayName'
   | 'clientName'
   | 'mainPm'
+  | 'income'
+  | 'expense'
+  | 'gp'
   | 'status';
 
 export type QuotationListSortDir = 'asc' | 'desc';
+
+export type QuotationListSortable = Pick<
+  PitchingRecord,
+  'inquiryDate' | 'status' | 'projectTypes' | 'displayName' | 'clientName' | 'mainPmName'
+> & {
+  income?: number | null;
+  expense?: number | null;
+  gp?: number | null;
+};
 
 export const QUOTATION_LIST_SORT_KEYS: QuotationListSortKey[] = [
   'inquiryDate',
@@ -26,14 +38,22 @@ export const QUOTATION_LIST_SORT_KEYS: QuotationListSortKey[] = [
   'displayName',
   'clientName',
   'mainPm',
+  'income',
+  'expense',
+  'gp',
   'status',
 ];
 
+const DESC_SORT_KEYS: ReadonlySet<QuotationListSortKey> = new Set([
+  'inquiryDate',
+  'remainingDays',
+  'income',
+  'expense',
+  'gp',
+]);
+
 export function getQuotationListSortValue(
-  record: Pick<
-    PitchingRecord,
-    'inquiryDate' | 'status' | 'projectTypes' | 'displayName' | 'clientName' | 'mainPmName'
-  >,
+  record: QuotationListSortable,
   key: QuotationListSortKey,
   asOfDate?: string,
 ): string | number | null {
@@ -56,6 +76,12 @@ export function getQuotationListSortValue(
       const name = formatMainPmName(record);
       return name === '—' ? null : name;
     }
+    case 'income':
+      return record.income ?? null;
+    case 'expense':
+      return record.expense ?? null;
+    case 'gp':
+      return record.gp ?? null;
     case 'status': {
       const index = PITCHING_STATUS_OPTIONS.indexOf(record.status);
       return index < 0 ? null : index;
@@ -86,7 +112,7 @@ export function compareQuotationListValues(
 }
 
 export function defaultQuotationListSortDir(key: QuotationListSortKey): QuotationListSortDir {
-  return key === 'inquiryDate' || key === 'remainingDays' ? 'desc' : 'asc';
+  return DESC_SORT_KEYS.has(key) ? 'desc' : 'asc';
 }
 
 export function nextQuotationListSort(
@@ -100,10 +126,7 @@ export function nextQuotationListSort(
   return { key: clickedKey, dir: defaultQuotationListSortDir(clickedKey) };
 }
 
-export function sortQuotationListRecords<T extends Pick<
-  PitchingRecord,
-  'inquiryDate' | 'status' | 'projectTypes' | 'displayName' | 'clientName' | 'mainPmName'
->>(
+export function sortQuotationListRecords<T extends QuotationListSortable>(
   records: T[],
   key: QuotationListSortKey,
   dir: QuotationListSortDir,

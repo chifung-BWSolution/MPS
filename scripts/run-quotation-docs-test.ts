@@ -10,6 +10,8 @@ import {
   QUOTATION_DOCS_TABLE,
   QUOTATION_LIST_DOC_TYPE_IDS,
   isQuotationListDocType,
+  formatQuotationClientProjectOptionLabel,
+  toQuotationClientProjectSelectOptions,
   addDaysIso,
   fileExtension,
   formatDocDate,
@@ -90,6 +92,24 @@ assert.equal(isQuotationListDocType('577a9f77-008d-45b2-90da-40c467fdc3d5'), tru
 assert.equal(isQuotationListDocType('d2b6c029-5850-43b5-80fd-5855b5c80699'), true);
 assert.equal(isQuotationListDocType('other'), false);
 
+assert.equal(formatQuotationClientProjectOptionLabel('CityU 網站', '香港城市大學'), 'CityU 網站（香港城市大學）');
+assert.equal(formatQuotationClientProjectOptionLabel(' 內部項目 ', '—'), '內部項目');
+assert.deepEqual(
+  toQuotationClientProjectSelectOptions(
+    [
+      { id: 'p2', displayName: 'B 項目', clientName: '乙客戶', pitchingId: 'MPS-2' },
+      { id: 'p1', displayName: 'A 項目', clientName: '甲客戶' },
+    ],
+    { id: 'p1', displayName: 'A 項目（已連結）', clientName: '甲客戶' },
+  ).map((option) => option.value),
+  ['p1', 'p2'],
+);
+assert.match(
+  toQuotationClientProjectSelectOptions([{ id: 'p2', displayName: 'B 項目', clientName: '乙客戶', pitchingId: 'MPS-2' }])[0]
+    .keywords ?? '',
+  /MPS-2/,
+);
+
 const migration = read('supabase/migrations/20260825140000_create_quotation_docs.sql');
 assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.quotation_docs/);
 assert.match(migration, /quotation_client_project_id text NOT NULL/);
@@ -116,6 +136,9 @@ assert.match(hook, /請選擇文件類型/);
 assert.match(hook, /useQuotationDocsList/);
 assert.match(hook, /\.in\('doc_type'/);
 assert.match(hook, /QUOTATION_LIST_DOC_TYPE_IDS/);
+assert.match(hook, /請選擇客戶項目/);
+assert.match(hook, /quotation_client_project_id/);
+assert.match(hook, /persistAddDoc|const addDoc/);
 
 const typeMigration = read('supabase/migrations/20260907082750_create_quotation_doc_types.sql');
 assert.match(typeMigration, /CREATE TABLE IF NOT EXISTS public\.quotation_doc_types/);
@@ -126,6 +149,15 @@ assert.match(typeMigration, /報價單/);
 assert.match(typeMigration, /項目合約/);
 assert.match(typeMigration, /參考圖片/);
 
+const dialog = read('src/components/quotation/QuotationDocFormDialog.tsx');
+assert.match(dialog, /新增項目文件/);
+assert.match(dialog, /編輯項目文件/);
+assert.match(dialog, /請選擇文件類型/);
+assert.match(dialog, /客戶項目/);
+assert.match(dialog, /SearchableSelect/);
+assert.match(dialog, /請選擇客戶項目/);
+assert.match(dialog, /搜尋項目或客戶/);
+
 const tab = read('src/components/quotation/PitchingDocsTab.tsx');
 assert.match(tab, /項目文件/);
 assert.match(tab, /useQuotationDocs/);
@@ -135,7 +167,8 @@ assert.match(tab, /updateDoc/);
 assert.match(tab, /deleteDoc/);
 assert.match(tab, /DeleteConfirmModal/);
 assert.match(tab, /aria-label="篩選文件類型"/);
-assert.match(tab, /請選擇文件類型/);
+assert.match(tab, /QuotationDocFormDialog/);
+assert.doesNotMatch(tab, /projectSelect/);
 assert.doesNotMatch(tab, /QUOTATION_DOC_TYPE_PRESETS/);
 assert.doesNotMatch(tab, /自行輸入/);
 
@@ -155,7 +188,17 @@ assert.doesNotMatch(project, /navigateTo\('quotation', 'new'\)/);
 const list = read('src/components/quotation/QuotationDocsList.tsx');
 assert.match(list, /useQuotationDocsList/);
 assert.match(list, /報價單列表/);
-assert.match(list, /項目文件/);
+assert.match(list, /客戶項目/);
+assert.match(list, /QuotationDocFormDialog/);
+assert.match(list, /projectSelect/);
+assert.match(list, /useQuotationClientProjects/);
+assert.match(list, /toQuotationClientProjectSelectOptions/);
+assert.match(list, /addDoc/);
+assert.match(list, /updateDoc/);
+assert.match(list, /deleteDoc/);
+assert.match(list, /DeleteConfirmModal/);
+assert.match(list, /新增文件/);
+assert.match(list, /請選擇客戶項目/);
 
 const moduleSrc = read('src/components/quotation/QuotationModule.tsx');
 assert.match(moduleSrc, /QuotationDocsList/);

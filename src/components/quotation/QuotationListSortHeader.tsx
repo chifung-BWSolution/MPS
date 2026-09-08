@@ -1,10 +1,14 @@
 import { useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { PitchingRecord } from '@/data/pitchingData';
+import {
+  formatQuotationListMoney,
+  quotationListGpClass,
+} from '@/lib/quotationListMoney';
 import {
   nextQuotationListSort,
   sortQuotationListRecords,
+  type QuotationListSortable,
   type QuotationListSortDir,
   type QuotationListSortKey,
 } from '@/lib/quotationListSort';
@@ -12,10 +16,17 @@ import {
 const headerClass =
   'text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3';
 
-export function useQuotationListSort<T extends Pick<
-  PitchingRecord,
-  'inquiryDate' | 'status' | 'projectTypes' | 'displayName' | 'clientName' | 'mainPmName'
->>(records: T[]) {
+export type QuotationListMoneyColumns = 'estimated' | 'actual';
+
+export const QUOTATION_LIST_MONEY_LABELS: Record<
+  QuotationListMoneyColumns,
+  { income: string; expense: string; gp: string }
+> = {
+  estimated: { income: '預計收入', expense: '預計支出', gp: '預計 GP' },
+  actual: { income: '總收入', expense: '總支出', gp: '實際 GP' },
+};
+
+export function useQuotationListSort<T extends QuotationListSortable>(records: T[]) {
   const [sortKey, setSortKey] = useState<QuotationListSortKey>('inquiryDate');
   const [sortDir, setSortDir] = useState<QuotationListSortDir>('desc');
 
@@ -39,24 +50,27 @@ function QuotationListSortableTh({
   activeKey,
   sortDir,
   onSort,
+  align = 'left',
 }: {
   label: string;
   sortKey: QuotationListSortKey;
   activeKey: QuotationListSortKey;
   sortDir: QuotationListSortDir;
   onSort: (key: QuotationListSortKey) => void;
+  align?: 'left' | 'right';
 }) {
   const active = activeKey === sortKey;
   const Icon = active ? (sortDir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
   const ariaSort = active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none';
 
   return (
-    <th className={headerClass} aria-sort={ariaSort}>
+    <th className={cn(headerClass, align === 'right' && 'text-right')} aria-sort={ariaSort}>
       <button
         type="button"
         onClick={() => onSort(sortKey)}
         className={cn(
           'inline-flex items-center gap-1 uppercase tracking-wider hover:text-foreground transition-colors',
+          align === 'right' && 'justify-end w-full',
           active ? 'text-foreground' : 'text-muted-foreground',
         )}
         aria-label={`依${label}排序`}
@@ -68,15 +82,58 @@ function QuotationListSortableTh({
   );
 }
 
+export function QuotationListMoneyCells({
+  income,
+  expense,
+  gp,
+}: {
+  income: number | null;
+  expense: number | null;
+  gp: number | null;
+}) {
+  return (
+    <>
+      <td className="px-4 py-3 text-[13px] text-right whitespace-nowrap">
+        <MoneyValue value={income} />
+      </td>
+      <td className="px-4 py-3 text-[13px] text-right whitespace-nowrap">
+        <MoneyValue value={expense} />
+      </td>
+      <td className="px-4 py-3 text-[13px] text-right whitespace-nowrap">
+        <MoneyValue value={gp} tone="gp" />
+      </td>
+    </>
+  );
+}
+
+function MoneyValue({
+  value,
+  tone,
+}: {
+  value: number | null;
+  tone?: 'gp';
+}) {
+  if (value == null) return <span className="text-muted-foreground">—</span>;
+  return (
+    <span className={cn('tabular-nums', tone === 'gp' && quotationListGpClass(value))}>
+      {formatQuotationListMoney(value)}
+    </span>
+  );
+}
+
 export function QuotationClientProjectTableHeaders({
   sortKey,
   sortDir,
   onSort,
+  moneyColumns,
 }: {
   sortKey: QuotationListSortKey;
   sortDir: QuotationListSortDir;
   onSort: (key: QuotationListSortKey) => void;
+  moneyColumns: QuotationListMoneyColumns;
 }) {
+  const labels = QUOTATION_LIST_MONEY_LABELS[moneyColumns];
+
   return (
     <tr className="border-b border-border bg-muted/30">
       <QuotationListSortableTh
@@ -120,6 +177,30 @@ export function QuotationClientProjectTableHeaders({
         activeKey={sortKey}
         sortDir={sortDir}
         onSort={onSort}
+      />
+      <QuotationListSortableTh
+        label={labels.income}
+        sortKey="income"
+        activeKey={sortKey}
+        sortDir={sortDir}
+        onSort={onSort}
+        align="right"
+      />
+      <QuotationListSortableTh
+        label={labels.expense}
+        sortKey="expense"
+        activeKey={sortKey}
+        sortDir={sortDir}
+        onSort={onSort}
+        align="right"
+      />
+      <QuotationListSortableTh
+        label={labels.gp}
+        sortKey="gp"
+        activeKey={sortKey}
+        sortDir={sortDir}
+        onSort={onSort}
+        align="right"
       />
       <QuotationListSortableTh
         label="狀態"

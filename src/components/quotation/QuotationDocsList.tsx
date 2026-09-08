@@ -1,15 +1,27 @@
 import { useMemo, useState } from 'react';
-import { ExternalLink, FileText, FolderOpen, Search } from 'lucide-react';
+import { ExternalLink, FileText, FolderOpen, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
+import { useQuotationDocTypes } from '@/hooks/useQuotationDocTypes';
 import { useQuotationDocsList } from '@/hooks/useQuotationDocs';
 import {
   formatDocDate,
   formatFileSize,
   isImageDoc,
   quotationDocExpiryStatus,
+  toQuotationClientProjectSelectOptions,
+  validateQuotationDocDates,
+  type QuotationListDoc,
 } from '@/lib/quotationDocs';
 import { buildQuotationProjectHref } from '@/lib/quotationProjectNavigation';
 import { pitchingStatusConfig } from '@/data/pitchingData';
+import { DeleteConfirmModal } from '@/components/ui/crud-modal';
+import {
+  QuotationDocFormDialog,
+  emptyQuotationDocFormDraft,
+  type QuotationDocFormDraft,
+} from '@/components/quotation/QuotationDocFormDialog';
 
 function expiryBadge(status: ReturnType<typeof quotationDocExpiryStatus>) {
   if (status === 'expired') return { label: '已過期', className: 'bg-rose-50 text-rose-700' };
@@ -18,9 +30,42 @@ function expiryBadge(status: ReturnType<typeof quotationDocExpiryStatus>) {
 }
 
 export function QuotationDocsList() {
-  const { rows, loading, error } = useQuotationDocsList();
+  const { rows, loading, error, addDoc, updateDoc, deleteDoc } = useQuotationDocsList();
+  const { types } = useQuotationDocTypes();
+  const { records: projects, loading: projectsLoading } = useQuotationClientProjects();
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<QuotationListDoc | null>(null);
+  const [draft, setDraft] = useState<QuotationDocFormDraft>(emptyQuotationDocFormDraft());
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<QuotationListDoc | null>(null);
+
+  const typeById = useMemo(() => new Map(types.map((type) => [type.id, type])), [types]);
+
+  const dialogTypes = useMemo(() => {
+    const active = types.filter((type) => type.isActive);
+    if (draft.docTypeId && !active.some((type) => type.id === draft.docTypeId)) {
+      const current = typeById.get(draft.docTypeId);
+      if (current) return [current, ...active];
+    }
+    return active;
+  }, [draft.docTypeId, typeById, types]);
+
+  const projectOptions = useMemo(
+    () =>
+      toQuotationClientProjectSelectOptions(
+        projects,
+        editing
+          ? {
+              id: editing.quotationClientProjectId,
+              displayName: editing.projectDisplayName,
+              clientName: editing.projectClientName,
+            }
+          : null,
+      ),
+    [editing, projects],
+  );
 
   const typeOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -30,11 +75,11 @@ export function QuotationDocsList() {
       seen.add(row.docTypeId);
       options.push({
         id: row.docTypeId,
-        display: row.docTypeDisplay || '—',
+        display: typeById.get(row.docTypeId)?.display || row.docTypeDisplay || '—',
       });
     }
     return options;
-  }, [rows]);
+  }, [rows, typeById]);
 
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -50,12 +95,104 @@ export function QuotationDocsList() {
     });
   }, [rows, searchQuery, typeFilter]);
 
+  const openCreate = () => {
+    setEditing(null);
+    setDraft(emptyQuotationDocFormDraft());
+    setModalOpen(true);
+  };
+
+  const openEdit = (row: QuotationListDoc) => {
+    setEditing(row);
+    setDraft({
+      projectId: row.quotationClientProjectId,
+      docTypeId: row.docTypeId,
+      documentDate: row.documentDate ?? '',
+      expiryDate: row.expiryDate ?? '',
+      file: null,
+    });
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditing(null);
+    setDraft(emptyQuotationDocFormDraft());
+  };
+
+  const handleSave = async () => {
+    const projectId = draft.projectId.trim();
+    if (!projectId) {
+      toast.error('請選擇客戶項目');
+      return;
+    }
+    const docTypeId = draft.docTypeId.trim();
+    if (!docTypeId) {
+      toast.error('請選擇文件類型');
+      return;
+    }
+    if (!editing && !draft.file) {
+      toast.error('請選擇檔案');
+      return;
+    }
+    const dateError = validateQuotationDocDates(draft.documentDate, draft.expiryDate);
+    if (dateError) {
+      toast.error(dateError);
+      return;
+    }
+
+    setSaving(true);
+    if (editing) {
+      const { error: saveErr } = await updateDoc(editing.id, {
+        projectId,
+        docTypeId,
+        documentDate: draft.documentDate,
+        expiryDate: draft.expiryDate,
+        file: draft.file ?? undefined,
+      });
+      setSaving(false);
+      if (saveErr) {
+        toast.error(`更新失敗：${saveErr.message}`);
+        return;
+      }
+      toast.success('已更新文件');
+    } else if (draft.file) {
+      const { error: addErr } = await addDoc({
+        projectId,
+        docTypeId,
+        fileName: draft.file.name,
+        fileUrl: '',
+        storagePath: '',
+        documentDate: draft.documentDate,
+        expiryDate: draft.expiryDate,
+        file: draft.file,
+      });
+      setSaving(false);
+      if (addErr) {
+        toast.error(`新增失敗：${addErr.message}`);
+        return;
+      }
+      toast.success('已上傳文件');
+    }
+    closeModal();
+  };
+
+  const handleDelete = async () => {
+    if (!deleting) return;
+    const { error: delErr } = await deleteDoc(deleting.id);
+    if (delErr) {
+      toast.error(`刪除失敗：${delErr.message}`);
+      return;
+    }
+    toast.success('已刪除文件');
+    setDeleting(null);
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-[32px] font-bold tracking-tight">報價單列表</h1>
         <p className="text-[14px] text-muted-foreground mt-1">
-          已上傳的報價單文件。請到 Pitching / Project 的「項目文件」上傳。
+          管理已上傳的報價單文件，並可連結到客戶項目。
         </p>
       </div>
 
@@ -84,6 +221,13 @@ export function QuotationDocsList() {
           ))}
         </select>
         <span className="text-[12px] text-muted-foreground">共 {filtered.length} 份</span>
+        <button
+          type="button"
+          onClick={openCreate}
+          className="ml-auto flex items-center gap-1.5 px-3 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors active:scale-[0.97]"
+        >
+          <Plus size={14} /> 新增文件
+        </button>
       </div>
 
       {error && (
@@ -101,7 +245,7 @@ export function QuotationDocsList() {
           <FolderOpen size={24} className="mx-auto text-muted-foreground/50 mb-2" />
           <p className="text-[13px] text-muted-foreground">尚未上傳報價單</p>
           <p className="text-[12px] text-muted-foreground/70 mt-1">
-            請到項目詳情的「項目文件」上傳報價單檔案
+            按「新增文件」上傳並連結到客戶項目
           </p>
         </div>
       ) : (
@@ -127,7 +271,7 @@ export function QuotationDocsList() {
                   return (
                     <tr key={row.id} className="border-b border-border/50 hover:bg-muted/20">
                       <td className="px-4 py-3 text-[13px] font-medium whitespace-nowrap">
-                        {row.docTypeDisplay || '—'}
+                        {typeById.get(row.docTypeId)?.display || row.docTypeDisplay || '—'}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 min-w-0">
@@ -187,15 +331,33 @@ export function QuotationDocsList() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <a
-                          href={row.fileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors inline-flex"
-                          aria-label={`開啟 ${row.fileName}`}
-                        >
-                          <ExternalLink size={13} />
-                        </a>
+                        <div className="flex items-center gap-1">
+                          <a
+                            href={row.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors inline-flex"
+                            aria-label={`開啟 ${row.fileName}`}
+                          >
+                            <ExternalLink size={13} />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => openEdit(row)}
+                            className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                            aria-label={`編輯 ${row.fileName}`}
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleting(row)}
+                            className="p-1.5 rounded-md text-muted-foreground hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                            aria-label={`刪除 ${row.fileName}`}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -205,6 +367,30 @@ export function QuotationDocsList() {
           </div>
         </div>
       )}
+
+      <QuotationDocFormDialog
+        isOpen={modalOpen}
+        onClose={closeModal}
+        editing={editing}
+        draft={draft}
+        onDraftChange={setDraft}
+        types={dialogTypes}
+        saving={saving}
+        onSave={() => void handleSave()}
+        projectSelect={{
+          options: projectOptions,
+          disabled: projectsLoading,
+        }}
+      />
+
+      <DeleteConfirmModal
+        isOpen={Boolean(deleting)}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => void handleDelete()}
+        itemName={deleting?.fileName || '文件'}
+        canDelete
+        description={`確定要刪除「${deleting?.fileName || ''}」嗎？檔案會一併從儲存空間移除。`}
+      />
     </div>
   );
 }

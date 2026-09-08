@@ -30,15 +30,26 @@ assert.match(headerSrc, /提案顯示名稱/);
 assert.match(headerSrc, /相關客戶/);
 assert.match(headerSrc, /負責 PM/);
 assert.match(headerSrc, /狀態/);
+assert.match(headerSrc, /預計收入/);
+assert.match(headerSrc, /總收入/);
 assert.ok(headerSrc.indexOf('提案顯示名稱') < headerSrc.indexOf('相關客戶'));
 assert.ok(headerSrc.indexOf('相關客戶') < headerSrc.indexOf('負責 PM'));
 assert.match(pitchingSrc, /formatRelatedClientName\(record\)/);
 assert.match(projectSrc, /formatRelatedClientName\(record\)/);
-assert.match(pitchingSrc, /colSpan=\{8\}/);
-assert.match(projectSrc, /colSpan=\{8\}/);
+assert.match(pitchingSrc, /moneyColumns="estimated"/);
+assert.match(projectSrc, /moneyColumns="actual"/);
+assert.match(pitchingSrc, /estimatedMoneyFor/);
+assert.match(projectSrc, /useQuotationProjectActuals/);
+assert.match(projectSrc, /projectActualsFor/);
+assert.doesNotMatch(pitchingSrc, /useQuotationProjectActuals/);
+assert.match(pitchingSrc, /colSpan=\{QUOTATION_LIST_COLUMN_COUNT\}/);
+assert.match(projectSrc, /colSpan=\{QUOTATION_LIST_COLUMN_COUNT\}/);
 
 assert.equal(defaultQuotationListSortDir('inquiryDate'), 'desc');
 assert.equal(defaultQuotationListSortDir('remainingDays'), 'desc');
+assert.equal(defaultQuotationListSortDir('income'), 'desc');
+assert.equal(defaultQuotationListSortDir('expense'), 'desc');
+assert.equal(defaultQuotationListSortDir('gp'), 'desc');
 assert.equal(defaultQuotationListSortDir('displayName'), 'asc');
 
 assert.deepEqual(nextQuotationListSort('inquiryDate', 'desc', 'inquiryDate'), {
@@ -53,6 +64,10 @@ assert.deepEqual(nextQuotationListSort('inquiryDate', 'desc', 'displayName'), {
   key: 'displayName',
   dir: 'asc',
 });
+assert.deepEqual(nextQuotationListSort('inquiryDate', 'desc', 'income'), {
+  key: 'income',
+  dir: 'desc',
+});
 
 function row(partial: {
   id: string;
@@ -62,6 +77,9 @@ function row(partial: {
   displayName?: string;
   clientName?: string;
   mainPmName?: string;
+  income?: number | null;
+  expense?: number | null;
+  gp?: number | null;
 }) {
   return {
     inquiryDate: '',
@@ -149,6 +167,20 @@ const byClientAsc = sortQuotationListRecords(rows, 'clientName', 'asc', '2026-08
 assert.deepEqual(
   byClientAsc.map((r) => r.id),
   ['b', 'a', 'c'],
+);
+
+const moneyRows = [
+  row({ id: 'high', income: 20000, expense: 4000, gp: 16000 }),
+  row({ id: 'low', income: 5000, expense: 8000, gp: -3000 }),
+  row({ id: 'empty', income: null, expense: null, gp: null }),
+];
+assert.deepEqual(
+  sortQuotationListRecords(moneyRows, 'income', 'desc').map((r) => r.id),
+  ['high', 'low', 'empty'],
+);
+assert.deepEqual(
+  sortQuotationListRecords(moneyRows, 'gp', 'asc').map((r) => r.id),
+  ['low', 'high', 'empty'],
 );
 
 console.log('quotation list sort: ok');

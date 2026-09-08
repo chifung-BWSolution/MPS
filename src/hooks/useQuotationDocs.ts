@@ -6,6 +6,7 @@ import {
   QUOTATION_DOCS_TABLE,
   QUOTATION_LIST_DOC_TYPE_IDS,
   isAllowedQuotationDocFile,
+  isQuotationListDocType,
   optionalIsoDate,
   quotationDocStoragePath,
   type QuotationDoc,
@@ -103,6 +104,121 @@ const DOC_SELECT = '*, quotation_doc_types!quotation_docs_doc_type_fkey ( id, di
 const LIST_SELECT =
   `${DOC_SELECT}, quotation_client_project!quotation_client_project_id ( id, display_name, client_name, status )`;
 
+type DocSelect = typeof DOC_SELECT | typeof LIST_SELECT;
+type AddDocInput = Omit<QuotationDocInput, 'createdBy'> & { file: File };
+type UpdateDocInput = Partial<Omit<QuotationDocInput, 'createdBy'>> & {
+  file?: File | null;
+  projectId?: string;
+};
+
+async function persistAddDoc(
+  projectId: string,
+  input: AddDocInput,
+  createdBy: string | null,
+  select: DocSelect,
+): Promise<{ data: DbRow | null; error: { message: string } | null }> {
+  const docTypeId = input.docTypeId.trim();
+  if (!docTypeId) return { data: null, error: { message: '請選擇文件類型' } };
+
+  const uploaded = await uploadQuotationDocFile(projectId, input.file);
+  if (uploaded.error || !uploaded.data) {
+    return { data: null, error: uploaded.error ?? { message: '上傳失敗' } };
+  }
+
+  const row = inputToRow(
+    {
+      ...input,
+      docTypeId,
+      fileName: input.file.name,
+      fileUrl: uploaded.data.url,
+      storagePath: uploaded.data.path,
+      fileSize: input.file.size,
+      mimeType: input.file.type || null,
+      createdBy,
+    },
+    projectId,
+  );
+
+  const { data, error: err } = await supabase
+    .from(QUOTATION_DOCS_TABLE)
+    .insert(row)
+    .select(select)
+    .single();
+
+  if (err || !data) {
+    await removeStorageObject(uploaded.data.path);
+    return { data: null, error: err ?? { message: '儲存失敗' } };
+  }
+
+  return { data: data as unknown as DbRow, error: null };
+}
+
+async function persistUpdateDoc(
+  id: string,
+  current: Pick<QuotationDoc, 'storagePath'> | undefined,
+  targetProjectId: string,
+  input: UpdateDocInput,
+  select: DocSelect,
+): Promise<{ data: DbRow | null; error: { message: string } | null }> {
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  let uploadedPath: string | undefined;
+
+  if (input.projectId !== undefined) {
+    const nextProjectId = input.projectId.trim();
+    if (!nextProjectId) return { data: null, error: { message: '請選擇客戶項目' } };
+    patch.quotation_client_project_id = nextProjectId;
+  }
+  if (input.docTypeId !== undefined) {
+    const docTypeId = input.docTypeId.trim();
+    if (!docTypeId) return { data: null, error: { message: '請選擇文件類型' } };
+    patch.doc_type = docTypeId;
+  }
+  if (input.documentDate !== undefined) patch.document_date = optionalIsoDate(input.documentDate ?? undefined) ?? null;
+  if (input.expiryDate !== undefined) patch.expiry_date = optionalIsoDate(input.expiryDate ?? undefined) ?? null;
+
+  if (input.file) {
+    const uploaded = await uploadQuotationDocFile(targetProjectId, input.file);
+    if (uploaded.error || !uploaded.data) {
+      return { data: null, error: uploaded.error ?? { message: '上傳失敗' } };
+    }
+    uploadedPath = uploaded.data.path;
+    patch.file_name = input.file.name;
+    patch.file_url = uploaded.data.url;
+    patch.storage_path = uploaded.data.path;
+    patch.file_size = input.file.size;
+    patch.mime_type = input.file.type || null;
+  } else {
+    if (input.fileName !== undefined) patch.file_name = input.fileName.trim();
+    if (input.fileUrl !== undefined) patch.file_url = input.fileUrl.trim();
+    if (input.storagePath !== undefined) patch.storage_path = input.storagePath.trim();
+  }
+
+  const { data, error: err } = await supabase
+    .from(QUOTATION_DOCS_TABLE)
+    .update(patch)
+    .eq('id', id)
+    .select(select)
+    .single();
+
+  if (err || !data) {
+    await removeStorageObject(uploadedPath);
+    return { data: null, error: err ?? { message: '更新失敗' } };
+  }
+
+  if (uploadedPath && current?.storagePath && current.storagePath !== uploadedPath) {
+    await removeStorageObject(current.storagePath);
+  }
+
+  return { data: data as unknown as DbRow, error: null };
+}
+
+async function persistDeleteDoc(id: string, current: Pick<QuotationDoc, 'storagePath'> | undefined) {
+  const { error: err } = await supabase.from(QUOTATION_DOCS_TABLE).delete().eq('id', id);
+  if (err) return { error: err };
+  await removeStorageObject(current?.storagePath);
+  return { error: null };
+}
+
 export async function uploadQuotationDocFile(
   projectId: string,
   file: File,
@@ -159,42 +275,18 @@ export function useQuotationDocs(projectId: string | undefined) {
   }, [refresh]);
 
   const addDoc = useCallback(
-    async (input: Omit<QuotationDocInput, 'createdBy'> & { file: File }) => {
+    async (input: AddDocInput) => {
       if (!projectId) return { data: null, error: { message: '缺少項目' } };
-      const docTypeId = input.docTypeId.trim();
-      if (!docTypeId) return { data: null, error: { message: '請選擇文件類型' } };
-
-      const uploaded = await uploadQuotationDocFile(projectId, input.file);
-      if (uploaded.error || !uploaded.data) {
-        return { data: null, error: uploaded.error ?? { message: '上傳失敗' } };
-      }
-
-      const row = inputToRow(
-        {
-          ...input,
-          docTypeId,
-          fileName: input.file.name,
-          fileUrl: uploaded.data.url,
-          storagePath: uploaded.data.path,
-          fileSize: input.file.size,
-          mimeType: input.file.type || null,
-          createdBy: systemUser?.staff_id || systemUser?.display_name || null,
-        },
+      const result = await persistAddDoc(
         projectId,
+        input,
+        systemUser?.staff_id || systemUser?.display_name || null,
+        DOC_SELECT,
       );
-
-      const { data, error: err } = await supabase
-        .from(QUOTATION_DOCS_TABLE)
-        .insert(row)
-        .select(DOC_SELECT)
-        .single();
-
-      if (err || !data) {
-        await removeStorageObject(uploaded.data.path);
-        return { data: null, error: err ?? { message: '儲存失敗' } };
+      if (result.error || !result.data) {
+        return { data: null, error: result.error ?? { message: '儲存失敗' } };
       }
-
-      const mapped = mapRow(data as DbRow);
+      const mapped = mapRow(result.data);
       setRows((prev) => [mapped, ...prev]);
       return { data: mapped, error: null };
     },
@@ -202,57 +294,14 @@ export function useQuotationDocs(projectId: string | undefined) {
   );
 
   const updateDoc = useCallback(
-    async (
-      id: string,
-      input: Partial<Omit<QuotationDocInput, 'createdBy'>> & { file?: File | null },
-    ) => {
+    async (id: string, input: UpdateDocInput) => {
       if (!projectId) return { error: { message: '缺少項目' } };
       const current = rows.find((row) => row.id === id);
-      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      let uploadedPath: string | undefined;
-
-      if (input.docTypeId !== undefined) {
-        const docTypeId = input.docTypeId.trim();
-        if (!docTypeId) return { error: { message: '請選擇文件類型' } };
-        patch.doc_type = docTypeId;
+      const result = await persistUpdateDoc(id, current, projectId, input, DOC_SELECT);
+      if (result.error || !result.data) {
+        return { error: result.error ?? { message: '更新失敗' } };
       }
-      if (input.documentDate !== undefined) patch.document_date = optionalIsoDate(input.documentDate ?? undefined) ?? null;
-      if (input.expiryDate !== undefined) patch.expiry_date = optionalIsoDate(input.expiryDate ?? undefined) ?? null;
-
-      if (input.file) {
-        const uploaded = await uploadQuotationDocFile(projectId, input.file);
-        if (uploaded.error || !uploaded.data) {
-          return { error: uploaded.error ?? { message: '上傳失敗' } };
-        }
-        uploadedPath = uploaded.data.path;
-        patch.file_name = input.file.name;
-        patch.file_url = uploaded.data.url;
-        patch.storage_path = uploaded.data.path;
-        patch.file_size = input.file.size;
-        patch.mime_type = input.file.type || null;
-      } else {
-        if (input.fileName !== undefined) patch.file_name = input.fileName.trim();
-        if (input.fileUrl !== undefined) patch.file_url = input.fileUrl.trim();
-        if (input.storagePath !== undefined) patch.storage_path = input.storagePath.trim();
-      }
-
-      const { data, error: err } = await supabase
-        .from(QUOTATION_DOCS_TABLE)
-        .update(patch)
-        .eq('id', id)
-        .select(DOC_SELECT)
-        .single();
-
-      if (err || !data) {
-        await removeStorageObject(uploadedPath);
-        return { error: err ?? { message: '更新失敗' } };
-      }
-
-      if (uploadedPath && current?.storagePath && current.storagePath !== uploadedPath) {
-        await removeStorageObject(current.storagePath);
-      }
-
-      const mapped = mapRow(data as DbRow);
+      const mapped = mapRow(result.data);
       setRows((prev) => prev.map((row) => (row.id === id ? mapped : row)));
       return { error: null };
     },
@@ -261,9 +310,8 @@ export function useQuotationDocs(projectId: string | undefined) {
 
   const deleteDoc = useCallback(async (id: string) => {
     const current = rows.find((row) => row.id === id);
-    const { error: err } = await supabase.from(QUOTATION_DOCS_TABLE).delete().eq('id', id);
-    if (err) return { error: err };
-    await removeStorageObject(current?.storagePath);
+    const result = await persistDeleteDoc(id, current);
+    if (result.error) return result;
     setRows((prev) => prev.filter((row) => row.id !== id));
     return { error: null };
   }, [rows]);
@@ -274,6 +322,7 @@ export function useQuotationDocs(projectId: string | undefined) {
 export function useQuotationDocsList(
   docTypeIds: readonly string[] = QUOTATION_LIST_DOC_TYPE_IDS,
 ) {
+  const { systemUser } = useAuth();
   const [rows, setRows] = useState<QuotationListDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -300,5 +349,56 @@ export function useQuotationDocsList(
     void refresh();
   }, [refresh]);
 
-  return { rows, loading, error, refresh };
+  const addDoc = useCallback(
+    async (input: AddDocInput & { projectId: string }) => {
+      const projectId = input.projectId.trim();
+      if (!projectId) return { data: null, error: { message: '請選擇客戶項目' } };
+      const result = await persistAddDoc(
+        projectId,
+        input,
+        systemUser?.staff_id || systemUser?.display_name || null,
+        LIST_SELECT,
+      );
+      if (result.error || !result.data) {
+        return { data: null, error: result.error ?? { message: '儲存失敗' } };
+      }
+      const mapped = mapListRow(result.data);
+      if (isQuotationListDocType(mapped.docTypeId)) {
+        setRows((prev) => [mapped, ...prev]);
+      }
+      return { data: mapped, error: null };
+    },
+    [systemUser?.display_name, systemUser?.staff_id],
+  );
+
+  const updateDoc = useCallback(
+    async (id: string, input: UpdateDocInput) => {
+      const current = rows.find((row) => row.id === id);
+      const targetProjectId = (input.projectId ?? current?.quotationClientProjectId ?? '').trim();
+      if (!targetProjectId) return { error: { message: '請選擇客戶項目' } };
+      const result = await persistUpdateDoc(id, current, targetProjectId, { ...input, projectId: targetProjectId }, LIST_SELECT);
+      if (result.error || !result.data) {
+        return { error: result.error ?? { message: '更新失敗' } };
+      }
+      const mapped = mapListRow(result.data);
+      setRows((prev) => {
+        if (!isQuotationListDocType(mapped.docTypeId)) {
+          return prev.filter((row) => row.id !== id);
+        }
+        return prev.map((row) => (row.id === id ? mapped : row));
+      });
+      return { error: null };
+    },
+    [rows],
+  );
+
+  const deleteDoc = useCallback(async (id: string) => {
+    const current = rows.find((row) => row.id === id);
+    const result = await persistDeleteDoc(id, current);
+    if (result.error) return result;
+    setRows((prev) => prev.filter((row) => row.id !== id));
+    return { error: null };
+  }, [rows]);
+
+  return { rows, loading, error, refresh, addDoc, updateDoc, deleteDoc };
 }

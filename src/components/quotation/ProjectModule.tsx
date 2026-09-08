@@ -28,8 +28,11 @@ import {
 } from '@/data/pitchingData';
 import {
   QuotationClientProjectTableHeaders,
+  QuotationListMoneyCells,
   useQuotationListSort,
 } from '@/components/quotation/QuotationListSortHeader';
+import { useQuotationProjectActuals } from '@/hooks/useQuotationProjectActuals';
+import { projectActualsFor, QUOTATION_LIST_COLUMN_COUNT } from '@/lib/quotationListMoney';
 
 function ProjectList({
   records,
@@ -45,9 +48,21 @@ function ProjectList({
   const [searchQuery, setSearchQuery] = useState('');
   const [projectTypeFilter, setProjectTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const { actuals, loading: actualsLoading, error: actualsError } = useQuotationProjectActuals();
+
+  const withMoney = useMemo(
+    () =>
+      records.map((record) => {
+        if (actualsLoading || actualsError) {
+          return { ...record, income: null, expense: null, gp: null };
+        }
+        return { ...record, ...projectActualsFor(record.id, actuals) };
+      }),
+    [records, actuals, actualsLoading, actualsError],
+  );
 
   const filtered = useMemo(() => {
-    return records.filter((p) => {
+    return withMoney.filter((p) => {
       if (!matchesProjectTypeFilter(p.projectTypes, projectTypeFilter)) return false;
       if (statusFilter !== 'all' && p.status !== statusFilter) return false;
       if (searchQuery) {
@@ -63,7 +78,7 @@ function ProjectList({
       }
       return true;
     });
-  }, [records, searchQuery, projectTypeFilter, statusFilter]);
+  }, [withMoney, searchQuery, projectTypeFilter, statusFilter]);
   const { sorted, sortKey, sortDir, onSort } = useQuotationListSort(filtered);
 
   const totalCount = records.length;
@@ -132,6 +147,7 @@ function ProjectList({
                 sortKey={sortKey}
                 sortDir={sortDir}
                 onSort={onSort}
+                moneyColumns="actual"
               />
             </thead>
             <tbody>
@@ -149,6 +165,11 @@ function ProjectList({
                     <td className="px-4 py-3 text-[14px] font-medium">{record.displayName}</td>
                     <td className="px-4 py-3 text-[13px]">{formatRelatedClientName(record)}</td>
                     <td className="px-4 py-3 text-[13px]">{formatMainPmName(record)}</td>
+                    <QuotationListMoneyCells
+                      income={record.income}
+                      expense={record.expense}
+                      gp={record.gp}
+                    />
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <PitchingStatusSelect
                         value={record.status}
@@ -177,7 +198,7 @@ function ProjectList({
                 ))}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-[13px] text-muted-foreground">
+                  <td colSpan={QUOTATION_LIST_COLUMN_COUNT} className="px-4 py-8 text-center text-[13px] text-muted-foreground">
                     沒有找到符合條件的 Project 紀錄
                   </td>
                 </tr>

@@ -5,7 +5,6 @@ import { cn } from '@/lib/utils';
 import { useQuotationDocs } from '@/hooks/useQuotationDocs';
 import { useQuotationDocTypes } from '@/hooks/useQuotationDocTypes';
 import {
-  QUOTATION_DOC_MAX_SIZE_MB,
   formatDocDate,
   formatFileSize,
   isImageDoc,
@@ -13,22 +12,12 @@ import {
   validateQuotationDocDates,
   type QuotationDoc,
 } from '@/lib/quotationDocs';
-import { CrudModal, CrudModalFooter, DeleteConfirmModal } from '@/components/ui/crud-modal';
-import { Input } from '@/components/ui/input';
-
-type Draft = {
-  docTypeId: string;
-  documentDate: string;
-  expiryDate: string;
-  file: File | null;
-};
-
-const emptyDraft = (): Draft => ({
-  docTypeId: '',
-  documentDate: '',
-  expiryDate: '',
-  file: null,
-});
+import { DeleteConfirmModal } from '@/components/ui/crud-modal';
+import {
+  QuotationDocFormDialog,
+  emptyQuotationDocFormDraft,
+  type QuotationDocFormDraft,
+} from '@/components/quotation/QuotationDocFormDialog';
 
 function expiryBadge(status: ReturnType<typeof quotationDocExpiryStatus>) {
   if (status === 'expired') return { label: '已過期', className: 'bg-rose-50 text-rose-700' };
@@ -42,7 +31,7 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
   const [typeFilter, setTypeFilter] = useState('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<QuotationDoc | null>(null);
-  const [draft, setDraft] = useState<Draft>(emptyDraft());
+  const [draft, setDraft] = useState<QuotationDocFormDraft>(emptyQuotationDocFormDraft());
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<QuotationDoc | null>(null);
 
@@ -78,13 +67,14 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
 
   const openCreate = () => {
     setEditing(null);
-    setDraft(emptyDraft());
+    setDraft(emptyQuotationDocFormDraft());
     setModalOpen(true);
   };
 
   const openEdit = (row: QuotationDoc) => {
     setEditing(row);
     setDraft({
+      projectId: row.quotationClientProjectId,
       docTypeId: row.docTypeId,
       documentDate: row.documentDate ?? '',
       expiryDate: row.expiryDate ?? '',
@@ -96,7 +86,7 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
   const closeModal = () => {
     setModalOpen(false);
     setEditing(null);
-    setDraft(emptyDraft());
+    setDraft(emptyQuotationDocFormDraft());
   };
 
   const handleSave = async () => {
@@ -303,97 +293,16 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
         </div>
       )}
 
-      <CrudModal
+      <QuotationDocFormDialog
         isOpen={modalOpen}
         onClose={closeModal}
-        title={editing ? '編輯項目文件' : '新增項目文件'}
-        size="md"
-        footer={
-          <CrudModalFooter className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={closeModal}
-              className="px-4 py-2 text-[13px] font-medium text-muted-foreground bg-secondary rounded-md hover:bg-secondary/80"
-            >
-              取消
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleSave()}
-              disabled={saving}
-              className="px-4 py-2 text-[13px] font-medium text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50"
-            >
-              {saving ? '儲存中…' : '儲存'}
-            </button>
-          </CrudModalFooter>
-        }
-      >
-        <div className="space-y-4">
-          <div>
-            <span className="text-[12px] text-muted-foreground block mb-1">文件類型 *</span>
-            {dialogTypes.length === 0 ? (
-              <p className="text-[12px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-                尚未設定可用的文件類型。請到項目管理 → 設置 → 文件類型新增。
-              </p>
-            ) : (
-              <select
-                value={draft.docTypeId}
-                onChange={(e) => setDraft((prev) => ({ ...prev, docTypeId: e.target.value }))}
-                aria-label="文件類型"
-                className="w-full text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
-              >
-                <option value="">請選擇文件類型</option>
-                {dialogTypes.map((type) => (
-                  <option key={type.id} value={type.id}>
-                    {type.display}{type.isActive ? '' : '（已停用）'}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-          <div>
-            <span className="text-[12px] text-muted-foreground block mb-1">
-              {editing ? '更換檔案（選填）' : '檔案 *'}
-            </span>
-            <Input
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.avif,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
-              onChange={(e) => setDraft((prev) => ({ ...prev, file: e.target.files?.[0] ?? null }))}
-              className="text-[13px]"
-              aria-label="選擇檔案"
-            />
-            <p className="text-[11px] text-muted-foreground mt-1.5">
-              {draft.file
-                ? `${draft.file.name}（${formatFileSize(draft.file.size)}）`
-                : editing
-                  ? `目前：${editing.fileName}`
-                  : `支援 PDF、圖片、Office、ZIP，上限 ${QUOTATION_DOC_MAX_SIZE_MB}MB`}
-            </p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <span className="text-[12px] text-muted-foreground block mb-1">文件日期</span>
-              <Input
-                type="date"
-                value={draft.documentDate}
-                onChange={(e) => setDraft((prev) => ({ ...prev, documentDate: e.target.value }))}
-                className="text-[13px]"
-                aria-label="文件日期"
-              />
-            </div>
-            <div>
-              <span className="text-[12px] text-muted-foreground block mb-1">到期日</span>
-              <Input
-                type="date"
-                value={draft.expiryDate}
-                onChange={(e) => setDraft((prev) => ({ ...prev, expiryDate: e.target.value }))}
-                className="text-[13px]"
-                aria-label="到期日"
-              />
-            </div>
-          </div>
-        </div>
-      </CrudModal>
+        editing={editing}
+        draft={draft}
+        onDraftChange={setDraft}
+        types={dialogTypes}
+        saving={saving}
+        onSave={() => void handleSave()}
+      />
 
       <DeleteConfirmModal
         isOpen={Boolean(deleting)}

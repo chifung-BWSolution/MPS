@@ -30,6 +30,7 @@ import {
   formatRelatedClientName,
   matchesProjectTypeFilter,
   optionalIsoDate,
+  resolvePitchingFormClient,
   type PitchingRecord,
   type PitchingStatus,
   type PitchingProjectType,
@@ -44,8 +45,10 @@ import { PitchingWorkHoursTab } from '@/components/quotation/PitchingWorkHoursTa
 import { QuotationBvCard } from '@/components/quotation/QuotationBvCard';
 import {
   QuotationClientProjectTableHeaders,
+  QuotationListMoneyCells,
   useQuotationListSort,
 } from '@/components/quotation/QuotationListSortHeader';
+import { estimatedMoneyFor, QUOTATION_LIST_COLUMN_COUNT } from '@/lib/quotationListMoney';
 
 export type PitchingFormValues = {
   clientId: string;
@@ -88,17 +91,9 @@ const emptyForm = (defaultMainPmId = ''): PitchingFormValues => ({
 });
 
 function formFromRecord(record: PitchingRecord, clientOptions: ClientOption[]): PitchingFormValues {
-  const byId = record.clientId
-    ? clientOptions.find((c) => c.value === record.clientId)
-    : undefined;
-  const byName =
-    !byId && record.clientName && record.clientName !== '—'
-      ? clientOptions.find((c) => c.label === record.clientName)
-      : undefined;
-  const matched = byId ?? byName;
-  const clientName = matched?.label ?? (record.clientName === '—' ? '' : record.clientName);
+  const { clientId, clientName } = resolvePitchingFormClient(record, clientOptions);
   return {
-    clientId: matched?.value ?? record.clientId?.trim() ?? '',
+    clientId,
     clientName,
     displayName: record.displayName,
     inquiryDate: record.inquiryDate,
@@ -305,7 +300,7 @@ export function PitchingFormModal({
   };
 
   const handleSubmit = async () => {
-    if (!form.clientId.trim()) {
+    if (!isEdit && !form.clientId.trim()) {
       toast.error('請選擇客戶');
       return;
     }
@@ -354,7 +349,9 @@ export function PitchingFormModal({
             客戶 Customer
           </h3>
           <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">客戶 Customer *</label>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">
+              客戶 Customer{isEdit ? '' : ' *'}
+            </label>
             <div className="flex items-center gap-2">
               <div className="flex-1 min-w-0">
                 <SearchableSelect
@@ -559,8 +556,13 @@ function PitchingList({
   const [projectTypeFilter, setProjectTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
+  const withMoney = useMemo(
+    () => records.map((record) => ({ ...record, ...estimatedMoneyFor(record) })),
+    [records],
+  );
+
   const filtered = useMemo(() => {
-    return records.filter((p) => {
+    return withMoney.filter((p) => {
       if (!matchesProjectTypeFilter(p.projectTypes, projectTypeFilter)) return false;
       if (statusFilter !== 'all' && p.status !== statusFilter) return false;
       if (searchQuery) {
@@ -576,7 +578,7 @@ function PitchingList({
       }
       return true;
     });
-  }, [records, searchQuery, projectTypeFilter, statusFilter]);
+  }, [withMoney, searchQuery, projectTypeFilter, statusFilter]);
   const { sorted, sortKey, sortDir, onSort } = useQuotationListSort(filtered);
 
   const totalCount = records.length;
@@ -649,6 +651,7 @@ function PitchingList({
                 sortKey={sortKey}
                 sortDir={sortDir}
                 onSort={onSort}
+                moneyColumns="estimated"
               />
             </thead>
             <tbody>
@@ -666,6 +669,11 @@ function PitchingList({
                     <td className="px-4 py-3 text-[14px] font-medium">{record.displayName}</td>
                     <td className="px-4 py-3 text-[13px]">{formatRelatedClientName(record)}</td>
                     <td className="px-4 py-3 text-[13px]">{formatMainPmName(record)}</td>
+                    <QuotationListMoneyCells
+                      income={record.income}
+                      expense={record.expense}
+                      gp={record.gp}
+                    />
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <PitchingStatusSelect
                         value={record.status}
@@ -694,7 +702,7 @@ function PitchingList({
                 ))}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-[13px] text-muted-foreground">
+                  <td colSpan={QUOTATION_LIST_COLUMN_COUNT} className="px-4 py-8 text-center text-[13px] text-muted-foreground">
                     沒有找到符合條件的 Pitching 紀錄
                   </td>
                 </tr>
@@ -724,17 +732,10 @@ type DetailDraft = {
 };
 
 function draftFromRecord(record: PitchingRecord, clientOptions: ClientOption[]): DetailDraft {
-  const byId = record.clientId
-    ? clientOptions.find((c) => c.value === record.clientId)
-    : undefined;
-  const byName =
-    !byId && record.clientName && record.clientName !== '—'
-      ? clientOptions.find((c) => c.label === record.clientName)
-      : undefined;
-  const matched = byId ?? byName;
+  const { clientId, clientName } = resolvePitchingFormClient(record, clientOptions);
   return {
-    clientId: matched?.value ?? record.clientId?.trim() ?? '',
-    clientName: matched?.label ?? (record.clientName === '—' ? '' : record.clientName),
+    clientId,
+    clientName,
     displayName: record.displayName,
     inquiryDate: record.inquiryDate,
     signedDate: optionalIsoDate(record.signedDate) ?? '',

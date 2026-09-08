@@ -57,6 +57,55 @@ export function isQuotationListDocType(id: string | null | undefined): boolean {
   return Boolean(id && (QUOTATION_LIST_DOC_TYPE_IDS as readonly string[]).includes(id));
 }
 
+export type QuotationClientProjectSelectOption = {
+  value: string;
+  label: string;
+  keywords?: string;
+};
+
+export function formatQuotationClientProjectOptionLabel(
+  displayName: string,
+  clientName: string,
+): string {
+  const name = displayName.trim() || '—';
+  const client = clientName.trim();
+  if (!client || client === '—') return name;
+  return `${name}（${client}）`;
+}
+
+export function toQuotationClientProjectSelectOptions(
+  projects: Array<{
+    id: string;
+    displayName: string;
+    clientName: string;
+    pitchingId?: string;
+  }>,
+  extra?: { id: string; displayName: string; clientName: string } | null,
+): QuotationClientProjectSelectOption[] {
+  const seen = new Set<string>();
+  const options: QuotationClientProjectSelectOption[] = [];
+  const push = (project: {
+    id: string;
+    displayName: string;
+    clientName: string;
+    pitchingId?: string;
+  }) => {
+    const id = project.id.trim();
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    options.push({
+      value: id,
+      label: formatQuotationClientProjectOptionLabel(project.displayName, project.clientName),
+      keywords: [project.displayName, project.clientName, project.pitchingId]
+        .filter((part) => part?.trim())
+        .join(' '),
+    });
+  };
+  if (extra) push(extra);
+  for (const project of projects) push(project);
+  return options;
+}
+
 export type QuotationDocInput = {
   docTypeId: string;
   fileName: string;
