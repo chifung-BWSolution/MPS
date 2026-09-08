@@ -23,10 +23,14 @@ import {
   validateBulkIncomeInput,
   BULK_BILLED_TOTAL_MISMATCH,
   billedSumMatchesTotal,
+  BULK_DATE_MODE_LABELS,
+  DEFAULT_BULK_DATE_MODE,
   DEFAULT_BULK_INSTALLMENT_COUNT,
   defaultBulkDateRange,
+  distributeDueDates,
   findInstallmentCollision,
   formatMoneyInput,
+  inferBulkDateMode,
   planBulkInstallmentNumbers,
   spreadDueDates,
   splitBilledAmounts,
@@ -75,9 +79,45 @@ assert.equal(nextInstallmentNumber([], '後加項目'), 1);
 assert.equal(DEFAULT_BULK_INSTALLMENT_COUNT, 2);
 assert.deepEqual(defaultBulkDateRange('2026-03-01', '2026-09-01'), { start: '2026-03-01', end: '2026-09-01' });
 assert.deepEqual(defaultBulkDateRange('2026-09-01', '2026-03-01'), { start: '2026-03-01', end: '2026-09-01' });
+assert.equal(DEFAULT_BULK_DATE_MODE, 'monthly');
+assert.equal(BULK_DATE_MODE_LABELS.even, '按平均日數');
+assert.equal(BULK_DATE_MODE_LABELS.weekly, '每週重複');
+assert.equal(BULK_DATE_MODE_LABELS.monthly, '每月重複');
+assert.equal(BULK_DATE_MODE_LABELS.quarterly, '每季重複');
+assert.equal(BULK_DATE_MODE_LABELS.yearly, '每年重複');
 assert.deepEqual(spreadDueDates('2026-01-01', '2026-04-01', 2), ['2026-01-01', '2026-04-01']);
 assert.deepEqual(spreadDueDates('2026-01-01', '2026-01-31', 3), ['2026-01-01', '2026-01-16', '2026-01-31']);
 assert.deepEqual(spreadDueDates('2026-01-01', '2026-01-01', 2), ['2026-01-01', '2026-01-01']);
+assert.deepEqual(
+  distributeDueDates({ mode: 'even', start: '2026-01-01', end: '2026-01-31', count: 3 }),
+  ['2026-01-01', '2026-01-16', '2026-01-31'],
+);
+assert.deepEqual(
+  distributeDueDates({ mode: 'weekly', start: '2026-01-06', count: 4 }),
+  ['2026-01-06', '2026-01-13', '2026-01-20', '2026-01-27'],
+);
+assert.deepEqual(
+  distributeDueDates({ mode: 'monthly', start: '2026-01-15', count: 3 }),
+  ['2026-01-15', '2026-02-15', '2026-03-15'],
+);
+assert.deepEqual(
+  distributeDueDates({ mode: 'monthly', start: '2026-01-31', count: 3 }),
+  ['2026-01-31', '2026-02-28', '2026-03-31'],
+);
+assert.deepEqual(
+  distributeDueDates({ mode: 'quarterly', start: '2026-01-31', count: 3 }),
+  ['2026-01-31', '2026-04-30', '2026-07-31'],
+);
+assert.deepEqual(
+  distributeDueDates({ mode: 'yearly', start: '2024-02-29', count: 3 }),
+  ['2024-02-29', '2025-02-28', '2026-02-28'],
+);
+assert.equal(inferBulkDateMode(['2026-01-06', '2026-01-13', '2026-01-20']), 'weekly');
+assert.equal(inferBulkDateMode(['2026-01-31', '2026-02-28', '2026-03-31']), 'monthly');
+assert.equal(inferBulkDateMode(['2026-01-31', '2026-04-30', '2026-07-31']), 'quarterly');
+assert.equal(inferBulkDateMode(['2024-02-29', '2025-02-28', '2026-02-28']), 'yearly');
+assert.equal(inferBulkDateMode(['2026-01-01', '2026-01-16', '2026-01-31']), 'even');
+assert.equal(inferBulkDateMode(['2026-01-01', '2026-01-10', '2026-03-03']), null);
 assert.deepEqual(splitBilledAmounts(10000, 2), [5000, 5000]);
 assert.deepEqual(splitBilledAmounts(10000, 3), [3333.33, 3333.33, 3333.34]);
 assert.equal(formatMoneyInput(3333.34), '3333.34');
@@ -362,16 +402,23 @@ const bulk = read('src/components/quotation/PitchingBulkIncomeDialog.tsx');
 assert.match(bulk, /新增整項收入/);
 assert.match(bulk, /編輯整項收入/);
 assert.match(bulk, /DEFAULT_BULK_INSTALLMENT_COUNT/);
-assert.match(bulk, /spreadDueDates/);
+assert.match(bulk, /DEFAULT_BULK_DATE_MODE/);
+assert.match(bulk, /distributeDueDates/);
 assert.match(bulk, /planBulkInstallmentNumbers/);
 assert.match(bulk, /mode="range"/);
+assert.match(bulk, /mode="single"/);
 assert.match(bulk, /setPickingEnd\(true\)/);
 assert.match(bulk, /to: undefined/);
 assert.match(bulk, /triggerDate/);
 assert.match(bulk, /BULK_BILLED_TOTAL_MISMATCH/);
 assert.match(bulk, /billedMismatch/);
 assert.match(bulk, /role="alert"/);
+assert.match(bulk, /aria-label="按日期分期"/);
+assert.match(bulk, /BULK_DATE_MODE_LABELS/);
+assert.match(bulk, /按日期分期 Date distribution/);
+assert.match(bulk, /開始日期 Start date/);
 assert.match(bulk, /aria-label="日期範圍"/);
+assert.match(bulk, /aria-label="開始日期"/);
 assert.match(bulk, /aria-label="總金額"/);
 assert.match(bulk, /aria-label="期數數量"/);
 assert.match(bulk, /到期日 Due date \*/);

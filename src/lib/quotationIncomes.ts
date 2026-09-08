@@ -136,6 +136,22 @@ export function nextInstallmentNumber(
 export const DEFAULT_BULK_INSTALLMENT_COUNT = 2;
 export const MAX_BULK_INSTALLMENT_COUNT = 24;
 
+export const BULK_DATE_MODES = ['even', 'weekly', 'monthly', 'quarterly', 'yearly'] as const;
+export type BulkDateMode = (typeof BULK_DATE_MODES)[number];
+export const DEFAULT_BULK_DATE_MODE: BulkDateMode = 'monthly';
+
+export const BULK_DATE_MODE_LABELS: Record<BulkDateMode, string> = {
+  even: '按平均日數',
+  weekly: '每週重複',
+  monthly: '每月重複',
+  quarterly: '每季重複',
+  yearly: '每年重複',
+};
+
+export function isBulkDateMode(value: string | null | undefined): value is BulkDateMode {
+  return BULK_DATE_MODES.includes(value as BulkDateMode);
+}
+
 export function parseLocalIsoDate(value: string | null | undefined): Date | null {
   const iso = optionalIsoDate(value);
   if (!iso) return null;
@@ -189,6 +205,51 @@ export function spreadDueDates(start: string, end: string, count: number): strin
     next.setDate(startDate.getDate() + offset);
     return formatLocalIsoDate(next);
   });
+}
+
+function addCalendarMonths(date: Date, months: number): Date {
+  const day = date.getDate();
+  const target = new Date(date.getFullYear(), date.getMonth() + months, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(day, lastDay));
+  return target;
+}
+
+export function distributeDueDates(input: {
+  mode: BulkDateMode;
+  start: string;
+  end?: string;
+  count: number;
+}): string[] {
+  const { mode, start, count } = input;
+  if (mode === 'even') return spreadDueDates(start, input.end ?? start, count);
+  if (count < 1) return [];
+  const startDate = parseLocalIsoDate(start);
+  if (!startDate) return Array.from({ length: count }, () => '');
+  return Array.from({ length: count }, (_, index) => {
+    if (mode === 'weekly') {
+      const next = new Date(startDate);
+      next.setDate(startDate.getDate() + index * 7);
+      return formatLocalIsoDate(next);
+    }
+    const months = mode === 'monthly' ? index : mode === 'quarterly' ? index * 3 : index * 12;
+    return formatLocalIsoDate(addCalendarMonths(startDate, months));
+  });
+}
+
+export function inferBulkDateMode(dates: string[]): BulkDateMode | null {
+  if (dates.length < 2 || dates.some((value) => !optionalIsoDate(value))) return null;
+  const start = dates[0];
+  const end = dates[dates.length - 1];
+  const count = dates.length;
+  const recurring: BulkDateMode[] = ['weekly', 'monthly', 'quarterly', 'yearly'];
+  for (const mode of recurring) {
+    const generated = distributeDueDates({ mode, start, count });
+    if (generated.every((value, index) => value === dates[index])) return mode;
+  }
+  const even = distributeDueDates({ mode: 'even', start, end, count });
+  if (even.every((value, index) => value === dates[index])) return 'even';
+  return null;
 }
 
 export function splitBilledAmounts(total: number, count: number): number[] {

@@ -4,24 +4,29 @@ import { toast } from 'sonner';
 import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
 import {
+  BULK_DATE_MODE_LABELS,
+  BULK_DATE_MODES,
   BULK_EXPENSE_BILLED_TOTAL_MISMATCH,
+  DEFAULT_BULK_DATE_MODE,
   DEFAULT_BULK_EXPENSE_INSTALLMENT_COUNT,
   MAX_BULK_EXPENSE_INSTALLMENT_COUNT,
   billedSumMatchesTotal,
   defaultBulkDateRange,
+  distributeDueDates,
   expenseToWriteInput,
   findExpenseInstallmentCollision,
   formatExpenseMoney,
   formatLocalIsoDate,
   formatMoneyInput,
+  inferBulkDateMode,
   normalizeDateRange,
   parseInstallmentNumber,
   parseLocalIsoDate,
   parseMoney,
   planBulkExpenseInstallmentNumbers,
-  spreadDueDates,
   splitBilledAmounts,
   validateBulkExpenseInput,
+  type BulkDateMode,
   type QuotationExpense,
 } from '@/lib/quotationExpenses';
 import type { QuotationExpenseWriteInput } from '@/hooks/useQuotationExpenses';
@@ -44,6 +49,7 @@ type BulkDraft = {
   supplierTypesId: string;
   supplierId: string;
   totalAmount: string;
+  dateMode: BulkDateMode;
   startDate: string;
   endDate: string;
   installmentCount: string;
@@ -71,7 +77,7 @@ function numbersFromRows(
 function rebuildRows(
   draft: BulkDraft,
   projectRows: QuotationExpense[],
-  patch: Partial<Pick<BulkDraft, 'supplierTypesId' | 'supplierId' | 'totalAmount' | 'startDate' | 'endDate' | 'installmentCount'>>,
+  patch: Partial<Pick<BulkDraft, 'supplierTypesId' | 'supplierId' | 'totalAmount' | 'dateMode' | 'startDate' | 'endDate' | 'installmentCount'>>,
   options?: { resetInstallments?: boolean },
 ): BulkDraft {
   const next = { ...draft, ...patch };
@@ -82,11 +88,22 @@ function rebuildRows(
   const count = Math.min(parsedCount, MAX_BULK_EXPENSE_INSTALLMENT_COUNT);
   if (count !== parsedCount) next.installmentCount = String(count);
 
-  const range = normalizeDateRange(next.startDate, next.endDate);
-  next.startDate = range.start;
-  next.endDate = range.end;
+  if (next.dateMode === 'even') {
+    const range = normalizeDateRange(next.startDate, next.endDate);
+    next.startDate = range.start;
+    next.endDate = range.end;
+  }
 
-  const dueDates = spreadDueDates(range.start, range.end, count);
+  const dueDates = distributeDueDates({
+    mode: next.dateMode,
+    start: next.startDate,
+    end: next.endDate,
+    count,
+  });
+  if (next.dateMode !== 'even') {
+    const lastDate = dueDates[dueDates.length - 1];
+    if (lastDate) next.endDate = lastDate;
+  }
   const total = moneyOrEmpty(next.totalAmount);
   const amounts = total == null ? null : splitBilledAmounts(total, count);
   const editingIds = draft.rows.flatMap((row) => (row.id ? [row.id] : []));
@@ -103,7 +120,11 @@ function rebuildRows(
   });
 
   const resize = count !== draft.rows.length;
-  const datesChanged = range.start !== draft.startDate || range.end !== draft.endDate || resize;
+  const datesChanged =
+    next.dateMode !== draft.dateMode
+    || next.startDate !== draft.startDate
+    || (next.dateMode === 'even' && next.endDate !== draft.endDate)
+    || resize;
   const amountsChanged = next.totalAmount !== draft.totalAmount || resize;
 
   next.rows = Array.from({ length: count }, (_, index) => {
@@ -134,6 +155,7 @@ export function emptyBulkExpenseDraft(
       supplierTypesId: defaultTypeId,
       supplierId: '',
       totalAmount: '',
+      dateMode: DEFAULT_BULK_DATE_MODE,
       startDate: range.start,
       endDate: range.end,
       installmentCount: String(DEFAULT_BULK_EXPENSE_INSTALLMENT_COUNT),
@@ -169,6 +191,7 @@ export function bulkExpenseDraftFromRows(
     supplierTypesId: sorted[0]?.supplierTypesId ?? '',
     supplierId: sorted[0]?.supplierId ?? '',
     totalAmount: formatMoneyInput(total),
+    dateMode: inferBulkDateMode(dueDates) ?? DEFAULT_BULK_DATE_MODE,
     startDate: range.start,
     endDate: range.end,
     installmentCount: String(sorted.length || DEFAULT_BULK_EXPENSE_INSTALLMENT_COUNT),
@@ -276,6 +299,51 @@ function DateRangePicker({
   );
 }
 
+function formatSingleDateLabel(date?: Date): string {
+  return date ? formatLocalIsoDate(date).replace(/-/g, '/') : '選擇開始日期';
+}
+
+function SingleDatePicker({
+  date,
+  onChange,
+}: {
+  date: string;
+  onChange: (date: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = parseLocalIsoDate(date);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            'flex h-9 w-full items-center gap-2 rounded-md border border-input bg-white px-3 text-left text-[13px] shadow-sm hover:bg-muted/30',
+            !date && 'text-muted-foreground',
+          )}
+          aria-label="開始日期"
+        >
+          <CalendarDays size={14} className="shrink-0 text-teal-600" />
+          <span className="truncate">{formatSingleDateLabel(selected ?? undefined)}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0 z-[130]" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <Calendar
+          mode="single"
+          selected={selected ?? undefined}
+          defaultMonth={selected ?? undefined}
+          onSelect={(next) => {
+            if (!next) return;
+            onChange(formatLocalIsoDate(next));
+            setOpen(false);
+          }}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function PitchingBulkExpenseDialog({
   open,
   editingRows,
@@ -345,7 +413,7 @@ export function PitchingBulkExpenseDialog({
   }, [open]);
 
   const patchHeader = (
-    patch: Partial<Pick<BulkDraft, 'supplierTypesId' | 'supplierId' | 'totalAmount' | 'startDate' | 'endDate' | 'installmentCount'>>,
+    patch: Partial<Pick<BulkDraft, 'supplierTypesId' | 'supplierId' | 'totalAmount' | 'dateMode' | 'startDate' | 'endDate' | 'installmentCount'>>,
     options?: { resetInstallments?: boolean },
   ) => {
     setDraft((prev) => rebuildRows(prev, projectRows, patch, options));
@@ -515,13 +583,49 @@ export function PitchingBulkExpenseDialog({
           </div>
 
           <div>
-            <span className="text-[12px] text-muted-foreground block mb-1">日期範圍 Date range</span>
-            <DateRangePicker
-              startDate={draft.startDate}
-              endDate={draft.endDate}
-              onChange={(startDate, endDate) => patchHeader({ startDate, endDate })}
-            />
+            <span className="text-[12px] text-muted-foreground block mb-1">按日期分期 Date distribution</span>
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="按日期分期">
+              {BULK_DATE_MODES.map((mode) => {
+                const selected = draft.dateMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => patchHeader({ dateMode: mode })}
+                    className={cn(
+                      'px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors',
+                      selected
+                        ? 'bg-teal-50 border-teal-300 text-teal-800'
+                        : 'bg-white border-border text-muted-foreground hover:bg-muted/40',
+                    )}
+                  >
+                    {BULK_DATE_MODE_LABELS[mode]}
+                  </button>
+                );
+              })}
+            </div>
           </div>
+
+          {draft.dateMode === 'even' ? (
+            <div>
+              <span className="text-[12px] text-muted-foreground block mb-1">日期範圍 Date range</span>
+              <DateRangePicker
+                startDate={draft.startDate}
+                endDate={draft.endDate}
+                onChange={(startDate, endDate) => patchHeader({ startDate, endDate })}
+              />
+            </div>
+          ) : (
+            <div>
+              <span className="text-[12px] text-muted-foreground block mb-1">開始日期 Start date</span>
+              <SingleDatePicker
+                date={draft.startDate}
+                onChange={(startDate) => patchHeader({ startDate })}
+              />
+            </div>
+          )}
         </section>
 
         <section className="space-y-3 pt-2 border-t border-border/60">

@@ -49,6 +49,13 @@ export function resolveRoute(module: string, sub?: string): { module: string; su
   if (module === 'quotation' && (sub === 'new' || sub === 'items')) {
     return { module: 'quotation', subModule: 'list' };
   }
+  // Removed: mock-only finance invoice / payment / card / company pages.
+  if (
+    module === 'finance' &&
+    (sub === 'invoices' || sub === 'payments' || sub === 'credit-cards' || sub === 'by-company')
+  ) {
+    return { module: 'finance', subModule: 'recurring' };
+  }
   return { module, subModule: resolveSubModule(module, sub) };
 }
 
@@ -183,12 +190,9 @@ export const mainMenuItems: MainMenuItem[] = [
   },
   {
     id: 'finance',
-    label: '財務管理',
+    label: '會計財務',
     subMenus: [
-      { id: 'invoices', label: '發票列表' },
-      { id: 'payments', label: '付款追蹤' },
-      { id: 'credit-cards', label: '信用卡管理' },
-      { id: 'by-company', label: '按公司查看' },
+      { id: 'recurring', label: '自動續訂管理' },
     ],
   },
   {

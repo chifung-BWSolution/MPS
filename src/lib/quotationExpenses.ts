@@ -147,6 +147,12 @@ export function isExpensePaymentMethod(value: string | null | undefined): value 
   return EXPENSE_PAYMENT_METHODS.includes(value as ExpensePaymentMethod);
 }
 
+export function optionalExpensePaymentMethod(
+  value: string | null | undefined,
+): ExpensePaymentMethod | null {
+  return isExpensePaymentMethod(value) ? value : null;
+}
+
 export function isCreditCardPaymentMethod(value: string | null | undefined): boolean {
   return value === EXPENSE_PAYMENT_METHOD_CREDIT_CARD;
 }
@@ -226,6 +232,12 @@ export function paidRecurringExpenseFields(billedAmount: number, dueDate: string
 
 export function isExpensePaymentStatus(value: string | null | undefined): value is ExpensePaymentStatus {
   return EXPENSE_PAYMENT_STATUSES.includes(value as ExpensePaymentStatus);
+}
+
+export function optionalExpensePaymentStatus(
+  value: string | null | undefined,
+): ExpensePaymentStatus | null {
+  return isExpensePaymentStatus(value) ? value : null;
 }
 
 export function installmentScopeRows(

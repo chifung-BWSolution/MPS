@@ -429,12 +429,3 @@ export interface Supplier {
   totalSpend: number;
   notes?: string;
 }
-
-export interface Invoice {
-  id: string;
-  invoiceNumber: string;
-  client: string;
-  amount: number;
-  dueDate: string;
-  status: 'paid' | 'pending' | 'overdue' | 'partial';
-}

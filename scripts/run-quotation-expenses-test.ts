@@ -40,6 +40,8 @@ import {
   groupExpensesByType,
   hasFilledPaymentAmount,
   nextExpenseInstallmentNumber,
+  optionalExpensePaymentMethod,
+  optionalExpensePaymentStatus,
   parseInstallmentNumber,
   parseMoney,
   planBulkExpenseInstallmentNumbers,
@@ -66,6 +68,12 @@ assert.equal(EXPENSE_PAYMENT_METHOD_CREDIT_CARD, 'Credit Card');
 assert.equal(expenseCreditCardId('Credit Card', ' cc-1 '), 'cc-1');
 assert.equal(expenseCreditCardId('Transfer', 'cc-1'), null);
 assert.deepEqual([...EXPENSE_PAYMENT_STATUSES], ['Pending Check', 'Paid', 'Not Paid']);
+assert.equal(optionalExpensePaymentMethod(''), null);
+assert.equal(optionalExpensePaymentMethod('Transfer'), 'Transfer');
+assert.equal(optionalExpensePaymentMethod('Wire'), null);
+assert.equal(optionalExpensePaymentStatus(''), null);
+assert.equal(optionalExpensePaymentStatus('Paid'), 'Paid');
+assert.equal(optionalExpensePaymentStatus('Settled'), null);
 
 assert.equal(hasFilledPaymentAmount(''), false);
 assert.equal(hasFilledPaymentAmount('0'), true);
@@ -534,6 +542,8 @@ assert.match(hook, /const saveBulkExpenses/);
 assert.match(hook, /credit_card_id/);
 assert.match(hook, /credit_cards!expenses_credit_card_id_fkey/);
 assert.match(hook, /expenseCreditCardId/);
+assert.match(hook, /optionalExpensePaymentMethod\(input\.paymentMethod\)/);
+assert.match(hook, /optionalExpensePaymentStatus\(input\.paymentStatus\)/);
 assert.match(hook, /RECURRING_EXPENSES_TABLE/);
 assert.match(hook, /recurring_expense_id/);
 assert.match(hook, /recurring_expenses!expenses_recurring_expense_id_fkey/);
@@ -598,6 +608,9 @@ assert.match(tab, /RECURRING_EXPENSE_FREQUENCIES/);
 assert.match(tab, /previewRecurringDueDates/);
 assert.match(tab, /setRecurringExpenseStatus/);
 assert.match(tab, /isRecurringExpenseFrequency\(draft\.frequency\) \? draft\.frequency : null/);
+assert.match(tab, /optionalExpensePaymentMethod\(draft\.paymentMethod\)/);
+assert.match(tab, /optionalExpensePaymentStatus\(draft\.paymentStatus\)/);
+assert.doesNotMatch(tab, /draft\.paymentMethod \?\? null/);
 assert.doesNotMatch(tab, /!editing && isRecurringExpenseFrequency/);
 assert.match(tab, /recurringSettingsFromRows/);
 assert.match(tab, /formatRecurringSettingDetails/);

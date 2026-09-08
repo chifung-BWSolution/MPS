@@ -168,10 +168,7 @@ App.tsx
 │   ├── /training-modules
 │   └── /training-progress
 ├── /finance
-│   ├── /invoices
-│   ├── /payments
-│   ├── /credit-cards
-│   └── /by-company
+│   └── /recurring
 ├── /companies
 │   ├── /list
 │   ├── /new
