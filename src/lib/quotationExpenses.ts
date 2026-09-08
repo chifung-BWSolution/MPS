@@ -34,6 +34,7 @@ import {
 
 export const EXPENSES_TABLE = 'expenses';
 export const RECURRING_EXPENSES_TABLE = 'recurring_expenses';
+export const CREATE_RECURRING_EXPENSE_RPC = 'create_recurring_expense';
 export const EXPENSE_RELATED_TYPE_PROJECT = 'project';
 export const EXPENSE_PAYMENT_RECORDS_BUCKET = 'expense-payment-records';
 export const EXPENSE_PAYMENT_RECORD_MAX_SIZE_MB = INCOME_PAYMENT_RECORD_MAX_SIZE_MB;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
+  CREATE_RECURRING_EXPENSE_RPC,
   EXPENSES_TABLE,
   EXPENSE_PAYMENT_RECORDS_BUCKET,
   EXPENSE_RELATED_TYPE_PROJECT,
@@ -230,6 +231,59 @@ function inputToRow(
   return row;
 }
 
+async function insertRecurringTemplate(input: {
+  projectId: string;
+  supplierTypesId: string;
+  supplierId: string;
+  creditCardId: string;
+  billedAmount: number;
+  remarks?: string | null;
+  frequency: RecurringExpenseFrequency;
+  dueDate: string;
+}): Promise<{ data: string | null; error: { message: string } | null }> {
+  const nextDate = nextRecurringDueDate(input.frequency, input.dueDate, input.dueDate);
+  if (!nextDate) return { data: null, error: { message: '無法計算下一次週期' } };
+
+  const row = {
+    related_type: EXPENSE_RELATED_TYPE_PROJECT,
+    related_id: input.projectId,
+    supplier_types_id: input.supplierTypesId.trim(),
+    supplier_id: input.supplierId.trim(),
+    credit_card_id: input.creditCardId,
+    billed_amount: input.billedAmount,
+    remarks: input.remarks?.trim() || null,
+    frequency: input.frequency,
+    anchor_date: input.dueDate,
+    next_occurrence_date: nextDate,
+    automation_run_count: 0,
+    status: 'active' as const,
+  };
+
+  const inserted = await supabase.from(RECURRING_EXPENSES_TABLE).insert(row).select('id').single();
+  if (!inserted.error && inserted.data && 'id' in inserted.data && inserted.data.id) {
+    return { data: String(inserted.data.id), error: null };
+  }
+
+  const rpc = await supabase.rpc(CREATE_RECURRING_EXPENSE_RPC, {
+    p_related_id: input.projectId,
+    p_supplier_types_id: input.supplierTypesId.trim(),
+    p_supplier_id: input.supplierId.trim(),
+    p_credit_card_id: input.creditCardId,
+    p_billed_amount: input.billedAmount,
+    p_remarks: input.remarks?.trim() || null,
+    p_frequency: input.frequency,
+    p_anchor_date: input.dueDate,
+    p_next_occurrence_date: nextDate,
+  });
+  if (rpc.error || rpc.data == null) {
+    return {
+      data: null,
+      error: { message: inserted.error?.message ?? rpc.error?.message ?? '建立週期失敗' },
+    };
+  }
+  return { data: String(rpc.data), error: null };
+}
+
 async function removeStorageObject(path: string | undefined) {
   const trimmed = path?.trim();
   if (!trimmed) return;
@@ -368,31 +422,20 @@ export function useQuotationExpenses(quotationClientProjectId: string | undefine
       if (frequency) {
         if (!creditCardId) return { data: null, error: { message: '週期支出須選擇信用卡' } };
         if (!dueDate) return { data: null, error: { message: '請選擇到期日' } };
-        const nextDate = nextRecurringDueDate(frequency, dueDate, dueDate);
-        if (!nextDate) return { data: null, error: { message: '無法計算下一次週期' } };
-
-        const { data: template, error: recErr } = await supabase
-          .from(RECURRING_EXPENSES_TABLE)
-          .insert({
-            related_type: EXPENSE_RELATED_TYPE_PROJECT,
-            related_id: projectId,
-            supplier_types_id: input.supplierTypesId.trim(),
-            supplier_id: input.supplierId.trim(),
-            credit_card_id: creditCardId,
-            billed_amount: input.billedAmount,
-            remarks: input.remarks?.trim() || null,
-            frequency,
-            anchor_date: dueDate,
-            next_occurrence_date: nextDate,
-            automation_run_count: 0,
-            status: 'active',
-          })
-          .select('id')
-          .single();
-        if (recErr || !template?.id) {
-          return { data: null, error: { message: recErr?.message ?? '建立週期失敗' } };
+        const created = await insertRecurringTemplate({
+          projectId,
+          supplierTypesId: input.supplierTypesId,
+          supplierId: input.supplierId,
+          creditCardId,
+          billedAmount: input.billedAmount,
+          remarks: input.remarks,
+          frequency,
+          dueDate,
+        });
+        if (created.error || !created.data) {
+          return { data: null, error: created.error ?? { message: '建立週期失敗' } };
         }
-        recurringId = template.id as string;
+        recurringId = created.data;
       }
 
       const fileAction: PaymentRecordFileAction = input.file ? 'replace' : 'keep';
@@ -437,24 +480,67 @@ export function useQuotationExpenses(quotationClientProjectId: string | undefine
   const updateExpense = useCallback(async (id: string, input: QuotationExpenseWriteInput) => {
     if (!projectId) return { data: null, error: { message: '缺少項目' } };
     const current = rows.find((row) => row.id === id);
+    const frequency = isRecurringExpenseFrequency(input.frequency) ? input.frequency : null;
+    const creditCardId = expenseCreditCardId(input.paymentMethod, input.creditCardId);
+    const dueDate = optionalIsoDate(input.dueDate ?? undefined);
+    let recurringId = current?.recurringExpenseId?.trim()
+      || input.recurringExpenseId?.trim()
+      || null;
+
+    if (frequency && !recurringId) {
+      if (!creditCardId) return { data: null, error: { message: '週期支出須選擇信用卡' } };
+      if (!dueDate) return { data: null, error: { message: '請選擇到期日' } };
+      const created = await insertRecurringTemplate({
+        projectId,
+        supplierTypesId: input.supplierTypesId,
+        supplierId: input.supplierId,
+        creditCardId,
+        billedAmount: input.billedAmount,
+        remarks: input.remarks,
+        frequency,
+        dueDate,
+      });
+      if (created.error || !created.data) {
+        return { data: null, error: created.error ?? { message: '建立週期失敗' } };
+      }
+      recurringId = created.data;
+    }
+
     const fileAction: PaymentRecordFileAction = input.file
       ? 'replace'
       : input.paymentRecordAction === 'clear'
         ? 'clear'
         : 'keep';
     const attached = await attachPaymentRecord(projectId, input.file, fileAction);
-    if (attached.error) return { data: null, error: attached.error };
+    if (attached.error) {
+      if (frequency && recurringId && recurringId !== current?.recurringExpenseId) {
+        await supabase.from(RECURRING_EXPENSES_TABLE).delete().eq('id', recurringId);
+      }
+      return { data: null, error: attached.error };
+    }
 
+    const paid = frequency && dueDate && !current?.recurringExpenseId
+      ? paidRecurringExpenseFields(input.billedAmount, dueDate)
+      : null;
     const { data, error: err } = await selectExpenseRow((columns) =>
       supabase
         .from(EXPENSES_TABLE)
-        .update(inputToRow({ ...input, ...attached.data }, projectId, fileAction))
+        .update(inputToRow({
+          ...input,
+          ...attached.data,
+          ...(paid ?? {}),
+          creditCardId,
+          recurringExpenseId: recurringId ?? undefined,
+        }, projectId, fileAction))
         .eq('id', id)
         .select(columns)
         .single(),
     );
     if (err) {
       await removeStorageObject(attached.uploadedPath);
+      if (frequency && recurringId && recurringId !== current?.recurringExpenseId) {
+        await supabase.from(RECURRING_EXPENSES_TABLE).delete().eq('id', recurringId);
+      }
       return { data: null, error: { message: err.message } };
     }
 

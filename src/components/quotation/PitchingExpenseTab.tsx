@@ -285,9 +285,7 @@ export function PitchingExpenseTab({
     const paymentAmount = parseMoney(draft.paymentAmount);
     const badDebt = parseMoney(draft.badDebt);
     if (billedAmount == null || paymentAmount == null || badDebt == null) return;
-    const frequency = !editing && isRecurringExpenseFrequency(draft.frequency)
-      ? draft.frequency
-      : null;
+    const frequency = isRecurringExpenseFrequency(draft.frequency) ? draft.frequency : null;
     const paid = frequency && draft.dueDate
       ? paidRecurringExpenseFields(billedAmount, draft.dueDate)
       : null;
@@ -323,7 +321,11 @@ export function PitchingExpenseTab({
       toast.error(`${editing ? '更新' : '新增'}失敗：${result.error.message}`);
       return;
     }
-    toast.success(editing ? '已更新支出' : frequency ? '已新增週期支出' : '已新增支出');
+    toast.success(
+      frequency
+        ? (editing ? '已更新並建立週期支出' : '已新增週期支出')
+        : (editing ? '已更新支出' : '已新增支出'),
+    );
     closeModal();
   };
 

@@ -9,6 +9,7 @@ import {
   EXPENSE_PAYMENT_METHOD_CREDIT_CARD,
   EXPENSE_PAYMENT_METHODS,
   EXPENSE_PAYMENT_STATUSES,
+  CREATE_RECURRING_EXPENSE_RPC,
   RECURRING_EXPENSES_TABLE,
   RECURRING_EXPENSE_FREQUENCIES,
   expenseCreditCardId,
@@ -289,6 +290,7 @@ assert.equal(validateExpenseInput({
 }), '請選擇有效週期');
 
 assert.equal(RECURRING_EXPENSES_TABLE, 'recurring_expenses');
+assert.equal(CREATE_RECURRING_EXPENSE_RPC, 'create_recurring_expense');
 assert.deepEqual([...RECURRING_EXPENSE_FREQUENCIES], ['weekly', 'monthly', 'quarterly', 'yearly']);
 assert.equal(isRecurringExpenseFrequency('monthly'), true);
 assert.equal(isRecurringExpenseFrequency('even'), false);
@@ -518,6 +520,10 @@ assert.match(hook, /automation_run_count/);
 assert.match(hook, /nextRecurringDueDate/);
 assert.match(hook, /paidRecurringExpenseFields/);
 assert.match(hook, /const setRecurringExpenseStatus/);
+assert.match(hook, /insertRecurringTemplate/);
+assert.match(hook, /CREATE_RECURRING_EXPENSE_RPC/);
+assert.match(hook, /frequency && !recurringId/);
+assert.doesNotMatch(hook, /!editing && isRecurringExpenseFrequency/);
 
 const tab = read('src/components/quotation/PitchingExpenseTab.tsx');
 assert.match(tab, /useQuotationExpenses/);
@@ -565,6 +571,8 @@ assert.match(tab, /ariaLabel="週期頻率"/);
 assert.match(tab, /RECURRING_EXPENSE_FREQUENCIES/);
 assert.match(tab, /previewRecurringDueDates/);
 assert.match(tab, /setRecurringExpenseStatus/);
+assert.match(tab, /isRecurringExpenseFrequency\(draft\.frequency\) \? draft\.frequency : null/);
+assert.doesNotMatch(tab, /!editing && isRecurringExpenseFrequency/);
 assert.match(tab, /recurringSettingsFromRows/);
 assert.match(tab, /formatRecurringSettingDetails/);
 assert.match(tab, /<Repeat size=\{14\} \/>/);
@@ -599,6 +607,12 @@ assert.match(recurringMigration, /recurring-expenses-daily/);
 assert.match(recurringMigration, /5 16 \* \* \*/);
 assert.doesNotMatch(recurringMigration, /GRANT SELECT, INSERT, UPDATE, DELETE ON public\.recurring_expenses TO anon/);
 assert.doesNotMatch(recurringMigration, /GRANT EXECUTE ON FUNCTION private\.generate_due_recurring_expenses\(\) TO authenticated/);
+
+const recurringRpc = read('supabase/migrations/20260908035523_create_recurring_expense_rpc.sql');
+assert.match(recurringRpc, /private\.insert_recurring_expense/);
+assert.match(recurringRpc, /public\.create_recurring_expense/);
+assert.match(recurringRpc, /GRANT EXECUTE ON FUNCTION public\.create_recurring_expense/);
+assert.match(recurringRpc, /NOTIFY pgrst, 'reload schema'/);
 
 const pitching = read('src/components/quotation/PitchingModule.tsx');
 assert.match(pitching, /PitchingExpenseTab/);
