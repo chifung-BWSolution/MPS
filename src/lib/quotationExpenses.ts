@@ -1,7 +1,11 @@
 import {
   billedSumMatchesTotal,
+  BULK_DATE_MODE_LABELS,
+  BULK_DATE_MODES,
   computeOutstanding,
+  DEFAULT_BULK_DATE_MODE,
   defaultBulkDateRange,
+  distributeDueDates,
   findInstallmentCollision,
   formatIncomeDate,
   formatIncomeDateTime,
@@ -10,8 +14,10 @@ import {
   formatMoneyInput,
   formatPaymentRecordFileSize,
   hasFilledPaymentAmount,
+  inferBulkDateMode,
   INCOME_PAYMENT_RECORD_MAX_SIZE_MB,
   isAllowedPaymentRecordFile,
+  isBulkDateMode,
   nextInstallmentNumber,
   normalizeDateRange,
   optionalIsoDate,
@@ -22,6 +28,7 @@ import {
   sanitizePaymentRecordFileName,
   splitBilledAmounts,
   spreadDueDates,
+  type BulkDateMode,
   type PaymentRecordFileAction,
 } from '@/lib/quotationIncomes';
 
@@ -30,17 +37,20 @@ export const EXPENSE_RELATED_TYPE_PROJECT = 'project';
 export const EXPENSE_PAYMENT_RECORDS_BUCKET = 'expense-payment-records';
 export const EXPENSE_PAYMENT_RECORD_MAX_SIZE_MB = INCOME_PAYMENT_RECORD_MAX_SIZE_MB;
 
-export const EXPENSE_PAYMENT_METHODS = ['Transfer', 'Cash', 'Cheque'] as const;
+export const EXPENSE_PAYMENT_METHODS = ['Transfer', 'Cash', 'Cheque', 'Credit Card'] as const;
 
 export const EXPENSE_PAYMENT_STATUSES = ['Pending Check', 'Paid', 'Not Paid'] as const;
 
 export type ExpensePaymentMethod = (typeof EXPENSE_PAYMENT_METHODS)[number];
 export type ExpensePaymentStatus = (typeof EXPENSE_PAYMENT_STATUSES)[number];
 
+export const EXPENSE_PAYMENT_METHOD_CREDIT_CARD: ExpensePaymentMethod = 'Credit Card';
+
 export const EXPENSE_PAYMENT_METHOD_LABELS: Record<ExpensePaymentMethod, string> = {
   Transfer: '轉帳 Transfer',
   Cash: '現金 Cash',
   Cheque: '支票 Cheque',
+  'Credit Card': '信用卡 Credit Card',
 };
 
 export const EXPENSE_PAYMENT_STATUS_LABELS: Record<ExpensePaymentStatus, string> = {
@@ -70,6 +80,8 @@ export type QuotationExpense = {
   paymentAmount: number;
   paymentDate?: string;
   paymentMethod?: ExpensePaymentMethod;
+  creditCardId?: string;
+  creditCardLabel?: string;
   paymentStatus?: ExpensePaymentStatus;
   outstanding: number;
   badDebt: number;
@@ -92,6 +104,7 @@ export type QuotationExpenseInput = {
   paymentAmount: number;
   paymentDate?: string | null;
   paymentMethod?: ExpensePaymentMethod | null;
+  creditCardId?: string | null;
   paymentStatus?: ExpensePaymentStatus | null;
   badDebt: number;
   remarks?: string | null;
@@ -108,6 +121,18 @@ export function expenseGroupKey(supplierTypesId: string, supplierId: string): st
 
 export function isExpensePaymentMethod(value: string | null | undefined): value is ExpensePaymentMethod {
   return EXPENSE_PAYMENT_METHODS.includes(value as ExpensePaymentMethod);
+}
+
+export function isCreditCardPaymentMethod(value: string | null | undefined): boolean {
+  return value === EXPENSE_PAYMENT_METHOD_CREDIT_CARD;
+}
+
+export function expenseCreditCardId(
+  paymentMethod: string | null | undefined,
+  creditCardId: string | null | undefined,
+): string | null {
+  if (!isCreditCardPaymentMethod(paymentMethod)) return null;
+  return creditCardId?.trim() || null;
 }
 
 export function isExpensePaymentStatus(value: string | null | undefined): value is ExpensePaymentStatus {
@@ -181,6 +206,7 @@ export function expenseToWriteInput(
     paymentAmount: row.paymentAmount,
     paymentDate: row.paymentDate ?? null,
     paymentMethod: row.paymentMethod ?? null,
+    creditCardId: expenseCreditCardId(row.paymentMethod, row.creditCardId),
     paymentStatus: row.paymentStatus ?? null,
     badDebt: row.badDebt,
     remarks: row.remarks ?? null,
@@ -210,6 +236,7 @@ export function validateExpenseInput(input: {
   paymentDate?: string;
   badDebt?: string;
   paymentMethod: string;
+  creditCardId?: string;
   paymentStatus: string;
 }): string | null {
   if (!input.supplierTypesId.trim()) return '請選擇支出類型';
@@ -229,6 +256,9 @@ export function validateExpenseInput(input: {
   } else {
     if (input.paymentMethod && !isExpensePaymentMethod(input.paymentMethod)) return '請選擇有效的付款方式';
     if (input.paymentStatus && !isExpensePaymentStatus(input.paymentStatus)) return '請選擇有效的付款狀態';
+  }
+  if (isCreditCardPaymentMethod(input.paymentMethod) && !input.creditCardId?.trim()) {
+    return '請選擇信用卡';
   }
   return null;
 }
@@ -335,13 +365,19 @@ export function groupExpensesByType(rows: QuotationExpense[]): ExpenseTypeGroup[
 
 export {
   billedSumMatchesTotal,
+  BULK_DATE_MODE_LABELS,
+  BULK_DATE_MODES,
   computeOutstanding,
+  DEFAULT_BULK_DATE_MODE,
   defaultBulkDateRange,
+  distributeDueDates,
   formatLocalIsoDate,
   formatMoneyInput,
   formatPaymentRecordFileSize,
   hasFilledPaymentAmount,
+  inferBulkDateMode,
   isAllowedPaymentRecordFile,
+  isBulkDateMode,
   normalizeDateRange,
   optionalIsoDate,
   parseInstallmentNumber,
@@ -349,5 +385,6 @@ export {
   parseMoney,
   splitBilledAmounts,
   spreadDueDates,
+  type BulkDateMode,
   type PaymentRecordFileAction,
 };

@@ -151,3 +151,15 @@ export function formatBrandOptionLabel(input: {
 export function cardTitle(card: Pick<CreditCardRecord, 'label' | 'lastFour'>): string {
   return card.label.trim() || `•••• ${card.lastFour}`;
 }
+
+export function formatCreditCardOptionLabel(
+  card: Pick<CreditCardRecord, 'label' | 'lastFour' | 'bank'>,
+): string {
+  const title = card.label.trim();
+  const last = `•••• ${card.lastFour}`;
+  const bank = card.bank.trim();
+  if (title && bank) return `${title} · ${bank} · ${last}`;
+  if (title) return `${title} · ${last}`;
+  if (bank) return `${bank} · ${last}`;
+  return last;
+}

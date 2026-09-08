@@ -7,6 +7,7 @@ import {
   creditCardYearOptions,
   formatBrandOptionLabel,
   formatCompanyOptionLabel,
+  formatCreditCardOptionLabel,
   isCardExpiringSoon,
   isValidExpiry,
   isValidLastFour,
@@ -42,6 +43,14 @@ assert.equal(formatBrandOptionLabel({ brandCode: 'BWF', displayName: 'BWF' }), '
 assert.equal(formatBrandOptionLabel({ brandCode: 'BSC', displayName: 'Attitude Beauty' }), 'BSC - Attitude Beauty');
 assert.equal(cardTitle({ label: "Franco's card - BWF", lastFour: '4268' }), "Franco's card - BWF");
 assert.equal(cardTitle({ label: '  ', lastFour: '4268' }), '•••• 4268');
+assert.equal(
+  formatCreditCardOptionLabel({ label: "Franco's card - BWF", lastFour: '4268', bank: 'HSBC' }),
+  "Franco's card - BWF · HSBC · •••• 4268",
+);
+assert.equal(
+  formatCreditCardOptionLabel({ label: '', lastFour: '4268', bank: 'HSBC' }),
+  'HSBC · •••• 4268',
+);
 assert.equal(mapCsvIssuer('SC'), 'Standard Chartered');
 assert.equal(mapCsvIssuer('HSBC'), 'HSBC');
 assert.deepEqual(mapCsvPaymentUnit('BWF'), { companyCode: 'BWD', brandCode: 'BWF' });

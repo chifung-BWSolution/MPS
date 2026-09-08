@@ -4,6 +4,7 @@ import {
   EXPENSES_TABLE,
   EXPENSE_PAYMENT_RECORDS_BUCKET,
   EXPENSE_RELATED_TYPE_PROJECT,
+  expenseCreditCardId,
   expenseGroupKey,
   expensePaymentRecordStoragePath,
   isAllowedPaymentRecordFile,
@@ -14,6 +15,7 @@ import {
   type QuotationExpense,
   type QuotationExpenseInput,
 } from '@/lib/quotationExpenses';
+import { formatCreditCardOptionLabel } from '@/lib/creditCards';
 
 type SupplierTypeJoin = {
   id: string;
@@ -25,6 +27,13 @@ type SupplierJoin = {
   id: string;
   display_name: string | null;
   supplier_types_id: string | null;
+} | null;
+
+type CreditCardJoin = {
+  id: string;
+  label: string | null;
+  last_four: string;
+  bank: string | null;
 } | null;
 
 type DbRow = {
@@ -39,6 +48,7 @@ type DbRow = {
   payment_amount: number | string;
   payment_date: string | null;
   payment_method: string | null;
+  credit_card_id: string | null;
   payment_status: string | null;
   outstanding: number | string;
   bad_debt: number | string;
@@ -52,6 +62,7 @@ type DbRow = {
   updated_at: string;
   supplier_types?: SupplierTypeJoin | SupplierTypeJoin[];
   suppliers?: SupplierJoin | SupplierJoin[];
+  credit_card?: CreditCardJoin | CreditCardJoin[];
 };
 
 export type QuotationExpenseWriteInput = QuotationExpenseInput & {
@@ -62,7 +73,8 @@ export type QuotationExpenseWriteInput = QuotationExpenseInput & {
 const EXPENSE_SELECT = `
   *,
   supplier_types:supplier_types_id (id, display_name, categories),
-  suppliers:supplier_id (id, display_name, supplier_types_id)
+  suppliers:supplier_id (id, display_name, supplier_types_id),
+  credit_card:credit_cards!expenses_credit_card_id_fkey (id, label, last_four, bank)
 `;
 
 function compareExpenses(a: QuotationExpense, b: QuotationExpense): number {
@@ -90,8 +102,10 @@ function firstJoin<T>(value: T | T[] | null | undefined): T | null {
 function mapRow(row: DbRow): QuotationExpense {
   const typeJoin = firstJoin(row.supplier_types);
   const supplierJoin = firstJoin(row.suppliers);
+  const cardJoin = firstJoin(row.credit_card);
   const supplierTypesId = row.supplier_types_id;
   const supplierId = row.supplier_id;
+  const creditCardId = expenseCreditCardId(row.payment_method, row.credit_card_id);
   return {
     id: row.id,
     relatedType: row.related_type,
@@ -107,6 +121,14 @@ function mapRow(row: DbRow): QuotationExpense {
     paymentAmount: toAmount(row.payment_amount),
     paymentDate: optionalIsoDate(row.payment_date),
     paymentMethod: isExpensePaymentMethod(row.payment_method) ? row.payment_method : undefined,
+    creditCardId: creditCardId ?? undefined,
+    creditCardLabel: cardJoin
+      ? formatCreditCardOptionLabel({
+          label: cardJoin.label ?? '',
+          lastFour: cardJoin.last_four,
+          bank: cardJoin.bank ?? '',
+        })
+      : undefined,
     paymentStatus: isExpensePaymentStatus(row.payment_status) ? row.payment_status : undefined,
     outstanding: toAmount(row.outstanding),
     badDebt: toAmount(row.bad_debt),
@@ -147,6 +169,7 @@ function inputToRow(
     payment_amount: input.paymentAmount,
     payment_date: optionalIsoDate(input.paymentDate ?? undefined) ?? null,
     payment_method: input.paymentMethod ?? null,
+    credit_card_id: expenseCreditCardId(input.paymentMethod, input.creditCardId),
     payment_status: input.paymentStatus ?? null,
     bad_debt: input.badDebt,
     remarks: input.remarks?.trim() || null,

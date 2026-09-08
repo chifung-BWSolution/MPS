@@ -2,9 +2,11 @@ import { useMemo, useState } from 'react';
 import { Banknote, ExternalLink, FileText, Pencil, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useCreditCards } from '@/hooks/useCreditCards';
 import { useQuotationExpenses } from '@/hooks/useQuotationExpenses';
 import { useSupplierTypes } from '@/hooks/useSupplierTypes';
 import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
+import { formatCreditCardOptionLabel } from '@/lib/creditCards';
 import {
   EXPENSE_PAYMENT_METHOD_LABELS,
   EXPENSE_PAYMENT_METHODS,
@@ -13,12 +15,14 @@ import {
   EXPENSE_PAYMENT_STATUS_STYLES,
   EXPENSE_PAYMENT_STATUSES,
   computeOutstanding,
+  expenseCreditCardId,
   formatExpenseDate,
   formatExpenseDateTime,
   formatExpenseMoney,
   formatPaymentRecordFileSize,
   groupExpensesByType,
   hasFilledPaymentAmount,
+  isCreditCardPaymentMethod,
   nextExpenseInstallmentNumber,
   parseInstallmentNumber,
   parseMoney,
@@ -43,6 +47,7 @@ type Draft = {
   paymentAmount: string;
   paymentDate: string;
   paymentMethod: string;
+  creditCardId: string;
   paymentStatus: ExpensePaymentStatus | '';
   badDebt: string;
   remarks: string;
@@ -57,6 +62,7 @@ const emptyDraft = (nextInstallment = 1, supplierTypesId = '', supplierId = ''):
   paymentAmount: '',
   paymentDate: '',
   paymentMethod: '',
+  creditCardId: '',
   paymentStatus: '',
   badDebt: '',
   remarks: '',
@@ -72,6 +78,7 @@ function draftFromRow(row: QuotationExpense): Draft {
     paymentAmount: row.paymentAmount ? String(row.paymentAmount) : '',
     paymentDate: row.paymentDate ?? '',
     paymentMethod: row.paymentMethod ?? '',
+    creditCardId: row.creditCardId ?? '',
     paymentStatus: row.paymentStatus ?? '',
     badDebt: String(row.badDebt),
     remarks: row.remarks ?? '',
@@ -128,6 +135,7 @@ export function PitchingExpenseTab({
 }) {
   const { rows, loading, error, addExpense, updateExpense, deleteExpense, saveBulkExpenses } =
     useQuotationExpenses(projectId);
+  const { cards } = useCreditCards();
   const { types: supplierTypes } = useSupplierTypes();
   const { suppliers } = useWebPageSuppliers();
   const [modalOpen, setModalOpen] = useState(false);
@@ -167,6 +175,22 @@ export function PitchingExpenseTab({
           keywords: [supplier.companyName, supplier.url].filter(Boolean).join(' '),
         })),
     [suppliers, draft.supplierTypesId, draft.supplierId],
+  );
+  const creditCardOptions = useMemo(
+    () =>
+      cards
+        .filter((card) => card.isActive || card.id === draft.creditCardId)
+        .map((card) => {
+          const label = formatCreditCardOptionLabel(card);
+          return {
+            value: card.id,
+            label: card.isActive ? label : `${label}（已停用）`,
+            keywords: [card.bank, card.lastFour, card.companyName, card.brandCode, card.holder]
+              .filter(Boolean)
+              .join(' '),
+          };
+        }),
+    [cards, draft.creditCardId],
   );
 
   const openCreate = () => {
@@ -247,6 +271,7 @@ export function PitchingExpenseTab({
       paymentAmount,
       paymentDate: draft.paymentDate || null,
       paymentMethod: (draft.paymentMethod || null) as ExpensePaymentMethod | null,
+      creditCardId: expenseCreditCardId(draft.paymentMethod, draft.creditCardId),
       paymentStatus: draft.paymentStatus || null,
       badDebt,
       remarks: draft.remarks.trim() || null,
@@ -407,6 +432,11 @@ export function PitchingExpenseTab({
                         </td>
                         <td className="px-4 py-3 text-[13px] whitespace-nowrap">
                           {row.paymentMethod ? EXPENSE_PAYMENT_METHOD_LABELS[row.paymentMethod] : '—'}
+                          {row.creditCardLabel && (
+                            <p className="text-[11px] text-muted-foreground font-normal truncate max-w-[200px] mt-0.5">
+                              {row.creditCardLabel}
+                            </p>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           {row.paymentRecordFileUrl ? (
@@ -686,14 +716,34 @@ export function PitchingExpenseTab({
                 options={EXPENSE_PAYMENT_METHODS}
                 labels={EXPENSE_PAYMENT_METHOD_LABELS}
                 onChange={(paymentMethod) =>
-                  setDraft((prev) => ({
-                    ...prev,
-                    paymentMethod: prev.paymentMethod === paymentMethod ? '' : paymentMethod,
-                  }))
+                  setDraft((prev) => {
+                    const next = prev.paymentMethod === paymentMethod ? '' : paymentMethod;
+                    return {
+                      ...prev,
+                      paymentMethod: next,
+                      creditCardId: isCreditCardPaymentMethod(next) ? prev.creditCardId : '',
+                    };
+                  })
                 }
                 ariaLabel="付款方式"
               />
             </div>
+
+            {isCreditCardPaymentMethod(draft.paymentMethod) && (
+              <div>
+                <span className="text-[12px] text-muted-foreground block mb-1">
+                  信用卡 Credit card *
+                </span>
+                <SearchableSelect
+                  value={draft.creditCardId}
+                  onValueChange={(creditCardId) => setDraft((prev) => ({ ...prev, creditCardId }))}
+                  options={creditCardOptions}
+                  placeholder="選擇信用卡"
+                  searchPlaceholder="搜尋信用卡…"
+                  emptyText="尚未新增信用卡"
+                />
+              </div>
+            )}
 
             <div>
               <span className="text-[12px] text-muted-foreground block mb-1.5">
