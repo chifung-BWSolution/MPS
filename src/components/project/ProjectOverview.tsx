@@ -1,12 +1,10 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import {
-  Globe, Server, Users, Video, FolderKanban, Plus, Search, Pencil, Trash2, Star, X,
+  Globe, Server, Users, Video, FolderKanban, Plus, Search, Pencil, Trash2, Star,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
-import { useCompanies } from '@/hooks/useCompanies';
-import { useBrands } from '@/hooks/useBrands';
 import { useProjectHours } from '@/hooks/useProjectHours';
 import { useProjectOrgLabels } from '@/hooks/useProjectOrgLabels';
 import {
@@ -19,12 +17,11 @@ import {
   type MasterProject,
   type ProjectKind,
   type ProjectLevel,
-  type ProjectWriteInput,
-  type ProjectRelatedType,
 } from '@/hooks/useProjects';
 import { ProjectCategoryBadge } from '@/components/ui/project-category-badge';
 import { BrandFieldBadge, CompanyFieldBadge, EmptyDash, StatusFieldBadge } from '@/components/ui/nullable-badge';
 import { DeleteConfirmModal } from '@/components/ui/crud-modal';
+import { ProjectSourceDialog } from '@/components/project/ProjectSourceDialog';
 
 type KindFilter = 'all' | Exclude<ProjectKind, 'manual'>;
 
@@ -51,33 +48,6 @@ const statusLabelMap: Record<string, { label: string; color: string; bgColor: st
   confirmed: { label: '確認項目', color: 'text-teal-700', bgColor: 'bg-teal-50' },
   closed: { label: '已結案', color: 'text-slate-600', bgColor: 'bg-slate-100' },
   paused: { label: '暫停', color: 'text-amber-700', bgColor: 'bg-amber-50' },
-};
-
-const statusOptionsByType: Record<ProjectRelatedType, { value: string; label: string }[]> = {
-  manual: [
-    { value: 'planning', label: '規劃中' },
-    { value: 'active', label: '進行中' },
-    { value: 'on_hold', label: '暫停' },
-    { value: 'completed', label: '已完成' },
-    { value: 'cancelled', label: '已取消' },
-  ],
-  webandsystem: [
-    { value: 'development', label: '開發中' },
-    { value: 'live', label: '已上線' },
-    { value: 'maintenance', label: '維護中' },
-    { value: 'archived', label: '已封存' },
-  ],
-  quotation_client: [
-    { value: 'initial', label: '初步提案' },
-    { value: 'following_up', label: '跟進中' },
-    { value: 'confirmed', label: '確認項目' },
-    { value: 'closed', label: '已結案' },
-  ],
-  vchannel: [
-    { value: 'active', label: '進行中' },
-    { value: 'paused', label: '暫停' },
-    { value: 'archived', label: '已封存' },
-  ],
 };
 
 const kindTabs: { key: KindFilter; label: string; icon?: ReactNode }[] = [
@@ -128,202 +98,9 @@ function LevelBadge({ level }: { level?: ProjectLevel | null }) {
   );
 }
 
-type FormState = {
-  name: string;
-  clientName: string;
-  status: string;
-  companyListId: string;
-  brandListId: string;
-  projectCategory: 'internal' | 'client';
-  level: ProjectLevel;
-  notes: string;
-};
-
-const emptyForm = (): FormState => ({
-  name: '',
-  clientName: '',
-  status: 'planning',
-  companyListId: '',
-  brandListId: '',
-  projectCategory: 'internal',
-  level: 3,
-  notes: '',
-});
-
-function formFromProject(project: MasterProject): FormState {
-  const options = statusOptionsByType[project.relatedType];
-  const status = options.some(o => o.value === project.status) ? project.status : options[0].value;
-  return {
-    name: project.name,
-    clientName: project.clientName || '',
-    status,
-    companyListId: project.companyListId || '',
-    brandListId: project.brandListId || '',
-    projectCategory: projectCategoryOf(project),
-    level: projectLevelOf(project) ?? 3,
-    notes: typeof project.meta.notes === 'string' ? project.meta.notes : '',
-  };
-}
-
-function ProjectFormModal({
-  mode,
-  relatedType,
-  initial,
-  onClose,
-  onSave,
-}: {
-  mode: 'add' | 'edit';
-  relatedType: ProjectRelatedType;
-  initial: FormState;
-  onClose: () => void;
-  onSave: (form: FormState) => void;
-}) {
-  const [form, setForm] = useState<FormState>(initial);
-  const { companies } = useCompanies();
-  const { brands } = useBrands();
-  const statusOptions = statusOptionsByType[relatedType];
-  const selectedCompany = companies.find(c => c.uuid === form.companyListId || c.id === form.companyListId);
-  const availableBrands = brands.filter(b => {
-    if (!b.isActive) return false;
-    if (!form.companyListId) return true;
-    return b.companyId === form.companyListId || b.companyId === selectedCompany?.uuid || b.companyId === selectedCompany?.id;
-  });
-  const showClientFields = relatedType === 'manual' || relatedType === 'quotation_client' || form.projectCategory === 'client';
-  const showLevel = relatedType !== 'quotation_client';
-
-  const handleChange = <K extends keyof FormState>(field: K, value: FormState[K]) => {
-    setForm(prev => ({ ...prev, [field]: value }));
-  };
-
-  return (
-    <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[85vh] flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h3 className="text-[16px] font-bold">{mode === 'add' ? '新增項目' : '編輯項目'}</h3>
-          <button type="button" onClick={onClose} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
-        </div>
-
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
-          <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">項目名稱 *</label>
-            <input
-              value={form.name}
-              onChange={e => handleChange('name', e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-              placeholder="輸入項目名稱"
-            />
-          </div>
-
-          {showClientFields && (
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">客戶名稱</label>
-              <input
-                value={form.clientName}
-                onChange={e => handleChange('clientName', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-                placeholder="（選填）"
-              />
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">所屬公司</label>
-              <select
-                value={form.companyListId}
-                onChange={e => {
-                  handleChange('companyListId', e.target.value);
-                  handleChange('brandListId', '');
-                }}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-              >
-                <option value="">選擇公司</option>
-                {companies.filter(c => c.isActive).map(c => (
-                  <option key={c.uuid || c.id} value={c.uuid || c.id}>{c.companyCode} — {c.companyNameZh || c.companyNameEn}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">所屬品牌</label>
-              <select
-                value={form.brandListId}
-                onChange={e => handleChange('brandListId', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-              >
-                <option value="">選擇品牌</option>
-                {availableBrands.map(b => (
-                  <option key={b.id} value={b.id}>{b.brandCode} — {b.displayName}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className={cn('grid gap-4', showLevel ? 'grid-cols-2' : 'grid-cols-1')}>
-            {showLevel && (
-              <div>
-                <label className="text-[12px] font-medium text-muted-foreground block mb-1">Level 等級</label>
-                <select
-                  value={form.level}
-                  onChange={e => handleChange('level', Number(e.target.value) as ProjectLevel)}
-                  className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-                >
-                  <option value={1}>L1 主打</option>
-                  <option value={2}>L2 重要</option>
-                  <option value={3}>L3 定期推廣</option>
-                  <option value={4}>L4 不主動</option>
-                  <option value={5}>L5 已關閉</option>
-                </select>
-              </div>
-            )}
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">狀態</label>
-              <select
-                value={form.status}
-                onChange={e => handleChange('status', e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-              >
-                {statusOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {relatedType === 'manual' && (
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">備註</label>
-              <textarea
-                value={form.notes}
-                onChange={e => handleChange('notes', e.target.value)}
-                rows={3}
-                className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white resize-none"
-                placeholder="（選填）"
-              />
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-border">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-muted-foreground bg-secondary rounded-md hover:bg-secondary/80">
-            取消
-          </button>
-          <button
-            type="button"
-            disabled={!form.name.trim()}
-            onClick={() => onSave(form)}
-            className="px-4 py-2 text-[13px] font-medium text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50"
-          >
-            {mode === 'add' ? '新增' : '儲存變更'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projectId: string) => void }) {
   const { selectedCompanyId, selectedBrandId } = useApp();
-  const { projects, loading, addProject, updateProject, deleteProject } = useProjects();
+  const { projects, loading, reload, deleteProject } = useProjects();
   const { companies, brands, companyLabel, brandLabel } = useProjectOrgLabels();
   const { data: hoursMap } = useProjectHours(30);
 
@@ -333,8 +110,7 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
   const [brandFilter, setBrandFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [levelFilter, setLevelFilter] = useState<ProjectLevel[]>([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editing, setEditing] = useState<MasterProject | null>(null);
+  const [dialog, setDialog] = useState<{ mode: 'add' } | { mode: 'edit'; project: MasterProject } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MasterProject | null>(null);
 
   const uniqueCompanies = useMemo(() => {
@@ -388,40 +164,6 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
     setLevelFilter(prev => prev.includes(lvl) ? prev.filter(x => x !== lvl) : [...prev, lvl]);
   };
 
-  const toWriteInput = (form: FormState): ProjectWriteInput => {
-    return {
-      name: form.name,
-      clientName: form.clientName || null,
-      status: form.status,
-      companyListId: form.companyListId || null,
-      brandListId: form.brandListId || null,
-      projectCategory: form.projectCategory,
-      level: form.level,
-      notes: form.notes || null,
-    };
-  };
-
-  const handleAdd = async (form: FormState) => {
-    const result = await addProject(toWriteInput(form));
-    if (result.error) {
-      toast.error('新增失敗', { description: result.error.message });
-      return;
-    }
-    toast.success('項目已新增');
-    setShowAddModal(false);
-  };
-
-  const handleEdit = async (form: FormState) => {
-    if (!editing) return;
-    const result = await updateProject(editing, toWriteInput(form));
-    if (result.error) {
-      toast.error('儲存失敗', { description: result.error.message });
-      return;
-    }
-    toast.success('項目已更新');
-    setEditing(null);
-  };
-
   const handleDelete = async () => {
     if (!deleteTarget) return;
     const result = await deleteProject(deleteTarget);
@@ -449,7 +191,7 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
           </div>
           <button
             type="button"
-            onClick={() => setShowAddModal(true)}
+            onClick={() => setDialog({ mode: 'add' })}
             className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-md text-sm font-medium hover:bg-teal-700 transition-colors active:scale-[0.97]"
           >
             <Plus size={14} />新增項目
@@ -611,7 +353,7 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
                         <div className="flex items-center gap-0.5">
                           <button
                             type="button"
-                            onClick={() => setEditing(project)}
+                            onClick={() => setDialog({ mode: 'edit', project })}
                             className="p-1.5 hover:bg-muted rounded-md transition-colors"
                             title="編輯項目"
                           >
@@ -643,22 +385,15 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
         )}
       </div>
 
-      {showAddModal && (
-        <ProjectFormModal
-          mode="add"
-          relatedType="manual"
-          initial={emptyForm()}
-          onClose={() => setShowAddModal(false)}
-          onSave={handleAdd}
-        />
-      )}
-      {editing && (
-        <ProjectFormModal
-          mode="edit"
-          relatedType={editing.relatedType}
-          initial={formFromProject(editing)}
-          onClose={() => setEditing(null)}
-          onSave={handleEdit}
+      {dialog && (
+        <ProjectSourceDialog
+          mode={dialog.mode}
+          project={dialog.mode === 'edit' ? dialog.project : null}
+          onClose={() => setDialog(null)}
+          onSaved={async () => {
+            await reload();
+            setDialog(null);
+          }}
         />
       )}
       <DeleteConfirmModal

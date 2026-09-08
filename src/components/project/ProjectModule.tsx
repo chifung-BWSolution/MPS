@@ -55,10 +55,9 @@ export function ProjectModule({ subModule }: { subModule?: string }) {
           <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] p-6 space-y-3 max-w-xl">
             <h2 className="text-[16px] font-bold">請到項目總覽新增</h2>
             <p className="text-[13px] text-muted-foreground leading-relaxed">
-              請使用「項目總覽」頁面新增、編輯或刪除項目。網站/系統、客戶報價與影片頻道仍可在來源模組維護，並會同步到此列表。
+              請使用「項目總覽」新增來源項目。網站/系統、客戶報價與影片頻道會寫入來源表，並同步到此列表。
             </p>
             <ul className="text-[13px] space-y-1.5 list-disc pl-5 text-muted-foreground">
-              <li>自訂項目 → 專案策劃／項目總覽</li>
               <li>網站/系統 → 網站+系統模組（webandsystem_list）</li>
               <li>客戶項目 → 客戶報價模組（quotation_client_project）</li>
               <li>影片頻道 → 影片頻道模組（vchannels）</li>
