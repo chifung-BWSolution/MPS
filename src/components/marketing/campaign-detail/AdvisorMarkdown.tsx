@@ -12,7 +12,7 @@ const headingClass =
 
 export function AdvisorMarkdown({ content, className }: AdvisorMarkdownProps) {
   return (
-    <div className={cn('break-words text-[13px] leading-relaxed text-slate-800', className)}>
+    <div className={cn('min-w-0 break-words [overflow-wrap:anywhere] text-[13px] leading-relaxed text-slate-800', className)}>
       <Markdown
         remarkPlugins={[remarkGfm]}
         urlTransform={safeUrlTransform}
@@ -31,12 +31,16 @@ export function AdvisorMarkdown({ content, className }: AdvisorMarkdownProps) {
           ),
           p: ({ children }) => <p className="my-1.5 first:mt-0 last:mb-0">{children}</p>,
           ul: ({ children }) => (
-            <ul className="my-1.5 list-disc space-y-1 pl-4 first:mt-0 last:mb-0">{children}</ul>
+            <ul className="my-1.5 list-disc space-y-1 break-words pl-4 first:mt-0 last:mb-0">
+              {children}
+            </ul>
           ),
           ol: ({ children }) => (
-            <ol className="my-1.5 list-decimal space-y-1 pl-4 first:mt-0 last:mb-0">{children}</ol>
+            <ol className="my-1.5 list-decimal space-y-1 break-words pl-4 first:mt-0 last:mb-0">
+              {children}
+            </ol>
           ),
-          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+          li: ({ children }) => <li className="min-w-0 break-words leading-relaxed">{children}</li>,
           strong: ({ children }) => <strong className="font-semibold text-slate-900">{children}</strong>,
           em: ({ children }) => <em className="italic">{children}</em>,
           hr: () => <hr className="my-2.5 border-slate-200" />,
@@ -63,7 +67,7 @@ export function AdvisorMarkdown({ content, className }: AdvisorMarkdownProps) {
                   'font-mono text-[12px] text-slate-800',
                   isBlock
                     ? codeClass
-                    : 'rounded bg-slate-200/80 px-1 py-0.5',
+                    : 'whitespace-pre-wrap break-all rounded bg-slate-200/80 px-1 py-0.5',
                 )}
               >
                 {children}

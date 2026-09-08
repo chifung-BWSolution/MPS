@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { invokeAdsCampaignAdvisor } from '@/lib/adsAdvisorApi';
-import { getAdsAdvisorSuggestedPrompts } from '@/lib/adsAdvisorPrompts';
+import {
+  getAdsAdvisorSuggestedPrompts,
+  getUnusedAdsAdvisorPrompts,
+} from '@/lib/adsAdvisorPrompts';
 import type {
   AdsAdvisorMessage,
   AdsAdvisorSnapshot,
@@ -22,16 +24,31 @@ type ChatTurn = AdsAdvisorMessage & {
   toolsUsed?: AdsAdvisorToolCall[];
 };
 
-const TOOL_LABELS: Record<string, string> = {
-  search_campaigns: '搜尋 campaign…',
-  get_campaign_metrics: '讀取 campaign 數據…',
-  compare_campaigns: '比較 campaign…',
-  get_campaigns_by_tag: '依標籤搜尋…',
-  get_campaign_breakdowns: '讀取細項（關鍵字／廣告／版位）…',
-};
-
-function toolLabel(name: string): string {
-  return TOOL_LABELS[name] ?? name;
+function SuggestedPromptList({
+  prompts,
+  disabled,
+  onSelect,
+}: {
+  prompts: string[];
+  disabled: boolean;
+  onSelect: (prompt: string) => void;
+}) {
+  if (prompts.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      {prompts.map((prompt) => (
+        <button
+          key={prompt}
+          type="button"
+          disabled={disabled}
+          onClick={() => onSelect(prompt)}
+          className="w-full whitespace-normal break-words rounded-md border border-teal-200 bg-teal-50/70 px-3 py-2 text-left text-[13px] leading-relaxed text-teal-700 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {prompt}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function isAbortError(error: unknown): boolean {
@@ -55,6 +72,14 @@ export function AdsCampaignAdvisorChat({
   const suggestedPrompts = useMemo(
     () => getAdsAdvisorSuggestedPrompts(snapshot),
     [snapshot],
+  );
+  const followUpPrompts = useMemo(
+    () =>
+      getUnusedAdsAdvisorPrompts(
+        suggestedPrompts,
+        messages.filter((message) => message.role === 'user').map((message) => message.content),
+      ),
+    [messages, suggestedPrompts],
   );
 
   useEffect(() => {
@@ -129,37 +154,33 @@ export function AdsCampaignAdvisorChat({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="flex flex-col gap-3 px-4 py-3">
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+        <div className="flex min-w-0 flex-col gap-3 px-4 py-3">
           {messages.length === 0 && !loading ? (
-            <div className="space-y-2">
+            <div className="min-w-0 space-y-2">
               <p className="text-[13px] text-muted-foreground">可以從這些問題開始：</p>
-              <div className="flex flex-col gap-2">
-                {suggestedPrompts.map((prompt) => (
-                  <button
-                    key={prompt}
-                    type="button"
-                    disabled={inputLocked}
-                    onClick={() => void send(prompt)}
-                    className="rounded-md border border-teal-200 bg-teal-50/70 px-3 py-2 text-left text-[13px] text-teal-700 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
+              <SuggestedPromptList
+                prompts={suggestedPrompts}
+                disabled={inputLocked}
+                onSelect={(prompt) => void send(prompt)}
+              />
             </div>
           ) : null}
 
           {messages.map((message, index) => (
             <div
               key={`${message.role}-${index}`}
-              className={message.role === 'user' ? 'flex justify-end' : 'flex justify-start'}
+              className={
+                message.role === 'user'
+                  ? 'flex min-w-0 justify-end'
+                  : 'flex min-w-0 justify-start'
+              }
             >
               <div
                 className={
                   message.role === 'user'
                     ? 'max-w-[85%] rounded-lg bg-teal-600 px-3 py-2 text-[13px] text-white'
-                    : 'max-w-[92%] min-w-0 rounded-lg border border-[rgba(13,26,45,0.08)] bg-slate-50 px-3 py-2 text-[13px] text-slate-800'
+                    : 'min-w-0 w-full rounded-lg border border-[rgba(13,26,45,0.08)] bg-slate-50 px-3 py-2 text-[13px] text-slate-800'
                 }
               >
                 {message.role === 'assistant' ? (
@@ -167,22 +188,6 @@ export function AdsCampaignAdvisorChat({
                 ) : (
                   <p className="whitespace-pre-wrap break-words">{message.content}</p>
                 )}
-                {message.role === 'assistant' && message.toolsUsed?.length ? (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {message.toolsUsed.map((tool, toolIndex) => (
-                      <span
-                        key={`${tool.name}-${toolIndex}`}
-                        className={
-                          tool.ok
-                            ? 'rounded bg-teal-50 px-1.5 py-0.5 text-[11px] text-teal-700'
-                            : 'rounded bg-rose-50 px-1.5 py-0.5 text-[11px] text-rose-700'
-                        }
-                      >
-                        {toolLabel(tool.name)}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
               </div>
             </div>
           ))}
@@ -197,9 +202,22 @@ export function AdsCampaignAdvisorChat({
           ) : null}
 
           {error ? <p className="text-[13px] text-red-600">{error}</p> : null}
+
+          {messages.some((message) => message.role === 'assistant') &&
+          followUpPrompts.length > 0 &&
+          !loading ? (
+            <div className="min-w-0 space-y-2">
+              <p className="text-[13px] text-muted-foreground">可以繼續問：</p>
+              <SuggestedPromptList
+                prompts={followUpPrompts}
+                disabled={inputLocked}
+                onSelect={(prompt) => void send(prompt)}
+              />
+            </div>
+          ) : null}
           <div ref={endRef} />
         </div>
-      </ScrollArea>
+      </div>
 
       <div className="border-t border-[rgba(13,26,45,0.08)] px-4 py-3">
         {disabled || !snapshot ? (

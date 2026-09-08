@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   getAdsAdvisorSuggestedPrompts,
+  getUnusedAdsAdvisorPrompts,
   resolveAdsAdvisorPromptScenario,
 } from '../src/lib/adsAdvisorPrompts';
 import type { AdsAdvisorSnapshot } from '../src/types/adsAdvisor';
@@ -103,5 +104,10 @@ const sales = getAdsAdvisorSuggestedPrompts(
 );
 assert.ok(sales.some((q) => q.includes('版位')));
 assert.ok(sales.every((q) => !q.includes('關鍵字')));
+
+const unused = getUnusedAdsAdvisorPrompts(search, [search[3]]);
+assert.equal(unused.length, 3);
+assert.ok(!unused.includes(search[3]));
+assert.deepEqual(getUnusedAdsAdvisorPrompts(search, search), []);
 
 console.log('ads advisor prompt scenario tests passed');

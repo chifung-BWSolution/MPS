@@ -185,3 +185,11 @@ export function getAdsAdvisorSuggestedPrompts(
   const scenario = resolveAdsAdvisorPromptScenario(snapshot);
   return PROMPTS[scenario](snapshot);
 }
+
+export function getUnusedAdsAdvisorPrompts(
+  suggested: string[],
+  asked: readonly string[],
+): string[] {
+  const used = new Set(asked.map((text) => text.trim()).filter(Boolean));
+  return suggested.filter((prompt) => !used.has(prompt.trim()));
+}

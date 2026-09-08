@@ -22,7 +22,7 @@ export function AdsCampaignAdvisorDock({
     <div
       className={
         open
-          ? 'fixed top-[48px] right-0 bottom-0 z-40 flex w-[400px] max-w-[100vw] flex-col border-l border-[rgba(13,26,45,0.08)] bg-white shadow-lg'
+          ? 'fixed top-[48px] right-0 bottom-0 z-40 flex w-[400px] max-w-[100vw] min-w-0 flex-col overflow-hidden border-l border-[rgba(13,26,45,0.08)] bg-white shadow-lg'
           : 'hidden'
       }
     >
