@@ -9,7 +9,6 @@ import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
 import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
 import { useActiveStaffOptions } from '@/hooks/useActiveStaffOptions';
-import { useVchannels } from '@/hooks/useVchannels';
 import { useProjects, projectCategoryOf, projectKindOf, projectLevelOf, type MasterProject } from '@/hooks/useProjects';
 import { toQuotationClientSelectOption } from '@/data/quotationClientList';
 import {
@@ -23,15 +22,10 @@ import {
   websiteFormDataToProfile,
   type WebsiteFormData,
 } from '@/components/website/WebsiteFormModal';
-import {
-  ProjectVchannelFormModal,
-  emptyVchannelForm,
-  vchannelFormFromChannel,
-  type ProjectVchannelForm,
-} from '@/components/project/ProjectVchannelFormModal';
+import { VchannelFormModal } from '@/components/video/VchannelFormModal';
+import { useVchannels } from '@/hooks/useVchannels';
 import type { ProjectSelectKind } from '@/lib/searchableProjectSelect';
 import type { WebsiteLevel, WebsiteProfileFull } from '@/types/app';
-import type { VchannelImportance, VchannelStatus } from '@/types/vchannel';
 
 const kindChoices: { key: ProjectSelectKind; label: string; icon: ReactNode }[] = [
   { key: 'website', label: '網站', icon: <Globe size={14} /> },
@@ -80,25 +74,6 @@ function websiteFormFromProject(project: MasterProject): WebsiteFormData {
     notes: typeof project.meta.notes === 'string' ? project.meta.notes : '',
     profileType: project.meta.profile_type === 'system' ? 'system' : 'website',
     projectCategory: projectCategoryOf(project),
-  };
-}
-
-function vchannelFormFromProject(project: MasterProject): ProjectVchannelForm {
-  const importance = typeof project.meta.importance === 'string' && /^A[1-5]$/.test(project.meta.importance)
-    ? project.meta.importance as VchannelImportance
-    : 'A3';
-  const status = (['active', 'paused', 'archived'].includes(project.status)
-    ? project.status
-    : 'active') as VchannelStatus;
-  return {
-    ...emptyVchannelForm(),
-    channelCode: typeof project.meta.channel_code === 'string' ? project.meta.channel_code : '',
-    internalName: project.name,
-    publicName: typeof project.meta.public_name === 'string' ? project.meta.public_name : '',
-    importance,
-    brandListId: project.brandListId || '',
-    status,
-    notes: typeof project.meta.notes === 'string' ? project.meta.notes : '',
   };
 }
 
@@ -281,7 +256,7 @@ export function ProjectSourceDialog({
   const { profiles, addProfile, updateProfile } = useWebsiteProfiles();
   const { records, loading: pitchingLoading, addRecord, updateRecord } = useQuotationClientProjects();
   const { records: clientListRecords, addClient } = useQuotationClientList();
-  const { channels, addChannel, updateChannel } = useVchannels();
+  const { channels, loading: vchannelLoading } = useVchannels();
   const editKind = project ? projectKindOf(project) : null;
   const [pickedKind, setPickedKind] = useState<ProjectSelectKind | null>(
     editKind && editKind !== 'manual' ? editKind : null,
@@ -391,37 +366,6 @@ export function ProjectSourceDialog({
     await onSaved();
   };
 
-  const handleVchannelSave = async (form: ProjectVchannelForm) => {
-    const input = {
-      channelCode: form.channelCode.trim(),
-      internalName: form.internalName.trim(),
-      publicName: form.publicName.trim(),
-      importance: form.importance,
-      brandListId: form.brandListId || null,
-      status: form.status,
-      platformStatus: {},
-      notes: form.notes.trim() || undefined,
-    };
-    if (mode === 'add') {
-      const err = await addChannel(input);
-      if (err) {
-        toast.error('新增失敗', { description: err.message });
-        return;
-      }
-      toast.success('影片頻道已新增');
-      await onSaved();
-      return;
-    }
-    if (!project) return;
-    const err = await updateChannel(project.relatedId, input);
-    if (err) {
-      toast.error('儲存失敗', { description: err.message });
-      return;
-    }
-    toast.success('影片頻道已更新');
-    await onSaved();
-  };
-
   if (kind === 'website' || kind === 'system') {
     const site = project ? profiles.find(p => p.id === project.relatedId) : undefined;
     const initialData = site
@@ -473,12 +417,30 @@ export function ProjectSourceDialog({
   }
 
   const channel = project ? channels.find(c => c.id === project.relatedId) : undefined;
+  if (mode === 'edit' && !channel) {
+    return (
+      <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-[420px] px-6 py-5 space-y-3">
+          <h3 className="text-[16px] font-bold">編輯影片頻道</h3>
+          <p className="text-[13px] text-muted-foreground">
+            {vchannelLoading ? '載入來源紀錄中…' : '找不到此影片頻道的來源紀錄。'}
+          </p>
+          <div className="flex justify-end">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-muted-foreground bg-secondary rounded-md hover:bg-secondary/80">
+              關閉
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
-    <ProjectVchannelFormModal
+    <VchannelFormModal
+      isOpen
       mode={mode}
-      initial={channel ? vchannelFormFromChannel(channel) : project ? vchannelFormFromProject(project) : emptyVchannelForm()}
+      channel={mode === 'edit' ? channel : null}
       onClose={onClose}
-      onSave={handleVchannelSave}
+      onSaved={onSaved}
     />
   );
 }

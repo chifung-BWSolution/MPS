@@ -2,22 +2,12 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Edit, Trash2, KeyRound, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EmptyDash, MutedFieldBadge } from '@/components/ui/nullable-badge';
-import { supabase } from '@/lib/supabase';
-import { formatLinkedLoginMethods, type Vchannel, type VchannelAccount, type VchannelImportance, type VchannelStatus } from '@/types/vchannel';
+import { formatLinkedLoginMethods, type Vchannel } from '@/types/vchannel';
 import { useVchannels } from '@/hooks/useVchannels';
 import { useVchannelAccounts } from '@/hooks/useVchannelAccounts';
 import { useBrands } from '@/hooks/useBrands';
-import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Button } from '@/components/ui/button';
+import { DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import {
-  accountLinkFingerprint,
-  planAccountChannelLinkPatches,
-  type AccountLinkPatch,
-} from '@/lib/vchannelAccountLink';
-import { ChannelAccountPicker } from './ChannelAccountPicker';
 import {
   CHANNEL_LIST_ACCOUNT_COLUMNS,
   PLATFORM_KEYS,
@@ -26,8 +16,6 @@ import {
   STATUS_KIND_LABELS,
   accountLabelForPlatform,
   accountPlatformLabel,
-  formatPlatformStatusNote,
-  type PlatformStatusValue,
   platformStatusSummary,
 } from '@/lib/vchannelPlatformStatus';
 import { fetchWorkLogTotalsByVchannelIds } from '@/services/videoOutputWorkLogService';
@@ -37,6 +25,7 @@ import {
   emptyAccountForm,
   formToAccountPayload,
 } from './VchannelAccountFormModal';
+import { VchannelFormModal, VCHANNEL_IMPORTANCE_CONFIG } from './VchannelFormModal';
 import { VchannelAccountLoginMethodsDialog } from './VchannelAccountLoginMethodsDialog';
 
 function ChannelWorkHoursCell({ hours }: { hours?: number }) {
@@ -69,159 +58,8 @@ function ChannelNameCell({ internalName, publicName }: { internalName: string; p
   );
 }
 
-const importanceConfig = {
-  A1: { label: 'A1', color: 'text-rose-700', bg: 'bg-rose-100', description: '最高重要' },
-  A2: { label: 'A2', color: 'text-amber-700', bg: 'bg-amber-100', description: '高重要' },
-  A3: { label: 'A3', color: 'text-blue-700', bg: 'bg-blue-100', description: '中等' },
-  A4: { label: 'A4', color: 'text-slate-700', bg: 'bg-slate-100', description: '低重要' },
-  A5: { label: 'A5', color: 'text-gray-600', bg: 'bg-gray-100', description: '最低' },
-};
-
-const emptyChannel = {
-  channelCode: '',
-  internalName: '',
-  publicName: '',
-  importance: 'A3' as VchannelImportance,
-  brandListId: '' as string,
-  status: 'active' as VchannelStatus,
-  platformStatus: {} as Record<string, PlatformStatusValue>,
-  notes: '',
-};
-
-function PlatformStatusNote({ value }: { value: Record<string, PlatformStatusValue> }) {
-  const text = formatPlatformStatusNote(value);
-  return (
-    <div className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2">
-      <p className="text-[11px] text-muted-foreground mb-1">臨時顯示，稍後會移除</p>
-      {text ? (
-        <pre className="m-0 whitespace-pre-wrap font-sans text-[12px] leading-relaxed text-foreground">{text}</pre>
-      ) : (
-        <p className="text-[12px] text-muted-foreground">暫無平台狀態資料</p>
-      )}
-    </div>
-  );
-}
-
-async function applyAccountLinkPatches(patches: AccountLinkPatch[]) {
-  for (const patch of patches) {
-    const { error } = await supabase
-      .from('vchannel_accounts')
-      .update({
-        vchannel_codes: patch.vchannelCodes,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', patch.id);
-    if (error) return error;
-  }
-  return null;
-}
-
-function ChannelForm({
-  form,
-  setForm,
-  brandOptions,
-  accounts,
-  selectedAccountIds,
-  onSelectedAccountIdsChange,
-  onAddAccount,
-}: {
-  form: typeof emptyChannel;
-  setForm: React.Dispatch<React.SetStateAction<typeof emptyChannel>>;
-  brandOptions: { id: string; brandCode: string; displayName: string }[];
-  accounts: VchannelAccount[];
-  selectedAccountIds: string[];
-  onSelectedAccountIdsChange: (ids: string[]) => void;
-  onAddAccount: () => void;
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="text-[12px] font-medium text-muted-foreground block mb-1">頻道編號 *</label>
-          <Input
-            value={form.channelCode}
-            onChange={e => setForm({ ...form, channelCode: e.target.value.toUpperCase() })}
-            className="h-9 text-[13px]"
-            placeholder="V01"
-          />
-        </div>
-        <div>
-          <label className="text-[12px] font-medium text-muted-foreground block mb-1">品牌分類 *</label>
-          <Select
-            value={form.brandListId || undefined}
-            onValueChange={val => setForm({ ...form, brandListId: val })}
-          >
-            <SelectTrigger className="h-9 text-[13px]"><SelectValue placeholder="選擇品牌" /></SelectTrigger>
-            <SelectContent>
-              {brandOptions.map(b => (
-                <SelectItem key={b.id} value={b.id}>
-                  {b.brandCode}{b.displayName !== b.brandCode ? ` — ${b.displayName}` : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div>
-        <label className="text-[12px] font-medium text-muted-foreground block mb-1">內部名稱 *</label>
-        <Input value={form.internalName} onChange={e => setForm({ ...form, internalName: e.target.value })} className="h-9 text-[13px]" />
-      </div>
-      <div>
-        <label className="text-[12px] font-medium text-muted-foreground block mb-1">公開頻道名稱 *</label>
-        <Input value={form.publicName} onChange={e => setForm({ ...form, publicName: e.target.value })} className="h-9 text-[13px]" />
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="text-[12px] font-medium text-muted-foreground block mb-1">重要性</label>
-          <Select value={form.importance} onValueChange={(val: VchannelImportance) => setForm({ ...form, importance: val })}>
-            <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {Object.entries(importanceConfig).map(([k, v]) => (
-                <SelectItem key={k} value={k}>{k} - {v.description}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <label className="text-[12px] font-medium text-muted-foreground block mb-1">狀態</label>
-          <Select value={form.status} onValueChange={(val: VchannelStatus) => setForm({ ...form, status: val })}>
-            <SelectTrigger className="h-9 text-[13px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="active">活躍</SelectItem>
-              <SelectItem value="paused">暫停</SelectItem>
-              <SelectItem value="archived">已歸檔</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div>
-        <label className="text-[12px] font-medium text-muted-foreground block mb-1">備註</label>
-        <Textarea
-          value={form.notes}
-          onChange={e => setForm({ ...form, notes: e.target.value })}
-          rows={4}
-          className="text-[13px]"
-          placeholder="頻道備註"
-        />
-      </div>
-      <ChannelAccountPicker
-        accounts={accounts}
-        selectedIds={selectedAccountIds}
-        onChange={onSelectedAccountIdsChange}
-        onAddAccount={onAddAccount}
-        disabled={!form.channelCode.trim()}
-        disabledReason="請先填寫頻道編號，才能搜尋或新增關聯的平台帳戶"
-      />
-      <div>
-        <label className="text-[12px] font-medium text-muted-foreground block mb-2">平台狀態矩陣</label>
-        <PlatformStatusNote value={form.platformStatus} />
-      </div>
-    </div>
-  );
-}
-
 export function VideoChannelsList() {
-  const { channels, loading, error, addChannel, updateChannel, deleteChannel } = useVchannels();
+  const { channels, loading, error, fetchChannels, deleteChannel } = useVchannels();
   const { brands } = useBrands();
   const {
     accounts,
@@ -231,11 +69,6 @@ export function VideoChannelsList() {
     fetchAccounts,
     accountsForChannel,
   } = useVchannelAccounts();
-
-  const activeBrandOptions = useMemo(
-    () => brands.filter(b => b.isActive).map(b => ({ id: b.id, brandCode: b.brandCode, displayName: b.displayName })),
-    [brands],
-  );
 
   const brandCodeById = useMemo(() => {
     const map = new Map<string, string>();
@@ -254,26 +87,16 @@ export function VideoChannelsList() {
   const [brandFilter, setBrandFilter] = useState<string>('all');
   const [expandedChannelId, setExpandedChannelId] = useState<string | null>(null);
 
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState(emptyChannel);
-  const [editingChannelId, setEditingChannelId] = useState<string | null>(null);
-  const [newChannel, setNewChannel] = useState(emptyChannel);
+  const [channelDialog, setChannelDialog] = useState<{ mode: 'add' } | { mode: 'edit'; channel: Vchannel } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Vchannel | null>(null);
   const [deleteReasons, setDeleteReasons] = useState<string[]>([]);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [loginMethodsChannel, setLoginMethodsChannel] = useState<Vchannel | null>(null);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [accountForm, setAccountForm] = useState(emptyAccountForm);
   const [savingAccount, setSavingAccount] = useState(false);
-  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
-  const [initialLinkedAccountIds, setInitialLinkedAccountIds] = useState<string[]>([]);
-  const [linkedDuringSessionIds, setLinkedDuringSessionIds] = useState<string[]>([]);
-  const [initialChannelCode, setInitialChannelCode] = useState('');
-  const [pendingCreatedFingerprint, setPendingCreatedFingerprint] = useState<string | null>(null);
   const [channelWorkHours, setChannelWorkHours] = useState<Map<string, number>>(new Map());
 
   const refreshChannelWorkHours = useCallback(async (channelIds: string[]) => {
@@ -297,18 +120,6 @@ export function VideoChannelsList() {
     void refreshChannelWorkHours(channels.map(ch => ch.id));
   }, [channels, refreshChannelWorkHours]);
 
-  useEffect(() => {
-    if (!pendingCreatedFingerprint) return;
-    const created = accounts.find(account => (
-      accountLinkFingerprint(account) === pendingCreatedFingerprint
-      && !selectedAccountIds.includes(account.id)
-    ));
-    if (!created) return;
-    setSelectedAccountIds(ids => (ids.includes(created.id) ? ids : [...ids, created.id]));
-    setLinkedDuringSessionIds(ids => (ids.includes(created.id) ? ids : [...ids, created.id]));
-    setPendingCreatedFingerprint(null);
-  }, [accounts, pendingCreatedFingerprint, selectedAccountIds]);
-
   const brandFilterOptions = useMemo(
     () => [...new Set(channels.map(c => channelBrandLabel(c)).filter(code => code && code !== '—'))].sort(),
     [channels, channelBrandLabel],
@@ -330,104 +141,8 @@ export function VideoChannelsList() {
     });
   }, [channels, searchQuery, importanceFilter, brandFilter, channelBrandLabel]);
 
-  const resetAccountLinkState = () => {
-    setSelectedAccountIds([]);
-    setInitialLinkedAccountIds([]);
-    setLinkedDuringSessionIds([]);
-    setInitialChannelCode('');
-    setPendingCreatedFingerprint(null);
-  };
-
-  const syncSelectedAccountLinks = async (channelCode: string, previousChannelCode?: string) => {
-    const patches = planAccountChannelLinkPatches({
-      accounts,
-      selectedIds: selectedAccountIds,
-      initialLinkedIds: [...initialLinkedAccountIds, ...linkedDuringSessionIds],
-      channelCode,
-      previousChannelCode,
-    });
-    if (patches.length === 0) return null;
-    const linkError = await applyAccountLinkPatches(patches);
-    if (!linkError) await fetchAccounts();
-    return linkError;
-  };
-
-  const handleAdd = async () => {
-    if (!newChannel.channelCode.trim() || !newChannel.internalName.trim() || !newChannel.brandListId) return;
-    setSaving(true);
-    const err = await addChannel({
-      ...newChannel,
-      brandListId: newChannel.brandListId || null,
-    });
-    if (err) {
-      setSaving(false);
-      alert(typeof err === 'object' && 'message' in err ? err.message : String(err));
-      return;
-    }
-    const linkError = await syncSelectedAccountLinks(newChannel.channelCode);
-    setSaving(false);
-    if (linkError) {
-      alert(`頻道已儲存，但平台帳戶關聯失敗：${linkError.message}`);
-    }
-    setNewChannel(emptyChannel);
-    resetAccountLinkState();
-    setShowAddModal(false);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editingChannelId) return;
-    setSaving(true);
-    const err = await updateChannel(editingChannelId, {
-      channelCode: editForm.channelCode,
-      internalName: editForm.internalName,
-      publicName: editForm.publicName,
-      importance: editForm.importance,
-      brandListId: editForm.brandListId || null,
-      status: editForm.status,
-      platformStatus: editForm.platformStatus,
-      notes: editForm.notes,
-    });
-    if (err) {
-      setSaving(false);
-      alert(typeof err === 'object' && 'message' in err ? err.message : String(err));
-      return;
-    }
-    const linkError = await syncSelectedAccountLinks(editForm.channelCode, initialChannelCode);
-    setSaving(false);
-    if (linkError) {
-      alert(`頻道已儲存，但平台帳戶關聯失敗：${linkError.message}`);
-    }
-    resetAccountLinkState();
-    setShowEditModal(false);
-    setEditingChannelId(null);
-  };
-
-  const openAddChannel = () => {
-    setNewChannel(emptyChannel);
-    resetAccountLinkState();
-    setShowAddModal(true);
-  };
-
   const openEditChannel = (channel: Vchannel) => {
-    const linked = accountsForChannel(channel.channelCode);
-    const linkedIds = linked.map(account => account.id);
-    setEditingChannelId(channel.id);
-    setEditForm({
-      channelCode: channel.channelCode,
-      internalName: channel.internalName,
-      publicName: channel.publicName,
-      importance: channel.importance,
-      brandListId: channel.brandListId ?? '',
-      status: channel.status,
-      platformStatus: channel.platformStatus,
-      notes: channel.notes ?? '',
-    });
-    setSelectedAccountIds(linkedIds);
-    setInitialLinkedAccountIds(linkedIds);
-    setLinkedDuringSessionIds([]);
-    setInitialChannelCode(channel.channelCode);
-    setPendingCreatedFingerprint(null);
-    setShowEditModal(true);
+    setChannelDialog({ mode: 'edit', channel });
   };
 
   const handleDeleteClick = (channel: Vchannel) => {
@@ -458,15 +173,6 @@ export function VideoChannelsList() {
     setShowAccountModal(true);
   };
 
-  const openAddAccountFromChannel = () => {
-    const code = (showEditModal ? editForm.channelCode : newChannel.channelCode).trim().toUpperCase();
-    if (!code) {
-      alert('請先填寫頻道編號');
-      return;
-    }
-    openAddAccount(code);
-  };
-
   const openEditAccount = (account: typeof accounts[0]) => {
     setEditingAccountId(account.id);
     setAccountForm(accountToForm(account));
@@ -484,9 +190,6 @@ export function VideoChannelsList() {
     if (err) {
       alert(typeof err === 'object' && 'message' in err ? err.message : String(err));
       return;
-    }
-    if (!editingAccountId && (showAddModal || showEditModal)) {
-      setPendingCreatedFingerprint(accountLinkFingerprint(payload));
     }
     setShowAccountModal(false);
   };
@@ -533,7 +236,7 @@ export function VideoChannelsList() {
             <SelectTrigger className="w-[120px] h-9 text-[12px]"><SelectValue placeholder="重要性" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部重要性</SelectItem>
-              {Object.keys(importanceConfig).map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}
+              {Object.keys(VCHANNEL_IMPORTANCE_CONFIG).map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={brandFilter} onValueChange={setBrandFilter}>
@@ -544,7 +247,7 @@ export function VideoChannelsList() {
             </SelectContent>
           </Select>
           <button
-            onClick={openAddChannel}
+            onClick={() => setChannelDialog({ mode: 'add' })}
             className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded text-[12px] font-medium hover:bg-teal-700"
           >
             <Plus size={12} /> 新增頻道
@@ -577,7 +280,7 @@ export function VideoChannelsList() {
               </thead>
               <tbody>
                 {filteredChannels.map(channel => {
-                  const iConfig = importanceConfig[channel.importance];
+                  const iConfig = VCHANNEL_IMPORTANCE_CONFIG[channel.importance];
                   const isExpanded = expandedChannelId === channel.id;
                   const linkedAccounts = accountsForChannel(channel.channelCode);
                   return (
@@ -699,47 +402,16 @@ export function VideoChannelsList() {
           </div>
       )}
 
-      <CrudModal
-        isOpen={showAddModal}
-        onClose={() => { setShowAddModal(false); resetAccountLinkState(); }}
-        title="新增 Vchannel"
-        size="lg"
-      >
-        <ChannelForm
-          form={newChannel}
-          setForm={setNewChannel}
-          brandOptions={activeBrandOptions}
-          accounts={accounts}
-          selectedAccountIds={selectedAccountIds}
-          onSelectedAccountIdsChange={setSelectedAccountIds}
-          onAddAccount={openAddAccountFromChannel}
-        />
-        <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
-          <Button variant="secondary" onClick={() => { setShowAddModal(false); resetAccountLinkState(); }}>取消</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleAdd} disabled={saving || savingAccount}>{saving ? '儲存中...' : '新增'}</Button>
-        </div>
-      </CrudModal>
-
-      <CrudModal
-        isOpen={showEditModal}
-        onClose={() => { setShowEditModal(false); resetAccountLinkState(); }}
-        title={`編輯 ${editForm.channelCode}`}
-        size="lg"
-      >
-        <ChannelForm
-          form={editForm}
-          setForm={setEditForm}
-          brandOptions={activeBrandOptions}
-          accounts={accounts}
-          selectedAccountIds={selectedAccountIds}
-          onSelectedAccountIdsChange={setSelectedAccountIds}
-          onAddAccount={openAddAccountFromChannel}
-        />
-        <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
-          <Button variant="secondary" onClick={() => { setShowEditModal(false); resetAccountLinkState(); }}>取消</Button>
-          <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSaveEdit} disabled={saving || savingAccount}>{saving ? '儲存中...' : '儲存'}</Button>
-        </div>
-      </CrudModal>
+      <VchannelFormModal
+        isOpen={!!channelDialog}
+        mode={channelDialog?.mode === 'edit' ? 'edit' : 'add'}
+        channel={channelDialog?.mode === 'edit' ? channelDialog.channel : null}
+        onClose={() => setChannelDialog(null)}
+        onSaved={async () => {
+          await fetchChannels();
+          await fetchAccounts();
+        }}
+      />
 
       <DeleteConfirmModal
         isOpen={showDeleteModal}
