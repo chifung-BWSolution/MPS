@@ -17,6 +17,7 @@ import {
   nextRecurringDueDate,
   paidRecurringExpenseFields,
   previewRecurringDueDates,
+  recurringSettingsFromRows,
   BULK_EXPENSE_BILLED_TOTAL_MISMATCH,
   BULK_DATE_MODE_LABELS,
   DEFAULT_BULK_DATE_MODE,
@@ -30,6 +31,7 @@ import {
   findExpenseInstallmentCollision,
   formatExpenseDate,
   formatExpenseMoney,
+  formatRecurringSettingDetails,
   formatMoneyInput,
   groupExpensesByType,
   hasFilledPaymentAmount,
@@ -418,6 +420,57 @@ assert.deepEqual(grouped[1].rows.map((row) => row.id), ['a1', 'a2']);
 assert.deepEqual(grouped[1].summary, { billed: 3000, paid: 400, outstanding: 2400, badDebt: 200 });
 assert.deepEqual(grouped[0].summary, { billed: 800, paid: 200, outstanding: 600, badDebt: 0 });
 
+const recurringGroup = recurringSettingsFromRows([
+  {
+    id: 'r1',
+    relatedType: 'project',
+    relatedId: 'p1',
+    supplierTypesId: 't1',
+    supplierId: 's1',
+    typeLabel: '網站',
+    supplierLabel: 'Bubble',
+    groupKey: 't1::s1',
+    billedAmount: 368,
+    paymentAmount: 368,
+    outstanding: 0,
+    badDebt: 0,
+    creditCardLabel: "Franco's card",
+    recurringExpenseId: 'rec-1',
+    recurringFrequency: 'monthly',
+    recurringStatus: 'active',
+    recurringNextOccurrenceDate: '2026-09-20',
+    recurringAutomationRunCount: 4,
+    createdAt: '',
+    updatedAt: '',
+  },
+  {
+    id: 'r2',
+    relatedType: 'project',
+    relatedId: 'p1',
+    supplierTypesId: 't1',
+    supplierId: 's1',
+    typeLabel: '網站',
+    supplierLabel: 'Bubble',
+    groupKey: 't1::s1',
+    billedAmount: 368,
+    paymentAmount: 368,
+    outstanding: 0,
+    badDebt: 0,
+    recurringExpenseId: 'rec-1',
+    recurringFrequency: 'monthly',
+    recurringStatus: 'active',
+    createdAt: '',
+    updatedAt: '',
+  },
+]);
+assert.equal(recurringGroup.length, 1);
+assert.equal(recurringGroup[0].id, 'rec-1');
+assert.match(
+  formatRecurringSettingDetails(recurringGroup[0]),
+  /每月 · 進行中 · 自動化已執行 4 次 · 下次 2026\/09\/20 · Franco's card · 每期 \$368\.00 HKD/,
+);
+assert.deepEqual(recurringSettingsFromRows(grouped[0].rows), []);
+
 const migration = read('supabase/migrations/20260907043040_create_expenses.sql');
 assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.expenses/);
 assert.match(migration, /related_type text NOT NULL DEFAULT 'project'/);
@@ -512,6 +565,11 @@ assert.match(tab, /ariaLabel="週期頻率"/);
 assert.match(tab, /RECURRING_EXPENSE_FREQUENCIES/);
 assert.match(tab, /previewRecurringDueDates/);
 assert.match(tab, /setRecurringExpenseStatus/);
+assert.match(tab, /recurringSettingsFromRows/);
+assert.match(tab, /formatRecurringSettingDetails/);
+assert.match(tab, /<Repeat size=\{14\} \/>/);
+assert.match(tab, /TooltipProvider/);
+assert.match(tab, /週期設定/);
 assert.match(tab, /暫停週期/);
 assert.match(tab, /恢復週期/);
 assert.match(tab, /自動化已執行/);

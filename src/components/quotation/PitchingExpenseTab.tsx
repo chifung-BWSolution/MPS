@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Banknote, ExternalLink, FileText, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Banknote, ExternalLink, FileText, Pencil, Plus, Repeat, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useCreditCards } from '@/hooks/useCreditCards';
@@ -23,6 +23,7 @@ import {
   formatExpenseDateTime,
   formatExpenseMoney,
   formatPaymentRecordFileSize,
+  formatRecurringSettingDetails,
   groupExpensesByType,
   hasFilledPaymentAmount,
   isCreditCardPaymentMethod,
@@ -32,6 +33,7 @@ import {
   parseInstallmentNumber,
   parseMoney,
   previewRecurringDueDates,
+  recurringSettingsFromRows,
   summarizeExpenses,
   validateExpenseInput,
   type ExpensePaymentMethod,
@@ -44,6 +46,7 @@ import { CrudModal, CrudModalFooter, DeleteConfirmModal } from '@/components/ui/
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 type Draft = {
   supplierTypesId: string;
@@ -401,7 +404,9 @@ export function PitchingExpenseTab({
         </div>
       ) : (
         <div className="space-y-3">
-          {groups.map((group) => (
+          {groups.map((group) => {
+            const recurringSettings = recurringSettingsFromRows(group.rows);
+            return (
             <section
               key={group.key}
               className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-hidden"
@@ -409,6 +414,32 @@ export function PitchingExpenseTab({
               <header className="flex items-center justify-between gap-4 flex-wrap px-4 py-3 bg-muted/30 border-b border-border">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
+                    {recurringSettings.length > 0 && (
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span
+                              className="inline-flex text-teal-600"
+                              aria-label={`${group.supplierLabel} 週期設定`}
+                              tabIndex={0}
+                            >
+                              <Repeat size={14} />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            side="bottom"
+                            align="start"
+                            className="max-w-xs space-y-1 bg-white text-foreground border border-border shadow-md"
+                          >
+                            {recurringSettings.map((setting) => (
+                              <p key={setting.id} className="text-[12px] leading-5">
+                                {formatRecurringSettingDetails(setting)}
+                              </p>
+                            ))}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                     <h3 className="text-[14px] font-semibold">{group.supplierLabel}</h3>
                     <button
                       type="button"
@@ -577,7 +608,8 @@ export function PitchingExpenseTab({
                 </table>
               </div>
             </section>
-          ))}
+            );
+          })}
         </div>
       )}
 

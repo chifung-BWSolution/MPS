@@ -421,6 +421,48 @@ export type ExpenseTypeGroup = {
   summary: ExpenseSummary;
 };
 
+export type RecurringExpenseSummary = {
+  id: string;
+  frequency?: RecurringExpenseFrequency;
+  status?: RecurringExpenseStatus;
+  nextOccurrenceDate?: string;
+  automationRunCount: number;
+  billedAmount?: number;
+  creditCardLabel?: string;
+};
+
+export function recurringSettingsFromRows(rows: QuotationExpense[]): RecurringExpenseSummary[] {
+  const byId = new Map<string, RecurringExpenseSummary>();
+  for (const row of rows) {
+    const id = row.recurringExpenseId?.trim();
+    if (!id || byId.has(id)) continue;
+    byId.set(id, {
+      id,
+      frequency: row.recurringFrequency,
+      status: row.recurringStatus,
+      nextOccurrenceDate: row.recurringNextOccurrenceDate,
+      automationRunCount: row.recurringAutomationRunCount ?? 0,
+      billedAmount: row.billedAmount,
+      creditCardLabel: row.creditCardLabel,
+    });
+  }
+  return [...byId.values()];
+}
+
+export function formatRecurringSettingDetails(setting: RecurringExpenseSummary): string {
+  const parts = [
+    setting.frequency ? RECURRING_EXPENSE_FREQUENCY_LABELS[setting.frequency] : '週期',
+    RECURRING_EXPENSE_STATUS_LABELS[setting.status ?? 'active'],
+    `自動化已執行 ${setting.automationRunCount} 次`,
+  ];
+  if (setting.nextOccurrenceDate) {
+    parts.push(`下次 ${formatExpenseDate(setting.nextOccurrenceDate)}`);
+  }
+  if (setting.creditCardLabel?.trim()) parts.push(setting.creditCardLabel.trim());
+  if (setting.billedAmount != null) parts.push(`每期 ${formatExpenseMoney(setting.billedAmount)}`);
+  return parts.join(' · ');
+}
+
 export function summarizeExpenses(rows: QuotationExpense[]): ExpenseSummary {
   return rows.reduce(
     (acc, row) => ({
