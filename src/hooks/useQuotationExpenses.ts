@@ -11,6 +11,7 @@ import {
   isAllowedPaymentRecordFile,
   isExpensePaymentMethod,
   isExpensePaymentStatus,
+  isMissingRecurringRelationship,
   isRecurringExpenseFrequency,
   isRecurringExpenseStatus,
   nextRecurringDueDate,
@@ -88,15 +89,28 @@ export type QuotationExpenseWriteInput = QuotationExpenseInput & {
   frequency?: RecurringExpenseFrequency | null;
 };
 
-const EXPENSE_SELECT = `
+const EXPENSE_SELECT_CORE = `
   *,
   supplier_types:supplier_types_id (id, display_name, categories),
   suppliers:supplier_id (id, display_name, supplier_types_id),
-  credit_card:credit_cards!expenses_credit_card_id_fkey (id, label, last_four, bank),
+  credit_card:credit_cards!expenses_credit_card_id_fkey (id, label, last_four, bank)
+`;
+
+const EXPENSE_SELECT = `${EXPENSE_SELECT_CORE},
   recurring:recurring_expenses!expenses_recurring_expense_id_fkey (
     id, frequency, next_occurrence_date, automation_run_count, status
   )
 `;
+
+async function selectExpenseRow<T>(
+  run: (columns: string) => PromiseLike<{ data: T; error: { message: string } | null }>,
+) {
+  const withRecurring = await run(EXPENSE_SELECT);
+  if (!withRecurring.error || !isMissingRecurringRelationship(withRecurring.error.message)) {
+    return withRecurring;
+  }
+  return run(EXPENSE_SELECT_CORE);
+}
 
 function compareExpenses(a: QuotationExpense, b: QuotationExpense): number {
   const aN = a.installmentNumber ?? Number.MAX_SAFE_INTEGER;
@@ -320,12 +334,14 @@ export function useQuotationExpenses(quotationClientProjectId: string | undefine
     }
     setProjectId(resolved.data);
 
-    const { data, error: err } = await supabase
-      .from(EXPENSES_TABLE)
-      .select(EXPENSE_SELECT)
-      .eq('related_type', EXPENSE_RELATED_TYPE_PROJECT)
-      .eq('related_id', resolved.data)
-      .order('created_at', { ascending: true });
+    const { data, error: err } = await selectExpenseRow((columns) =>
+      supabase
+        .from(EXPENSES_TABLE)
+        .select(columns)
+        .eq('related_type', EXPENSE_RELATED_TYPE_PROJECT)
+        .eq('related_id', resolved.data)
+        .order('created_at', { ascending: true }),
+    );
 
     if (err) {
       setError(err.message);
@@ -391,17 +407,19 @@ export function useQuotationExpenses(quotationClientProjectId: string | undefine
       const paid = frequency && dueDate
         ? paidRecurringExpenseFields(input.billedAmount, dueDate)
         : null;
-      const { data, error: err } = await supabase
-        .from(EXPENSES_TABLE)
-        .insert(inputToRow({
-          ...input,
-          ...attached.data,
-          ...(paid ?? {}),
-          creditCardId,
-          recurringExpenseId: recurringId,
-        }, projectId, fileAction))
-        .select(EXPENSE_SELECT)
-        .single();
+      const { data, error: err } = await selectExpenseRow((columns) =>
+        supabase
+          .from(EXPENSES_TABLE)
+          .insert(inputToRow({
+            ...input,
+            ...attached.data,
+            ...(paid ?? {}),
+            creditCardId,
+            recurringExpenseId: recurringId,
+          }, projectId, fileAction))
+          .select(columns)
+          .single(),
+      );
       if (err) {
         await removeStorageObject(attached.uploadedPath);
         if (frequency && recurringId) {
@@ -427,12 +445,14 @@ export function useQuotationExpenses(quotationClientProjectId: string | undefine
     const attached = await attachPaymentRecord(projectId, input.file, fileAction);
     if (attached.error) return { data: null, error: attached.error };
 
-    const { data, error: err } = await supabase
-      .from(EXPENSES_TABLE)
-      .update(inputToRow({ ...input, ...attached.data }, projectId, fileAction))
-      .eq('id', id)
-      .select(EXPENSE_SELECT)
-      .single();
+    const { data, error: err } = await selectExpenseRow((columns) =>
+      supabase
+        .from(EXPENSES_TABLE)
+        .update(inputToRow({ ...input, ...attached.data }, projectId, fileAction))
+        .eq('id', id)
+        .select(columns)
+        .single(),
+    );
     if (err) {
       await removeStorageObject(attached.uploadedPath);
       return { data: null, error: { message: err.message } };
@@ -465,12 +485,14 @@ export function useQuotationExpenses(quotationClientProjectId: string | undefine
     const updated: QuotationExpense[] = [];
     for (const item of items) {
       if (!item.id) continue;
-      const { data, error: err } = await supabase
-        .from(EXPENSES_TABLE)
-        .update(inputToRow(item.input, projectId, 'keep'))
-        .eq('id', item.id)
-        .select(EXPENSE_SELECT)
-        .single();
+      const { data, error: err } = await selectExpenseRow((columns) =>
+        supabase
+          .from(EXPENSES_TABLE)
+          .update(inputToRow(item.input, projectId, 'keep'))
+          .eq('id', item.id)
+          .select(columns)
+          .single(),
+      );
       if (err) return { data: null, error: { message: err.message } };
       updated.push(mapRow(data as DbRow));
     }
@@ -478,10 +500,12 @@ export function useQuotationExpenses(quotationClientProjectId: string | undefine
     const creates = items.filter((item) => !item.id);
     let created: QuotationExpense[] = [];
     if (creates.length > 0) {
-      const { data, error: err } = await supabase
-        .from(EXPENSES_TABLE)
-        .insert(creates.map((item) => inputToRow(item.input, projectId, 'keep')))
-        .select(EXPENSE_SELECT);
+      const { data, error: err } = await selectExpenseRow((columns) =>
+        supabase
+          .from(EXPENSES_TABLE)
+          .insert(creates.map((item) => inputToRow(item.input, projectId, 'keep')))
+          .select(columns),
+      );
       if (err) return { data: null, error: { message: err.message } };
       created = ((data as DbRow[] | null) ?? []).map(mapRow);
     }

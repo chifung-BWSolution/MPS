@@ -12,6 +12,7 @@ import {
   RECURRING_EXPENSES_TABLE,
   RECURRING_EXPENSE_FREQUENCIES,
   expenseCreditCardId,
+  isMissingRecurringRelationship,
   isRecurringExpenseFrequency,
   nextRecurringDueDate,
   paidRecurringExpenseFields,
@@ -298,6 +299,13 @@ assert.deepEqual(
   previewRecurringDueDates('monthly', '2026-01-31', 3),
   ['2026-01-31', '2026-02-28', '2026-03-31'],
 );
+assert.equal(
+  isMissingRecurringRelationship(
+    "Could not find a relationship between 'expenses' and 'recurring_expenses' in the schema cache",
+  ),
+  true,
+);
+assert.equal(isMissingRecurringRelationship('missing project'), false);
 assert.deepEqual(paidRecurringExpenseFields(1200, '2026-09-08'), {
   paymentAmount: 1200,
   paymentDate: '2026-09-08',
@@ -450,6 +458,9 @@ assert.match(hook, /expenseCreditCardId/);
 assert.match(hook, /RECURRING_EXPENSES_TABLE/);
 assert.match(hook, /recurring_expense_id/);
 assert.match(hook, /recurring_expenses!expenses_recurring_expense_id_fkey/);
+assert.match(hook, /EXPENSE_SELECT_CORE/);
+assert.match(hook, /isMissingRecurringRelationship/);
+assert.match(hook, /selectExpenseRow/);
 assert.match(hook, /automation_run_count/);
 assert.match(hook, /nextRecurringDueDate/);
 assert.match(hook, /paidRecurringExpenseFields/);

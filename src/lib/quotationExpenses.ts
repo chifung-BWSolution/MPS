@@ -209,6 +209,10 @@ export function previewRecurringDueDates(
   return dates;
 }
 
+export function isMissingRecurringRelationship(message: string | null | undefined): boolean {
+  return /relationship between ['"]expenses['"] and ['"]recurring_expenses['"]/i.test(message ?? '');
+}
+
 export function paidRecurringExpenseFields(billedAmount: number, dueDate: string) {
   return {
     paymentAmount: billedAmount,
