@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Banknote, ExternalLink, FileText, Pencil, Plus, Repeat, Trash2 } from 'lucide-react';
+import { Banknote, ExternalLink, FileText, Pause, Pencil, Plus, Repeat, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useCreditCards } from '@/hooks/useCreditCards';
@@ -39,9 +39,15 @@ import {
   type ExpensePaymentMethod,
   type ExpensePaymentStatus,
   type QuotationExpense,
+  type ExpenseTypeGroup,
   type RecurringExpenseFrequency,
+  type RecurringExpenseSummary,
 } from '@/lib/quotationExpenses';
 import { PitchingBulkExpenseDialog } from '@/components/quotation/PitchingBulkExpenseDialog';
+import {
+  PitchingRecurringExpenseDialog,
+  type RecurringExpenseDialogInput,
+} from '@/components/quotation/PitchingRecurringExpenseDialog';
 import { CrudModal, CrudModalFooter, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
@@ -155,6 +161,7 @@ export function PitchingExpenseTab({
     deleteExpense,
     saveBulkExpenses,
     setRecurringExpenseStatus,
+    saveGroupRecurring,
   } = useQuotationExpenses(projectId);
   const { cards } = useCreditCards();
   const { types: supplierTypes } = useSupplierTypes();
@@ -169,6 +176,9 @@ export function PitchingExpenseTab({
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkEditing, setBulkEditing] = useState<QuotationExpense[] | null>(null);
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [recurringGroup, setRecurringGroup] = useState<ExpenseTypeGroup | null>(null);
+  const [recurringSetting, setRecurringSetting] = useState<RecurringExpenseSummary | undefined>();
+  const [recurringSaving, setRecurringSaving] = useState(false);
 
   const summary = useMemo(() => summarizeExpenses(rows), [rows]);
   const groups = useMemo(() => groupExpensesByType(rows), [rows]);
@@ -258,6 +268,33 @@ export function PitchingExpenseTab({
   const closeBulk = () => {
     setBulkOpen(false);
     setBulkEditing(null);
+  };
+
+  const openRecurringSettings = (group: ExpenseTypeGroup, settings: RecurringExpenseSummary[]) => {
+    setRecurringGroup(group);
+    setRecurringSetting(settings[0]);
+  };
+
+  const closeRecurringSettings = () => {
+    setRecurringGroup(null);
+    setRecurringSetting(undefined);
+  };
+
+  const handleRecurringSave = async (input: RecurringExpenseDialogInput) => {
+    if (!recurringGroup) return;
+    setRecurringSaving(true);
+    const result = await saveGroupRecurring({
+      ...input,
+      supplierTypesId: recurringGroup.supplierTypesId,
+      supplierId: recurringGroup.supplierId,
+    });
+    setRecurringSaving(false);
+    if (result.error) {
+      toast.error(`儲存循環設定失敗：${result.error.message}`);
+      return;
+    }
+    toast.success(input.id ? '已更新循環設定' : '已新增循環設定');
+    closeRecurringSettings();
   };
 
   const handleBulkSave = async (
@@ -408,6 +445,8 @@ export function PitchingExpenseTab({
         <div className="space-y-3">
           {groups.map((group) => {
             const recurringSettings = recurringSettingsFromRows(group.rows);
+            const primaryRecurring = recurringSettings[0];
+            const RecurringIcon = primaryRecurring?.status === 'paused' ? Pause : Repeat;
             return (
             <section
               key={group.key}
@@ -421,11 +460,16 @@ export function PitchingExpenseTab({
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span
-                              className="inline-flex text-teal-600"
-                              aria-label={`${group.supplierLabel} 週期設定`}
+                              className={cn(
+                                'inline-flex',
+                                primaryRecurring?.status === 'paused' ? 'text-amber-600' : 'text-teal-600',
+                              )}
+                              aria-label={`${group.supplierLabel} ${
+                                primaryRecurring?.status === 'paused' ? '週期已暫停' : '週期進行中'
+                              }`}
                               tabIndex={0}
                             >
-                              <Repeat size={14} />
+                              <RecurringIcon size={14} />
                             </span>
                           </TooltipTrigger>
                           <TooltipContent
@@ -450,6 +494,14 @@ export function PitchingExpenseTab({
                       aria-label={`編輯整項 ${group.supplierLabel}`}
                     >
                       <Pencil size={12} /> 編輯整項
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openRecurringSettings(group, recurringSettings)}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[12px] font-medium text-teal-700 hover:bg-teal-50 transition-colors"
+                      aria-label={`循環設定 ${group.supplierLabel}`}
+                    >
+                      <Repeat size={12} /> 循環設定
                     </button>
                   </div>
                   <p className="text-[12px] text-muted-foreground">{group.typeLabel} · {group.rows.length} 筆</p>
@@ -1028,6 +1080,16 @@ export function PitchingExpenseTab({
         suppliers={suppliers}
         onClose={closeBulk}
         onSave={handleBulkSave}
+      />
+
+      <PitchingRecurringExpenseDialog
+        open={Boolean(recurringGroup)}
+        group={recurringGroup}
+        setting={recurringSetting}
+        cards={cards}
+        saving={recurringSaving}
+        onClose={closeRecurringSettings}
+        onSave={handleRecurringSave}
       />
 
       <DeleteConfirmModal

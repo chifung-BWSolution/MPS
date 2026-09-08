@@ -231,6 +231,19 @@ function inputToRow(
   return row;
 }
 
+export type RecurringExpenseWriteInput = {
+  id?: string;
+  supplierTypesId: string;
+  supplierId: string;
+  creditCardId: string;
+  billedAmount: number;
+  remarks?: string | null;
+  frequency: RecurringExpenseFrequency;
+  nextOccurrenceDate: string;
+  status: RecurringExpenseStatus;
+  attachExpenseIds: string[];
+};
+
 async function insertRecurringTemplate(input: {
   projectId: string;
   supplierTypesId: string;
@@ -240,8 +253,11 @@ async function insertRecurringTemplate(input: {
   remarks?: string | null;
   frequency: RecurringExpenseFrequency;
   dueDate: string;
+  nextOccurrenceDate?: string;
+  status?: RecurringExpenseStatus;
 }): Promise<{ data: string | null; error: { message: string } | null }> {
-  const nextDate = nextRecurringDueDate(input.frequency, input.dueDate, input.dueDate);
+  const nextDate = input.nextOccurrenceDate
+    || nextRecurringDueDate(input.frequency, input.dueDate, input.dueDate);
   if (!nextDate) return { data: null, error: { message: '無法計算下一次週期' } };
 
   const row = {
@@ -256,7 +272,7 @@ async function insertRecurringTemplate(input: {
     anchor_date: input.dueDate,
     next_occurrence_date: nextDate,
     automation_run_count: 0,
-    status: 'active' as const,
+    status: input.status ?? 'active',
   };
 
   const inserted = await supabase.from(RECURRING_EXPENSES_TABLE).insert(row).select('id').single();
@@ -644,6 +660,63 @@ export function useQuotationExpenses(quotationClientProjectId: string | undefine
     return { error: null };
   }, []);
 
+  const saveGroupRecurring = useCallback(async (input: RecurringExpenseWriteInput) => {
+    if (!projectId) return { error: { message: '缺少項目' } };
+    const nextDate = optionalIsoDate(input.nextOccurrenceDate);
+    if (!nextDate) return { error: { message: '請選擇下次到期日' } };
+    const now = new Date().toISOString();
+    let recurringId = input.id?.trim() || '';
+
+    if (recurringId) {
+      const { error: err } = await supabase
+        .from(RECURRING_EXPENSES_TABLE)
+        .update({
+          credit_card_id: input.creditCardId,
+          billed_amount: input.billedAmount,
+          remarks: input.remarks?.trim() || null,
+          frequency: input.frequency,
+          anchor_date: nextDate,
+          next_occurrence_date: nextDate,
+          status: input.status,
+          updated_at: now,
+        })
+        .eq('id', recurringId);
+      if (err) return { error: { message: err.message } };
+    } else {
+      const created = await insertRecurringTemplate({
+        projectId,
+        supplierTypesId: input.supplierTypesId,
+        supplierId: input.supplierId,
+        creditCardId: input.creditCardId,
+        billedAmount: input.billedAmount,
+        remarks: input.remarks,
+        frequency: input.frequency,
+        dueDate: nextDate,
+        nextOccurrenceDate: nextDate,
+        status: input.status,
+      });
+      if (created.error || !created.data) {
+        return { error: created.error ?? { message: '建立週期失敗' } };
+      }
+      recurringId = created.data;
+    }
+
+    const attachIds = input.attachExpenseIds.filter(Boolean);
+    if (attachIds.length > 0) {
+      const { error: attachErr } = await supabase
+        .from(EXPENSES_TABLE)
+        .update({
+          recurring_expense_id: recurringId,
+          updated_at: now,
+        })
+        .in('id', attachIds);
+      if (attachErr) return { error: { message: attachErr.message } };
+    }
+
+    await refresh();
+    return { error: null };
+  }, [projectId, refresh]);
+
   return {
     rows,
     projectId,
@@ -655,5 +728,6 @@ export function useQuotationExpenses(quotationClientProjectId: string | undefine
     deleteExpense,
     saveBulkExpenses,
     setRecurringExpenseStatus,
+    saveGroupRecurring,
   };
 }

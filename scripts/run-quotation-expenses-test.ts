@@ -19,6 +19,9 @@ import {
   paidRecurringExpenseFields,
   previewRecurringDueDates,
   recurringSettingsFromRows,
+  defaultGroupRecurringNextDate,
+  latestExpenseDueDate,
+  validateRecurringSettingInput,
   BULK_EXPENSE_BILLED_TOTAL_MISMATCH,
   BULK_DATE_MODE_LABELS,
   DEFAULT_BULK_DATE_MODE,
@@ -472,6 +475,27 @@ assert.match(
   /每月 · 進行中 · 自動化已執行 4 次 · 下次 2026\/09\/20 · Franco's card · 每期 \$368\.00 HKD/,
 );
 assert.deepEqual(recurringSettingsFromRows(grouped[0].rows), []);
+assert.equal(latestExpenseDueDate([
+  { dueDate: '2026-04-20' },
+  { dueDate: '2026-08-20' },
+  { dueDate: '2026-05-20' },
+]), '2026-08-20');
+assert.equal(defaultGroupRecurringNextDate([
+  { dueDate: '2026-04-20' },
+  { dueDate: '2026-08-20' },
+], 'monthly'), '2026-09-20');
+assert.equal(validateRecurringSettingInput({
+  creditCardId: 'cc-1',
+  frequency: 'monthly',
+  billedAmount: '249.6',
+  nextOccurrenceDate: '2026-09-20',
+}), null);
+assert.equal(validateRecurringSettingInput({
+  creditCardId: '',
+  frequency: 'monthly',
+  billedAmount: '249.6',
+  nextOccurrenceDate: '2026-09-20',
+}), '請選擇信用卡');
 
 const migration = read('supabase/migrations/20260907043040_create_expenses.sql');
 assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.expenses/);
@@ -520,6 +544,8 @@ assert.match(hook, /automation_run_count/);
 assert.match(hook, /nextRecurringDueDate/);
 assert.match(hook, /paidRecurringExpenseFields/);
 assert.match(hook, /const setRecurringExpenseStatus/);
+assert.match(hook, /const saveGroupRecurring/);
+assert.match(hook, /RecurringExpenseWriteInput/);
 assert.match(hook, /insertRecurringTemplate/);
 assert.match(hook, /CREATE_RECURRING_EXPENSE_RPC/);
 assert.match(hook, /frequency && !recurringId/);
@@ -575,9 +601,14 @@ assert.match(tab, /isRecurringExpenseFrequency\(draft\.frequency\) \? draft\.fre
 assert.doesNotMatch(tab, /!editing && isRecurringExpenseFrequency/);
 assert.match(tab, /recurringSettingsFromRows/);
 assert.match(tab, /formatRecurringSettingDetails/);
-assert.match(tab, /<Repeat size=\{14\} \/>/);
+assert.match(tab, /<Repeat size=\{14\} \/>|<RecurringIcon size=\{14\} \/>/);
+assert.match(tab, /Pause/);
+assert.match(tab, /週期已暫停/);
+assert.match(tab, /循環設定/);
+assert.match(tab, /PitchingRecurringExpenseDialog/);
+assert.match(tab, /openRecurringSettings/);
 assert.match(tab, /TooltipProvider/);
-assert.match(tab, /週期設定/);
+assert.match(tab, /週期進行中/);
 assert.match(tab, /暫停週期/);
 assert.match(tab, /恢復週期/);
 assert.match(tab, /自動化已執行/);
@@ -613,6 +644,14 @@ assert.match(recurringRpc, /private\.insert_recurring_expense/);
 assert.match(recurringRpc, /public\.create_recurring_expense/);
 assert.match(recurringRpc, /GRANT EXECUTE ON FUNCTION public\.create_recurring_expense/);
 assert.match(recurringRpc, /NOTIFY pgrst, 'reload schema'/);
+
+const recurringDialog = read('src/components/quotation/PitchingRecurringExpenseDialog.tsx');
+assert.match(recurringDialog, /export function PitchingRecurringExpenseDialog/);
+assert.match(recurringDialog, /新增循環設定/);
+assert.match(recurringDialog, /編輯循環設定/);
+assert.match(recurringDialog, /validateRecurringSettingInput/);
+assert.match(recurringDialog, /aria-label="下次到期日"/);
+assert.match(recurringDialog, /aria-label="週期狀態"/);
 
 const pitching = read('src/components/quotation/PitchingModule.tsx');
 assert.match(pitching, /PitchingExpenseTab/);

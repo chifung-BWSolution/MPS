@@ -429,7 +429,9 @@ export type RecurringExpenseSummary = {
   nextOccurrenceDate?: string;
   automationRunCount: number;
   billedAmount?: number;
+  creditCardId?: string;
   creditCardLabel?: string;
+  remarks?: string;
 };
 
 export function recurringSettingsFromRows(rows: QuotationExpense[]): RecurringExpenseSummary[] {
@@ -444,7 +446,9 @@ export function recurringSettingsFromRows(rows: QuotationExpense[]): RecurringEx
       nextOccurrenceDate: row.recurringNextOccurrenceDate,
       automationRunCount: row.recurringAutomationRunCount ?? 0,
       billedAmount: row.billedAmount,
+      creditCardId: row.creditCardId,
       creditCardLabel: row.creditCardLabel,
+      remarks: row.remarks,
     });
   }
   return [...byId.values()];
@@ -462,6 +466,37 @@ export function formatRecurringSettingDetails(setting: RecurringExpenseSummary):
   if (setting.creditCardLabel?.trim()) parts.push(setting.creditCardLabel.trim());
   if (setting.billedAmount != null) parts.push(`每期 ${formatExpenseMoney(setting.billedAmount)}`);
   return parts.join(' · ');
+}
+
+export function latestExpenseDueDate(rows: Array<{ dueDate?: string }>): string | null {
+  const dates = rows
+    .map((row) => optionalIsoDate(row.dueDate))
+    .filter((value): value is string => Boolean(value))
+    .sort();
+  return dates[dates.length - 1] ?? null;
+}
+
+export function defaultGroupRecurringNextDate(
+  rows: Array<{ dueDate?: string }>,
+  frequency: RecurringExpenseFrequency,
+): string {
+  const latest = latestExpenseDueDate(rows);
+  if (!latest) return '';
+  return nextRecurringDueDate(frequency, latest, latest) ?? latest;
+}
+
+export function validateRecurringSettingInput(input: {
+  creditCardId?: string;
+  frequency?: string;
+  billedAmount: string;
+  nextOccurrenceDate?: string;
+}): string | null {
+  if (!isRecurringExpenseFrequency(input.frequency)) return '請選擇週期頻率';
+  if (!input.creditCardId?.trim()) return '請選擇信用卡';
+  if (!input.billedAmount?.trim()) return '請填寫每期金額';
+  if (parseMoney(input.billedAmount) == null) return '每期金額須為 0 或以上的數字';
+  if (!optionalIsoDate(input.nextOccurrenceDate)) return '請選擇下次到期日';
+  return null;
 }
 
 export function summarizeExpenses(rows: QuotationExpense[]): ExpenseSummary {
