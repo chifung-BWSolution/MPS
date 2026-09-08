@@ -14,6 +14,9 @@ import {
   EXPENSE_PAYMENT_STATUS_LABELS,
   EXPENSE_PAYMENT_STATUS_STYLES,
   EXPENSE_PAYMENT_STATUSES,
+  RECURRING_EXPENSE_FREQUENCIES,
+  RECURRING_EXPENSE_FREQUENCY_LABELS,
+  RECURRING_EXPENSE_STATUS_LABELS,
   computeOutstanding,
   expenseCreditCardId,
   formatExpenseDate,
@@ -23,14 +26,18 @@ import {
   groupExpensesByType,
   hasFilledPaymentAmount,
   isCreditCardPaymentMethod,
+  isRecurringExpenseFrequency,
   nextExpenseInstallmentNumber,
+  paidRecurringExpenseFields,
   parseInstallmentNumber,
   parseMoney,
+  previewRecurringDueDates,
   summarizeExpenses,
   validateExpenseInput,
   type ExpensePaymentMethod,
   type ExpensePaymentStatus,
   type QuotationExpense,
+  type RecurringExpenseFrequency,
 } from '@/lib/quotationExpenses';
 import { PitchingBulkExpenseDialog } from '@/components/quotation/PitchingBulkExpenseDialog';
 import { CrudModal, CrudModalFooter, DeleteConfirmModal } from '@/components/ui/crud-modal';
@@ -51,6 +58,7 @@ type Draft = {
   paymentStatus: ExpensePaymentStatus | '';
   badDebt: string;
   remarks: string;
+  frequency: RecurringExpenseFrequency | '';
 };
 
 const emptyDraft = (nextInstallment = 1, supplierTypesId = '', supplierId = ''): Draft => ({
@@ -66,6 +74,7 @@ const emptyDraft = (nextInstallment = 1, supplierTypesId = '', supplierId = ''):
   paymentStatus: '',
   badDebt: '',
   remarks: '',
+  frequency: '',
 });
 
 function draftFromRow(row: QuotationExpense): Draft {
@@ -82,6 +91,7 @@ function draftFromRow(row: QuotationExpense): Draft {
     paymentStatus: row.paymentStatus ?? '',
     badDebt: String(row.badDebt),
     remarks: row.remarks ?? '',
+    frequency: '',
   };
 }
 
@@ -133,8 +143,16 @@ export function PitchingExpenseTab({
   signedDate?: string;
   handoverDate?: string;
 }) {
-  const { rows, loading, error, addExpense, updateExpense, deleteExpense, saveBulkExpenses } =
-    useQuotationExpenses(projectId);
+  const {
+    rows,
+    loading,
+    error,
+    addExpense,
+    updateExpense,
+    deleteExpense,
+    saveBulkExpenses,
+    setRecurringExpenseStatus,
+  } = useQuotationExpenses(projectId);
   const { cards } = useCreditCards();
   const { types: supplierTypes } = useSupplierTypes();
   const { suppliers } = useWebPageSuppliers();
@@ -157,6 +175,10 @@ export function PitchingExpenseTab({
     parseMoney(draft.badDebt) ?? 0,
   );
   const paymentRequired = hasFilledPaymentAmount(draft.paymentAmount);
+  const showRecurringBlock = Boolean(draft.creditCardId) && !editing?.recurringExpenseId;
+  const recurringPreview = showRecurringBlock && isRecurringExpenseFrequency(draft.frequency) && draft.dueDate
+    ? previewRecurringDueDates(draft.frequency, draft.dueDate, 3)
+    : [];
   const defaultTypeId = supplierTypes.find((type) => type.isActive)?.id ?? '';
   const typeOptions = useMemo(
     () => supplierTypes.filter((type) => type.isActive || type.id === draft.supplierTypesId),
@@ -260,6 +282,12 @@ export function PitchingExpenseTab({
     const paymentAmount = parseMoney(draft.paymentAmount);
     const badDebt = parseMoney(draft.badDebt);
     if (billedAmount == null || paymentAmount == null || badDebt == null) return;
+    const frequency = !editing && isRecurringExpenseFrequency(draft.frequency)
+      ? draft.frequency
+      : null;
+    const paid = frequency && draft.dueDate
+      ? paidRecurringExpenseFields(billedAmount, draft.dueDate)
+      : null;
 
     setSaving(true);
     const payload = {
@@ -268,13 +296,17 @@ export function PitchingExpenseTab({
       installmentNumber: parseInstallmentNumber(draft.installmentNumber),
       billedAmount,
       dueDate: draft.dueDate || null,
-      paymentAmount,
-      paymentDate: draft.paymentDate || null,
-      paymentMethod: (draft.paymentMethod || null) as ExpensePaymentMethod | null,
-      creditCardId: expenseCreditCardId(draft.paymentMethod, draft.creditCardId),
-      paymentStatus: draft.paymentStatus || null,
-      badDebt,
+      paymentAmount: paid?.paymentAmount ?? paymentAmount,
+      paymentDate: paid?.paymentDate ?? (draft.paymentDate || null),
+      paymentMethod: (paid?.paymentMethod ?? draft.paymentMethod ?? null) as ExpensePaymentMethod | null,
+      creditCardId: expenseCreditCardId(
+        paid?.paymentMethod ?? draft.paymentMethod,
+        draft.creditCardId,
+      ),
+      paymentStatus: paid?.paymentStatus ?? (draft.paymentStatus || null),
+      badDebt: paid?.badDebt ?? badDebt,
       remarks: draft.remarks.trim() || null,
+      frequency,
       file: paymentRecordFile,
       paymentRecordAction: (clearPaymentRecord && !paymentRecordFile ? 'clear' : undefined) as
         | 'clear'
@@ -288,8 +320,23 @@ export function PitchingExpenseTab({
       toast.error(`${editing ? '更新' : '新增'}失敗：${result.error.message}`);
       return;
     }
-    toast.success(editing ? '已更新支出' : '已新增支出');
+    toast.success(editing ? '已更新支出' : frequency ? '已新增週期支出' : '已新增支出');
     closeModal();
+  };
+
+  const handleRecurringStatus = async (status: 'active' | 'paused') => {
+    if (!editing?.recurringExpenseId) return;
+    setSaving(true);
+    const result = await setRecurringExpenseStatus(editing.recurringExpenseId, status);
+    setSaving(false);
+    if (result.error) {
+      toast.error(result.error.message);
+      return;
+    }
+    setEditing((prev) => prev
+      ? { ...prev, recurringStatus: status }
+      : prev);
+    toast.success(status === 'paused' ? '已暫停週期' : '已恢復週期');
   };
 
   const handleDelete = async () => {
@@ -362,17 +409,17 @@ export function PitchingExpenseTab({
               <header className="flex items-center justify-between gap-4 flex-wrap px-4 py-3 bg-muted/30 border-b border-border">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-[14px] font-semibold">{group.typeLabel}</h3>
+                    <h3 className="text-[14px] font-semibold">{group.supplierLabel}</h3>
                     <button
                       type="button"
                       onClick={() => openBulkEdit(group.rows)}
                       className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[12px] font-medium text-teal-700 hover:bg-teal-50 transition-colors"
-                      aria-label={`編輯整項 ${group.typeLabel}`}
+                      aria-label={`編輯整項 ${group.supplierLabel}`}
                     >
                       <Pencil size={12} /> 編輯整項
                     </button>
                   </div>
-                  <p className="text-[12px] text-muted-foreground">{group.supplierLabel} · {group.rows.length} 筆</p>
+                  <p className="text-[12px] text-muted-foreground">{group.typeLabel} · {group.rows.length} 筆</p>
                 </div>
                 <div className="flex items-end gap-4 sm:gap-6">
                   <SectionSum label="應付合計" value={formatExpenseMoney(group.summary.billed)} />
@@ -411,7 +458,14 @@ export function PitchingExpenseTab({
                     {group.rows.map((row) => (
                       <tr key={row.id} className="border-b border-border/50 last:border-b-0 hover:bg-muted/20">
                         <td className="px-4 py-3 text-[13px] tabular-nums">
-                          {row.installmentNumber ?? '—'}
+                          <div className="flex items-center gap-1.5">
+                            <span>{row.installmentNumber ?? '—'}</span>
+                            {row.recurringExpenseId && (
+                              <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium border bg-teal-50 text-teal-800 border-teal-200">
+                                週期
+                              </span>
+                            )}
+                          </div>
                           {row.remarks && (
                             <p className="text-[11px] text-muted-foreground font-normal truncate max-w-[160px] mt-0.5">
                               {row.remarks}
@@ -637,7 +691,25 @@ export function PitchingExpenseTab({
                   min="0"
                   step="0.01"
                   value={draft.billedAmount}
-                  onChange={(e) => setDraft((prev) => ({ ...prev, billedAmount: e.target.value }))}
+                  onChange={(e) =>
+                    setDraft((prev) => {
+                      const billedAmount = e.target.value;
+                      if (!isRecurringExpenseFrequency(prev.frequency) || !prev.dueDate) {
+                        return { ...prev, billedAmount };
+                      }
+                      const billed = parseMoney(billedAmount);
+                      const paid = billed != null
+                        ? paidRecurringExpenseFields(billed, prev.dueDate)
+                        : null;
+                      return {
+                        ...prev,
+                        billedAmount,
+                        paymentAmount: paid ? String(paid.paymentAmount) : prev.paymentAmount,
+                        paymentDate: paid?.paymentDate ?? prev.paymentDate,
+                        paymentStatus: paid?.paymentStatus ?? prev.paymentStatus,
+                      };
+                    })
+                  }
                   placeholder="0.00"
                   className="text-[13px]"
                   aria-label="應付金額"
@@ -648,7 +720,25 @@ export function PitchingExpenseTab({
                 <Input
                   type="date"
                   value={draft.dueDate}
-                  onChange={(e) => setDraft((prev) => ({ ...prev, dueDate: e.target.value }))}
+                  onChange={(e) =>
+                    setDraft((prev) => {
+                      const dueDate = e.target.value;
+                      if (!isRecurringExpenseFrequency(prev.frequency) || !dueDate) {
+                        return { ...prev, dueDate };
+                      }
+                      const billed = parseMoney(prev.billedAmount);
+                      const paid = billed != null
+                        ? paidRecurringExpenseFields(billed, dueDate)
+                        : null;
+                      return {
+                        ...prev,
+                        dueDate,
+                        paymentAmount: paid ? String(paid.paymentAmount) : prev.paymentAmount,
+                        paymentDate: paid?.paymentDate ?? prev.paymentDate,
+                        paymentStatus: paid?.paymentStatus ?? prev.paymentStatus,
+                      };
+                    })
+                  }
                   className="text-[13px]"
                   aria-label="到期日"
                 />
@@ -718,10 +808,12 @@ export function PitchingExpenseTab({
                 onChange={(paymentMethod) =>
                   setDraft((prev) => {
                     const next = prev.paymentMethod === paymentMethod ? '' : paymentMethod;
+                    const keepCard = isCreditCardPaymentMethod(next);
                     return {
                       ...prev,
                       paymentMethod: next,
-                      creditCardId: isCreditCardPaymentMethod(next) ? prev.creditCardId : '',
+                      creditCardId: keepCard ? prev.creditCardId : '',
+                      frequency: keepCard ? prev.frequency : '',
                     };
                   })
                 }
@@ -736,12 +828,97 @@ export function PitchingExpenseTab({
                 </span>
                 <SearchableSelect
                   value={draft.creditCardId}
-                  onValueChange={(creditCardId) => setDraft((prev) => ({ ...prev, creditCardId }))}
+                  onValueChange={(creditCardId) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      creditCardId,
+                      frequency: creditCardId ? prev.frequency : '',
+                    }))
+                  }
                   options={creditCardOptions}
                   placeholder="選擇信用卡"
                   searchPlaceholder="搜尋信用卡…"
                   emptyText="尚未新增信用卡"
                 />
+              </div>
+            )}
+
+            {showRecurringBlock && (
+              <div className="space-y-3 rounded-md border border-teal-200 bg-teal-50/40 px-3 py-3">
+                <div>
+                  <h4 className="text-[13px] font-semibold text-teal-900">週期 Recurring</h4>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    選擇頻率後將建立週期，第一筆即標記已付款；之後由每日排程自動新增
+                  </p>
+                </div>
+                <PillOptions
+                  value={draft.frequency}
+                  options={RECURRING_EXPENSE_FREQUENCIES}
+                  labels={RECURRING_EXPENSE_FREQUENCY_LABELS}
+                  onChange={(frequency) =>
+                    setDraft((prev) => {
+                      const next = prev.frequency === frequency ? '' : frequency;
+                      if (!next) return { ...prev, frequency: '' };
+                      const billed = parseMoney(prev.billedAmount);
+                      const paid = billed != null && prev.dueDate
+                        ? paidRecurringExpenseFields(billed, prev.dueDate)
+                        : null;
+                      return {
+                        ...prev,
+                        frequency: next,
+                        paymentAmount: paid ? String(paid.paymentAmount) : prev.paymentAmount,
+                        paymentDate: paid?.paymentDate ?? prev.paymentDate,
+                        paymentStatus: paid?.paymentStatus ?? prev.paymentStatus,
+                      };
+                    })
+                  }
+                  ariaLabel="週期頻率"
+                />
+                {recurringPreview.length > 0 && (
+                  <p className="text-[12px] text-teal-900">
+                    預覽到期日：{recurringPreview.map((date) => formatExpenseDate(date)).join('、')}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {editing?.recurringExpenseId && (
+              <div className="space-y-2 rounded-md border border-teal-200 bg-teal-50/40 px-3 py-3">
+                <h4 className="text-[13px] font-semibold text-teal-900">週期 Recurring</h4>
+                <p className="text-[12px] text-teal-900">
+                  {editing.recurringFrequency
+                    ? RECURRING_EXPENSE_FREQUENCY_LABELS[editing.recurringFrequency]
+                    : '週期'}
+                  {' · '}
+                  {RECURRING_EXPENSE_STATUS_LABELS[editing.recurringStatus ?? 'active']}
+                  {' · 自動化已執行 '}
+                  {editing.recurringAutomationRunCount ?? 0}
+                  {' 次'}
+                  {editing.recurringNextOccurrenceDate
+                    ? ` · 下次 ${formatExpenseDate(editing.recurringNextOccurrenceDate)}`
+                    : ''}
+                </p>
+                <div className="flex items-center gap-2">
+                  {editing.recurringStatus === 'paused' ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleRecurringStatus('active')}
+                      disabled={saving}
+                      className="px-3 py-1.5 text-[12px] font-medium text-teal-800 bg-white border border-teal-200 rounded-md hover:bg-teal-50 disabled:opacity-50"
+                    >
+                      恢復週期
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void handleRecurringStatus('paused')}
+                      disabled={saving}
+                      className="px-3 py-1.5 text-[12px] font-medium text-rose-700 bg-white border border-rose-200 rounded-md hover:bg-rose-50 disabled:opacity-50"
+                    >
+                      暫停週期
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 

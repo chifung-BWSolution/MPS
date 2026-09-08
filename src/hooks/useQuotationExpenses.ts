@@ -4,16 +4,23 @@ import {
   EXPENSES_TABLE,
   EXPENSE_PAYMENT_RECORDS_BUCKET,
   EXPENSE_RELATED_TYPE_PROJECT,
+  RECURRING_EXPENSES_TABLE,
   expenseCreditCardId,
   expenseGroupKey,
   expensePaymentRecordStoragePath,
   isAllowedPaymentRecordFile,
   isExpensePaymentMethod,
   isExpensePaymentStatus,
+  isRecurringExpenseFrequency,
+  isRecurringExpenseStatus,
+  nextRecurringDueDate,
   optionalIsoDate,
+  paidRecurringExpenseFields,
   type PaymentRecordFileAction,
   type QuotationExpense,
   type QuotationExpenseInput,
+  type RecurringExpenseFrequency,
+  type RecurringExpenseStatus,
 } from '@/lib/quotationExpenses';
 import { formatCreditCardOptionLabel } from '@/lib/creditCards';
 
@@ -34,6 +41,14 @@ type CreditCardJoin = {
   label: string | null;
   last_four: string;
   bank: string | null;
+} | null;
+
+type RecurringJoin = {
+  id: string;
+  frequency: string | null;
+  next_occurrence_date: string | null;
+  automation_run_count: number | string | null;
+  status: string | null;
 } | null;
 
 type DbRow = {
@@ -58,23 +73,29 @@ type DbRow = {
   payment_record_storage_path: string | null;
   payment_record_file_size: number | string | null;
   payment_record_mime_type: string | null;
+  recurring_expense_id: string | null;
   created_at: string;
   updated_at: string;
   supplier_types?: SupplierTypeJoin | SupplierTypeJoin[];
   suppliers?: SupplierJoin | SupplierJoin[];
   credit_card?: CreditCardJoin | CreditCardJoin[];
+  recurring?: RecurringJoin | RecurringJoin[];
 };
 
 export type QuotationExpenseWriteInput = QuotationExpenseInput & {
   file?: File | null;
   paymentRecordAction?: PaymentRecordFileAction;
+  frequency?: RecurringExpenseFrequency | null;
 };
 
 const EXPENSE_SELECT = `
   *,
   supplier_types:supplier_types_id (id, display_name, categories),
   suppliers:supplier_id (id, display_name, supplier_types_id),
-  credit_card:credit_cards!expenses_credit_card_id_fkey (id, label, last_four, bank)
+  credit_card:credit_cards!expenses_credit_card_id_fkey (id, label, last_four, bank),
+  recurring:recurring_expenses!expenses_recurring_expense_id_fkey (
+    id, frequency, next_occurrence_date, automation_run_count, status
+  )
 `;
 
 function compareExpenses(a: QuotationExpense, b: QuotationExpense): number {
@@ -103,9 +124,11 @@ function mapRow(row: DbRow): QuotationExpense {
   const typeJoin = firstJoin(row.supplier_types);
   const supplierJoin = firstJoin(row.suppliers);
   const cardJoin = firstJoin(row.credit_card);
+  const recurringJoin = firstJoin(row.recurring);
   const supplierTypesId = row.supplier_types_id;
   const supplierId = row.supplier_id;
   const creditCardId = expenseCreditCardId(row.payment_method, row.credit_card_id);
+  const recurringExpenseId = row.recurring_expense_id?.trim() || undefined;
   return {
     id: row.id,
     relatedType: row.related_type,
@@ -138,6 +161,15 @@ function mapRow(row: DbRow): QuotationExpense {
     paymentRecordStoragePath: optionalText(row.payment_record_storage_path),
     paymentRecordFileSize: row.payment_record_file_size == null ? undefined : Number(row.payment_record_file_size) || undefined,
     paymentRecordMimeType: optionalText(row.payment_record_mime_type),
+    recurringExpenseId,
+    recurringFrequency: isRecurringExpenseFrequency(recurringJoin?.frequency)
+      ? recurringJoin?.frequency
+      : undefined,
+    recurringNextOccurrenceDate: optionalIsoDate(recurringJoin?.next_occurrence_date),
+    recurringAutomationRunCount: recurringJoin?.automation_run_count == null
+      ? undefined
+      : Number(recurringJoin.automation_run_count) || 0,
+    recurringStatus: isRecurringExpenseStatus(recurringJoin?.status) ? recurringJoin?.status : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -175,6 +207,9 @@ function inputToRow(
     remarks: input.remarks?.trim() || null,
     updated_at: new Date().toISOString(),
   };
+  if (input.recurringExpenseId !== undefined) {
+    row.recurring_expense_id = input.recurringExpenseId?.trim() || null;
+  }
   if (fileAction !== 'keep') {
     Object.assign(row, fileMetaColumns(input));
   }
@@ -309,17 +344,69 @@ export function useQuotationExpenses(quotationClientProjectId: string | undefine
   const addExpense = useCallback(
     async (input: QuotationExpenseWriteInput) => {
       if (!projectId) return { data: null, error: { message: '缺少項目' } };
+      const frequency = isRecurringExpenseFrequency(input.frequency) ? input.frequency : null;
+      const creditCardId = expenseCreditCardId(input.paymentMethod, input.creditCardId);
+      const dueDate = optionalIsoDate(input.dueDate ?? undefined);
+      let recurringId = input.recurringExpenseId?.trim() || null;
+
+      if (frequency) {
+        if (!creditCardId) return { data: null, error: { message: '週期支出須選擇信用卡' } };
+        if (!dueDate) return { data: null, error: { message: '請選擇到期日' } };
+        const nextDate = nextRecurringDueDate(frequency, dueDate, dueDate);
+        if (!nextDate) return { data: null, error: { message: '無法計算下一次週期' } };
+
+        const { data: template, error: recErr } = await supabase
+          .from(RECURRING_EXPENSES_TABLE)
+          .insert({
+            related_type: EXPENSE_RELATED_TYPE_PROJECT,
+            related_id: projectId,
+            supplier_types_id: input.supplierTypesId.trim(),
+            supplier_id: input.supplierId.trim(),
+            credit_card_id: creditCardId,
+            billed_amount: input.billedAmount,
+            remarks: input.remarks?.trim() || null,
+            frequency,
+            anchor_date: dueDate,
+            next_occurrence_date: nextDate,
+            automation_run_count: 0,
+            status: 'active',
+          })
+          .select('id')
+          .single();
+        if (recErr || !template?.id) {
+          return { data: null, error: { message: recErr?.message ?? '建立週期失敗' } };
+        }
+        recurringId = template.id as string;
+      }
+
       const fileAction: PaymentRecordFileAction = input.file ? 'replace' : 'keep';
       const attached = await attachPaymentRecord(projectId, input.file, fileAction);
-      if (attached.error) return { data: null, error: attached.error };
+      if (attached.error) {
+        if (frequency && recurringId) {
+          await supabase.from(RECURRING_EXPENSES_TABLE).delete().eq('id', recurringId);
+        }
+        return { data: null, error: attached.error };
+      }
 
+      const paid = frequency && dueDate
+        ? paidRecurringExpenseFields(input.billedAmount, dueDate)
+        : null;
       const { data, error: err } = await supabase
         .from(EXPENSES_TABLE)
-        .insert(inputToRow({ ...input, ...attached.data }, projectId, fileAction))
+        .insert(inputToRow({
+          ...input,
+          ...attached.data,
+          ...(paid ?? {}),
+          creditCardId,
+          recurringExpenseId: recurringId,
+        }, projectId, fileAction))
         .select(EXPENSE_SELECT)
         .single();
       if (err) {
         await removeStorageObject(attached.uploadedPath);
+        if (frequency && recurringId) {
+          await supabase.from(RECURRING_EXPENSES_TABLE).delete().eq('id', recurringId);
+        }
         return { data: null, error: { message: err.message } };
       }
       const mapped = mapRow(data as DbRow);
@@ -416,6 +503,37 @@ export function useQuotationExpenses(quotationClientProjectId: string | undefine
     return { data: [...updated, ...created], error: null };
   }, [projectId, rows]);
 
+  const setRecurringExpenseStatus = useCallback(async (
+    recurringExpenseId: string,
+    status: RecurringExpenseStatus,
+  ) => {
+    const id = recurringExpenseId.trim();
+    if (!id) return { error: { message: '缺少週期' } };
+    const { data, error: err } = await supabase
+      .from(RECURRING_EXPENSES_TABLE)
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('id, frequency, next_occurrence_date, automation_run_count, status')
+      .single();
+    if (err || !data) return { error: { message: err?.message ?? '更新週期失敗' } };
+
+    setRows((prev) => prev.map((row) => {
+      if (row.recurringExpenseId !== id) return row;
+      return {
+        ...row,
+        recurringFrequency: isRecurringExpenseFrequency(data.frequency)
+          ? data.frequency
+          : row.recurringFrequency,
+        recurringNextOccurrenceDate: optionalIsoDate(data.next_occurrence_date),
+        recurringAutomationRunCount: data.automation_run_count == null
+          ? row.recurringAutomationRunCount
+          : Number(data.automation_run_count) || 0,
+        recurringStatus: isRecurringExpenseStatus(data.status) ? data.status : row.recurringStatus,
+      };
+    }));
+    return { error: null };
+  }, []);
+
   return {
     rows,
     projectId,
@@ -426,5 +544,6 @@ export function useQuotationExpenses(quotationClientProjectId: string | undefine
     updateExpense,
     deleteExpense,
     saveBulkExpenses,
+    setRecurringExpenseStatus,
   };
 }

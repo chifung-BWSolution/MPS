@@ -9,7 +9,13 @@ import {
   EXPENSE_PAYMENT_METHOD_CREDIT_CARD,
   EXPENSE_PAYMENT_METHODS,
   EXPENSE_PAYMENT_STATUSES,
+  RECURRING_EXPENSES_TABLE,
+  RECURRING_EXPENSE_FREQUENCIES,
   expenseCreditCardId,
+  isRecurringExpenseFrequency,
+  nextRecurringDueDate,
+  paidRecurringExpenseFields,
+  previewRecurringDueDates,
   BULK_EXPENSE_BILLED_TOTAL_MISMATCH,
   BULK_DATE_MODE_LABELS,
   DEFAULT_BULK_DATE_MODE,
@@ -240,6 +246,74 @@ assert.equal(validateExpenseInput({
   creditCardId: 'cc-1',
   paymentStatus: 'Paid',
 }), null);
+assert.equal(validateExpenseInput({
+  supplierTypesId: 't1',
+  supplierId: 's1',
+  installmentNumber: '1',
+  billedAmount: '100',
+  dueDate: '2026-09-04',
+  paymentAmount: '100',
+  paymentDate: '2026-09-04',
+  paymentMethod: 'Transfer',
+  paymentStatus: 'Paid',
+  frequency: 'monthly',
+}), '週期支出須選擇信用卡');
+assert.equal(validateExpenseInput({
+  supplierTypesId: 't1',
+  supplierId: 's1',
+  installmentNumber: '1',
+  billedAmount: '100',
+  dueDate: '2026-09-04',
+  paymentAmount: '100',
+  paymentDate: '2026-09-04',
+  paymentMethod: 'Credit Card',
+  creditCardId: 'cc-1',
+  paymentStatus: 'Paid',
+  frequency: 'monthly',
+}), null);
+assert.equal(validateExpenseInput({
+  supplierTypesId: 't1',
+  supplierId: 's1',
+  installmentNumber: '1',
+  billedAmount: '100',
+  dueDate: '2026-09-04',
+  paymentAmount: '100',
+  paymentDate: '2026-09-04',
+  paymentMethod: 'Credit Card',
+  creditCardId: 'cc-1',
+  paymentStatus: 'Paid',
+  frequency: 'daily',
+}), '請選擇有效週期');
+
+assert.equal(RECURRING_EXPENSES_TABLE, 'recurring_expenses');
+assert.deepEqual([...RECURRING_EXPENSE_FREQUENCIES], ['weekly', 'monthly', 'quarterly', 'yearly']);
+assert.equal(isRecurringExpenseFrequency('monthly'), true);
+assert.equal(isRecurringExpenseFrequency('even'), false);
+assert.equal(nextRecurringDueDate('weekly', '2026-01-07'), '2026-01-14');
+assert.equal(nextRecurringDueDate('monthly', '2026-01-31'), '2026-02-28');
+assert.equal(nextRecurringDueDate('monthly', '2026-02-28', '2026-01-31'), '2026-03-31');
+assert.equal(nextRecurringDueDate('quarterly', '2026-01-31'), '2026-04-30');
+assert.equal(nextRecurringDueDate('yearly', '2024-02-29'), '2025-02-28');
+assert.deepEqual(
+  previewRecurringDueDates('monthly', '2026-01-31', 3),
+  ['2026-01-31', '2026-02-28', '2026-03-31'],
+);
+assert.deepEqual(paidRecurringExpenseFields(1200, '2026-09-08'), {
+  paymentAmount: 1200,
+  paymentDate: '2026-09-08',
+  paymentMethod: 'Credit Card',
+  paymentStatus: 'Paid',
+  badDebt: 0,
+});
+let catchUp = '2026-01-31';
+const catchUpDates = [catchUp];
+for (let i = 0; i < 2; i += 1) {
+  const next = nextRecurringDueDate('monthly', catchUp, '2026-01-31');
+  assert.ok(next);
+  catchUp = next;
+  catchUpDates.push(catchUp);
+}
+assert.deepEqual(catchUpDates, ['2026-01-31', '2026-02-28', '2026-03-31']);
 
 assert.deepEqual(
   summarizeExpenses([
@@ -373,6 +447,13 @@ assert.match(hook, /const saveBulkExpenses/);
 assert.match(hook, /credit_card_id/);
 assert.match(hook, /credit_cards!expenses_credit_card_id_fkey/);
 assert.match(hook, /expenseCreditCardId/);
+assert.match(hook, /RECURRING_EXPENSES_TABLE/);
+assert.match(hook, /recurring_expense_id/);
+assert.match(hook, /recurring_expenses!expenses_recurring_expense_id_fkey/);
+assert.match(hook, /automation_run_count/);
+assert.match(hook, /nextRecurringDueDate/);
+assert.match(hook, /paidRecurringExpenseFields/);
+assert.match(hook, /const setRecurringExpenseStatus/);
 
 const tab = read('src/components/quotation/PitchingExpenseTab.tsx');
 assert.match(tab, /useQuotationExpenses/);
@@ -403,6 +484,8 @@ assert.match(tab, /完成付款/);
 assert.match(tab, /於完成付款時填寫/);
 assert.match(tab, /aria-label="付款日期"/);
 assert.match(tab, /groupExpensesByType/);
+assert.match(tab, /<h3 className="text-\[14px\] font-semibold">\{group\.supplierLabel\}<\/h3>/);
+assert.match(tab, /\{group\.typeLabel\} · \{group\.rows\.length\} 筆/);
 assert.match(tab, /應付合計/);
 assert.match(tab, /查看附件/);
 assert.match(tab, /paymentRecordFileUrl/);
@@ -411,8 +494,42 @@ assert.match(tab, /供應商 Supplier/);
 assert.match(tab, /SearchableSelect/);
 assert.match(tab, /useSupplierTypes/);
 assert.match(tab, /useWebPageSuppliers/);
+assert.match(tab, /showRecurringBlock/);
+assert.match(tab, /draft\.creditCardId/);
+assert.match(tab, /週期 Recurring/);
+assert.match(tab, /ariaLabel="週期頻率"/);
+assert.match(tab, /RECURRING_EXPENSE_FREQUENCIES/);
+assert.match(tab, /previewRecurringDueDates/);
+assert.match(tab, /setRecurringExpenseStatus/);
+assert.match(tab, /暫停週期/);
+assert.match(tab, /恢復週期/);
+assert.match(tab, /自動化已執行/);
+assert.match(tab, /row\.recurringExpenseId &&/);
+assert.match(tab, /rounded-full text-\[10px\][\s\S]*週期/);
+assert.doesNotMatch(tab, /單次 \/ 週期/);
 assert.doesNotMatch(tab, /應收合計/);
 assert.doesNotMatch(tab, /完成收款/);
+
+const recurringMigration = read('supabase/migrations/20260908032903_recurring_expenses.sql');
+assert.match(recurringMigration, /CREATE TABLE IF NOT EXISTS public\.recurring_expenses/);
+assert.match(recurringMigration, /credit_card_id uuid NOT NULL/);
+assert.match(recurringMigration, /automation_run_count integer NOT NULL DEFAULT 0/);
+assert.match(recurringMigration, /frequency text NOT NULL/);
+assert.match(recurringMigration, /'weekly', 'monthly', 'quarterly', 'yearly'/);
+assert.match(recurringMigration, /ADD COLUMN IF NOT EXISTS recurring_expense_id uuid/);
+assert.match(recurringMigration, /expenses_recurring_due_date_uidx/);
+assert.match(recurringMigration, /CREATE SCHEMA IF NOT EXISTS private/);
+assert.match(recurringMigration, /private\.generate_due_recurring_expenses/);
+assert.match(recurringMigration, /private\.next_recurring_due_date/);
+assert.match(recurringMigration, /SECURITY DEFINER/);
+assert.match(recurringMigration, /Asia\/Hong_Kong/);
+assert.match(recurringMigration, /payment_status/);
+assert.match(recurringMigration, /'Paid'/);
+assert.match(recurringMigration, /cron\.schedule/);
+assert.match(recurringMigration, /recurring-expenses-daily/);
+assert.match(recurringMigration, /5 16 \* \* \*/);
+assert.doesNotMatch(recurringMigration, /GRANT SELECT, INSERT, UPDATE, DELETE ON public\.recurring_expenses TO anon/);
+assert.doesNotMatch(recurringMigration, /GRANT EXECUTE ON FUNCTION private\.generate_due_recurring_expenses\(\) TO authenticated/);
 
 const pitching = read('src/components/quotation/PitchingModule.tsx');
 assert.match(pitching, /PitchingExpenseTab/);

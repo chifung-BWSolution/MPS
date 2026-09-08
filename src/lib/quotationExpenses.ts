@@ -33,9 +33,26 @@ import {
 } from '@/lib/quotationIncomes';
 
 export const EXPENSES_TABLE = 'expenses';
+export const RECURRING_EXPENSES_TABLE = 'recurring_expenses';
 export const EXPENSE_RELATED_TYPE_PROJECT = 'project';
 export const EXPENSE_PAYMENT_RECORDS_BUCKET = 'expense-payment-records';
 export const EXPENSE_PAYMENT_RECORD_MAX_SIZE_MB = INCOME_PAYMENT_RECORD_MAX_SIZE_MB;
+
+export const RECURRING_EXPENSE_FREQUENCIES = ['weekly', 'monthly', 'quarterly', 'yearly'] as const;
+export type RecurringExpenseFrequency = (typeof RECURRING_EXPENSE_FREQUENCIES)[number];
+export type RecurringExpenseStatus = 'active' | 'paused';
+
+export const RECURRING_EXPENSE_FREQUENCY_LABELS: Record<RecurringExpenseFrequency, string> = {
+  weekly: '每週',
+  monthly: '每月',
+  quarterly: '每季',
+  yearly: '每年',
+};
+
+export const RECURRING_EXPENSE_STATUS_LABELS: Record<RecurringExpenseStatus, string> = {
+  active: '進行中',
+  paused: '已暫停',
+};
 
 export const EXPENSE_PAYMENT_METHODS = ['Transfer', 'Cash', 'Cheque', 'Credit Card'] as const;
 
@@ -91,6 +108,11 @@ export type QuotationExpense = {
   paymentRecordStoragePath?: string;
   paymentRecordFileSize?: number;
   paymentRecordMimeType?: string;
+  recurringExpenseId?: string;
+  recurringFrequency?: RecurringExpenseFrequency;
+  recurringNextOccurrenceDate?: string;
+  recurringAutomationRunCount?: number;
+  recurringStatus?: RecurringExpenseStatus;
   createdAt: string;
   updatedAt: string;
 };
@@ -113,6 +135,7 @@ export type QuotationExpenseInput = {
   paymentRecordStoragePath?: string | null;
   paymentRecordFileSize?: number | null;
   paymentRecordMimeType?: string | null;
+  recurringExpenseId?: string | null;
 };
 
 export function expenseGroupKey(supplierTypesId: string, supplierId: string): string {
@@ -133,6 +156,67 @@ export function expenseCreditCardId(
 ): string | null {
   if (!isCreditCardPaymentMethod(paymentMethod)) return null;
   return creditCardId?.trim() || null;
+}
+
+export function isRecurringExpenseFrequency(
+  value: string | null | undefined,
+): value is RecurringExpenseFrequency {
+  return RECURRING_EXPENSE_FREQUENCIES.includes(value as RecurringExpenseFrequency);
+}
+
+export function isRecurringExpenseStatus(
+  value: string | null | undefined,
+): value is RecurringExpenseStatus {
+  return value === 'active' || value === 'paused';
+}
+
+export function nextRecurringDueDate(
+  frequency: RecurringExpenseFrequency,
+  from: string,
+  anchor = from,
+): string | null {
+  const fromDate = parseLocalIsoDate(from);
+  const anchorDate = parseLocalIsoDate(anchor);
+  if (!fromDate || !anchorDate) return null;
+  if (frequency === 'weekly') {
+    const next = new Date(fromDate);
+    next.setDate(fromDate.getDate() + 7);
+    return formatLocalIsoDate(next);
+  }
+  const months = frequency === 'monthly' ? 1 : frequency === 'quarterly' ? 3 : 12;
+  const target = new Date(fromDate.getFullYear(), fromDate.getMonth() + months, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(anchorDate.getDate(), lastDay));
+  return formatLocalIsoDate(target);
+}
+
+export function previewRecurringDueDates(
+  frequency: RecurringExpenseFrequency,
+  start: string,
+  count = 3,
+): string[] {
+  if (count < 1) return [];
+  const first = optionalIsoDate(start);
+  if (!first) return [];
+  const dates = [first];
+  let current = first;
+  for (let i = 1; i < count; i += 1) {
+    const next = nextRecurringDueDate(frequency, current, first);
+    if (!next) break;
+    dates.push(next);
+    current = next;
+  }
+  return dates;
+}
+
+export function paidRecurringExpenseFields(billedAmount: number, dueDate: string) {
+  return {
+    paymentAmount: billedAmount,
+    paymentDate: dueDate,
+    paymentMethod: EXPENSE_PAYMENT_METHOD_CREDIT_CARD,
+    paymentStatus: 'Paid' as const,
+    badDebt: 0,
+  };
 }
 
 export function isExpensePaymentStatus(value: string | null | undefined): value is ExpensePaymentStatus {
@@ -208,6 +292,7 @@ export function expenseToWriteInput(
     paymentMethod: row.paymentMethod ?? null,
     creditCardId: expenseCreditCardId(row.paymentMethod, row.creditCardId),
     paymentStatus: row.paymentStatus ?? null,
+    recurringExpenseId: row.recurringExpenseId ?? null,
     badDebt: row.badDebt,
     remarks: row.remarks ?? null,
     ...overrides,
@@ -238,6 +323,7 @@ export function validateExpenseInput(input: {
   paymentMethod: string;
   creditCardId?: string;
   paymentStatus: string;
+  frequency?: string;
 }): string | null {
   if (!input.supplierTypesId.trim()) return '請選擇支出類型';
   if (!input.supplierId.trim()) return '請選擇供應商';
@@ -259,6 +345,12 @@ export function validateExpenseInput(input: {
   }
   if (isCreditCardPaymentMethod(input.paymentMethod) && !input.creditCardId?.trim()) {
     return '請選擇信用卡';
+  }
+  if (input.frequency?.trim()) {
+    if (!input.creditCardId?.trim() || !isCreditCardPaymentMethod(input.paymentMethod)) {
+      return '週期支出須選擇信用卡';
+    }
+    if (!isRecurringExpenseFrequency(input.frequency)) return '請選擇有效週期';
   }
   return null;
 }
