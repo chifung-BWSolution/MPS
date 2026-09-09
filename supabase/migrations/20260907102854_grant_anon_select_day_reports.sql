@@ -1,0 +1,3 @@
+-- Already applied on the linked remote (schema_migrations.version = 20260907102854).
+-- Local file restored so later migrations can be pushed.
+-- GRANT SELECT on day_reports / related report tables to anon.

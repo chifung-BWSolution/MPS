@@ -4,9 +4,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   buildProjectActuals,
+  CLIENT_PROJECT_INFO_METRIC_LABELS,
+  clientProjectInfoMetrics,
   computeGp,
   estimatedMoneyFor,
+  formatProfitRatioPercent,
   formatQuotationListMoney,
+  isActualClientProjectMetricsStatus,
+  profitRatioPercent,
   projectActualsFor,
   quotationListGpClass,
   QUOTATION_LIST_COLUMN_COUNT,
@@ -17,6 +22,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const hookSrc = readFileSync(join(root, 'src/hooks/useQuotationProjectActuals.ts'), 'utf8');
 const pitchingSrc = readFileSync(join(root, 'src/components/quotation/PitchingModule.tsx'), 'utf8');
 const projectSrc = readFileSync(join(root, 'src/components/quotation/ProjectModule.tsx'), 'utf8');
+const metricsSrc = readFileSync(join(root, 'src/components/quotation/PitchingInfoMetricsRow.tsx'), 'utf8');
 
 assert.equal(QUOTATION_LIST_COLUMN_COUNT, 11);
 assert.match(hookSrc, /INCOMES_TABLE/);
@@ -31,6 +37,11 @@ assert.match(pitchingSrc, /moneyColumns="estimated"/);
 assert.match(pitchingSrc, /QUOTATION_LIST_COLUMN_COUNT/);
 assert.match(projectSrc, /QUOTATION_LIST_COLUMN_COUNT/);
 assert.doesNotMatch(pitchingSrc, /useQuotationProjectActuals/);
+assert.match(pitchingSrc, /PitchingInfoMetricsRow/);
+assert.match(pitchingSrc, /activeTab === 'info'/);
+assert.match(metricsSrc, /useQuotationProjectActualsFor/);
+assert.match(metricsSrc, /clientProjectInfoMetrics/);
+assert.match(hookSrc, /useQuotationProjectActualsFor/);
 
 assert.equal(sumEstimatedExpenses([]), 0);
 assert.equal(sumEstimatedExpenses([{ amount: 1200 }, { amount: 800.5 }]), 2000.5);
@@ -80,5 +91,46 @@ assert.equal(quotationListGpClass(1200), 'text-emerald-600');
 assert.equal(quotationListGpClass(-50), 'text-rose-600');
 assert.equal(quotationListGpClass(0), '');
 assert.equal(quotationListGpClass(null), '');
+
+assert.equal(isActualClientProjectMetricsStatus('confirmed'), true);
+assert.equal(isActualClientProjectMetricsStatus('initial'), false);
+assert.equal(isActualClientProjectMetricsStatus('following_up'), false);
+assert.equal(isActualClientProjectMetricsStatus('closed'), false);
+assert.equal(profitRatioPercent(10000, 2500), 25);
+assert.equal(profitRatioPercent(0, 0), null);
+assert.equal(profitRatioPercent(null, 100), null);
+assert.equal(formatProfitRatioPercent(25), '25.0%');
+assert.equal(formatProfitRatioPercent(null), '—');
+
+const estimated = estimatedMoneyFor({
+  estimatedIncome: 20000,
+  estimatedExpenses: [{ amount: 5000 }],
+});
+const confirmedMetrics = clientProjectInfoMetrics({
+  status: 'confirmed',
+  estimated,
+  actuals: { income: 10000, expense: 2000, gp: 8000 },
+});
+assert.equal(confirmedMetrics.mode, 'actual');
+assert.equal(confirmedMetrics.income, 10000);
+assert.equal(confirmedMetrics.expense, 2000);
+assert.equal(confirmedMetrics.gp, 8000);
+assert.equal(confirmedMetrics.ratio, 80);
+assert.equal(confirmedMetrics.labels.income, CLIENT_PROJECT_INFO_METRIC_LABELS.actual.income);
+assert.equal(confirmedMetrics.labels.ratio, CLIENT_PROJECT_INFO_METRIC_LABELS.actual.ratio);
+
+const pitchingMetrics = clientProjectInfoMetrics({
+  status: 'following_up',
+  estimated,
+  actuals: { income: 10000, expense: 2000, gp: 8000 },
+});
+assert.equal(pitchingMetrics.mode, 'estimated');
+assert.equal(pitchingMetrics.income, 20000);
+assert.equal(pitchingMetrics.expense, 5000);
+assert.equal(pitchingMetrics.gp, 15000);
+assert.equal(pitchingMetrics.ratio, 75);
+assert.equal(pitchingMetrics.labels.income, CLIENT_PROJECT_INFO_METRIC_LABELS.estimated.income);
+assert.equal(pitchingMetrics.labels.gp, CLIENT_PROJECT_INFO_METRIC_LABELS.estimated.gp);
+assert.equal(pitchingMetrics.labels.ratio, CLIENT_PROJECT_INFO_METRIC_LABELS.estimated.ratio);
 
 console.log('quotation list money: ok');

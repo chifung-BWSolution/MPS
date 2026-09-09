@@ -1,5 +1,7 @@
-/** USD ↔ HKD conversion for backlink purchases (HKD peg). */
-export const USD_HKD_RATE = 7.8;
+import { HKD_PER_UNIT } from './currency';
+
+/** USD ↔ HKD conversion for backlink purchases. Rate lives in `currency.ts`. */
+export const USD_HKD_RATE = HKD_PER_UNIT.USD;
 
 export function hkdToUsd(hkd: number): number {
   if (!hkd || hkd <= 0) return 0;

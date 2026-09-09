@@ -1,3 +1,8 @@
+import {
+  DEFAULT_CURRENCY,
+  type SystemCurrency,
+} from './currency';
+
 export const INCOMES_TABLE = 'incomes';
 export const INCOME_PAYMENT_RECORDS_BUCKET = 'income-payment-records';
 export const INCOME_PAYMENT_RECORD_MAX_SIZE_MB = 50;
@@ -37,6 +42,7 @@ export type QuotationIncome = {
   quotationClientProjectId: string;
   type: string;
   installmentNumber?: number;
+  currency?: SystemCurrency;
   billedAmount: number;
   dueDate?: string;
   paymentAmount: number;
@@ -58,6 +64,7 @@ export type QuotationIncome = {
 export type QuotationIncomeInput = {
   type: string;
   installmentNumber?: number | null;
+  currency?: SystemCurrency;
   billedAmount: number;
   dueDate?: string | null;
   paymentAmount: number;
@@ -315,6 +322,7 @@ export function incomeToWriteInput(
   return {
     type: row.type,
     installmentNumber: row.installmentNumber ?? null,
+    currency: row.currency ?? DEFAULT_CURRENCY,
     billedAmount: row.billedAmount,
     dueDate: row.dueDate ?? null,
     paymentAmount: row.paymentAmount,

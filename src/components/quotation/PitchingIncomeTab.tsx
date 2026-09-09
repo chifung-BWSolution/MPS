@@ -30,12 +30,24 @@ import {
 } from '@/lib/quotationIncomes';
 import { PitchingBulkIncomeDialog } from '@/components/quotation/PitchingBulkIncomeDialog';
 import { CrudModal, CrudModalFooter, DeleteConfirmModal } from '@/components/ui/crud-modal';
+import { CurrencyBadge, CurrencyPicker, StoredHkdHint } from '@/components/ui/currency-picker';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  DEFAULT_CURRENCY,
+  amountsToHkd,
+  convertMoneyInput,
+  formatMoney,
+  moneyInputFromHkd,
+  parseSystemCurrency,
+  toHkd,
+  type SystemCurrency,
+} from '@/lib/currency';
 
 type Draft = {
   type: string;
   installmentNumber: string;
+  currency: SystemCurrency;
   billedAmount: string;
   dueDate: string;
   paymentAmount: string;
@@ -49,6 +61,7 @@ type Draft = {
 const emptyDraft = (nextInstallment = 1, type = DEFAULT_INCOME_TYPE): Draft => ({
   type,
   installmentNumber: String(nextInstallment),
+  currency: DEFAULT_CURRENCY,
   billedAmount: '',
   dueDate: '',
   paymentAmount: '',
@@ -60,17 +73,30 @@ const emptyDraft = (nextInstallment = 1, type = DEFAULT_INCOME_TYPE): Draft => (
 });
 
 function draftFromRow(row: QuotationIncome): Draft {
+  const currency = parseSystemCurrency(row.currency);
   return {
     type: row.type,
     installmentNumber: row.installmentNumber != null ? String(row.installmentNumber) : '',
-    billedAmount: String(row.billedAmount),
+    currency,
+    billedAmount: moneyInputFromHkd(row.billedAmount, currency),
     dueDate: row.dueDate ?? '',
-    paymentAmount: row.paymentAmount ? String(row.paymentAmount) : '',
+    paymentAmount: moneyInputFromHkd(row.paymentAmount, currency, { emptyIfZero: true }),
     paymentDate: row.paymentDate ?? '',
     paymentMethod: row.paymentMethod ?? '',
     paymentStatus: row.paymentStatus ?? '',
-    badDebt: String(row.badDebt),
+    badDebt: moneyInputFromHkd(row.badDebt, currency),
     remarks: row.remarks ?? '',
+  };
+}
+
+function setDraftCurrency(prev: Draft, currency: SystemCurrency): Draft {
+  if (prev.currency === currency) return prev;
+  return {
+    ...prev,
+    currency,
+    billedAmount: convertMoneyInput(prev.billedAmount, prev.currency, currency),
+    paymentAmount: convertMoneyInput(prev.paymentAmount, prev.currency, currency),
+    badDebt: convertMoneyInput(prev.badDebt, prev.currency, currency),
   };
 }
 
@@ -207,18 +233,20 @@ export function PitchingIncomeTab({
     const paymentAmount = parseMoney(draft.paymentAmount);
     const badDebt = parseMoney(draft.badDebt);
     if (billedAmount == null || paymentAmount == null || badDebt == null) return;
+    const stored = amountsToHkd({ billedAmount, paymentAmount, badDebt }, draft.currency);
 
     setSaving(true);
     const payload = {
       type: draft.type.trim(),
       installmentNumber: parseInstallmentNumber(draft.installmentNumber),
-      billedAmount,
+      currency: draft.currency,
+      billedAmount: stored.billedAmount,
       dueDate: draft.dueDate || null,
-      paymentAmount,
+      paymentAmount: stored.paymentAmount,
       paymentDate: draft.paymentDate || null,
       paymentMethod: (draft.paymentMethod || null) as IncomePaymentMethod | null,
       paymentStatus: draft.paymentStatus || null,
-      badDebt,
+      badDebt: stored.badDebt,
       remarks: draft.remarks.trim() || null,
       file: paymentRecordFile,
       paymentRecordAction: clearPaymentRecord && !paymentRecordFile ? 'clear' : undefined,
@@ -363,6 +391,7 @@ export function PitchingIncomeTab({
                         </td>
                         <td className="px-4 py-3 text-[13px] tabular-nums text-right whitespace-nowrap">
                           {formatIncomeMoney(row.billedAmount)}
+                          <CurrencyBadge currency={row.currency} />
                         </td>
                         <td className="px-4 py-3 text-[13px] tabular-nums text-muted-foreground whitespace-nowrap">
                           {formatIncomeDate(row.dueDate)}
@@ -493,6 +522,10 @@ export function PitchingIncomeTab({
         <div className="space-y-6">
           <section className="space-y-4">
             <h3 className="text-[14px] font-semibold">款項資訊</h3>
+            <CurrencyPicker
+              value={draft.currency}
+              onChange={(currency) => setDraft((prev) => setDraftCurrency(prev, currency))}
+            />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <span className="text-[12px] text-muted-foreground block mb-1">類型 Type *</span>
@@ -554,6 +587,7 @@ export function PitchingIncomeTab({
                   className="text-[13px]"
                   aria-label="應收金額"
                 />
+                <StoredHkdHint amount={parseMoney(draft.billedAmount)} currency={draft.currency} />
               </div>
               <div>
                 <span className="text-[12px] text-muted-foreground block mb-1">到期日 Due date *</span>
@@ -599,6 +633,7 @@ export function PitchingIncomeTab({
                   className="text-[13px]"
                   aria-label="實收金額"
                 />
+                <StoredHkdHint amount={parseMoney(draft.paymentAmount)} currency={draft.currency} />
               </div>
               <div>
                 <span className="text-[12px] text-muted-foreground block mb-1">
@@ -616,7 +651,14 @@ export function PitchingIncomeTab({
 
             <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2.5 flex items-center justify-between">
               <span className="text-[12px] text-muted-foreground">未收 Outstanding（應收 − 實收 − 壞帳）</span>
-              <span className="text-[14px] font-semibold tabular-nums">{formatIncomeMoney(outstandingPreview)}</span>
+              <span className="text-[14px] font-semibold tabular-nums text-right">
+                {formatIncomeMoney(outstandingPreview, draft.currency)}
+                {draft.currency !== DEFAULT_CURRENCY && (
+                  <span className="block text-[11px] font-normal text-muted-foreground">
+                    {formatMoney(toHkd(outstandingPreview, draft.currency))}
+                  </span>
+                )}
+              </span>
             </div>
 
             <div>

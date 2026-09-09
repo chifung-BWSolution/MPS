@@ -152,7 +152,7 @@ export function VchannelLoginMethodPicker({
           </Button>
         </PopoverTrigger>
         <PopoverContent
-          className="z-[110] w-[var(--radix-popover-trigger-width)] p-0"
+          className="z-[120] w-[var(--radix-popover-trigger-width)] p-0"
           align="start"
         >
           <Command>

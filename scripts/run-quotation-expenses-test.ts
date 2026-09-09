@@ -539,6 +539,8 @@ assert.match(hook, /const addExpense/);
 assert.match(hook, /const updateExpense/);
 assert.match(hook, /const deleteExpense/);
 assert.match(hook, /const saveBulkExpenses/);
+assert.match(hook, /currency: input\.currency \?\? DEFAULT_CURRENCY/);
+assert.match(hook, /parseSystemCurrency\(row\.currency\)/);
 assert.match(hook, /credit_card_id/);
 assert.match(hook, /credit_cards!expenses_credit_card_id_fkey/);
 assert.match(hook, /expenseCreditCardId/);
@@ -630,6 +632,9 @@ assert.match(tab, /rounded-full text-\[10px\][\s\S]*週期/);
 assert.doesNotMatch(tab, /單次 \/ 週期/);
 assert.doesNotMatch(tab, /應收合計/);
 assert.doesNotMatch(tab, /完成收款/);
+assert.match(tab, /CurrencyPicker/);
+assert.match(tab, /amountsToHkd/);
+assert.match(tab, /draft\.currency/);
 
 const recurringMigration = read('supabase/migrations/20260908032903_recurring_expenses.sql');
 assert.match(recurringMigration, /CREATE TABLE IF NOT EXISTS public\.recurring_expenses/);
@@ -702,6 +707,13 @@ assert.match(bulk, /aria-label="支出類型"/);
 assert.doesNotMatch(bulk, /總金額 Total \*/);
 assert.doesNotMatch(bulk, /日期範圍 Date range \*/);
 assert.doesNotMatch(bulk, /應收合計/);
+assert.match(bulk, /CurrencyPicker/);
+assert.match(bulk, /toHkd\(/);
+assert.match(bulk, /draft\.currency/);
+
+const currencyMigration = read('supabase/migrations/20260908102418_income_expense_currency.sql');
+assert.match(currencyMigration, /ALTER TABLE public\.expenses/);
+assert.match(currencyMigration, /ADD COLUMN IF NOT EXISTS currency text NOT NULL DEFAULT 'HKD'/);
 
 const project = read('src/components/quotation/ProjectModule.tsx');
 assert.match(project, /PitchingDetail/);

@@ -45,6 +45,10 @@ export function resolveRoute(module: string, sub?: string): { module: string; su
   if (module === 'website' && sub === 'pending') {
     return { module: 'website', subModule: resolveSubModule('website', 'list') };
   }
+  // Removed: 文章列表 was unused mock content
+  if (module === 'website' && sub === 'articles-list') {
+    return { module: 'website', subModule: resolveSubModule('website', 'list') };
+  }
   // Removed: in-app quotation generation. Documents are uploaded to quotation_docs.
   if (module === 'quotation' && (sub === 'new' || sub === 'items')) {
     return { module: 'quotation', subModule: 'list' };
@@ -115,7 +119,6 @@ export const mainMenuItems: MainMenuItem[] = [
     subMenus: [
       { id: 'list', label: '網站列表' },
       { id: 'traffic', label: '網站流量' },
-      { id: 'articles-list', label: '文章列表' },
     ],
   },
   {

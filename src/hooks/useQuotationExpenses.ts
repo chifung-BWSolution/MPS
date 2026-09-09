@@ -26,6 +26,7 @@ import {
   type RecurringExpenseFrequency,
   type RecurringExpenseStatus,
 } from '@/lib/quotationExpenses';
+import { DEFAULT_CURRENCY, parseSystemCurrency } from '@/lib/currency';
 import { formatCreditCardOptionLabel } from '@/lib/creditCards';
 
 type SupplierTypeJoin = {
@@ -62,6 +63,7 @@ type DbRow = {
   supplier_types_id: string;
   supplier_id: string;
   installment_number: number | null;
+  currency: string | null;
   billed_amount: number | string;
   due_date: string | null;
   payment_amount: number | string;
@@ -156,6 +158,7 @@ function mapRow(row: DbRow): QuotationExpense {
     supplierLabel: optionalText(supplierJoin?.display_name) ?? '未指定供應商',
     groupKey: expenseGroupKey(supplierTypesId, supplierId),
     installmentNumber: row.installment_number ?? undefined,
+    currency: parseSystemCurrency(row.currency),
     billedAmount: toAmount(row.billed_amount),
     dueDate: optionalIsoDate(row.due_date),
     paymentAmount: toAmount(row.payment_amount),
@@ -213,6 +216,7 @@ function inputToRow(
     supplier_types_id: input.supplierTypesId.trim(),
     supplier_id: input.supplierId.trim(),
     installment_number: input.installmentNumber ?? null,
+    currency: input.currency ?? DEFAULT_CURRENCY,
     billed_amount: input.billedAmount,
     due_date: optionalIsoDate(input.dueDate ?? undefined) ?? null,
     payment_amount: input.paymentAmount,

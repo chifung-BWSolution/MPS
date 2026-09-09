@@ -11,6 +11,13 @@ export interface SupplierType {
   createdAt?: string;
 }
 
+export type SupplierLinkedLoginMethod = {
+  id: string;
+  displayName: string;
+  loginMethod: string;
+  isActive: boolean;
+};
+
 export interface WebPageSupplier {
   id: string;
   supplierTypesId: string | null;
@@ -23,6 +30,8 @@ export interface WebPageSupplier {
   remarks: string;
   url: string;
   isActive: boolean;
+  loginMethodIds: string[];
+  linkedLoginMethods: SupplierLinkedLoginMethod[];
   createdAt?: string;
 }
 

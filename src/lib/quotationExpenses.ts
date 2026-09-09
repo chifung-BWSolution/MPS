@@ -1,4 +1,8 @@
 import {
+  DEFAULT_CURRENCY,
+  type SystemCurrency,
+} from './currency';
+import {
   billedSumMatchesTotal,
   BULK_DATE_MODE_LABELS,
   BULK_DATE_MODES,
@@ -93,6 +97,7 @@ export type QuotationExpense = {
   supplierLabel: string;
   groupKey: string;
   installmentNumber?: number;
+  currency?: SystemCurrency;
   billedAmount: number;
   dueDate?: string;
   paymentAmount: number;
@@ -122,6 +127,7 @@ export type QuotationExpenseInput = {
   supplierTypesId: string;
   supplierId: string;
   installmentNumber?: number | null;
+  currency?: SystemCurrency;
   billedAmount: number;
   dueDate?: string | null;
   paymentAmount: number;
@@ -302,6 +308,7 @@ export function expenseToWriteInput(
     supplierTypesId: row.supplierTypesId,
     supplierId: row.supplierId,
     installmentNumber: row.installmentNumber ?? null,
+    currency: row.currency ?? DEFAULT_CURRENCY,
     billedAmount: row.billedAmount,
     dueDate: row.dueDate ?? null,
     paymentAmount: row.paymentAmount,

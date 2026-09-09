@@ -348,6 +348,10 @@ assert.match(statusMigration, /'主要收入', '後加項目', '代付項目'/);
 const paymentDateMigration = read('supabase/migrations/20260904060756_incomes_payment_date.sql');
 assert.match(paymentDateMigration, /ADD COLUMN IF NOT EXISTS payment_date date/);
 
+const currencyMigration = read('supabase/migrations/20260908102418_income_expense_currency.sql');
+assert.match(currencyMigration, /ALTER TABLE public\.incomes/);
+assert.match(currencyMigration, /ADD COLUMN IF NOT EXISTS currency text NOT NULL DEFAULT 'HKD'/);
+
 const hook = read('src/hooks/useQuotationIncomes.ts');
 assert.match(hook, /INCOMES_TABLE/);
 assert.match(hook, /INCOME_PAYMENT_RECORDS_BUCKET/);
@@ -359,6 +363,8 @@ assert.match(hook, /const addIncome/);
 assert.match(hook, /const updateIncome/);
 assert.match(hook, /const deleteIncome/);
 assert.match(hook, /const saveBulkIncomes/);
+assert.match(hook, /currency: input\.currency \?\? DEFAULT_CURRENCY/);
+assert.match(hook, /parseSystemCurrency\(row\.currency\)/);
 
 const tab = read('src/components/quotation/PitchingIncomeTab.tsx');
 assert.match(tab, /useQuotationIncomes/);
@@ -390,6 +396,9 @@ assert.match(tab, /應收合計/);
 assert.match(tab, /查看附件/);
 assert.match(tab, /paymentRecordFileUrl/);
 assert.match(tab, /FileText/);
+assert.match(tab, /CurrencyPicker/);
+assert.match(tab, /amountsToHkd/);
+assert.match(tab, /draft\.currency/);
 
 const pitching = read('src/components/quotation/PitchingModule.tsx');
 assert.match(pitching, /PitchingIncomeTab/);
@@ -426,6 +435,9 @@ assert.match(bulk, /應收金額 Billed \*/);
 assert.doesNotMatch(bulk, /總金額 Total \*/);
 assert.doesNotMatch(bulk, /日期範圍 Date range \*/);
 assert.doesNotMatch(bulk, /第 \$\{index \+ 1\} 期期數/);
+assert.match(bulk, /CurrencyPicker/);
+assert.match(bulk, /toHkd\(/);
+assert.match(bulk, /draft\.currency/);
 
 const project = read('src/components/quotation/ProjectModule.tsx');
 assert.match(project, /PitchingDetail/);

@@ -12,12 +12,14 @@ import {
   type QuotationIncome,
   type QuotationIncomeInput,
 } from '@/lib/quotationIncomes';
+import { DEFAULT_CURRENCY, parseSystemCurrency } from '@/lib/currency';
 
 type DbRow = {
   id: string;
   quotation_client_project_id: string;
   type: string;
   installment_number: number | null;
+  currency: string | null;
   billed_amount: number | string;
   due_date: string | null;
   payment_amount: number | string;
@@ -64,6 +66,7 @@ function mapRow(row: DbRow): QuotationIncome {
     quotationClientProjectId: row.quotation_client_project_id,
     type: row.type,
     installmentNumber: row.installment_number ?? undefined,
+    currency: parseSystemCurrency(row.currency),
     billedAmount: toAmount(row.billed_amount),
     dueDate: optionalIsoDate(row.due_date),
     paymentAmount: toAmount(row.payment_amount),
@@ -102,6 +105,7 @@ function inputToRow(
     quotation_client_project_id: projectId,
     type: input.type.trim(),
     installment_number: input.installmentNumber ?? null,
+    currency: input.currency ?? DEFAULT_CURRENCY,
     billed_amount: input.billedAmount,
     due_date: optionalIsoDate(input.dueDate ?? undefined) ?? null,
     payment_amount: input.paymentAmount,

@@ -43,6 +43,7 @@ import { PitchingExpenseTab } from '@/components/quotation/PitchingExpenseTab';
 import { PitchingFollowUpsTab } from '@/components/quotation/PitchingFollowUpsTab';
 import { PitchingWorkHoursTab } from '@/components/quotation/PitchingWorkHoursTab';
 import { QuotationBvCard } from '@/components/quotation/QuotationBvCard';
+import { PitchingInfoMetricsRow } from '@/components/quotation/PitchingInfoMetricsRow';
 import {
   QuotationClientProjectTableHeaders,
   QuotationListMoneyCells,
@@ -898,6 +899,12 @@ export function PitchingDetail({
 
       {activeTab === 'info' && (
         <div className="space-y-6">
+          <PitchingInfoMetricsRow
+            projectId={record.id}
+            status={draft.status}
+            estimatedIncome={record.estimatedIncome}
+            estimatedExpenses={record.estimatedExpenses}
+          />
           <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
             <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6 space-y-5 min-w-0 overflow-hidden">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-w-0">

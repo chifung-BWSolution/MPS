@@ -134,3 +134,70 @@ export function quotationListGpClass(amount: number | null): string {
   if (amount == null || amount === 0) return '';
   return amount > 0 ? 'text-emerald-600' : 'text-rose-600';
 }
+
+export type ClientProjectInfoMetricMode = 'actual' | 'estimated';
+
+export const CLIENT_PROJECT_INFO_METRIC_LABELS = {
+  actual: {
+    income: '收入 Income',
+    expense: '支出 Expense',
+    gp: '毛利 Gross Profit',
+    ratio: '毛利率 Profit Ratio',
+  },
+  estimated: {
+    income: '預計收入 Est. Income',
+    expense: '預計支出 Est. Expense',
+    gp: '預計 GP Est. GP',
+    ratio: '預計 GP 比率 Est. GP Ratio',
+  },
+} as const;
+
+export function isActualClientProjectMetricsStatus(status: string): boolean {
+  return status === 'confirmed';
+}
+
+export function profitRatioPercent(
+  income: number | null,
+  gp: number | null,
+): number | null {
+  if (income == null || gp == null || income <= 0) return null;
+  return roundMoney((gp / income) * 100);
+}
+
+export function formatProfitRatioPercent(ratio: number | null): string {
+  if (ratio == null) return '—';
+  return `${ratio.toFixed(1)}%`;
+}
+
+export function clientProjectInfoMetrics(input: {
+  status: string;
+  estimated: QuotationListMoney;
+  actuals: QuotationProjectActuals | null;
+}): {
+  mode: ClientProjectInfoMetricMode;
+  income: number | null;
+  expense: number | null;
+  gp: number | null;
+  ratio: number | null;
+  labels: (typeof CLIENT_PROJECT_INFO_METRIC_LABELS)[ClientProjectInfoMetricMode];
+} {
+  if (isActualClientProjectMetricsStatus(input.status)) {
+    const money = input.actuals ?? { income: 0, expense: 0, gp: 0 };
+    return {
+      mode: 'actual',
+      income: money.income,
+      expense: money.expense,
+      gp: money.gp,
+      ratio: profitRatioPercent(money.income, money.gp),
+      labels: CLIENT_PROJECT_INFO_METRIC_LABELS.actual,
+    };
+  }
+  return {
+    mode: 'estimated',
+    income: input.estimated.income,
+    expense: input.estimated.expense,
+    gp: input.estimated.gp,
+    ratio: profitRatioPercent(input.estimated.income, input.estimated.gp),
+    labels: CLIENT_PROJECT_INFO_METRIC_LABELS.estimated,
+  };
+}

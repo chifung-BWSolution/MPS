@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { VchannelLoginMethodPicker } from '@/components/video/VchannelLoginMethodPicker';
 
 const emptyForm: Omit<WebPageSupplier, 'id'> = {
   supplierTypesId: null,
@@ -23,6 +24,8 @@ const emptyForm: Omit<WebPageSupplier, 'id'> = {
   remarks: '',
   url: '',
   isActive: true,
+  loginMethodIds: [],
+  linkedLoginMethods: [],
 };
 
 export function WebPageSupplierModule() {
@@ -61,6 +64,7 @@ export function WebPageSupplierModule() {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     const type = s.supplierTypesId ? typeMap.get(s.supplierTypesId) : undefined;
+    const loginNames = (s.linkedLoginMethods ?? []).map((m) => m.displayName.toLowerCase()).join(' ');
     return (
       s.displayName.toLowerCase().includes(q) ||
       s.companyName.toLowerCase().includes(q) ||
@@ -68,7 +72,8 @@ export function WebPageSupplierModule() {
       s.phone.toLowerCase().includes(q) ||
       s.email.toLowerCase().includes(q) ||
       s.url.toLowerCase().includes(q) ||
-      (type?.displayName || '').toLowerCase().includes(q)
+      (type?.displayName || '').toLowerCase().includes(q) ||
+      loginNames.includes(q)
     );
   });
 
@@ -221,6 +226,13 @@ export function WebPageSupplierModule() {
         />
       </div>
       <div>
+        <label className="text-[12px] font-medium text-muted-foreground block mb-1">登入方式</label>
+        <VchannelLoginMethodPicker
+          value={data.loginMethodIds ?? []}
+          onChange={(loginMethodIds) => onChange({ ...data, loginMethodIds })}
+        />
+      </div>
+      <div>
         <label className="text-[12px] font-medium text-muted-foreground block mb-1">備註</label>
         <Textarea
           value={data.remarks}
@@ -278,6 +290,7 @@ export function WebPageSupplierModule() {
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">聯絡人</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">電話</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">電郵</th>
+              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">登入方式</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">狀態</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">操作</th>
             </tr>
@@ -293,6 +306,27 @@ export function WebPageSupplierModule() {
                   <td className="px-4 py-3 text-muted-foreground">{supplier.contactPerson || '—'}</td>
                   <td className="px-4 py-3 text-muted-foreground">{supplier.phone || '—'}</td>
                   <td className="px-4 py-3 text-muted-foreground">{supplier.email || '—'}</td>
+                  <td className="px-4 py-3 max-w-[220px]">
+                    {(supplier.linkedLoginMethods ?? []).length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {supplier.linkedLoginMethods.map((method) => (
+                          <span
+                            key={method.id}
+                            className={cn(
+                              'inline-flex items-center rounded border px-1.5 py-0.5 text-[11px]',
+                              method.isActive
+                                ? 'border-teal-200 bg-teal-50 text-teal-800'
+                                : 'border-slate-200 bg-slate-50 text-slate-600',
+                            )}
+                          >
+                            {method.displayName}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <span className={cn('text-[12px]', supplier.isActive ? 'text-teal-700' : 'text-amber-700')}>
                       {supplier.isActive ? '啟用' : '停用'}

@@ -50,15 +50,27 @@ import {
   type RecurringExpenseDialogInput,
 } from '@/components/quotation/PitchingRecurringExpenseDialog';
 import { CrudModal, CrudModalFooter, DeleteConfirmModal } from '@/components/ui/crud-modal';
+import { CurrencyBadge, CurrencyPicker, StoredHkdHint } from '@/components/ui/currency-picker';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  DEFAULT_CURRENCY,
+  amountsToHkd,
+  convertMoneyInput,
+  formatMoney,
+  moneyInputFromHkd,
+  parseSystemCurrency,
+  toHkd,
+  type SystemCurrency,
+} from '@/lib/currency';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 type Draft = {
   supplierTypesId: string;
   supplierId: string;
   installmentNumber: string;
+  currency: SystemCurrency;
   billedAmount: string;
   dueDate: string;
   paymentAmount: string;
@@ -75,6 +87,7 @@ const emptyDraft = (nextInstallment = 1, supplierTypesId = '', supplierId = ''):
   supplierTypesId,
   supplierId,
   installmentNumber: String(nextInstallment),
+  currency: DEFAULT_CURRENCY,
   billedAmount: '',
   dueDate: '',
   paymentAmount: '',
@@ -88,20 +101,33 @@ const emptyDraft = (nextInstallment = 1, supplierTypesId = '', supplierId = ''):
 });
 
 function draftFromRow(row: QuotationExpense): Draft {
+  const currency = parseSystemCurrency(row.currency);
   return {
     supplierTypesId: row.supplierTypesId,
     supplierId: row.supplierId,
     installmentNumber: row.installmentNumber != null ? String(row.installmentNumber) : '',
-    billedAmount: String(row.billedAmount),
+    currency,
+    billedAmount: moneyInputFromHkd(row.billedAmount, currency),
     dueDate: row.dueDate ?? '',
-    paymentAmount: row.paymentAmount ? String(row.paymentAmount) : '',
+    paymentAmount: moneyInputFromHkd(row.paymentAmount, currency, { emptyIfZero: true }),
     paymentDate: row.paymentDate ?? '',
     paymentMethod: row.paymentMethod ?? '',
     creditCardId: row.creditCardId ?? '',
     paymentStatus: row.paymentStatus ?? '',
-    badDebt: String(row.badDebt),
+    badDebt: moneyInputFromHkd(row.badDebt, currency),
     remarks: row.remarks ?? '',
     frequency: '',
+  };
+}
+
+function setDraftCurrency(prev: Draft, currency: SystemCurrency): Draft {
+  if (prev.currency === currency) return prev;
+  return {
+    ...prev,
+    currency,
+    billedAmount: convertMoneyInput(prev.billedAmount, prev.currency, currency),
+    paymentAmount: convertMoneyInput(prev.paymentAmount, prev.currency, currency),
+    badDebt: convertMoneyInput(prev.badDebt, prev.currency, currency),
   };
 }
 
@@ -327,15 +353,21 @@ export function PitchingExpenseTab({
     const paid = frequency && draft.dueDate
       ? paidRecurringExpenseFields(billedAmount, draft.dueDate)
       : null;
+    const stored = amountsToHkd({
+      billedAmount,
+      paymentAmount: paid?.paymentAmount ?? paymentAmount,
+      badDebt: paid?.badDebt ?? badDebt,
+    }, draft.currency);
 
     setSaving(true);
     const payload = {
       supplierTypesId: draft.supplierTypesId.trim(),
       supplierId: draft.supplierId.trim(),
       installmentNumber: parseInstallmentNumber(draft.installmentNumber),
-      billedAmount,
+      currency: draft.currency,
+      billedAmount: stored.billedAmount,
       dueDate: draft.dueDate || null,
-      paymentAmount: paid?.paymentAmount ?? paymentAmount,
+      paymentAmount: stored.paymentAmount,
       paymentDate: paid?.paymentDate ?? (draft.paymentDate || null),
       paymentMethod: paid?.paymentMethod ?? optionalExpensePaymentMethod(draft.paymentMethod),
       creditCardId: expenseCreditCardId(
@@ -343,7 +375,7 @@ export function PitchingExpenseTab({
         draft.creditCardId,
       ),
       paymentStatus: paid?.paymentStatus ?? optionalExpensePaymentStatus(draft.paymentStatus),
-      badDebt: paid?.badDebt ?? badDebt,
+      badDebt: stored.badDebt,
       remarks: draft.remarks.trim() || null,
       frequency,
       file: paymentRecordFile,
@@ -560,6 +592,7 @@ export function PitchingExpenseTab({
                         </td>
                         <td className="px-4 py-3 text-[13px] tabular-nums text-right whitespace-nowrap">
                           {formatExpenseMoney(row.billedAmount)}
+                          <CurrencyBadge currency={row.currency} />
                         </td>
                         <td className="px-4 py-3 text-[13px] tabular-nums text-muted-foreground whitespace-nowrap">
                           {formatExpenseDate(row.dueDate)}
@@ -696,6 +729,10 @@ export function PitchingExpenseTab({
         <div className="space-y-6">
           <section className="space-y-4">
             <h3 className="text-[14px] font-semibold">款項資訊</h3>
+            <CurrencyPicker
+              value={draft.currency}
+              onChange={(currency) => setDraft((prev) => setDraftCurrency(prev, currency))}
+            />
             <div>
               <span className="text-[12px] text-muted-foreground block mb-1">類型 Type *</span>
               <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="支出類型">
@@ -801,6 +838,7 @@ export function PitchingExpenseTab({
                   className="text-[13px]"
                   aria-label="應付金額"
                 />
+                <StoredHkdHint amount={parseMoney(draft.billedAmount)} currency={draft.currency} />
               </div>
               <div>
                 <span className="text-[12px] text-muted-foreground block mb-1">到期日 Due date *</span>
@@ -864,6 +902,7 @@ export function PitchingExpenseTab({
                   className="text-[13px]"
                   aria-label="實付金額"
                 />
+                <StoredHkdHint amount={parseMoney(draft.paymentAmount)} currency={draft.currency} />
               </div>
               <div>
                 <span className="text-[12px] text-muted-foreground block mb-1">
@@ -881,7 +920,14 @@ export function PitchingExpenseTab({
 
             <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2.5 flex items-center justify-between">
               <span className="text-[12px] text-muted-foreground">未付 Outstanding（應付 − 實付 − 壞帳）</span>
-              <span className="text-[14px] font-semibold tabular-nums">{formatExpenseMoney(outstandingPreview)}</span>
+              <span className="text-[14px] font-semibold tabular-nums text-right">
+                {formatExpenseMoney(outstandingPreview, draft.currency)}
+                {draft.currency !== DEFAULT_CURRENCY && (
+                  <span className="block text-[11px] font-normal text-muted-foreground">
+                    {formatMoney(toHkd(outstandingPreview, draft.currency))}
+                  </span>
+                )}
+              </span>
             </div>
 
             <div>

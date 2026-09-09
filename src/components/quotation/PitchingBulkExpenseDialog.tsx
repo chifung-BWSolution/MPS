@@ -33,9 +33,20 @@ import type { QuotationExpenseWriteInput } from '@/hooks/useQuotationExpenses';
 import type { SupplierType, WebPageSupplier } from '@/types/marketingOps';
 import { CrudModal, CrudModalFooter } from '@/components/ui/crud-modal';
 import { Calendar } from '@/components/ui/calendar';
+import { CurrencyPicker, StoredHkdHint } from '@/components/ui/currency-picker';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import {
+  DEFAULT_CURRENCY,
+  convertMoneyInput,
+  formatMoney,
+  fromHkd,
+  moneyInputFromHkd,
+  parseSystemCurrency,
+  toHkd,
+  type SystemCurrency,
+} from '@/lib/currency';
 
 type BulkRow = {
   key: string;
@@ -48,6 +59,7 @@ type BulkRow = {
 type BulkDraft = {
   supplierTypesId: string;
   supplierId: string;
+  currency: SystemCurrency;
   totalAmount: string;
   dateMode: BulkDateMode;
   startDate: string;
@@ -154,6 +166,7 @@ export function emptyBulkExpenseDraft(
     {
       supplierTypesId: defaultTypeId,
       supplierId: '',
+      currency: DEFAULT_CURRENCY,
       totalAmount: '',
       dateMode: DEFAULT_BULK_DATE_MODE,
       startDate: range.start,
@@ -185,11 +198,13 @@ export function bulkExpenseDraftFromRows(
     dueDates[0] ?? fallback.start,
     dueDates[dueDates.length - 1] ?? fallback.end,
   );
-  const total = sorted.reduce((sum, row) => sum + row.billedAmount, 0);
+  const currency = parseSystemCurrency(sorted[0]?.currency);
+  const total = sorted.reduce((sum, row) => sum + fromHkd(row.billedAmount, currency), 0);
 
   return {
     supplierTypesId: sorted[0]?.supplierTypesId ?? '',
     supplierId: sorted[0]?.supplierId ?? '',
+    currency,
     totalAmount: formatMoneyInput(total),
     dateMode: inferBulkDateMode(dueDates) ?? DEFAULT_BULK_DATE_MODE,
     startDate: range.start,
@@ -200,7 +215,7 @@ export function bulkExpenseDraftFromRows(
       id: row.id,
       dueDate: row.dueDate ?? '',
       installmentNumber: row.installmentNumber != null ? String(row.installmentNumber) : '',
-      billedAmount: formatMoneyInput(row.billedAmount),
+      billedAmount: moneyInputFromHkd(row.billedAmount, currency),
     })),
   };
 }
@@ -419,6 +434,21 @@ export function PitchingBulkExpenseDialog({
     setDraft((prev) => rebuildRows(prev, projectRows, patch, options));
   };
 
+  const setCurrency = (currency: SystemCurrency) => {
+    setDraft((prev) => {
+      if (prev.currency === currency) return prev;
+      return {
+        ...prev,
+        currency,
+        totalAmount: convertMoneyInput(prev.totalAmount, prev.currency, currency),
+        rows: prev.rows.map((row) => ({
+          ...row,
+          billedAmount: convertMoneyInput(row.billedAmount, prev.currency, currency),
+        })),
+      };
+    });
+  };
+
   const handleSave = async () => {
     const validationError = validateBulkExpenseInput(draft);
     if (validationError) {
@@ -439,13 +469,14 @@ export function PitchingBulkExpenseDialog({
     }
 
     const items = draft.rows.map((row) => {
-      const billedAmount = parseMoney(row.billedAmount) ?? 0;
+      const billedAmount = toHkd(parseMoney(row.billedAmount) ?? 0, draft.currency);
       const installmentNumber = parseInstallmentNumber(row.installmentNumber);
       const existing = row.id ? editingRows?.find((item) => item.id === row.id) : undefined;
       const input: QuotationExpenseWriteInput = existing
         ? expenseToWriteInput(existing, {
             supplierTypesId: draft.supplierTypesId,
             supplierId: draft.supplierId,
+            currency: draft.currency,
             installmentNumber,
             billedAmount,
             dueDate: row.dueDate || null,
@@ -453,6 +484,7 @@ export function PitchingBulkExpenseDialog({
         : {
             supplierTypesId: draft.supplierTypesId,
             supplierId: draft.supplierId,
+            currency: draft.currency,
             installmentNumber,
             billedAmount,
             dueDate: row.dueDate || null,
@@ -503,6 +535,7 @@ export function PitchingBulkExpenseDialog({
       <div className="space-y-6">
         <section className="space-y-4">
           <h3 className="text-[14px] font-semibold">整項設定</h3>
+          <CurrencyPicker value={draft.currency} onChange={setCurrency} />
           <div>
             <span className="text-[12px] text-muted-foreground block mb-1">類型 Type *</span>
             <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="支出類型">
@@ -565,6 +598,7 @@ export function PitchingBulkExpenseDialog({
                 className="text-[13px]"
                 aria-label="總金額"
               />
+              <StoredHkdHint amount={totalValue} currency={draft.currency} />
               <p className="text-[11px] text-muted-foreground mt-1">填寫後平均分配至各期，可再調整各期應付</p>
             </div>
             <div>
@@ -633,8 +667,9 @@ export function PitchingBulkExpenseDialog({
             <h3 className="text-[14px] font-semibold">分期明細</h3>
             <div className="text-right">
               <p className={cn('text-[12px]', billedMismatch ? 'text-rose-700' : 'text-muted-foreground')}>
-                應付合計 {formatExpenseMoney(billedSum)}
-                {totalValue != null && draft.totalAmount.trim() ? ` ／ 總額 ${formatExpenseMoney(totalValue)}` : ''}
+                應付合計 {formatExpenseMoney(billedSum, draft.currency)}
+                {draft.currency !== DEFAULT_CURRENCY ? `（${formatMoney(toHkd(billedSum, draft.currency))}）` : ''}
+                {totalValue != null && draft.totalAmount.trim() ? ` ／ 總額 ${formatExpenseMoney(totalValue, draft.currency)}` : ''}
               </p>
               {billedMismatch && (
                 <p className="text-[12px] text-rose-700 mt-0.5" role="alert">
@@ -698,6 +733,7 @@ export function PitchingBulkExpenseDialog({
                           className="text-[13px]"
                           aria-label={`第 ${index + 1} 期應付金額`}
                         />
+                        <StoredHkdHint amount={parseMoney(row.billedAmount)} currency={draft.currency} />
                       </td>
                     </tr>
                   ))}
