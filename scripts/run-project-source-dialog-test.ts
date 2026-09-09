@@ -25,6 +25,8 @@ assert.match(dialogSrc, /舊自訂項目/);
 assert.doesNotMatch(dialogSrc, /related_type: 'manual'/);
 assert.match(dialogSrc, /addProfile/);
 assert.match(dialogSrc, /addRecord/);
+assert.match(dialogSrc, /syncWebsiteClientProjectLink/);
+assert.match(dialogSrc, /quotationClientProjectId/);
 
 const vchannelSrc = read('src/components/video/VchannelFormModal.tsx');
 assert.match(vchannelSrc, /頻道編號/);

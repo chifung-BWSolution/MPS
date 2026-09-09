@@ -11,8 +11,10 @@ import {
   type WebsiteFormData,
 } from '@/components/website/WebsiteFormModal';
 import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
+import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useBrands } from '@/hooks/useBrands';
+import { nextClientProjectIdForWebsite, syncWebsiteClientProjectLink } from '@/lib/websiteClientProjectLink';
 import { projects as allProjectsData } from '@/data/mockData';
 import { ProjectCategoryBadge, getProjectCategory, type ProjectCategoryType } from '@/components/ui/project-category-badge';
 import { BrandFieldBadge, CompanyFieldBadge, EmptyDash, MutedFieldBadge, StatusFieldBadge, displayText } from '@/components/ui/nullable-badge';
@@ -695,6 +697,7 @@ function UnmatchedAdsDomainsModal({
 // ===== Website List =====
 function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site: WebsiteProfileFull) => void; profileTypeFilter?: 'all' | 'website' | 'system' }) {
   const { profiles: websiteProfiles, loading: profilesLoading, addProfile, updateProfile } = useWebsiteProfiles();
+  const { records: clientProjects, updateRecord: updateClientProject } = useQuotationClientProjects();
   const {
     unmatched,
     syncing: adsSyncing,
@@ -753,7 +756,17 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       toast.error('新增失敗', { description: err.message });
       return;
     }
-    toast.success(data.profileType === 'system' ? '系統已新增' : '網站已新增');
+    const linkErr = await syncWebsiteClientProjectLink({
+      websiteId: newSite.id,
+      nextProjectId: nextClientProjectIdForWebsite(data.projectCategory, data.quotationClientProjectId),
+      records: clientProjects,
+      updateRecord: updateClientProject,
+    });
+    if (linkErr.error) {
+      toast.error('網站已新增，但客戶項目連結失敗', { description: linkErr.error.message });
+    } else {
+      toast.success(data.profileType === 'system' ? '系統已新增' : '網站已新增');
+    }
     setShowAddModal(false);
     setPendingCreateDomain(null);
 
@@ -833,7 +846,20 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       projectCategory: data.projectCategory,
       systemType: data.systemType,
     };
-    await updateProfile(editingSite.id, updates);
+    const err = await updateProfile(editingSite.id, updates);
+    if (err) {
+      toast.error('儲存失敗', { description: err.message });
+      return;
+    }
+    const linkErr = await syncWebsiteClientProjectLink({
+      websiteId: editingSite.id,
+      nextProjectId: nextClientProjectIdForWebsite(data.projectCategory, data.quotationClientProjectId),
+      records: clientProjects,
+      updateRecord: updateClientProject,
+    });
+    if (linkErr.error) {
+      toast.error('網站已更新，但客戶項目連結失敗', { description: linkErr.error.message });
+    }
     setEditingSite(null);
   };
 
@@ -1114,6 +1140,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       {editingSite && (
         <WebsiteFormModal
           mode="edit"
+          websiteId={editingSite.id}
           initialData={getEditFormData(editingSite)}
           onClose={() => setEditingSite(null)}
           onSave={handleEditWebsite}

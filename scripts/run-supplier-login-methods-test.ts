@@ -19,7 +19,7 @@ assert.match(types, /linkedLoginMethods: SupplierLinkedLoginMethod\[\]/);
 
 const hook = read('src/hooks/useWebPageSuppliers.ts');
 assert.match(hook, /JOIN_TABLE = 'supplier_login_methods'/);
-assert.match(hook, /from\('vchannel_login_methods'\)/);
+assert.match(hook, /from\('login_methods'\)/);
 assert.match(hook, /async function syncSupplierLoginMethods/);
 assert.match(hook, /data\.loginMethodIds/);
 

@@ -93,7 +93,7 @@ async function fetchJoinState(): Promise<{
 }> {
   const [joinRes, methodRes] = await Promise.all([
     supabase.from(JOIN_TABLE).select('supplier_id, login_method_id'),
-    supabase.from('vchannel_login_methods').select('id, display_name, login_method, is_active'),
+    supabase.from('login_methods').select('id, display_name, login_method, is_active'),
   ]);
 
   const joins = (joinRes.data as JoinRow[] | null) ?? [];

@@ -23,7 +23,7 @@ type VideoLoginMethodRow = {
   updated_at: string;
 };
 
-const TABLE = 'vchannel_login_methods';
+const TABLE = 'login_methods';
 
 const SELECT_COLUMNS =
   'id, login_method, display_name, account_name, phone_number, email, password, two_fa_methods, note, is_active, created_at, updated_at';

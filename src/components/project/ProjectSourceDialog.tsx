@@ -25,6 +25,7 @@ import {
 import { VchannelFormModal } from '@/components/video/VchannelFormModal';
 import { useVchannels } from '@/hooks/useVchannels';
 import type { ProjectSelectKind } from '@/lib/searchableProjectSelect';
+import { nextClientProjectIdForWebsite, syncWebsiteClientProjectLink } from '@/lib/websiteClientProjectLink';
 import type { WebsiteLevel, WebsiteProfileFull } from '@/types/app';
 
 const kindChoices: { key: ProjectSelectKind; label: string; icon: ReactNode }[] = [
@@ -292,7 +293,17 @@ export function ProjectSourceDialog({
         toast.error('新增失敗', { description: err.message });
         return;
       }
-      toast.success(data.profileType === 'system' ? '系統已新增' : '網站已新增');
+      const linkErr = await syncWebsiteClientProjectLink({
+        websiteId: newSite.id,
+        nextProjectId: nextClientProjectIdForWebsite(data.projectCategory, data.quotationClientProjectId),
+        records,
+        updateRecord,
+      });
+      if (linkErr.error) {
+        toast.error('網站已新增，但客戶項目連結失敗', { description: linkErr.error.message });
+      } else {
+        toast.success(data.profileType === 'system' ? '系統已新增' : '網站已新增');
+      }
       await onSaved();
       return;
     }
@@ -320,7 +331,17 @@ export function ProjectSourceDialog({
       toast.error('儲存失敗', { description: err.message });
       return;
     }
-    toast.success('項目已更新');
+    const linkErr = await syncWebsiteClientProjectLink({
+      websiteId: project.relatedId,
+      nextProjectId: nextClientProjectIdForWebsite(data.projectCategory, data.quotationClientProjectId),
+      records,
+      updateRecord,
+    });
+    if (linkErr.error) {
+      toast.error('項目已更新，但客戶項目連結失敗', { description: linkErr.error.message });
+    } else {
+      toast.success('項目已更新');
+    }
     await onSaved();
   };
 
@@ -376,6 +397,7 @@ export function ProjectSourceDialog({
     return (
       <WebsiteFormModal
         mode={mode}
+        websiteId={mode === 'edit' ? site?.id || project?.relatedId : undefined}
         initialData={initialData}
         onClose={onClose}
         onSave={handleWebsiteSave}

@@ -258,6 +258,7 @@ export function PitchingFormModal({
   createTitle,
   initialRecord,
   onCreateClient,
+  hideWebsiteField = false,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -271,6 +272,8 @@ export function PitchingFormModal({
   createTitle?: string;
   initialRecord?: PitchingRecord | null;
   onCreateClient?: (input: QuotationClientInput) => Promise<QuotationClient | null>;
+  /** Hide the website/system picker when creating a project from the website dialog. */
+  hideWebsiteField?: boolean;
 }) {
   const [form, setForm] = useState<PitchingFormValues>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
@@ -515,6 +518,7 @@ export function PitchingFormModal({
           </div>
         </section>
 
+        {!hideWebsiteField && (
         <section className="space-y-3 border-t border-border pt-5">
           <h3 className="text-[14px] font-semibold flex items-center gap-2">
             網站 / 系統
@@ -530,6 +534,7 @@ export function PitchingFormModal({
             projectTypes={form.projectTypes}
           />
         </section>
+        )}
 
         <section className="space-y-3 border-t border-border pt-5">
           <h3 className="text-[14px] font-semibold flex items-center gap-2">

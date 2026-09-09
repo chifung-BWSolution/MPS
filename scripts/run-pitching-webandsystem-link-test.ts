@@ -155,6 +155,8 @@ assert.match(websiteModal, /export function WebsiteFormModal/);
 assert.match(websiteModal, /overlayClassName/);
 assert.match(websiteModal, /lockProjectCategory/);
 assert.match(websiteModal, /websiteFormDataToProfile/);
+assert.match(websiteModal, /WebsiteClientProjectSelectField/);
+assert.match(websiteModal, /quotationClientProjectId/);
 
 const websiteModule = readFileSync(join(root, 'src/components/website/WebsiteModule.tsx'), 'utf8');
 assert.match(websiteModule, /from '@\/components\/website\/WebsiteFormModal'/);

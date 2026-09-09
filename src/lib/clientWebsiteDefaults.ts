@@ -58,6 +58,7 @@ export function suggestedClientWebsiteFormDefaults(input: {
     profileType,
     projectCategory: 'client',
     systemType: profileType === 'system' ? 'client_system' : undefined,
+    quotationClientProjectId: '',
   };
 }
 

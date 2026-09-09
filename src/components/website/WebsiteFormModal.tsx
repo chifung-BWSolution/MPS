@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Globe, Server, Building2, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useBrands } from '@/hooks/useBrands';
 import { useSystemOptions } from '@/hooks/useSystemOptions';
+import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
+import { WebsiteClientProjectSelectField } from '@/components/website/WebsiteClientProjectSelectField';
+import { linkedClientProjectId } from '@/lib/websiteClientProjectLink';
 import type { Brand, Company, ProfileType, ProjectCategory, SystemType, WebsiteLevel, WebsiteProfileFull } from '@/types/app';
 
 export interface WebsiteFormData {
@@ -20,6 +23,8 @@ export interface WebsiteFormData {
   profileType: ProfileType;
   projectCategory: ProjectCategory;
   systemType?: SystemType;
+  /** Optional quotation_client_project.id when projectCategory is client. */
+  quotationClientProjectId?: string;
 }
 
 export const emptyFormData: WebsiteFormData = {
@@ -36,6 +41,7 @@ export const emptyFormData: WebsiteFormData = {
   profileType: 'website',
   projectCategory: 'internal',
   systemType: undefined,
+  quotationClientProjectId: '',
 };
 
 export function websiteFormDataToProfile(
@@ -79,6 +85,7 @@ export function websiteFormDataToProfile(
 export function WebsiteFormModal({
   mode,
   initialData,
+  websiteId,
   onClose,
   onSave,
   overlayClassName,
@@ -87,6 +94,8 @@ export function WebsiteFormModal({
 }: {
   mode: 'add' | 'edit';
   initialData?: WebsiteFormData;
+  /** Existing webandsystem_list.id — used to prefill the linked client project. */
+  websiteId?: string;
   onClose: () => void;
   onSave: (data: WebsiteFormData) => void | Promise<void>;
   overlayClassName?: string;
@@ -95,6 +104,8 @@ export function WebsiteFormModal({
 }) {
   const [form, setForm] = useState<WebsiteFormData>(initialData || emptyFormData);
   const [saving, setSaving] = useState(false);
+  const { records: clientProjects } = useQuotationClientProjects();
+  const prefilledLinkRef = useRef(false);
   const { companies } = useCompanies();
   const { brands } = useBrands();
   const uniqueBrandCodes = Array.from(
@@ -127,6 +138,17 @@ export function WebsiteFormModal({
     setIsCustomSelected(isCustom);
     setCustomPlatform(isCustom ? form.platform : '');
   }, [knownPlatformValues.length]);
+
+  useEffect(() => {
+    if (prefilledLinkRef.current || !websiteId || clientProjects.length === 0) return;
+    const linkedId = linkedClientProjectId(clientProjects, websiteId);
+    prefilledLinkRef.current = true;
+    if (!linkedId) return;
+    setForm((prev) => ({
+      ...prev,
+      quotationClientProjectId: prev.quotationClientProjectId || linkedId,
+    }));
+  }, [websiteId, clientProjects]);
 
   const handleChange = (field: keyof WebsiteFormData, value: WebsiteFormData[keyof WebsiteFormData]) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -161,7 +183,10 @@ export function WebsiteFormModal({
   };
 
   return (
-    <div className={cn('fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50', overlayClassName)}>
+    <div
+      data-fixed-overlay=""
+      className={cn('fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50', overlayClassName)}
+    >
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[640px] max-h-[85vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h3 className="text-[16px] font-bold">{mode === 'add' ? '新增網站/系統' : '編輯網站/系統'}</h3>
@@ -234,6 +259,14 @@ export function WebsiteFormModal({
               </button>
             </div>
           </div>
+
+          {form.projectCategory === 'client' && !lockProjectCategory && (
+            <WebsiteClientProjectSelectField
+              value={form.quotationClientProjectId || ''}
+              onChange={(quotationClientProjectId) => handleChange('quotationClientProjectId', quotationClientProjectId)}
+              websiteName={form.websiteName}
+            />
+          )}
 
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1">
