@@ -562,7 +562,7 @@ async function loadPrefillContext(incomeId: string): Promise<InvoicePrefillConte
     }),
     siteAddress: client?.address?.trim() || '',
     projectTypes: project?.project_types ?? [],
-    defaultCompanyListId: defaultCompanyListId(project?.project_types ?? []),
+    defaultCompanyListId: defaultCompanyListId(),
     sameTypeSum,
     dueDate: optionalIsoDate((incomeRow as IncomeDbRow).due_date),
     paymentDate: optionalIsoDate((incomeRow as IncomeDbRow).payment_date),

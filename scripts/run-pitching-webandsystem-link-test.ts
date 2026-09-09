@@ -18,6 +18,7 @@ assert.equal(clientWebsiteProfileType(['bwt_web']), 'website');
 assert.equal(clientWebsiteProfileType(['bwt_system']), 'system');
 assert.equal(clientWebsiteProfileType(['bwt_web', 'bwt_system']), 'website');
 assert.equal(clientWebsiteProfileType(['bwl_event']), 'website');
+assert.equal(clientWebsiteProfileType(['bwg_gift']), 'website');
 
 assert.equal(clientWebsiteNameStem({ companyNameZh: '智豐' }), '智豐');
 assert.equal(clientWebsiteNameStem({ companyNameZh: '', companyNameEn: 'Chi Fung' }), 'Chi Fung');

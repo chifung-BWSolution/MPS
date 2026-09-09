@@ -4,12 +4,13 @@
 
 export type PitchingStatus = 'initial' | 'following_up' | 'confirmed' | 'closed';
 
-export type PitchingProjectType = 'bwl_event' | 'bwt_web' | 'bwt_system';
+export type PitchingProjectType = 'bwl_event' | 'bwt_web' | 'bwt_system' | 'bwg_gift';
 
 export const PITCHING_PROJECT_TYPE_OPTIONS: { id: PitchingProjectType; label: string }[] = [
   { id: 'bwl_event', label: 'BWL 活動報價' },
   { id: 'bwt_web', label: 'BWT-網頁' },
   { id: 'bwt_system', label: 'BWT-系統' },
+  { id: 'bwg_gift', label: 'BWG-禮品' },
 ];
 
 export interface PitchingFollowUp {

@@ -41,7 +41,7 @@ export type AsanaTask = {
   }>;
 };
 
-export type SyncDateMode = "created_exact" | "created_from" | "active_deal";
+export type SyncDateMode = "created_exact" | "created_from" | "active_deal" | "all" | "pipeline";
 
 export type SyncProjectConfig = {
   project_gid: string;
@@ -306,7 +306,10 @@ export async function getAttachment(attachmentGid: string): Promise<AsanaAttachm
   return mapped;
 }
 
-export async function listProjectTasks(projectGid: string): Promise<AsanaTask[]> {
+export async function listProjectTasks(
+  projectGid: string,
+  options?: { includeCompleted?: boolean },
+): Promise<AsanaTask[]> {
   const optFields = [
     "name",
     "notes",
@@ -335,6 +338,9 @@ export async function listProjectTasks(projectGid: string): Promise<AsanaTask[]>
       opt_fields: optFields,
       ...(offset ? { offset } : {}),
     });
+    if (options?.includeCompleted) {
+      qs.set("completed_since", "1970-01-01T00:00:00.000Z");
+    }
     const data = await asanaFetch<{
       data: AsanaTask[];
       next_page?: { offset?: string } | null;
@@ -429,14 +435,15 @@ export function resolveSyncYear(project: SyncProjectConfig): number {
 
 /** Filter by sync_date_mode and year config. */
 export function isTaskInSyncRange(task: AsanaTask, project: SyncProjectConfig): boolean {
+  const mode = project.sync_date_mode ?? (
+    project.sync_year_from ? "created_from" : "created_exact"
+  );
+  if (mode === "all") return true;
+
   const minYear =
     (project.sync_year_from && project.sync_year_from > 2000
       ? project.sync_year_from
       : null) ?? resolveSyncYear(project);
-
-  const mode = project.sync_date_mode ?? (
-    project.sync_year_from ? "created_from" : "created_exact"
-  );
 
   if (mode === "active_deal") {
     if (task.completed) return false;

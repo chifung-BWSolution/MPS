@@ -153,7 +153,9 @@ Deno.serve(async (req) => {
 
     for (const project of projects) {
       try {
-        const tasks = await listProjectTasks(project.project_gid);
+        const tasks = await listProjectTasks(project.project_gid, {
+          includeCompleted: project.sync_date_mode === "all",
+        });
         tasksFetched += tasks.length;
 
         for (const task of tasks) {

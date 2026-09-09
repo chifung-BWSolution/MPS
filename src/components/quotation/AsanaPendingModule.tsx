@@ -176,7 +176,11 @@ export function AsanaPendingModule() {
           <h1 className="text-[24px] font-bold tracking-tight">Asana 待匯入</h1>
           <p className="text-[13px] text-muted-foreground mt-0.5 max-w-3xl">
             {syncSources.length
-              ? `只同步這些 Asana 專案：${syncSources.map((s) => s.projectName).join('、')}。任務依各專案日期規則篩選（目前為建立日 ${syncSources.find((s) => s.syncYearFrom)?.syncYearFrom ?? 2026} 年起）。尚未匯入的項目需透過表單建立報價客戶項目。`
+              ? `只同步這些 Asana 專案：${syncSources.map((s) => s.projectName).join('、')}。${
+                  syncSources.some((s) => s.syncDateMode === 'all')
+                    ? `${syncSources.filter((s) => s.syncDateMode === 'all').map((s) => s.projectName).join('、')} 同步全部任務；其餘專案依建立日 ${syncSources.find((s) => s.syncYearFrom && s.syncDateMode !== 'all')?.syncYearFrom ?? 2026} 年起篩選。`
+                    : `任務依各專案日期規則篩選（目前為建立日 ${syncSources.find((s) => s.syncYearFrom)?.syncYearFrom ?? 2026} 年起）。`
+                } 尚未匯入的項目需透過表單建立報價客戶項目。`
               : '只同步已啟用的 Asana 專案，並依各專案的日期規則篩選任務。尚未匯入的項目需透過表單建立報價客戶項目。'}
           </p>
         </div>

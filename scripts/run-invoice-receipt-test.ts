@@ -3,8 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  DEFAULT_COMPANY_LIST_ID_BWL,
-  DEFAULT_COMPANY_LIST_ID_OTHER,
+  DEFAULT_COMPANY_LIST_ID,
   DEFAULT_INVOICE_NOTE,
   DEFAULT_RECEIPT_NOTE,
   INVOICE_FLOOR_ERROR,
@@ -54,12 +53,8 @@ assert.equal(INVOICE_LINE_ITEMS_TABLE, 'invoice_line_items');
 assert.equal(RECEIPTS_TABLE, 'receipts');
 assert.equal(RECEIPT_LINE_ITEMS_TABLE, 'receipt_line_items');
 
-assert.equal(defaultCompanyListId(['bwl_event']), DEFAULT_COMPANY_LIST_ID_BWL);
-assert.equal(defaultCompanyListId(['bwl_event', 'bwt_web']), DEFAULT_COMPANY_LIST_ID_BWL);
-assert.equal(defaultCompanyListId(['bwt_web']), DEFAULT_COMPANY_LIST_ID_OTHER);
-assert.equal(defaultCompanyListId([]), DEFAULT_COMPANY_LIST_ID_OTHER);
-assert.equal(DEFAULT_COMPANY_LIST_ID_BWL, 'c1779782989086');
-assert.equal(DEFAULT_COMPANY_LIST_ID_OTHER, 'c1779783081242');
+assert.equal(defaultCompanyListId(), DEFAULT_COMPANY_LIST_ID);
+assert.equal(DEFAULT_COMPANY_LIST_ID, 'c1779783081242');
 
 assert.equal(toCents(10.005), 1001);
 assert.equal(invoiceGrossTotal(1, 1000, [{ quantity: 2, price: 50 }]), 1100);

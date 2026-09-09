@@ -9,8 +9,7 @@ export const INVOICE_LINE_ITEMS_TABLE = 'invoice_line_items';
 export const RECEIPTS_TABLE = 'receipts';
 export const RECEIPT_LINE_ITEMS_TABLE = 'receipt_line_items';
 
-export const DEFAULT_COMPANY_LIST_ID_BWL = 'c1779782989086';
-export const DEFAULT_COMPANY_LIST_ID_OTHER = 'c1779783081242';
+export const DEFAULT_COMPANY_LIST_ID = 'c1779783081242';
 
 export const INVOICE_FLOOR_ERROR =
   'Main item and sub items total must be at least the related income amount. Use discount to reduce the invoice below income amount.';
@@ -117,10 +116,8 @@ export function isReceiptPaymentMethod(value: string | null | undefined): value 
   return RECEIPT_PAYMENT_METHODS.includes(value as ReceiptPaymentMethod);
 }
 
-export function defaultCompanyListId(projectTypes: string[] | null | undefined): string {
-  return (projectTypes ?? []).includes('bwl_event')
-    ? DEFAULT_COMPANY_LIST_ID_BWL
-    : DEFAULT_COMPANY_LIST_ID_OTHER;
+export function defaultCompanyListId(): string {
+  return DEFAULT_COMPANY_LIST_ID;
 }
 
 export function toCents(value: number): number {
