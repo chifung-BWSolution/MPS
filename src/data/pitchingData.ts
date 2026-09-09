@@ -144,6 +144,39 @@ export function calcRemainingDays(
   return PITCHING_FOLLOW_UP_DAYS - elapsed;
 }
 
+/** Confirmed-project timeline vs 簽約日期 / 交付日期. */
+export type ClientProjectProgress = 'pending' | 'in_progress' | 'completed';
+
+export const clientProjectProgressConfig: Record<
+  ClientProjectProgress,
+  { label: string; color: string; bgColor: string }
+> = {
+  pending: { label: '待開始', color: 'text-amber-700', bgColor: 'bg-amber-50' },
+  in_progress: { label: '進行中', color: 'text-blue-700', bgColor: 'bg-blue-50' },
+  completed: { label: '已完成', color: 'text-emerald-700', bgColor: 'bg-emerald-50' },
+};
+
+/**
+ * Progress for a confirmed client project:
+ * - current < start (簽約日期): 待開始
+ * - start <= current <= handover: 進行中
+ * - handover < current: 已完成
+ * Missing or invalid dates return null (shown as —).
+ */
+export function calcClientProjectProgress(
+  startDate: string | undefined,
+  handoverDate: string | undefined,
+  asOfDate: string = localTodayIso(),
+): ClientProjectProgress | null {
+  const start = optionalIsoDate(startDate);
+  const handover = optionalIsoDate(handoverDate);
+  const today = optionalIsoDate(asOfDate);
+  if (!start || !handover || !today) return null;
+  if (today < start) return 'pending';
+  if (today > handover) return 'completed';
+  return 'in_progress';
+}
+
 export function formatMainPmName(record: Pick<PitchingRecord, 'mainPmName'>): string {
   return record.mainPmName?.trim() || '—';
 }

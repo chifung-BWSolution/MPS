@@ -45,9 +45,11 @@ export function useActiveStaffOptions(includeIds: Array<string | undefined | nul
         setLoading(false);
       })
       .catch((err: Error) => {
-        if (cancelled || isAbortError(err)) return;
-        console.warn('[useActiveStaffOptions] failed:', err.message);
-        setAllOptions([]);
+        if (cancelled) return;
+        if (!isAbortError(err)) {
+          console.warn('[useActiveStaffOptions] failed:', err.message);
+          setAllOptions([]);
+        }
         setLoading(false);
       });
     return () => {

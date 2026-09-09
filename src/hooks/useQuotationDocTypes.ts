@@ -57,11 +57,13 @@ export function useQuotationDocTypes() {
       setError(null);
       setTypes(rows);
     } catch (err) {
-      if (isAbortError(err)) return;
-      setError(err instanceof Error ? err.message : String(err));
-      setTypes([]);
+      if (!isAbortError(err)) {
+        setError(err instanceof Error ? err.message : String(err));
+        setTypes([]);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {

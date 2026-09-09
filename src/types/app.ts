@@ -28,6 +28,8 @@ export interface Company {
   contactPhone: string;
   contactEmail: string;
   logoUrl?: string;
+  chopUrl?: string;
+  bankNotes?: string;
   isActive: boolean;
   brandCount?: number;
   activeProjectCount?: number;

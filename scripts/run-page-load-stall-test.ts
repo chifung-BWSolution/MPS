@@ -73,8 +73,13 @@ assert.doesNotMatch(quotation, /QuotationItemsManagement/);
 
 const app = read('src/context/AppContext.tsx');
 assert.match(app, /beginPageNavigation/);
+assert.match(app, /replace\(\/\^\\\/\+\/, ''\)/);
 assert.match(read('src/lib/supabase.ts'), /supabaseBoundedFetch/);
 assert.match(read('src/hooks/useCompanies.ts'), /cachedQuery/);
 assert.match(read('src/hooks/useQuotationDocs.ts'), /useQuotationDocsList/);
+
+const useProjects = read('src/hooks/useProjects.ts');
+assert.match(useProjects, /requestIdRef/);
+assert.match(useProjects, /finally \{\s*if \(requestId === requestIdRef\.current\) setLoading\(false\);/);
 
 console.log('page load stall: ok');

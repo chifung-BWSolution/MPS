@@ -78,6 +78,8 @@ export function CompanyManagementSettings() {
         contactPhone: formData.contactPhone || '',
         contactEmail: formData.contactEmail || '',
         logoUrl: formData.logoUrl || '',
+        chopUrl: formData.chopUrl || '',
+        bankNotes: formData.bankNotes || '',
         isActive: true,
         brandCount: 0,
         activeProjectCount: 0,
@@ -493,6 +495,8 @@ function CompanyModal({
     contactPhone: company?.contactPhone || '',
     contactEmail: company?.contactEmail || '',
     logoUrl: company?.logoUrl || '',
+    chopUrl: company?.chopUrl || '',
+    bankNotes: company?.bankNotes || '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -569,6 +573,17 @@ function CompanyModal({
                 />
               </div>
               <FieldInput label="公司 Logo URL" value={form.logoUrl || ''} onChange={(v) => updateField('logoUrl', v)} placeholder="https://..." />
+              <FieldInput label="公司印章 Chop URL" value={form.chopUrl || ''} onChange={(v) => updateField('chopUrl', v)} placeholder="https://..." />
+              <div>
+                <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">付款說明 Bank notes</label>
+                <textarea
+                  value={form.bankNotes || ''}
+                  onChange={(e) => updateField('bankNotes', e.target.value)}
+                  placeholder="銀行名稱、帳號、轉帳備註…"
+                  rows={3}
+                  className="w-full px-3 py-2 border border-border rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all resize-none"
+                />
+              </div>
             </div>
           </div>
         </div>

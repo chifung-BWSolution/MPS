@@ -257,7 +257,7 @@ export function Ga4TrafficModule() {
 
   return (
     <div className="space-y-0">
-      <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
+      <div className="sticky top-[calc(48px+var(--app-banner-h))] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-[32px] font-bold tracking-tight">網站流量</h1>

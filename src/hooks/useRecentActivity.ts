@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { isAbortError } from '@/lib/queryCache';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
 
 export type RecentActivityItem = {
@@ -149,7 +148,7 @@ export function useRecentActivity() {
         setLoading(false);
       }
       } catch (err) {
-        if (signal.aborted || isAbortError(err)) return;
+        if (signal.aborted) return;
         setLoading(false);
       }
     };

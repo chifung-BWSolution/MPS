@@ -395,7 +395,7 @@ assert.match(tab, /groupIncomesByType/);
 assert.match(tab, /應收合計/);
 assert.match(tab, /查看附件/);
 assert.match(tab, /paymentRecordFileUrl/);
-assert.match(tab, /FileText/);
+assert.match(tab, /Paperclip/);
 assert.match(tab, /CurrencyPicker/);
 assert.match(tab, /amountsToHkd/);
 assert.match(tab, /draft\.currency/);

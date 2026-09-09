@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ExternalLink, FileText, Pencil, Plus, Trash2, Wallet } from 'lucide-react';
+import { ExternalLink, Paperclip, Pencil, Plus, Receipt, ScrollText, Trash2, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useQuotationIncomes } from '@/hooks/useQuotationIncomes';
@@ -29,6 +29,9 @@ import {
   type QuotationIncome,
 } from '@/lib/quotationIncomes';
 import { PitchingBulkIncomeDialog } from '@/components/quotation/PitchingBulkIncomeDialog';
+import { useDocumentExistence } from '@/hooks/useInvoiceReceipts';
+import { documentExistsColor } from '@/lib/invoiceReceipts';
+import { openInvoiceReceiptEditor, type InvoiceReceiptDocKind, type QuotationClientPage } from '@/lib/quotationProjectNavigation';
 import { CrudModal, CrudModalFooter, DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { CurrencyBadge, CurrencyPicker, StoredHkdHint } from '@/components/ui/currency-picker';
 import { Input } from '@/components/ui/input';
@@ -141,14 +144,19 @@ function PillOptions<T extends string>({
 
 export function PitchingIncomeTab({
   projectId,
+  page = 'pitching',
   signedDate,
   handoverDate,
+  onOpenDocument,
 }: {
   projectId: string;
+  page?: QuotationClientPage;
   signedDate?: string;
   handoverDate?: string;
+  onOpenDocument?: (kind: InvoiceReceiptDocKind, incomeId: string) => void;
 }) {
   const { rows, loading, error, addIncome, updateIncome, deleteIncome, saveBulkIncomes } = useQuotationIncomes(projectId);
+  const { invoiceIds, receiptIds } = useDocumentExistence(rows.map((row) => row.id));
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<QuotationIncome | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft());
@@ -168,6 +176,14 @@ export function PitchingIncomeTab({
     parseMoney(draft.badDebt) ?? 0,
   );
   const paymentRequired = hasFilledPaymentAmount(draft.paymentAmount);
+
+  const openDocument = (kind: InvoiceReceiptDocKind, incomeId: string) => {
+    if (onOpenDocument) {
+      onOpenDocument(kind, incomeId);
+      return;
+    }
+    openInvoiceReceiptEditor(projectId, page, kind, incomeId);
+  };
 
   const openCreate = () => {
     setEditing(null);
@@ -446,6 +462,30 @@ export function PitchingIncomeTab({
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openDocument('invoice', row.id)}
+                              className={cn(
+                                'p-1.5 rounded-md hover:bg-blue-50 transition-colors',
+                                documentExistsColor(invoiceIds.has(row.id), 'invoice'),
+                              )}
+                              aria-label={invoiceIds.has(row.id) ? `編輯發票 ${row.type}` : `建立發票 ${row.type}`}
+                              title={invoiceIds.has(row.id) ? '編輯發票' : '建立發票'}
+                            >
+                              <ScrollText size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openDocument('receipt', row.id)}
+                              className={cn(
+                                'p-1.5 rounded-md hover:bg-teal-50 transition-colors',
+                                documentExistsColor(receiptIds.has(row.id), 'receipt'),
+                              )}
+                              aria-label={receiptIds.has(row.id) ? `編輯收據 ${row.type}` : `建立收據 ${row.type}`}
+                              title={receiptIds.has(row.id) ? '編輯收據' : '建立收據'}
+                            >
+                              <Receipt size={13} />
+                            </button>
                             {row.paymentRecordFileUrl ? (
                               <a
                                 href={row.paymentRecordFileUrl}
@@ -455,7 +495,7 @@ export function PitchingIncomeTab({
                                 aria-label={`查看附件 ${row.paymentRecordFileName || row.type}`}
                                 title={row.paymentRecordFileName || '查看附件'}
                               >
-                                <FileText size={13} />
+                                <Paperclip size={13} />
                               </a>
                             ) : (
                               <span
@@ -463,7 +503,7 @@ export function PitchingIncomeTab({
                                 aria-label="沒有附件"
                                 title="沒有附件"
                               >
-                                <FileText size={13} />
+                                <Paperclip size={13} />
                               </span>
                             )}
                             <button

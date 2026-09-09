@@ -192,11 +192,13 @@ export function useQuotationClientProjects() {
       const latest = mapped.map((r) => r.updatedAt).filter(Boolean).sort().pop();
       setLastSyncedAt(latest ?? null);
     } catch (err) {
-      if (isAbortError(err)) return;
-      setError(err instanceof Error ? err.message : String(err));
-      setRecords([]);
+      if (!isAbortError(err)) {
+        setError(err instanceof Error ? err.message : String(err));
+        setRecords([]);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Banknote, ExternalLink, FileText, Pause, Pencil, Plus, Repeat, Trash2 } from 'lucide-react';
+import { Banknote, ExternalLink, Paperclip, Pause, Pencil, Plus, Repeat, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useCreditCards } from '@/hooks/useCreditCards';
@@ -661,7 +661,7 @@ export function PitchingExpenseTab({
                                 aria-label={`查看附件 ${row.paymentRecordFileName || row.typeLabel}`}
                                 title={row.paymentRecordFileName || '查看附件'}
                               >
-                                <FileText size={13} />
+                                <Paperclip size={13} />
                               </a>
                             ) : (
                               <span
@@ -669,7 +669,7 @@ export function PitchingExpenseTab({
                                 aria-label="沒有附件"
                                 title="沒有附件"
                               >
-                                <FileText size={13} />
+                                <Paperclip size={13} />
                               </span>
                             )}
                             <button

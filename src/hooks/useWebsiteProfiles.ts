@@ -84,9 +84,11 @@ export function useWebsiteProfiles() {
         setLoading(false);
       })
       .catch((err: Error) => {
-        if (cancelled || isAbortError(err)) return;
-        setError(err.message);
-        setProfiles(staticWebsiteProfiles as WebsiteProfileFull[]);
+        if (cancelled) return;
+        if (!isAbortError(err)) {
+          setError(err.message);
+          setProfiles(staticWebsiteProfiles as WebsiteProfileFull[]);
+        }
         setLoading(false);
       });
     return () => {

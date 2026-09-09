@@ -64,7 +64,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'fixed left-0 top-[48px] bottom-0 bg-white border-r border-[rgba(13,26,45,0.08)] flex flex-col z-40 transition-all duration-200',
+        'fixed left-0 top-[calc(48px+var(--app-banner-h))] bottom-0 bg-white border-r border-[rgba(13,26,45,0.08)] flex flex-col z-40 transition-all duration-200',
         sidebarCollapsed ? 'w-[60px]' : 'w-[220px]'
       )}
     >

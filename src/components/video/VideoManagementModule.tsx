@@ -341,7 +341,7 @@ export function VideoManagementModule() {
 
   return (
     <div>
-      <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-4 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
+      <div className="sticky top-[calc(48px+var(--app-banner-h))] z-30 -mx-6 px-6 pt-1 pb-3 mb-4 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
         <div className="min-w-0">
           <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
             <h1 className="text-[32px] font-bold tracking-tight">影片統籌</h1>

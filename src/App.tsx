@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { TalentInvitePublicPage } from "./components/talent/TalentInvitePublicPage";
 import { TalentSubmissionViewPage } from "./components/talent/TalentSubmissionViewPage";
 import { VolunteerApplyPublicPage } from "./components/marketing/VolunteerApplyPublicPage";
+import { VersionUpdateBar } from "./components/layout/VersionUpdateBar";
 
 function AuthGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated, isAuthorized, loading, authError } = useAuth();
@@ -42,6 +43,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
 function App() {
   return (
     <AuthProvider>
+      <VersionUpdateBar />
       <Suspense fallback={<p>Loading...</p>}>
         <>
           <Routes>

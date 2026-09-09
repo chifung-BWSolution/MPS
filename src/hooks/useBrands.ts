@@ -53,9 +53,11 @@ export function useBrands() {
         setLoading(false);
       })
       .catch((err: Error) => {
-        if (cancelled || isAbortError(err)) return;
-        setError(err.message);
-        setBrands(staticBrands as Brand[]);
+        if (cancelled) return;
+        if (!isAbortError(err)) {
+          setError(err.message);
+          setBrands(staticBrands as Brand[]);
+        }
         setLoading(false);
       });
     return () => {

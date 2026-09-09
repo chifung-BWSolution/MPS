@@ -120,8 +120,10 @@ export function useDayReportTypes() {
         setLoading(false);
       })
       .catch((err: Error) => {
-        if (cancelled || isAbortError(err)) return;
-        setTypes(staticTypes);
+        if (cancelled) return;
+        if (!isAbortError(err)) {
+          setTypes(staticTypes);
+        }
         setLoading(false);
       });
     return () => {

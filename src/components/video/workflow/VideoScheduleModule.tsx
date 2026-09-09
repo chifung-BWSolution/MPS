@@ -189,7 +189,7 @@ export function VideoScheduleModule() {
 
   return (
     // 頂欄 48px + AppLayout p-6（上下各 24px）
-    <div className="flex flex-col h-[calc(100vh-48px-3rem)] overflow-hidden gap-3">
+    <div className="flex flex-col h-[calc(100vh-48px-var(--app-banner-h)-3rem)] overflow-hidden gap-3">
       <div className="shrink-0 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-[32px] font-bold tracking-tight">拍攝排期</h1>

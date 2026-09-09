@@ -15,7 +15,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       <TopNav />
       <Sidebar />
       <main
-        className={`pt-[48px] min-h-screen transition-all duration-200 ${sidebarCollapsed ? 'pl-[60px]' : 'pl-[220px]'}`}
+        className={`pt-[calc(48px+var(--app-banner-h))] min-h-screen transition-all duration-200 ${sidebarCollapsed ? 'pl-[60px]' : 'pl-[220px]'}`}
       >
         <div className="p-6">
           {children}

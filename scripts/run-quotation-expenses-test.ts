@@ -597,7 +597,7 @@ assert.match(tab, /\{group\.typeLabel\} · \{group\.rows\.length\} 筆/);
 assert.match(tab, /應付合計/);
 assert.match(tab, /查看附件/);
 assert.match(tab, /paymentRecordFileUrl/);
-assert.match(tab, /FileText/);
+assert.match(tab, /Paperclip/);
 assert.match(tab, /供應商 Supplier/);
 assert.match(tab, /SearchableSelect/);
 assert.match(tab, /useSupplierTypes/);

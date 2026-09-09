@@ -5,6 +5,10 @@ export const SELECTED_QUOTATION_PROJECT_KEY = 'mps_selected_quotation_project_id
 export const QUOTATION_PROJECT_QUERY_KEY = 'id';
 /** Older CRM / session links used `project`. */
 export const QUOTATION_PROJECT_QUERY_KEY_LEGACY = 'project';
+export const QUOTATION_DOC_QUERY_KEY = 'doc';
+export const QUOTATION_INCOME_QUERY_KEY = 'income';
+
+export type InvoiceReceiptDocKind = 'invoice' | 'receipt';
 
 export type QuotationClientPage = 'pitching' | 'projects';
 
@@ -88,8 +92,28 @@ export function readSelectedQuotationProjectId(
   }
 }
 
-export function setQuotationClientHash(page: QuotationClientPage, id?: string | null): void {
-  const next = buildQuotationProjectHash(id?.trim() || '', page);
+function hashWithPreservedDoc(
+  projectId: string,
+  page: QuotationClientPage,
+  hash = globalThis.window?.location?.hash ?? '',
+): string {
+  const current = readInvoiceReceiptDoc(hash);
+  const currentProjectId = projectIdFromHash(hash);
+  if (current && projectId && currentProjectId === projectId) {
+    return buildInvoiceReceiptHash(projectId, page, current.kind, current.incomeId);
+  }
+  return buildQuotationProjectHash(projectId, page);
+}
+
+export function setQuotationClientHash(
+  page: QuotationClientPage,
+  id?: string | null,
+  options?: { preserveDoc?: boolean },
+): void {
+  const projectId = id?.trim() || '';
+  const next = options?.preserveDoc
+    ? hashWithPreservedDoc(projectId, page)
+    : buildQuotationProjectHash(projectId, page);
   try {
     const loc = globalThis.window?.location;
     if (!loc) return;
@@ -119,11 +143,58 @@ export function openQuotationProjectDetail(
   const id = projectId.trim();
   if (!id) return;
   writeSelectedQuotationProjectId(id);
-  setQuotationClientHash(quotationProjectSubModule(status), id);
+  setQuotationClientHash(quotationProjectSubModule(status), id, { preserveDoc: true });
 }
 
 export function readQuotationClientPage(
   hash = globalThis.window?.location?.hash ?? '',
 ): QuotationClientPage | null {
   return pageFromHash(hash);
+}
+
+export function readInvoiceReceiptDoc(
+  hash = globalThis.window?.location?.hash ?? '',
+): { kind: InvoiceReceiptDocKind; incomeId: string } | null {
+  const { params } = hashPathAndQuery(hash);
+  const kind = params.get(QUOTATION_DOC_QUERY_KEY)?.trim();
+  const incomeId = params.get(QUOTATION_INCOME_QUERY_KEY)?.trim() || '';
+  if ((kind === 'invoice' || kind === 'receipt') && incomeId) {
+    return { kind, incomeId };
+  }
+  return null;
+}
+
+export function buildInvoiceReceiptHash(
+  projectId: string,
+  page: QuotationClientPage,
+  kind: InvoiceReceiptDocKind,
+  incomeId: string,
+): string {
+  const params = new URLSearchParams();
+  params.set(QUOTATION_PROJECT_QUERY_KEY, projectId.trim());
+  params.set(QUOTATION_DOC_QUERY_KEY, kind);
+  params.set(QUOTATION_INCOME_QUERY_KEY, incomeId.trim());
+  return `quotation/${page}?${params.toString()}`;
+}
+
+export function openInvoiceReceiptEditor(
+  projectId: string,
+  page: QuotationClientPage,
+  kind: InvoiceReceiptDocKind,
+  incomeId: string,
+): void {
+  const next = buildInvoiceReceiptHash(projectId, page, kind, incomeId);
+  try {
+    const loc = globalThis.window?.location;
+    if (!loc) return;
+    const current = loc.hash.replace(/^#/, '');
+    if (current === next) return;
+    loc.hash = `#${next}`;
+  } catch {
+    /* ignore */
+  }
+}
+
+export function closeInvoiceReceiptEditor(projectId: string, page: QuotationClientPage): void {
+  setQuotationClientHash(page, projectId);
 }

@@ -232,13 +232,15 @@ export function useDashboardOverviewStats(): DashboardOverviewStats {
         setLastMonthHours(Math.round(lastHours * 10) / 10);
         setLoading(false);
       } catch (e) {
-        if (signal.aborted || isAbortError(e)) return;
-        setError(e instanceof Error ? e.message : 'Failed to load overview stats');
-        setLiveWebsiteCount(0);
-        setPublishedVideoCount(0);
-        setThisMonthHours(0);
-        setLastMonthHours(0);
-        setVideosMomPct(null);
+        if (signal.aborted) return;
+        if (!isAbortError(e)) {
+          setError(e instanceof Error ? e.message : 'Failed to load overview stats');
+          setLiveWebsiteCount(0);
+          setPublishedVideoCount(0);
+          setThisMonthHours(0);
+          setLastMonthHours(0);
+          setVideosMomPct(null);
+        }
         setLoading(false);
       }
     };

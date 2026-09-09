@@ -6,7 +6,7 @@ import { useQuotationClientList } from '@/hooks/useQuotationClientList';
 import { useActiveStaffOptions } from '@/hooks/useActiveStaffOptions';
 import { toQuotationClientSelectOption } from '@/data/quotationClientList';
 import { useQuotationClientDetailId } from '@/hooks/useQuotationClientDetailId';
-import { openQuotationProjectDetail } from '@/lib/quotationProjectNavigation';
+import { openQuotationProjectDetail, quotationProjectSubModule, readQuotationClientPage } from '@/lib/quotationProjectNavigation';
 import {
   PitchingDetail,
   PitchingFormModal,
@@ -148,6 +148,7 @@ function ProjectList({
                 sortDir={sortDir}
                 onSort={onSort}
                 moneyColumns="actual"
+                remainingDaysLabel="項目進度"
               />
             </thead>
             <tbody>
@@ -159,7 +160,12 @@ function ProjectList({
                   >
                     <td className="px-4 py-3 text-[13px] text-muted-foreground tabular-nums">{record.inquiryDate}</td>
                     <td className="px-4 py-3 text-[13px]">
-                      <RemainingDaysCell inquiryDate={record.inquiryDate} status={record.status} />
+                      <RemainingDaysCell
+                        inquiryDate={record.inquiryDate}
+                        status={record.status}
+                        signedDate={record.signedDate}
+                        handoverDate={record.handoverDate}
+                      />
                     </td>
                     <td className="px-4 py-3 text-[13px] max-w-[180px]">{formatProjectTypes(record.projectTypes)}</td>
                     <td className="px-4 py-3 text-[14px] font-medium">{record.displayName}</td>
@@ -238,6 +244,7 @@ export function ProjectModule() {
 
   useEffect(() => {
     if (!selectedRecord) return;
+    if (readQuotationClientPage() === quotationProjectSubModule(selectedRecord.status)) return;
     openQuotationProjectDetail(selectedRecord.id, selectedRecord.status);
   }, [selectedRecord]);
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { isAbortError } from '@/lib/queryCache';
 import type { ProjectSelectItem, ProjectSelectKind } from '@/lib/searchableProjectSelect';
@@ -187,36 +187,61 @@ export function useProjects(options: UseProjectsOptions = {}) {
     return Array.isArray(relatedType) ? relatedType.slice().sort().join(',') : relatedType;
   }, [relatedType]);
 
+  const requestIdRef = useRef(0);
+
   const reload = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
-    let query = supabase
-      .from('projects')
-      .select('*')
-      .order('name', { ascending: true });
 
-    if (activeOnly) {
-      query = query.eq('is_active', true);
-    }
+    const runQuery = () => {
+      let query = supabase
+        .from('projects')
+        .select('*')
+        .order('name', { ascending: true });
 
-    if (relatedTypeKey) {
-      const types = relatedTypeKey.split(',') as ProjectRelatedType[];
-      if (types.length === 1) {
-        query = query.eq('related_type', types[0]);
-      } else {
-        query = query.in('related_type', types);
+      if (activeOnly) {
+        query = query.eq('is_active', true);
       }
-    }
 
-    const { data, error: qError } = await query;
-    if (qError) {
-      if (isAbortError(qError)) return;
-      setError(qError.message);
-      setProjects([]);
-    } else {
+      if (relatedTypeKey) {
+        const types = relatedTypeKey.split(',') as ProjectRelatedType[];
+        if (types.length === 1) {
+          query = query.eq('related_type', types[0]);
+        } else {
+          query = query.in('related_type', types);
+        }
+      }
+
+      return query;
+    };
+
+    try {
+      let { data, error: qError } = await runQuery();
+      if (requestId !== requestIdRef.current) return;
+
+      // Page-generation abort can cancel the in-flight GET while this view is
+      // still mounted. Retry once so the table is not left empty.
+      if (qError && isAbortError(qError)) {
+        ({ data, error: qError } = await runQuery());
+        if (requestId !== requestIdRef.current) return;
+      }
+
+      if (qError) {
+        if (isAbortError(qError)) return;
+        setError(qError.message);
+        setProjects([]);
+        return;
+      }
+
       setError(null);
       setProjects(((data || []) as DbRow[]).map(mapRow));
+    } catch (err) {
+      if (requestId !== requestIdRef.current || isAbortError(err)) return;
+      setError(err instanceof Error ? err.message : String(err));
+      setProjects([]);
+    } finally {
+      if (requestId === requestIdRef.current) setLoading(false);
     }
-    setLoading(false);
   }, [activeOnly, relatedTypeKey]);
 
   useEffect(() => {

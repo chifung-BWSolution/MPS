@@ -49,10 +49,12 @@ export function useSystemOptions() {
       const rows = await cachedQuery(QUERY_CACHE_KEYS.systemOptions, fetchSystemOptions);
       setOptions(rows);
     } catch (err) {
-      if (isAbortError(err)) return;
-      setError(err instanceof Error ? err.message : String(err));
+      if (!isAbortError(err)) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {

@@ -253,21 +253,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Query strings (e.g. campaign detail) must not pollute the submenu id.
   const parseHash = () => {
     const hash = window.location.hash.replace(/^#/, '');
-    const path = hash.split('?')[0] || '';
+    const path = (hash.split('?')[0] || '').replace(/^\/+/, '');
     const [mod, sub] = path.split('/');
     return { mod: mod || 'dashboard', sub: sub || '' };
   };
 
-  const hashRouteKey = (module: string, subModule: string, hash = window.location.hash) => {
-    const raw = hash.replace(/^#/, '');
-    const qIndex = raw.indexOf('?');
-    const query = qIndex >= 0 ? raw.slice(qIndex) : '';
-    return `${module}/${subModule}${query}`;
-  };
-
   const [currentModule, setCurrentModule] = useState(() => {
     const { mod, sub } = parseHash();
-    return resolveRoute(mod, sub || undefined).module;
+    const resolved = resolveRoute(mod, sub || undefined);
+    // Bind the first page to a fetch generation before child effects run, so
+    // the later hashchange/normalize cannot abort those GETs as "stale".
+    beginPageNavigation(`${resolved.module}/${resolved.subModule}`);
+    return resolved.module;
   });
   const [currentSubModule, setCurrentSubModule] = useState(() => {
     const { mod, sub } = parseHash();
@@ -282,7 +279,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const raw = window.location.hash.replace(/^#/, '');
     const qIndex = raw.indexOf('?');
     const query = qIndex >= 0 ? raw.slice(qIndex) : '';
-    const path = qIndex >= 0 ? raw.slice(0, qIndex) : raw;
+    const path = (qIndex >= 0 ? raw.slice(0, qIndex) : raw).replace(/^\/+/, '');
     const expectedPath = `${resolved.module}/${resolved.subModule}`;
     if (path !== expectedPath) {
       window.location.replace(`#${expectedPath}${query}`);
@@ -294,13 +291,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const onHashChange = () => {
       const { mod, sub } = parseHash();
       const resolved = resolveRoute(mod, sub || undefined);
-      beginPageNavigation(hashRouteKey(resolved.module, resolved.subModule));
+      beginPageNavigation(`${resolved.module}/${resolved.subModule}`);
       setCurrentModule(resolved.module);
       setCurrentSubModule(resolved.subModule);
       const raw = window.location.hash.replace(/^#/, '');
       const qIndex = raw.indexOf('?');
       const query = qIndex >= 0 ? raw.slice(qIndex) : '';
-      const path = qIndex >= 0 ? raw.slice(0, qIndex) : raw;
+      const path = (qIndex >= 0 ? raw.slice(0, qIndex) : raw).replace(/^\/+/, '');
       const expectedPath = `${resolved.module}/${resolved.subModule}`;
       if (path !== expectedPath) {
         window.location.replace(`#${expectedPath}${query}`);

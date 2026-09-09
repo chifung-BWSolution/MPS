@@ -13,7 +13,17 @@ import {
   type QuotationClientSelectOption,
 } from '@/data/quotationClientList';
 import { useQuotationClientDetailId } from '@/hooks/useQuotationClientDetailId';
-import { openQuotationProjectDetail } from '@/lib/quotationProjectNavigation';
+import {
+  closeInvoiceReceiptEditor,
+  openInvoiceReceiptEditor,
+  openQuotationProjectDetail,
+  quotationProjectSubModule,
+  readInvoiceReceiptDoc,
+  readQuotationClientPage,
+  type InvoiceReceiptDocKind,
+} from '@/lib/quotationProjectNavigation';
+import { InvoiceEditor } from '@/components/quotation/InvoiceEditor';
+import { ReceiptEditor } from '@/components/quotation/ReceiptEditor';
 import { ClientFormModal } from '@/components/crm/ClientFormModal';
 import { ClientWebsiteSelectField } from '@/components/quotation/ClientWebsiteSelectField';
 import { CrudModal } from '@/components/ui/crud-modal';
@@ -24,7 +34,9 @@ import {
   pitchingStatusConfig,
   PITCHING_PROJECT_TYPE_OPTIONS,
   PITCHING_STATUS_OPTIONS,
+  calcClientProjectProgress,
   calcRemainingDays,
+  clientProjectProgressConfig,
   formatProjectTypes,
   formatMainPmName,
   formatRelatedClientName,
@@ -165,7 +177,28 @@ export function PitchingStatusSelect({
   );
 }
 
-export function RemainingDaysCell({ inquiryDate, status }: { inquiryDate: string; status: PitchingStatus }) {
+export function RemainingDaysCell({
+  inquiryDate,
+  status,
+  signedDate,
+  handoverDate,
+}: {
+  inquiryDate: string;
+  status: PitchingStatus;
+  signedDate?: string;
+  handoverDate?: string;
+}) {
+  if (status === 'confirmed') {
+    const progress = calcClientProjectProgress(signedDate, handoverDate);
+    if (!progress) return <span className="text-muted-foreground">—</span>;
+    const config = clientProjectProgressConfig[progress];
+    return (
+      <span className={cn('text-[12px] font-medium px-2 py-1 rounded-sm', config.bgColor, config.color)}>
+        {config.label}
+      </span>
+    );
+  }
+
   const days = calcRemainingDays(inquiryDate, status);
   if (days === null) return <span className="text-muted-foreground">—</span>;
   const color =
@@ -664,7 +697,12 @@ function PitchingList({
                   >
                     <td className="px-4 py-3 text-[13px] text-muted-foreground tabular-nums">{record.inquiryDate}</td>
                     <td className="px-4 py-3 text-[13px]">
-                      <RemainingDaysCell inquiryDate={record.inquiryDate} status={record.status} />
+                      <RemainingDaysCell
+                        inquiryDate={record.inquiryDate}
+                        status={record.status}
+                        signedDate={record.signedDate}
+                        handoverDate={record.handoverDate}
+                      />
                     </td>
                     <td className="px-4 py-3 text-[13px] max-w-[180px]">{formatProjectTypes(record.projectTypes)}</td>
                     <td className="px-4 py-3 text-[14px] font-medium">{record.displayName}</td>
@@ -784,7 +822,16 @@ export function PitchingDetail({
   const [activeTab, setActiveTab] = useState<'info' | 'followups' | 'hours' | 'docs' | 'income' | 'budget' | 'expense'>('info');
   const [draft, setDraft] = useState<DetailDraft>(() => draftFromRecord(record, clientOptions));
   const [saving, setSaving] = useState(false);
+  const [docEditor, setDocEditor] = useState(() => readInvoiceReceiptDoc());
   const clientCompany = companyNamesForClient(draft.clientId, clientOptions);
+  const clientPage = quotationProjectSubModule(record.status);
+
+  useEffect(() => {
+    const sync = () => setDocEditor(readInvoiceReceiptDoc());
+    sync();
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
+  }, [record.id]);
 
   useEffect(() => {
     setDraft(draftFromRecord(record, clientOptions));
@@ -831,6 +878,26 @@ export function PitchingDetail({
     estimatedIncome?: number;
     estimatedExpenses?: PitchingExpenseItem[];
   }) => persist(patch, '預計收入支出已更新');
+
+  const closeDocEditor = () => {
+    closeInvoiceReceiptEditor(record.id, clientPage);
+    setDocEditor(null);
+    setActiveTab('income');
+  };
+
+  const openDocEditor = (kind: InvoiceReceiptDocKind, incomeId: string) => {
+    setActiveTab('income');
+    setDocEditor({ kind, incomeId });
+    openInvoiceReceiptEditor(record.id, clientPage, kind, incomeId);
+  };
+
+  if (docEditor) {
+    return docEditor.kind === 'receipt' ? (
+      <ReceiptEditor incomeId={docEditor.incomeId} onBack={closeDocEditor} />
+    ) : (
+      <InvoiceEditor incomeId={docEditor.incomeId} onBack={closeDocEditor} />
+    );
+  }
 
   const tabs = [
     { id: 'info', label: '基本資訊', icon: FileText },
@@ -1003,8 +1070,10 @@ export function PitchingDetail({
       {activeTab === 'income' && (
         <PitchingIncomeTab
           projectId={record.id}
+          page={clientPage}
           signedDate={draft.signedDate}
           handoverDate={draft.handoverDate}
+          onOpenDocument={openDocEditor}
         />
       )}
 
@@ -1051,6 +1120,7 @@ export function PitchingModule() {
 
   useEffect(() => {
     if (!selectedRecord) return;
+    if (readQuotationClientPage() === quotationProjectSubModule(selectedRecord.status)) return;
     openQuotationProjectDetail(selectedRecord.id, selectedRecord.status);
   }, [selectedRecord]);
 

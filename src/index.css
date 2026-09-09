@@ -51,6 +51,8 @@
     --scrollbar-size: 5px;
     --scrollbar-thumb: rgba(13, 26, 45, 0.18);
     --scrollbar-thumb-hover: rgba(13, 26, 45, 0.36);
+
+    --app-banner-h: 0px;
   }
 }
 

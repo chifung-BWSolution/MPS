@@ -126,11 +126,13 @@ export function QuotationClientProjectTableHeaders({
   sortDir,
   onSort,
   moneyColumns,
+  remainingDaysLabel = '剩餘天數',
 }: {
   sortKey: QuotationListSortKey;
   sortDir: QuotationListSortDir;
   onSort: (key: QuotationListSortKey) => void;
   moneyColumns: QuotationListMoneyColumns;
+  remainingDaysLabel?: string;
 }) {
   const labels = QUOTATION_LIST_MONEY_LABELS[moneyColumns];
 
@@ -144,7 +146,7 @@ export function QuotationClientProjectTableHeaders({
         onSort={onSort}
       />
       <QuotationListSortableTh
-        label="剩餘天數"
+        label={remainingDaysLabel}
         sortKey="remainingDays"
         activeKey={sortKey}
         sortDir={sortDir}

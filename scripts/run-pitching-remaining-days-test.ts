@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import {
   calendarDaysBetween,
+  calcClientProjectProgress,
   calcRemainingDays,
+  clientProjectProgressConfig,
   localTodayIso,
 } from '../src/data/pitchingData';
 
@@ -29,5 +31,17 @@ assert.equal(calcRemainingDays('2026-08-25T16:00:00.000Z', 'confirmed', '2026-08
 const today = localTodayIso();
 assert.match(today, /^\d{4}-\d{2}-\d{2}$/);
 assert.equal(calcRemainingDays(today, 'initial'), 30);
+
+assert.equal(calcClientProjectProgress('2026-09-10', '2026-09-20', '2026-09-09'), 'pending');
+assert.equal(calcClientProjectProgress('2026-09-10', '2026-09-20', '2026-09-10'), 'in_progress');
+assert.equal(calcClientProjectProgress('2026-09-10', '2026-09-20', '2026-09-15'), 'in_progress');
+assert.equal(calcClientProjectProgress('2026-09-10', '2026-09-20', '2026-09-20'), 'in_progress');
+assert.equal(calcClientProjectProgress('2026-09-10', '2026-09-20', '2026-09-21'), 'completed');
+assert.equal(calcClientProjectProgress(undefined, '2026-09-20', '2026-09-21'), null);
+assert.equal(calcClientProjectProgress('2026-09-10', undefined, '2026-09-15'), null);
+assert.equal(calcClientProjectProgress('', '2026-09-20', '2026-09-21'), null);
+assert.equal(clientProjectProgressConfig.pending.label, '待開始');
+assert.equal(clientProjectProgressConfig.in_progress.label, '進行中');
+assert.equal(clientProjectProgressConfig.completed.label, '已完成');
 
 console.log('pitching remaining days: ok');

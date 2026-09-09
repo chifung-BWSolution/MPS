@@ -31,9 +31,11 @@ export function useStaffNames() {
         setLoading(false);
       })
       .catch((err: Error) => {
-        if (cancelled || isAbortError(err)) return;
-        console.warn('[useStaffNames] failed:', err.message);
-        setNames([]);
+        if (cancelled) return;
+        if (!isAbortError(err)) {
+          console.warn('[useStaffNames] failed:', err.message);
+          setNames([]);
+        }
         setLoading(false);
       });
     return () => {

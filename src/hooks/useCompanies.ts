@@ -18,6 +18,8 @@ type DbRow = {
   contact_phone: string;
   contact_email: string;
   logo_url: string | null;
+  chop_url: string | null;
+  bank_notes: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -38,6 +40,8 @@ function mapRow(row: DbRow): Company {
     contactPhone: row.contact_phone,
     contactEmail: row.contact_email,
     logoUrl: row.logo_url ?? '',
+    chopUrl: row.chop_url ?? '',
+    bankNotes: row.bank_notes ?? '',
     isActive: row.is_active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -69,9 +73,11 @@ export function useCompanies() {
         setLoading(false);
       })
       .catch((err: Error) => {
-        if (cancelled || isAbortError(err)) return;
-        setError(err.message);
-        setCompanies(staticCompanies as Company[]);
+        if (cancelled) return;
+        if (!isAbortError(err)) {
+          setError(err.message);
+          setCompanies(staticCompanies as Company[]);
+        }
         setLoading(false);
       });
     return () => {
@@ -94,6 +100,8 @@ export function useCompanies() {
       contact_phone: company.contactPhone,
       contact_email: company.contactEmail,
       logo_url: company.logoUrl || null,
+      chop_url: company.chopUrl || null,
+      bank_notes: company.bankNotes || null,
       is_active: company.isActive,
     };
     const { error } = await supabase.from('company_list').insert(row);
@@ -116,6 +124,8 @@ export function useCompanies() {
     if (updates.contactPhone !== undefined) row.contact_phone = updates.contactPhone;
     if (updates.contactEmail !== undefined) row.contact_email = updates.contactEmail;
     if (updates.logoUrl !== undefined) row.logo_url = updates.logoUrl || null;
+    if (updates.chopUrl !== undefined) row.chop_url = updates.chopUrl || null;
+    if (updates.bankNotes !== undefined) row.bank_notes = updates.bankNotes || null;
     if (updates.isActive !== undefined) row.is_active = updates.isActive;
 
     const { error } = await supabase.from('company_list').update(row).eq('id', id);
