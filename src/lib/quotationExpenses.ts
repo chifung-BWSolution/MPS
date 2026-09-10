@@ -3,6 +3,7 @@ import {
   type SystemCurrency,
 } from './currency';
 import {
+  billedInputFromPercent,
   billedSumMatchesTotal,
   BULK_DATE_MODE_LABELS,
   BULK_DATE_MODES,
@@ -28,6 +29,7 @@ import {
   parseInstallmentNumber,
   parseLocalIsoDate,
   parseMoney,
+  percentInputFromBilled,
   planBulkInstallmentNumbers,
   sanitizePaymentRecordFileName,
   splitBilledAmounts,
@@ -39,9 +41,33 @@ import {
 export const EXPENSES_TABLE = 'expenses';
 export const RECURRING_EXPENSES_TABLE = 'recurring_expenses';
 export const CREATE_RECURRING_EXPENSE_RPC = 'create_recurring_expense';
+export const PROJECTS_TABLE = 'projects';
+export const QUOTATION_CLIENT_PROJECT_TABLE = 'quotation_client_project';
 export const EXPENSE_RELATED_TYPE_PROJECT = 'project';
+export const EXPENSE_SOURCE_RELATED_TYPES = ['quotation_client', 'webandsystem'] as const;
+export type ExpenseSourceRelatedType = (typeof EXPENSE_SOURCE_RELATED_TYPES)[number];
 export const EXPENSE_PAYMENT_RECORDS_BUCKET = 'expense-payment-records';
 export const EXPENSE_PAYMENT_RECORD_MAX_SIZE_MB = INCOME_PAYMENT_RECORD_MAX_SIZE_MB;
+
+export function isExpenseSourceRelatedType(
+  value: string | undefined | null,
+): value is ExpenseSourceRelatedType {
+  return !!value && (EXPENSE_SOURCE_RELATED_TYPES as readonly string[]).includes(value);
+}
+
+/** Website 工具支出 prefers the linked client-project hub so both detail pages share expenses. */
+export function expenseHubSource(
+  relatedType: ExpenseSourceRelatedType,
+  relatedId: string,
+  linkedClientProjectId?: string | null,
+): { relatedType: ExpenseSourceRelatedType; relatedId: string } {
+  const sourceId = relatedId.trim();
+  const linkedId = linkedClientProjectId?.trim() || '';
+  if (relatedType === 'webandsystem' && linkedId) {
+    return { relatedType: 'quotation_client', relatedId: linkedId };
+  }
+  return { relatedType, relatedId: sourceId };
+}
 
 export const RECURRING_EXPENSE_FREQUENCIES = ['weekly', 'monthly', 'quarterly', 'yearly'] as const;
 export type RecurringExpenseFrequency = (typeof RECURRING_EXPENSE_FREQUENCIES)[number];
@@ -557,6 +583,7 @@ export function groupExpensesByType(rows: QuotationExpense[]): ExpenseTypeGroup[
 }
 
 export {
+  billedInputFromPercent,
   billedSumMatchesTotal,
   BULK_DATE_MODE_LABELS,
   BULK_DATE_MODES,
@@ -576,6 +603,7 @@ export {
   parseInstallmentNumber,
   parseLocalIsoDate,
   parseMoney,
+  percentInputFromBilled,
   splitBilledAmounts,
   spreadDueDates,
   type BulkDateMode,

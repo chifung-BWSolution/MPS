@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useActiveStaffOptions } from '@/hooks/useActiveStaffOptions';
 import { useQuotationBv } from '@/hooks/useQuotationBv';
+import type { ProjectHubRelatedType } from '@/lib/projectsHub';
 import {
   BV_RATIO_TOTAL,
   remainingBvRatio,
@@ -29,8 +30,16 @@ function formatRatio(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, '');
 }
 
-export function QuotationBvCard({ projectId }: { projectId: string }) {
-  const { rows, loading, error, addRow, updateRow, deleteRow } = useQuotationBv(projectId);
+export function QuotationBvCard({
+  relatedType,
+  relatedId,
+  variant = 'card',
+}: {
+  relatedType: ProjectHubRelatedType;
+  relatedId: string;
+  variant?: 'card' | 'embedded';
+}) {
+  const { rows, loading, error, addRow, updateRow, deleteRow } = useQuotationBv(relatedType, relatedId);
   const { options: staffOptions } = useActiveStaffOptions(rows.map((row) => row.staffId));
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -126,7 +135,12 @@ export function QuotationBvCard({ projectId }: { projectId: string }) {
   };
 
   return (
-    <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6 h-full">
+    <div
+      className={cn(
+        'h-full',
+        variant === 'card' && 'bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6',
+      )}
+    >
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-md bg-teal-50 flex items-center justify-center">

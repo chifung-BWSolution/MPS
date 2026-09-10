@@ -81,12 +81,15 @@ assert.match(auth, /parsed\.kind === 'google'/);
 assert.match(auth, /isBackgroundRefresh/);
 assert.match(auth, /kind: authKindRef.current/);
 assert.match(auth, /function isSameSession/);
-assert.match(auth, /event === 'INITIAL_SESSION' \|\| event === 'SIGNED_IN'/);
+assert.match(auth, /Same session identity — skip re-verify/);
+assert.match(auth, /void verifyAndFetchUser/);
+assert.doesNotMatch(auth, /await verifyAndFetchUser/);
 assert.doesNotMatch(auth, /event === 'SIGNED_IN' && !authSucceededRef\.current/);
 
 const supabaseClient = read('src/lib/supabase.ts');
-assert.match(supabaseClient, /lock: async \(_name, _timeout, fn\) => fn\(\)/);
+assert.match(supabaseClient, /installCachedAuthSession/);
 assert.match(supabaseClient, /supabaseBoundedFetch/);
+assert.doesNotMatch(supabaseClient, /lock: async \(_name, _timeout, fn\) => fn\(\)/);
 assert.doesNotMatch(auth, /\.then\(\(\) => \{\}\)\.catch\(\(\) => \{\}\)/);
 
 const loginPage = read('src/components/auth/LoginPage.tsx');

@@ -156,7 +156,6 @@ export function AsanaPendingModule() {
       asanaLink: form.asanaLink.trim() || undefined,
       webandsystemListId: form.webandsystemListId.trim() || undefined,
       status: importingTask.mappedStatus,
-      pitchingId: `ASANA-${importingTask.asanaTaskGid.slice(-8)}`,
     });
     if (addErr) {
       const duplicate = addErr.code === '23505' || /asana_task_gid|duplicate/i.test(addErr.message);

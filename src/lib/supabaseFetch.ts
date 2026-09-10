@@ -1,3 +1,4 @@
+import { getCachedAccessToken } from './authSessionCache';
 import { isAbortError } from './queryCache';
 
 export const REST_GET_TIMEOUT_MS = 25_000;
@@ -35,6 +36,21 @@ export function shouldBoundGetRequest(url: string, method: string): boolean {
   return url.includes('/rest/v1/') || url.includes('/functions/v1/');
 }
 
+export function shouldAttachCachedJwt(url: string): boolean {
+  return url.includes('/rest/v1/') || url.includes('/functions/v1/');
+}
+
+/** Attach the in-memory JWT when fetchWithAuth has not already set Authorization. */
+export function applyCachedAuthHeaders(url: string, init?: RequestInit): RequestInit | undefined {
+  if (!shouldAttachCachedJwt(url)) return init;
+  const token = getCachedAccessToken();
+  if (!token) return init;
+  const headers = new Headers(init?.headers);
+  if (headers.has('Authorization')) return init;
+  headers.set('Authorization', `Bearer ${token}`);
+  return { ...init, headers };
+}
+
 function abortGeneration(generation: number): void {
   const controllers = controllersByGeneration.get(generation);
   if (!controllers) return;
@@ -61,9 +77,10 @@ export function beginPageNavigation(path: string): boolean {
 
 export function supabaseBoundedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = requestUrl(input);
-  const method = requestMethod(init);
+  const nextInit = applyCachedAuthHeaders(url, init);
+  const method = requestMethod(nextInit);
   if (!shouldBoundGetRequest(url, method)) {
-    return fetch(input, init).catch((err: Error) => {
+    return fetch(input, nextInit).catch((err: Error) => {
       console.warn('[Supabase] Network error:', err.message);
       throw err;
     });
@@ -82,7 +99,7 @@ export function supabaseBoundedFetch(input: RequestInfo | URL, init?: RequestIni
   }
 
   const timeoutId = setTimeout(() => controller.abort(), REST_GET_TIMEOUT_MS);
-  const userSignal = init?.signal;
+  const userSignal = nextInit?.signal;
   if (userSignal) {
     if (userSignal.aborted) {
       controller.abort();
@@ -91,7 +108,7 @@ export function supabaseBoundedFetch(input: RequestInfo | URL, init?: RequestIni
     }
   }
 
-  return fetch(input, { ...init, signal: controller.signal })
+  return fetch(input, { ...nextInit, signal: controller.signal })
     .catch((err: Error) => {
       if (!isAbortError(err)) {
         console.warn('[Supabase] Network error:', err.message);

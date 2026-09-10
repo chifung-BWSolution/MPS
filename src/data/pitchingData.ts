@@ -227,6 +227,11 @@ export function formatProjectTypes(types: PitchingProjectType[]): string {
     .join('、');
 }
 
+/** Website/system picker is only relevant for BWT-網頁 or BWT-系統. */
+export function projectTypesNeedWebsiteLink(types: readonly PitchingProjectType[]): boolean {
+  return types.includes('bwt_web') || types.includes('bwt_system');
+}
+
 /** Filter records by selected project type id (or all). */
 export function matchesProjectTypeFilter(
   types: PitchingProjectType[],
@@ -239,12 +244,43 @@ export function matchesProjectTypeFilter(
 /** Pitching estimated income / expense amounts are always stored and shown as HKD. */
 export const PITCHING_CURRENCY = 'HKD';
 
-export function generatePitchingId(existingCount: number): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const seq = String(existingCount + 1).padStart(3, '0');
-  return `PTC-${y}${m}-${seq}`;
+export type PitchingCodePrefix = 'BWT-S' | 'BWL-E' | 'BWG-G' | 'BWT-W';
+
+/** Assigned pitching_code shape, e.g. BWT-S26-001. */
+export const PITCHING_CODE_PATTERN = /^(BWT-S|BWT-W|BWL-E|BWG-G)\d{2}-\d{3}$/;
+
+/**
+ * Prefix from stored project types (source of truth, ignore title):
+ * bwt_system → BWT-S, else bwl_event → BWL-E, else bwg_gift → BWG-G, else BWT-W.
+ */
+export function pitchingCodePrefix(
+  types: readonly string[] | null | undefined,
+): PitchingCodePrefix {
+  const list = types ?? [];
+  if (list.includes('bwt_system')) return 'BWT-S';
+  if (list.includes('bwl_event')) return 'BWL-E';
+  if (list.includes('bwg_gift')) return 'BWG-G';
+  return 'BWT-W';
+}
+
+/**
+ * Two-digit financial year from inquiry date.
+ * 1/4/2026–31/3/2027 = 26; 1/4/2027–31/3/2028 = 27.
+ */
+export function pitchingCodeFinancialYear(inquiryDate: string): number | null {
+  const iso = optionalIsoDate(inquiryDate);
+  if (!iso) return null;
+  const [year, month] = iso.split('-').map(Number);
+  if (!year || !month) return null;
+  return month >= 4 ? year % 100 : (year - 1) % 100;
+}
+
+export function formatPitchingCode(
+  prefix: PitchingCodePrefix,
+  fy: number,
+  seq: number,
+): string {
+  return `${prefix}${String(fy).padStart(2, '0')}-${String(seq).padStart(3, '0')}`;
 }
 
 /** Client options for pitching forms (shared with CRM sample data). */

@@ -29,8 +29,14 @@ import {
   defaultBulkDateRange,
   distributeDueDates,
   findInstallmentCollision,
+  billedAmountFromPercent,
+  billedInputFromPercent,
   formatMoneyInput,
+  formatPercentInput,
   inferBulkDateMode,
+  parsePercent,
+  percentFromBilledAmount,
+  percentInputFromBilled,
   planBulkInstallmentNumbers,
   spreadDueDates,
   splitBilledAmounts,
@@ -121,6 +127,18 @@ assert.equal(inferBulkDateMode(['2026-01-01', '2026-01-10', '2026-03-03']), null
 assert.deepEqual(splitBilledAmounts(10000, 2), [5000, 5000]);
 assert.deepEqual(splitBilledAmounts(10000, 3), [3333.33, 3333.33, 3333.34]);
 assert.equal(formatMoneyInput(3333.34), '3333.34');
+assert.equal(parsePercent('33.33'), 33.33);
+assert.equal(parsePercent(-1), null);
+assert.equal(billedAmountFromPercent(10000, 50), 5000);
+assert.equal(billedAmountFromPercent(10000, 33.33), 3333);
+assert.equal(percentFromBilledAmount(10000, 3333.33), 33.33);
+assert.equal(percentFromBilledAmount(0, 100), null);
+assert.equal(formatPercentInput(33.3), '33.30');
+assert.equal(billedInputFromPercent('10000', '50'), '5000.00');
+assert.equal(billedInputFromPercent('10000', ''), '');
+assert.equal(billedInputFromPercent('', '50'), null);
+assert.equal(percentInputFromBilled('10000', '5000'), '50.00');
+assert.equal(percentInputFromBilled('', '5000'), '');
 assert.deepEqual(
   planBulkInstallmentNumbers({
     projectRows: [{ type: '主要收入', installmentNumber: 2 }],
@@ -432,6 +450,10 @@ assert.match(bulk, /aria-label="總金額"/);
 assert.match(bulk, /aria-label="期數數量"/);
 assert.match(bulk, /到期日 Due date \*/);
 assert.match(bulk, /應收金額 Billed \*/);
+assert.match(bulk, /比例 %/);
+assert.match(bulk, /billedInputFromPercent/);
+assert.match(bulk, /percentInputFromBilled/);
+assert.match(bulk, /aria-label=\{`第 \$\{index \+ 1\} 期比例`\}/);
 assert.doesNotMatch(bulk, /總金額 Total \*/);
 assert.doesNotMatch(bulk, /日期範圍 Date range \*/);
 assert.doesNotMatch(bulk, /第 \$\{index \+ 1\} 期期數/);

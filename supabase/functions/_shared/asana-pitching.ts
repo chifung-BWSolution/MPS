@@ -403,12 +403,24 @@ export function inferProjectTypes(
   return [...types];
 }
 
-export function taskInquiryDate(task: AsanaTask, project?: SyncProjectConfig): string {
-  if (project?.sync_date_mode === "active_deal" && task.due_on) {
-    return task.due_on;
-  }
-  if (task.created_at) return task.created_at.slice(0, 10);
-  return new Date().toISOString().slice(0, 10);
+/** Hong Kong has no DST; inquiry dates use this offset from UTC. */
+export const HKT_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+/** Calendar date in Asia/Hong_Kong (YYYY-MM-DD) from an ISO timestamp. */
+export function timestampToHktDate(iso: string | null | undefined): string | null {
+  if (!iso?.trim()) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Date(date.getTime() + HKT_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+export function todayHktDate(): string {
+  return timestampToHktDate(new Date().toISOString()) ?? new Date().toISOString().slice(0, 10);
+}
+
+/** Inquiry date is the Asana task created_at in HKT, never due_on. */
+export function taskInquiryDate(task: AsanaTask, _project?: SyncProjectConfig): string {
+  return timestampToHktDate(task.created_at) ?? todayHktDate();
 }
 
 export function taskCreatedYear(task: AsanaTask): number | null {
@@ -571,7 +583,7 @@ export function asanaTaskToRecord(
     asana_project_gid: row.asana_project_gid,
     asana_project_name: row.asana_project_name,
     asana_section_name: row.asana_section_name,
-    pitching_code: `ASANA-${task.gid.slice(-8)}`,
+    pitching_code: null,
     client_name: row.client_name,
     display_name: row.display_name,
     inquiry_date: row.inquiry_date,

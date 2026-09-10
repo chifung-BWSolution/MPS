@@ -272,6 +272,49 @@ export function formatMoneyInput(amount: number): string {
   return (Math.round(amount * 100) / 100).toFixed(2);
 }
 
+export function parsePercent(raw: string | number | null | undefined): number | null {
+  if (typeof raw === 'number') {
+    return Number.isFinite(raw) && raw >= 0 ? raw : null;
+  }
+  const trimmed = raw?.trim();
+  if (!trimmed) return null;
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || value < 0) return null;
+  return value;
+}
+
+export function formatPercentInput(percent: number): string {
+  return (Math.round(percent * 100) / 100).toFixed(2);
+}
+
+export function billedAmountFromPercent(total: number, percent: number): number {
+  return Math.round(total * percent) / 100;
+}
+
+export function percentFromBilledAmount(total: number, billed: number): number | null {
+  if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(billed) || billed < 0) return null;
+  return Math.round((billed / total) * 10000) / 100;
+}
+
+export function billedInputFromPercent(totalAmount: string, percentRaw: string): string | null {
+  const total = parseMoney(totalAmount);
+  if (total == null || total <= 0 || !totalAmount.trim()) return null;
+  if (!percentRaw.trim()) return '';
+  const percent = parsePercent(percentRaw);
+  if (percent == null) return null;
+  return formatMoneyInput(billedAmountFromPercent(total, percent));
+}
+
+export function percentInputFromBilled(totalAmount: string, billedRaw: string): string {
+  const total = parseMoney(totalAmount);
+  if (total == null || total <= 0 || !totalAmount.trim()) return '';
+  if (!billedRaw.trim()) return '';
+  const billed = parseMoney(billedRaw);
+  if (billed == null) return '';
+  const percent = percentFromBilledAmount(total, billed);
+  return percent == null ? '' : formatPercentInput(percent);
+}
+
 export function planBulkInstallmentNumbers(input: {
   projectRows: Array<{ id?: string; type?: string; installmentNumber?: number }>;
   type: string;

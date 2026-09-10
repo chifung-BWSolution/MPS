@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { resolveRelatedProjectHubIds } from '@/lib/resolveProjectHub';
 import {
   QUOTATION_BV_TABLE,
   parseBvRatio,
@@ -13,7 +14,7 @@ type StaffEmbed = {
 
 type DbRow = {
   id: string;
-  quotation_client_project_id: string;
+  project_id: string;
   staff_id: string;
   bv_ratio: number | string;
   created_at: string;
@@ -24,7 +25,7 @@ type DbRow = {
 function mapRow(row: DbRow): QuotationBvRecord {
   return {
     id: row.id,
-    quotationClientProjectId: row.quotation_client_project_id,
+    projectId: row.project_id,
     staffId: row.staff_id,
     staffName: row.staff?.display_name?.trim() || '—',
     bvRatio: Number(row.bv_ratio),
@@ -33,22 +34,34 @@ function mapRow(row: DbRow): QuotationBvRecord {
   };
 }
 
-export function useQuotationBv(projectId: string | undefined) {
+export function useQuotationBv(relatedType: string | undefined, relatedId: string | undefined) {
   const [rows, setRows] = useState<QuotationBvRecord[]>([]);
-  const [loading, setLoading] = useState(Boolean(projectId));
+  const [hubProjectId, setHubProjectId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(Boolean(relatedType && relatedId));
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!projectId) {
+    if (!relatedType || !relatedId?.trim()) {
       setRows([]);
+      setHubProjectId(null);
       setLoading(false);
       return;
     }
     setLoading(true);
+    const resolved = await resolveRelatedProjectHubIds(relatedType, relatedId);
+    if (resolved.error || !resolved.data) {
+      setError(resolved.error?.message ?? '找不到對應的 projects 紀錄');
+      setRows([]);
+      setHubProjectId(null);
+      setLoading(false);
+      return;
+    }
+
+    setHubProjectId(resolved.data.writeProjectId);
     const { data, error: err } = await supabase
       .from(QUOTATION_BV_TABLE)
       .select('*, staff:staffs!staff_id ( display_name )')
-      .eq('quotation_client_project_id', projectId)
+      .in('project_id', resolved.data.projectIds)
       .order('created_at', { ascending: true });
 
     if (err) {
@@ -59,7 +72,7 @@ export function useQuotationBv(projectId: string | undefined) {
       setRows(((data as DbRow[] | null) ?? []).map(mapRow));
     }
     setLoading(false);
-  }, [projectId]);
+  }, [relatedType, relatedId]);
 
   useEffect(() => {
     void refresh();
@@ -67,7 +80,7 @@ export function useQuotationBv(projectId: string | undefined) {
 
   const addRow = useCallback(
     async (input: QuotationBvInput) => {
-      if (!projectId) return { data: null, error: { message: '缺少項目' } };
+      if (!hubProjectId) return { data: null, error: { message: '缺少項目' } };
       const staffId = input.staffId.trim();
       const bvRatio = parseBvRatio(input.bvRatio);
       if (!staffId) return { data: null, error: { message: '請選擇協作者' } };
@@ -77,7 +90,7 @@ export function useQuotationBv(projectId: string | undefined) {
       const { data, error: err } = await supabase
         .from(QUOTATION_BV_TABLE)
         .insert({
-          quotation_client_project_id: projectId,
+          project_id: hubProjectId,
           staff_id: staffId,
           bv_ratio: bvRatio,
           created_at: now,
@@ -93,7 +106,7 @@ export function useQuotationBv(projectId: string | undefined) {
       }
       return { data: null, error: err };
     },
-    [projectId],
+    [hubProjectId],
   );
 
   const updateRow = useCallback(async (id: string, input: Partial<QuotationBvInput>) => {
@@ -129,5 +142,5 @@ export function useQuotationBv(projectId: string | undefined) {
     return { error: err };
   }, []);
 
-  return { rows, loading, error, refresh, addRow, updateRow, deleteRow };
+  return { rows, hubProjectId, loading, error, refresh, addRow, updateRow, deleteRow };
 }

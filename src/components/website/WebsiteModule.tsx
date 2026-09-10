@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
-import { Globe, Plus, Search, ExternalLink, Video, TrendingUp, Puzzle, Link2, Calendar, X, Check, LayoutGrid, List, ArrowLeft, Megaphone, Star, ChevronDown, Pencil, Monitor, Server, MapPin, RefreshCw, BarChart3 } from 'lucide-react';
+import { Banknote, Globe, Plus, Search, ExternalLink, Video, TrendingUp, Link2, Calendar, X, Check, LayoutGrid, List, ArrowLeft, Megaphone, Star, ChevronDown, Pencil, Monitor, Server, MapPin, RefreshCw, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WebsiteProfileFull, WebsiteLevel, ProfileType, SystemType } from '@/types/app';
 import {
@@ -15,6 +15,9 @@ import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useBrands } from '@/hooks/useBrands';
 import { nextClientProjectIdForWebsite, syncWebsiteClientProjectLink } from '@/lib/websiteClientProjectLink';
+import { PitchingExpenseTab } from '@/components/quotation/PitchingExpenseTab';
+import { QuotationBvCard } from '@/components/quotation/QuotationBvCard';
+import { resolveProjectHubId } from '@/lib/resolveProjectHub';
 import { projects as allProjectsData } from '@/data/mockData';
 import { ProjectCategoryBadge, getProjectCategory, type ProjectCategoryType } from '@/components/ui/project-category-badge';
 import { BrandFieldBadge, CompanyFieldBadge, EmptyDash, MutedFieldBadge, StatusFieldBadge, displayText } from '@/components/ui/nullable-badge';
@@ -44,7 +47,6 @@ import {
   WebsiteVideosTab,
   WebsiteAdsTab,
   WebsiteSeoTab,
-  WebsitePluginsTab,
   WebsiteBacklinkTab,
   WebsiteGoogleBusinessTab,
   WebsiteCalendarTab,
@@ -224,6 +226,55 @@ function WebsiteTableRow({ site, onClick }: { site: WebsiteProfileFull; onClick:
   );
 }
 
+function WebsiteToolExpenseTab({ websiteId }: { websiteId: string }) {
+  return <PitchingExpenseTab relatedType="webandsystem" relatedId={websiteId} />;
+}
+
+function getEditFormData(site: WebsiteProfileFull): WebsiteFormData {
+  return {
+    websiteName: site.websiteName,
+    domainUrl: site.domainUrl || '',
+    companyId: site.companyId,
+    brandId: site.brandId,
+    brand: site.brand || '',
+    platform: site.platform,
+    hostingProvider: site.hostingProvider || '',
+    level: site.level,
+    status: site.status,
+    notes: site.notes || '',
+    profileType: site.profileType || 'website',
+    projectCategory: site.projectCategory === 'client' ? 'client' : 'internal',
+    systemType: site.systemType,
+  };
+}
+
+function websiteFormToProfileUpdates(
+  data: WebsiteFormData,
+  companies: { uuid?: string; id: string; companyCode?: string }[],
+  brands: { id: string; brandCode: string; companyId?: string }[],
+  fallback: Pick<WebsiteProfileFull, 'company' | 'brand'>,
+): Partial<WebsiteProfileFull> {
+  const company = companies.find(c => c.uuid === data.companyId || c.id === data.companyId);
+  const brandRow = brands.find(b => b.brandCode === data.brand && (b.companyId === (company?.uuid || company?.id) || !data.companyId))
+    || brands.find(b => b.brandCode === data.brand);
+  return {
+    websiteName: data.websiteName,
+    domainUrl: data.domainUrl,
+    companyId: company?.uuid || data.companyId,
+    brandId: brandRow?.id || data.brandId || '',
+    platform: data.platform as WebsiteProfileFull['platform'],
+    hostingProvider: data.hostingProvider,
+    company: company?.companyCode ?? fallback.company ?? '',
+    brand: brandRow?.brandCode || data.brand || fallback.brand || '',
+    level: data.level,
+    status: data.status,
+    notes: data.notes || undefined,
+    profileType: data.profileType,
+    projectCategory: data.projectCategory,
+    systemType: data.systemType,
+  };
+}
+
 // ===== Website Detail =====
 function WebsiteDetail({
   site,
@@ -237,15 +288,23 @@ function WebsiteDetail({
   const [activeTab, setActiveTab] = useState('overview');
   const [currentLevel, setCurrentLevel] = useState<WebsiteLevel>(site.level);
   const [showLevelDropdown, setShowLevelDropdown] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [staffHours, setStaffHours] = useState<{ name: string; hours: number }[]>([]);
+  const { updateProfile } = useWebsiteProfiles();
+  const { records: clientProjects, updateRecord: updateClientProject } = useQuotationClientProjects();
+  const { companies } = useCompanies();
+  const { brands } = useBrands();
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const relatedIds = new Set<string>([site.id]);
+      const hub = await resolveProjectHubId('webandsystem', site.id);
+      if (hub.data) relatedIds.add(hub.data);
       const { data: entries } = await supabase
         .from('day_report_entries')
         .select('staff_id, hours')
-        .eq('related_id', site.id);
+        .in('related_id', [...relatedIds]);
       if (cancelled || !entries || entries.length === 0) return;
 
       // Aggregate hours per staff_id
@@ -283,7 +342,7 @@ function WebsiteDetail({
     { id: 'ads', label: '付費廣告', icon: Megaphone },
     { id: 'seo', label: 'SEO 關鍵字', icon: TrendingUp },
     { id: 'traffic', label: '網站流量', icon: BarChart3 },
-    { id: 'plugins', label: '插件/工具', icon: Puzzle },
+    { id: 'expense', label: '工具支出', icon: Banknote },
     { id: 'backlink', label: '反向連結', icon: Link2 },
     { id: 'google-business', label: 'Google Business', icon: MapPin },
     { id: 'calendar', label: '內容日曆', icon: Calendar },
@@ -291,12 +350,41 @@ function WebsiteDetail({
 
   const budgetPercent = site.budgetTotal ? Math.round((site.budgetUsed || 0) / site.budgetTotal * 100) : 0;
 
+  const handleSaveEdit = async (data: WebsiteFormData) => {
+    const updates = websiteFormToProfileUpdates(data, companies, brands, site);
+    const err = await updateProfile(site.id, updates);
+    if (err) {
+      toast.error('儲存失敗', { description: err.message });
+      return;
+    }
+    const linkErr = await syncWebsiteClientProjectLink({
+      websiteId: site.id,
+      nextProjectId: nextClientProjectIdForWebsite(data.projectCategory, data.quotationClientProjectId),
+      records: clientProjects,
+      updateRecord: updateClientProject,
+    });
+    if (linkErr.error) {
+      toast.error('網站已更新，但客戶項目連結失敗', { description: linkErr.error.message });
+    }
+    onSitePatch?.(updates);
+    if (updates.level != null) setCurrentLevel(updates.level);
+    setShowEditModal(false);
+  };
+
   return (
     <div className="space-y-6">
-      {/* Back button */}
-      <button onClick={onBack} className="flex items-center gap-1 text-[13px] text-teal-600 font-medium hover:underline">
-        <ArrowLeft size={14} />返回{site.profileType === 'system' ? '系統' : '網站'}列表
-      </button>
+      <div className="flex items-center justify-between gap-3">
+        <button onClick={onBack} className="flex items-center gap-1 text-[13px] text-teal-600 font-medium hover:underline">
+          <ArrowLeft size={14} />返回{site.profileType === 'system' ? '系統' : '網站'}列表
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowEditModal(true)}
+          className="flex items-center gap-1.5 px-4 py-2 border border-border rounded-md text-[13px] font-medium text-foreground bg-white hover:bg-muted/50 transition-colors active:scale-[0.97]"
+        >
+          <Pencil size={14} /> 編輯
+        </button>
+      </div>
 
       {/* Site Header */}
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] p-5">
@@ -416,19 +504,7 @@ function WebsiteDetail({
                 </div>
               </div>
               <div className="space-y-3">
-                <h5 className="text-[14px] font-bold">團隊</h5>
-                {site.assignedStaff && site.assignedStaff.length > 0 ? (
-                  <div className="space-y-2">
-                    {site.assignedStaff.map((staff, i) => (
-                      <div key={i} className="flex items-center justify-between text-[13px]">
-                        <span className="font-medium">{staff.name}</span>
-                        <MutedFieldBadge value={staff.role} className="text-muted-foreground" />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-[13px] text-muted-foreground">尚未分配團隊</p>
-                )}
+                <QuotationBvCard relatedType="webandsystem" relatedId={site.id} variant="embedded" />
 
                 {/* Budget */}
                 {site.budgetTotal && (
@@ -482,11 +558,21 @@ function WebsiteDetail({
         {activeTab === 'ads' && <WebsiteAdsTab site={site} />}
         {activeTab === 'seo' && <WebsiteSeoTab site={site} />}
         {activeTab === 'traffic' && <WebsiteTrafficTab site={site} />}
-        {activeTab === 'plugins' && <WebsitePluginsTab site={site} />}
+        {activeTab === 'expense' && <WebsiteToolExpenseTab websiteId={site.id} />}
         {activeTab === 'backlink' && <WebsiteBacklinkTab site={site} />}
         {activeTab === 'google-business' && <WebsiteGoogleBusinessTab site={site} />}
         {activeTab === 'calendar' && <WebsiteCalendarTab site={site} />}
       </div>
+
+      {showEditModal && (
+        <WebsiteFormModal
+          mode="edit"
+          websiteId={site.id}
+          initialData={getEditFormData(site)}
+          onClose={() => setShowEditModal(false)}
+          onSave={handleSaveEdit}
+        />
+      )}
     </div>
   );
 }
@@ -827,25 +913,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
 
   const handleEditWebsite = async (data: WebsiteFormData) => {
     if (!editingSite) return;
-    const company = companies.find(c => c.uuid === data.companyId || c.id === data.companyId);
-    const brandRow = brands.find(b => b.brandCode === data.brand && (b.companyId === (company?.uuid || company?.id) || !data.companyId))
-      || brands.find(b => b.brandCode === data.brand);
-    const updates = {
-      websiteName: data.websiteName,
-      domainUrl: data.domainUrl,
-      companyId: company?.uuid || data.companyId,
-      brandId: brandRow?.id || data.brandId || '',
-      platform: data.platform as WebsiteProfileFull['platform'],
-      hostingProvider: data.hostingProvider,
-      company: company?.companyCode ?? editingSite.company ?? '',
-      brand: brandRow?.brandCode || data.brand || editingSite.brand || '',
-      level: data.level,
-      status: data.status,
-      notes: data.notes || undefined,
-      profileType: data.profileType,
-      projectCategory: data.projectCategory,
-      systemType: data.systemType,
-    };
+    const updates = websiteFormToProfileUpdates(data, companies, brands, editingSite);
     const err = await updateProfile(editingSite.id, updates);
     if (err) {
       toast.error('儲存失敗', { description: err.message });
@@ -862,22 +930,6 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
     }
     setEditingSite(null);
   };
-
-  const getEditFormData = (site: WebsiteProfileFull): WebsiteFormData => ({
-    websiteName: site.websiteName,
-    domainUrl: site.domainUrl || '',
-    companyId: site.companyId,
-    brandId: site.brandId,
-    brand: site.brand || '',
-    platform: site.platform,
-    hostingProvider: site.hostingProvider || '',
-    level: site.level,
-    status: site.status,
-    notes: site.notes || '',
-    profileType: site.profileType || 'website',
-    projectCategory: site.projectCategory === 'client' ? 'client' : 'internal',
-    systemType: site.systemType,
-  });
 
   const filtered = websiteProfiles.filter(ws => {
     if (typeFilter !== 'all') {

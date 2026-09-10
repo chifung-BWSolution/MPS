@@ -14,7 +14,7 @@ import {
 } from '@/lib/quotationListSort';
 
 const headerClass =
-  'text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3';
+  'text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 whitespace-nowrap';
 
 export type QuotationListMoneyColumns = 'estimated' | 'actual';
 

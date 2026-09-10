@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Banknote, ExternalLink, Paperclip, Pause, Pencil, Plus, Repeat, Trash2 } from 'lucide-react';
+import { Banknote, ExternalLink, FileSpreadsheet, Paperclip, Pause, Pencil, Plus, Repeat, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useCreditCards } from '@/hooks/useCreditCards';
-import { useQuotationExpenses } from '@/hooks/useQuotationExpenses';
+import { useQuotationExpenses, type QuotationExpenseWriteInput } from '@/hooks/useQuotationExpenses';
 import { useSupplierTypes } from '@/hooks/useSupplierTypes';
 import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
 import { formatCreditCardOptionLabel } from '@/lib/creditCards';
@@ -39,12 +39,14 @@ import {
   summarizeExpenses,
   validateExpenseInput,
   type ExpensePaymentStatus,
+  type ExpenseSourceRelatedType,
   type QuotationExpense,
   type ExpenseTypeGroup,
   type RecurringExpenseFrequency,
   type RecurringExpenseSummary,
 } from '@/lib/quotationExpenses';
 import { PitchingBulkExpenseDialog } from '@/components/quotation/PitchingBulkExpenseDialog';
+import { ShopifyBillingImportDialog } from '@/components/quotation/ShopifyBillingImportDialog';
 import {
   PitchingRecurringExpenseDialog,
   type RecurringExpenseDialogInput,
@@ -171,11 +173,13 @@ function PillOptions<T extends string>({
 }
 
 export function PitchingExpenseTab({
-  projectId,
+  relatedType,
+  relatedId,
   signedDate,
   handoverDate,
 }: {
-  projectId: string;
+  relatedType: ExpenseSourceRelatedType;
+  relatedId: string;
   signedDate?: string;
   handoverDate?: string;
 }) {
@@ -189,7 +193,7 @@ export function PitchingExpenseTab({
     saveBulkExpenses,
     setRecurringExpenseStatus,
     saveGroupRecurring,
-  } = useQuotationExpenses(projectId);
+  } = useQuotationExpenses(relatedType, relatedId);
   const { cards } = useCreditCards();
   const { types: supplierTypes } = useSupplierTypes();
   const { suppliers } = useWebPageSuppliers();
@@ -203,6 +207,8 @@ export function PitchingExpenseTab({
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkEditing, setBulkEditing] = useState<QuotationExpense[] | null>(null);
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [shopifyImportOpen, setShopifyImportOpen] = useState(false);
+  const [shopifyImportSaving, setShopifyImportSaving] = useState(false);
   const [recurringGroup, setRecurringGroup] = useState<ExpenseTypeGroup | null>(null);
   const [recurringSetting, setRecurringSetting] = useState<RecurringExpenseSummary | undefined>();
   const [recurringSaving, setRecurringSaving] = useState(false);
@@ -339,6 +345,20 @@ export function PitchingExpenseTab({
     closeBulk();
   };
 
+  const handleShopifyImport = async (
+    items: Array<{ input: QuotationExpenseWriteInput }>,
+  ) => {
+    setShopifyImportSaving(true);
+    const result = await saveBulkExpenses(items, []);
+    setShopifyImportSaving(false);
+    if (result.error) {
+      toast.error(`匯入失敗：${result.error.message}`);
+      throw new Error(result.error.message);
+    }
+    toast.success(`已匯入 ${result.data?.length ?? items.length} 筆 Shopify 支出`);
+    setShopifyImportOpen(false);
+  };
+
   const handleSave = async () => {
     const validationError = validateExpenseInput(draft);
     if (validationError) {
@@ -443,6 +463,13 @@ export function PitchingExpenseTab({
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={() => setShopifyImportOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 border border-border text-foreground bg-white rounded-md text-[13px] font-medium hover:bg-muted/40 transition-colors active:scale-[0.97]"
+          >
+            <FileSpreadsheet size={14} /> 匯入 Shopify 帳單
+          </button>
+          <button
+            type="button"
             onClick={openBulkCreate}
             className="flex items-center gap-1.5 px-3 py-2 border border-teal-200 text-teal-700 bg-teal-50 rounded-md text-[13px] font-medium hover:bg-teal-100 transition-colors active:scale-[0.97]"
           >
@@ -472,7 +499,14 @@ export function PitchingExpenseTab({
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-8 text-center">
           <Banknote size={24} className="mx-auto text-muted-foreground/50 mb-2" />
           <p className="text-[13px] text-muted-foreground">尚未新增支出</p>
-          <p className="text-[12px] text-muted-foreground/70 mt-1">可記錄分期應付、實付、未付與壞帳</p>
+          <p className="text-[12px] text-muted-foreground/70 mt-1">可記錄分期應付、實付、未付與壞帳，或匯入 Shopify 帳單 CSV</p>
+          <button
+            type="button"
+            onClick={() => setShopifyImportOpen(true)}
+            className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 text-[12px] font-medium text-teal-700 hover:bg-teal-50 rounded-md"
+          >
+            <FileSpreadsheet size={12} /> 匯入 Shopify 帳單
+          </button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -1127,6 +1161,17 @@ export function PitchingExpenseTab({
         suppliers={suppliers}
         onClose={closeBulk}
         onSave={handleBulkSave}
+      />
+
+      <ShopifyBillingImportDialog
+        open={shopifyImportOpen}
+        existingRows={rows}
+        supplierTypes={supplierTypes}
+        suppliers={suppliers}
+        cards={cards}
+        saving={shopifyImportSaving}
+        onClose={() => setShopifyImportOpen(false)}
+        onSave={handleShopifyImport}
       />
 
       <PitchingRecurringExpenseDialog

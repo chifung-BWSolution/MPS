@@ -6,6 +6,11 @@ import {
   EXPENSES_TABLE,
   EXPENSE_PAYMENT_RECORDS_BUCKET,
   EXPENSE_RELATED_TYPE_PROJECT,
+  EXPENSE_SOURCE_RELATED_TYPES,
+  PROJECTS_TABLE,
+  QUOTATION_CLIENT_PROJECT_TABLE,
+  expenseHubSource,
+  isExpenseSourceRelatedType,
   EXPENSE_PAYMENT_METHOD_CREDIT_CARD,
   EXPENSE_PAYMENT_METHODS,
   EXPENSE_PAYMENT_STATUSES,
@@ -26,6 +31,7 @@ import {
   BULK_DATE_MODE_LABELS,
   DEFAULT_BULK_DATE_MODE,
   DEFAULT_BULK_EXPENSE_INSTALLMENT_COUNT,
+  billedInputFromPercent,
   billedSumMatchesTotal,
   distributeDueDates,
   computeOutstanding,
@@ -44,6 +50,7 @@ import {
   optionalExpensePaymentStatus,
   parseInstallmentNumber,
   parseMoney,
+  percentInputFromBilled,
   planBulkExpenseInstallmentNumbers,
   splitBilledAmounts,
   spreadDueDates,
@@ -56,8 +63,26 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
 
 assert.equal(EXPENSES_TABLE, 'expenses');
+assert.equal(PROJECTS_TABLE, 'projects');
 assert.equal(EXPENSE_PAYMENT_RECORDS_BUCKET, 'expense-payment-records');
 assert.equal(EXPENSE_RELATED_TYPE_PROJECT, 'project');
+assert.deepEqual([...EXPENSE_SOURCE_RELATED_TYPES], ['quotation_client', 'webandsystem']);
+assert.equal(isExpenseSourceRelatedType('quotation_client'), true);
+assert.equal(isExpenseSourceRelatedType('webandsystem'), true);
+assert.equal(isExpenseSourceRelatedType('vchannel'), false);
+assert.equal(QUOTATION_CLIENT_PROJECT_TABLE, 'quotation_client_project');
+assert.deepEqual(
+  expenseHubSource('webandsystem', 'ws_1788941630827', 'asana_1210914944432255'),
+  { relatedType: 'quotation_client', relatedId: 'asana_1210914944432255' },
+);
+assert.deepEqual(
+  expenseHubSource('webandsystem', 'ws_1788941630827', ''),
+  { relatedType: 'webandsystem', relatedId: 'ws_1788941630827' },
+);
+assert.deepEqual(
+  expenseHubSource('quotation_client', 'asana_1210914944432255'),
+  { relatedType: 'quotation_client', relatedId: 'asana_1210914944432255' },
+);
 assert.equal(expenseGroupKey('type-1', 'sup-1'), 'type-1::sup-1');
 assert.equal(
   expensePaymentRecordStoragePath('proj-1', '收據 (v2).pdf', 'abc'),
@@ -103,6 +128,8 @@ assert.deepEqual(
 );
 assert.deepEqual(splitBilledAmounts(10000, 3), [3333.33, 3333.33, 3333.34]);
 assert.equal(formatMoneyInput(3333.34), '3333.34');
+assert.equal(billedInputFromPercent('10000', '50'), '5000.00');
+assert.equal(percentInputFromBilled('10000', '5000'), '50.00');
 assert.deepEqual(
   planBulkExpenseInstallmentNumbers({
     projectRows: [{ groupKey: 't1::s1', installmentNumber: 2 }],
@@ -532,8 +559,10 @@ assert.match(hook, /related_type/);
 assert.match(hook, /related_id/);
 assert.match(hook, /supplier_types_id/);
 assert.match(hook, /supplier_id/);
-assert.match(hook, /quotation_client/);
+assert.match(hook, /resolveRelatedProjectHubIds/);
+assert.match(hook, /\.in\('related_id', resolved\.data\.projectIds\)/);
 assert.match(hook, /resolveExpenseProjectId/);
+assert.match(hook, /writeProjectId/);
 assert.match(hook, /uploadExpensePaymentRecordFile/);
 assert.match(hook, /const addExpense/);
 assert.match(hook, /const updateExpense/);
@@ -565,6 +594,9 @@ assert.doesNotMatch(hook, /!editing && isRecurringExpenseFrequency/);
 
 const tab = read('src/components/quotation/PitchingExpenseTab.tsx');
 assert.match(tab, /useQuotationExpenses/);
+assert.match(tab, /relatedType/);
+assert.match(tab, /relatedId/);
+assert.match(tab, /useQuotationExpenses\(relatedType, relatedId\)/);
 assert.match(tab, /addExpense/);
 assert.match(tab, /updateExpense/);
 assert.match(tab, /deleteExpense/);
@@ -581,8 +613,10 @@ assert.match(tab, /aria-label="付款紀錄檔案"/);
 assert.match(tab, /paymentRecordAction/);
 assert.match(tab, /新增單項支出/);
 assert.match(tab, /新增整項支出/);
+assert.match(tab, /匯入 Shopify 帳單/);
 assert.match(tab, /編輯整項/);
 assert.match(tab, /PitchingBulkExpenseDialog/);
+assert.match(tab, /ShopifyBillingImportDialog/);
 assert.match(tab, /signedDate/);
 assert.match(tab, /handoverDate/);
 assert.match(tab, /saveBulkExpenses/);
@@ -675,7 +709,23 @@ const pitching = read('src/components/quotation/PitchingModule.tsx');
 assert.match(pitching, /PitchingExpenseTab/);
 assert.match(pitching, /id: 'expense', label: '支出'/);
 assert.match(pitching, /<PitchingExpenseTab/);
+assert.match(pitching, /relatedType="quotation_client"/);
+assert.match(pitching, /relatedId=\{record\.id\}/);
 assert.match(pitching, /activeTab === 'expense'/);
+
+const websiteModule = read('src/components/website/WebsiteModule.tsx');
+assert.match(websiteModule, /id: 'expense', label: '工具支出'/);
+assert.match(websiteModule, /PitchingExpenseTab/);
+assert.match(websiteModule, /relatedType="webandsystem"/);
+assert.match(websiteModule, /relatedId=\{websiteId\}/);
+assert.match(websiteModule, /activeTab === 'expense'/);
+assert.doesNotMatch(websiteModule, /插件\/工具/);
+assert.doesNotMatch(websiteModule, /WebsitePluginsTab/);
+assert.doesNotMatch(websiteModule, /尚未連結客戶項目/);
+
+const websiteTabs = read('src/components/website/WebsiteDetailTabs.tsx');
+assert.doesNotMatch(websiteTabs, /WebsitePluginsTab/);
+assert.doesNotMatch(websiteTabs, /插件\/工具/);
 
 const bulk = read('src/components/quotation/PitchingBulkExpenseDialog.tsx');
 assert.match(bulk, /新增整項支出/);
@@ -702,6 +752,10 @@ assert.match(bulk, /aria-label="總金額"/);
 assert.match(bulk, /aria-label="期數數量"/);
 assert.match(bulk, /到期日 Due date \*/);
 assert.match(bulk, /應付金額 Billed \*/);
+assert.match(bulk, /比例 %/);
+assert.match(bulk, /billedInputFromPercent/);
+assert.match(bulk, /percentInputFromBilled/);
+assert.match(bulk, /aria-label=\{`第 \$\{index \+ 1\} 期比例`\}/);
 assert.match(bulk, /供應商 Supplier \*/);
 assert.match(bulk, /aria-label="支出類型"/);
 assert.doesNotMatch(bulk, /總金額 Total \*/);

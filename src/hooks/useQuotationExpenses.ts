@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { resolveRelatedProjectHubIds } from '@/lib/resolveProjectHub';
 import {
   CREATE_RECURRING_EXPENSE_RPC,
   EXPENSES_TABLE,
   EXPENSE_PAYMENT_RECORDS_BUCKET,
   EXPENSE_RELATED_TYPE_PROJECT,
   RECURRING_EXPENSES_TABLE,
+  type ExpenseSourceRelatedType,
   expenseCreditCardId,
   expenseGroupKey,
   expensePaymentRecordStoragePath,
@@ -312,18 +314,16 @@ async function removeStorageObject(path: string | undefined) {
   await supabase.storage.from(EXPENSE_PAYMENT_RECORDS_BUCKET).remove([trimmed]);
 }
 
+/** Resolve the write-target projects hub row. Website fetches merge own + linked pitching hubs. */
 export async function resolveExpenseProjectId(
-  quotationClientProjectId: string,
+  relatedType: ExpenseSourceRelatedType,
+  relatedId: string,
 ): Promise<{ data: string | null; error: { message: string } | null }> {
-  const { data, error } = await supabase
-    .from('projects')
-    .select('id')
-    .eq('related_type', 'quotation_client')
-    .eq('related_id', quotationClientProjectId)
-    .maybeSingle();
-  if (error) return { data: null, error: { message: error.message } };
-  if (!data?.id) return { data: null, error: { message: '找不到對應的 projects 紀錄' } };
-  return { data: data.id as string, error: null };
+  const resolved = await resolveRelatedProjectHubIds(relatedType, relatedId);
+  if (resolved.error || !resolved.data?.writeProjectId) {
+    return { data: null, error: resolved.error ?? { message: '找不到對應的 projects 紀錄' } };
+  }
+  return { data: resolved.data.writeProjectId, error: null };
 }
 
 export async function uploadExpensePaymentRecordFile(
@@ -386,21 +386,24 @@ async function attachPaymentRecord(
   };
 }
 
-export function useQuotationExpenses(quotationClientProjectId: string | undefined) {
+export function useQuotationExpenses(
+  relatedType: ExpenseSourceRelatedType | undefined,
+  relatedId: string | undefined,
+) {
   const [rows, setRows] = useState<QuotationExpense[]>([]);
   const [projectId, setProjectId] = useState<string | undefined>();
-  const [loading, setLoading] = useState(Boolean(quotationClientProjectId));
+  const [loading, setLoading] = useState(Boolean(relatedType && relatedId));
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!quotationClientProjectId) {
+    if (!relatedType || !relatedId?.trim()) {
       setRows([]);
       setProjectId(undefined);
       setLoading(false);
       return;
     }
     setLoading(true);
-    const resolved = await resolveExpenseProjectId(quotationClientProjectId);
+    const resolved = await resolveRelatedProjectHubIds(relatedType, relatedId);
     if (resolved.error || !resolved.data) {
       setError(resolved.error?.message ?? '找不到對應的 projects 紀錄');
       setProjectId(undefined);
@@ -408,14 +411,14 @@ export function useQuotationExpenses(quotationClientProjectId: string | undefine
       setLoading(false);
       return;
     }
-    setProjectId(resolved.data);
+    setProjectId(resolved.data.writeProjectId ?? undefined);
 
     const { data, error: err } = await selectExpenseRow((columns) =>
       supabase
         .from(EXPENSES_TABLE)
         .select(columns)
         .eq('related_type', EXPENSE_RELATED_TYPE_PROJECT)
-        .eq('related_id', resolved.data)
+        .in('related_id', resolved.data.projectIds)
         .order('created_at', { ascending: true }),
     );
 
@@ -427,7 +430,7 @@ export function useQuotationExpenses(quotationClientProjectId: string | undefine
       setRows(((data as DbRow[] | null) ?? []).map(mapRow).sort(compareExpenses));
     }
     setLoading(false);
-  }, [quotationClientProjectId]);
+  }, [relatedType, relatedId]);
 
   useEffect(() => {
     void refresh();

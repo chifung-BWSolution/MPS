@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, ChevronRight, Pencil, ArrowLeft } from 'lucide-react';
+import { Search, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
@@ -13,6 +13,8 @@ import {
   pitchingFormToUpdate,
   RemainingDaysCell,
   PitchingStatusBadge,
+  ProjectDisplayNameCell,
+  ProjectListActionCell,
   type PitchingFormValues,
 } from '@/components/quotation/PitchingModule';
 import {
@@ -164,7 +166,7 @@ function ProjectList({
                       />
                     </td>
                     <td className="px-4 py-3 text-[13px] max-w-[180px]">{formatProjectTypes(record.projectTypes)}</td>
-                    <td className="px-4 py-3 text-[14px] font-medium">{record.displayName}</td>
+                    <ProjectDisplayNameCell record={record} />
                     <td className="px-4 py-3 text-[13px]">{formatRelatedClientName(record)}</td>
                     <td className="px-4 py-3 text-[13px]">{formatMainPmName(record)}</td>
                     <QuotationListMoneyCells
@@ -172,27 +174,10 @@ function ProjectList({
                       expense={record.expense}
                       gp={record.gp}
                     />
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <PitchingStatusBadge status={record.status} />
                     </td>
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => onEdit(record)}
-                          className="flex items-center gap-1 text-[12px] text-teal-600 font-medium hover:text-teal-700"
-                        >
-                          <Pencil size={12} /> 編輯
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onView(record)}
-                          className="flex items-center gap-1 text-[12px] text-muted-foreground font-medium hover:text-foreground"
-                        >
-                          詳情 <ChevronRight size={12} />
-                        </button>
-                      </div>
-                    </td>
+                    <ProjectListActionCell record={record} onEdit={onEdit} />
                   </tr>
                 ))}
               {sorted.length === 0 && (

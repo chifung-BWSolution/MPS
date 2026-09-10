@@ -10,6 +10,7 @@ import {
   suggestedClientWebsiteFormDefaults,
   toClientWebsiteSelectOptions,
 } from '../src/lib/clientWebsiteDefaults';
+import { projectTypesNeedWebsiteLink } from '../src/data/pitchingData';
 import type { WebsiteProfileFull } from '../src/types/app';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -106,11 +107,23 @@ const formModalSrc = pitching.slice(
 );
 const detailSrc = pitching.slice(pitching.indexOf('export function PitchingDetail'));
 
+assert.equal(projectTypesNeedWebsiteLink(['bwt_web']), true);
+assert.equal(projectTypesNeedWebsiteLink(['bwt_system']), true);
+assert.equal(projectTypesNeedWebsiteLink(['bwt_web', 'bwg_gift']), true);
+assert.equal(projectTypesNeedWebsiteLink(['bwl_event']), false);
+assert.equal(projectTypesNeedWebsiteLink(['bwg_gift']), false);
+assert.equal(projectTypesNeedWebsiteLink([]), false);
+
 assert.match(formModalSrc, /ClientWebsiteSelectField/);
-assert.match(formModalSrc, /網站 \/ 系統/);
+assert.match(formModalSrc, /projectTypesNeedWebsiteLink\(form\.projectTypes\)/);
+assert.doesNotMatch(formModalSrc, /<h3[\s\S]*網站 \/ 系統/);
 assert.ok(
-  formModalSrc.indexOf('網站 / 系統') < formModalSrc.indexOf('連結 Links'),
-  'form website field must appear before Links',
+  formModalSrc.indexOf('專案類型 Project Type') < formModalSrc.indexOf('ClientWebsiteSelectField'),
+  'form website field must appear under Project Type',
+);
+assert.ok(
+  formModalSrc.indexOf('ClientWebsiteSelectField') < formModalSrc.indexOf('負責 PM *'),
+  'form website field must appear before PM',
 );
 assert.ok(
   formModalSrc.indexOf('連結 Links') < formModalSrc.indexOf('Asana 連結'),

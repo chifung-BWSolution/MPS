@@ -26,7 +26,7 @@ export function CrudModal({ isOpen, onClose, title, children, size = 'md', heade
         : size === 'xl'
           ? 'max-w-[780px] max-h-[92vh] min-h-[min(720px,92vh)]'
           : size === '2xl'
-            ? 'max-w-[960px] max-h-[92vh]'
+            ? 'max-w-[960px] max-h-[92vh] min-h-[min(560px,92vh)]'
             : 'max-w-[550px] max-h-[85vh]';
 
   const split = splitModalChrome(children);

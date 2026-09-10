@@ -216,7 +216,6 @@ export function useQuotationClientProjects() {
       const now = new Date().toISOString();
       const row = {
         id,
-        pitching_code: data.pitchingId || `MPS-${id.slice(-8)}`,
         client_id: data.clientId?.trim() || null,
         client_name: data.clientName || null,
         display_name: data.displayName,
@@ -239,15 +238,19 @@ export function useQuotationClientProjects() {
         created_at: now,
         updated_at: now,
       };
-      const { error: err } = await supabase.from(QUOTATION_CLIENT_PROJECT_TABLE).insert(row);
+      const { data: inserted, error: err } = await supabase
+        .from(QUOTATION_CLIENT_PROJECT_TABLE)
+        .insert(row)
+        .select('id, pitching_code, created_at, updated_at')
+        .single();
       const record: PitchingRecord = {
         ...data,
-        id,
-        pitchingId: row.pitching_code,
+        id: inserted?.id ?? id,
+        pitchingId: inserted?.pitching_code || data.pitchingId || inserted?.id || id,
         mainPmName: data.mainPmName || (data.mainPmId ? data.assignedPmName : undefined),
         followUps: [],
-        createdAt: now,
-        updatedAt: now,
+        createdAt: inserted?.created_at ?? now,
+        updatedAt: inserted?.updated_at ?? now,
       };
       if (!err) {
         invalidateCachedQuery(QUERY_CACHE_KEYS.quotationClientProjects);
@@ -296,15 +299,26 @@ export function useQuotationClientProjects() {
     if (data.estimatedIncome !== undefined) row.estimated_income = data.estimatedIncome;
     if (data.estimatedExpenses !== undefined) row.estimated_expenses = data.estimatedExpenses;
 
-    const { error: err } = await supabase
+    const { data: updated, error: err } = await supabase
       .from(QUOTATION_CLIENT_PROJECT_TABLE)
       .update(row)
-      .eq('id', id);
+      .eq('id', id)
+      .select('pitching_code')
+      .single();
 
     if (!err) {
       invalidateCachedQuery(QUERY_CACHE_KEYS.quotationClientProjects);
       setRecords((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, ...data, updatedAt: now } : r)),
+        prev.map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                ...data,
+                pitchingId: updated?.pitching_code || r.pitchingId,
+                updatedAt: now,
+              }
+            : r,
+        ),
       );
     }
     return { error: err };

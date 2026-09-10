@@ -12,6 +12,7 @@ import {
   DEFAULT_INCOME_TYPE,
   INCOME_TYPE_PRESETS,
   MAX_BULK_INSTALLMENT_COUNT,
+  billedInputFromPercent,
   billedSumMatchesTotal,
   defaultBulkDateRange,
   distributeDueDates,
@@ -25,6 +26,7 @@ import {
   parseInstallmentNumber,
   parseLocalIsoDate,
   parseMoney,
+  percentInputFromBilled,
   planBulkInstallmentNumbers,
   splitBilledAmounts,
   validateBulkIncomeInput,
@@ -54,6 +56,7 @@ type BulkRow = {
   dueDate: string;
   installmentNumber: string;
   billedAmount: string;
+  percent: string;
 };
 
 type BulkDraft = {
@@ -139,14 +142,18 @@ function rebuildRows(
 
   next.rows = Array.from({ length: count }, (_, index) => {
     const existing = draft.rows[index];
+    const billedAmount = amountsChanged
+      ? (amounts ? formatMoneyInput(amounts[index] ?? 0) : '')
+      : (existing?.billedAmount ?? (amounts ? formatMoneyInput(amounts[index] ?? 0) : ''));
     return {
       key: existing?.key ?? newRowKey(),
       id: existing?.id,
       dueDate: datesChanged ? (dueDates[index] ?? '') : (existing?.dueDate ?? dueDates[index] ?? ''),
       installmentNumber: String(installments[index] ?? index + 1),
-      billedAmount: amountsChanged
-        ? (amounts ? formatMoneyInput(amounts[index] ?? 0) : '')
-        : (existing?.billedAmount ?? (amounts ? formatMoneyInput(amounts[index] ?? 0) : '')),
+      billedAmount,
+      percent: amountsChanged || !existing
+        ? percentInputFromBilled(next.totalAmount, billedAmount)
+        : existing.percent,
     };
   });
 
@@ -205,13 +212,17 @@ export function bulkDraftFromRows(
     startDate: range.start,
     endDate: range.end,
     installmentCount: String(sorted.length || DEFAULT_BULK_INSTALLMENT_COUNT),
-    rows: sorted.map((row) => ({
-      key: row.id,
-      id: row.id,
-      dueDate: row.dueDate ?? '',
-      installmentNumber: row.installmentNumber != null ? String(row.installmentNumber) : '',
-      billedAmount: moneyInputFromHkd(row.billedAmount, currency),
-    })),
+    rows: sorted.map((row) => {
+      const billedAmount = moneyInputFromHkd(row.billedAmount, currency);
+      return {
+        key: row.id,
+        id: row.id,
+        dueDate: row.dueDate ?? '',
+        installmentNumber: row.installmentNumber != null ? String(row.installmentNumber) : '',
+        billedAmount,
+        percent: percentInputFromBilled(formatMoneyInput(total), billedAmount),
+      };
+    }),
   };
 }
 
@@ -410,10 +421,15 @@ export function PitchingBulkIncomeDialog({
         ...prev,
         currency,
         totalAmount: convertMoneyInput(prev.totalAmount, prev.currency, currency),
-        rows: prev.rows.map((row) => ({
-          ...row,
-          billedAmount: convertMoneyInput(row.billedAmount, prev.currency, currency),
-        })),
+        rows: prev.rows.map((row) => {
+          const billedAmount = convertMoneyInput(row.billedAmount, prev.currency, currency);
+          return {
+            ...row,
+            billedAmount,
+            percent: percentInputFromBilled(convertMoneyInput(prev.totalAmount, prev.currency, currency), billedAmount)
+              || row.percent,
+          };
+        }),
       };
     });
   };
@@ -632,6 +648,7 @@ export function PitchingBulkIncomeDialog({
                     <th className="text-left text-[12px] font-medium text-muted-foreground px-3 py-2 w-12">#</th>
                     <th className="text-left text-[12px] font-medium text-muted-foreground px-3 py-2">到期日 Due date *</th>
                     <th className="text-left text-[12px] font-medium text-muted-foreground px-3 py-2">期數 Installment</th>
+                    <th className="text-left text-[12px] font-medium text-muted-foreground px-3 py-2 w-28">比例 %</th>
                     <th className="text-left text-[12px] font-medium text-muted-foreground px-3 py-2">應收金額 Billed *</th>
                   </tr>
                 </thead>
@@ -659,19 +676,56 @@ export function PitchingBulkIncomeDialog({
                         {row.installmentNumber || '—'}
                       </td>
                       <td className="px-3 py-2">
+                        <div className="relative">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={row.percent}
+                            onChange={(e) => {
+                              const percent = e.target.value;
+                              setDraft((prev) => ({
+                                ...prev,
+                                rows: prev.rows.map((item) => {
+                                  if (item.key !== row.key) return item;
+                                  const billedAmount = billedInputFromPercent(prev.totalAmount, percent);
+                                  return {
+                                    ...item,
+                                    percent,
+                                    billedAmount: billedAmount ?? item.billedAmount,
+                                  };
+                                }),
+                              }));
+                            }}
+                            placeholder={totalValue != null && draft.totalAmount.trim() ? '0.00' : '—'}
+                            disabled={!draft.totalAmount.trim() || totalValue == null || totalValue <= 0}
+                            className="text-[13px] pr-7"
+                            aria-label={`第 ${index + 1} 期比例`}
+                          />
+                          <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[12px] text-muted-foreground">%</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
                         <Input
                           type="number"
                           min="0"
                           step="0.01"
                           value={row.billedAmount}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const billedAmount = e.target.value;
                             setDraft((prev) => ({
                               ...prev,
                               rows: prev.rows.map((item) =>
-                                item.key === row.key ? { ...item, billedAmount: e.target.value } : item,
+                                item.key === row.key
+                                  ? {
+                                      ...item,
+                                      billedAmount,
+                                      percent: percentInputFromBilled(prev.totalAmount, billedAmount),
+                                    }
+                                  : item,
                               ),
-                            }))
-                          }
+                            }));
+                          }}
                           placeholder="0.00"
                           className="text-[13px]"
                           aria-label={`第 ${index + 1} 期應收金額`}

@@ -1,14 +1,29 @@
+import type { ProjectHubRelatedType } from '@/lib/projectsHub';
+
 export const QUOTATION_BV_TABLE = 'quotation_bv';
 export const BV_RATIO_TOTAL = 100;
+export const BV_SOURCE_RELATED_TYPES = ['quotation_client', 'webandsystem'] as const;
+export type BvSourceRelatedType = (typeof BV_SOURCE_RELATED_TYPES)[number];
+
+export function isBvSourceRelatedType(
+  value: string | undefined | null,
+): value is BvSourceRelatedType {
+  return !!value && (BV_SOURCE_RELATED_TYPES as readonly string[]).includes(value);
+}
 
 export type QuotationBvRecord = {
   id: string;
-  quotationClientProjectId: string;
+  projectId: string;
   staffId: string;
   staffName: string;
   bvRatio: number;
   createdAt: string;
   updatedAt: string;
+};
+
+export type QuotationBvSource = {
+  relatedType: ProjectHubRelatedType;
+  relatedId: string;
 };
 
 export type QuotationBvInput = {

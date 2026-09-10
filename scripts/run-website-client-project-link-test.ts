@@ -127,6 +127,11 @@ assert.match(formModalSrc, /!hideWebsiteField &&/);
 const websiteModule = read('src/components/website/WebsiteModule.tsx');
 assert.match(websiteModule, /syncWebsiteClientProjectLink/);
 assert.match(websiteModule, /websiteId=\{editingSite\.id\}/);
+assert.match(websiteModule, /id: 'expense', label: '工具支出'/);
+assert.match(websiteModule, /<PitchingExpenseTab/);
+assert.match(websiteModule, /relatedType="webandsystem"/);
+assert.match(websiteModule, /relatedId=\{websiteId\}/);
+assert.doesNotMatch(websiteModule, /插件\/工具/);
 
 const sourceDialog = read('src/components/project/ProjectSourceDialog.tsx');
 assert.match(sourceDialog, /syncWebsiteClientProjectLink/);

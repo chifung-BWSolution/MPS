@@ -4,8 +4,11 @@ import {
   corsHeaders,
   asanaTaskToSyncedRow,
   getAsanaUser,
+  getTask,
   isTaskInSyncRange,
   listProjectTasks,
+  parseAsanaTaskGidFromLink,
+  taskInquiryDate,
   taskMatchesSectionFilter,
   type SyncProjectConfig,
 } from "../_shared/asana-pitching.ts";
@@ -95,6 +98,127 @@ async function backfillMainPmIds(supabase: SupabaseClient) {
   };
 }
 
+function resolveProjectTaskGid(row: {
+  asana_task_gid?: string | null;
+  asana_link?: string | null;
+}): string | null {
+  const gid = row.asana_task_gid?.trim();
+  if (gid) return gid;
+  return parseAsanaTaskGidFromLink(row.asana_link);
+}
+
+async function backfillInquiryDates(supabase: SupabaseClient) {
+  const [{ data: projects, error: projectErr }, { data: staging, error: stagingErr }] =
+    await Promise.all([
+      supabase
+        .from("quotation_client_project")
+        .select("id, asana_task_gid, asana_link, inquiry_date"),
+      supabase
+        .from("asana_synced_tasks")
+        .select("asana_task_gid, inquiry_date"),
+    ]);
+  if (projectErr) throw new Error(`Load projects failed: ${projectErr.message}`);
+  if (stagingErr) throw new Error(`Load synced tasks failed: ${stagingErr.message}`);
+
+  const projectRows = (projects || []) as Array<{
+    id: string;
+    asana_task_gid: string | null;
+    asana_link: string | null;
+    inquiry_date: string;
+  }>;
+  const stagingRows = (staging || []) as Array<{
+    asana_task_gid: string;
+    inquiry_date: string;
+  }>;
+
+  const uniqueGids = [
+    ...new Set(
+      [
+        ...projectRows.map((row) => resolveProjectTaskGid(row)),
+        ...stagingRows.map((row) => row.asana_task_gid?.trim() || null),
+      ].filter((gid): gid is string => Boolean(gid)),
+    ),
+  ];
+
+  const createdDates = new Map<string, string>();
+  const asanaErrors: string[] = [];
+  for (const gid of uniqueGids) {
+    try {
+      const task = await getTask(gid);
+      createdDates.set(gid, taskInquiryDate(task));
+    } catch (e) {
+      asanaErrors.push(`${gid}: ${(e as Error).message}`);
+    }
+  }
+
+  const now = new Date().toISOString();
+  let projectsUpdated = 0;
+  let projectsSkipped = 0;
+  let projectsUnmatched = 0;
+
+  for (const row of projectRows) {
+    const gid = resolveProjectTaskGid(row);
+    if (!gid) {
+      projectsUnmatched += 1;
+      continue;
+    }
+    const inquiryDate = createdDates.get(gid);
+    if (!inquiryDate) {
+      projectsUnmatched += 1;
+      continue;
+    }
+    const current = String(row.inquiry_date).slice(0, 10);
+    if (current === inquiryDate) {
+      projectsSkipped += 1;
+      continue;
+    }
+    const { error: updateErr } = await supabase
+      .from("quotation_client_project")
+      .update({ inquiry_date: inquiryDate, updated_at: now })
+      .eq("id", row.id);
+    if (updateErr) {
+      asanaErrors.push(`${row.id}: ${updateErr.message}`);
+    } else {
+      projectsUpdated += 1;
+    }
+  }
+
+  let stagingUpdated = 0;
+  let stagingSkipped = 0;
+  for (const row of stagingRows) {
+    const gid = row.asana_task_gid?.trim();
+    if (!gid) continue;
+    const inquiryDate = createdDates.get(gid);
+    if (!inquiryDate) continue;
+    const current = String(row.inquiry_date).slice(0, 10);
+    if (current === inquiryDate) {
+      stagingSkipped += 1;
+      continue;
+    }
+    const { error: updateErr } = await supabase
+      .from("asana_synced_tasks")
+      .update({ inquiry_date: inquiryDate, updated_at: now })
+      .eq("asana_task_gid", gid);
+    if (updateErr) {
+      asanaErrors.push(`staging ${gid}: ${updateErr.message}`);
+    } else {
+      stagingUpdated += 1;
+    }
+  }
+
+  return {
+    action: "backfill_inquiry_date",
+    asana_tasks_fetched: createdDates.size,
+    projects_total: projectRows.length,
+    projects_updated: projectsUpdated,
+    projects_skipped: projectsSkipped,
+    projects_unmatched: projectsUnmatched,
+    staging_updated: stagingUpdated,
+    staging_skipped: stagingSkipped,
+    errors: asanaErrors,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -113,6 +237,12 @@ Deno.serve(async (req) => {
     const action = (body as { action?: string }).action;
     if (action === "backfill_main_pm") {
       const result = await backfillMainPmIds(supabase);
+      return new Response(JSON.stringify({ success: true, ...result }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (action === "backfill_inquiry_date") {
+      const result = await backfillInquiryDates(supabase);
       return new Response(JSON.stringify({ success: true, ...result }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

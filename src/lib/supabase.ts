@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { installCachedAuthSession } from '@/lib/authSessionCache';
 import { supabaseBoundedFetch } from '@/lib/supabaseFetch';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -13,11 +14,13 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    // Navigator locks serialize getSession() across every PostgREST call.
-    // Google login has a JWT so every list query waited on that lock; bypass does not.
-    lock: async (_name, _timeout, fn) => fn(),
+    // Default navigator.locks keeps refresh-token rotation safe across tabs.
+    // REST calls must not wait on that lock — installCachedAuthSession()
+    // serves getSession() from memory when the JWT is still fresh.
   },
   global: {
     fetch: supabaseBoundedFetch,
   },
 });
+
+installCachedAuthSession(supabase, supabaseUrl);

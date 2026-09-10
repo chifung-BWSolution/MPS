@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, type ReactNode } from 'react';
-import { Search, Plus, ChevronRight, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil, Clock, FolderOpen, Wallet, Banknote } from 'lucide-react';
+import { Search, Plus, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil, Clock, FolderOpen, Wallet, Banknote, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -41,6 +41,7 @@ import {
   formatMainPmName,
   formatRelatedClientName,
   matchesProjectTypeFilter,
+  projectTypesNeedWebsiteLink,
   optionalIsoDate,
   resolvePitchingFormClient,
   type PitchingRecord,
@@ -64,6 +65,7 @@ import {
   useQuotationListSort,
 } from '@/components/quotation/QuotationListSortHeader';
 import { estimatedMoneyFor, QUOTATION_LIST_COLUMN_COUNT } from '@/lib/quotationListMoney';
+import { toExternalHref } from '@/lib/externalUrl';
 
 export type PitchingFormValues = {
   clientId: string;
@@ -155,7 +157,7 @@ export function PitchingStatusBadge({
 }) {
   const config = pitchingStatusConfig[status];
   return (
-    <span className={cn('text-[12px] font-medium px-2 py-1 rounded-sm', config.bgColor, config.color, className)}>
+    <span className={cn('inline-block text-[12px] font-medium px-2 py-1 rounded-sm whitespace-nowrap', config.bgColor, config.color, className)}>
       {config.label}
     </span>
   );
@@ -182,7 +184,7 @@ export function PitchingStatusSelect({
       onClick={(e) => e.stopPropagation()}
       onChange={(e) => onChange(e.target.value as PitchingStatus)}
       className={cn(
-        'text-[12px] font-medium px-2 py-1 rounded-sm border border-transparent cursor-pointer',
+        'text-[12px] font-medium px-2 py-1 rounded-sm border border-transparent cursor-pointer whitespace-nowrap',
         'hover:ring-1 hover:ring-teal-400 focus:outline-none focus:ring-1 focus:ring-teal-500',
         config.bgColor,
         config.color,
@@ -196,6 +198,94 @@ export function PitchingStatusSelect({
         </option>
       ))}
     </select>
+  );
+}
+
+export function ProjectDisplayNameCell({ record }: { record: PitchingRecord }) {
+  const pitchingCode = record.pitchingId !== record.id ? record.pitchingId : '';
+  return (
+    <td className="px-4 py-3">
+      <div className="text-[14px] font-medium">{record.displayName}</div>
+      {pitchingCode ? (
+        <p className="text-[11px] text-muted-foreground mt-0.5">{pitchingCode}</p>
+      ) : null}
+    </td>
+  );
+}
+
+function AsanaLogoIcon({ size = 13 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="5.2" r="3.2" fill="currentColor" />
+      <circle cx="6.4" cy="16.8" r="3.2" fill="currentColor" />
+      <circle cx="17.6" cy="16.8" r="3.2" fill="currentColor" />
+    </svg>
+  );
+}
+
+const listActionIconClass =
+  'p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors inline-flex';
+const listActionIconDisabledClass = 'p-1.5 rounded-md text-muted-foreground/30 inline-flex';
+
+export function ProjectListActionCell({
+  record,
+  onEdit,
+}: {
+  record: PitchingRecord;
+  onEdit: (record: PitchingRecord) => void;
+}) {
+  const websiteUrl = record.webandsystemDomainUrl?.trim();
+  const websiteHref = websiteUrl ? toExternalHref(websiteUrl) : '';
+  const asanaRaw = record.asanaLink?.trim() || '';
+  const asanaHref = asanaRaw
+    ? toExternalHref(asanaRaw)
+    : record.asanaTaskGid
+      ? `https://app.asana.com/0/0/${record.asanaTaskGid}`
+      : '';
+
+  return (
+    <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center gap-1">
+        {websiteHref ? (
+          <a
+            href={websiteHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={listActionIconClass}
+            aria-label={`開啟 ${record.webandsystemName || '網站/系統'}`}
+          >
+            <ExternalLink size={13} />
+          </a>
+        ) : (
+          <span className={listActionIconDisabledClass} aria-disabled="true" title="尚未連結網站/系統">
+            <ExternalLink size={13} />
+          </span>
+        )}
+        {asanaHref ? (
+          <a
+            href={asanaHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`${listActionIconClass} text-[#F06A6A] hover:text-[#F06A6A]`}
+            aria-label="開啟 Asana"
+          >
+            <AsanaLogoIcon />
+          </a>
+        ) : (
+          <span className={listActionIconDisabledClass} aria-disabled="true" title="尚未設定 Asana 連結">
+            <AsanaLogoIcon />
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => onEdit(record)}
+          className={listActionIconClass}
+          aria-label={`編輯 ${record.displayName}`}
+        >
+          <Pencil size={13} />
+        </button>
+      </div>
+    </td>
   );
 }
 
@@ -515,6 +605,19 @@ export function PitchingFormModal({
             />
           </div>
 
+          {!hideWebsiteField && projectTypesNeedWebsiteLink(form.projectTypes) && (
+            <ClientWebsiteSelectField
+              value={form.webandsystemListId}
+              onChange={(webandsystemListId) => setForm((prev) => ({ ...prev, webandsystemListId }))}
+              clientId={form.clientId}
+              companyNameZh={companyNamesForClient(form.clientId, clientOptions).companyNameZh}
+              companyNameEn={companyNamesForClient(form.clientId, clientOptions).companyNameEn}
+              clientName={form.clientName}
+              displayName={form.displayName}
+              projectTypes={form.projectTypes}
+            />
+          )}
+
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1">負責 PM *</label>
             <SearchableSelect
@@ -539,24 +642,6 @@ export function PitchingFormModal({
             />
           </div>
         </section>
-
-        {!hideWebsiteField && (
-        <section className="space-y-3 border-t border-border pt-5">
-          <h3 className="text-[14px] font-semibold flex items-center gap-2">
-            網站 / 系統
-          </h3>
-          <ClientWebsiteSelectField
-            value={form.webandsystemListId}
-            onChange={(webandsystemListId) => setForm((prev) => ({ ...prev, webandsystemListId }))}
-            clientId={form.clientId}
-            companyNameZh={companyNamesForClient(form.clientId, clientOptions).companyNameZh}
-            companyNameEn={companyNamesForClient(form.clientId, clientOptions).companyNameEn}
-            clientName={form.clientName}
-            displayName={form.displayName}
-            projectTypes={form.projectTypes}
-          />
-        </section>
-        )}
 
         <section className="space-y-3 border-t border-border pt-5">
           <h3 className="text-[14px] font-semibold flex items-center gap-2">
@@ -730,7 +815,7 @@ function PitchingList({
                       />
                     </td>
                     <td className="px-4 py-3 text-[13px] max-w-[180px]">{formatProjectTypes(record.projectTypes)}</td>
-                    <td className="px-4 py-3 text-[14px] font-medium">{record.displayName}</td>
+                    <ProjectDisplayNameCell record={record} />
                     <td className="px-4 py-3 text-[13px]">{formatRelatedClientName(record)}</td>
                     <td className="px-4 py-3 text-[13px]">{formatMainPmName(record)}</td>
                     <QuotationListMoneyCells
@@ -738,27 +823,10 @@ function PitchingList({
                       expense={record.expense}
                       gp={record.gp}
                     />
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <PitchingStatusBadge status={record.status} />
                     </td>
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => onEdit(record)}
-                          className="flex items-center gap-1 text-[12px] text-teal-600 font-medium hover:text-teal-700"
-                        >
-                          <Pencil size={12} /> 編輯
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onView(record)}
-                          className="flex items-center gap-1 text-[12px] text-muted-foreground font-medium hover:text-foreground"
-                        >
-                          詳情 <ChevronRight size={12} />
-                        </button>
-                      </div>
-                    </td>
+                    <ProjectListActionCell record={record} onEdit={onEdit} />
                   </tr>
                 ))}
               {sorted.length === 0 && (
@@ -1094,7 +1162,7 @@ export function PitchingDetail({
                 </div>
               </div>
             </div>
-            <QuotationBvCard projectId={record.id} />
+            <QuotationBvCard relatedType="quotation_client" relatedId={record.id} />
           </div>
           <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6">
             <span className="text-[12px] text-muted-foreground block mb-1">提案描述</span>
@@ -1133,7 +1201,8 @@ export function PitchingDetail({
 
       {activeTab === 'expense' && (
         <PitchingExpenseTab
-          projectId={record.id}
+          relatedType="quotation_client"
+          relatedId={record.id}
           signedDate={draft.signedDate}
           handoverDate={draft.handoverDate}
         />

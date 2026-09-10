@@ -11,6 +11,7 @@ import {
   scoreWhitelistCandidate,
   type UsersWhitelistRow,
 } from '@/services/authStaffResolve';
+import { setCachedAuthSession } from '@/lib/authSessionCache';
 import { isUsersUuid } from '@/lib/loginLogs';
 import { normalizePhonePassword } from '@/lib/phonePassword';
 import type { User as SupabaseUser, Session } from '@supabase/supabase-js';
@@ -505,6 +506,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const authSucceededRef = useRef(!!storedAuth.systemUser);
   const authKindRef = useRef<AuthProfileKind>(storedAuth.kind);
   const staffUuidMigrateRef = useRef(false);
+  const lastVerifiedIdentityRef = useRef<{ id: string; email: string } | null>(
+    storedAuth.systemUser
+      ? {
+          id: storedAuth.systemUser.auth_user_id || '',
+          email: normalizeLoginEmail(storedAuth.systemUser.email),
+        }
+      : null,
+  );
+
+  const isSameVerifiedIdentity = (next: Session): boolean => {
+    const last = lastVerifiedIdentityRef.current;
+    if (!last) return false;
+    const email = normalizeLoginEmail(next.user?.email || '');
+    if (!last.email || !email || last.email !== email) return false;
+    if (!last.id || !next.user?.id) return true;
+    return last.id === next.user.id;
+  };
 
   useEffect(() => {
     let subscription: { unsubscribe: () => void } | null = null;
@@ -542,6 +560,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       console.log('[Auth] getSession result:', { hasSession: !!session, email: session?.user?.email });
+      setCachedAuthSession(session ?? null);
       setSession((prev) => (isSameSession(prev, session) ? prev : session));
       setUser((prev) => {
         const nextUser = session?.user ?? null;
@@ -571,6 +590,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.warn('[Auth] No Auth session on refresh. Clearing cached profile.');
           authSucceededRef.current = false;
           authKindRef.current = 'dev_bypass';
+          lastVerifiedIdentityRef.current = null;
+          setCachedAuthSession(null);
           clearStoredAuthProfile();
           setSystemUser(null);
           setUserInfo(null);
@@ -587,37 +608,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Listen for auth changes
     try {
       const { data } = supabase.auth.onAuthStateChange(
-        async (event, session) => {
+        (event, session) => {
           console.log('[Auth] onAuthStateChange:', event, session?.user?.email, '| authSucceeded:', authSucceededRef.current);
+          setCachedAuthSession(session ?? null);
           setSession((prev) => (isSameSession(prev, session) ? prev : session));
           setUser((prev) => {
             const nextUser = session?.user ?? null;
             return isSameAuthUser(prev, nextUser) ? prev : nextUser;
           });
 
-          if (session?.user) {
-            // Only show the spinner when we do not already have a cached profile.
-            if (!verifyInProgressRef.current && !authSucceededRef.current) {
-              // Reset timeout since we're starting a new verification
-              startLoadingTimeout();
-              setLoading(true);
-              // Small delay to ensure the Supabase client has fully initialized the authenticated state
-              // This prevents 401/403 errors on immediate queries after OAuth callback
-              if (event === 'SIGNED_IN') {
-                await new Promise(resolve => setTimeout(resolve, 300));
-              }
-              await verifyAndFetchUser(session.user.email, session.user.id);
-              // Clear timeout on success
-              if (loadingTimeoutId) clearTimeout(loadingTimeoutId);
-            } else if (
-              !verifyInProgressRef.current &&
-              authSucceededRef.current &&
-              (event === 'INITIAL_SESSION' || event === 'SIGNED_IN')
-            ) {
-              console.log('[Auth] Cached session — background re-verify');
-              await verifyAndFetchUser(session.user.email, session.user.id);
-            }
-          } else {
+          if (!session?.user) {
             // Session became null — BUT don't clear state if:
             // 1. Verification is in progress (transient state)
             // 2. Auth already succeeded (prevents state wipe from stale events)
@@ -629,7 +629,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             } else {
               console.log('[Auth] onAuthStateChange: Ignoring null session (verify in progress or auth succeeded)');
             }
+            return;
           }
+
+          // Tab focus emits SIGNED_IN with the same user. Do not re-query users/staffs
+          // while the auth lock is held — that queues every /rest/v1 call.
+          if (authSucceededRef.current && isSameVerifiedIdentity(session)) {
+            console.log('[Auth] Same session identity — skip re-verify on', event);
+            return;
+          }
+
+          if (
+            authSucceededRef.current &&
+            authKindRef.current === 'google'
+          ) {
+            const sessionEmail = normalizeLoginEmail(session.user.email || '');
+            const lastEmail = lastVerifiedIdentityRef.current?.email || '';
+            if (lastEmail && sessionEmail && lastEmail !== sessionEmail) {
+              console.warn('[Auth] Cached profile email mismatch. Re-verifying.');
+              authSucceededRef.current = false;
+              setLoading(true);
+            }
+          }
+
+          if (verifyInProgressRef.current) return;
+
+          if (!authSucceededRef.current) {
+            startLoadingTimeout();
+            setLoading(true);
+          }
+
+          // Must leave the auth lock before any supabase.from() / getSession().
+          setTimeout(() => {
+            void verifyAndFetchUser(session.user.email, session.user.id);
+          }, 0);
         }
       );
       subscription = data.subscription;
@@ -747,6 +780,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthError(null);
         authSucceededRef.current = true; // CRITICAL: Mark auth as succeeded IMMEDIATELY
         authKindRef.current = 'google';
+        lastVerifiedIdentityRef.current = {
+          id: authUserId || sysUser.auth_user_id || '',
+          email: normalizedEmail,
+        };
 
         // Enrich phone / profile pic from staffs.id — fire and forget
         (async () => {
@@ -813,6 +850,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('[Auth] ❌', failMsg);
       authSucceededRef.current = false;
       authKindRef.current = 'dev_bypass';
+      lastVerifiedIdentityRef.current = null;
+      setCachedAuthSession(null);
       clearStoredAuthProfile();
       setSystemUser(null);
       setUserInfo(null);
@@ -932,6 +971,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     authSucceededRef.current = false; // Reset auth success flag on sign out
     authKindRef.current = 'dev_bypass';
+    lastVerifiedIdentityRef.current = null;
+    setCachedAuthSession(null);
     clearStoredAuthProfile();
     await supabase.auth.signOut();
     setSession(null);

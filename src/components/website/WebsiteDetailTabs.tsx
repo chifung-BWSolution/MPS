@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, X, ExternalLink, Video, Megaphone, TrendingUp, Puzzle, Link2, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Loader2, Unlink, Search, Edit, Trash2, MapPin, RefreshCw } from 'lucide-react';
+import { Plus, X, ExternalLink, Video, Megaphone, TrendingUp, Link2, ChevronLeft, ChevronRight, Sparkles, Loader2, Unlink, Search, Edit, Trash2, MapPin, RefreshCw } from 'lucide-react';
 import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
-import { BrandFieldBadge, MutedFieldBadge, NullableBadge, StatusFieldBadge, displayText } from '@/components/ui/nullable-badge';
+import { BrandFieldBadge, MutedFieldBadge, NullableBadge, StatusFieldBadge } from '@/components/ui/nullable-badge';
 import { WebsiteProfileFull } from '@/types/app';
 import {
   getVideosForWebsite,
-  getPluginsForWebsite,
   getExternalLinksForWebsite,
-  Plugin,
   ExternalLink as ExternalLinkType,
 } from '@/data/websiteDetailData';
 import { useSeoKeywords } from '@/hooks/useSeoKeywords';
@@ -937,132 +935,6 @@ export function WebsiteSeoTab({ site }: { site: WebsiteProfileFull }) {
               >
                 新增關鍵字
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// PLUGINS TAB
-// ============================================================
-export function WebsitePluginsTab({ site }: { site: WebsiteProfileFull }) {
-  const [plugins] = useState<Plugin[]>(() => getPluginsForWebsite(site.id));
-  const [showModal, setShowModal] = useState(false);
-  const [newPlugin, setNewPlugin] = useState({ pluginName: '', cost: '', billingCycle: 'monthly', expiryDate: '' });
-
-  const isExpiringSoon = (expiryDate?: string) => {
-    if (!expiryDate) return false;
-    const diff = new Date(expiryDate).getTime() - Date.now();
-    return diff > 0 && diff < 30 * 24 * 60 * 60 * 1000; // 30 days
-  };
-
-  const isExpired = (expiryDate?: string) => {
-    if (!expiryDate) return false;
-    return new Date(expiryDate).getTime() < Date.now();
-  };
-
-  const totalMonthlyCost = plugins.reduce((sum, p) => {
-    if (p.status !== 'active' || p.cost === 0) return sum;
-    if (p.billingCycle === 'monthly') return sum + p.cost;
-    if (p.billingCycle === 'annual') return sum + p.cost / 12;
-    return sum;
-  }, 0);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h4 className="text-[15px] font-bold">插件/工具訂閱</h4>
-          <p className="text-[12px] text-muted-foreground mt-0.5">共 {plugins.length} 個插件 · 每月約 ${totalMonthlyCost.toFixed(0)} USD</p>
-        </div>
-        <button onClick={() => setShowModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-md text-[12px] font-medium hover:bg-teal-700 transition-colors">
-          <Plus size={13} />新增插件
-        </button>
-      </div>
-
-      {plugins.length === 0 ? (
-        <div className="text-center py-12 border border-dashed border-border rounded-md">
-          <Puzzle size={32} className="text-muted-foreground mx-auto mb-3" />
-          <p className="text-[14px] font-medium text-muted-foreground">尚未新增任何插件</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {plugins.map(plugin => {
-            const expiring = isExpiringSoon(plugin.expiryDate);
-            const expired = isExpired(plugin.expiryDate) || plugin.status === 'expired';
-            const billingLabels: Record<string, string> = { monthly: '月付', annual: '年付', one_time: '一次性', lifetime: '永久' };
-            return (
-              <div key={plugin.id} className={cn('flex items-center justify-between p-4 rounded-md border transition-all', expired ? 'border-rose-300 bg-rose-50/50' : expiring ? 'border-amber-300 bg-amber-50/30' : 'border-[rgba(13,26,45,0.08)] bg-white')}>
-                <div className="flex items-center gap-3">
-                  <Puzzle size={16} className={cn(expired ? 'text-rose-500' : expiring ? 'text-amber-500' : 'text-teal-600')} />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[13px] font-medium">{plugin.pluginName}</span>
-                      {expired && <span className="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5"><AlertTriangle size={9} />已過期</span>}
-                      {expiring && !expired && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5"><AlertTriangle size={9} />即將到期</span>}
-                    </div>
-                    {plugin.description && <p className="text-[11px] text-muted-foreground mt-0.5">{plugin.description}</p>}
-                  </div>
-                </div>
-                <div className="flex items-center gap-4 shrink-0">
-                  <div className="text-right">
-                    <span className="text-[13px] font-bold block">{plugin.cost === 0 ? '免費' : `$${plugin.cost} ${plugin.currency}`}</span>
-                    <span className="text-[10px] text-muted-foreground">{billingLabels[plugin.billingCycle]}{plugin.autoRenew ? ' · 自動續約' : ''}</span>
-                  </div>
-                  {plugin.expiryDate && (
-                    <div className="text-right">
-                      <span className={cn('text-[11px] font-medium', expired ? 'text-rose-600' : expiring ? 'text-amber-600' : 'text-muted-foreground')}>{plugin.expiryDate}</span>
-                      <span className="text-[9px] text-muted-foreground block">到期日</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Add Plugin Modal */}
-      {showModal && (
-        <div className="fixed inset-0 m-0 z-[100] flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-[540px]">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h3 className="text-[16px] font-bold">新增插件/工具</h3>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-muted rounded"><X size={16} /></button>
-            </div>
-            <div className="px-6 py-4 space-y-4">
-              <div className="bg-muted/30 rounded-md p-3 text-[12px] text-muted-foreground">
-                公司：<span className="font-medium text-foreground">{displayText(site.company)}</span> · 品牌：<span className="font-medium text-foreground">{displayText(site.brand)}</span>
-              </div>
-              <div>
-                <label className="text-[12px] font-medium text-muted-foreground block mb-1">插件名稱 *</label>
-                <input value={newPlugin.pluginName} onChange={e => setNewPlugin(p => ({ ...p, pluginName: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="例如：Yoast SEO Premium" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[12px] font-medium text-muted-foreground block mb-1">費用 (USD)</label>
-                  <input type="number" value={newPlugin.cost} onChange={e => setNewPlugin(p => ({ ...p, cost: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" placeholder="0" />
-                </div>
-                <div>
-                  <label className="text-[12px] font-medium text-muted-foreground block mb-1">計費週期</label>
-                  <select value={newPlugin.billingCycle} onChange={e => setNewPlugin(p => ({ ...p, billingCycle: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white">
-                    <option value="monthly">月付</option>
-                    <option value="annual">年付</option>
-                    <option value="one_time">一次性</option>
-                    <option value="lifetime">永久</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="text-[12px] font-medium text-muted-foreground block mb-1">到期日</label>
-                <input type="date" value={newPlugin.expiryDate} onChange={e => setNewPlugin(p => ({ ...p, expiryDate: e.target.value }))} className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white" />
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-muted rounded-md">取消</button>
-              <button onClick={() => setShowModal(false)} disabled={!newPlugin.pluginName} className="px-4 py-2 text-[13px] font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed">新增插件</button>
             </div>
           </div>
         </div>
