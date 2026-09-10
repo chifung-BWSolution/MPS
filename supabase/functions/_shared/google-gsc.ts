@@ -34,15 +34,152 @@ export function toIsoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-export async function getGscAccessToken(): Promise<string> {
-  const clientId = Deno.env.get("GOOGLE_GSC_CLIENT_ID") || "";
-  const clientSecret = Deno.env.get("GOOGLE_GSC_CLIENT_SECRET") || "";
-  const refreshToken = Deno.env.get("GOOGLE_GSC_REFRESH_TOKEN") || "";
-  if (!clientId || !clientSecret || !refreshToken) {
-    throw new Error(
-      "Missing GOOGLE_GSC_CLIENT_ID / GOOGLE_GSC_CLIENT_SECRET / GOOGLE_GSC_REFRESH_TOKEN",
-    );
+export const GSC_READONLY_SCOPE =
+  "https://www.googleapis.com/auth/webmasters.readonly";
+export const GSC_OAUTH_LOGIN_HINT = "chifung.login@gmail.com";
+
+export function getGscOAuthRedirectUri(): string {
+  const override = (Deno.env.get("GOOGLE_GSC_OAUTH_REDIRECT_URI") || "").trim();
+  if (override) return override;
+  const base = (Deno.env.get("SUPABASE_URL") || "").replace(/\/+$/, "");
+  return base ? `${base}/functions/v1/gsc-oauth` : "";
+}
+
+export function maskRefreshToken(token: string): string {
+  const t = String(token || "").trim();
+  if (!t) return "";
+  if (t.length <= 8) return "••••";
+  return `${t.slice(0, 4)}…${t.slice(-4)}`;
+}
+
+export function hasWebmastersScope(scope: string | null | undefined): boolean {
+  return /webmasters/i.test(String(scope || ""));
+}
+
+type GscTokenStore = {
+  from: (table: string) => {
+    select: (cols: string) => {
+      eq: (
+        col: string,
+        val: string,
+      ) => {
+        maybeSingle: () => PromiseLike<{
+          data: { refresh_token?: string } | null;
+          error: { message: string } | null;
+        }>;
+      };
+    };
+    upsert: (
+      row: Record<string, unknown>,
+      opts?: { onConflict?: string },
+    ) => PromiseLike<{ error: { message: string } | null }>;
+  };
+};
+
+/** Same client chain as GA4: GSC override → GA4 override → live Ads client. */
+export function resolveGscOAuthClient(): { clientId: string; clientSecret: string } {
+  return {
+    clientId: (
+      Deno.env.get("GOOGLE_GSC_CLIENT_ID") ||
+      Deno.env.get("GOOGLE_GA4_CLIENT_ID") ||
+      Deno.env.get("GOOGLE_ADS_CLIENT_ID") ||
+      ""
+    ).trim(),
+    clientSecret: (
+      Deno.env.get("GOOGLE_GSC_CLIENT_SECRET") ||
+      Deno.env.get("GOOGLE_GA4_CLIENT_SECRET") ||
+      Deno.env.get("GOOGLE_ADS_CLIENT_SECRET") ||
+      ""
+    ).trim(),
+  };
+}
+
+function nextRotatedRefreshToken(
+  current: string,
+  incoming: string | null | undefined,
+): string | null {
+  const next = String(incoming || "").trim();
+  if (!next || next === current) return null;
+  return next;
+}
+
+type GscTokenSource = "gsc" | "ga4";
+
+async function loadStoredRefreshToken(
+  supabase: GscTokenStore | undefined,
+  provider: GscTokenSource,
+): Promise<string> {
+  if (!supabase) return "";
+  const { data, error } = await supabase
+    .from("google_oauth_tokens")
+    .select("refresh_token")
+    .eq("provider", provider)
+    .maybeSingle();
+  if (error) {
+    console.warn(`[gsc-oauth] load stored ${provider} refresh token:`, error.message);
+    return "";
   }
+  return String(data?.refresh_token || "").trim();
+}
+
+async function collectGscRefreshTokens(
+  supabase?: GscTokenStore,
+): Promise<Array<{ token: string; source: GscTokenSource }>> {
+  const out: Array<{ token: string; source: GscTokenSource }> = [];
+  const seen = new Set<string>();
+  const add = (raw: string, source: GscTokenSource) => {
+    const token = String(raw || "").trim();
+    if (!token || seen.has(token)) return;
+    seen.add(token);
+    out.push({ token, source });
+  };
+  add(await loadStoredRefreshToken(supabase, "gsc"), "gsc");
+  add(Deno.env.get("GOOGLE_GSC_REFRESH_TOKEN") || "", "gsc");
+  add(await loadStoredRefreshToken(supabase, "ga4"), "ga4");
+  add(Deno.env.get("GOOGLE_GA4_REFRESH_TOKEN") || "", "ga4");
+  return out;
+}
+
+export async function persistRefreshToken(
+  supabase: GscTokenStore | undefined,
+  provider: GscTokenSource,
+  refreshToken: string,
+  rotated: boolean,
+): Promise<void> {
+  if (!supabase || !refreshToken) return;
+  const nowIso = new Date().toISOString();
+  const row: Record<string, unknown> = {
+    provider,
+    refresh_token: refreshToken,
+    last_used_at: nowIso,
+    updated_at: nowIso,
+  };
+  if (rotated) row.last_rotated_at = nowIso;
+  const { data: existing } = await supabase
+    .from("google_oauth_tokens")
+    .select("refresh_token")
+    .eq("provider", provider)
+    .maybeSingle();
+  if (!existing && !rotated) {
+    row.last_rotated_at = nowIso;
+  }
+  const { error } = await supabase.from("google_oauth_tokens").upsert(row, {
+    onConflict: "provider",
+  });
+  if (error) {
+    console.warn(`[gsc-oauth] persist ${provider} refresh token:`, error.message);
+  }
+}
+
+function isClientMismatchRefreshError(detail: string): boolean {
+  return /unauthorized_client|invalid_grant/i.test(detail);
+}
+
+async function exchangeRefreshToken(
+  clientId: string,
+  clientSecret: string,
+  refreshToken: string,
+): Promise<{ accessToken: string; refreshToken?: string } | { error: string }> {
   const body = new URLSearchParams({
     client_id: clientId,
     client_secret: clientSecret,
@@ -54,11 +191,71 @@ export async function getGscAccessToken(): Promise<string> {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
   });
+  const detail = await res.text();
   if (!res.ok) {
-    throw new Error(`GSC OAuth refresh failed (${res.status}): ${await res.text()}`);
+    return { error: `GSC OAuth refresh failed (${res.status}): ${detail}` };
   }
-  const json = await res.json();
-  return json.access_token as string;
+  const json = JSON.parse(detail) as {
+    access_token?: string;
+    refresh_token?: string;
+  };
+  if (!json.access_token) {
+    return { error: "GSC OAuth refresh returned no access_token" };
+  }
+  return { accessToken: json.access_token, refreshToken: json.refresh_token };
+}
+
+/**
+ * Same pattern as GA4: exchange refresh_token → access_token.
+ * Reuses the Ads / GA4 OAuth client. Tries GSC token first, then the working
+ * GA4 refresh token (Playground tokens are often issued for Google's client).
+ */
+export async function getGscAccessToken(supabase?: GscTokenStore): Promise<string> {
+  const { clientId, clientSecret } = resolveGscOAuthClient();
+  const candidates = await collectGscRefreshTokens(supabase);
+  if (!clientId || !clientSecret || candidates.length === 0) {
+    throw new Error(
+      "Missing Google Ads / GA4 OAuth client (GOOGLE_ADS_CLIENT_ID + GOOGLE_ADS_CLIENT_SECRET) or GOOGLE_GA4_REFRESH_TOKEN / GOOGLE_GSC_REFRESH_TOKEN",
+    );
+  }
+
+  const failures: string[] = [];
+  for (const candidate of candidates) {
+    const result = await exchangeRefreshToken(
+      clientId,
+      clientSecret,
+      candidate.token,
+    );
+    if ("error" in result) {
+      if (isClientMismatchRefreshError(result.error) && candidates.length > 1) {
+        console.warn(
+          `[gsc-oauth] ${candidate.source} refresh token rejected, trying next:`,
+          result.error.slice(0, 180),
+        );
+        failures.push(`${candidate.source}: ${result.error.slice(0, 180)}`);
+        continue;
+      }
+      throw new Error(
+        result.error +
+          (isClientMismatchRefreshError(result.error)
+            ? " — refresh token was not issued by this OAuth client. GSC now also tries the GA4 token; if both fail, re-authorize webmasters.readonly with the Ads client via scripts/get-gsc-refresh-token.py (not Playground's default client)."
+            : ""),
+      );
+    }
+
+    const rotated = nextRotatedRefreshToken(candidate.token, result.refreshToken);
+    await persistRefreshToken(
+      supabase,
+      candidate.source,
+      rotated || candidate.token,
+      !!rotated,
+    );
+    return result.accessToken;
+  }
+
+  throw new Error(
+    "GSC OAuth refresh failed for GSC and GA4 tokens. " + failures.join(" | "),
+  );
 }
 
 export type GscSite = {
@@ -74,7 +271,14 @@ export async function listGscSites(accessToken: string): Promise<GscSite[]> {
     },
   );
   if (!res.ok) {
-    throw new Error(`GSC sites.list failed (${res.status}): ${await res.text()}`);
+    const detail = await res.text();
+    const missingScope = res.status === 403 || /insufficient.?permission|accessNotConfigured|PERMISSION_DENIED/i.test(detail);
+    throw new Error(
+      `GSC sites.list failed (${res.status}): ${detail}` +
+        (missingScope
+          ? " — this access token has no Search Console scope. The GA4 grant is analytics.readonly only; add webmasters.readonly with the Ads client via scripts/get-gsc-refresh-token.py (do not use Playground's default client)."
+          : ""),
+    );
   }
   const json = await res.json();
   const entries = (json.siteEntry || []) as Array<{

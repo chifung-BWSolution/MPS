@@ -3,11 +3,8 @@ import { supabase } from '@/lib/supabase';
 import { invokeGscSync } from '@/lib/gscApi';
 import type { GscSyncRunRow, SeoKeywordRow } from '@/types/seo';
 
-type WebsiteJoin = {
-  website_name: string | null;
-  company: string | null;
-  brand: string | null;
-};
+const SEO_KEYWORD_COLUMNS =
+  'id, website_profile_id, keyword, normalized_keyword, level, search_volume, current_ranking, target_ranking, target_page, difficulty_score, status, ai_generated, source, gsc_site_url, last_gsc_sync_at';
 
 type KeywordDbRow = {
   id: string;
@@ -25,16 +22,9 @@ type KeywordDbRow = {
   source: SeoKeywordRow['source'];
   gsc_site_url: string | null;
   last_gsc_sync_at: string | null;
-  webandsystem_list?: WebsiteJoin | WebsiteJoin[] | null;
 };
 
-function pickWebsite(join: KeywordDbRow['webandsystem_list']): WebsiteJoin | null {
-  if (!join) return null;
-  return Array.isArray(join) ? join[0] ?? null : join;
-}
-
 function mapKeyword(row: KeywordDbRow): SeoKeywordRow {
-  const ws = pickWebsite(row.webandsystem_list);
   return {
     id: row.id,
     website_profile_id: row.website_profile_id,
@@ -51,9 +41,6 @@ function mapKeyword(row: KeywordDbRow): SeoKeywordRow {
     source: row.source,
     gsc_site_url: row.gsc_site_url,
     last_gsc_sync_at: row.last_gsc_sync_at,
-    websiteName: ws?.website_name ?? undefined,
-    company: ws?.company ?? undefined,
-    brand: ws?.brand ?? undefined,
   };
 }
 
@@ -81,12 +68,11 @@ export function useSeoKeywords() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    try {
     const [kwRes, syncRes] = await Promise.all([
       supabase
         .from('seo_keywords')
-        .select(
-          'id, website_profile_id, keyword, normalized_keyword, level, search_volume, current_ranking, target_ranking, target_page, difficulty_score, status, ai_generated, source, gsc_site_url, last_gsc_sync_at, webandsystem_list(website_name, company, brand)',
-        )
+        .select(SEO_KEYWORD_COLUMNS)
         .order('keyword', { ascending: true }),
       supabase
         .from('gsc_sync_runs')
@@ -122,7 +108,12 @@ export function useSeoKeywords() {
       setLastSyncRun(null);
     }
 
-    setLoading(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setKeywords([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -174,9 +165,7 @@ export function useSeoKeywords() {
     const { data, error: err } = await supabase
       .from('seo_keywords')
       .insert(row)
-      .select(
-        'id, website_profile_id, keyword, normalized_keyword, level, search_volume, current_ranking, target_ranking, target_page, difficulty_score, status, ai_generated, source, gsc_site_url, last_gsc_sync_at, webandsystem_list(website_name, company, brand)',
-      )
+      .select(SEO_KEYWORD_COLUMNS)
       .single();
     if (!err && data) {
       const mapped = mapKeyword(data as KeywordDbRow);

@@ -10,6 +10,7 @@ import {
   ExternalLink as ExternalLinkType,
 } from '@/data/websiteDetailData';
 import { useSeoKeywords } from '@/hooks/useSeoKeywords';
+import { GscOAuthPanel } from '@/components/website/GscOAuthPanel';
 import { useWebsitePaidAds } from '@/hooks/useWebsitePaidAds';
 import {
   buildFacebookAdsCampaignHash,
@@ -795,6 +796,7 @@ export function WebsiteSeoTab({ site }: { site: WebsiteProfileFull }) {
           <p className="text-[12px] text-muted-foreground mt-0.5">共 {keywords.length} 個關鍵字 — S1: {level1.length} | S2: {level2.length} | S3: {level3.length}</p>
         </div>
         <div className="flex items-center gap-2">
+          <GscOAuthPanel compact />
           <button
             disabled={syncing}
             onClick={handleSyncGsc}

@@ -1,6 +1,7 @@
 import { useGoogleAdsBackfill } from '@/hooks/useGoogleAdsBackfill';
 import { useFacebookAdsBackfill } from '@/hooks/useFacebookAdsBackfill';
 import { useGa4Backfill } from '@/hooks/useGa4Backfill';
+import { GscOAuthPanel } from '@/components/website/GscOAuthPanel';
 import { AdsSyncPanel } from './AdsSyncPanel';
 
 export function AdsDataSyncModule() {
@@ -14,10 +15,12 @@ export function AdsDataSyncModule() {
         <div>
           <h1 className="text-[32px] font-bold tracking-tight">廣告數據同步</h1>
           <p className="text-[14px] text-muted-foreground mt-1">
-            觸發並監控 Google Ads、Facebook Ads 與 GA4 的完整歷史回填。日常增量由每日 cron 與各報表頁「Refresh recent (7d)」處理。
+            觸發並監控 Google Ads、Facebook Ads、GA4 與 Search Console 授權。日常增量由每日 cron 與各報表頁「Refresh recent (7d)」處理。
           </p>
         </div>
       </div>
+
+      <GscOAuthPanel />
 
       <AdsSyncPanel
         title="Google Ads"

@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""One-time helper: obtain a Google OAuth refresh token for Search Console (readonly).
+"""Optional local helper. Preferred path is OAuth Playground — see docs/gsc-setup.md.
 
-Usage:
-  export GOOGLE_GSC_CLIENT_ID='....apps.googleusercontent.com'
-  export GOOGLE_GSC_CLIENT_SECRET='....'
+Reuse the live Google Ads / GA4 OAuth client (same as Analytics):
+
+  export GOOGLE_ADS_CLIENT_ID='....apps.googleusercontent.com'
+  export GOOGLE_ADS_CLIENT_SECRET='....'
   python3 scripts/get-gsc-refresh-token.py
 
-Requires: pip install requests
-Uses a Desktop OAuth client + loopback redirect on http://127.0.0.1:8765/
+Then store the printed value as GOOGLE_GSC_REFRESH_TOKEN.
+Playground is easier if the Ads client can add
+https://developers.google.com/oauthplayground as a redirect URI.
 """
 
 from __future__ import annotations
@@ -25,13 +27,25 @@ except ImportError:
     print("Missing dependency: pip install requests", file=sys.stderr)
     sys.exit(1)
 
-CLIENT_ID = os.environ.get("GOOGLE_GSC_CLIENT_ID", "").strip()
-CLIENT_SECRET = os.environ.get("GOOGLE_GSC_CLIENT_SECRET", "").strip()
+CLIENT_ID = (
+    os.environ.get("GOOGLE_GSC_CLIENT_ID", "").strip()
+    or os.environ.get("GOOGLE_GA4_CLIENT_ID", "").strip()
+    or os.environ.get("GOOGLE_ADS_CLIENT_ID", "").strip()
+)
+CLIENT_SECRET = (
+    os.environ.get("GOOGLE_GSC_CLIENT_SECRET", "").strip()
+    or os.environ.get("GOOGLE_GA4_CLIENT_SECRET", "").strip()
+    or os.environ.get("GOOGLE_ADS_CLIENT_SECRET", "").strip()
+)
 REDIRECT_URI = "http://127.0.0.1:8765/"
 SCOPE = "https://www.googleapis.com/auth/webmasters.readonly"
 
 if not CLIENT_ID or not CLIENT_SECRET:
-    print("Set GOOGLE_GSC_CLIENT_ID and GOOGLE_GSC_CLIENT_SECRET first.", file=sys.stderr)
+    print(
+        "Set GOOGLE_ADS_CLIENT_ID and GOOGLE_ADS_CLIENT_SECRET "
+        "(the live Google Ads OAuth client), or GOOGLE_GSC_* / GOOGLE_GA4_* overrides.",
+        file=sys.stderr,
+    )
     sys.exit(1)
 
 auth_code: dict[str, str] = {}
@@ -59,6 +73,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    print(
+        "Preferred: https://developers.google.com/oauthplayground/ "
+        "with the Google Ads OAuth client (docs/gsc-setup.md).\n"
+        "This script is a local fallback for Desktop/loopback clients.\n"
+    )
     server = http.server.HTTPServer(("127.0.0.1", 8765), Handler)
     thread = threading.Thread(target=server.handle_request, daemon=True)
     thread.start()
@@ -70,9 +89,12 @@ def main() -> None:
         "scope": SCOPE,
         "access_type": "offline",
         "prompt": "consent",
+        "include_granted_scopes": "true",
+        "login_hint": "chifung.login@gmail.com",
     }
     url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(params)
     print("Opening browser for Google consent…")
+    print("Sign in as chifung.login@gmail.com (the account with all GSC properties).")
     print(url)
     webbrowser.open(url)
     thread.join(timeout=180)
@@ -110,7 +132,7 @@ def main() -> None:
 
     print("\n=== SUCCESS — store this as Supabase secret GOOGLE_GSC_REFRESH_TOKEN ===\n")
     print(refresh)
-    print("\nAlso set GOOGLE_GSC_CLIENT_ID and GOOGLE_GSC_CLIENT_SECRET on Edge Functions.\n")
+    print("\nClient ID/Secret stay on the Google Ads OAuth client unless you overrode GOOGLE_GSC_*.\n")
 
 
 if __name__ == "__main__":

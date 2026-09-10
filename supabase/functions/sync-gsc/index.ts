@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
     const startStr = toIsoDate(start);
     const endStr = toIsoDate(end);
 
-    const accessToken = await getGscAccessToken();
+    const accessToken = await getGscAccessToken(supabase);
     const sites = await listGscSites(accessToken);
 
     const { data: websiteRows, error: wsErr } = await supabase
@@ -174,6 +174,7 @@ Deno.serve(async (req) => {
           const { error: insErr } = await supabase
             .from("seo_keywords")
             .insert({
+              id: crypto.randomUUID(),
               website_profile_id: match.website_profile_id,
               keyword: display,
               normalized_keyword: normalized,

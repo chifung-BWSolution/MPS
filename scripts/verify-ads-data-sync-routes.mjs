@@ -38,6 +38,11 @@ const checks = [
       .includes('title="Google Analytics 4"'),
   },
   {
+    name: 'AdsDataSyncModule has GSC OAuth panel',
+    ok: readFileSync(path.join(root, 'src/components/marketing/AdsDataSyncModule.tsx'), 'utf8')
+      .includes('<GscOAuthPanel'),
+  },
+  {
     name: 'sidebar still groups by section',
     ok: sidebarSrc.includes('subItem.section'),
   },
