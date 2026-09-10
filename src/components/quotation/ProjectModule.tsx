@@ -12,11 +12,10 @@ import {
   PitchingFormModal,
   pitchingFormToUpdate,
   RemainingDaysCell,
-  PitchingStatusSelect,
+  PitchingStatusBadge,
   type PitchingFormValues,
 } from '@/components/quotation/PitchingModule';
 import {
-  pitchingStatusConfig,
   formatProjectTypes,
   formatMainPmName,
   formatRelatedClientName,
@@ -24,7 +23,6 @@ import {
   PITCHING_PROJECT_TYPE_OPTIONS,
   isProjectPageRecord,
   type PitchingRecord,
-  type PitchingStatus,
 } from '@/data/pitchingData';
 import {
   QuotationClientProjectTableHeaders,
@@ -38,12 +36,10 @@ function ProjectList({
   records,
   onView,
   onEdit,
-  onStatusChange,
 }: {
   records: PitchingRecord[];
   onView: (record: PitchingRecord) => void;
   onEdit: (record: PitchingRecord) => void;
-  onStatusChange: (id: string, status: PitchingStatus) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [projectTypeFilter, setProjectTypeFilter] = useState<string>('all');
@@ -176,11 +172,8 @@ function ProjectList({
                       expense={record.expense}
                       gp={record.gp}
                     />
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      <PitchingStatusSelect
-                        value={record.status}
-                        onChange={(status) => onStatusChange(record.id, status)}
-                      />
+                    <td className="px-4 py-3">
+                      <PitchingStatusBadge status={record.status} />
                     </td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-3">
@@ -218,7 +211,7 @@ function ProjectList({
 }
 
 export function ProjectModule() {
-  const { records, loading, error, lastSyncedAt, refresh, updateStatus, updateRecord } = useQuotationClientProjects();
+  const { records, loading, error, lastSyncedAt, refresh, updateRecord } = useQuotationClientProjects();
   const { records: clientListRecords, addClient } = useQuotationClientList();
   const { detailId, openDetail, closeDetail } = useQuotationClientDetailId('projects');
   const selectedRecord = useMemo(
@@ -278,15 +271,6 @@ export function ProjectModule() {
     }
     closeFormModal();
     toast.success('Project 已更新');
-  };
-
-  const handleStatusChange = async (id: string, status: PitchingStatus) => {
-    const { error: updateErr } = await updateStatus(id, status);
-    if (updateErr) {
-      toast.error(`狀態更新失敗：${updateErr.message}`);
-      return;
-    }
-    if (detailId === id) openQuotationProjectDetail(id, status);
   };
 
   const handleSaveRecord = async (id: string, data: QuotationClientProjectUpdate) => {
@@ -372,7 +356,6 @@ export function ProjectModule() {
           records={projectRecords}
           onView={handleView}
           onEdit={openEditModal}
-          onStatusChange={(id, status) => void handleStatusChange(id, status)}
         />
       )}
 

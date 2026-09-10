@@ -54,6 +54,8 @@ import { PitchingIncomeTab } from '@/components/quotation/PitchingIncomeTab';
 import { PitchingExpenseTab } from '@/components/quotation/PitchingExpenseTab';
 import { PitchingFollowUpsTab } from '@/components/quotation/PitchingFollowUpsTab';
 import { PitchingWorkHoursTab } from '@/components/quotation/PitchingWorkHoursTab';
+import { PitchingStatusConversionModal } from '@/components/quotation/PitchingStatusConversionModal';
+import { allowedStatusTargets, isAllowedStatusTransition, needsConversionPopup } from '@/lib/clientProjectStatus';
 import { QuotationBvCard } from '@/components/quotation/QuotationBvCard';
 import { PitchingInfoMetricsRow } from '@/components/quotation/PitchingInfoMetricsRow';
 import {
@@ -144,16 +146,36 @@ function formatEnquiryDateLabel(iso: string): string {
   return `${y}年${parseInt(m!, 10)}月${parseInt(d!, 10)}日`;
 }
 
+export function PitchingStatusBadge({
+  status,
+  className,
+}: {
+  status: PitchingStatus;
+  className?: string;
+}) {
+  const config = pitchingStatusConfig[status];
+  return (
+    <span className={cn('text-[12px] font-medium px-2 py-1 rounded-sm', config.bgColor, config.color, className)}>
+      {config.label}
+    </span>
+  );
+}
+
 export function PitchingStatusSelect({
   value,
   onChange,
+  allowedTargets,
   className,
 }: {
   value: PitchingStatus;
   onChange: (status: PitchingStatus) => void;
+  allowedTargets?: PitchingStatus[];
   className?: string;
 }) {
   const config = pitchingStatusConfig[value];
+  const options = allowedTargets
+    ? Array.from(new Set([value, ...allowedTargets]))
+    : PITCHING_STATUS_OPTIONS;
   return (
     <select
       value={value}
@@ -168,7 +190,7 @@ export function PitchingStatusSelect({
       )}
       aria-label="變更狀態"
     >
-      {PITCHING_STATUS_OPTIONS.map((status) => (
+      {options.map((status) => (
         <option key={status} value={status}>
           {pitchingStatusConfig[status].label}
         </option>
@@ -584,12 +606,10 @@ function PitchingList({
   records,
   onView,
   onEdit,
-  onStatusChange,
 }: {
   records: PitchingRecord[];
   onView: (record: PitchingRecord) => void;
   onEdit: (record: PitchingRecord) => void;
-  onStatusChange: (id: string, status: PitchingStatus) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [projectTypeFilter, setProjectTypeFilter] = useState<string>('all');
@@ -718,11 +738,8 @@ function PitchingList({
                       expense={record.expense}
                       gp={record.gp}
                     />
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      <PitchingStatusSelect
-                        value={record.status}
-                        onChange={(status) => onStatusChange(record.id, status)}
-                      />
+                    <td className="px-4 py-3">
+                      <PitchingStatusBadge status={record.status} />
                     </td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-3">
@@ -827,6 +844,7 @@ export function PitchingDetail({
   const [activeTab, setActiveTab] = useState<'info' | 'followups' | 'hours' | 'docs' | 'income' | 'budget' | 'expense'>('info');
   const [draft, setDraft] = useState<DetailDraft>(() => draftFromRecord(record, clientOptions));
   const [saving, setSaving] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<PitchingStatus | null>(null);
   const [docEditor, setDocEditor] = useState(() => readInvoiceReceiptDoc());
   const clientCompany = companyNamesForClient(draft.clientId, clientOptions);
   const clientPage = quotationProjectSubModule(record.status);
@@ -870,13 +888,42 @@ export function PitchingDetail({
     }
   };
 
+  const applyStatusChange = async (status: PitchingStatus, extra?: QuotationClientProjectUpdate) => {
+    const ok = await persist({ ...extra, status });
+    if (!ok) return false;
+    const nextDates = extra
+      ? {
+          signedDate: extra.signedDate ?? draft.signedDate,
+          handoverDate: extra.handoverDate ?? draft.handoverDate,
+        }
+      : {
+          signedDate: draft.signedDate,
+          handoverDate: draft.handoverDate,
+        };
+    setDraft((prev) => ({
+      ...prev,
+      status,
+      ...nextDates,
+      estimatedIncome: extra?.estimatedIncome ?? prev.estimatedIncome,
+      estimatedExpenses: extra?.estimatedExpenses ?? prev.estimatedExpenses,
+    }));
+    if (quotationProjectSubModule(status) !== quotationProjectSubModule(record.status)) {
+      openQuotationProjectDetail(record.id, status);
+    }
+    return true;
+  };
+
   const handleStatusChange = async (status: PitchingStatus) => {
     if (status === record.status) return;
-    setDraft((prev) => ({ ...prev, status }));
-    const ok = await persist({ status });
-    if (!ok) {
-      setDraft((prev) => ({ ...prev, status: record.status }));
+    if (!isAllowedStatusTransition(record.status, status)) {
+      toast.error('不允許此狀態轉換');
+      return;
     }
+    if (needsConversionPopup(record.status, status)) {
+      setPendingStatus(status);
+      return;
+    }
+    await applyStatusChange(status);
   };
 
   const handleBudgetPersist = async (patch: {
@@ -945,8 +992,10 @@ export function PitchingDetail({
           >
             <Pencil size={14} /> 編輯
           </button>
+          {/* Status change stays on the detail page for development; will become admin-only later. */}
           <PitchingStatusSelect
             value={draft.status}
+            allowedTargets={allowedStatusTargets(record.status)}
             onChange={(status) => void handleStatusChange(status)}
             className="text-[13px] px-3 py-1.5"
           />
@@ -1098,13 +1147,23 @@ export function PitchingDetail({
           onPersist={handleBudgetPersist}
         />
       )}
+
+      {pendingStatus && (
+        <PitchingStatusConversionModal
+          record={record}
+          target={pendingStatus}
+          saving={saving}
+          onClose={() => setPendingStatus(null)}
+          onConfirm={(patch) => applyStatusChange(pendingStatus, patch)}
+        />
+      )}
     </div>
   );
 }
 
 export function PitchingModule() {
   const { systemUser } = useAuth();
-  const { records, loading, error, lastSyncedAt, refresh, addRecord, updateStatus, updateRecord } = useQuotationClientProjects();
+  const { records, loading, error, lastSyncedAt, refresh, addRecord, updateRecord } = useQuotationClientProjects();
   const { records: clientListRecords, addClient } = useQuotationClientList();
   const { detailId, openDetail, closeDetail } = useQuotationClientDetailId('pitching');
   const selectedRecord = useMemo(
@@ -1190,15 +1249,6 @@ export function PitchingModule() {
     }
     closeFormModal();
     toast.success('Pitching 已成功新增');
-  };
-
-  const handleStatusChange = async (id: string, status: PitchingStatus) => {
-    const { error: updateErr } = await updateStatus(id, status);
-    if (updateErr) {
-      toast.error(`狀態更新失敗：${updateErr.message}`);
-      return;
-    }
-    if (detailId === id) openQuotationProjectDetail(id, status);
   };
 
   const handleSaveRecord = async (id: string, data: QuotationClientProjectUpdate) => {
@@ -1291,7 +1341,6 @@ export function PitchingModule() {
           records={records}
           onView={handleView}
           onEdit={openEditModal}
-          onStatusChange={(id, status) => void handleStatusChange(id, status)}
         />
       )}
 
