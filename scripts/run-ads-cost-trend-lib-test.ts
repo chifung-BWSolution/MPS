@@ -7,9 +7,11 @@ import {
   buildMonthlyBucketRanges,
   clampSelectedMonthRange,
   defaultMonthlyRange,
+  costTrendUnitCostMicros,
   emptyCostTrendBuckets,
   filterCostTrendCampaigns,
   formatCostTrendMoney,
+  formatCostTrendRate,
   formatMonthLabel,
   groupCostTrendByBrand,
   monthEndIso,
@@ -36,6 +38,8 @@ function campaign(partial: Partial<AdsCostTrendCampaign> & Pick<AdsCostTrendCamp
     impressions: 0,
     clicks: 0,
     conversions: 0,
+    clickBuckets: emptyCostTrendBuckets(),
+    conversionBuckets: emptyCostTrendBuckets(),
     totalMicros: Object.values(buckets).reduce((sum, value) => sum + value, 0),
     ...partial,
     buckets,
@@ -129,6 +133,10 @@ assert.equal(totals.facebookMicros, 3_000_000);
 
 assert.match(formatCostTrendMoney(6_500_000), /^\$/);
 assert.match(formatCostTrendMoney(1_000_000), /^\$/);
+assert.equal(costTrendUnitCostMicros(6_000_000, 3), 2_000_000);
+assert.equal(costTrendUnitCostMicros(6_000_000, 0), null);
+assert.equal(formatCostTrendRate(null), '—');
+assert.match(formatCostTrendRate(2_000_000), /^\$/);
 
 const monthlyDefault = defaultMonthlyRange('2026-08-14');
 assert.equal(monthlyDefault.from, '2026-03');

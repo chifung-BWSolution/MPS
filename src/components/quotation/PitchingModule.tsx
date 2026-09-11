@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, type ReactNode } from 'react';
-import { Search, Plus, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil, Clock, FolderOpen, Wallet, Banknote, ExternalLink } from 'lucide-react';
+import { Search, Plus, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil, Clock, FolderOpen, Wallet, Banknote, ExternalLink, PieChart } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -53,6 +53,7 @@ import { PitchingBudgetTab } from '@/components/quotation/PitchingBudgetTab';
 import { PitchingDocsTab } from '@/components/quotation/PitchingDocsTab';
 import { PitchingIncomeTab } from '@/components/quotation/PitchingIncomeTab';
 import { PitchingExpenseTab } from '@/components/quotation/PitchingExpenseTab';
+import { PitchingCostAnalysisTab } from '@/components/quotation/PitchingCostAnalysisTab';
 import { PitchingFollowUpsTab } from '@/components/quotation/PitchingFollowUpsTab';
 import { PitchingWorkHoursTab } from '@/components/quotation/PitchingWorkHoursTab';
 import { PitchingStatusConversionModal } from '@/components/quotation/PitchingStatusConversionModal';
@@ -909,7 +910,7 @@ export function PitchingDetail({
   onEdit: () => void;
   onSave: (id: string, data: QuotationClientProjectUpdate) => Promise<{ error: { message: string } | null }>;
 }) {
-  const [activeTab, setActiveTab] = useState<'info' | 'followups' | 'hours' | 'docs' | 'income' | 'budget' | 'expense'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'followups' | 'hours' | 'docs' | 'income' | 'budget' | 'expense' | 'cost'>('info');
   const [draft, setDraft] = useState<DetailDraft>(() => draftFromRecord(record, clientOptions));
   const [saving, setSaving] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<PitchingStatus | null>(null);
@@ -1027,6 +1028,7 @@ export function PitchingDetail({
     { id: 'budget', label: '預計收入支出', icon: DollarSign },
     { id: 'income', label: '收入', icon: Wallet },
     { id: 'expense', label: '支出', icon: Banknote },
+    { id: 'cost', label: '成本分析', icon: PieChart },
   ] as const;
 
   return (
@@ -1205,6 +1207,14 @@ export function PitchingDetail({
           relatedId={record.id}
           signedDate={draft.signedDate}
           handoverDate={draft.handoverDate}
+        />
+      )}
+
+      {activeTab === 'cost' && (
+        <PitchingCostAnalysisTab
+          projectId={record.id}
+          estimatedIncome={record.estimatedIncome}
+          estimatedExpenses={record.estimatedExpenses ?? []}
         />
       )}
 

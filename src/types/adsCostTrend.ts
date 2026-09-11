@@ -14,6 +14,8 @@ export type AdsCostTrendBucketId = string;
 
 export type AdsCostTrendPeriodMode = 'rolling30' | 'monthly';
 
+export type AdsCostTrendRateMetric = 'cpc' | 'cpa';
+
 export type AdsCostTrendPlatformFilter = 'all' | AdsPlatform;
 
 export type AdsCostTrendBucketDef = {
@@ -43,6 +45,8 @@ export type AdsCostTrendCampaign = {
   brandListIds: string[];
   tags: AdsTag[];
   buckets: AdsCostTrendBuckets;
+  clickBuckets: AdsCostTrendBuckets;
+  conversionBuckets: AdsCostTrendBuckets;
   totalMicros: number;
   impressions: number;
   clicks: number;

@@ -158,6 +158,16 @@ export function formatCostTrendMoney(micros: number): string {
   return formatMoneyFromMicros(micros);
 }
 
+export function costTrendUnitCostMicros(costMicros: number, units: number): number | null {
+  if (!(units > 0)) return null;
+  return Math.round(costMicros / units);
+}
+
+export function formatCostTrendRate(micros: number | null): string {
+  if (micros == null) return '—';
+  return formatCostTrendMoney(micros);
+}
+
 function compareText(a: string, b: string): number {
   return a.localeCompare(b, 'zh-Hant', { sensitivity: 'base', numeric: true });
 }

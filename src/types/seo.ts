@@ -41,6 +41,19 @@ export type SeoUpgradeRow = {
   rankAfter?: number | null;
 };
 
+export type GscSyncRunMeta = {
+  date_from?: string;
+  date_to?: string;
+  sites_listed?: number;
+  errors?: string[];
+  skipped?: string[];
+  processed_site_urls?: string[];
+  skipped_site_urls?: string[];
+  incomplete?: boolean;
+  timed_out?: boolean;
+  sites_remaining?: number;
+};
+
 export type GscSyncRunRow = {
   id: string;
   started_at: string;
@@ -50,4 +63,5 @@ export type GscSyncRunRow = {
   rows_upserted: number;
   keywords_upserted: number;
   error_message: string | null;
+  meta?: GscSyncRunMeta | null;
 };

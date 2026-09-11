@@ -10,8 +10,10 @@ import {
   currentMonthKey,
   defaultMonthlyRange,
   emptyCostTrendBuckets,
+  costTrendUnitCostMicros,
   filterCostTrendCampaigns,
   formatCostTrendMoney,
+  formatCostTrendRate,
   formatMonthLabel,
   groupCostTrendByBrand,
   isMonthKey,
@@ -35,6 +37,7 @@ import type {
   AdsCostTrendCampaign,
   AdsCostTrendPeriodMode,
   AdsCostTrendPlatformFilter,
+  AdsCostTrendRateMetric,
   AdsCostTrendSortDir,
   AdsCostTrendSortKey,
 } from '@/types/adsCostTrend';
@@ -71,6 +74,33 @@ function SortableTh({
         <Icon size={12} className={cn(active ? 'text-teal-600' : 'opacity-40')} />
       </button>
     </th>
+  );
+}
+
+function campaignRateUnits(
+  campaign: AdsCostTrendCampaign,
+  bucketId: string | 'total',
+  rateMetric: AdsCostTrendRateMetric,
+): number {
+  if (bucketId === 'total') {
+    return rateMetric === 'cpc' ? campaign.clicks : campaign.conversions;
+  }
+  const buckets = rateMetric === 'cpc' ? campaign.clickBuckets : campaign.conversionBuckets;
+  return buckets[bucketId] ?? 0;
+}
+
+function campaignRateLine(
+  costMicros: number,
+  campaign: AdsCostTrendCampaign,
+  bucketId: string | 'total',
+  rateMetric: AdsCostTrendRateMetric,
+) {
+  const label = rateMetric === 'cpc' ? 'CPC' : 'CPA';
+  const units = campaignRateUnits(campaign, bucketId, rateMetric);
+  return (
+    <div className="text-[11px] font-normal text-muted-foreground">
+      {label} {formatCostTrendRate(costTrendUnitCostMicros(costMicros, units))}
+    </div>
   );
 }
 
@@ -124,6 +154,7 @@ export function AdsCostTrendModule() {
   const [platform, setPlatform] = useState<AdsCostTrendPlatformFilter>('all');
   const [objective, setObjective] = useState('all');
   const [tagFilter, setTagFilter] = useState('all');
+  const [rateMetric, setRateMetric] = useState<AdsCostTrendRateMetric>('cpc');
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<AdsCostTrendSortKey>('total');
   const [sortDir, setSortDir] = useState<AdsCostTrendSortDir>('desc');
@@ -332,6 +363,28 @@ export function AdsCostTrendModule() {
               <span className="text-[12px] text-muted-foreground">最多 {ADS_COST_TREND_MAX_MONTHS} 個月</span>
             </>
           )}
+          <div className="flex gap-1 bg-white rounded-md p-1 border border-[rgba(13,26,45,0.08)]" role="group" aria-label="效率指標">
+            <button
+              type="button"
+              onClick={() => setRateMetric('cpc')}
+              className={cn(
+                'px-3 py-1.5 rounded text-[12px] font-medium transition-colors',
+                rateMetric === 'cpc' ? 'bg-teal-600 text-white' : 'text-muted-foreground hover:bg-muted',
+              )}
+            >
+              CPC
+            </button>
+            <button
+              type="button"
+              onClick={() => setRateMetric('cpa')}
+              className={cn(
+                'px-3 py-1.5 rounded text-[12px] font-medium transition-colors',
+                rateMetric === 'cpa' ? 'bg-teal-600 text-white' : 'text-muted-foreground hover:bg-muted',
+              )}
+            >
+              CPA
+            </button>
+          </div>
           <Select value={platform} onValueChange={(value) => onPlatformChange(value as AdsCostTrendPlatformFilter)}>
             <SelectTrigger className="w-[170px] h-9 text-[13px] bg-white">
               <SelectValue placeholder="廣告平台" />
@@ -450,6 +503,7 @@ export function AdsCostTrendModule() {
                         buckets={ranges}
                         isOpen={isOpen}
                         onToggle={() => toggleBrand(row.brandId)}
+                        rateMetric={rateMetric}
                         onOpenCampaign={(campaign) => openCampaignDetail(campaign, campaignDetailRange)}
                       />
                     );
@@ -467,6 +521,7 @@ function BrandBlock({
   row,
   buckets,
   isOpen,
+  rateMetric,
   onToggle,
   onOpenCampaign,
 }: {
@@ -480,6 +535,7 @@ function BrandBlock({
   };
   buckets: AdsCostTrendBucketRange[];
   isOpen: boolean;
+  rateMetric: AdsCostTrendRateMetric;
   onToggle: () => void;
   onOpenCampaign: (campaign: AdsCostTrendCampaign) => void;
 }) {
@@ -553,13 +609,18 @@ function BrandBlock({
                 </div>
               </div>
             </td>
-            {buckets.map((bucket) => (
-              <td key={bucket.id} className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
-                {formatCostTrendMoney(campaign.buckets[bucket.id] ?? 0)}
-              </td>
-            ))}
+            {buckets.map((bucket) => {
+              const costMicros = campaign.buckets[bucket.id] ?? 0;
+              return (
+                <td key={bucket.id} className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                  <div>{formatCostTrendMoney(costMicros)}</div>
+                  {campaignRateLine(costMicros, campaign, bucket.id, rateMetric)}
+                </td>
+              );
+            })}
             <td className="px-3 py-2.5 text-right tabular-nums font-medium">
-              {formatCostTrendMoney(campaign.totalMicros)}
+              <div>{formatCostTrendMoney(campaign.totalMicros)}</div>
+              {campaignRateLine(campaign.totalMicros, campaign, 'total', rateMetric)}
             </td>
           </tr>
         ))}

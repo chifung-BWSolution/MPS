@@ -190,6 +190,7 @@ async function exchangeRefreshToken(
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
+    signal: AbortSignal.timeout(20_000),
   });
   const detail = await res.text();
   if (!res.ok) {
@@ -268,6 +269,7 @@ export async function listGscSites(accessToken: string): Promise<GscSite[]> {
     "https://www.googleapis.com/webmasters/v3/sites",
     {
       headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(20_000),
     },
   );
   if (!res.ok) {
@@ -318,8 +320,9 @@ export async function fetchDailyQueryMetrics(
   const out: GscDailyMetric[] = [];
   let startRow = 0;
   const pageSize = 25000;
+  const maxRows = 50_000;
 
-  while (true) {
+  while (startRow < maxRows) {
     const res = await fetch(url, {
       method: "POST",
       headers: {
@@ -334,6 +337,7 @@ export async function fetchDailyQueryMetrics(
         startRow,
         dataState: "final",
       }),
+      signal: AbortSignal.timeout(45_000),
     });
     if (!res.ok) {
       throw new Error(

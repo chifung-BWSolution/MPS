@@ -43,6 +43,15 @@ const checks = [
       .includes('<GscOAuthPanel'),
   },
   {
+    name: 'GSC panel shows sync run like Ads/GA4',
+    ok: readFileSync(path.join(root, 'src/components/website/GscOAuthPanel.tsx'), 'utf8')
+      .includes('useGscSync')
+      && readFileSync(path.join(root, 'src/components/website/GscOAuthPanel.tsx'), 'utf8')
+        .includes('開始同步')
+      && readFileSync(path.join(root, 'src/components/website/GscOAuthPanel.tsx'), 'utf8')
+        .includes('顯示 refresh token'),
+  },
+  {
     name: 'sidebar still groups by section',
     ok: sidebarSrc.includes('subItem.section'),
   },

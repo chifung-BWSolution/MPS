@@ -307,6 +307,8 @@ export function useAdsCostTrend(query: {
           accountId: string;
           campaignId: string;
           buckets: ReturnType<typeof emptyCostTrendBuckets>;
+          clickBuckets: ReturnType<typeof emptyCostTrendBuckets>;
+          conversionBuckets: ReturnType<typeof emptyCostTrendBuckets>;
           impressions: number;
           clicks: number;
           conversions: number;
@@ -329,11 +331,15 @@ export function useAdsCostTrend(query: {
           accountId,
           campaignId,
           buckets: emptyCostTrendBuckets(bucketIds),
+          clickBuckets: emptyCostTrendBuckets(bucketIds),
+          conversionBuckets: emptyCostTrendBuckets(bucketIds),
           impressions: 0,
           clicks: 0,
           conversions: 0,
         };
         existing.buckets[bucketId] = (existing.buckets[bucketId] ?? 0) + spendMicros;
+        existing.clickBuckets[bucketId] = (existing.clickBuckets[bucketId] ?? 0) + clicks;
+        existing.conversionBuckets[bucketId] = (existing.conversionBuckets[bucketId] ?? 0) + conversions;
         existing.impressions += impressions;
         existing.clicks += clicks;
         existing.conversions += conversions;
@@ -390,6 +396,8 @@ export function useAdsCostTrend(query: {
             ],
             tags: tagsByCampaign.get(`google:${rowId}`) ?? [],
             buckets: row.buckets,
+            clickBuckets: row.clickBuckets,
+            conversionBuckets: row.conversionBuckets,
             totalMicros: sumCostTrendBuckets(row.buckets),
             impressions: row.impressions,
             clicks: row.clicks,
@@ -422,6 +430,8 @@ export function useAdsCostTrend(query: {
           brandListIds: brandListId ? [brandListId] : [],
           tags: tagsByCampaign.get(`facebook:${rowId}`) ?? [],
           buckets: row.buckets,
+          clickBuckets: row.clickBuckets,
+          conversionBuckets: row.conversionBuckets,
           totalMicros: sumCostTrendBuckets(row.buckets),
           impressions: row.impressions,
           clicks: row.clicks,
