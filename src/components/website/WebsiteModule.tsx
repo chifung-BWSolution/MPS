@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
-import { Banknote, Globe, Plus, Search, ExternalLink, Video, TrendingUp, Link2, Calendar, X, Check, LayoutGrid, List, ArrowLeft, Megaphone, Star, ChevronDown, Pencil, Monitor, Server, MapPin, RefreshCw, BarChart3 } from 'lucide-react';
+import { Banknote, Globe, Plus, ExternalLink, Video, TrendingUp, Link2, Calendar, X, Check, LayoutGrid, ArrowLeft, Megaphone, Star, ChevronDown, Pencil, Monitor, Server, MapPin, RefreshCw, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WebsiteProfileFull, WebsiteLevel, ProfileType, SystemType } from '@/types/app';
 import {
@@ -14,6 +14,7 @@ import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
 import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useBrands } from '@/hooks/useBrands';
+import { findWebsiteByCanonicalUrl } from '@/lib/canonicalDomainUrl';
 import { nextClientProjectIdForWebsite, syncWebsiteClientProjectLink } from '@/lib/websiteClientProjectLink';
 import { PitchingExpenseTab } from '@/components/quotation/PitchingExpenseTab';
 import { QuotationBvCard } from '@/components/quotation/QuotationBvCard';
@@ -23,13 +24,14 @@ import { ProjectCategoryBadge, getProjectCategory, type ProjectCategoryType } fr
 import { BrandFieldBadge, CompanyFieldBadge, EmptyDash, MutedFieldBadge, StatusFieldBadge, displayText } from '@/components/ui/nullable-badge';
 import { useAdsWebsiteLinks } from '@/hooks/useAdsWebsiteLinks';
 import { useWebsiteConnectionStatus } from '@/hooks/useWebsiteConnectionStatus';
-import type { AdsDiscoveredDomain } from '@/types/adsWebsiteLink';
 import {
-  ga4ConnectionLabel,
-  googleAdsConnectionLabel,
-  type Ga4ConnectionStatus,
-  type GoogleAdsConnectionStatus,
-} from '@/lib/websiteConnectionStatus';
+  WebsiteListFilterBar,
+  brandIdsByCodeMap,
+  matchesWebsiteListFilters,
+} from '@/components/website/WebsiteListFilterBar';
+import { useGa4WebsiteListTraffic } from '@/hooks/useGa4WebsiteListTraffic';
+import { Ga4RecentTrafficCell, Ga4TrafficTrendCell } from '@/components/website/Ga4WebsiteListTrafficCells';
+import type { AdsDiscoveredDomain } from '@/types/adsWebsiteLink';
 import {
   adsPlatformSourceLabel,
   domainSourceOrigin,
@@ -53,6 +55,7 @@ import {
 } from './WebsiteDetailTabs';
 import { Ga4TrafficModule } from './traffic/Ga4TrafficModule';
 import { WebsiteTrafficTab } from './traffic/WebsiteTrafficTab';
+import { AnalyticsConnectionsModule } from './AnalyticsConnectionsModule';
 
 const statusConfig = {
   development: { label: '開發中', color: 'text-blue-700', bgColor: 'bg-blue-50' },
@@ -259,7 +262,7 @@ function websiteFormToProfileUpdates(
     || brands.find(b => b.brandCode === data.brand);
   return {
     websiteName: data.websiteName,
-    domainUrl: data.domainUrl,
+    domainUrl: data.domainUrl.trim(),
     companyId: company?.uuid || data.companyId,
     brandId: brandRow?.id || data.brandId || '',
     platform: data.platform as WebsiteProfileFull['platform'],
@@ -577,50 +580,16 @@ function WebsiteDetail({
   );
 }
 
-function ConnectionStatusBadge({
-  label,
-  tone,
-}: {
-  label: string;
-  tone: 'active' | 'paused' | 'linked' | 'unlinked';
-}) {
-  const toneClass =
-    tone === 'active'
-      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-      : tone === 'paused'
-        ? 'bg-amber-50 text-amber-700 border-amber-200'
-        : tone === 'linked'
-          ? 'bg-teal-50 text-teal-700 border-teal-200'
-          : 'bg-slate-50 text-slate-500 border-slate-200';
-  return (
-    <span className={cn('text-[11px] font-medium px-1.5 py-0.5 rounded border', toneClass)}>
-      {label}
-    </span>
-  );
-}
-
-function GoogleAdsConnectionBadge({ status }: { status: GoogleAdsConnectionStatus }) {
-  const tone = status === 'active' ? 'active' : status === 'paused' ? 'paused' : 'unlinked';
-  return <ConnectionStatusBadge label={googleAdsConnectionLabel(status)} tone={tone} />;
-}
-
-function Ga4ConnectionBadge({ status }: { status: Ga4ConnectionStatus }) {
-  return (
-    <ConnectionStatusBadge
-      label={ga4ConnectionLabel(status)}
-      tone={status === 'linked' ? 'linked' : 'unlinked'}
-    />
-  );
-}
-
 function UnmatchedAdsDomainsModal({
   domains,
+  profiles,
   syncing,
   onClose,
   onDismiss,
   onCreate,
 }: {
   domains: AdsDiscoveredDomain[];
+  profiles: WebsiteProfileFull[];
   syncing: boolean;
   onClose: () => void;
   onDismiss: (domain: string) => Promise<void>;
@@ -657,6 +626,7 @@ function UnmatchedAdsDomainsModal({
               const extra = Math.max(0, refs.length - shown.length);
               const origin = domainSourceOrigin(d.sources);
               const originLabel = domainSourceOriginLabel(origin);
+              const existing = findWebsiteByCanonicalUrl(profiles, d.normalizedDomain);
               return (
                 <div
                   key={d.normalizedDomain}
@@ -666,6 +636,11 @@ function UnmatchedAdsDomainsModal({
                     <div className="text-[13px] font-medium truncate">{d.normalizedDomain}</div>
                     {d.sampleUrl ? (
                       <div className="text-[11px] text-muted-foreground truncate max-w-[520px]">{d.sampleUrl}</div>
+                    ) : null}
+                    {existing ? (
+                      <div className="text-[11px] text-teal-700 mt-1">
+                        已有網站：{existing.websiteName}
+                      </div>
                     ) : null}
                     <div className="flex gap-1.5 mt-1.5 flex-wrap items-center">
                       <span className="text-[11px] text-muted-foreground">來源</span>
@@ -750,7 +725,7 @@ function UnmatchedAdsDomainsModal({
                       onClick={() => onCreate(d)}
                       className="px-2.5 py-1.5 text-[12px] font-medium rounded-md bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50"
                     >
-                      建立網站
+                      {existing ? '連結現有網站' : '建立網站'}
                     </button>
                     <button
                       type="button"
@@ -791,11 +766,8 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
     dismissDomain,
     markLinkedAndRelink,
   } = useAdsWebsiteLinks();
-  const {
-    googleAdsByWebsiteId,
-    ga4StatusFor,
-    refresh: refreshConnectionStatus,
-  } = useWebsiteConnectionStatus();
+  const { refresh: refreshConnectionStatus } = useWebsiteConnectionStatus();
+  const { byWebsiteId: ga4TrafficByWebsiteId, loading: ga4TrafficLoading } = useGa4WebsiteListTraffic();
   const { companies } = useCompanies();
   const { brands } = useBrands();
   const [searchQuery, setSearchQuery] = useState('');
@@ -805,32 +777,12 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'internal' | 'client'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'website' | 'system'>(profileTypeFilter || 'all');
   const [levelFilter, setLevelFilter] = useState<number[]>([]);
-  const [adsFilter, setAdsFilter] = useState<'all' | 'with' | 'without'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showUnmatchedModal, setShowUnmatchedModal] = useState(false);
   const [pendingCreateDomain, setPendingCreateDomain] = useState<AdsDiscoveredDomain | null>(null);
   const [editingSite, setEditingSite] = useState<WebsiteProfileFull | null>(null);
 
-  const filteredBrands = companyFilter === 'all'
-    ? brands
-    : brands.filter(b => {
-        const co = companies.find(c => c.uuid === b.companyId || c.id === b.companyId);
-        return co?.companyCode === companyFilter;
-      });
-  // Deduplicate brands by brandCode for the filter dropdown
-  const uniqueBrandCodes = Array.from(
-    new Map(filteredBrands.filter(b => b.isActive).map(b => [b.brandCode, b])).values()
-  );
-  // Map of brandCode -> set of brand ids (so filtering matches all brands sharing the same code)
-  const brandIdsByCode = new Map<string, Set<string>>();
-  brands.forEach(b => {
-    if (!brandIdsByCode.has(b.brandCode)) brandIdsByCode.set(b.brandCode, new Set());
-    brandIdsByCode.get(b.brandCode)!.add(b.id);
-  });
-
-  const toggleLevelFilter = (lvl: number) => {
-    setLevelFilter(prev => prev.includes(lvl) ? prev.filter(l => l !== lvl) : [...prev, lvl]);
-  };
+  const brandIdsByCode = brandIdsByCodeMap(brands);
 
   const getWebsiteProjectCategory = (ws: WebsiteProfileFull) => resolveWebsiteProjectCategory(ws);
 
@@ -931,31 +883,14 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
     setEditingSite(null);
   };
 
-  const filtered = websiteProfiles.filter(ws => {
-    if (typeFilter !== 'all') {
-      const wsType = ws.profileType || 'website';
-      if (wsType !== typeFilter) return false;
-    }
-    const adsStatus = googleAdsByWebsiteId[ws.id] || 'unlinked';
-    if (adsFilter === 'with' && adsStatus === 'unlinked') return false;
-    if (adsFilter === 'without' && adsStatus !== 'unlinked') return false;
-    if (companyFilter !== 'all' && (ws.company || '') !== companyFilter) return false;
-    if (brandFilter !== 'all') {
-      const matchingIds = brandIdsByCode.get(brandFilter);
-      if (!matchingIds || !matchingIds.has(ws.brandId)) return false;
-    }
-    if (statusFilter !== 'all' && ws.status !== statusFilter) return false;
-    if (levelFilter.length > 0 && !levelFilter.includes(ws.level)) return false;
-    if (categoryFilter !== 'all') {
-      const { category } = getWebsiteProjectCategory(ws);
-      if (category !== categoryFilter) return false;
-    }
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return ws.websiteName.toLowerCase().includes(q) || (ws.domainUrl || '').toLowerCase().includes(q) || (ws.brand || '').toLowerCase().includes(q);
-    }
-    return true;
-  }).sort((a, b) => b.totalHours - a.totalHours);
+  const filtered = websiteProfiles.filter((ws) =>
+    matchesWebsiteListFilters(
+      ws,
+      { searchQuery, companyFilter, brandFilter, statusFilter, categoryFilter, typeFilter, levelFilter },
+      brandIdsByCode,
+      getWebsiteProjectCategory,
+    ),
+  ).sort((a, b) => b.totalHours - a.totalHours);
 
   return (
     <div className="space-y-6">
@@ -995,100 +930,23 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
         </div>
       </div>
 
-      {/* Profile Type Quick Switch */}
-      <div className="flex items-center gap-1.5">
-        {(['all', 'website', 'system'] as const).map(type => (
-          <button
-            key={type}
-            onClick={() => setTypeFilter(type)}
-            className={cn(
-              'px-3 py-1.5 rounded text-[12px] font-medium transition-colors duration-200 flex items-center gap-1.5',
-              typeFilter === type ? (type === 'system' ? 'bg-purple-600 text-white' : 'bg-teal-600 text-white') : 'bg-muted text-muted-foreground hover:bg-muted/80'
-            )}
-          >
-            {type === 'all' && '全部'}
-            {type === 'website' && <><Globe size={11} />網站</>}
-            {type === 'system' && <><Server size={11} />系統</>}
-          </button>
-        ))}
-      </div>
-
-      {/* Category Quick Switch Tabs */}
-      <div className="flex items-center gap-1.5">
-        {(['all', 'internal', 'client'] as const).map(cat => (
-          <button
-            key={cat}
-            onClick={() => setCategoryFilter(cat)}
-            className={cn(
-              'px-3 py-1.5 rounded text-[12px] font-medium transition-colors duration-200',
-              categoryFilter === cat ? 'bg-teal-600 text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'
-            )}
-          >
-            {cat === 'all' ? '全部' : cat === 'internal' ? '內部項目' : '客戶項目'}
-          </button>
-        ))}
-      </div>
-
-      {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2 px-3 py-1.5 border border-border rounded-md text-sm flex-1 max-w-[260px] bg-white">
-          <Search size={14} className="text-muted-foreground" />
-          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground" placeholder="搜尋網站名稱..." />
-        </div>
-        <select value={companyFilter} onChange={(e) => { setCompanyFilter(e.target.value); setBrandFilter('all'); }} className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white">
-          <option value="all">所有公司</option>
-          {Array.from(new Set(websiteProfiles.map(p => p.company || '').filter(Boolean))).sort().map(code => (
-            <option key={code} value={code}>{code}</option>
-          ))}
-        </select>
-        <select value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white">
-          <option value="all">所有品牌</option>
-          {uniqueBrandCodes.map(b => (
-            <option key={b.brandCode} value={b.brandCode}>{b.brandCode}</option>
-          ))}
-        </select>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white">
-          <option value="all">所有狀態</option>
-          <option value="live">已上線</option>
-          <option value="development">開發中</option>
-          <option value="maintenance">維護中</option>
-          <option value="archived">已封存</option>
-        </select>
-        <select
-          value={adsFilter}
-          onChange={(e) => setAdsFilter(e.target.value as 'all' | 'with' | 'without')}
-          className="px-3 py-1.5 border border-border rounded-md text-[13px] bg-white"
-        >
-          <option value="all">Google Ads：全部</option>
-          <option value="with">已連接</option>
-          <option value="without">未連接</option>
-        </select>
-      </div>
-
-      {/* Level Filter Buttons */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[12px] text-muted-foreground font-medium">Level 篩選：</span>
-        {([1, 2, 3, 4, 5] as WebsiteLevel[]).map(lvl => {
-          const active = levelFilter.includes(lvl);
-          return (
-            <button
-              key={lvl}
-              onClick={() => toggleLevelFilter(lvl)}
-              className={cn(
-                'text-[11px] px-2 py-1 rounded-md border font-bold transition-all',
-                active
-                  ? levelConfig[lvl].className + ' shadow-sm'
-                  : 'border-border bg-white text-muted-foreground hover:border-slate-400'
-              )}
-            >
-              L{lvl} {levelConfig[lvl].label}
-            </button>
-          );
-        })}
-        {levelFilter.length > 0 && (
-          <button onClick={() => setLevelFilter([])} className="text-[11px] text-rose-500 hover:underline ml-1">清除篩選</button>
-        )}
-      </div>
+      <WebsiteListFilterBar
+        profiles={websiteProfiles}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        companyFilter={companyFilter}
+        onCompanyFilterChange={setCompanyFilter}
+        brandFilter={brandFilter}
+        onBrandFilterChange={setBrandFilter}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        categoryFilter={categoryFilter}
+        onCategoryFilterChange={setCategoryFilter}
+        typeFilter={typeFilter}
+        onTypeFilterChange={setTypeFilter}
+        levelFilter={levelFilter}
+        onLevelFilterChange={setLevelFilter}
+      />
 
       {/* Results Count */}
       <div className="text-[12px] text-muted-foreground">
@@ -1114,8 +972,8 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">公司</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">品牌</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
-              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Google Ads</th>
-              <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">Google Analytics</th>
+              <th className="text-left text-[12px] font-medium text-muted-foreground tracking-wider px-4 py-3">最近14天流量</th>
+              <th className="text-left text-[12px] font-medium text-muted-foreground tracking-wider px-4 py-3">最近14天流量趨勢</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">工時</th>
               <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">操作</th>
             </tr>
@@ -1140,10 +998,16 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3"><BrandFieldBadge value={site.brand} /></td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3"><StatusFieldBadge config={config} /></td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3">
-                    <GoogleAdsConnectionBadge status={googleAdsByWebsiteId[site.id] || 'unlinked'} />
+                    <Ga4RecentTrafficCell
+                      summary={ga4TrafficByWebsiteId.get(site.id)}
+                      loading={ga4TrafficLoading}
+                    />
                   </td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3">
-                    <Ga4ConnectionBadge status={ga4StatusFor(site.id)} />
+                    <Ga4TrafficTrendCell
+                      summary={ga4TrafficByWebsiteId.get(site.id)}
+                      loading={ga4TrafficLoading}
+                    />
                   </td>
                   <td onClick={() => onSelectSite(site)} className="px-4 py-3 text-[13px] font-medium">{site.totalHours}h</td>
                   <td className="px-4 py-3">
@@ -1174,7 +1038,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
               ? {
                   ...emptyFormData,
                   websiteName: pendingCreateDomain.normalizedDomain,
-                  domainUrl: pendingCreateDomain.sampleUrl || `https://${pendingCreateDomain.normalizedDomain}`,
+                  domainUrl: pendingCreateDomain.normalizedDomain,
                   profileType: 'website',
                   status: 'live',
                 }
@@ -1202,6 +1066,7 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
       {showUnmatchedModal && (
         <UnmatchedAdsDomainsModal
           domains={unmatched}
+          profiles={websiteProfiles}
           syncing={adsSyncing}
           onClose={() => setShowUnmatchedModal(false)}
           onDismiss={async (domain) => {
@@ -1210,6 +1075,31 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
             else toast.message(`已略過 ${domain}`);
           }}
           onCreate={(domain) => {
+            const existing = findWebsiteByCanonicalUrl(websiteProfiles, domain.normalizedDomain);
+            if (existing) {
+              void (async () => {
+                const ga4PropertyId = (domain.sourceRefs || []).find((ref) => ref.platform === 'ga4')?.campaignId;
+                if (ga4PropertyId) {
+                  const { error: ga4Err } = await supabase
+                    .from('webandsystem_list')
+                    .update({ ga4_property_id: ga4PropertyId })
+                    .eq('id', existing.id)
+                    .is('ga4_property_id', null);
+                  if (ga4Err) {
+                    toast.error('已找到現有網站，但寫入 GA4 Property 失敗', { description: ga4Err.message });
+                  }
+                }
+                const linkRes = await markLinkedAndRelink(domain.normalizedDomain, existing.id);
+                await refreshConnectionStatus();
+                if (linkRes.ok) {
+                  toast.success(`已連結到 ${existing.websiteName}`);
+                  setShowUnmatchedModal((linkRes.result?.unmatched?.length ?? 0) > 0);
+                } else {
+                  toast.error('連結現有網站失敗', { description: linkRes.error });
+                }
+              })();
+              return;
+            }
             setPendingCreateDomain(domain);
             setShowUnmatchedModal(false);
             setShowAddModal(true);
@@ -1401,19 +1291,23 @@ function websiteListPageOf(subModule?: string): WebsiteListPage {
   return 'list';
 }
 
+function isWebsiteStandalonePage(subModule?: string): boolean {
+  return subModule === 'traffic' || subModule === 'analytics-connections';
+}
+
 // ===== Main Export =====
 export function WebsiteModule({ subModule }: { subModule?: string }) {
   const { profiles, loading } = useWebsiteProfiles();
   const listPage = websiteListPageOf(subModule);
   const [selectedSite, setSelectedSite] = useState<WebsiteProfileFull | null>(null);
   const [detailId, setDetailId] = useState<string | null>(() => {
-    if (subModule === 'traffic') return null;
+    if (isWebsiteStandalonePage(subModule)) return null;
     return readSelectedWebsiteId();
   });
 
   useEffect(() => {
     const sync = () => {
-      if (subModule === 'traffic') {
+      if (isWebsiteStandalonePage(subModule)) {
         setDetailId(null);
         setSelectedSite(null);
         return;
@@ -1450,6 +1344,10 @@ export function WebsiteModule({ subModule }: { subModule?: string }) {
     return <Ga4TrafficModule />;
   }
 
+  if (subModule === 'analytics-connections') {
+    return <AnalyticsConnectionsModule />;
+  }
+
   if (detailId) {
     if (loading && !selectedSite) {
       return <div className="text-[13px] text-muted-foreground py-12 text-center">載入中…</div>;
@@ -1484,8 +1382,6 @@ export function WebsiteModule({ subModule }: { subModule?: string }) {
       return <WebsiteList onSelectSite={handleSelectSite} profileTypeFilter="system" />;
     case 'featured':
       return <FeaturedWebsites onSelectSite={handleSelectSite} />;
-    case 'traffic':
-      return <Ga4TrafficModule />;
     case 'list':
       return <WebsiteList onSelectSite={handleSelectSite} />;
     default:

@@ -117,14 +117,15 @@ export type AdsLinkSummary = {
   link_errors: string[];
 };
 
-/** Normalize a URL or domain to a bare hostname (no www). */
+/** Normalize a URL or domain to a bare hostname (no www, port, or path). */
 export function normalizeDomain(raw: string | null | undefined): string {
   if (!raw) return "";
   let s = String(raw).trim().toLowerCase();
   s = s.replace(/^https?:\/\//, "");
+  s = s.replace(/^\/\//, "");
   s = s.replace(/^www\./, "");
-  s = s.replace(/\/+$/, "");
-  return s.split(/[/?#]/)[0] || "";
+  s = s.split(/[/?#]/)[0] || "";
+  return s.replace(/:\d+$/, "");
 }
 
 /** Collect unique normalized hostnames from URL strings. */

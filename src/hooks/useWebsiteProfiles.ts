@@ -3,6 +3,12 @@ import { supabase } from '@/lib/supabase';
 import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, peekCachedQuery } from '@/lib/queryCache';
 import { WebsiteProfileFull, WebsiteLevel, ProfileType, ProjectCategory } from '@/types/app';
 import { websiteProfiles as staticWebsiteProfiles } from '@/data/websiteData';
+import { canonicalizeDomainUrl } from '@/lib/canonicalDomainUrl';
+
+function toStoredDomainUrl(raw: string | null | undefined): string | null {
+  const canonical = canonicalizeDomainUrl(raw);
+  return canonical || null;
+}
 
 type DbRow = {
   id: string;
@@ -100,7 +106,7 @@ export function useWebsiteProfiles() {
     const row = {
       id: site.id,
       website_name: site.websiteName,
-      domain_url: site.domainUrl ?? null,
+      domain_url: toStoredDomainUrl(site.domainUrl),
       profile_type: site.profileType ?? 'website',
       project_category: site.projectCategory ?? 'internal',
       level: site.level,
@@ -131,7 +137,7 @@ export function useWebsiteProfiles() {
   const updateProfile = useCallback(async (id: string, updates: Partial<WebsiteProfileFull>) => {
     const row: Record<string, unknown> = {};
     if (updates.websiteName !== undefined) row.website_name = updates.websiteName;
-    if (updates.domainUrl !== undefined) row.domain_url = updates.domainUrl;
+    if (updates.domainUrl !== undefined) row.domain_url = toStoredDomainUrl(updates.domainUrl);
     if (updates.profileType !== undefined) row.profile_type = updates.profileType;
     if (updates.projectCategory !== undefined) row.project_category = updates.projectCategory;
     if (updates.level !== undefined) row.level = updates.level;

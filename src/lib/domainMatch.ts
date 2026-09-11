@@ -1,12 +1,8 @@
-/** Normalize a URL or domain for fuzzy matching. */
+import { canonicalizeDomainUrl } from './canonicalDomainUrl';
+
+/** Normalize a URL or domain for fuzzy matching (same rules as stored domain_url). */
 export function normalizeDomain(raw: string | null | undefined): string {
-  if (!raw) return '';
-  let s = String(raw).trim().toLowerCase();
-  s = s.replace(/^https?:\/\//, '');
-  s = s.replace(/^www\./, '');
-  s = s.replace(/\/+$/, '');
-  s = s.split(/[/?#]/)[0] ?? '';
-  return s;
+  return canonicalizeDomainUrl(raw);
 }
 
 /** Extract likely domain tokens from Google Ads account descriptive name. */

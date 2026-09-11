@@ -119,6 +119,7 @@ export const mainMenuItems: MainMenuItem[] = [
     subMenus: [
       { id: 'list', label: '網站列表' },
       { id: 'traffic', label: '網站流量' },
+      { id: 'analytics-connections', label: '分析工具連接' },
     ],
   },
   {

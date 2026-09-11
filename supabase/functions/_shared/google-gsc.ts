@@ -10,24 +10,23 @@ export function normalizeKeyword(raw: string): string {
   return String(raw || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/** Extract hostname-like key from GSC siteUrl (domain or URL-prefix). */
-export function siteUrlToDomainKey(siteUrl: string): string {
-  let s = String(siteUrl || "").trim().toLowerCase();
-  if (s.startsWith("sc-domain:")) {
-    return s.slice("sc-domain:".length).replace(/^www\./, "");
-  }
-  s = s.replace(/^https?:\/\//, "").replace(/^www\./, "");
-  s = s.replace(/\/+$/, "");
-  return s.split(/[/?#]/)[0] || "";
-}
-
 export function normalizeDomain(raw: string | null | undefined): string {
   if (!raw) return "";
   let s = String(raw).trim().toLowerCase();
   s = s.replace(/^https?:\/\//, "");
+  s = s.replace(/^\/\//, "");
   s = s.replace(/^www\./, "");
-  s = s.replace(/\/+$/, "");
-  return s.split(/[/?#]/)[0] || "";
+  s = s.split(/[/?#]/)[0] || "";
+  return s.replace(/:\d+$/, "");
+}
+
+/** Extract hostname-like key from GSC siteUrl (domain or URL-prefix). */
+export function siteUrlToDomainKey(siteUrl: string): string {
+  const s = String(siteUrl || "").trim().toLowerCase();
+  if (s.startsWith("sc-domain:")) {
+    return normalizeDomain(s.slice("sc-domain:".length));
+  }
+  return normalizeDomain(s);
 }
 
 export function toIsoDate(d: Date): string {

@@ -11,6 +11,9 @@ import {
 } from '../supabase/functions/_shared/website-match.ts';
 
 assert.equal(normalizeDomain('https://www.BrandingWorks.com.hk/path'), 'brandingworks.com.hk');
+assert.equal(normalizeDomain('http://www.x.com/'), 'x.com');
+assert.equal(normalizeDomain('//www.x.com:443/home'), 'x.com');
+assert.equal(normalizeDomain('shop.x.com'), 'shop.x.com');
 assert.deepEqual(extractDomainsFromName('BW Brandingworks.com.hk P Max-1'), [
   'brandingworks.com.hk',
 ]);

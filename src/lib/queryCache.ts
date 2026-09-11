@@ -20,6 +20,7 @@ export const QUERY_CACHE_KEYS = {
   quotationClientProjects: 'list:quotation_client_project',
   quotationClientList: 'list:quotation_client_list',
   websiteProfiles: 'list:webandsystem_list',
+  ga4WebsiteListTraffic: 'list:ga4_website_list_traffic',
 } as const;
 
 export function isAbortError(error: unknown): boolean {

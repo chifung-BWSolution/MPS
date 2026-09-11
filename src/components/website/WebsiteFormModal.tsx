@@ -7,6 +7,9 @@ import { useSystemOptions } from '@/hooks/useSystemOptions';
 import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
 import { WebsiteClientProjectSelectField } from '@/components/website/WebsiteClientProjectSelectField';
 import { linkedClientProjectId } from '@/lib/websiteClientProjectLink';
+import { canonicalizeDomainUrl, findWebsiteByCanonicalUrl } from '@/lib/canonicalDomainUrl';
+import { buildWebsiteDetailHref } from '@/lib/websiteNavigation';
+import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
 import type { Brand, Company, ProfileType, ProjectCategory, SystemType, WebsiteLevel, WebsiteProfileFull } from '@/types/app';
 
 export interface WebsiteFormData {
@@ -61,7 +64,7 @@ export function websiteFormDataToProfile(
     companyId: company?.uuid || data.companyId,
     brandId: brandRow?.id || data.brandId || '',
     websiteName: data.websiteName,
-    domainUrl: data.domainUrl,
+    domainUrl: canonicalizeDomainUrl(data.domainUrl) || data.domainUrl.trim(),
     platform: data.platform as WebsiteProfileFull['platform'],
     hostingProvider: data.hostingProvider,
     company: company?.companyCode || '',
@@ -104,6 +107,9 @@ export function WebsiteFormModal({
 }) {
   const [form, setForm] = useState<WebsiteFormData>(initialData || emptyFormData);
   const [saving, setSaving] = useState(false);
+  const [domainError, setDomainError] = useState<string | null>(null);
+  const [duplicateSite, setDuplicateSite] = useState<{ id: string; websiteName: string } | null>(null);
+  const { profiles } = useWebsiteProfiles();
   const { records: clientProjects } = useQuotationClientProjects();
   const prefilledLinkRef = useRef(false);
   const { companies } = useCompanies();
@@ -172,11 +178,41 @@ export function WebsiteFormModal({
     });
   };
 
+  const handleDomainBlur = () => {
+    const canonical = canonicalizeDomainUrl(form.domainUrl);
+    if (canonical && canonical !== form.domainUrl) {
+      handleChange('domainUrl', canonical);
+    }
+    const dup = findWebsiteByCanonicalUrl(profiles, canonical || form.domainUrl, websiteId);
+    if (dup && canonical) {
+      setDuplicateSite({ id: dup.id, websiteName: dup.websiteName || dup.id });
+      setDomainError('此網域已存在於網站列表');
+      return;
+    }
+    setDuplicateSite(null);
+    setDomainError(null);
+  };
+
   const handleSubmit = async () => {
     if (!form.websiteName || saving) return;
+    const canonical = canonicalizeDomainUrl(form.domainUrl);
+    const next: WebsiteFormData = {
+      ...form,
+      domainUrl: canonical || form.domainUrl.trim(),
+    };
+    if (canonical) {
+      const dup = findWebsiteByCanonicalUrl(profiles, canonical, websiteId);
+      if (dup) {
+        setDuplicateSite({ id: dup.id, websiteName: dup.websiteName || dup.id });
+        setDomainError('此網域已存在於網站列表');
+        return;
+      }
+    }
+    setDuplicateSite(null);
+    setDomainError(null);
     setSaving(true);
     try {
-      await onSave(form);
+      await onSave(next);
     } finally {
       setSaving(false);
     }
@@ -286,10 +322,45 @@ export function WebsiteFormModal({
             </label>
             <input
               value={form.domainUrl}
-              onChange={(e) => handleChange('domainUrl', e.target.value)}
-              className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
-              placeholder={form.profileType === 'system' ? 'app.example.com' : 'www.example.com'}
+              onChange={(e) => {
+                handleChange('domainUrl', e.target.value);
+                if (domainError) {
+                  setDomainError(null);
+                  setDuplicateSite(null);
+                }
+              }}
+              onBlur={handleDomainBlur}
+              className={cn(
+                'w-full px-3 py-2 border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white',
+                domainError ? 'border-red-400 focus:ring-red-400' : 'border-border',
+              )}
+              placeholder={form.profileType === 'system' ? 'app.example.com' : 'example.com'}
             />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              請輸入網域，不要加 http://、www. 或結尾 /
+            </p>
+            {canonicalizeDomainUrl(form.domainUrl) &&
+            canonicalizeDomainUrl(form.domainUrl) !== form.domainUrl.trim().toLowerCase() ? (
+              <p className="text-[11px] text-teal-700 mt-0.5">
+                將儲存為：{canonicalizeDomainUrl(form.domainUrl)}
+              </p>
+            ) : null}
+            {domainError ? (
+              <p className="text-[12px] text-red-600 mt-1">
+                {domainError}
+                {duplicateSite ? (
+                  <>
+                    {' '}
+                    <a
+                      href={buildWebsiteDetailHref(duplicateSite.id)}
+                      className="underline font-medium"
+                    >
+                      {duplicateSite.websiteName}
+                    </a>
+                  </>
+                ) : null}
+              </p>
+            ) : null}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
