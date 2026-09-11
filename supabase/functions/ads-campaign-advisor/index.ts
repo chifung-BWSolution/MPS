@@ -95,10 +95,30 @@ function normalizeMessages(raw: unknown): ChatMessage[] {
   return messages.slice(-MAX_MESSAGES);
 }
 
+function snapshotWebsites(snapshot: AdsAdvisorSnapshot): AdvisorDateContext["websites"] {
+  const raw = Array.isArray(snapshot.websites) ? snapshot.websites : [];
+  const websites: AdvisorDateContext["websites"] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as { domain?: unknown; websiteProfileId?: unknown };
+    const domain = isNonEmptyString(row.domain) ? row.domain.trim() : "";
+    const websiteProfileId = isNonEmptyString(row.websiteProfileId)
+      ? row.websiteProfileId.trim()
+      : "";
+    if (!domain && !websiteProfileId) continue;
+    websites.push({ domain, websiteProfileId: websiteProfileId || undefined });
+  }
+  return websites;
+}
+
 function snapshotContext(snapshot: AdsAdvisorSnapshot): AdvisorDateContext {
   return {
     dateFrom: String(snapshot.dateFrom),
     dateTo: String(snapshot.dateTo),
+    platform: isNonEmptyString(snapshot.platform) ? String(snapshot.platform) : "",
+    accountId: isNonEmptyString(snapshot.accountId) ? String(snapshot.accountId) : "",
+    campaignId: isNonEmptyString(snapshot.campaignId) ? String(snapshot.campaignId) : "",
+    websites: snapshotWebsites(snapshot),
   };
 }
 
@@ -107,14 +127,19 @@ function buildSystemPrompt(snapshot: AdsAdvisorSnapshot): string {
 
 職責：
 1. 先根據目前活動 snapshot 診斷表現（狀態、期間、KPI、標籤、網站、目標）。
-2. 然後給出 3–5 項按優先排序的行動建議，涵蓋：預算、出價、定向／關鍵字、創意、著陸頁。
-3. 若用戶目標不清楚，只問一個釐清問題。
+2. 有關聯網站時，用 get_ga4_metrics 與 get_gsc_queries 對照到站品質與自然搜尋，再給建議。
+3. 然後給出 3–5 項按優先排序的行動建議，涵蓋：預算、出價、定向／關鍵字、創意、著陸頁。
+4. 若用戶目標不清楚，只問一個釐清問題。
 
 硬性規則：
-- 只可引用 snapshot 或工具結果內已有的數字。沒有的數字不要估算、不要發明 spend／CPA／轉換。
+- 只可引用 snapshot 或工具結果內已有的數字。沒有的數字不要估算、不要發明 spend／CPA／轉換／sessions／organic clicks／排名。
 - 用戶提到其他 campaign 時，必須先 search_campaigns（或 get_campaigns_by_tag），再用回傳的 accountId／campaignId 呼叫 get_campaign_metrics 或 compare_campaigns。不可自行捏造 id。
 - 搜尋結果有多個候選時，請列出 A/B/C 請用戶確認，不要猜。
 - 關鍵字／搜尋字詞／廣告／版位要用 get_campaign_breakdowns。若工具回報區間過長（最多 92 日），改用倉庫 KPI 並說明限制。
+- 判斷著陸頁、到站品質、付費 vs 自然搜尋時，必須呼叫 get_ga4_metrics 與 get_gsc_queries（已同步倉庫）。同一輪可同時呼叫。沒有網站參數時讓工具用 snapshot／campaign 對應網站。
+- 用 GA4 渠道（Paid Search / Paid Social / Organic Search 等）對照廣告花費，評估是否真的帶到站、有沒有空點。
+- 用 GSC 查詢對照 Search 關鍵字／搜尋字詞：找出有自然需求但廣告沒覆蓋、或自然排名已很好仍在燒廣告的詞。
+- 多個關聯網站時列出請用戶確認，不要猜。
 - 不可建議或執行任何寫回 Google Ads／Meta 的操作（不可改預算、出價、狀態、素材）。
 - 語氣務實、可執行，避免空泛口號。引用數字時附上日期區間。
 
@@ -253,7 +278,7 @@ function geminiToolPrompt(system: string, messages: ChatMessage[], extra = ""): 
   return `${system}
 
 工具協定：
-- 若需要資料，只回傳 JSON：{"tool_call":{"name":"search_campaigns|get_campaign_metrics|compare_campaigns|get_campaigns_by_tag|get_campaign_breakdowns","arguments":{...}}}
+- 若需要資料，只回傳 JSON：{"tool_call":{"name":"search_campaigns|get_campaign_metrics|compare_campaigns|get_campaigns_by_tag|get_campaign_breakdowns|get_ga4_metrics|get_gsc_queries","arguments":{...}}}
 - 若可以回答，只回傳 JSON：{"reply":"..."}
 - 不要 markdown。
 

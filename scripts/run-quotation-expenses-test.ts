@@ -711,6 +711,7 @@ assert.match(pitching, /id: 'expense', label: '支出'/);
 assert.match(pitching, /<PitchingExpenseTab/);
 assert.match(pitching, /relatedType="quotation_client"/);
 assert.match(pitching, /relatedId=\{record\.id\}/);
+assert.match(pitching, /webandsystemListId=\{draft\.webandsystemListId\}/);
 assert.match(pitching, /activeTab === 'expense'/);
 
 const websiteModule = read('src/components/website/WebsiteModule.tsx');

@@ -1,3 +1,26 @@
+export type QuotationProjectAsanaRef = {
+  id: string;
+  asana_link?: string | null;
+  asana_task_gid?: string | null;
+};
+
+/**
+ * Map Asana task GIDs already present on quotation_client_project → project id.
+ * Prefer GID parsed from asana_link (manual Pitching entries only store the URL).
+ * Fall back to asana_task_gid for official /asana-pending imports that still have the column.
+ */
+export function importedProjectIdsFromAsanaRefs(
+  projects: Array<QuotationProjectAsanaRef>,
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const row of projects) {
+    const gid = parseAsanaTaskGidFromLink(row.asana_link) || row.asana_task_gid?.trim() || null;
+    if (!gid || map.has(gid)) continue;
+    map.set(gid, row.id);
+  }
+  return map;
+}
+
 /** Parse an Asana task GID from permalink, inbox URL, or a bare numeric id. */
 export function parseAsanaTaskGidFromLink(raw: string | null | undefined): string | null {
   const value = (raw ?? '').trim();

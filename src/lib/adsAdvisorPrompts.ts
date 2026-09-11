@@ -179,11 +179,14 @@ const PROMPTS: Record<AdsAdvisorPromptScenario, (snapshot: AdsAdvisorSnapshot | 
   ],
 };
 
+const WEBSITE_ANALYTICS_PROMPT =
+  '對照已同步的 GA4 到站數據同 GSC 自然搜尋，著陸頁同搜尋意圖是否支持這檔廣告？';
+
 export function getAdsAdvisorSuggestedPrompts(
   snapshot: AdsAdvisorSnapshot | null,
 ): string[] {
   const scenario = resolveAdsAdvisorPromptScenario(snapshot);
-  return PROMPTS[scenario](snapshot);
+  return [...PROMPTS[scenario](snapshot), WEBSITE_ANALYTICS_PROMPT];
 }
 
 export function getUnusedAdsAdvisorPrompts(

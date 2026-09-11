@@ -39,7 +39,10 @@ function buildAdvisorSnapshot(
     channelOrObjective: model.channelOrObjective,
     objectives: model.objectives,
     brandLabel: model.brandLabel,
-    websites: model.websites.map((w) => ({ domain: w.domain })),
+    websites: model.websites.map((w) => ({
+      domain: w.domain,
+      websiteProfileId: w.websiteProfileId,
+    })),
     tags,
     dateFrom: dateRange.rangeFrom,
     dateTo: dateRange.rangeTo,

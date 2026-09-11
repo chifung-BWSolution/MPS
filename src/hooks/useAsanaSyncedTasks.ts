@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { autoSyncAsanaPitchingIfNeeded, invokeAsanaPitchingSync } from '@/lib/asanaPitchingApi';
+import { autoSyncAsanaPitchingIfNeeded, closeAsanaSyncedTask, invokeAsanaPitchingSync } from '@/lib/asanaPitchingApi';
+import { importedProjectIdsFromAsanaRefs } from '@/lib/asanaTaskLink';
 import { QUOTATION_CLIENT_PROJECT_TABLE } from '@/hooks/useQuotationClientProjects';
 import { optionalIsoDate, type PitchingProjectType, type PitchingStatus } from '@/data/pitchingData';
 
@@ -21,6 +22,7 @@ export type AsanaSyncedTask = {
   assignedPmName: string;
   mappedStatus: PitchingStatus;
   asanaLink: string;
+  caseClosedReason: string;
   syncedAt: string | null;
   imported: boolean;
   importedProjectId?: string;
@@ -40,6 +42,7 @@ type StagingRow = {
   assigned_pm_name: string | null;
   mapped_status: string;
   asana_link: string | null;
+  case_closed_reason: string | null;
   synced_at: string | null;
 };
 
@@ -70,13 +73,13 @@ export function useAsanaSyncedTasks() {
       supabase
         .from(ASANA_SYNCED_TASKS_TABLE)
         .select(
-          'asana_task_gid, asana_project_gid, asana_project_name, asana_section_name, display_name, client_name, inquiry_date, description, project_types, assigned_pm, assigned_pm_name, mapped_status, asana_link, synced_at',
+          'asana_task_gid, asana_project_gid, asana_project_name, asana_section_name, display_name, client_name, inquiry_date, description, project_types, assigned_pm, assigned_pm_name, mapped_status, asana_link, case_closed_reason, synced_at',
         )
         .order('inquiry_date', { ascending: false }),
       supabase
         .from(QUOTATION_CLIENT_PROJECT_TABLE)
-        .select('id, asana_task_gid')
-        .not('asana_task_gid', 'is', null),
+        .select('id, asana_link, asana_task_gid')
+        .or('asana_link.not.is.null,asana_task_gid.not.is.null'),
       supabase
         .from('asana_pitching_projects')
         .select('project_name, sync_year_from, sync_date_mode')
@@ -91,11 +94,7 @@ export function useAsanaSyncedTasks() {
       return;
     }
 
-    const importedByGid = new Map<string, string>();
-    for (const row of importedRes.data || []) {
-      const gid = (row.asana_task_gid || '').trim();
-      if (gid) importedByGid.set(gid, row.id);
-    }
+    const importedByGid = importedProjectIdsFromAsanaRefs(importedRes.data || []);
 
     const mapped = ((stagingRes.data as StagingRow[] | null) ?? []).map((row) => {
       const gid = row.asana_task_gid;
@@ -114,6 +113,7 @@ export function useAsanaSyncedTasks() {
         assignedPmName: row.assigned_pm_name || '',
         mappedStatus: mapStatus(row.mapped_status),
         asanaLink: row.asana_link || '',
+        caseClosedReason: (row.case_closed_reason || '').trim(),
         syncedAt: row.synced_at,
         imported: Boolean(importedId),
         importedProjectId: importedId,
@@ -162,6 +162,26 @@ export function useAsanaSyncedTasks() {
     }
   }, [refresh]);
 
+  const updateCaseClosedReason = useCallback(async (asanaTaskGid: string, reason: string) => {
+    const gid = asanaTaskGid.trim();
+    const next = reason.trim();
+    const previous = tasks.find((task) => task.asanaTaskGid === gid)?.caseClosedReason ?? '';
+    setTasks((current) =>
+      current.map((task) => (task.asanaTaskGid === gid ? { ...task, caseClosedReason: next } : task)),
+    );
+    try {
+      await closeAsanaSyncedTask({ asanaTaskGid: gid, caseClosedReason: next });
+      return { error: null };
+    } catch (e) {
+      setTasks((current) =>
+        current.map((task) =>
+          task.asanaTaskGid === gid ? { ...task, caseClosedReason: previous } : task,
+        ),
+      );
+      return { error: e as Error };
+    }
+  }, [tasks]);
+
   const pendingCount = useMemo(() => tasks.filter((t) => !t.imported).length, [tasks]);
   const importedCount = useMemo(() => tasks.filter((t) => t.imported).length, [tasks]);
 
@@ -176,5 +196,6 @@ export function useAsanaSyncedTasks() {
     importedCount,
     refresh,
     syncNow,
+    updateCaseClosedReason,
   };
 }

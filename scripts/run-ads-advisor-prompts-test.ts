@@ -43,7 +43,8 @@ assert.equal(
 const pmax = getAdsAdvisorSuggestedPrompts(
   snap({ channelOrObjective: 'PERFORMANCE_MAX', objectives: ['PURCHASE'] }),
 );
-assert.equal(pmax.length, 4);
+assert.equal(pmax.length, 5);
+assert.ok(pmax.some((q) => q.includes('GA4') && q.includes('GSC')));
 assert.ok(pmax.every((q) => !q.includes('關鍵字')), 'PMax prompts must not mention keywords');
 assert.ok(pmax.some((q) => /asset group|素材|PMax/i.test(q)));
 assert.ok(pmax[1].includes('CPA') || pmax[1].includes('ROAS'));
@@ -106,7 +107,7 @@ assert.ok(sales.some((q) => q.includes('版位')));
 assert.ok(sales.every((q) => !q.includes('關鍵字')));
 
 const unused = getUnusedAdsAdvisorPrompts(search, [search[3]]);
-assert.equal(unused.length, 3);
+assert.equal(unused.length, 4);
 assert.ok(!unused.includes(search[3]));
 assert.deepEqual(getUnusedAdsAdvisorPrompts(search, search), []);
 

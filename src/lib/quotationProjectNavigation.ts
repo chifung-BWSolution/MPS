@@ -1,3 +1,8 @@
+import {
+  isQuotationSectionModule,
+  type QuotationSectionModule,
+} from './quotationSectionScope';
+
 /** @deprecated Session fallback; detail is opened from the hash `id` query. */
 export const SELECTED_QUOTATION_PROJECT_KEY = 'mps_selected_quotation_project_id';
 
@@ -47,6 +52,14 @@ function pageFromHash(hash: string): QuotationClientPage | null {
   return null;
 }
 
+export function quotationSectionModuleFromHash(
+  hash = globalThis.window?.location?.hash ?? '',
+): QuotationSectionModule {
+  const { path } = hashPathAndQuery(hash);
+  const mod = path.split('/')[0];
+  return isQuotationSectionModule(mod) ? mod : 'quotation';
+}
+
 /** Hash path for a Pitching or Project detail, keyed by quotation_client_project.id. */
 export function buildQuotationProjectHash(
   projectId: string,
@@ -57,10 +70,11 @@ export function buildQuotationProjectHash(
       ? pageOrStatus
       : quotationProjectSubModule(pageOrStatus);
   const id = projectId.trim();
-  if (!id) return `quotation/${page}`;
+  const section = quotationSectionModuleFromHash();
+  if (!id) return `${section}/${page}`;
   const params = new URLSearchParams();
   params.set(QUOTATION_PROJECT_QUERY_KEY, id);
-  return `quotation/${page}?${params.toString()}`;
+  return `${section}/${page}?${params.toString()}`;
 }
 
 /** Same-origin href that opens the project in a new tab. */
@@ -174,7 +188,7 @@ export function buildInvoiceReceiptHash(
   params.set(QUOTATION_PROJECT_QUERY_KEY, projectId.trim());
   params.set(QUOTATION_DOC_QUERY_KEY, kind);
   params.set(QUOTATION_INCOME_QUERY_KEY, incomeId.trim());
-  return `quotation/${page}?${params.toString()}`;
+  return `${quotationSectionModuleFromHash()}/${page}?${params.toString()}`;
 }
 
 export function openInvoiceReceiptEditor(

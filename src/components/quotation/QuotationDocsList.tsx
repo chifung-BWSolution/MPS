@@ -16,6 +16,8 @@ import {
 } from '@/lib/quotationDocs';
 import { buildQuotationProjectHref } from '@/lib/quotationProjectNavigation';
 import { pitchingStatusConfig } from '@/data/pitchingData';
+import { useQuotationSection } from '@/context/QuotationSectionContext';
+import { filterBySectionProjectTypes } from '@/lib/quotationSectionScope';
 import { DeleteConfirmModal } from '@/components/ui/crud-modal';
 import {
   QuotationDocFormDialog,
@@ -30,6 +32,7 @@ function expiryBadge(status: ReturnType<typeof quotationDocExpiryStatus>) {
 }
 
 export function QuotationDocsList() {
+  const { allowedTypes } = useQuotationSection();
   const { rows, loading, error, addDoc, updateDoc, deleteDoc } = useQuotationDocsList();
   const { types } = useQuotationDocTypes();
   const { records: projects, loading: projectsLoading } = useQuotationClientProjects();
@@ -52,10 +55,19 @@ export function QuotationDocsList() {
     return active;
   }, [draft.docTypeId, typeById, types]);
 
+  const scopedProjects = useMemo(
+    () => filterBySectionProjectTypes(projects, allowedTypes),
+    [projects, allowedTypes],
+  );
+  const outOfScopeProjectIds = useMemo(() => {
+    const scopedIds = new Set(scopedProjects.map((project) => project.id));
+    return new Set(projects.filter((project) => !scopedIds.has(project.id)).map((project) => project.id));
+  }, [projects, scopedProjects]);
+
   const projectOptions = useMemo(
     () =>
       toQuotationClientProjectSelectOptions(
-        projects,
+        scopedProjects,
         editing
           ? {
               id: editing.quotationClientProjectId,
@@ -64,13 +76,14 @@ export function QuotationDocsList() {
             }
           : null,
       ),
-    [editing, projects],
+    [editing, scopedProjects],
   );
 
   const typeOptions = useMemo(() => {
     const seen = new Set<string>();
     const options: { id: string; display: string }[] = [];
     for (const row of rows) {
+      if (outOfScopeProjectIds.has(row.quotationClientProjectId)) continue;
       if (!row.docTypeId || seen.has(row.docTypeId)) continue;
       seen.add(row.docTypeId);
       options.push({
@@ -79,11 +92,12 @@ export function QuotationDocsList() {
       });
     }
     return options;
-  }, [rows, typeById]);
+  }, [rows, typeById, outOfScopeProjectIds]);
 
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return rows.filter((row) => {
+      if (outOfScopeProjectIds.has(row.quotationClientProjectId)) return false;
       if (typeFilter !== 'all' && row.docTypeId !== typeFilter) return false;
       if (!query) return true;
       return (
@@ -93,7 +107,7 @@ export function QuotationDocsList() {
         row.docTypeDisplay.toLowerCase().includes(query)
       );
     });
-  }, [rows, searchQuery, typeFilter]);
+  }, [rows, searchQuery, typeFilter, outOfScopeProjectIds]);
 
   const openCreate = () => {
     setEditing(null);

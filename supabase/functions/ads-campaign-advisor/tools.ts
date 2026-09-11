@@ -10,6 +10,8 @@
  * - compare_campaigns
  * - get_campaigns_by_tag
  * - get_campaign_breakdowns
+ * - get_ga4_metrics
+ * - get_gsc_queries
  *
  * Frozen args:
  * - search_campaigns: query, platform? google|facebook|both, status?, tag?, limit?
@@ -17,6 +19,8 @@
  * - compare_campaigns: campaigns[{platform,accountId,campaignId}], dateFrom?, dateTo?
  * - get_campaigns_by_tag: tag, platform?, limit?
  * - get_campaign_breakdowns: platform, accountId, campaignId, dateFrom?, dateTo?, channelType?
+ * - get_ga4_metrics: websiteProfileId?, domain?, propertyId?, dateFrom?, dateTo?
+ * - get_gsc_queries: websiteProfileId?, domain?, siteUrl?, query?, dateFrom?, dateTo?, limit?
  */
 
 export const ADVISOR_TOOL_NAMES = [
@@ -25,9 +29,30 @@ export const ADVISOR_TOOL_NAMES = [
   "compare_campaigns",
   "get_campaigns_by_tag",
   "get_campaign_breakdowns",
+  "get_ga4_metrics",
+  "get_gsc_queries",
 ] as const;
 
 export type AdvisorToolName = (typeof ADVISOR_TOOL_NAMES)[number];
+
+export type AdvisorWebsiteRef = {
+  domain: string;
+  websiteProfileId?: string;
+};
+
+export type AdvisorDateContext = {
+  dateFrom: string;
+  dateTo: string;
+  platform?: string;
+  accountId?: string;
+  campaignId?: string;
+  websites: AdvisorWebsiteRef[];
+};
+
+export type ToolExecution = {
+  ok: boolean;
+  data: unknown;
+};
 
 export type AdvisorToolDefinition = {
   type: "function";
@@ -212,6 +237,82 @@ export const ADVISOR_TOOL_DEFINITIONS: AdvisorToolDefinition[] = [
           },
         },
         required: ["platform", "accountId", "campaignId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_ga4_metrics",
+      description:
+        "讀取關聯網站已同步的 GA4 倉庫數據（用戶、工作階段、瀏覽、參與、轉換、渠道拆解）。省略網站參數時用目前 campaign 對應網站。",
+      parameters: {
+        type: "object",
+        properties: {
+          websiteProfileId: {
+            type: "string",
+            description: "網站資料 ID（webandsystem_list.id）",
+          },
+          domain: {
+            type: "string",
+            description: "網站網域，例如 example.com",
+          },
+          propertyId: {
+            type: "string",
+            description: "GA4 property ID",
+          },
+          dateFrom: {
+            type: "string",
+            description: "開始日期 YYYY-MM-DD",
+          },
+          dateTo: {
+            type: "string",
+            description: "結束日期 YYYY-MM-DD",
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_gsc_queries",
+      description:
+        "讀取關聯網站已同步的 Google Search Console 查詢表現（點擊、曝光、CTR、平均排名）與 SEO 關鍵字庫。可依 query 篩選。省略網站參數時用目前 campaign 對應網站。",
+      parameters: {
+        type: "object",
+        properties: {
+          websiteProfileId: {
+            type: "string",
+            description: "網站資料 ID（webandsystem_list.id）",
+          },
+          domain: {
+            type: "string",
+            description: "網站網域，例如 example.com",
+          },
+          siteUrl: {
+            type: "string",
+            description: "GSC site URL，例如 sc-domain:example.com",
+          },
+          query: {
+            type: "string",
+            description: "查詢字串篩選（部分符合）",
+          },
+          dateFrom: {
+            type: "string",
+            description: "開始日期 YYYY-MM-DD",
+          },
+          dateTo: {
+            type: "string",
+            description: "結束日期 YYYY-MM-DD",
+          },
+          limit: {
+            type: "number",
+            description: "回傳查詢筆數上限",
+          },
+        },
+        required: [],
       },
     },
   },

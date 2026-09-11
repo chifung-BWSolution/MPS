@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Search, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
+import { useQuotationSection } from '@/context/QuotationSectionContext';
+import { filterBySectionProjectTypes, mergeScopedProjectTypes } from '@/lib/quotationSectionScope';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
 import { useActiveStaffOptions } from '@/hooks/useActiveStaffOptions';
@@ -22,7 +24,6 @@ import {
   formatMainPmName,
   formatRelatedClientName,
   matchesProjectTypeFilter,
-  PITCHING_PROJECT_TYPE_OPTIONS,
   isProjectPageRecord,
   type PitchingRecord,
 } from '@/data/pitchingData';
@@ -43,6 +44,7 @@ function ProjectList({
   onView: (record: PitchingRecord) => void;
   onEdit: (record: PitchingRecord) => void;
 }) {
+  const { typeOptions } = useQuotationSection();
   const [searchQuery, setSearchQuery] = useState('');
   const [projectTypeFilter, setProjectTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -121,7 +123,7 @@ function ProjectList({
           className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
         >
           <option value="all">全部項目類型</option>
-          {PITCHING_PROJECT_TYPE_OPTIONS.map((opt) => (
+          {typeOptions.map((opt) => (
             <option key={opt.id} value={opt.id}>
               {opt.label}
             </option>
@@ -196,6 +198,7 @@ function ProjectList({
 }
 
 export function ProjectModule() {
+  const { allowedTypes } = useQuotationSection();
   const { records, loading, error, lastSyncedAt, refresh, updateRecord } = useQuotationClientProjects();
   const { records: clientListRecords, addClient } = useQuotationClientList();
   const { detailId, openDetail, closeDetail } = useQuotationClientDetailId('projects');
@@ -211,8 +214,8 @@ export function ProjectModule() {
   ]);
 
   const projectRecords = useMemo(
-    () => records.filter(isProjectPageRecord),
-    [records],
+    () => filterBySectionProjectTypes(records.filter(isProjectPageRecord), allowedTypes),
+    [records, allowedTypes],
   );
 
   const pitchingClientOptions = useMemo(
@@ -246,6 +249,7 @@ export function ProjectModule() {
     const selectedStaff = staffOptions.find((s) => s.value === form.mainPmId);
     const payload = {
       ...pitchingFormToUpdate(form),
+      projectTypes: mergeScopedProjectTypes(editingRecord.projectTypes, form.projectTypes, allowedTypes),
       assignedPmName: selectedStaff?.label || '',
       mainPmName: selectedStaff?.label || undefined,
     };

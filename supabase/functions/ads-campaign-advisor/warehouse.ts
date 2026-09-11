@@ -12,7 +12,8 @@ import {
   resolveCredentialForCampaign,
   validateLiveBreakdownRange as validateFacebookBreakdownRange,
 } from "../_shared/meta-ads.ts";
-import type { AdvisorToolName } from "./tools.ts";
+import type { AdvisorDateContext, AdvisorToolName, ToolExecution } from "./tools.ts";
+import { getGa4Metrics, getGscQueries } from "./website-analytics.ts";
 
 const PAGE_SIZE = 1000;
 const SEARCH_LIMIT = 10;
@@ -21,15 +22,7 @@ const SERIES_KEEP = 14;
 const BREAKDOWN_KEEP = 20;
 const BREAKDOWN_TIMEOUT_MS = 20_000;
 
-export type AdvisorDateContext = {
-  dateFrom: string;
-  dateTo: string;
-};
-
-export type ToolExecution = {
-  ok: boolean;
-  data: unknown;
-};
+export type { AdvisorDateContext, ToolExecution } from "./tools.ts";
 
 type Platform = "google" | "facebook";
 
@@ -658,6 +651,10 @@ export async function executeAdvisorTool(
         return await getCampaignsByTag(args);
       case "get_campaign_breakdowns":
         return await getCampaignBreakdowns(args, ctx);
+      case "get_ga4_metrics":
+        return await getGa4Metrics(args, ctx, serviceClient());
+      case "get_gsc_queries":
+        return await getGscQueries(args, ctx, serviceClient());
       default:
         return { ok: false, data: { error: `未知工具：${name}` } };
     }

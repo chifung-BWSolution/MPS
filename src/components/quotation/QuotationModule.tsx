@@ -4,8 +4,10 @@ import { ProjectModule } from '@/components/quotation/ProjectModule';
 import { AsanaPendingModule } from '@/components/quotation/AsanaPendingModule';
 import { QuotationDocTypesSettings } from '@/components/quotation/QuotationDocTypesSettings';
 import { QuotationDocsList } from '@/components/quotation/QuotationDocsList';
+import { QuotationSectionProvider } from '@/context/QuotationSectionContext';
+import type { QuotationSectionModule } from '@/lib/quotationSectionScope';
 
-export function QuotationModule({ subModule }: { subModule?: string }) {
+function QuotationSectionPages({ subModule }: { subModule?: string }) {
   if (subModule === 'asana-pending') {
     return <AsanaPendingModule />;
   }
@@ -37,4 +39,18 @@ export function QuotationModule({ subModule }: { subModule?: string }) {
   }
 
   return <QuotationDocsList />;
+}
+
+export function QuotationModule({
+  subModule,
+  sectionModule = 'quotation',
+}: {
+  subModule?: string;
+  sectionModule?: QuotationSectionModule;
+}) {
+  return (
+    <QuotationSectionProvider moduleId={sectionModule}>
+      <QuotationSectionPages subModule={subModule} />
+    </QuotationSectionProvider>
+  );
 }

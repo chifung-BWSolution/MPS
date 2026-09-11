@@ -90,6 +90,42 @@ async function asanaFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return json as T;
 }
 
+export function formatAsanaCaseClosedComment(reason: string, staffName: string): string {
+  const who = staffName.trim() || "MPS";
+  return `放棄跟進（${who}）：${reason.trim()}`;
+}
+
+export function formatAsanaCaseReopenedComment(staffName: string): string {
+  const who = staffName.trim() || "MPS";
+  return `已取消放棄跟進（${who}）`;
+}
+
+export async function getAsanaMe(): Promise<{ gid: string; email?: string; name?: string }> {
+  return getAsanaUser("me");
+}
+
+export async function updateAsanaTask(
+  taskGid: string,
+  patch: { completed?: boolean },
+): Promise<AsanaTask> {
+  const data = await asanaFetch<{ data: AsanaTask }>(`/tasks/${taskGid}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ data: patch }),
+  });
+  return data.data;
+}
+
+export async function createAsanaTaskComment(taskGid: string, text: string): Promise<void> {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  await asanaFetch(`/tasks/${taskGid}/stories`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ data: { text: trimmed } }),
+  });
+}
+
 export async function getAsanaUser(
   userGid: string,
 ): Promise<{ gid: string; email?: string; name?: string }> {
@@ -567,6 +603,7 @@ export function asanaTaskToSyncedRow(
     asana_link: task.permalink_url || `https://app.asana.com/0/0/${task.gid}`,
     synced_at: syncedAt,
     updated_at: syncedAt,
+    // case_closed_reason is user-set on /asana-pending; omit so upsert keeps the existing value.
   };
 }
 

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useMemo, ReactNode, useCallback, useEffect } from 'react';
 import { User, UserRole } from '@/types/app';
 import { useAuth } from '@/context/AuthContext';
+import { isQuotationSectionModule } from '@/lib/quotationSectionScope';
 import { beginPageNavigation } from '@/lib/supabaseFetch';
 
 export interface SubMenuItem {
@@ -13,7 +14,7 @@ export interface SubMenuItem {
 export function resolveSubModule(module: string, sub?: string): string {
   const menuItem = mainMenuItems.find(m => m.id === module);
   const defaultSub = menuItem?.subMenus[0]?.id || 'overview';
-  if (!sub) return module === 'quotation' ? 'pitching' : defaultSub;
+  if (!sub) return isQuotationSectionModule(module) ? 'pitching' : defaultSub;
   // Legacy alias: 影片管理 → 影片統籌
   if (module === 'video' && sub === 'management') return 'coordination';
   // Legacy alias: Google / Facebook Ads 同步 → 廣告數據同步
@@ -50,8 +51,8 @@ export function resolveRoute(module: string, sub?: string): { module: string; su
     return { module: 'website', subModule: resolveSubModule('website', 'list') };
   }
   // Removed: in-app quotation generation. Documents are uploaded to quotation_docs.
-  if (module === 'quotation' && (sub === 'new' || sub === 'items')) {
-    return { module: 'quotation', subModule: 'list' };
+  if (isQuotationSectionModule(module) && (sub === 'new' || sub === 'items')) {
+    return { module, subModule: 'list' };
   }
   // Removed: mock-only finance invoice / payment / card / company pages.
   if (
@@ -68,6 +69,15 @@ export interface MainMenuItem {
   label: string;
   subMenus: SubMenuItem[];
 }
+
+const quotationSectionSubMenus: SubMenuItem[] = [
+  { id: 'asana-pending', label: 'Asana 待匯入' },
+  { id: 'pitching', label: 'Pitching' },
+  { id: 'projects', label: 'Project' },
+  { id: 'list', label: '報價單列表' },
+  { id: 'clients', label: '客戶列表' },
+  { id: 'doc-types', label: '文件類型', section: '設置' },
+];
 
 export const mainMenuItems: MainMenuItem[] = [
   {
@@ -92,15 +102,13 @@ export const mainMenuItems: MainMenuItem[] = [
   },
   {
     id: 'quotation',
-    label: '項目管理',
-    subMenus: [
-      { id: 'asana-pending', label: 'Asana 待匯入' },
-      { id: 'pitching', label: 'Pitching' },
-      { id: 'projects', label: 'Project' },
-      { id: 'list', label: '報價單列表' },
-      { id: 'clients', label: '客戶列表' },
-      { id: 'doc-types', label: '文件類型', section: '設置' },
-    ],
+    label: '市場項目管理',
+    subMenus: quotationSectionSubMenus,
+  },
+  {
+    id: 'system-dev',
+    label: '系統開發管理',
+    subMenus: quotationSectionSubMenus,
   },
   {
     id: 'project',
@@ -129,6 +137,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'google-ads', label: 'Google Ads', section: '廣告' },
       { id: 'facebook-ads', label: 'Facebook Ads', section: '廣告' },
       { id: 'ads-cost-trend', label: '廣告成本趨勢', section: '廣告' },
+      { id: 'ads-click-trend', label: '廣告點擊趨勢', section: '廣告' },
       { id: 'ads-comparison', label: '廣告比較圖表', section: '廣告' },
       { id: 'backlink', label: '反向連結 Backlinks', section: '內容' },
       { id: 'ads-data-sync', label: '廣告數據同步', section: '設定' },

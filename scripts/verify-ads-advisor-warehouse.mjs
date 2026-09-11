@@ -110,6 +110,38 @@ const longDays = daysInclusive('2026-01-01', '2026-08-18');
 record('5. breakdown 92-day gate (30d allowed)', shortDays <= 92, `${shortDays} days`);
 record('5b. breakdown 92-day gate (ytd/all refused)', longDays > 92, `${longDays} days`);
 
+const ga4 = await supabase
+  .from('ga4_property_daily_metrics')
+  .select('property_id,metric_date,sessions,users')
+  .gt('sessions', 0)
+  .order('metric_date', { ascending: false })
+  .limit(1)
+  .maybeSingle();
+record(
+  '7. get_ga4_metrics daily rows readable',
+  !ga4.error,
+  ga4.error?.message ||
+    (ga4.data
+      ? `${ga4.data.property_id} ${ga4.data.metric_date} sessions=${ga4.data.sessions}`
+      : 'no synced GA4 rows yet'),
+);
+
+const gsc = await supabase
+  .from('gsc_query_daily_metrics')
+  .select('site_url,query,metric_date,clicks,impressions')
+  .gt('impressions', 0)
+  .order('metric_date', { ascending: false })
+  .limit(1)
+  .maybeSingle();
+record(
+  '8. get_gsc_queries daily rows readable',
+  !gsc.error,
+  gsc.error?.message ||
+    (gsc.data
+      ? `${gsc.data.site_url} "${gsc.data.query}" ${gsc.data.metric_date}`
+      : 'no synced GSC rows yet'),
+);
+
 const unauth = await fetch(`${url}/functions/v1/ads-campaign-advisor`, {
   method: 'POST',
   headers: {

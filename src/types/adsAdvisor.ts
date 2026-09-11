@@ -11,6 +11,8 @@ import type { AdsCampaignPlatform } from '@/components/marketing/campaign-detail
  * - compare_campaigns
  * - get_campaigns_by_tag
  * - get_campaign_breakdowns
+ * - get_ga4_metrics
+ * - get_gsc_queries
  */
 
 export type AdsAdvisorPlatform = AdsCampaignPlatform;
@@ -32,7 +34,7 @@ export type AdsAdvisorSnapshot = {
   channelOrObjective?: string;
   objectives?: string[];
   brandLabel?: string;
-  websites: { domain: string }[];
+  websites: { domain: string; websiteProfileId?: string }[];
   tags: string[];
   dateFrom: string;
   dateTo: string;
@@ -56,7 +58,9 @@ export type AdsAdvisorToolName =
   | 'get_campaign_metrics'
   | 'compare_campaigns'
   | 'get_campaigns_by_tag'
-  | 'get_campaign_breakdowns';
+  | 'get_campaign_breakdowns'
+  | 'get_ga4_metrics'
+  | 'get_gsc_queries';
 
 export type AdsAdvisorToolCall = {
   name: string;
@@ -114,4 +118,22 @@ export type GetCampaignBreakdownsArgs = {
   dateFrom?: string;
   dateTo?: string;
   channelType?: string;
+};
+
+export type GetGa4MetricsArgs = {
+  websiteProfileId?: string;
+  domain?: string;
+  propertyId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+};
+
+export type GetGscQueriesArgs = {
+  websiteProfileId?: string;
+  domain?: string;
+  siteUrl?: string;
+  query?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
 };

@@ -16,6 +16,9 @@ export type AdsCostTrendPeriodMode = 'rolling30' | 'monthly';
 
 export type AdsCostTrendRateMetric = 'cpc' | 'cpa';
 
+export const ADS_CLICK_TREND_METRICS = ['impr', 'clicks', 'conv', 'cpc', 'cpa'] as const;
+export type AdsClickTrendMetric = (typeof ADS_CLICK_TREND_METRICS)[number];
+
 export type AdsCostTrendPlatformFilter = 'all' | AdsPlatform;
 
 export type AdsCostTrendBucketDef = {
@@ -45,6 +48,7 @@ export type AdsCostTrendCampaign = {
   brandListIds: string[];
   tags: AdsTag[];
   buckets: AdsCostTrendBuckets;
+  impressionBuckets: AdsCostTrendBuckets;
   clickBuckets: AdsCostTrendBuckets;
   conversionBuckets: AdsCostTrendBuckets;
   totalMicros: number;
@@ -59,6 +63,9 @@ export type AdsCostTrendBrandRow = {
   displayName: string;
   campaigns: AdsCostTrendCampaign[];
   buckets: AdsCostTrendBuckets;
+  impressionBuckets: AdsCostTrendBuckets;
+  clickBuckets: AdsCostTrendBuckets;
+  conversionBuckets: AdsCostTrendBuckets;
   totalMicros: number;
 };
 

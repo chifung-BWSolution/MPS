@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { mergeWebsitesByDomain } from '@/lib/adsWebsiteDisplay';
 import { resolveFacebookBrandListId } from '@/lib/facebookAdsBrand';
 import {
   mergeActionBreakdowns,
@@ -190,7 +191,7 @@ export function useFacebookAdsCampaignDetail(
     const prev = previousPeriod(dateFrom, dateTo);
 
     try {
-      const [metaRes, accountRes, currentRows, previousRows] = await Promise.all([
+      const [metaRes, accountRes, websiteRes, currentRows, previousRows] = await Promise.all([
         supabase
           .from('facebook_ads_campaigns')
           .select(
@@ -203,12 +204,17 @@ export function useFacebookAdsCampaignDetail(
           .select('ad_account_id,account_name,currency_code,business_key,business_name')
           .eq('ad_account_id', adAccountId)
           .maybeSingle(),
+        supabase
+          .from('facebook_ads_account_websites')
+          .select('matched_domain,website_profile_id')
+          .eq('ad_account_id', adAccountId),
         fetchDailyRows(adAccountId, campaignId, dateFrom, dateTo),
         fetchDailyRows(adAccountId, campaignId, prev.from, prev.to),
       ]);
 
       if (metaRes.error) throw metaRes.error;
       if (accountRes.error) throw accountRes.error;
+      if (websiteRes.error) throw websiteRes.error;
 
       const meta = metaRes.data as CampaignMetaRow | null;
       const account = accountRes.data as AccountRow | null;
@@ -235,6 +241,18 @@ export function useFacebookAdsCampaignDetail(
       const brandCode = brand?.brand_code;
       const brandDisplayName = brand?.display_name;
 
+      const matchedWebsites = mergeWebsitesByDomain(
+        ((websiteRes.data as Array<{
+          matched_domain: string;
+          website_profile_id: string;
+        }> | null) ?? [])
+          .map((link) => ({
+            domain: (link.matched_domain || '').trim(),
+            websiteProfileId: (link.website_profile_id || '').trim(),
+          }))
+          .filter((w) => w.domain && w.websiteProfileId),
+      );
+
       const series = fillSeries(dateFrom, dateTo, currentRows);
       const prevSeries = fillSeries(prev.from, prev.to, previousRows);
 
@@ -252,6 +270,7 @@ export function useFacebookAdsCampaignDetail(
         brandListId,
         brandCode,
         brandDisplayName,
+        matchedWebsites,
         series,
         totals: sumSeries(series),
         previousTotals: sumSeries(prevSeries),

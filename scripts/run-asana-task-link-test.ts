@@ -4,6 +4,7 @@ import {
   asanaStoryToComment,
   attachmentOpenUrl,
   formatAttachmentSize,
+  importedProjectIdsFromAsanaRefs,
   isImageAttachment,
   isAsanaChatStory,
   mapAsanaAttachment,
@@ -38,6 +39,33 @@ assert.equal(
   parseAsanaTaskGidFromLink('https://app.asana.com/0/1208704092427502/list?focus=1209456549512345'),
   '1209456549512345',
 );
+
+const importedByLink = importedProjectIdsFromAsanaRefs([
+  {
+    id: 'manual_nwoded',
+    asana_link: 'https://app.asana.com/1/6649488167653/project/1208704092427502/task/1212345678901234',
+    asana_task_gid: null,
+  },
+  {
+    id: 'official_import',
+    asana_link: 'https://app.asana.com/0/0/1209456549512345',
+    asana_task_gid: '1209456549512345',
+  },
+  {
+    id: 'gid_only',
+    asana_link: null,
+    asana_task_gid: '1201112223334445',
+  },
+  {
+    id: 'no_asana',
+    asana_link: '',
+    asana_task_gid: null,
+  },
+]);
+assert.equal(importedByLink.get('1212345678901234'), 'manual_nwoded');
+assert.equal(importedByLink.get('1209456549512345'), 'official_import');
+assert.equal(importedByLink.get('1201112223334445'), 'gid_only');
+assert.equal(importedByLink.has('9999999999999999'), false);
 
 assert.equal(isAsanaChatStory({ type: 'system', resource_subtype: 'assigned' }), false);
 assert.equal(isAsanaChatStory({ type: 'comment', resource_subtype: 'comment_added' }), true);
@@ -159,5 +187,13 @@ const api = readFileSync(
 );
 assert.match(api, /asana-attachment-download/);
 assert.match(api, /downloadAsanaAttachment/);
+
+const pendingHook = readFileSync(
+  new URL('../src/hooks/useAsanaSyncedTasks.ts', import.meta.url),
+  'utf8',
+);
+assert.match(pendingHook, /importedProjectIdsFromAsanaRefs/);
+assert.match(pendingHook, /asana_link/);
+assert.doesNotMatch(pendingHook, /\.not\('asana_task_gid', 'is', null\)/);
 
 console.log('asana task link: ok');

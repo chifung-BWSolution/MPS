@@ -110,6 +110,7 @@ export type FacebookAdsCampaignDetail = {
   brandListId?: string | null;
   brandCode?: string;
   brandDisplayName?: string;
+  matchedWebsites: Array<{ domain: string; websiteProfileId: string }>;
   series: FacebookAdsDailyMetricPoint[];
   totals: FacebookAdsMetricTotals;
   previousTotals: FacebookAdsMetricTotals;

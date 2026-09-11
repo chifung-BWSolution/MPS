@@ -3,6 +3,7 @@ import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import type { AdsTag } from '@/types/adsTags';
 import {
   ADS_COST_TREND_BUCKET_IDS,
+  type AdsClickTrendMetric,
   type AdsCostTrendBrandRow,
   type AdsCostTrendBucketId,
   type AdsCostTrendBucketRange,
@@ -243,12 +244,16 @@ export function groupCostTrendByBrand(
     const existing = groups.get(brandId);
     if (existing) return existing;
     const brand = brandById.get(brandId);
+    const ids = bucketIdsFrom(campaigns[0]?.buckets);
     const row: AdsCostTrendBrandRow = {
       brandId,
       brandCode: brand?.brandCode || (brandId === UNASSIGNED_BRAND_ID ? '未設定品牌' : brandId),
       displayName: brand?.displayName || (brandId === UNASSIGNED_BRAND_ID ? '未設定品牌' : brandId),
       campaigns: [],
-      buckets: emptyCostTrendBuckets(bucketIdsFrom(campaigns[0]?.buckets)),
+      buckets: emptyCostTrendBuckets(ids),
+      impressionBuckets: emptyCostTrendBuckets(ids),
+      clickBuckets: emptyCostTrendBuckets(ids),
+      conversionBuckets: emptyCostTrendBuckets(ids),
       totalMicros: 0,
     };
     groups.set(brandId, row);
@@ -266,6 +271,9 @@ export function groupCostTrendByBrand(
       if (search.trim() && !brandHit && !campaignHit) continue;
       group.campaigns.push(campaign);
       addCostTrendBuckets(group.buckets, campaign.buckets);
+      addCostTrendBuckets(group.impressionBuckets, campaign.impressionBuckets);
+      addCostTrendBuckets(group.clickBuckets, campaign.clickBuckets);
+      addCostTrendBuckets(group.conversionBuckets, campaign.conversionBuckets);
       group.totalMicros += campaign.totalMicros;
     }
   }
@@ -308,6 +316,9 @@ export function uniqueCostTrendCampaigns(campaigns: AdsCostTrendCampaign[]): Ads
 export function sumUniqueCampaignMetrics(rows: AdsCostTrendBrandRow[]): {
   campaigns: AdsCostTrendCampaign[];
   buckets: AdsCostTrendBuckets;
+  impressionBuckets: AdsCostTrendBuckets;
+  clickBuckets: AdsCostTrendBuckets;
+  conversionBuckets: AdsCostTrendBuckets;
   totalMicros: number;
   impressions: number;
   clicks: number;
@@ -316,7 +327,11 @@ export function sumUniqueCampaignMetrics(rows: AdsCostTrendBrandRow[]): {
   facebookMicros: number;
 } {
   const campaigns = uniqueCostTrendCampaigns(rows.flatMap((row) => row.campaigns));
-  const buckets = emptyCostTrendBuckets(bucketIdsFrom(campaigns[0]?.buckets));
+  const ids = bucketIdsFrom(campaigns[0]?.buckets);
+  const buckets = emptyCostTrendBuckets(ids);
+  const impressionBuckets = emptyCostTrendBuckets(ids);
+  const clickBuckets = emptyCostTrendBuckets(ids);
+  const conversionBuckets = emptyCostTrendBuckets(ids);
   let impressions = 0;
   let clicks = 0;
   let conversions = 0;
@@ -324,6 +339,9 @@ export function sumUniqueCampaignMetrics(rows: AdsCostTrendBrandRow[]): {
   let facebookMicros = 0;
   for (const campaign of campaigns) {
     addCostTrendBuckets(buckets, campaign.buckets);
+    addCostTrendBuckets(impressionBuckets, campaign.impressionBuckets);
+    addCostTrendBuckets(clickBuckets, campaign.clickBuckets);
+    addCostTrendBuckets(conversionBuckets, campaign.conversionBuckets);
     impressions += campaign.impressions;
     clicks += campaign.clicks;
     conversions += campaign.conversions;
@@ -333,6 +351,9 @@ export function sumUniqueCampaignMetrics(rows: AdsCostTrendBrandRow[]): {
   return {
     campaigns,
     buckets,
+    impressionBuckets,
+    clickBuckets,
+    conversionBuckets,
     totalMicros: sumCostTrendBuckets(buckets),
     impressions,
     clicks,
@@ -348,6 +369,7 @@ export function buildCostTrendChartPoints(
   google: AdsCostTrendBuckets,
   facebook: AdsCostTrendBuckets,
   brandSeries: { key: string; name: string; buckets: AdsCostTrendBuckets }[],
+  divisor = 1_000_000,
 ): {
   label: string;
   total: number;
@@ -355,15 +377,16 @@ export function buildCostTrendChartPoints(
   facebook: number;
   [brand: string]: string | number;
 }[] {
+  const scale = divisor > 0 ? divisor : 1;
   return bucketDefs.map((bucket) => {
     const point: { label: string; total: number; google: number; facebook: number; [brand: string]: string | number } = {
       label: bucket.label,
-      total: (totals[bucket.id] ?? 0) / 1_000_000,
-      google: (google[bucket.id] ?? 0) / 1_000_000,
-      facebook: (facebook[bucket.id] ?? 0) / 1_000_000,
+      total: (totals[bucket.id] ?? 0) / scale,
+      google: (google[bucket.id] ?? 0) / scale,
+      facebook: (facebook[bucket.id] ?? 0) / scale,
     };
     for (const series of brandSeries) {
-      point[series.key] = (series.buckets[bucket.id] ?? 0) / 1_000_000;
+      point[series.key] = (series.buckets[bucket.id] ?? 0) / scale;
     }
     return point;
   });
@@ -380,6 +403,164 @@ export function topBrandSeries(
       key: `brand:${row.brandId}`,
       name: row.displayName || row.brandCode,
       buckets: row.buckets,
+    }));
+}
+
+export const ADS_CLICK_TREND_METRIC_OPTIONS: { id: AdsClickTrendMetric; label: string }[] = [
+  { id: 'impr', label: 'Impr.' },
+  { id: 'clicks', label: 'Clicks' },
+  { id: 'conv', label: 'Conv.' },
+  { id: 'cpc', label: 'CPC' },
+  { id: 'cpa', label: 'CPA' },
+];
+
+export function isClickTrendMoneyMetric(metric: AdsClickTrendMetric): boolean {
+  return metric === 'cpc' || metric === 'cpa';
+}
+
+export function clickTrendMetricNoun(metric: AdsClickTrendMetric): string {
+  switch (metric) {
+    case 'impr':
+      return '曝光';
+    case 'clicks':
+      return '點擊';
+    case 'conv':
+      return '轉換';
+    case 'cpc':
+      return 'CPC';
+    case 'cpa':
+      return 'CPA';
+  }
+}
+
+type ClickTrendMetricSource = {
+  buckets: AdsCostTrendBuckets;
+  impressionBuckets: AdsCostTrendBuckets;
+  clickBuckets: AdsCostTrendBuckets;
+  conversionBuckets: AdsCostTrendBuckets;
+  totalMicros?: number;
+  impressions?: number;
+  clicks?: number;
+  conversions?: number;
+};
+
+export function clickTrendBucketValue(
+  source: ClickTrendMetricSource,
+  bucketId: string | 'total',
+  metric: AdsClickTrendMetric,
+): number | null {
+  const cost =
+    bucketId === 'total'
+      ? source.totalMicros ?? sumCostTrendBuckets(source.buckets)
+      : (source.buckets[bucketId] ?? 0);
+  const impressions =
+    bucketId === 'total'
+      ? source.impressions ?? sumCostTrendBuckets(source.impressionBuckets)
+      : (source.impressionBuckets[bucketId] ?? 0);
+  const clicks =
+    bucketId === 'total'
+      ? source.clicks ?? sumCostTrendBuckets(source.clickBuckets)
+      : (source.clickBuckets[bucketId] ?? 0);
+  const conversions =
+    bucketId === 'total'
+      ? source.conversions ?? sumCostTrendBuckets(source.conversionBuckets)
+      : (source.conversionBuckets[bucketId] ?? 0);
+  switch (metric) {
+    case 'impr':
+      return impressions;
+    case 'clicks':
+      return clicks;
+    case 'conv':
+      return conversions;
+    case 'cpc':
+      return costTrendUnitCostMicros(cost, clicks);
+    case 'cpa':
+      return costTrendUnitCostMicros(cost, conversions);
+  }
+}
+
+export function clickTrendMetricBuckets(
+  source: ClickTrendMetricSource,
+  metric: AdsClickTrendMetric,
+  ids: readonly string[],
+): AdsCostTrendBuckets {
+  const out = emptyCostTrendBuckets(ids);
+  for (const id of ids) {
+    out[id] = clickTrendBucketValue(source, id, metric) ?? 0;
+  }
+  return out;
+}
+
+export function formatClickTrendValue(value: number | null, metric: AdsClickTrendMetric): string {
+  if (isClickTrendMoneyMetric(metric)) return formatCostTrendRate(value);
+  if (value == null) return '—';
+  if (metric === 'conv') {
+    return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+  return Math.round(value).toLocaleString();
+}
+
+export function sortClickTrendBrandRows(
+  rows: AdsCostTrendBrandRow[],
+  sortKey: AdsCostTrendSortKey,
+  sortDir: AdsCostTrendSortDir,
+  metric: AdsClickTrendMetric,
+): AdsCostTrendBrandRow[] {
+  const dir = sortDir === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    if (sortKey === 'brand') {
+      return compareText(a.displayName || a.brandCode, b.displayName || b.brandCode) * dir;
+    }
+    const bucketId = sortKey === 'total' ? 'total' : sortKey;
+    const aVal = clickTrendBucketValue(a, bucketId, metric);
+    const bVal = clickTrendBucketValue(b, bucketId, metric);
+    if (aVal == null && bVal == null) return 0;
+    if (aVal == null) return 1;
+    if (bVal == null) return -1;
+    return (aVal - bVal) * dir;
+  });
+}
+
+export function aggregateClickTrendCampaignBuckets(
+  campaigns: AdsCostTrendCampaign[],
+  metric: AdsClickTrendMetric,
+  ids: readonly string[],
+  platform?: AdsCostTrendCampaign['platform'],
+): AdsCostTrendBuckets {
+  const filtered = platform ? campaigns.filter((campaign) => campaign.platform === platform) : campaigns;
+  if (!isClickTrendMoneyMetric(metric)) {
+    const out = emptyCostTrendBuckets(ids);
+    for (const campaign of filtered) {
+      addCostTrendBuckets(out, clickTrendMetricBuckets(campaign, metric, ids));
+    }
+    return out;
+  }
+  const cost = emptyCostTrendBuckets(ids);
+  const units = emptyCostTrendBuckets(ids);
+  for (const campaign of filtered) {
+    addCostTrendBuckets(cost, campaign.buckets);
+    addCostTrendBuckets(units, metric === 'cpc' ? campaign.clickBuckets : campaign.conversionBuckets);
+  }
+  const out = emptyCostTrendBuckets(ids);
+  for (const id of ids) {
+    out[id] = costTrendUnitCostMicros(cost[id] ?? 0, units[id] ?? 0) ?? 0;
+  }
+  return out;
+}
+
+export function topBrandSeriesByMetric(
+  rows: AdsCostTrendBrandRow[],
+  metric: AdsClickTrendMetric,
+  ids: readonly string[],
+  limit = 5,
+): { key: string; name: string; buckets: AdsCostTrendBuckets }[] {
+  return [...rows]
+    .sort((a, b) => (clickTrendBucketValue(b, 'total', metric) ?? -1) - (clickTrendBucketValue(a, 'total', metric) ?? -1))
+    .slice(0, limit)
+    .map((row) => ({
+      key: `brand:${row.brandId}`,
+      name: row.displayName || row.brandCode,
+      buckets: clickTrendMetricBuckets(row, metric, ids),
     }));
 }
 

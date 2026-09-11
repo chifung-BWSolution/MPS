@@ -102,8 +102,8 @@ export function isProjectPageRecord(
   return record.status === 'confirmed';
 }
 
-/** Days from enquiry date until follow-up deadline (30-day window). */
-export const PITCHING_FOLLOW_UP_DAYS = 30;
+/** Days from enquiry date until follow-up deadline (45-day window). */
+export const PITCHING_FOLLOW_UP_DAYS = 45;
 
 /** Normalize a DB / form date to YYYY-MM-DD, or undefined when empty. */
 export function optionalIsoDate(value: string | null | undefined): string | undefined {
@@ -131,8 +131,8 @@ export function calendarDaysBetween(fromIso: string, toIso: string): number | nu
 }
 
 /**
- * Days left in the 30-day follow-up window: `30 - (asOf - 查詢日期)`.
- * Future inquiry dates yield more than 30. Status is ignored — only a missing
+ * Days left in the 45-day follow-up window: `45 - (asOf - 查詢日期)`.
+ * Future inquiry dates yield more than 45. Status is ignored — only a missing
  * or invalid inquiry date returns null (shown as —).
  */
 export function calcRemainingDays(

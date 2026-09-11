@@ -47,6 +47,8 @@ import {
 } from '@/lib/quotationExpenses';
 import { PitchingBulkExpenseDialog } from '@/components/quotation/PitchingBulkExpenseDialog';
 import { ShopifyBillingImportDialog } from '@/components/quotation/ShopifyBillingImportDialog';
+import { isShopifyWebsitePlatform } from '@/lib/shopifyBillingCsv';
+import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
 import {
   PitchingRecurringExpenseDialog,
   type RecurringExpenseDialogInput,
@@ -177,11 +179,14 @@ export function PitchingExpenseTab({
   relatedId,
   signedDate,
   handoverDate,
+  webandsystemListId,
 }: {
   relatedType: ExpenseSourceRelatedType;
   relatedId: string;
   signedDate?: string;
   handoverDate?: string;
+  /** Linked `webandsystem_list.id` (client project). Website detail uses `relatedId`. */
+  webandsystemListId?: string;
 }) {
   const {
     rows,
@@ -197,6 +202,11 @@ export function PitchingExpenseTab({
   const { cards } = useCreditCards();
   const { types: supplierTypes } = useSupplierTypes();
   const { suppliers } = useWebPageSuppliers();
+  const { profiles: websiteProfiles } = useWebsiteProfiles();
+  const linkedWebsiteId = relatedType === 'webandsystem' ? relatedId : (webandsystemListId ?? '');
+  const canImportShopify = isShopifyWebsitePlatform(
+    websiteProfiles.find((profile) => profile.id === linkedWebsiteId)?.platform,
+  );
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<QuotationExpense | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft());
@@ -461,13 +471,15 @@ export function PitchingExpenseTab({
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <span className="text-[12px] text-muted-foreground">共 {rows.length} 筆</span>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShopifyImportOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 border border-border text-foreground bg-white rounded-md text-[13px] font-medium hover:bg-muted/40 transition-colors active:scale-[0.97]"
-          >
-            <FileSpreadsheet size={14} /> 匯入 Shopify 帳單
-          </button>
+          {canImportShopify && (
+            <button
+              type="button"
+              onClick={() => setShopifyImportOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 border border-border text-foreground bg-white rounded-md text-[13px] font-medium hover:bg-muted/40 transition-colors active:scale-[0.97]"
+            >
+              <FileSpreadsheet size={14} /> 匯入 Shopify 帳單
+            </button>
+          )}
           <button
             type="button"
             onClick={openBulkCreate}
@@ -499,14 +511,20 @@ export function PitchingExpenseTab({
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-8 text-center">
           <Banknote size={24} className="mx-auto text-muted-foreground/50 mb-2" />
           <p className="text-[13px] text-muted-foreground">尚未新增支出</p>
-          <p className="text-[12px] text-muted-foreground/70 mt-1">可記錄分期應付、實付、未付與壞帳，或匯入 Shopify 帳單 CSV</p>
-          <button
-            type="button"
-            onClick={() => setShopifyImportOpen(true)}
-            className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 text-[12px] font-medium text-teal-700 hover:bg-teal-50 rounded-md"
-          >
-            <FileSpreadsheet size={12} /> 匯入 Shopify 帳單
-          </button>
+          <p className="text-[12px] text-muted-foreground/70 mt-1">
+            {canImportShopify
+              ? '可記錄分期應付、實付、未付與壞帳，或匯入 Shopify 帳單 CSV'
+              : '可記錄分期應付、實付、未付與壞帳'}
+          </p>
+          {canImportShopify && (
+            <button
+              type="button"
+              onClick={() => setShopifyImportOpen(true)}
+              className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 text-[12px] font-medium text-teal-700 hover:bg-teal-50 rounded-md"
+            >
+              <FileSpreadsheet size={12} /> 匯入 Shopify 帳單
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -1163,16 +1181,18 @@ export function PitchingExpenseTab({
         onSave={handleBulkSave}
       />
 
-      <ShopifyBillingImportDialog
-        open={shopifyImportOpen}
-        existingRows={rows}
-        supplierTypes={supplierTypes}
-        suppliers={suppliers}
-        cards={cards}
-        saving={shopifyImportSaving}
-        onClose={() => setShopifyImportOpen(false)}
-        onSave={handleShopifyImport}
-      />
+      {canImportShopify && (
+        <ShopifyBillingImportDialog
+          open={shopifyImportOpen}
+          existingRows={rows}
+          supplierTypes={supplierTypes}
+          suppliers={suppliers}
+          cards={cards}
+          saving={shopifyImportSaving}
+          onClose={() => setShopifyImportOpen(false)}
+          onSave={handleShopifyImport}
+        />
+      )}
 
       <PitchingRecurringExpenseDialog
         open={Boolean(recurringGroup)}

@@ -1,8 +1,10 @@
 import { useState, useMemo, useEffect, type ReactNode } from 'react';
-import { Search, Plus, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil, Clock, FolderOpen, Wallet, Banknote, ExternalLink, PieChart } from 'lucide-react';
+import { Search, Plus, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil, Clock, FolderOpen, Wallet, Banknote, PieChart } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
+import { useQuotationSection } from '@/context/QuotationSectionContext';
+import { filterBySectionProjectTypes, mergeScopedProjectTypes } from '@/lib/quotationSectionScope';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
 import { useActiveStaffOptions, type StaffSelectOption } from '@/hooks/useActiveStaffOptions';
@@ -32,7 +34,6 @@ import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   pitchingStatusConfig,
-  PITCHING_PROJECT_TYPE_OPTIONS,
   PITCHING_STATUS_OPTIONS,
   calcClientProjectProgress,
   calcRemainingDays,
@@ -235,8 +236,6 @@ export function ProjectListActionCell({
   record: PitchingRecord;
   onEdit: (record: PitchingRecord) => void;
 }) {
-  const websiteUrl = record.webandsystemDomainUrl?.trim();
-  const websiteHref = websiteUrl ? toExternalHref(websiteUrl) : '';
   const asanaRaw = record.asanaLink?.trim() || '';
   const asanaHref = asanaRaw
     ? toExternalHref(asanaRaw)
@@ -247,21 +246,6 @@ export function ProjectListActionCell({
   return (
     <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center gap-1">
-        {websiteHref ? (
-          <a
-            href={websiteHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={listActionIconClass}
-            aria-label={`開啟 ${record.webandsystemName || '網站/系統'}`}
-          >
-            <ExternalLink size={13} />
-          </a>
-        ) : (
-          <span className={listActionIconDisabledClass} aria-disabled="true" title="尚未連結網站/系統">
-            <ExternalLink size={13} />
-          </span>
-        )}
         {asanaHref ? (
           <a
             href={asanaHref}
@@ -326,15 +310,23 @@ function ProjectTypeMultiSelect({
   value: PitchingProjectType[];
   onChange: (next: PitchingProjectType[]) => void;
 }) {
+  const { typeOptions } = useQuotationSection();
+  const optionIds = new Set(typeOptions.map((opt) => opt.id));
+  const visibleValue = value.filter((type) => optionIds.has(type));
+  const hiddenValue = value.filter((type) => !optionIds.has(type));
+
   const toggle = (id: PitchingProjectType) => {
-    onChange(value.includes(id) ? value.filter((t) => t !== id) : [...value, id]);
+    const nextVisible = visibleValue.includes(id)
+      ? visibleValue.filter((type) => type !== id)
+      : [...visibleValue, id];
+    onChange([...nextVisible, ...hiddenValue]);
   };
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
-        {PITCHING_PROJECT_TYPE_OPTIONS.map((opt) => {
-          const selected = value.includes(opt.id);
+        {typeOptions.map((opt) => {
+          const selected = visibleValue.includes(opt.id);
           return (
             <button
               key={opt.id}
@@ -352,8 +344,8 @@ function ProjectTypeMultiSelect({
           );
         })}
       </div>
-      {value.length > 0 && (
-        <p className="text-[11px] text-muted-foreground">已選：{formatProjectTypes(value)}</p>
+      {visibleValue.length > 0 && (
+        <p className="text-[11px] text-muted-foreground">已選：{formatProjectTypes(visibleValue)}</p>
       )}
     </div>
   );
@@ -697,6 +689,7 @@ function PitchingList({
   onView: (record: PitchingRecord) => void;
   onEdit: (record: PitchingRecord) => void;
 }) {
+  const { typeOptions } = useQuotationSection();
   const [searchQuery, setSearchQuery] = useState('');
   const [projectTypeFilter, setProjectTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -769,7 +762,7 @@ function PitchingList({
           className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
         >
           <option value="all">全部項目類型</option>
-          {PITCHING_PROJECT_TYPE_OPTIONS.map((opt) => (
+          {typeOptions.map((opt) => (
             <option key={opt.id} value={opt.id}>
               {opt.label}
             </option>
@@ -1205,6 +1198,7 @@ export function PitchingDetail({
         <PitchingExpenseTab
           relatedType="quotation_client"
           relatedId={record.id}
+          webandsystemListId={draft.webandsystemListId}
           signedDate={draft.signedDate}
           handoverDate={draft.handoverDate}
         />
@@ -1242,6 +1236,7 @@ export function PitchingDetail({
 
 export function PitchingModule() {
   const { systemUser } = useAuth();
+  const { allowedTypes } = useQuotationSection();
   const { records, loading, error, lastSyncedAt, refresh, addRecord, updateRecord } = useQuotationClientProjects();
   const { records: clientListRecords, addClient } = useQuotationClientList();
   const { detailId, openDetail, closeDetail } = useQuotationClientDetailId('pitching');
@@ -1259,6 +1254,11 @@ export function PitchingModule() {
   const pitchingClientOptions = useMemo(
     () => clientListRecords.map(toQuotationClientSelectOption),
     [clientListRecords],
+  );
+
+  const scopedRecords = useMemo(
+    () => filterBySectionProjectTypes(records, allowedTypes),
+    [records, allowedTypes],
   );
 
   useEffect(() => {
@@ -1291,6 +1291,7 @@ export function PitchingModule() {
     const selectedStaff = staffOptions.find((s) => s.value === form.mainPmId);
     const payload = {
       ...pitchingFormToUpdate(form),
+      projectTypes: mergeScopedProjectTypes(editingRecord?.projectTypes, form.projectTypes, allowedTypes),
       assignedPmName: selectedStaff?.label || '',
       mainPmName: selectedStaff?.label || undefined,
     };
@@ -1313,7 +1314,7 @@ export function PitchingModule() {
       signedDate: form.signedDate || undefined,
       handoverDate: form.handoverDate || undefined,
       description: form.description.trim() || undefined,
-      projectTypes: form.projectTypes,
+      projectTypes: mergeScopedProjectTypes([], form.projectTypes, allowedTypes),
       assignedPm: '',
       assignedPmName: selectedStaff?.label || '',
       mainPmId: form.mainPmId.trim() || undefined,
@@ -1417,7 +1418,7 @@ export function PitchingModule() {
         <div className="text-center py-12 text-[13px] text-muted-foreground">載入 Pitching 資料中…</div>
       ) : (
         <PitchingList
-          records={records}
+          records={scopedRecords}
           onView={handleView}
           onEdit={openEditModal}
         />

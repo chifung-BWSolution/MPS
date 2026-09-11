@@ -25,7 +25,9 @@ function ModuleRouter() {
     case 'day-report':
       return <DayReportModule subModule={currentSubModule} />;
     case 'quotation':
-      return <QuotationModule subModule={currentSubModule} />;
+      return <QuotationModule subModule={currentSubModule} sectionModule="quotation" />;
+    case 'system-dev':
+      return <QuotationModule subModule={currentSubModule} sectionModule="system-dev" />;
     case 'project':
       return <ProjectModule subModule={currentSubModule} />;
     case 'website':

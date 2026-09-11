@@ -99,6 +99,25 @@ export async function downloadAsanaAttachment(
   link.remove();
 }
 
+export function closeAsanaSyncedTask(input: {
+  asanaTaskGid: string;
+  caseClosedReason: string;
+}) {
+  return invokeFunction<{
+    success?: boolean;
+    asana_task_gid?: string;
+    case_closed_reason?: string | null;
+    asana_completed?: boolean;
+    asana_comment?: string;
+    asana_actor_name?: string | null;
+    asana_actor_email?: string | null;
+    staff_name?: string | null;
+  }>('asana-close-synced-task', {
+    asana_task_gid: input.asanaTaskGid,
+    case_closed_reason: input.caseClosedReason || null,
+  });
+}
+
 export function invokeAsanaPitchingSync() {
   return invokeFunction<{
     success?: boolean;

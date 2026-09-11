@@ -95,7 +95,7 @@ export function QuotationDocFormDialog({
           <span className="text-[12px] text-muted-foreground block mb-1">文件類型 *</span>
           {types.length === 0 ? (
             <p className="text-[12px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-              尚未設定可用的文件類型。請到項目管理 → 設置 → 文件類型新增。
+              尚未設定可用的文件類型。請到市場項目管理或系統開發管理 → 設置 → 文件類型新增。
             </p>
           ) : (
             <select

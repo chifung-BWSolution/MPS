@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import {
   assignShopifyBillingInstallments,
   isShopifyBillingDuplicate,
+  isShopifyWebsitePlatform,
   matchShopifyBillingSupplier,
   parseShopifyBillingCsvText,
   shopifyBillingImportKey,
@@ -150,11 +151,26 @@ if (existsSync(exportPath)) {
   assert.equal(matchShopifyBillingSupplier(exported.charges[0]!, suppliers)?.id, 'wps_gempage');
 }
 
+assert.equal(isShopifyWebsitePlatform('Shopify'), true);
+assert.equal(isShopifyWebsitePlatform('shopify'), true);
+assert.equal(isShopifyWebsitePlatform(' SHOPIFY '), true);
+assert.equal(isShopifyWebsitePlatform('wordpress'), false);
+assert.equal(isShopifyWebsitePlatform(''), false);
+assert.equal(isShopifyWebsitePlatform(null), false);
+
 const tab = read('src/components/quotation/PitchingExpenseTab.tsx');
 assert.match(tab, /匯入 Shopify 帳單/);
 assert.match(tab, /ShopifyBillingImportDialog/);
 assert.match(tab, /handleShopifyImport/);
 assert.match(tab, /saveBulkExpenses/);
+assert.match(tab, /canImportShopify/);
+assert.match(tab, /isShopifyWebsitePlatform/);
+assert.match(tab, /webandsystemListId/);
+assert.match(tab, /relatedType === 'webandsystem'/);
+assert.match(tab, /\{canImportShopify && \(/);
+
+const pitching = read('src/components/quotation/PitchingModule.tsx');
+assert.match(pitching, /webandsystemListId=\{draft\.webandsystemListId\}/);
 
 const dialog = read('src/components/quotation/ShopifyBillingImportDialog.tsx');
 assert.match(dialog, /Shopify 帳單檔案/);

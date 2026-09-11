@@ -236,7 +236,7 @@ export function FacebookAdsCampaignDetail({
       channelOrObjective: detail.objective,
       businessLabel: detail.businessName,
       brandLabel: brandLabel(detail.brandCode, detail.brandDisplayName),
-      websites: [],
+      websites: detail.matchedWebsites,
       series: detail.series.map((p) => ({
         date: p.date,
         impressions: p.impressions,

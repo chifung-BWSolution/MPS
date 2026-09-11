@@ -11,6 +11,7 @@ assert.equal(QUOTATION_DOC_TYPES_TABLE, 'quotation_doc_types');
 
 const menu = read('src/context/AppContext.tsx');
 assert.match(menu, /id: 'quotation'/);
+assert.match(menu, /id: 'system-dev'/);
 assert.match(menu, /id: 'doc-types'/);
 assert.match(menu, /label: '文件類型', section: '設置'/);
 

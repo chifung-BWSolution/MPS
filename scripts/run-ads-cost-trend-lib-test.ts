@@ -18,6 +18,10 @@ import {
   monthSpan,
   monthStartIso,
   sortCostTrendBrandRows,
+  sortClickTrendBrandRows,
+  clickTrendBucketValue,
+  formatClickTrendValue,
+  aggregateClickTrendCampaignBuckets,
   sumUniqueCampaignMetrics,
   UNASSIGNED_BRAND_ID,
 } from '../src/lib/adsCostTrend';
@@ -38,6 +42,7 @@ function campaign(partial: Partial<AdsCostTrendCampaign> & Pick<AdsCostTrendCamp
     impressions: 0,
     clicks: 0,
     conversions: 0,
+    impressionBuckets: emptyCostTrendBuckets(),
     clickBuckets: emptyCostTrendBuckets(),
     conversionBuckets: emptyCostTrendBuckets(),
     totalMicros: Object.values(buckets).reduce((sum, value) => sum + value, 0),
@@ -58,6 +63,12 @@ const rows = [
     campaignName: 'Search Brand',
     brandListIds: ['b1'],
     buckets: { ...emptyCostTrendBuckets(), d0_30: 1_000_000, d31_60: 2_000_000 },
+    impressionBuckets: { ...emptyCostTrendBuckets(), d0_30: 1000, d31_60: 2000 },
+    clickBuckets: { ...emptyCostTrendBuckets(), d0_30: 10, d31_60: 20 },
+    conversionBuckets: { ...emptyCostTrendBuckets(), d0_30: 1, d31_60: 2 },
+    impressions: 3000,
+    clicks: 30,
+    conversions: 3,
   }),
   campaign({
     key: 'fb:1',
@@ -184,5 +195,17 @@ assert.equal(chartPoints.length, 6);
 assert.equal(chartPoints[0].label, '2026年3月');
 assert.equal(chartPoints[0].total, 1);
 assert.equal(chartPoints[5].total, 2);
+
+assert.equal(clickTrendBucketValue(bw!, 'd0_30', 'clicks'), 10);
+assert.equal(clickTrendBucketValue(bw!, 'total', 'impr'), 3000);
+assert.equal(clickTrendBucketValue(bw!, 'total', 'cpc'), 200_000);
+assert.equal(formatClickTrendValue(10, 'clicks'), '10');
+assert.match(formatClickTrendValue(200_000, 'cpc'), /^\$/);
+
+const clickSorted = sortClickTrendBrandRows(grouped, 'total', 'desc', 'clicks');
+assert.equal(clickSorted[0].brandId, 'b1');
+
+const clickBuckets = aggregateClickTrendCampaignBuckets(totals.campaigns, 'clicks', Object.keys(emptyCostTrendBuckets()));
+assert.equal(clickBuckets.d0_30, 10);
 
 console.log('ads cost trend lib: ok');

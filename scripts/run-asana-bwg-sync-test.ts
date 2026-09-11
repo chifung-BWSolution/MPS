@@ -34,6 +34,9 @@ assert.doesNotMatch(migration, /Bearer eyJ/);
 const hook = read('src/hooks/useAsanaSyncedTasks.ts');
 assert.match(hook, /sync_date_mode/);
 assert.match(hook, /invokeAsanaPitchingSync/);
+assert.match(hook, /importedProjectIdsFromAsanaRefs/);
+assert.match(hook, /asana_link/);
+assert.doesNotMatch(hook, /\.not\('asana_task_gid', 'is', null\)/);
 
 const api = read('src/lib/asanaPitchingApi.ts');
 assert.match(api, /sync-asana-pitching/);

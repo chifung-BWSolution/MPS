@@ -307,6 +307,7 @@ export function useAdsCostTrend(query: {
           accountId: string;
           campaignId: string;
           buckets: ReturnType<typeof emptyCostTrendBuckets>;
+          impressionBuckets: ReturnType<typeof emptyCostTrendBuckets>;
           clickBuckets: ReturnType<typeof emptyCostTrendBuckets>;
           conversionBuckets: ReturnType<typeof emptyCostTrendBuckets>;
           impressions: number;
@@ -331,6 +332,7 @@ export function useAdsCostTrend(query: {
           accountId,
           campaignId,
           buckets: emptyCostTrendBuckets(bucketIds),
+          impressionBuckets: emptyCostTrendBuckets(bucketIds),
           clickBuckets: emptyCostTrendBuckets(bucketIds),
           conversionBuckets: emptyCostTrendBuckets(bucketIds),
           impressions: 0,
@@ -338,6 +340,7 @@ export function useAdsCostTrend(query: {
           conversions: 0,
         };
         existing.buckets[bucketId] = (existing.buckets[bucketId] ?? 0) + spendMicros;
+        existing.impressionBuckets[bucketId] = (existing.impressionBuckets[bucketId] ?? 0) + impressions;
         existing.clickBuckets[bucketId] = (existing.clickBuckets[bucketId] ?? 0) + clicks;
         existing.conversionBuckets[bucketId] = (existing.conversionBuckets[bucketId] ?? 0) + conversions;
         existing.impressions += impressions;
@@ -396,6 +399,7 @@ export function useAdsCostTrend(query: {
             ],
             tags: tagsByCampaign.get(`google:${rowId}`) ?? [],
             buckets: row.buckets,
+            impressionBuckets: row.impressionBuckets,
             clickBuckets: row.clickBuckets,
             conversionBuckets: row.conversionBuckets,
             totalMicros: sumCostTrendBuckets(row.buckets),
@@ -430,6 +434,7 @@ export function useAdsCostTrend(query: {
           brandListIds: brandListId ? [brandListId] : [],
           tags: tagsByCampaign.get(`facebook:${rowId}`) ?? [],
           buckets: row.buckets,
+          impressionBuckets: row.impressionBuckets,
           clickBuckets: row.clickBuckets,
           conversionBuckets: row.conversionBuckets,
           totalMicros: sumCostTrendBuckets(row.buckets),

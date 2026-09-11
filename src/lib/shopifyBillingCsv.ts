@@ -15,6 +15,11 @@ import {
 
 export const SHOPIFY_BILLING_IMPORT_SOURCE = 'shopify_billing';
 
+/** `webandsystem_list.platform` is free-text (system_options); match Shopify regardless of case. */
+export function isShopifyWebsitePlatform(platform?: string | null): boolean {
+  return (platform ?? '').trim().toLowerCase() === 'shopify';
+}
+
 const REQUIRED_HEADERS = ['bill', 'chargecategory', 'amount'] as const;
 
 const HEADER_ALIASES: Record<string, keyof ShopifyBillingRaw> = {

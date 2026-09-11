@@ -20,12 +20,14 @@ import {
   BookOpen,
   Users,
   Palette,
+  Code,
 } from 'lucide-react';
 
 const moduleIcons: Record<string, React.ElementType> = {
   'dashboard': LayoutDashboard,
   'day-report': FileText,
   'quotation': DollarSign,
+  'system-dev': Code,
   'project': FolderKanban,
   'website': Globe,
   'articles': BookOpen,

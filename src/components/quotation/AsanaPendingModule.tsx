@@ -3,6 +3,8 @@ import { RefreshCw, Search, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
+import { useQuotationSection } from '@/context/QuotationSectionContext';
+import { filterBySectionProjectTypes, mergeScopedProjectTypes } from '@/lib/quotationSectionScope';
 import { useAsanaSyncedTasks, type AsanaSyncedTask } from '@/hooks/useAsanaSyncedTasks';
 import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
@@ -12,14 +14,20 @@ import {
   type QuotationClientSelectOption,
 } from '@/data/quotationClientList';
 import {
-  pitchingStatusConfig,
-  PITCHING_PROJECT_TYPE_OPTIONS,
   formatProjectTypes,
   matchesProjectTypeFilter,
 } from '@/data/pitchingData';
+import {
+  ASANA_CASE_CLOSED_REASONS,
+  type AsanaCaseClosedFilter,
+  type AsanaExpiredFilter,
+  type AsanaImportFilter,
+  matchesAsanaPendingFilters,
+} from '@/lib/asanaPendingFilters';
 import { assignedNameMatchesDisplayName } from '@/lib/mainPmMatch';
 import {
   PitchingFormModal,
+  RemainingDaysCell,
   type PitchingFormValues,
 } from '@/components/quotation/PitchingModule';
 
@@ -64,6 +72,7 @@ function formDefaultsFromTask(
 
 export function AsanaPendingModule() {
   const { systemUser } = useAuth();
+  const { allowedTypes, typeOptions } = useQuotationSection();
   const {
     tasks,
     loading,
@@ -71,19 +80,21 @@ export function AsanaPendingModule() {
     error,
     lastSyncedAt,
     syncSources,
-    pendingCount,
-    importedCount,
     refresh,
     syncNow,
+    updateCaseClosedReason,
   } = useAsanaSyncedTasks();
   const { addRecord } = useQuotationClientProjects();
   const { records: clientListRecords, addClient } = useQuotationClientList();
   const { options: staffOptions } = useActiveStaffOptions([systemUser?.staff_id]);
 
-  const [importFilter, setImportFilter] = useState<'pending' | 'all'>('pending');
+  const [importFilter, setImportFilter] = useState<AsanaImportFilter>('pending');
+  const [expiredFilter, setExpiredFilter] = useState<AsanaExpiredFilter>('all');
+  const [caseClosedFilter, setCaseClosedFilter] = useState<AsanaCaseClosedFilter>('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [projectTypeFilter, setProjectTypeFilter] = useState('all');
   const [importingTask, setImportingTask] = useState<AsanaSyncedTask | null>(null);
+  const [savingReasonGid, setSavingReasonGid] = useState<string | null>(null);
 
   const clientOptions = useMemo(
     () => clientListRecords.map(toQuotationClientSelectOption),
@@ -103,9 +114,24 @@ export function AsanaPendingModule() {
     [importingTask, clientOptions, staffOptions, systemUser?.staff_id],
   );
 
+  const sectionTasks = useMemo(
+    () => filterBySectionProjectTypes(tasks, allowedTypes),
+    [tasks, allowedTypes],
+  );
+  const sectionPendingCount = sectionTasks.filter((task) => !task.imported).length;
+  const sectionImportedCount = sectionTasks.filter((task) => task.imported).length;
+
   const visible = useMemo(() => {
-    return tasks.filter((task) => {
-      if (importFilter === 'pending' && task.imported) return false;
+    return sectionTasks.filter((task) => {
+      if (
+        !matchesAsanaPendingFilters(task, {
+          importFilter,
+          expiredFilter,
+          caseClosedFilter,
+        })
+      ) {
+        return false;
+      }
       if (!matchesProjectTypeFilter(task.projectTypes, projectTypeFilter)) return false;
       if (!searchQuery.trim()) return true;
       const query = searchQuery.toLowerCase();
@@ -115,10 +141,11 @@ export function AsanaPendingModule() {
         task.asanaProjectName.toLowerCase().includes(query) ||
         task.asanaSectionName.toLowerCase().includes(query) ||
         task.assignedPmName.toLowerCase().includes(query) ||
+        task.caseClosedReason.toLowerCase().includes(query) ||
         formatProjectTypes(task.projectTypes).toLowerCase().includes(query)
       );
     });
-  }, [tasks, importFilter, projectTypeFilter, searchQuery]);
+  }, [sectionTasks, importFilter, expiredFilter, caseClosedFilter, projectTypeFilter, searchQuery]);
 
   const handleSync = async () => {
     try {
@@ -144,7 +171,7 @@ export function AsanaPendingModule() {
       signedDate: form.signedDate || undefined,
       handoverDate: form.handoverDate || undefined,
       description: form.description.trim() || undefined,
-      projectTypes: form.projectTypes,
+      projectTypes: mergeScopedProjectTypes(importingTask.projectTypes, form.projectTypes, allowedTypes),
       assignedPm: importingTask.assignedPm,
       assignedPmName: selectedStaff?.label || importingTask.assignedPmName || '',
       mainPmId: form.mainPmId.trim() || undefined,
@@ -166,6 +193,17 @@ export function AsanaPendingModule() {
     toast.success('已建立報價客戶項目');
     setImportingTask(null);
     await refresh();
+  };
+
+  const handleCaseClosedReasonChange = async (task: AsanaSyncedTask, reason: string) => {
+    setSavingReasonGid(task.asanaTaskGid);
+    const { error: saveErr } = await updateCaseClosedReason(task.asanaTaskGid, reason);
+    setSavingReasonGid(null);
+    if (saveErr) {
+      toast.error(`無法儲存取消跟進原因：${saveErr.message}`);
+      return;
+    }
+    toast.success(reason ? '已在 Asana 標記完成並寫入取消跟進原因' : '已在 Asana 取消完成並清除取消跟進原因');
   };
 
   return (
@@ -208,15 +246,15 @@ export function AsanaPendingModule() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
           <span className="text-[13px] font-medium text-muted-foreground">待匯入</span>
-          <span className="text-[22px] font-bold block mt-1 text-amber-600">{pendingCount}</span>
+          <span className="text-[22px] font-bold block mt-1 text-amber-600">{sectionPendingCount}</span>
         </div>
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
           <span className="text-[13px] font-medium text-muted-foreground">已匯入</span>
-          <span className="text-[22px] font-bold block mt-1 text-teal-600">{importedCount}</span>
+          <span className="text-[22px] font-bold block mt-1 text-teal-600">{sectionImportedCount}</span>
         </div>
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
           <span className="text-[13px] font-medium text-muted-foreground">Asana 總數</span>
-          <span className="text-[22px] font-bold block mt-1">{tasks.length}</span>
+          <span className="text-[22px] font-bold block mt-1">{sectionTasks.length}</span>
         </div>
       </div>
 
@@ -233,11 +271,30 @@ export function AsanaPendingModule() {
         </div>
         <select
           value={importFilter}
-          onChange={(e) => setImportFilter(e.target.value as 'pending' | 'all')}
+          onChange={(e) => setImportFilter(e.target.value as AsanaImportFilter)}
           className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
         >
           <option value="pending">待匯入</option>
-          <option value="all">全部</option>
+          <option value="imported">已匯入</option>
+          <option value="all">全部匯入狀態</option>
+        </select>
+        <select
+          value={expiredFilter}
+          onChange={(e) => setExpiredFilter(e.target.value as AsanaExpiredFilter)}
+          className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
+        >
+          <option value="all">全部期限</option>
+          <option value="expired">已過期</option>
+          <option value="not_expired">未過期</option>
+        </select>
+        <select
+          value={caseClosedFilter}
+          onChange={(e) => setCaseClosedFilter(e.target.value as AsanaCaseClosedFilter)}
+          className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
+        >
+          <option value="pending">未取消</option>
+          <option value="closed">已取消跟進</option>
+          <option value="all">全部取消狀態</option>
         </select>
         <select
           value={projectTypeFilter}
@@ -245,7 +302,7 @@ export function AsanaPendingModule() {
           className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
         >
           <option value="all">全部項目類型</option>
-          {PITCHING_PROJECT_TYPE_OPTIONS.map((opt) => (
+          {typeOptions.map((opt) => (
             <option key={opt.id} value={opt.id}>
               {opt.label}
             </option>
@@ -265,10 +322,10 @@ export function AsanaPendingModule() {
                     查詢日期
                   </th>
                   <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
-                    Asana 專案
+                    剩餘天數
                   </th>
                   <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
-                    區塊
+                    Asana 專案
                   </th>
                   <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
                     顯示名稱
@@ -279,40 +336,59 @@ export function AsanaPendingModule() {
                   <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
                     負責 PM
                   </th>
-                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
-                    狀態
+                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 whitespace-nowrap">
+                    取消跟進
                   </th>
-                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
+                  <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3 whitespace-nowrap">
                     操作
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {visible.map((task) => {
-                  const status = pitchingStatusConfig[task.mappedStatus];
+                  const reasonOptions = ASANA_CASE_CLOSED_REASONS.includes(
+                    task.caseClosedReason as (typeof ASANA_CASE_CLOSED_REASONS)[number],
+                  )
+                    ? ASANA_CASE_CLOSED_REASONS
+                    : task.caseClosedReason
+                      ? [task.caseClosedReason, ...ASANA_CASE_CLOSED_REASONS]
+                      : ASANA_CASE_CLOSED_REASONS;
                   return (
                     <tr key={task.asanaTaskGid} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                       <td className="px-4 py-3 text-[13px] text-muted-foreground tabular-nums">{task.inquiryDate}</td>
+                      <td className="px-4 py-3 text-[13px]">
+                        <RemainingDaysCell inquiryDate={task.inquiryDate} status="initial" />
+                      </td>
                       <td className="px-4 py-3 text-[13px] max-w-[180px]">{task.asanaProjectName || '—'}</td>
-                      <td className="px-4 py-3 text-[13px] text-muted-foreground">{task.asanaSectionName || '—'}</td>
                       <td className="px-4 py-3 text-[14px] font-medium">{task.displayName}</td>
                       <td className="px-4 py-3 text-[13px]">{task.clientName || '—'}</td>
                       <td className="px-4 py-3 text-[13px]">{task.assignedPmName || '—'}</td>
                       <td className="px-4 py-3">
-                        <span className={cn('text-[12px] font-medium px-2 py-1 rounded-sm', status.bgColor, status.color)}>
-                          {status.label}
-                        </span>
+                        <select
+                          value={task.caseClosedReason}
+                          disabled={savingReasonGid === task.asanaTaskGid}
+                          onChange={(e) => void handleCaseClosedReasonChange(task, e.target.value)}
+                          className="max-w-[220px] text-[12px] border border-border rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                        >
+                          <option value="">請選擇</option>
+                          {reasonOptions.map((reason) => (
+                            <option key={reason} value={reason}>
+                              {reason}
+                            </option>
+                          ))}
+                        </select>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         {task.imported ? (
-                          <span className="text-[12px] text-muted-foreground">已匯入</span>
+                          <span className="text-[12px] text-muted-foreground whitespace-nowrap">已匯入</span>
                         ) : (
                           <button
                             type="button"
                             onClick={() => setImportingTask(task)}
-                            className="flex items-center gap-1 text-[12px] text-teal-600 font-medium hover:text-teal-700"
+                            className="inline-flex items-center gap-1 whitespace-nowrap text-[12px] text-teal-600 font-medium hover:text-teal-700"
                           >
-                            <Download size={12} /> 匯入
+                            <Download size={12} className="shrink-0" />
+                            匯入
                           </button>
                         )}
                       </td>
@@ -322,7 +398,7 @@ export function AsanaPendingModule() {
                 {visible.length === 0 && (
                   <tr>
                     <td colSpan={8} className="px-4 py-8 text-center text-[13px] text-muted-foreground">
-                      {importFilter === 'pending' ? '沒有待匯入的 Asana 項目' : '沒有找到符合條件的 Asana 項目'}
+                      沒有找到符合條件的 Asana 項目
                     </td>
                   </tr>
                 )}
