@@ -294,29 +294,26 @@ export async function listGscSites(accessToken: string): Promise<GscSite[]> {
     }));
 }
 
-export type GscDailyMetric = {
-  site_url: string;
-  query: string;
-  metric_date: string;
+export type GscSearchAnalyticsRow = {
+  keys: string[];
   clicks: number;
   impressions: number;
   ctr: number;
   position: number;
-  last_synced_at: string;
-  updated_at: string;
 };
 
-export async function fetchDailyQueryMetrics(
+export async function fetchSearchAnalytics(
   accessToken: string,
   siteUrl: string,
   startDate: string,
   endDate: string,
-  nowIso: string,
-): Promise<GscDailyMetric[]> {
+  dimensions: string[],
+  dataState: "final" | "all" = "final",
+): Promise<GscSearchAnalyticsRow[]> {
   const encoded = encodeURIComponent(siteUrl);
   const url =
     `https://www.googleapis.com/webmasters/v3/sites/${encoded}/searchAnalytics/query`;
-  const out: GscDailyMetric[] = [];
+  const out: GscSearchAnalyticsRow[] = [];
   let startRow = 0;
   const pageSize = 25000;
   const maxRows = 50_000;
@@ -331,10 +328,10 @@ export async function fetchDailyQueryMetrics(
       body: JSON.stringify({
         startDate,
         endDate,
-        dimensions: ["query", "date"],
+        dimensions,
         rowLimit: pageSize,
         startRow,
-        dataState: "final",
+        dataState,
       }),
       signal: AbortSignal.timeout(45_000),
     });
@@ -354,19 +351,12 @@ export async function fetchDailyQueryMetrics(
     if (batch.length === 0) break;
 
     for (const r of batch) {
-      const query = String(r.keys?.[0] || "").trim();
-      const metricDate = String(r.keys?.[1] || "");
-      if (!query || !metricDate) continue;
       out.push({
-        site_url: siteUrl,
-        query,
-        metric_date: metricDate,
+        keys: (r.keys || []).map((k) => String(k || "")),
         clicks: Number(r.clicks || 0),
         impressions: Number(r.impressions || 0),
         ctr: Number(r.ctr || 0),
         position: Number(r.position || 0),
-        last_synced_at: nowIso,
-        updated_at: nowIso,
       });
     }
 
@@ -374,6 +364,153 @@ export async function fetchDailyQueryMetrics(
     if (batch.length < pageSize) break;
   }
 
+  return out;
+}
+
+export type GscDailyMetric = {
+  site_url: string;
+  query: string;
+  metric_date: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+  last_synced_at: string;
+  updated_at: string;
+};
+
+function stampMetric(
+  siteUrl: string,
+  nowIso: string,
+  row: GscSearchAnalyticsRow,
+): {
+  site_url: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+  last_synced_at: string;
+  updated_at: string;
+} {
+  return {
+    site_url: siteUrl,
+    clicks: row.clicks,
+    impressions: row.impressions,
+    ctr: row.ctr,
+    position: row.position,
+    last_synced_at: nowIso,
+    updated_at: nowIso,
+  };
+}
+
+export async function fetchDailyQueryMetrics(
+  accessToken: string,
+  siteUrl: string,
+  startDate: string,
+  endDate: string,
+  nowIso: string,
+  dataState: "final" | "all" = "final",
+): Promise<GscDailyMetric[]> {
+  const rows = await fetchSearchAnalytics(
+    accessToken,
+    siteUrl,
+    startDate,
+    endDate,
+    ["query", "date"],
+    dataState,
+  );
+  const out: GscDailyMetric[] = [];
+  for (const r of rows) {
+    const query = String(r.keys[0] || "").trim();
+    const metricDate = String(r.keys[1] || "");
+    if (!query || !metricDate) continue;
+    out.push({
+      ...stampMetric(siteUrl, nowIso, r),
+      query,
+      metric_date: metricDate,
+    });
+  }
+  return out;
+}
+
+export type GscSiteDailyMetric = {
+  site_url: string;
+  metric_date: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+  last_synced_at: string;
+  updated_at: string;
+};
+
+export async function fetchDailySiteMetrics(
+  accessToken: string,
+  siteUrl: string,
+  startDate: string,
+  endDate: string,
+  nowIso: string,
+  dataState: "final" | "all" = "final",
+): Promise<GscSiteDailyMetric[]> {
+  const rows = await fetchSearchAnalytics(
+    accessToken,
+    siteUrl,
+    startDate,
+    endDate,
+    ["date"],
+    dataState,
+  );
+  const out: GscSiteDailyMetric[] = [];
+  for (const r of rows) {
+    const metricDate = String(r.keys[0] || "");
+    if (!metricDate) continue;
+    out.push({
+      ...stampMetric(siteUrl, nowIso, r),
+      metric_date: metricDate,
+    });
+  }
+  return out;
+}
+
+export type GscPageDailyMetric = {
+  site_url: string;
+  page: string;
+  metric_date: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+  last_synced_at: string;
+  updated_at: string;
+};
+
+export async function fetchDailyPageMetrics(
+  accessToken: string,
+  siteUrl: string,
+  startDate: string,
+  endDate: string,
+  nowIso: string,
+  dataState: "final" | "all" = "final",
+): Promise<GscPageDailyMetric[]> {
+  const rows = await fetchSearchAnalytics(
+    accessToken,
+    siteUrl,
+    startDate,
+    endDate,
+    ["page", "date"],
+    dataState,
+  );
+  const out: GscPageDailyMetric[] = [];
+  for (const r of rows) {
+    const page = String(r.keys[0] || "").trim();
+    const metricDate = String(r.keys[1] || "");
+    if (!page || !metricDate) continue;
+    out.push({
+      ...stampMetric(siteUrl, nowIso, r),
+      page,
+      metric_date: metricDate,
+    });
+  }
   return out;
 }
 

@@ -1,16 +1,10 @@
 import { supabase } from '@/lib/supabase';
+import {
+  buildHelloWorldEmail,
+  type SendEmailInput,
+} from '@/lib/resend';
 
-export type SendEmailInput = {
-  to: string | string[];
-  subject: string;
-  html?: string;
-  text?: string;
-  from?: string;
-  replyTo?: string | string[];
-  cc?: string | string[];
-  bcc?: string | string[];
-  idempotencyKey?: string;
-};
+export type { SendEmailInput };
 
 export type SendEmailResult = {
   success: boolean;
@@ -20,12 +14,20 @@ export type SendEmailResult = {
   subject: string;
 };
 
-type EdgeFunctionResponse = SendEmailResult & {
+export type ResendStatus = {
+  configured: boolean;
+  from: string;
+};
+
+type EdgeFunctionResponse = SendEmailResult & ResendStatus & {
   error?: string;
   details?: unknown;
 };
 
-async function invokeSendEmail(body: SendEmailInput): Promise<SendEmailResult> {
+async function invokeSendEmailFunction(
+  method: 'GET' | 'POST',
+  body?: SendEmailInput,
+): Promise<EdgeFunctionResponse> {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
   const { data: sessionData } = await supabase.auth.getSession();
@@ -33,20 +35,33 @@ async function invokeSendEmail(body: SendEmailInput): Promise<SendEmailResult> {
   const url = `${supabaseUrl}/functions/v1/send-email`;
 
   const res = await fetch(url, {
-    method: 'POST',
+    method,
     headers: {
       Authorization: `Bearer ${token}`,
       apikey: supabaseAnonKey,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(body),
+    body: method === 'POST' ? JSON.stringify(body) : undefined,
   });
 
   const json = (await res.json().catch(() => ({}))) as EdgeFunctionResponse;
   if (!res.ok || json.error) {
     throw new Error(String(json.error || `${res.status} ${res.statusText}`));
   }
+  return json;
+}
 
+export async function getResendStatus(): Promise<ResendStatus> {
+  const json = await invokeSendEmailFunction('GET');
+  return {
+    configured: Boolean(json.configured),
+    from: json.from,
+  };
+}
+
+/** Send a transactional email via the Resend-backed Edge Function. */
+export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
+  const json = await invokeSendEmailFunction('POST', input);
   return {
     success: Boolean(json.success),
     id: json.id ?? null,
@@ -56,23 +71,7 @@ async function invokeSendEmail(body: SendEmailInput): Promise<SendEmailResult> {
   };
 }
 
-/** Send a transactional email via the Resend-backed Edge Function. */
-export function sendEmail(input: SendEmailInput) {
-  return invokeSendEmail(input);
-}
-
-/** Convenience helper for a one-off MPS test email. */
+/** Resend Hello World test email. */
 export function sendTestEmail(to: string) {
-  return sendEmail({
-    to,
-    subject: 'MPS Resend test',
-    html: `
-      <div style="font-family: ui-sans-serif, system-ui, sans-serif; line-height: 1.5;">
-        <p>This is a test email from <strong>MPS</strong> via Resend.</p>
-        <p>If you received this, the Resend integration is working.</p>
-      </div>
-    `,
-    text: 'This is a test email from MPS via Resend. If you received this, the Resend integration is working.',
-    idempotencyKey: `mps-test-email/${to}/${new Date().toISOString().slice(0, 13)}`,
-  });
+  return sendEmail(buildHelloWorldEmail(to));
 }

@@ -1,4 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import {
+  resendStatus,
+  sendResendEmail,
+} from "../_shared/resend.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,10 +22,11 @@ type SendEmailBody = {
   idempotencyKey?: string;
 };
 
-function normalizeAddresses(value: string | string[] | undefined): string[] {
-  if (!value) return [];
-  const list = Array.isArray(value) ? value : [value];
-  return list.map((item) => String(item).trim()).filter(Boolean);
+function json(status: number, payload: unknown) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
 Deno.serve(async (req: Request) => {
@@ -29,118 +34,37 @@ Deno.serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders, status: 200 });
   }
 
+  if (req.method === "GET") {
+    return json(200, resendStatus());
+  }
+
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 405,
-    });
+    return json(405, { error: "Method not allowed" });
   }
 
   try {
-    const apiKey = Deno.env.get("RESEND_API_KEY");
-    if (!apiKey) {
-      return new Response(
-        JSON.stringify({
-          error:
-            "RESEND_API_KEY is not configured. Set it with: supabase secrets set RESEND_API_KEY=re_xxx",
-        }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 500,
-        },
-      );
-    }
-
     const body = (await req.json()) as SendEmailBody;
-    const to = normalizeAddresses(body.to);
-    const subject = String(body.subject ?? "").trim();
-    const html = body.html ? String(body.html) : undefined;
-    const text = body.text ? String(body.text) : undefined;
-    const from =
-      String(body.from ?? "").trim() ||
-      Deno.env.get("RESEND_FROM_EMAIL") ||
-      "MPS <noreply@bwteam-marketing.com>";
-
-    if (!to.length) {
-      return new Response(JSON.stringify({ error: "to is required" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 400,
-      });
-    }
-    if (!subject) {
-      return new Response(JSON.stringify({ error: "subject is required" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 400,
-      });
-    }
-    if (!html && !text) {
-      return new Response(
-        JSON.stringify({ error: "html or text is required" }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 400,
-        },
-      );
-    }
-
-    const payload: Record<string, unknown> = {
-      from,
-      to,
-      subject,
-    };
-    if (html) payload.html = html;
-    if (text) payload.text = text;
-
-    const cc = normalizeAddresses(body.cc);
-    const bcc = normalizeAddresses(body.bcc);
-    const replyTo = normalizeAddresses(body.replyTo);
-    if (cc.length) payload.cc = cc;
-    if (bcc.length) payload.bcc = bcc;
-    if (replyTo.length) payload.reply_to = replyTo;
-
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    };
-    const idempotencyKey = String(body.idempotencyKey ?? "").trim();
-    if (idempotencyKey) {
-      headers["Idempotency-Key"] = idempotencyKey.slice(0, 256);
-    }
-
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
+    const result = await sendResendEmail({
+      to: body.to ?? [],
+      subject: body.subject ?? "",
+      html: body.html,
+      text: body.text,
+      from: body.from,
+      replyTo: body.replyTo,
+      cc: body.cc,
+      bcc: body.bcc,
+      idempotencyKey: body.idempotencyKey,
     });
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const message =
-        (data && (data.message || data.error)) ||
-        `Resend API error (${res.status})`;
-      return new Response(JSON.stringify({ error: String(message), details: data }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: res.status >= 400 && res.status < 600 ? res.status : 502,
-      });
-    }
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        id: data?.id ?? null,
-        from,
-        to,
-        subject,
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      },
-    );
+    return json(200, {
+      success: true,
+      ...result,
+    });
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
-    });
+    const message = err instanceof Error ? err.message : String(err);
+    const status = /not configured|required/i.test(message)
+      ? message.includes("not configured") ? 500 : 400
+      : 502;
+    return json(status, { error: message });
   }
 });

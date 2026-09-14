@@ -6,6 +6,8 @@ import {
   buildWebsiteToolConnections,
   formatGoogleAdsCustomerId,
   groupAnalyticsAccountsByName,
+  gscPermissionLabel,
+  isGscAnalyticsReadable,
   mapFacebookAdsAccount,
   mapGa4Account,
   mapGoogleAdsAccount,
@@ -32,6 +34,17 @@ const gsc = mapGscAccount({
 });
 assert.equal(gsc?.name, 'bwdesign.com.hk');
 assert.equal(gsc?.description, 'sc-domain:bwdesign.com.hk');
+
+assert.equal(isGscAnalyticsReadable('siteFullUser'), true);
+assert.equal(isGscAnalyticsReadable('siteUnverifiedUser'), false);
+assert.equal(gscPermissionLabel('siteUnverifiedUser'), '未驗證');
+
+const unverified = mapGscAccount({
+  site_url: 'https://foodchannels-catering.com/',
+  permission_level: 'siteUnverifiedUser',
+  matched_domain: 'foodchannels-catering.com',
+});
+assert.equal(unverified?.description, 'https://foodchannels-catering.com/（未驗證）');
 
 const groupedGsc = groupAnalyticsAccountsByName([
   { id: 'https://www.bwdesign-office.com/', name: 'bwdesign-office.com', description: 'https://www.bwdesign-office.com/' },
@@ -106,10 +119,13 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const menu = readFileSync(join(root, 'src/context/AppContext.tsx'), 'utf8');
 assert.match(menu, /id: 'analytics-connections'/);
 assert.match(menu, /分析工具連接/);
+assert.match(menu, /id: 'gsc'/);
+assert.match(menu, /Search Console/);
 
 const website = readFileSync(join(root, 'src/components/website/WebsiteModule.tsx'), 'utf8');
 assert.match(website, /AnalyticsConnectionsModule/);
 assert.match(website, /analytics-connections/);
+assert.match(website, /GscReportModule/);
 
 const page = readFileSync(join(root, 'src/components/website/AnalyticsConnectionsModule.tsx'), 'utf8');
 assert.match(page, /分析工具連接/);

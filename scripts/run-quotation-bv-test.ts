@@ -5,11 +5,18 @@ import { fileURLToPath } from 'node:url';
 import {
   BV_RATIO_TOTAL,
   BV_SOURCE_RELATED_TYPES,
+  COMPANY_BV_LABEL,
+  COMPANY_BV_RATIO,
+  QUOTATION_BV_WITH_COMPANY_VIEW,
+  STAFF_BV_POOL,
   isBvSourceRelatedType,
+  isStaffBvComplete,
   parseBvRatio,
-  remainingBvRatio,
+  projectBvTotal,
+  remainingStaffBvRatio,
+  scaleLegacyStaffBvRatio,
   sumBvRatios,
-  wouldExceedBvTotal,
+  wouldExceedStaffBvPool,
 } from '../src/lib/quotationBv';
 import {
   PROJECTS_TABLE,
@@ -22,15 +29,28 @@ import {
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
 
+assert.equal(COMPANY_BV_RATIO, 30);
+assert.equal(STAFF_BV_POOL, 70);
+assert.equal(COMPANY_BV_RATIO + STAFF_BV_POOL, BV_RATIO_TOTAL);
+assert.equal(COMPANY_BV_LABEL, 'Branding Works');
+assert.equal(QUOTATION_BV_WITH_COMPANY_VIEW, 'quotation_bv_with_company');
 assert.equal(parseBvRatio(''), null);
 assert.equal(parseBvRatio(0), null);
-assert.equal(parseBvRatio(100.01), null);
+assert.equal(parseBvRatio(100), null);
+assert.equal(parseBvRatio(70.01), null);
+assert.equal(parseBvRatio(70), 70);
 assert.equal(parseBvRatio(50), 50);
 assert.equal(parseBvRatio('33.333'), 33.33);
 assert.equal(sumBvRatios([50, 25, 25]), BV_RATIO_TOTAL);
-assert.equal(remainingBvRatio([40, 20]), 40);
-assert.equal(wouldExceedBvTotal(80, 30), true);
-assert.equal(wouldExceedBvTotal(70, 30), false);
+assert.equal(remainingStaffBvRatio([40, 20]), 10);
+assert.equal(wouldExceedStaffBvPool(80, 30), true);
+assert.equal(wouldExceedStaffBvPool(40, 30), false);
+assert.equal(wouldExceedStaffBvPool(40, 30.01), true);
+assert.equal(scaleLegacyStaffBvRatio(100), 70);
+assert.equal(scaleLegacyStaffBvRatio(50), 35);
+assert.equal(projectBvTotal([35, 35]), BV_RATIO_TOTAL);
+assert.equal(isStaffBvComplete([35, 35]), true);
+assert.equal(isStaffBvComplete([40, 20]), false);
 assert.equal(PROJECTS_TABLE, 'projects');
 assert.deepEqual([...BV_SOURCE_RELATED_TYPES], ['quotation_client', 'webandsystem']);
 assert.equal(isBvSourceRelatedType('quotation_client'), true);
@@ -103,6 +123,14 @@ assert.match(card, /addRow/);
 assert.match(card, /updateRow/);
 assert.match(card, /deleteRow/);
 assert.match(card, /DeleteConfirmModal/);
+assert.match(card, /COMPANY_BV_LABEL/);
+assert.match(card, /COMPANY_BV_RATIO/);
+assert.match(card, /STAFF_BV_POOL/);
+assert.match(card, /固定政策/);
+assert.match(card, /wouldExceedStaffBvPool/);
+assert.match(card, /remainingStaffBvRatio/);
+assert.doesNotMatch(card, /remainingBvRatio/);
+assert.doesNotMatch(card, /wouldExceedBvTotal/);
 
 const pitching = read('src/components/quotation/PitchingModule.tsx');
 assert.match(pitching, /QuotationBvCard/);
@@ -133,6 +161,25 @@ assert.match(automation, /VALUES \(NEW\.id, NEW\.main_pm_id, 100\)/);
 assert.match(automation, /staff_id = NEW\.main_pm_id/);
 assert.match(automation, /DELETE FROM public\.quotation_bv/);
 assert.match(automation, /VALUES \(NEW\.id, NEW\.main_pm_id, v_old_ratio\)/);
+
+const policyMigration = read('supabase/migrations/20260914015735_quotation_bv_company_policy.sql');
+assert.match(policyMigration, /CREATE OR REPLACE FUNCTION public\.quotation_bv_company_ratio/);
+assert.match(policyMigration, /CREATE OR REPLACE FUNCTION public\.quotation_bv_staff_pool/);
+assert.match(policyMigration, /CREATE OR REPLACE FUNCTION public\.quotation_bv_company_label/);
+assert.match(policyMigration, /SELECT 30::numeric\(6, 2\)/);
+assert.match(policyMigration, /SELECT 70::numeric\(6, 2\)/);
+assert.match(policyMigration, /SELECT 'Branding Works'::text/);
+assert.match(policyMigration, /ROUND\(bv\.bv_ratio \* public\.quotation_bv_staff_pool\(\) \/ 100\.0, 2\)/);
+assert.match(policyMigration, /s\.staff_sum > public\.quotation_bv_staff_pool\(\)/);
+assert.match(policyMigration, /ADD CONSTRAINT quotation_bv_bv_ratio_check/);
+assert.match(policyMigration, /bv_ratio <= 70/);
+assert.match(policyMigration, /v_staff_pool numeric\(6, 2\) := public\.quotation_bv_staff_pool\(\)/);
+assert.match(policyMigration, /VALUES \(v_project_id, NEW\.main_pm_id, v_staff_pool\)/);
+assert.match(policyMigration, /CREATE OR REPLACE VIEW public\.quotation_bv_with_company/);
+assert.match(policyMigration, /security_invoker = true/);
+assert.doesNotMatch(policyMigration, /VALUES \(v_project_id, NEW\.main_pm_id, 100\)/);
+
+assert.match(hook, /協作者上限/);
 
 assert.match(pitching, /負責 PM \*/);
 assert.match(pitching, /請選擇負責 PM/);

@@ -127,6 +127,7 @@ export const mainMenuItems: MainMenuItem[] = [
     subMenus: [
       { id: 'list', label: '網站列表' },
       { id: 'traffic', label: '網站流量' },
+      { id: 'gsc', label: 'Search Console' },
       { id: 'analytics-connections', label: '分析工具連接' },
     ],
   },
@@ -142,6 +143,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'backlink', label: '反向連結 Backlinks', section: '內容' },
       { id: 'ads-data-sync', label: '廣告數據同步', section: '設定' },
       { id: 'ads-tags', label: '廣告標籤', section: '設定' },
+      { id: 'ads-email-alert', label: '電郵預警通知', section: '設定' },
     ],
   },
   {
@@ -222,6 +224,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'quotation-settings', label: '客戶報價設定' },
       { id: 'terms-conditions', label: '條款及細則管理' },
       { id: 'users', label: '用戶管理' },
+      { id: 'email-connection', label: '電郵連接' },
       { id: 'login-logs', label: '登入紀錄' },
     ],
   },

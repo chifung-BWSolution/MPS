@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
-import { Banknote, Globe, Plus, ExternalLink, Video, TrendingUp, Link2, Calendar, X, Check, LayoutGrid, ArrowLeft, Megaphone, Star, ChevronDown, Pencil, Monitor, Server, MapPin, RefreshCw, BarChart3 } from 'lucide-react';
+import { Banknote, Globe, Plus, ExternalLink, Video, TrendingUp, Link2, Calendar, X, Check, LayoutGrid, ArrowLeft, Megaphone, Star, ChevronDown, Pencil, Monitor, Server, MapPin, RefreshCw, BarChart3, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WebsiteProfileFull, WebsiteLevel, ProfileType, SystemType } from '@/types/app';
 import {
@@ -55,6 +55,8 @@ import {
 } from './WebsiteDetailTabs';
 import { Ga4TrafficModule } from './traffic/Ga4TrafficModule';
 import { WebsiteTrafficTab } from './traffic/WebsiteTrafficTab';
+import { GscReportModule } from './gsc/GscReportModule';
+import { WebsiteGscTab } from './gsc/WebsiteGscTab';
 import { AnalyticsConnectionsModule } from './AnalyticsConnectionsModule';
 
 const statusConfig = {
@@ -293,10 +295,29 @@ function WebsiteDetail({
   const [showLevelDropdown, setShowLevelDropdown] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [staffHours, setStaffHours] = useState<{ name: string; hours: number }[]>([]);
+  const [keywordCount, setKeywordCount] = useState(site.keywordsCount);
   const { updateProfile } = useWebsiteProfiles();
   const { records: clientProjects, updateRecord: updateClientProject } = useQuotationClientProjects();
   const { companies } = useCompanies();
   const { brands } = useBrands();
+
+  useEffect(() => {
+    setKeywordCount(site.keywordsCount);
+  }, [site.id, site.keywordsCount]);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase
+      .from('seo_keywords')
+      .select('id', { count: 'exact', head: true })
+      .eq('website_profile_id', site.id)
+      .then(({ count }) => {
+        if (!cancelled && count != null) setKeywordCount(count);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [site.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -344,6 +365,7 @@ function WebsiteDetail({
     { id: 'videos', label: '影片列表', icon: Video },
     { id: 'ads', label: '付費廣告', icon: Megaphone },
     { id: 'seo', label: 'SEO 關鍵字', icon: TrendingUp },
+    { id: 'gsc', label: 'Search Console', icon: Search },
     { id: 'traffic', label: '網站流量', icon: BarChart3 },
     { id: 'expense', label: '工具支出', icon: Banknote },
     { id: 'backlink', label: '反向連結', icon: Link2 },
@@ -437,7 +459,7 @@ function WebsiteDetail({
           <div className="grid grid-cols-4 gap-4 text-center">
             <div><span className="text-[18px] font-bold block">{site.pagesCount}</span><span className="text-[10px] text-muted-foreground">頁面</span></div>
             <div><span className="text-[18px] font-bold block">{site.videosCount}</span><span className="text-[10px] text-muted-foreground">影片</span></div>
-            <div><span className="text-[18px] font-bold block">{site.keywordsCount}</span><span className="text-[10px] text-muted-foreground">關鍵字</span></div>
+            <div><span className="text-[18px] font-bold block">{keywordCount}</span><span className="text-[10px] text-muted-foreground">關鍵字</span></div>
             <div><span className="text-[18px] font-bold block">{site.totalHours}h</span><span className="text-[10px] text-muted-foreground">工時</span></div>
           </div>
         </div>
@@ -473,7 +495,7 @@ function WebsiteDetail({
                 <span className="text-[12px] text-blue-600">影片數</span>
               </div>
               <div className="bg-teal-50 rounded-md p-4 text-center">
-                <span className="text-[24px] font-bold text-teal-700 block">{site.keywordsCount}</span>
+                <span className="text-[24px] font-bold text-teal-700 block">{keywordCount}</span>
                 <span className="text-[12px] text-teal-600">關鍵字</span>
               </div>
               <div className="bg-amber-50 rounded-md p-4 text-center">
@@ -559,7 +581,8 @@ function WebsiteDetail({
           />
         )}
         {activeTab === 'ads' && <WebsiteAdsTab site={site} />}
-        {activeTab === 'seo' && <WebsiteSeoTab site={site} />}
+        {activeTab === 'seo' && <WebsiteSeoTab site={site} onKeywordsCount={setKeywordCount} />}
+        {activeTab === 'gsc' && <WebsiteGscTab site={site} />}
         {activeTab === 'traffic' && <WebsiteTrafficTab site={site} />}
         {activeTab === 'expense' && <WebsiteToolExpenseTab websiteId={site.id} />}
         {activeTab === 'backlink' && <WebsiteBacklinkTab site={site} />}
@@ -1292,7 +1315,7 @@ function websiteListPageOf(subModule?: string): WebsiteListPage {
 }
 
 function isWebsiteStandalonePage(subModule?: string): boolean {
-  return subModule === 'traffic' || subModule === 'analytics-connections';
+  return subModule === 'traffic' || subModule === 'gsc' || subModule === 'analytics-connections';
 }
 
 // ===== Main Export =====
@@ -1342,6 +1365,10 @@ export function WebsiteModule({ subModule }: { subModule?: string }) {
 
   if (subModule === 'traffic') {
     return <Ga4TrafficModule />;
+  }
+
+  if (subModule === 'gsc') {
+    return <GscReportModule />;
   }
 
   if (subModule === 'analytics-connections') {

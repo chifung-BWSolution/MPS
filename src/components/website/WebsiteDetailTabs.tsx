@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, X, ExternalLink, Video, Megaphone, TrendingUp, Link2, ChevronLeft, ChevronRight, Sparkles, Loader2, Unlink, Search, Edit, Trash2, MapPin, RefreshCw } from 'lucide-react';
+import { Plus, X, ExternalLink, Video, Megaphone, TrendingUp, Link2, ChevronLeft, ChevronRight, Sparkles, Loader2, Unlink, Search, Edit, Trash2, MapPin, RefreshCw, ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
 import { BrandFieldBadge, MutedFieldBadge, NullableBadge, StatusFieldBadge } from '@/components/ui/nullable-badge';
@@ -10,6 +10,16 @@ import {
   ExternalLink as ExternalLinkType,
 } from '@/data/websiteDetailData';
 import { useSeoKeywords } from '@/hooks/useSeoKeywords';
+import { gscPermissionLabel, isGscAnalyticsReadable } from '@/lib/analyticsToolConnections';
+import { setGscReportHash } from '@/lib/gscNavigation';
+import { writeSelectedWebsiteId } from '@/lib/websiteNavigation';
+import {
+  nextSeoKeywordSort,
+  seoKeywordSortValue,
+  sortSeoKeywords,
+  type SeoKeywordSortDir,
+  type SeoKeywordSortKey,
+} from '@/lib/seoKeywordSort';
 import { GscOAuthPanel } from '@/components/website/GscOAuthPanel';
 import { useWebsitePaidAds } from '@/hooks/useWebsitePaidAds';
 import {
@@ -70,6 +80,38 @@ const seoStatusConfig = {
   achieved: { label: '已達標', color: 'text-teal-700', bgColor: 'bg-teal-50' },
   paused: { label: '已暫停', color: 'text-slate-700', bgColor: 'bg-slate-50' },
 };
+
+function SeoSortableTh({
+  label,
+  column,
+  sortKey,
+  sortDir,
+  onSort,
+}: {
+  label: string;
+  column: SeoKeywordSortKey;
+  sortKey: SeoKeywordSortKey;
+  sortDir: SeoKeywordSortDir;
+  onSort: (key: SeoKeywordSortKey) => void;
+}) {
+  const active = sortKey === column;
+  const Icon = active ? (sortDir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <th className="text-left text-[12px] font-medium uppercase tracking-wider px-4 py-3">
+      <button
+        type="button"
+        onClick={() => onSort(column)}
+        className={cn(
+          'inline-flex items-center gap-1 hover:text-foreground transition-colors',
+          active ? 'text-foreground' : 'text-muted-foreground',
+        )}
+      >
+        <span>{label}</span>
+        <Icon size={12} className={cn(active ? 'text-teal-600' : 'opacity-40')} />
+      </button>
+    </th>
+  );
+}
 
 const linkTypeConfig: Record<string, { label: string; icon: string; color: string }> = {
   figma: { label: 'Figma', icon: '🎨', color: 'text-purple-600' },
@@ -766,14 +808,36 @@ export function WebsiteAdsTab({ site }: { site: WebsiteProfileFull }) {
 // ============================================================
 // SEO KEYWORDS TAB
 // ============================================================
-export function WebsiteSeoTab({ site }: { site: WebsiteProfileFull }) {
-  const { keywords: allKeywords, loading, addKeyword, syncGsc, syncing } = useSeoKeywords();
-  const keywords = useMemo(
-    () => allKeywords.filter((k) => k.website_profile_id === site.id),
-    [allKeywords, site.id],
-  );
+export function WebsiteSeoTab({
+  site,
+  onKeywordsCount,
+}: {
+  site: WebsiteProfileFull;
+  onKeywordsCount?: (count: number) => void;
+}) {
+  const { keywords, gscSites, loading, addKeyword, syncGsc, syncing } = useSeoKeywords(site.id);
   const [showModal, setShowModal] = useState(false);
   const [newKeyword, setNewKeyword] = useState({ keyword: '', level: 'level_2', targetPage: '', targetRanking: '' });
+  const [sortKey, setSortKey] = useState<SeoKeywordSortKey>('keyword');
+  const [sortDir, setSortDir] = useState<SeoKeywordSortDir>('asc');
+  const sortedKeywords = useMemo(
+    () => sortSeoKeywords(keywords, sortKey, sortDir),
+    [keywords, sortDir, sortKey],
+  );
+  const onSort = (key: SeoKeywordSortKey) => {
+    const next = nextSeoKeywordSort(
+      sortKey,
+      sortDir,
+      key,
+      keywords[0] ? seoKeywordSortValue(keywords[0], key) : null,
+    );
+    setSortKey(next.key);
+    setSortDir(next.dir);
+  };
+
+  useEffect(() => {
+    if (!loading) onKeywordsCount?.(keywords.length);
+  }, [keywords.length, loading, onKeywordsCount]);
 
   const handleSyncGsc = async () => {
     const r = await syncGsc();
@@ -784,19 +848,71 @@ export function WebsiteSeoTab({ site }: { site: WebsiteProfileFull }) {
     }
   };
 
+  const openGscReport = () => {
+    const preferred =
+      gscSites.find((row) => isGscAnalyticsReadable(row.permission_level)) || gscSites[0];
+    writeSelectedWebsiteId(null);
+    setGscReportHash({
+      siteUrl: preferred?.site_url || null,
+      preset: '30d',
+    });
+  };
+
   const level1 = keywords.filter(k => k.level === 'level_1');
   const level2 = keywords.filter(k => k.level === 'level_2');
   const level3 = keywords.filter(k => k.level === 'level_3');
+  const gscConnected = gscSites.length > 0;
+  const gscReadable = gscSites.some((row) => isGscAnalyticsReadable(row.permission_level));
+  const unverifiedUrls = gscSites
+    .filter((row) => row.permission_level === 'siteUnverifiedUser')
+    .map((row) => row.site_url);
+  const gscLabel = [...new Set(gscSites.map((row) => row.matched_domain || row.site_url).filter(Boolean))].join('、');
+  const emptyHint = !gscConnected
+    ? '可手動新增，或按「同步 GSC」匯入查詢與排名資料（見 docs/gsc-setup.md）'
+    : !gscReadable
+      ? `GSC 已列出${gscLabel ? `（${gscLabel}）` : ''}，但授權帳號尚未驗證此資源，無法讀取查詢。請在 Search Console 把帳號加成已驗證使用者。`
+      : unverifiedUrls.length > 0
+        ? `GSC 已連接。可讀取的資源尚無查詢資料；未驗證的 ${unverifiedUrls.join('、')} 無法讀取。請在 Search Console 驗證該資源後再同步。`
+        : `GSC 已連接${gscLabel ? `（${gscLabel}）` : ''}，目前沒有查詢資料。可按「同步 GSC」再試，或手動新增。`;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h4 className="text-[15px] font-bold">SEO 關鍵字</h4>
-          <p className="text-[12px] text-muted-foreground mt-0.5">共 {keywords.length} 個關鍵字 — S1: {level1.length} | S2: {level2.length} | S3: {level3.length}</p>
+          <p className="text-[12px] text-muted-foreground mt-0.5">
+            共 {keywords.length} 個關鍵字 — S1: {level1.length} | S2: {level2.length} | S3: {level3.length}
+            {gscConnected
+              ? gscReadable
+                ? ` · GSC 已連接 ${gscLabel}`
+                : ` · GSC 已列出但未驗證 ${gscLabel}`
+              : ' · GSC 未連接'}
+          </p>
+          {gscSites.length > 0 ? (
+            <div className="mt-1 space-y-0.5">
+              {gscSites.map((row) => {
+                const permission = gscPermissionLabel(row.permission_level);
+                return (
+                  <p key={row.site_url} className="text-[11px] text-muted-foreground font-mono">
+                    {row.site_url}
+                    {permission ? ` · ${permission}` : ''}
+                    {!isGscAnalyticsReadable(row.permission_level) ? '，無法讀取查詢' : ''}
+                  </p>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           <GscOAuthPanel compact />
+          <button
+            type="button"
+            onClick={openGscReport}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-md text-[12px] font-medium hover:bg-muted transition-colors"
+          >
+            <Search size={13} />
+            開啟 GSC 報告
+          </button>
           <button
             disabled={syncing}
             onClick={handleSyncGsc}
@@ -819,25 +935,25 @@ export function WebsiteSeoTab({ site }: { site: WebsiteProfileFull }) {
         <div className="text-center py-12 border border-dashed border-border rounded-md">
           <TrendingUp size={32} className="text-muted-foreground mx-auto mb-3" />
           <p className="text-[14px] font-medium text-muted-foreground">尚未設定 SEO 關鍵字</p>
-          <p className="text-[12px] text-muted-foreground mt-1">可手動新增，或按「同步 GSC」匯入查詢與排名資料（見 docs/gsc-setup.md）</p>
+          <p className="text-[12px] text-muted-foreground mt-1">{emptyHint}</p>
         </div>
       ) : (
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] overflow-hidden">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">關鍵字</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">等級</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">搜尋量</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">GSC 平均排名</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">目標排名</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">目標頁面</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">難度</th>
-                <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">狀態</th>
+                <SeoSortableTh label="關鍵字" column="keyword" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SeoSortableTh label="等級" column="level" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SeoSortableTh label="搜尋量" column="search_volume" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SeoSortableTh label="GSC 平均排名" column="current_ranking" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SeoSortableTh label="目標排名" column="target_ranking" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SeoSortableTh label="目標頁面" column="target_page" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SeoSortableTh label="難度" column="difficulty_score" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SeoSortableTh label="狀態" column="status" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
               </tr>
             </thead>
             <tbody>
-              {keywords.map(kw => {
+              {sortedKeywords.map(kw => {
                 const levelCfg = seoLevelConfig[kw.level];
                 const statusCfg = seoStatusConfig[kw.status];
                 const currentRanking = kw.current_ranking;

@@ -1,10 +1,44 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { invokeGscSync } from '@/lib/gscApi';
+import { aggregateGscMetricsToKeywordRows } from '@/lib/gscKeywords';
 import type { GscSyncRunRow, SeoKeywordRow } from '@/types/seo';
+
+type MetricRow = {
+  site_url: string;
+  query: string;
+  metric_date: string;
+  impressions: number | string;
+  position: number | string;
+  last_synced_at: string | null;
+};
+
+const PAGE_SIZE = 1000;
 
 const SEO_KEYWORD_COLUMNS =
   'id, website_profile_id, keyword, normalized_keyword, level, search_volume, current_ranking, target_ranking, target_page, difficulty_score, status, ai_generated, source, gsc_site_url, last_gsc_sync_at';
+
+export type WebsiteGscSite = {
+  site_url: string;
+  matched_domain: string | null;
+  last_synced_at: string | null;
+  permission_level: string | null;
+};
+
+async function fetchAllPages<T>(
+  fetchPage: (from: number, to: number) => Promise<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<{ data: T[]; error: string | null }> {
+  const rows: T[] = [];
+  let offset = 0;
+  for (;;) {
+    const { data, error } = await fetchPage(offset, offset + PAGE_SIZE - 1);
+    if (error) return { data: rows, error: error.message };
+    const page = data || [];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) return { data: rows, error: null };
+    offset += PAGE_SIZE;
+  }
+}
 
 type KeywordDbRow = {
   id: string;
@@ -58,22 +92,39 @@ export type AddSeoKeywordInput = {
   source?: SeoKeywordRow['source'];
 };
 
-export function useSeoKeywords() {
-  
+export function useSeoKeywords(websiteProfileId: string) {
+  const websiteId = websiteProfileId.trim();
   const [keywords, setKeywords] = useState<SeoKeywordRow[]>([]);
+  const [gscSites, setGscSites] = useState<WebsiteGscSite[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncRun, setLastSyncRun] = useState<GscSyncRunRow | null>(null);
 
   const refresh = useCallback(async () => {
+    if (!websiteId) {
+      setKeywords([]);
+      setGscSites([]);
+      setLastSyncRun(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-    const [kwRes, syncRes] = await Promise.all([
+    const [kwRes, gscRes, syncRes] = await Promise.all([
+      fetchAllPages<KeywordDbRow>((from, to) =>
+        supabase
+          .from('seo_keywords')
+          .select(SEO_KEYWORD_COLUMNS)
+          .eq('website_profile_id', websiteId)
+          .order('keyword', { ascending: true })
+          .range(from, to),
+      ),
       supabase
-        .from('seo_keywords')
-        .select(SEO_KEYWORD_COLUMNS)
-        .order('keyword', { ascending: true }),
+        .from('gsc_sites')
+        .select('site_url, matched_domain, last_synced_at, permission_level')
+        .eq('website_profile_id', websiteId),
       supabase
         .from('gsc_sync_runs')
         .select(
@@ -84,13 +135,24 @@ export function useSeoKeywords() {
         .maybeSingle(),
     ]);
 
-    if (kwRes.error) {
-      setError(kwRes.error.message);
-      setKeywords([]);
-    } else {
-      setError(null);
-      setKeywords((kwRes.data as KeywordDbRow[] | null)?.map(mapKeyword) ?? []);
+    const errors = [kwRes.error, gscRes.error?.message].filter(Boolean);
+    const sites = (gscRes.data as WebsiteGscSite[] | null) ?? [];
+    let keywords = kwRes.data.map(mapKeyword);
+    if (keywords.length === 0 && sites.length > 0) {
+      const siteUrls = sites.map((row) => row.site_url).filter(Boolean);
+      const metricsRes = await fetchAllPages<MetricRow>((from, to) =>
+        supabase
+          .from('gsc_query_daily_metrics')
+          .select('site_url,query,metric_date,impressions,position,last_synced_at')
+          .in('site_url', siteUrls)
+          .range(from, to),
+      );
+      if (metricsRes.error) errors.push(metricsRes.error);
+      else keywords = aggregateGscMetricsToKeywordRows(websiteId, metricsRes.data);
     }
+    setError(errors.join(' ') || null);
+    setKeywords(keywords);
+    setGscSites(sites);
 
     if (syncRes.data) {
       const s = syncRes.data as GscSyncRunRow;
@@ -111,10 +173,11 @@ export function useSeoKeywords() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setKeywords([]);
+      setGscSites([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [websiteId]);
 
   useEffect(() => {
     void refresh();
@@ -183,6 +246,7 @@ export function useSeoKeywords() {
 
   return {
     keywords,
+    gscSites,
     loading,
     error,
     refresh,

@@ -7,6 +7,7 @@ import { AdsComparisonModule } from './AdsComparisonModule';
 import { BacklinkModule } from './BacklinkModule';
 import { AdsDataSyncModule } from './AdsDataSyncModule';
 import { AdsTagsSettingsModule } from './AdsTagsSettingsModule';
+import { AdsEmailAlertModule } from './AdsEmailAlertModule';
 import { parseAdsCampaignHashQuery } from '@/lib/adsCampaignNavigation';
 
 export function MarketingModule({ subModule }: { subModule?: string }) {
@@ -39,6 +40,7 @@ export function MarketingModule({ subModule }: { subModule?: string }) {
       case 'backlink': return { title: '反向連結 Backlinks', subtitle: '記錄各平台反向連結購買及費用。' };
       case 'ads-data-sync': return { title: '廣告數據同步', subtitle: '觸發並監控 Google Ads、Facebook Ads、GA4 與 Search Console 同步。日常增量由每日 cron 處理。' };
       case 'ads-tags': return { title: '廣告標籤', subtitle: '管理 Google Ads / Facebook Ads Campaign 共用標籤，並以啟用狀態控制是否可套用。' };
+      case 'ads-email-alert': return { title: '電郵預警通知', subtitle: '以品牌檢視相對上一期的成效變化，並把 CPC/CPA 上升預警電郵寄給同事。' };
       default: return { title: 'Google Ads', subtitle: '依日期區間檢視 MCC Campaign 成效（每日指標彙總）。' };
     }
   };
@@ -49,6 +51,7 @@ export function MarketingModule({ subModule }: { subModule?: string }) {
     activeTab === 'ads-comparison' ||
     activeTab === 'ads-cost-trend' ||
     activeTab === 'ads-click-trend' ||
+    activeTab === 'ads-email-alert' ||
     activeTab === 'ads-data-sync';
 
   return (
@@ -68,6 +71,7 @@ export function MarketingModule({ subModule }: { subModule?: string }) {
       {activeTab === 'backlink' && <BacklinkModule />}
       {activeTab === 'ads-data-sync' && <AdsDataSyncModule />}
       {activeTab === 'ads-tags' && <AdsTagsSettingsModule />}
+      {activeTab === 'ads-email-alert' && <AdsEmailAlertModule />}
     </div>
   );
 }

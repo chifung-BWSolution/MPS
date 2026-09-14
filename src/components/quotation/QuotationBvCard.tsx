@@ -1,15 +1,19 @@
 import { useMemo, useState } from 'react';
-import { Pencil, Plus, Trash2, Users } from 'lucide-react';
+import { Lock, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useActiveStaffOptions } from '@/hooks/useActiveStaffOptions';
 import { useQuotationBv } from '@/hooks/useQuotationBv';
 import type { ProjectHubRelatedType } from '@/lib/projectsHub';
 import {
-  BV_RATIO_TOTAL,
-  remainingBvRatio,
+  COMPANY_BV_LABEL,
+  COMPANY_BV_RATIO,
+  STAFF_BV_POOL,
+  isStaffBvComplete,
+  projectBvTotal,
+  remainingStaffBvRatio,
   sumBvRatios,
-  wouldExceedBvTotal,
+  wouldExceedStaffBvPool,
   type QuotationBvRecord,
 } from '@/lib/quotationBv';
 import { CrudModal, CrudModalFooter, DeleteConfirmModal } from '@/components/ui/crud-modal';
@@ -48,9 +52,10 @@ export function QuotationBvCard({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<QuotationBvRecord | null>(null);
 
-  const total = useMemo(() => sumBvRatios(rows.map((row) => row.bvRatio)), [rows]);
-  const remaining = useMemo(() => remainingBvRatio(rows.map((row) => row.bvRatio)), [rows]);
-  const isComplete = total === BV_RATIO_TOTAL;
+  const staffTotal = useMemo(() => sumBvRatios(rows.map((row) => row.bvRatio)), [rows]);
+  const remaining = useMemo(() => remainingStaffBvRatio(rows.map((row) => row.bvRatio)), [rows]);
+  const total = useMemo(() => projectBvTotal(rows.map((row) => row.bvRatio)), [rows]);
+  const isComplete = useMemo(() => isStaffBvComplete(rows.map((row) => row.bvRatio)), [rows]);
 
   const assignedStaffIds = useMemo(() => {
     const ids = new Set(rows.map((row) => row.staffId));
@@ -64,9 +69,9 @@ export function QuotationBvCard({
   );
 
   const otherSum = useMemo(() => {
-    if (!editing) return total;
+    if (!editing) return staffTotal;
     return sumBvRatios(rows.filter((row) => row.id !== editing.id).map((row) => row.bvRatio));
-  }, [editing, rows, total]);
+  }, [editing, rows, staffTotal]);
 
   const openCreate = () => {
     setEditing(null);
@@ -93,12 +98,12 @@ export function QuotationBvCard({
       toast.error('請選擇協作者');
       return;
     }
-    if (!Number.isFinite(ratio) || ratio <= 0 || ratio > BV_RATIO_TOTAL) {
-      toast.error('BV 比例須為大於 0、不大於 100 的數字');
+    if (!Number.isFinite(ratio) || ratio <= 0 || ratio > STAFF_BV_POOL) {
+      toast.error(`BV 比例須為大於 0、不大於 ${STAFF_BV_POOL} 的數字`);
       return;
     }
-    if (wouldExceedBvTotal(otherSum, ratio)) {
-      toast.error(`BV 比例合計不可超過 ${BV_RATIO_TOTAL}%`);
+    if (wouldExceedStaffBvPool(otherSum, ratio)) {
+      toast.error(`協作者 BV 合計不可超過 ${STAFF_BV_POOL}%（${COMPANY_BV_LABEL} 固定 ${COMPANY_BV_RATIO}%）`);
       return;
     }
 
@@ -148,7 +153,9 @@ export function QuotationBvCard({
           </div>
           <div>
             <h3 className="text-[14px] font-semibold">協作者 Collaborators</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">BV 比例合計應為 100%</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {COMPANY_BV_LABEL} 固定 {formatRatio(COMPANY_BV_RATIO)}%，協作者合計應為 {formatRatio(STAFF_BV_POOL)}%
+            </p>
           </div>
         </div>
         <button
@@ -166,8 +173,12 @@ export function QuotationBvCard({
           isComplete ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800',
         )}
       >
-        <span>合計 {formatRatio(total)}%</span>
-        <span>{isComplete ? '已分配 100%' : `尚餘 ${formatRatio(remaining)}%`}</span>
+        <span>
+          合計 {formatRatio(total)}%（公司 {formatRatio(COMPANY_BV_RATIO)}% + 協作者 {formatRatio(staffTotal)}%）
+        </span>
+        <span>
+          {isComplete ? `協作者已分配 ${formatRatio(STAFF_BV_POOL)}%` : `協作者尚餘 ${formatRatio(remaining)}%`}
+        </span>
       </div>
 
       {error && (
@@ -178,42 +189,58 @@ export function QuotationBvCard({
 
       {loading ? (
         <p className="text-[13px] text-muted-foreground py-8 text-center">載入協作者中…</p>
-      ) : rows.length === 0 ? (
-        <div className="py-8 text-center">
-          <p className="text-[13px] text-muted-foreground">尚未設定協作者</p>
-          <p className="text-[12px] text-muted-foreground/70 mt-1">新增同事並分配 BV 比例</p>
-        </div>
       ) : (
         <div className="space-y-2">
-          {rows.map((row) => (
-            <div
-              key={row.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2.5"
-            >
-              <div className="min-w-0">
-                <p className="text-[13px] font-medium truncate">{row.staffName}</p>
-                <p className="text-[11px] text-muted-foreground tabular-nums">{formatRatio(row.bvRatio)}% BV</p>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => openEdit(row)}
-                  className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                  aria-label={`編輯 ${row.staffName}`}
-                >
-                  <Pencil size={13} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleting(row)}
-                  className="p-1.5 rounded-md text-muted-foreground hover:bg-rose-50 hover:text-rose-600 transition-colors"
-                  aria-label={`刪除 ${row.staffName}`}
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
+          <div className="flex items-center justify-between gap-3 rounded-md border border-teal-200/80 bg-teal-50/70 px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium truncate">{COMPANY_BV_LABEL}</p>
+              <p className="text-[11px] text-muted-foreground tabular-nums">
+                {formatRatio(COMPANY_BV_RATIO)}% BV · 固定政策
+              </p>
             </div>
-          ))}
+            <span className="inline-flex items-center gap-1 shrink-0 text-[11px] text-teal-800">
+              <Lock size={12} />
+              鎖定
+            </span>
+          </div>
+          {rows.length === 0 ? (
+            <div className="py-6 text-center">
+              <p className="text-[13px] text-muted-foreground">尚未設定協作者</p>
+              <p className="text-[12px] text-muted-foreground/70 mt-1">
+                新增同事並分配其餘 {formatRatio(STAFF_BV_POOL)}%
+              </p>
+            </div>
+          ) : (
+            rows.map((row) => (
+              <div
+                key={row.id}
+                className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="text-[13px] font-medium truncate">{row.staffName}</p>
+                  <p className="text-[11px] text-muted-foreground tabular-nums">{formatRatio(row.bvRatio)}% BV</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(row)}
+                    className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    aria-label={`編輯 ${row.staffName}`}
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleting(row)}
+                    className="p-1.5 rounded-md text-muted-foreground hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                    aria-label={`刪除 ${row.staffName}`}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       )}
 
@@ -259,15 +286,16 @@ export function QuotationBvCard({
             <Input
               type="number"
               min={0.01}
-              max={BV_RATIO_TOTAL}
+              max={STAFF_BV_POOL}
               step="0.01"
               value={draft.bvRatio}
               onChange={(e) => setDraft((prev) => ({ ...prev, bvRatio: e.target.value }))}
-              placeholder={remaining > 0 && !editing ? String(remaining) : '例如 50'}
+              placeholder={remaining > 0 && !editing ? String(remaining) : '例如 35'}
               className="text-[13px]"
             />
             <p className="text-[11px] text-muted-foreground mt-1.5">
-              其他協作者已佔 {formatRatio(otherSum)}%，這筆最多 {formatRatio(Math.max(0, BV_RATIO_TOTAL - otherSum))}%
+              {COMPANY_BV_LABEL} 固定 {formatRatio(COMPANY_BV_RATIO)}%。其他協作者已佔 {formatRatio(otherSum)}
+              %，這筆最多 {formatRatio(Math.max(0, STAFF_BV_POOL - otherSum))}%
             </p>
           </div>
         </div>

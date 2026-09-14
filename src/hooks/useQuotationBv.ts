@@ -84,7 +84,7 @@ export function useQuotationBv(relatedType: string | undefined, relatedId: strin
       const staffId = input.staffId.trim();
       const bvRatio = parseBvRatio(input.bvRatio);
       if (!staffId) return { data: null, error: { message: '請選擇協作者' } };
-      if (bvRatio == null) return { data: null, error: { message: 'BV 比例須為 0 到 100 之間的數字' } };
+      if (bvRatio == null) return { data: null, error: { message: 'BV 比例須為大於 0、不大於協作者上限的數字' } };
 
       const now = new Date().toISOString();
       const { data, error: err } = await supabase
@@ -118,7 +118,7 @@ export function useQuotationBv(relatedType: string | undefined, relatedId: strin
     }
     if (input.bvRatio !== undefined) {
       const bvRatio = parseBvRatio(input.bvRatio);
-      if (bvRatio == null) return { error: { message: 'BV 比例須為 0 到 100 之間的數字' } };
+      if (bvRatio == null) return { error: { message: 'BV 比例須為大於 0、不大於協作者上限的數字' } };
       patch.bv_ratio = bvRatio;
     }
 

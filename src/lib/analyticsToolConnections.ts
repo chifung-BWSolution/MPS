@@ -74,6 +74,26 @@ export function groupAnalyticsAccountsByName(accounts: AnalyticsToolAccount[]): 
   return groups;
 }
 
+export function isGscAnalyticsReadable(permissionLevel?: string | null): boolean {
+  const level = String(permissionLevel || '').trim();
+  return level === 'siteOwner' || level === 'siteFullUser' || level === 'siteRestrictedUser';
+}
+
+export function gscPermissionLabel(permissionLevel?: string | null): string {
+  switch (String(permissionLevel || '').trim()) {
+    case 'siteOwner':
+      return '擁有者';
+    case 'siteFullUser':
+      return '完整權限';
+    case 'siteRestrictedUser':
+      return '受限權限';
+    case 'siteUnverifiedUser':
+      return '未驗證';
+    default:
+      return '';
+  }
+}
+
 export function mapGscAccount(row: {
   site_url?: string | null;
   permission_level?: string | null;
@@ -82,10 +102,11 @@ export function mapGscAccount(row: {
   const siteUrl = String(row.site_url || '').trim();
   if (!siteUrl) return null;
   const domain = String(row.matched_domain || '').trim();
+  const unverified = String(row.permission_level || '').trim() === 'siteUnverifiedUser';
   return {
     id: siteUrl,
     name: domain || siteUrl,
-    description: siteUrl,
+    description: unverified ? `${siteUrl}（未驗證）` : siteUrl,
   };
 }
 

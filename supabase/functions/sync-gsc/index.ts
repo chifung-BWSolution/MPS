@@ -2,7 +2,9 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   corsHeaders,
+  fetchDailyPageMetrics,
   fetchDailyQueryMetrics,
+  fetchDailySiteMetrics,
   getGscAccessToken,
   listGscSites,
   matchWebsiteForSite,
@@ -20,8 +22,10 @@ const SUPABASE_SERVICE_ROLE_KEY =
 
 /** GSC data lags ~2–3 days; pull a 28-day window by default. */
 const LOOKBACK_DAYS = 28;
+/** If the default window is empty, retry a wider window before treating the property as blank. */
+const EMPTY_RETRY_LOOKBACK_DAYS = 90;
 /** Auto-create seo_keywords for queries with at least this many impressions in-window. */
-const MIN_IMPRESSIONS_FOR_KEYWORD = 10;
+const MIN_IMPRESSIONS_FOR_KEYWORD = 1;
 /** Leave headroom under the ~150s Edge Function limit. */
 const DEADLINE_MS = 120_000;
 
@@ -157,6 +161,8 @@ Deno.serve(async (req) => {
       }
 
       let metrics;
+      let reportStartStr = startStr;
+      let reportDataState: "final" | "all" = "final";
       try {
         metrics = await fetchDailyQueryMetrics(
           accessToken,
@@ -165,6 +171,20 @@ Deno.serve(async (req) => {
           endStr,
           nowIso,
         );
+        if (metrics.length === 0) {
+          const wideStart = new Date(end);
+          wideStart.setUTCDate(wideStart.getUTCDate() - (EMPTY_RETRY_LOOKBACK_DAYS - 1));
+          reportStartStr = toIsoDate(wideStart);
+          reportDataState = "all";
+          metrics = await fetchDailyQueryMetrics(
+            accessToken,
+            site.siteUrl,
+            reportStartStr,
+            endStr,
+            nowIso,
+            reportDataState,
+          );
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (isGscPermissionError(message)) {
@@ -192,6 +212,71 @@ Deno.serve(async (req) => {
         }
         rowsUpserted += chunk.length;
       }
+      if (timedOut) {
+        siteErrors.push(`尚餘站點未跑完，再按「開始同步」會從下一站繼續（停在 ${site.siteUrl}）`);
+        break;
+      }
+
+      if (Date.now() < deadlineAt - 15_000) {
+        try {
+          const siteDaily = await fetchDailySiteMetrics(
+            accessToken,
+            site.siteUrl,
+            reportStartStr,
+            endStr,
+            nowIso,
+            reportDataState,
+          );
+          for (let i = 0; i < siteDaily.length; i += 500) {
+            const chunk = siteDaily.slice(i, i + 500);
+            const { error } = await supabase
+              .from("gsc_site_daily_metrics")
+              .upsert(chunk, { onConflict: "site_url,metric_date" });
+            if (error) {
+              siteErrors.push(`${site.siteUrl}: site daily upsert ${error.message}`);
+              break;
+            }
+            rowsUpserted += chunk.length;
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          if (!isGscPermissionError(message)) {
+            siteErrors.push(`${site.siteUrl}: site daily ${message.slice(0, 220)}`);
+          }
+        }
+
+        try {
+          const pageDaily = await fetchDailyPageMetrics(
+            accessToken,
+            site.siteUrl,
+            reportStartStr,
+            endStr,
+            nowIso,
+            reportDataState,
+          );
+          for (let i = 0; i < pageDaily.length; i += 500) {
+            if (Date.now() >= deadlineAt) {
+              timedOut = true;
+              break;
+            }
+            const chunk = pageDaily.slice(i, i + 500);
+            const { error } = await supabase
+              .from("gsc_page_daily_metrics")
+              .upsert(chunk, { onConflict: "site_url,page,metric_date" });
+            if (error) {
+              siteErrors.push(`${site.siteUrl}: page daily upsert ${error.message}`);
+              break;
+            }
+            rowsUpserted += chunk.length;
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          if (!isGscPermissionError(message)) {
+            siteErrors.push(`${site.siteUrl}: page daily ${message.slice(0, 220)}`);
+          }
+        }
+      }
+
       if (timedOut) {
         siteErrors.push(`尚餘站點未跑完，再按「開始同步」會從下一站繼續（停在 ${site.siteUrl}）`);
         break;
@@ -279,6 +364,15 @@ Deno.serve(async (req) => {
 
     const remaining = Math.max(0, sites.length - processedUrls.length);
     const incomplete = timedOut && remaining > 0;
+    const { data: rebuilt, error: rebuildErr } = await supabase.rpc(
+      "upsert_gsc_seo_keywords_from_metrics",
+      { p_website_profile_id: null },
+    );
+    if (rebuildErr) {
+      siteErrors.push(`keyword rebuild from metrics: ${rebuildErr.message}`);
+    } else {
+      keywordsUpserted = Math.max(keywordsUpserted, Number(rebuilt) || 0);
+    }
     await finishRun({
       status: "success",
       finished_at: new Date().toISOString(),

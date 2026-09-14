@@ -125,6 +125,9 @@ const fn = read('supabase/functions/sync-gsc/index.ts');
 assert.match(fn, /DEADLINE_MS/);
 assert.match(fn, /AbortSignal\.timeout|deadlineAt/);
 assert.match(fn, /upsert_gsc_seo_keywords/);
+assert.match(fn, /upsert_gsc_seo_keywords_from_metrics/);
+assert.match(fn, /EMPTY_RETRY_LOOKBACK_DAYS/);
+assert.match(fn, /MIN_IMPRESSIONS_FOR_KEYWORD = 1/);
 assert.match(fn, /resumeSkipSiteUrls/);
 assert.match(fn, /processed_site_urls/);
 assert.match(fn, /isGscPermissionError/);
@@ -134,5 +137,16 @@ const rpc = read('supabase/migrations/20260911023000_upsert_gsc_seo_keywords.sql
 assert.match(rpc, /upsert_gsc_seo_keywords/);
 assert.match(rpc, /ON CONFLICT \(website_profile_id, normalized_keyword\)/);
 assert.doesNotMatch(rpc, /Bearer eyJ/);
+
+const rebuild = read('supabase/migrations/20260914104000_upsert_gsc_seo_keywords_from_metrics.sql');
+assert.match(rebuild, /upsert_gsc_seo_keywords_from_metrics/);
+assert.match(rebuild, /gsc_query_daily_metrics/);
+assert.match(rebuild, /HAVING sum\(m.impressions\) >= 1/);
+
+const gscFetch = read('supabase/functions/_shared/google-gsc.ts');
+assert.match(gscFetch, /dataState: "final" \| "all"/);
+assert.match(gscFetch, /fetchDailySiteMetrics/);
+assert.match(gscFetch, /fetchDailyPageMetrics/);
+assert.match(fn, /gsc_site_daily_metrics/);
 
 console.log('gsc sync lib: ok');
