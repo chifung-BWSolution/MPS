@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Folder, Clock, Loader2 } from 'lucide-react';
-import { useApp } from '@/context/AppContext';
+import { buildAppHref, useApp } from '@/context/AppContext';
+import { AppLink } from '@/components/AppLink';
+import { appHrefClickProps } from '@/lib/appNavigation';
 import { cn } from '@/lib/utils';
 import {
   useMyProjectsFromDayReports,
@@ -55,7 +57,9 @@ function ProjectCard({
   return (
     <Card
       className="hover:shadow-md transition-shadow duration-200 cursor-pointer"
-      onClick={() => onOpen(project.id)}
+      {...appHrefClickProps(buildAppHref('project', 'detail'), () => onOpen(project.id), {
+        beforeNewTab: () => writeSelectedProject(project.id),
+      })}
     >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
@@ -189,13 +193,13 @@ export function MyProjects() {
       ) : displayProjects.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground text-[14px]">
           尚無日報工時關聯的項目。
-          <button
-            type="button"
-            onClick={() => navigateTo('day-report', 'submit')}
+          <AppLink
+            module="day-report"
+            subModule="submit"
             className="ml-2 text-teal-600 font-medium hover:underline"
           >
             前往提交日報
-          </button>
+          </AppLink>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

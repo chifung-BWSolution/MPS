@@ -3,6 +3,7 @@ import { User, UserRole } from '@/types/app';
 import { useAuth } from '@/context/AuthContext';
 import { isQuotationSectionModule } from '@/lib/quotationSectionScope';
 import { beginPageNavigation } from '@/lib/supabaseFetch';
+import { applyLocationHash, buildSameOriginHref, installAppNavGestureListener } from '@/lib/appNavigation';
 
 export interface SubMenuItem {
   id: string;
@@ -64,6 +65,15 @@ export function resolveRoute(module: string, sub?: string): { module: string; su
   return { module, subModule: resolveSubModule(module, sub) };
 }
 
+export function buildAppHash(module: string, subModule?: string): string {
+  const resolved = resolveRoute(module, subModule);
+  return `${resolved.module}/${resolved.subModule}`;
+}
+
+export function buildAppHref(module: string, subModule?: string): string {
+  return buildSameOriginHref(buildAppHash(module, subModule));
+}
+
 export interface MainMenuItem {
   id: string;
   label: string;
@@ -77,6 +87,7 @@ const quotationSectionSubMenus: SubMenuItem[] = [
   { id: 'list', label: '報價單列表' },
   { id: 'clients', label: '客戶列表' },
   { id: 'doc-types', label: '文件類型', section: '設置' },
+  { id: 'project-types', label: '項目類型', section: '設置' },
 ];
 
 export const mainMenuItems: MainMenuItem[] = [
@@ -236,7 +247,7 @@ interface AppContextType {
   setCurrentModule: (module: string) => void;
   currentSubModule: string;
   setCurrentSubModule: (subModule: string) => void;
-  navigateTo: (module: string, subModule?: string) => void;
+  navigateTo: (module: string, subModule?: string) => boolean;
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
   selectedCompanyId: string | null;
@@ -319,6 +330,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
+  useEffect(() => installAppNavGestureListener(), []);
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
@@ -344,27 +357,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [systemUser, session]);
 
   const navigateTo = useCallback((module: string, subModule?: string) => {
+    const hash = buildAppHash(module, subModule);
+    if (applyLocationHash(hash)) return true;
+    beginPageNavigation(hash);
     const resolved = resolveRoute(module, subModule);
-    beginPageNavigation(`${resolved.module}/${resolved.subModule}`);
     setCurrentModule(resolved.module);
     setCurrentSubModule(resolved.subModule);
-    // Update the URL hash so refresh restores the same page
-    window.location.hash = `${resolved.module}/${resolved.subModule}`;
+    return false;
   }, []);
 
   // Hash-aware wrappers so any direct setCurrentModule/setCurrentSubModule call also updates the URL
   const setModuleWithHash = useCallback((module: string) => {
+    const hash = buildAppHash(module);
+    if (applyLocationHash(hash)) return;
+    beginPageNavigation(hash);
     const resolved = resolveRoute(module);
-    beginPageNavigation(`${resolved.module}/${resolved.subModule}`);
     setCurrentModule(resolved.module);
     setCurrentSubModule(resolved.subModule);
-    window.location.hash = `${resolved.module}/${resolved.subModule}`;
   }, []);
 
   const setSubModuleWithHash = useCallback((subModule: string) => {
-    beginPageNavigation(`${currentModule}/${subModule}`);
+    const hash = `${currentModule}/${subModule}`;
+    if (applyLocationHash(hash)) return;
+    beginPageNavigation(hash);
     setCurrentSubModule(subModule);
-    window.location.hash = `${currentModule}/${subModule}`;
   }, [currentModule]);
 
   return (

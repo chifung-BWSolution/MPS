@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { useApp } from '@/context/AppContext';
 import { resolveDateRange } from '@/hooks/useGoogleAdsData';
 import { useGa4Data } from '@/hooks/useGa4Data';
-import { parseGa4TrafficHashQuery, setGa4TrafficHash } from '@/lib/ga4Navigation';
+import { buildGa4TrafficHref, parseGa4TrafficHashQuery, setGa4TrafficHash } from '@/lib/ga4Navigation';
+import { appHrefClickProps } from '@/lib/appNavigation';
 import { formatDurationSeconds } from '@/lib/ga4Traffic';
-import { openWebsiteDetail } from '@/lib/websiteNavigation';
+import { buildWebsiteDetailHref } from '@/lib/websiteNavigation';
 import type { DateRangePreset } from '@/types/googleAds';
 import type { Ga4Property } from '@/types/ga4';
 import { Button } from '@/components/ui/button';
@@ -113,7 +113,6 @@ function readInitialListRange() {
 }
 
 export function Ga4TrafficModule() {
-  const { navigateTo } = useApp();
   const [hashQuery, setHashQuery] = useState(() => parseGa4TrafficHashQuery());
 
   useEffect(() => {
@@ -417,7 +416,15 @@ export function Ga4TrafficModule() {
                     key={row.propertyId}
                     role="button"
                     tabIndex={0}
-                    onClick={() => openProperty(row)}
+                    {...appHrefClickProps(
+                      buildGa4TrafficHref({
+                        propertyId: row.propertyId,
+                        preset,
+                        from: range.from,
+                        to: range.to,
+                      }),
+                      () => openProperty(row),
+                    )}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
@@ -429,16 +436,13 @@ export function Ga4TrafficModule() {
                     <td className="px-3 py-2.5">
                       {row.matchedDomain || row.websiteName ? (
                         row.websiteProfileId ? (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openWebsiteDetail(row.websiteProfileId as string, navigateTo);
-                            }}
+                          <a
+                            href={buildWebsiteDetailHref(row.websiteProfileId as string)}
+                            onClick={(e) => e.stopPropagation()}
                             className="text-left text-teal-700 hover:text-teal-800 hover:underline"
                           >
                             {row.matchedDomain || row.websiteName}
-                          </button>
+                          </a>
                         ) : (
                           <span>{row.matchedDomain || row.websiteName}</span>
                         )

@@ -1,4 +1,5 @@
 import type { DateRangePreset } from '@/types/googleAds';
+import { applyLocationHash, buildSameOriginHref } from '@/lib/appNavigation';
 import { splitHashPathAndQuery } from '@/lib/adsCampaignNavigation';
 
 export type Ga4TrafficHashQuery = {
@@ -42,15 +43,20 @@ export function buildGa4TrafficHash(opts: {
   return qs ? `website/traffic?${qs}` : 'website/traffic';
 }
 
+export function buildGa4TrafficHref(opts: {
+  propertyId?: string | null;
+  preset?: DateRangePreset | null;
+  from?: string | null;
+  to?: string | null;
+}): string {
+  return buildSameOriginHref(buildGa4TrafficHash(opts));
+}
+
 export function setGa4TrafficHash(opts: {
   propertyId?: string | null;
   preset?: DateRangePreset | null;
   from?: string | null;
   to?: string | null;
-}): void {
-  const next = buildGa4TrafficHash(opts);
-  const current = window.location.hash.replace(/^#/, '');
-  if (current !== next) {
-    window.location.hash = next;
-  }
+}): boolean {
+  return applyLocationHash(buildGa4TrafficHash(opts));
 }

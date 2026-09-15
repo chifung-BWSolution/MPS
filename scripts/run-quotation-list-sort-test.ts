@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { PitchingProjectType, PitchingStatus } from '../src/data/pitchingData';
+import type { PitchingStatus } from '../src/data/pitchingData';
 import {
   defaultQuotationListSortDir,
   nextQuotationListSort,
@@ -18,8 +18,10 @@ const headerSrc = readFileSync(
 );
 
 assert.match(pitchingSrc, /useQuotationListSort/);
+assert.match(pitchingSrc, /useQuotationListQuery\('pitching'\)/);
 assert.match(pitchingSrc, /QuotationClientProjectTableHeaders/);
 assert.match(projectSrc, /useQuotationListSort/);
+assert.match(projectSrc, /useQuotationListQuery\('projects'\)/);
 assert.match(projectSrc, /QuotationClientProjectTableHeaders/);
 assert.match(headerSrc, /依\$\{label\}排序/);
 assert.match(headerSrc, /aria-sort/);
@@ -79,7 +81,7 @@ function row(partial: {
   id: string;
   inquiryDate?: string;
   status?: PitchingStatus;
-  projectTypes?: PitchingProjectType[];
+  projectTypeId?: string;
   displayName?: string;
   clientName?: string;
   mainPmName?: string;
@@ -90,7 +92,7 @@ function row(partial: {
   return {
     inquiryDate: '',
     status: 'initial' as PitchingStatus,
-    projectTypes: [] as PitchingProjectType[],
+    projectTypeId: '',
     displayName: '',
     clientName: '',
     mainPmName: '',
@@ -103,7 +105,7 @@ const rows = [
     id: 'a',
     inquiryDate: '2026-08-01',
     status: 'closed',
-    projectTypes: ['bwt_web'],
+    projectTypeId: 'bwt_web',
     displayName: 'Zeta',
     clientName: 'Zeta Bank',
     mainPmName: 'Chris',
@@ -112,7 +114,7 @@ const rows = [
     id: 'b',
     inquiryDate: '2026-08-20',
     status: 'initial',
-    projectTypes: ['bwl_event'],
+    projectTypeId: 'bwl_event',
     displayName: 'Alpha',
     clientName: 'Alpha Air',
     mainPmName: 'Ada',

@@ -11,9 +11,11 @@ import { CrudModal } from '@/components/ui/crud-modal';
 import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
 import {
+  buildFacebookAdsCampaignHref,
   parseAdsCampaignHashQuery,
   setFacebookAdsCampaignHash,
 } from '@/lib/adsCampaignNavigation';
+import { appHrefClickProps } from '@/lib/appNavigation';
 import { FacebookAdsCampaignDetail } from './campaign-detail/FacebookAdsCampaignDetail';
 import { FacebookAdsConversionHover } from './FacebookAdsConversionHover';
 import { AdsCampaignTagsModal } from './ads-tags/AdsCampaignTagsModal';
@@ -581,7 +583,15 @@ export function FacebookAdsModule() {
                     key={c.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => openCampaign(c)}
+                    {...appHrefClickProps(
+                      buildFacebookAdsCampaignHref({
+                        campaignKey: c.id,
+                        preset,
+                        from: range.from,
+                        to: range.to,
+                      }),
+                      () => openCampaign(c),
+                    )}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();

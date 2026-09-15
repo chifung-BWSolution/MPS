@@ -2,13 +2,15 @@ import { useState, useMemo, useEffect } from 'react';
 import { Search, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQuotationSection } from '@/context/QuotationSectionContext';
-import { filterBySectionProjectTypes, mergeScopedProjectTypes } from '@/lib/quotationSectionScope';
+import { filterBySectionProjectTypes } from '@/lib/quotationSectionScope';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
 import { useActiveStaffOptions } from '@/hooks/useActiveStaffOptions';
 import { toQuotationClientSelectOption } from '@/data/quotationClientList';
 import { useQuotationClientDetailId } from '@/hooks/useQuotationClientDetailId';
-import { openQuotationProjectDetail, quotationProjectSubModule, readQuotationClientPage } from '@/lib/quotationProjectNavigation';
+import { useQuotationListQuery } from '@/hooks/useQuotationListQuery';
+import { appHrefClickProps } from '@/lib/appNavigation';
+import { buildQuotationProjectHref, openQuotationProjectDetail, quotationProjectSubModule, readQuotationClientPage } from '@/lib/quotationProjectNavigation';
 import {
   PitchingDetail,
   PitchingFormModal,
@@ -45,9 +47,10 @@ function ProjectList({
   onEdit: (record: PitchingRecord) => void;
 }) {
   const { typeOptions } = useQuotationSection();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [projectTypeFilter, setProjectTypeFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const { query, setQuery } = useQuotationListQuery('projects');
+  const searchQuery = query.q;
+  const projectTypeFilter = query.type;
+  const statusFilter = query.status;
   const { actuals, loading: actualsLoading, error: actualsError } = useQuotationProjectActuals();
 
   const withMoney = useMemo(
@@ -63,7 +66,7 @@ function ProjectList({
 
   const filtered = useMemo(() => {
     return withMoney.filter((p) => {
-      if (!matchesProjectTypeFilter(p.projectTypes, projectTypeFilter)) return false;
+      if (!matchesProjectTypeFilter(p.projectTypeId, projectTypeFilter)) return false;
       if (statusFilter !== 'all' && p.status !== statusFilter) return false;
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
@@ -71,7 +74,7 @@ function ProjectList({
           p.pitchingId.toLowerCase().includes(query) ||
           p.clientName.toLowerCase().includes(query) ||
           p.displayName.toLowerCase().includes(query) ||
-          formatProjectTypes(p.projectTypes).toLowerCase().includes(query) ||
+          formatProjectTypes(p.projectTypeId).toLowerCase().includes(query) ||
           formatMainPmName(p).toLowerCase().includes(query) ||
           p.assignedPmName.toLowerCase().includes(query)
         );
@@ -79,11 +82,15 @@ function ProjectList({
       return true;
     });
   }, [withMoney, searchQuery, projectTypeFilter, statusFilter]);
-  const { sorted, sortKey, sortDir, onSort } = useQuotationListSort(filtered);
+  const { sorted, sortKey, sortDir, onSort } = useQuotationListSort(filtered, {
+    sortKey: query.sort,
+    sortDir: query.dir,
+    onSortChange: (key, dir) => setQuery({ sort: key, dir }),
+  });
 
-  const totalCount = records.length;
-  const confirmedCount = records.filter((p) => p.status === 'confirmed').length;
-  const closedCount = records.filter((p) => p.status === 'closed').length;
+  const totalCount = filtered.length;
+  const confirmedCount = filtered.filter((p) => p.status === 'confirmed').length;
+  const closedCount = filtered.filter((p) => p.status === 'closed').length;
 
   return (
     <div className="space-y-6">
@@ -113,13 +120,13 @@ function ProjectList({
             type="text"
             placeholder="搜尋客戶、顯示名稱、項目類型..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => setQuery({ q: e.target.value })}
             className="w-full pl-9 pr-4 py-2 text-[13px] border border-border rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
         </div>
         <select
           value={projectTypeFilter}
-          onChange={(e) => setProjectTypeFilter(e.target.value)}
+          onChange={(e) => setQuery({ type: e.target.value })}
           className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
         >
           <option value="all">全部項目類型</option>
@@ -131,7 +138,7 @@ function ProjectList({
         </select>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => setQuery({ status: e.target.value })}
           className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
         >
           <option value="all">全部狀態</option>
@@ -155,7 +162,7 @@ function ProjectList({
               {sorted.map((record) => (
                   <tr
                     key={record.id}
-                    onClick={() => onView(record)}
+                    {...appHrefClickProps(buildQuotationProjectHref(record.id, record.status), () => onView(record))}
                     className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer"
                   >
                     <td className="px-4 py-3 text-[13px] text-muted-foreground tabular-nums">{record.inquiryDate}</td>
@@ -167,7 +174,7 @@ function ProjectList({
                         handoverDate={record.handoverDate}
                       />
                     </td>
-                    <td className="px-4 py-3 text-[13px] max-w-[180px]">{formatProjectTypes(record.projectTypes)}</td>
+                    <td className="px-4 py-3 text-[13px] max-w-[180px]">{formatProjectTypes(record.projectTypeId)}</td>
                     <ProjectDisplayNameCell record={record} />
                     <td className="px-4 py-3 text-[13px]">{formatRelatedClientName(record)}</td>
                     <td className="px-4 py-3 text-[13px]">{formatMainPmName(record)}</td>
@@ -230,7 +237,7 @@ export function ProjectModule() {
   }, [selectedRecord]);
 
   const handleView = (record: PitchingRecord) => {
-    openQuotationProjectDetail(record.id, record.status);
+    if (openQuotationProjectDetail(record.id, record.status)) return;
     if (record.status === 'confirmed') openDetail(record.id);
   };
 
@@ -249,7 +256,7 @@ export function ProjectModule() {
     const selectedStaff = staffOptions.find((s) => s.value === form.mainPmId);
     const payload = {
       ...pitchingFormToUpdate(form),
-      projectTypes: mergeScopedProjectTypes(editingRecord.projectTypes, form.projectTypes, allowedTypes),
+      projectTypeId: form.projectTypeId,
       assignedPmName: selectedStaff?.label || '',
       mainPmName: selectedStaff?.label || undefined,
     };

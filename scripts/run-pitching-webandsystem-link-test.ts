@@ -115,7 +115,7 @@ assert.equal(projectTypesNeedWebsiteLink(['bwg_gift']), false);
 assert.equal(projectTypesNeedWebsiteLink([]), false);
 
 assert.match(formModalSrc, /ClientWebsiteSelectField/);
-assert.match(formModalSrc, /projectTypesNeedWebsiteLink\(form\.projectTypes\)/);
+assert.match(formModalSrc, /projectTypesNeedWebsiteLink\(form\.projectTypeId\)/);
 assert.doesNotMatch(formModalSrc, /<h3[\s\S]*網站 \/ 系統/);
 assert.ok(
   formModalSrc.indexOf('專案類型 Project Type') < formModalSrc.indexOf('ClientWebsiteSelectField'),

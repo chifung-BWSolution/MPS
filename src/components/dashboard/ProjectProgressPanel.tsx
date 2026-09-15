@@ -5,9 +5,10 @@ import { Clock } from 'lucide-react';
 import { useProjects, relatedTypeLabels } from '@/hooks/useProjects';
 import { useProjectHours } from '@/hooks/useProjectHours';
 import { useProjectOrgLabels } from '@/hooks/useProjectOrgLabels';
+import { AppLink } from '@/components/AppLink';
 
 export function ProjectProgressPanel() {
-  const { navigateTo, selectedCompanyId, selectedBrandId } = useApp();
+  const { selectedCompanyId, selectedBrandId } = useApp();
   const { projects, loading: projectsLoading } = useProjects({ activeOnly: true });
   const { data: hoursMap, loading: hoursLoading } = useProjectHours(30);
   const { orgLine } = useProjectOrgLabels();
@@ -45,12 +46,13 @@ export function ProjectProgressPanel() {
     <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-[18px] font-bold">即時專案進度</h3>
-        <button
-          onClick={() => navigateTo('project', 'progress')}
+        <AppLink
+          module="project"
+          subModule="progress"
           className="text-[13px] text-teal-600 font-medium hover:underline"
         >
           查看全部
-        </button>
+        </AppLink>
       </div>
       {loading ? (
         <div className="text-center py-8 text-[13px] text-muted-foreground">載入工時進度中…</div>
@@ -63,10 +65,11 @@ export function ProjectProgressPanel() {
               .filter(Boolean)
               .join(' · ');
             return (
-              <div
+              <AppLink
                 key={project.id}
-                className="space-y-1.5 cursor-pointer group"
-                onClick={() => navigateTo('project', 'progress')}
+                module="project"
+                subModule="progress"
+                className="block space-y-1.5 cursor-pointer group no-underline text-inherit"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
@@ -99,7 +102,7 @@ export function ProjectProgressPanel() {
                     {project.growthHours > 0 ? ` · +${project.growthHours}h / 30天` : ''}
                   </span>
                 </div>
-              </div>
+              </AppLink>
             );
           })}
         </div>

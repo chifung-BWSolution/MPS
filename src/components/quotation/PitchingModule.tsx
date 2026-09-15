@@ -4,8 +4,9 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { useQuotationSection } from '@/context/QuotationSectionContext';
-import { filterBySectionProjectTypes, mergeScopedProjectTypes } from '@/lib/quotationSectionScope';
+import { filterBySectionProjectTypes } from '@/lib/quotationSectionScope';
 import { useQuotationClientProjects, type QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
+import { useQuotationProjectTypes } from '@/hooks/useQuotationProjectTypes';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
 import { useActiveStaffOptions, type StaffSelectOption } from '@/hooks/useActiveStaffOptions';
 import {
@@ -15,7 +16,10 @@ import {
   type QuotationClientSelectOption,
 } from '@/data/quotationClientList';
 import { useQuotationClientDetailId } from '@/hooks/useQuotationClientDetailId';
+import { useQuotationListQuery } from '@/hooks/useQuotationListQuery';
+import { appHrefClickProps } from '@/lib/appNavigation';
 import {
+  buildQuotationProjectHref,
   closeInvoiceReceiptEditor,
   openInvoiceReceiptEditor,
   openQuotationProjectDetail,
@@ -47,7 +51,6 @@ import {
   resolvePitchingFormClient,
   type PitchingRecord,
   type PitchingStatus,
-  type PitchingProjectType,
   type PitchingExpenseItem,
 } from '@/data/pitchingData';
 import { PitchingBudgetTab } from '@/components/quotation/PitchingBudgetTab';
@@ -77,7 +80,7 @@ export type PitchingFormValues = {
   signedDate: string;
   handoverDate: string;
   description: string;
-  projectTypes: PitchingProjectType[];
+  projectTypeId: string;
   mainPmId: string;
   webandsystemListId: string;
   asanaLink: string;
@@ -103,7 +106,7 @@ const emptyForm = (defaultMainPmId = ''): PitchingFormValues => ({
   signedDate: '',
   handoverDate: '',
   description: '',
-  projectTypes: [],
+  projectTypeId: '',
   mainPmId: defaultMainPmId,
   webandsystemListId: '',
   asanaLink: '',
@@ -119,7 +122,7 @@ function formFromRecord(record: PitchingRecord, clientOptions: ClientOption[]): 
     signedDate: optionalIsoDate(record.signedDate) ?? '',
     handoverDate: optionalIsoDate(record.handoverDate) ?? '',
     description: record.description ?? '',
-    projectTypes: record.projectTypes,
+    projectTypeId: record.projectTypeId ?? '',
     mainPmId: record.mainPmId ?? '',
     webandsystemListId: record.webandsystemListId ?? '',
     asanaLink: record.asanaLink ?? '',
@@ -135,7 +138,7 @@ export function pitchingFormToUpdate(form: PitchingFormValues): QuotationClientP
     signedDate: form.signedDate,
     handoverDate: form.handoverDate,
     description: form.description.trim() || undefined,
-    projectTypes: form.projectTypes,
+    projectTypeId: form.projectTypeId,
     mainPmId: form.mainPmId.trim(),
     webandsystemListId: form.webandsystemListId.trim(),
     asanaLink: form.asanaLink.trim() || undefined,
@@ -207,7 +210,13 @@ export function ProjectDisplayNameCell({ record }: { record: PitchingRecord }) {
   const pitchingCode = record.pitchingId !== record.id ? record.pitchingId : '';
   return (
     <td className="px-4 py-3">
-      <div className="text-[14px] font-medium">{record.displayName}</div>
+      <a
+        href={buildQuotationProjectHref(record.id, record.status)}
+        className="text-[14px] font-medium text-inherit hover:text-teal-700"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {record.displayName}
+      </a>
       {pitchingCode ? (
         <p className="text-[11px] text-muted-foreground mt-0.5">{pitchingCode}</p>
       ) : null}
@@ -303,35 +312,29 @@ export function RemainingDaysCell({
   return <span className={cn('tabular-nums', color)}>{days <= 0 ? `逾期 ${Math.abs(days)} 天` : `${days} 天`}</span>;
 }
 
-function ProjectTypeMultiSelect({
+function ProjectTypeSelect({
   value,
   onChange,
 }: {
-  value: PitchingProjectType[];
-  onChange: (next: PitchingProjectType[]) => void;
+  value: string;
+  onChange: (next: string) => void;
 }) {
-  const { typeOptions } = useQuotationSection();
-  const optionIds = new Set(typeOptions.map((opt) => opt.id));
-  const visibleValue = value.filter((type) => optionIds.has(type));
-  const hiddenValue = value.filter((type) => !optionIds.has(type));
-
-  const toggle = (id: PitchingProjectType) => {
-    const nextVisible = visibleValue.includes(id)
-      ? visibleValue.filter((type) => type !== id)
-      : [...visibleValue, id];
-    onChange([...nextVisible, ...hiddenValue]);
-  };
+  const { typeOptions: sectionOptions, scoped } = useQuotationSection();
+  const { types } = useQuotationProjectTypes();
+  const typeOptions = !scoped && types.length
+    ? types.filter((type) => type.isActive).map((type) => ({ id: type.id, label: type.display }))
+    : sectionOptions;
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
         {typeOptions.map((opt) => {
-          const selected = visibleValue.includes(opt.id);
+          const selected = value === opt.id;
           return (
             <button
               key={opt.id}
               type="button"
-              onClick={() => toggle(opt.id)}
+              onClick={() => onChange(opt.id)}
               className={cn(
                 'px-3 py-1.5 rounded-md text-[13px] font-medium border transition-colors',
                 selected
@@ -344,9 +347,9 @@ function ProjectTypeMultiSelect({
           );
         })}
       </div>
-      {visibleValue.length > 0 && (
-        <p className="text-[11px] text-muted-foreground">已選：{formatProjectTypes(visibleValue)}</p>
-      )}
+      {value ? (
+        <p className="text-[11px] text-muted-foreground">已選：{formatProjectTypes(value)}</p>
+      ) : null}
     </div>
   );
 }
@@ -454,8 +457,8 @@ export function PitchingFormModal({
       toast.error('請選擇查詢日期');
       return;
     }
-    if (form.projectTypes.length === 0) {
-      toast.error('請至少選擇一個專案類型');
+    if (!form.projectTypeId) {
+      toast.error('請選擇專案類型');
       return;
     }
     if (!form.mainPmId.trim()) {
@@ -592,13 +595,13 @@ export function PitchingFormModal({
 
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">專案類型 Project Type *</label>
-            <ProjectTypeMultiSelect
-              value={form.projectTypes}
-              onChange={(projectTypes) => setForm((prev) => ({ ...prev, projectTypes }))}
+            <ProjectTypeSelect
+              value={form.projectTypeId}
+              onChange={(projectTypeId) => setForm((prev) => ({ ...prev, projectTypeId }))}
             />
           </div>
 
-          {!hideWebsiteField && projectTypesNeedWebsiteLink(form.projectTypes) && (
+          {!hideWebsiteField && projectTypesNeedWebsiteLink(form.projectTypeId) && (
             <ClientWebsiteSelectField
               value={form.webandsystemListId}
               onChange={(webandsystemListId) => setForm((prev) => ({ ...prev, webandsystemListId }))}
@@ -607,7 +610,7 @@ export function PitchingFormModal({
               companyNameEn={companyNamesForClient(form.clientId, clientOptions).companyNameEn}
               clientName={form.clientName}
               displayName={form.displayName}
-              projectTypes={form.projectTypes}
+              projectTypes={form.projectTypeId}
             />
           )}
 
@@ -690,9 +693,10 @@ function PitchingList({
   onEdit: (record: PitchingRecord) => void;
 }) {
   const { typeOptions } = useQuotationSection();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [projectTypeFilter, setProjectTypeFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const { query, setQuery } = useQuotationListQuery('pitching');
+  const searchQuery = query.q;
+  const projectTypeFilter = query.type;
+  const statusFilter = query.status;
 
   const withMoney = useMemo(
     () => records.map((record) => ({ ...record, ...estimatedMoneyFor(record) })),
@@ -701,7 +705,7 @@ function PitchingList({
 
   const filtered = useMemo(() => {
     return withMoney.filter((p) => {
-      if (!matchesProjectTypeFilter(p.projectTypes, projectTypeFilter)) return false;
+      if (!matchesProjectTypeFilter(p.projectTypeId, projectTypeFilter)) return false;
       if (statusFilter !== 'all' && p.status !== statusFilter) return false;
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
@@ -709,7 +713,7 @@ function PitchingList({
           p.pitchingId.toLowerCase().includes(query) ||
           p.clientName.toLowerCase().includes(query) ||
           p.displayName.toLowerCase().includes(query) ||
-          formatProjectTypes(p.projectTypes).toLowerCase().includes(query) ||
+          formatProjectTypes(p.projectTypeId).toLowerCase().includes(query) ||
           formatMainPmName(p).toLowerCase().includes(query) ||
           p.assignedPmName.toLowerCase().includes(query)
         );
@@ -717,11 +721,15 @@ function PitchingList({
       return true;
     });
   }, [withMoney, searchQuery, projectTypeFilter, statusFilter]);
-  const { sorted, sortKey, sortDir, onSort } = useQuotationListSort(filtered);
+  const { sorted, sortKey, sortDir, onSort } = useQuotationListSort(filtered, {
+    sortKey: query.sort,
+    sortDir: query.dir,
+    onSortChange: (key, dir) => setQuery({ sort: key, dir }),
+  });
 
-  const totalCount = records.length;
-  const activeCount = records.filter((p) => p.status === 'initial' || p.status === 'following_up' || p.status === 'confirmed').length;
-  const closedCount = records.filter((p) => p.status === 'closed').length;
+  const totalCount = filtered.length;
+  const activeCount = filtered.filter((p) => p.status === 'initial' || p.status === 'following_up' || p.status === 'confirmed').length;
+  const closedCount = filtered.filter((p) => p.status === 'closed').length;
   const conversionRate = totalCount > 0 ? Math.round((closedCount / totalCount) * 100) : 0;
 
   return (
@@ -752,13 +760,13 @@ function PitchingList({
             type="text"
             placeholder="搜尋客戶、顯示名稱、項目類型..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => setQuery({ q: e.target.value })}
             className="w-full pl-9 pr-4 py-2 text-[13px] border border-border rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
         </div>
         <select
           value={projectTypeFilter}
-          onChange={(e) => setProjectTypeFilter(e.target.value)}
+          onChange={(e) => setQuery({ type: e.target.value })}
           className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
         >
           <option value="all">全部項目類型</option>
@@ -770,7 +778,7 @@ function PitchingList({
         </select>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => setQuery({ status: e.target.value })}
           className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
         >
           <option value="all">全部狀態</option>
@@ -796,7 +804,7 @@ function PitchingList({
               {sorted.map((record) => (
                   <tr
                     key={record.id}
-                    onClick={() => onView(record)}
+                    {...appHrefClickProps(buildQuotationProjectHref(record.id, record.status), () => onView(record))}
                     className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer"
                   >
                     <td className="px-4 py-3 text-[13px] text-muted-foreground tabular-nums">{record.inquiryDate}</td>
@@ -808,7 +816,7 @@ function PitchingList({
                         handoverDate={record.handoverDate}
                       />
                     </td>
-                    <td className="px-4 py-3 text-[13px] max-w-[180px]">{formatProjectTypes(record.projectTypes)}</td>
+                    <td className="px-4 py-3 text-[13px] max-w-[180px]">{formatProjectTypes(record.projectTypeId)}</td>
                     <ProjectDisplayNameCell record={record} />
                     <td className="px-4 py-3 text-[13px]">{formatRelatedClientName(record)}</td>
                     <td className="px-4 py-3 text-[13px]">{formatMainPmName(record)}</td>
@@ -846,7 +854,7 @@ type DetailDraft = {
   signedDate: string;
   handoverDate: string;
   description: string;
-  projectTypes: PitchingProjectType[];
+  projectTypeId: string;
   webandsystemListId: string;
   asanaLink: string;
   status: PitchingStatus;
@@ -864,7 +872,7 @@ function draftFromRecord(record: PitchingRecord, clientOptions: ClientOption[]):
     signedDate: optionalIsoDate(record.signedDate) ?? '',
     handoverDate: optionalIsoDate(record.handoverDate) ?? '',
     description: record.description ?? '',
-    projectTypes: record.projectTypes,
+    projectTypeId: record.projectTypeId ?? '',
     webandsystemListId: record.webandsystemListId ?? '',
     asanaLink: record.asanaLink ?? '',
     status: record.status,
@@ -1116,7 +1124,7 @@ export function PitchingDetail({
                 </div>
                 <div className="space-y-4 min-w-0">
                   <ReadOnlyField label="項目類型">
-                    {formatProjectTypes(draft.projectTypes) || '—'}
+                    {formatProjectTypes(draft.projectTypeId) || '—'}
                   </ReadOnlyField>
                   <ReadOnlyField label="負責 PM">{formatMainPmName(record)}</ReadOnlyField>
                   <div>
@@ -1128,7 +1136,7 @@ export function PitchingDetail({
                       companyNameEn={clientCompany.companyNameEn}
                       clientName={draft.clientName}
                       displayName={draft.displayName}
-                      projectTypes={draft.projectTypes}
+                      projectTypes={draft.projectTypeId}
                       showOpenLink
                       disabled={saving}
                     />
@@ -1268,7 +1276,7 @@ export function PitchingModule() {
   }, [selectedRecord]);
 
   const handleView = (record: PitchingRecord) => {
-    openQuotationProjectDetail(record.id, record.status);
+    if (openQuotationProjectDetail(record.id, record.status)) return;
     if (record.status !== 'confirmed') openDetail(record.id);
   };
 
@@ -1291,7 +1299,7 @@ export function PitchingModule() {
     const selectedStaff = staffOptions.find((s) => s.value === form.mainPmId);
     const payload = {
       ...pitchingFormToUpdate(form),
-      projectTypes: mergeScopedProjectTypes(editingRecord?.projectTypes, form.projectTypes, allowedTypes),
+      projectTypeId: form.projectTypeId,
       assignedPmName: selectedStaff?.label || '',
       mainPmName: selectedStaff?.label || undefined,
     };
@@ -1314,7 +1322,7 @@ export function PitchingModule() {
       signedDate: form.signedDate || undefined,
       handoverDate: form.handoverDate || undefined,
       description: form.description.trim() || undefined,
-      projectTypes: mergeScopedProjectTypes([], form.projectTypes, allowedTypes),
+      projectTypeId: form.projectTypeId,
       assignedPm: '',
       assignedPmName: selectedStaff?.label || '',
       mainPmId: form.mainPmId.trim() || undefined,

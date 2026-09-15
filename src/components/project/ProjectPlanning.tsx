@@ -16,11 +16,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { AppLink } from '@/components/AppLink';
 import { Input } from '@/components/ui/input';
 import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
 
 type ProjectPlanningProps = {
-  onSelectProject?: (projectId: string) => void;
+  onSelectProject?: (projectId: string, event?: import('@/lib/appNavigation').ModifierClickEvent) => void;
   forcedCategory?: 'internal' | 'client';
   projects: Project[];
   loading: boolean;
@@ -29,7 +30,7 @@ type ProjectPlanningProps = {
 };
 
 export function ProjectPlanning({ onSelectProject, forcedCategory, projects, loading: projectsLoading, updateProject, deleteProject }: ProjectPlanningProps) {
-  const { navigateTo, selectedCompanyId, selectedBrandId } = useApp();
+  const { selectedCompanyId, selectedBrandId } = useApp();
   const { companies } = useCompanies();
   const { brands } = useBrands();
   const [filterBrand, setFilterBrand] = useState<string>('all');
@@ -183,12 +184,17 @@ export function ProjectPlanning({ onSelectProject, forcedCategory, projects, loa
         </div>
         <div className="flex items-center gap-2">
           <Button
+            asChild
             size="sm"
             className="bg-teal-600 hover:bg-teal-700 text-white gap-1.5"
-            onClick={() => navigateTo('project', forcedCategory === 'client' ? 'new-client' : 'new')}
           >
-            <Plus size={14} />
-            新增項目
+            <AppLink
+              module="project"
+              subModule={forcedCategory === 'client' ? 'new-client' : 'new'}
+            >
+              <Plus size={14} />
+              新增項目
+            </AppLink>
           </Button>
         </div>
       </div>
@@ -236,7 +242,8 @@ export function ProjectPlanning({ onSelectProject, forcedCategory, projects, loa
                   <tr
                     key={project.id}
                     className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer"
-                    onClick={() => onSelectProject?.(project.id)}
+                    onClick={(e) => onSelectProject?.(project.id, e)}
+                    onAuxClick={(e) => onSelectProject?.(project.id, e)}
                   >
                     <td className="px-4 py-3">
                       <span className="text-[12px] font-medium text-muted-foreground">{companyItem?.companyCode || '-'}</span>

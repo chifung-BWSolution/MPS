@@ -4,6 +4,7 @@ import { canAccessSettings } from '@/lib/permissions';
 import { Search, Bell, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
+import { AppLink } from '@/components/AppLink';
 import {
   LayoutDashboard,
   FileText,
@@ -43,7 +44,7 @@ const moduleIcons: Record<string, React.ElementType> = {
 };
 
 export function TopNav() {
-  const { currentModule, navigateTo } = useApp();
+  const { currentModule } = useApp();
   const { systemUser, userInfo, signOut } = useAuth();
   const [searchFocused, setSearchFocused] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -71,11 +72,11 @@ export function TopNav() {
           const isActive = currentModule === menuItem.id;
 
           return (
-            <button
+            <AppLink
               key={menuItem.id}
-              onClick={() => navigateTo(menuItem.id)}
+              module={menuItem.id}
               className={cn(
-                'h-full px-3 text-[14px] font-medium whitespace-nowrap transition-all duration-200 relative flex items-center gap-1.5 shrink-0',
+                'h-full px-3 text-[14px] font-medium whitespace-nowrap transition-all duration-200 relative flex items-center gap-1.5 shrink-0 no-underline',
                 isActive
                   ? 'text-white'
                   : 'text-white/55 hover:text-white/90'
@@ -86,7 +87,7 @@ export function TopNav() {
               {isActive && (
                 <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-teal-500 rounded-t-full" />
               )}
-            </button>
+            </AppLink>
           );
         })}
       </nav>

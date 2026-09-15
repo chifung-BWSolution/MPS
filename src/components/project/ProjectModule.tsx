@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useApp } from '@/context/AppContext';
+import { buildAppHref, useApp } from '@/context/AppContext';
+import { openInNewTab, shouldOpenHrefInNewTab, type ModifierClickEvent } from '@/lib/appNavigation';
 import { ProjectFocus } from './ProjectFocus';
 import { ProjectDetail } from './ProjectDetail';
 import { ProjectProgress } from './ProjectProgress';
@@ -28,19 +29,29 @@ export function ProjectModule({ subModule }: { subModule?: string }) {
   useEffect(() => { writeSession(SELECTED_PROJECT_KEY, selectedProjectId); }, [selectedProjectId]);
   useEffect(() => { writeSession(PREVIOUS_LIST_KEY, previousListSubModule); }, [previousListSubModule]);
 
-  const handleSelectProject = (projectId: string) => {
-    if (subModule === 'internal') setPreviousListSubModule('internal');
-    else if (subModule === 'client') setPreviousListSubModule('client');
-    else if (subModule === 'progress') setPreviousListSubModule('progress');
-    else if (subModule === 'focus') setPreviousListSubModule('focus');
-    else setPreviousListSubModule('overview');
+  const handleSelectProject = (projectId: string, event?: ModifierClickEvent) => {
+    const nextList =
+      subModule === 'internal' ? 'internal'
+      : subModule === 'client' ? 'client'
+      : subModule === 'progress' ? 'progress'
+      : subModule === 'focus' ? 'focus'
+      : 'overview';
+    writeSession(PREVIOUS_LIST_KEY, nextList);
+    writeSession(SELECTED_PROJECT_KEY, projectId);
+    if (shouldOpenHrefInNewTab(event)) {
+      event?.preventDefault?.();
+      openInNewTab(buildAppHref('project', 'detail'));
+      return;
+    }
+    if (navigateTo('project', 'detail')) return;
+    setPreviousListSubModule(nextList);
     setSelectedProjectId(projectId);
-    navigateTo('project', 'detail');
   };
 
   const handleBackToList = () => {
+    writeSession(SELECTED_PROJECT_KEY, null);
+    if (navigateTo('project', previousListSubModule)) return;
     setSelectedProjectId(null);
-    navigateTo('project', previousListSubModule);
   };
 
   const renderContent = () => {

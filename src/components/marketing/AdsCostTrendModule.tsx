@@ -22,9 +22,12 @@ import {
   topBrandSeries,
 } from '@/lib/adsCostTrend';
 import {
+  buildFacebookAdsCampaignHref,
+  buildGoogleAdsCampaignHref,
   setFacebookAdsCampaignHash,
   setGoogleAdsCampaignHash,
 } from '@/lib/adsCampaignNavigation';
+import { openInNewTab, shouldOpenHrefInNewTab, type ModifierClickEvent } from '@/lib/appNavigation';
 import { daysAgoIso, todayIso } from '@/lib/adsDailySeries';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -123,18 +126,26 @@ function platformBadge(platform: AdsCostTrendCampaign['platform']) {
 function openCampaignDetail(
   campaign: AdsCostTrendCampaign,
   range: { preset: '30d' | 'custom'; from: string; to: string },
+  event?: ModifierClickEvent,
 ) {
-  if (campaign.platform === 'google') {
-    setGoogleAdsCampaignHash({
-      campaignKey: `${campaign.accountId}:${campaign.campaignId}`,
-      ...range,
-    });
-    return;
-  }
-  setFacebookAdsCampaignHash({
+  const opts = {
     campaignKey: `${campaign.accountId}:${campaign.campaignId}`,
     ...range,
-  });
+  };
+  if (shouldOpenHrefInNewTab(event)) {
+    event?.preventDefault?.();
+    openInNewTab(
+      campaign.platform === 'google'
+        ? buildGoogleAdsCampaignHref(opts)
+        : buildFacebookAdsCampaignHref(opts),
+    );
+    return;
+  }
+  if (campaign.platform === 'google') {
+    setGoogleAdsCampaignHash(opts);
+    return;
+  }
+  setFacebookAdsCampaignHash(opts);
 }
 
 export function AdsCostTrendModule() {
@@ -504,7 +515,7 @@ export function AdsCostTrendModule() {
                         isOpen={isOpen}
                         onToggle={() => toggleBrand(row.brandId)}
                         rateMetric={rateMetric}
-                        onOpenCampaign={(campaign) => openCampaignDetail(campaign, campaignDetailRange)}
+                        onOpenCampaign={(campaign, event) => openCampaignDetail(campaign, campaignDetailRange, event)}
                       />
                     );
                   })}
@@ -537,7 +548,7 @@ function BrandBlock({
   isOpen: boolean;
   rateMetric: AdsCostTrendRateMetric;
   onToggle: () => void;
-  onOpenCampaign: (campaign: AdsCostTrendCampaign) => void;
+  onOpenCampaign: (campaign: AdsCostTrendCampaign, event?: ModifierClickEvent) => void;
 }) {
   const brandLabel =
     row.displayName && row.displayName !== row.brandCode
@@ -588,7 +599,8 @@ function BrandBlock({
             key={`${row.brandId}:${campaign.key}`}
             role="button"
             tabIndex={0}
-            onClick={() => onOpenCampaign(campaign)}
+            onClick={(e) => onOpenCampaign(campaign, e)}
+            onAuxClick={(e) => onOpenCampaign(campaign, e)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();

@@ -31,7 +31,7 @@ export function useQuotationClientDetailId(page: QuotationClientPage) {
   const openDetail = useCallback(
     (id: string) => {
       writeSelectedQuotationProjectId(id);
-      setQuotationClientHash(page, id);
+      if (setQuotationClientHash(page, id)) return;
       setDetailId(id);
     },
     [page],
@@ -39,7 +39,7 @@ export function useQuotationClientDetailId(page: QuotationClientPage) {
 
   const closeDetail = useCallback(() => {
     writeSelectedQuotationProjectId(null);
-    setQuotationClientHash(page, null);
+    if (setQuotationClientHash(page, null)) return;
     setDetailId(null);
   }, [page]);
 

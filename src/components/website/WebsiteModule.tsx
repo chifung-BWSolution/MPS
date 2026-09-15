@@ -39,11 +39,14 @@ import {
   originSortRank,
 } from '@/lib/adsWebsiteDisplay';
 import {
+  buildWebsiteDetailHref,
   readSelectedWebsiteId,
+  readWebsiteListPage,
   setWebsiteDetailHash,
   writeSelectedWebsiteId,
   type WebsiteListPage,
 } from '@/lib/websiteNavigation';
+import { appHrefClickProps } from '@/lib/appNavigation';
 import { toExternalHref } from '@/lib/externalUrl';
 import {
   WebsiteVideosTab,
@@ -147,7 +150,7 @@ function WebsiteCard({ site, onClick }: { site: WebsiteProfileFull; onClick: () 
   const { category, clientName } = resolveWebsiteProjectCategory(site);
 
   return (
-    <div onClick={onClick} className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] p-5 hover:shadow-[0_4px_12px_rgba(0,20,40,0.1)] transition-all duration-200 cursor-pointer">
+    <div {...appHrefClickProps(buildWebsiteDetailHref(site.id, readWebsiteListPage() || 'list'), onClick)} className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] p-5 hover:shadow-[0_4px_12px_rgba(0,20,40,0.1)] transition-all duration-200 cursor-pointer">
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div>
@@ -212,7 +215,7 @@ function WebsiteTableRow({ site, onClick }: { site: WebsiteProfileFull; onClick:
   const config = statusConfig[site.status];
   const { category, clientName } = resolveWebsiteProjectCategory(site);
   return (
-    <tr onClick={onClick} className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer">
+    <tr {...appHrefClickProps(buildWebsiteDetailHref(site.id, readWebsiteListPage() || 'list'), onClick)} className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer">
       <td className="px-4 py-3">
         <div>
           <span className="text-[13px] font-medium block">{site.websiteName}</span>
@@ -1006,33 +1009,41 @@ function WebsiteList({ onSelectSite, profileTypeFilter }: { onSelectSite: (site:
               const config = statusConfig[site.status];
               const { category, clientName } = resolveWebsiteProjectCategory(site);
               return (
-                <tr key={site.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer">
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3">
-                    <div>
+                <tr
+                  key={site.id}
+                  className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer"
+                  {...appHrefClickProps(buildWebsiteDetailHref(site.id, readWebsiteListPage() || 'list'), () => onSelectSite(site))}
+                >
+                  <td className="px-4 py-3">
+                    <a
+                      href={buildWebsiteDetailHref(site.id, readWebsiteListPage() || 'list')}
+                      className="block no-underline text-inherit"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <span className="text-[13px] font-medium block">{site.websiteName}</span>
                       <span className="text-[11px] text-teal-600">{site.domainUrl}</span>
-                    </div>
+                    </a>
                   </td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><ProfileTypeBadge profileType={site.profileType} size="small" /></td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><ProjectCategoryBadge category={category} clientName={clientName} size="sm" /></td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><WebsiteLevelBadge level={site.level} size="small" /></td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><MutedFieldBadge value={site.platform} /></td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><CompanyFieldBadge value={site.company} /></td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><BrandFieldBadge value={site.brand} /></td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3"><StatusFieldBadge config={config} /></td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3">
+                  <td className="px-4 py-3"><ProfileTypeBadge profileType={site.profileType} size="small" /></td>
+                  <td className="px-4 py-3"><ProjectCategoryBadge category={category} clientName={clientName} size="sm" /></td>
+                  <td className="px-4 py-3"><WebsiteLevelBadge level={site.level} size="small" /></td>
+                  <td className="px-4 py-3"><MutedFieldBadge value={site.platform} /></td>
+                  <td className="px-4 py-3"><CompanyFieldBadge value={site.company} /></td>
+                  <td className="px-4 py-3"><BrandFieldBadge value={site.brand} /></td>
+                  <td className="px-4 py-3"><StatusFieldBadge config={config} /></td>
+                  <td className="px-4 py-3">
                     <Ga4RecentTrafficCell
                       summary={ga4TrafficByWebsiteId.get(site.id)}
                       loading={ga4TrafficLoading}
                     />
                   </td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3">
+                  <td className="px-4 py-3">
                     <Ga4TrafficTrendCell
                       summary={ga4TrafficByWebsiteId.get(site.id)}
                       loading={ga4TrafficLoading}
                     />
                   </td>
-                  <td onClick={() => onSelectSite(site)} className="px-4 py-3 text-[13px] font-medium">{site.totalHours}h</td>
+                  <td className="px-4 py-3 text-[13px] font-medium">{site.totalHours}h</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-0.5">
                       <OpenWebsiteUrlButton domainUrl={site.domainUrl} />
@@ -1141,7 +1152,7 @@ function FeaturedWebsiteCard({ site, onClick }: { site: WebsiteProfileFull; onCl
 
   return (
     <div
-      onClick={onClick}
+      {...appHrefClickProps(buildWebsiteDetailHref(site.id, 'featured'), onClick)}
       className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] p-5 hover:shadow-[0_4px_14px_rgba(0,20,40,0.1)] transition-all duration-200 cursor-pointer group"
     >
       {/* Header */}
@@ -1351,14 +1362,14 @@ export function WebsiteModule({ subModule }: { subModule?: string }) {
 
   const handleSelectSite = (site: WebsiteProfileFull) => {
     writeSelectedWebsiteId(site.id);
-    setWebsiteDetailHash(listPage, site.id);
+    if (setWebsiteDetailHash(listPage, site.id)) return;
     setDetailId(site.id);
     setSelectedSite(site);
   };
 
   const handleBackFromSite = () => {
     writeSelectedWebsiteId(null);
-    setWebsiteDetailHash(listPage, null);
+    if (setWebsiteDetailHash(listPage, null)) return;
     setDetailId(null);
     setSelectedSite(null);
   };

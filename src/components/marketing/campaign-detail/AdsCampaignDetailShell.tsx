@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { DateRangePreset } from '@/types/googleAds';
 import { cn } from '@/lib/utils';
+import { buildWebsiteDetailHref } from '@/lib/websiteNavigation';
 import { useAdsCampaignTagNames } from '@/hooks/useAdsCampaignTagNames';
 import type { AdsAdvisorSnapshot } from '@/types/adsAdvisor';
 import { AdsKpiCard } from './AdsKpiCard';
@@ -154,14 +155,13 @@ export function AdsCampaignDetailShell({
                 <span className="flex flex-wrap items-center gap-2">
                   {model.websites.map((w) =>
                     onOpenWebsite ? (
-                      <button
+                      <a
                         key={`${w.websiteProfileId}:${w.domain}`}
-                        type="button"
-                        onClick={() => onOpenWebsite(w.websiteProfileId)}
+                        href={buildWebsiteDetailHref(w.websiteProfileId)}
                         className="text-teal-700 hover:text-teal-800 hover:underline"
                       >
                         {w.domain}
-                      </button>
+                      </a>
                     ) : (
                       <span key={`${w.websiteProfileId}:${w.domain}`}>{w.domain}</span>
                     ),

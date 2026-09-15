@@ -1,4 +1,5 @@
 import type { DateRangePreset } from '@/types/googleAds';
+import { applyLocationHash, buildSameOriginHref } from '@/lib/appNavigation';
 import { splitHashPathAndQuery } from '@/lib/adsCampaignNavigation';
 
 export type GscReportHashQuery = {
@@ -42,19 +43,20 @@ export function buildGscReportHash(opts: {
   return qs ? `website/gsc?${qs}` : 'website/gsc';
 }
 
+export function buildGscReportHref(opts: {
+  siteUrl?: string | null;
+  preset?: DateRangePreset | null;
+  from?: string | null;
+  to?: string | null;
+}): string {
+  return buildSameOriginHref(buildGscReportHash(opts));
+}
+
 export function setGscReportHash(opts: {
   siteUrl?: string | null;
   preset?: DateRangePreset | null;
   from?: string | null;
   to?: string | null;
-}): void {
-  const next = buildGscReportHash(opts);
-  try {
-    const current = globalThis.window?.location.hash.replace(/^#/, '') ?? '';
-    if (current !== next && globalThis.window) {
-      globalThis.window.location.hash = next;
-    }
-  } catch {
-    /* ignore */
-  }
+}): boolean {
+  return applyLocationHash(buildGscReportHash(opts));
 }

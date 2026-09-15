@@ -1,4 +1,5 @@
 import type { DateRangePreset } from '@/types/googleAds';
+import { applyLocationHash, buildSameOriginHref } from '@/lib/appNavigation';
 
 export type AdsCampaignHashQuery = {
   campaign: string | null;
@@ -69,17 +70,22 @@ export function buildGoogleAdsCampaignHash(opts: {
   return qs ? `marketing/google-ads?${qs}` : 'marketing/google-ads';
 }
 
+export function buildGoogleAdsCampaignHref(opts: {
+  campaignKey?: string | null;
+  preset?: DateRangePreset | null;
+  from?: string | null;
+  to?: string | null;
+}): string {
+  return buildSameOriginHref(buildGoogleAdsCampaignHash(opts));
+}
+
 export function setGoogleAdsCampaignHash(opts: {
   campaignKey?: string | null;
   preset?: DateRangePreset | null;
   from?: string | null;
   to?: string | null;
-}): void {
-  const next = buildGoogleAdsCampaignHash(opts);
-  const current = window.location.hash.replace(/^#/, '');
-  if (current !== next) {
-    window.location.hash = next;
-  }
+}): boolean {
+  return applyLocationHash(buildGoogleAdsCampaignHash(opts));
 }
 
 export function buildFacebookAdsCampaignHash(opts: {
@@ -97,15 +103,20 @@ export function buildFacebookAdsCampaignHash(opts: {
   return qs ? `marketing/facebook-ads?${qs}` : 'marketing/facebook-ads';
 }
 
+export function buildFacebookAdsCampaignHref(opts: {
+  campaignKey?: string | null;
+  preset?: DateRangePreset | null;
+  from?: string | null;
+  to?: string | null;
+}): string {
+  return buildSameOriginHref(buildFacebookAdsCampaignHash(opts));
+}
+
 export function setFacebookAdsCampaignHash(opts: {
   campaignKey?: string | null;
   preset?: DateRangePreset | null;
   from?: string | null;
   to?: string | null;
-}): void {
-  const next = buildFacebookAdsCampaignHash(opts);
-  const current = window.location.hash.replace(/^#/, '');
-  if (current !== next) {
-    window.location.hash = next;
-  }
+}): boolean {
+  return applyLocationHash(buildFacebookAdsCampaignHash(opts));
 }

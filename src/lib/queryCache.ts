@@ -17,6 +17,7 @@ export const QUERY_CACHE_KEYS = {
   dayReportTypes: 'lookup:day_report_type',
   supplierTypes: 'lookup:supplier_types',
   quotationDocTypes: 'lookup:quotation_doc_types',
+  quotationProjectTypes: 'lookup:quotation_project_types',
   quotationClientProjects: 'list:quotation_client_project',
   quotationClientList: 'list:quotation_client_list',
   websiteProfiles: 'list:webandsystem_list',

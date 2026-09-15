@@ -121,7 +121,7 @@ type ProjectEmbed = {
   pitching_code: string | null;
   client_id: string | null;
   client_name: string | null;
-  project_types: string[] | null;
+  project_types: string | null;
   quotation_client_list?: {
     company_name_zh: string | null;
     company_name_en: string | null;
@@ -512,7 +512,7 @@ export type InvoicePrefillContext = {
   projectName: string;
   customerName: string;
   siteAddress: string;
-  projectTypes: string[];
+  projectTypeId: string;
   defaultCompanyListId: string;
   sameTypeSum: number;
   dueDate?: string;
@@ -561,7 +561,7 @@ async function loadPrefillContext(incomeId: string): Promise<InvoicePrefillConte
       clientName: project?.client_name,
     }),
     siteAddress: client?.address?.trim() || '',
-    projectTypes: project?.project_types ?? [],
+    projectTypeId: project?.project_types ?? '',
     defaultCompanyListId: defaultCompanyListId(),
     sameTypeSum,
     dueDate: optionalIsoDate((incomeRow as IncomeDbRow).due_date),

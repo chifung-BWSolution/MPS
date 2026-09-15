@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-export function ProjectFocus({ onSelectProject }: { onSelectProject?: (projectId: string) => void }) {
+export function ProjectFocus({ onSelectProject }: { onSelectProject?: (projectId: string, event?: import('@/lib/appNavigation').ModifierClickEvent) => void }) {
   const { projects, loading } = useProjects({ activeOnly: true });
   const { orgLine } = useProjectOrgLabels();
   const [timeRange, setTimeRange] = useState<string>('14');
@@ -105,7 +105,8 @@ export function ProjectFocus({ onSelectProject }: { onSelectProject?: (projectId
           <div
             key={project.id}
             className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-4 hover:shadow-card-hover transition-all duration-200 cursor-pointer"
-            onClick={() => onSelectProject?.(project.id)}
+            onClick={(e) => onSelectProject?.(project.id, e)}
+            onAuxClick={(e) => onSelectProject?.(project.id, e)}
           >
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">

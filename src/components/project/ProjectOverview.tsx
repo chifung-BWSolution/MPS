@@ -98,7 +98,7 @@ function LevelBadge({ level }: { level?: ProjectLevel | null }) {
   );
 }
 
-export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projectId: string) => void }) {
+export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projectId: string, event?: import('@/lib/appNavigation').ModifierClickEvent) => void }) {
   const { selectedCompanyId, selectedBrandId } = useApp();
   const { projects, loading, reload, deleteProject } = useProjects();
   const { companies, brands, companyLabel, brandLabel } = useProjectOrgLabels();
@@ -320,33 +320,35 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
                   const status = statusDisplay(project.status);
                   const hours = Math.round(hoursMap[project.id]?.totalHours ?? 0);
                   return (
-                    <tr key={project.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                      <td
-                        className="px-4 py-3 cursor-pointer"
-                        onClick={() => onSelectProject?.(project.id)}
-                      >
+                    <tr
+                      key={project.id}
+                      className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer"
+                      onClick={(e) => onSelectProject?.(project.id, e)}
+                      onAuxClick={(e) => onSelectProject?.(project.id, e)}
+                    >
+                      <td className="px-4 py-3">
                         <span className="text-[13px] font-medium block">{project.name}</span>
                         {subtitle ? <span className="text-[11px] text-teal-600">{subtitle}</span> : null}
                       </td>
-                      <td className="px-4 py-3 cursor-pointer" onClick={() => onSelectProject?.(project.id)}>
+                      <td className="px-4 py-3">
                         <KindBadge kind={kind} />
                       </td>
-                      <td className="px-4 py-3 cursor-pointer" onClick={() => onSelectProject?.(project.id)}>
+                      <td className="px-4 py-3">
                         <ProjectCategoryBadge category={category} clientName={project.clientName} size="sm" />
                       </td>
-                      <td className="px-4 py-3 cursor-pointer" onClick={() => onSelectProject?.(project.id)}>
+                      <td className="px-4 py-3">
                         <LevelBadge level={level} />
                       </td>
-                      <td className="px-4 py-3 cursor-pointer" onClick={() => onSelectProject?.(project.id)}>
+                      <td className="px-4 py-3">
                         <BrandFieldBadge value={brandLabel(project.brandListId)} />
                       </td>
-                      <td className="px-4 py-3 cursor-pointer" onClick={() => onSelectProject?.(project.id)}>
+                      <td className="px-4 py-3">
                         <CompanyFieldBadge value={companyLabel(project.companyListId)} />
                       </td>
-                      <td className="px-4 py-3 cursor-pointer" onClick={() => onSelectProject?.(project.id)}>
+                      <td className="px-4 py-3">
                         <StatusFieldBadge config={status} />
                       </td>
-                      <td className="px-4 py-3 text-[13px] font-medium cursor-pointer" onClick={() => onSelectProject?.(project.id)}>
+                      <td className="px-4 py-3 text-[13px] font-medium">
                         {hours}h
                       </td>
                       <td className="px-4 py-3">

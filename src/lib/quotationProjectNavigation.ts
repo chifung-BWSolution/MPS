@@ -1,3 +1,9 @@
+import { applyLocationHash, buildSameOriginHref } from './appNavigation';
+import {
+  copyQuotationListQueryParams,
+  writeQuotationListQueryParams,
+  type QuotationListQuery,
+} from './quotationListQuery';
 import {
   isQuotationSectionModule,
   type QuotationSectionModule,
@@ -60,21 +66,34 @@ export function quotationSectionModuleFromHash(
   return isQuotationSectionModule(mod) ? mod : 'quotation';
 }
 
+function quotationHashFromParams(page: QuotationClientPage, params: URLSearchParams): string {
+  const section = quotationSectionModuleFromHash();
+  const qs = params.toString();
+  return qs ? `${section}/${page}?${qs}` : `${section}/${page}`;
+}
+
+function appendListQuery(
+  params: URLSearchParams,
+  sourceHash = globalThis.window?.location?.hash ?? '',
+): void {
+  copyQuotationListQueryParams(hashPathAndQuery(sourceHash).params, params);
+}
+
 /** Hash path for a Pitching or Project detail, keyed by quotation_client_project.id. */
 export function buildQuotationProjectHash(
   projectId: string,
   pageOrStatus?: QuotationClientPage | string,
+  sourceHash = globalThis.window?.location?.hash ?? '',
 ): string {
   const page: QuotationClientPage =
     pageOrStatus === 'pitching' || pageOrStatus === 'projects'
       ? pageOrStatus
       : quotationProjectSubModule(pageOrStatus);
   const id = projectId.trim();
-  const section = quotationSectionModuleFromHash();
-  if (!id) return `${section}/${page}`;
   const params = new URLSearchParams();
-  params.set(QUOTATION_PROJECT_QUERY_KEY, id);
-  return `${section}/${page}?${params.toString()}`;
+  if (id) params.set(QUOTATION_PROJECT_QUERY_KEY, id);
+  appendListQuery(params, sourceHash);
+  return quotationHashFromParams(page, params);
 }
 
 /** Same-origin href that opens the project in a new tab. */
@@ -82,14 +101,7 @@ export function buildQuotationProjectHref(
   projectId: string,
   pageOrStatus?: QuotationClientPage | string,
 ): string {
-  const hash = buildQuotationProjectHash(projectId, pageOrStatus);
-  try {
-    const loc = globalThis.window?.location;
-    if (!loc) return `#${hash}`;
-    return `${loc.pathname}${loc.search}#${hash}`;
-  } catch {
-    return `#${hash}`;
-  }
+  return buildSameOriginHref(buildQuotationProjectHash(projectId, pageOrStatus));
 }
 
 export function readSelectedQuotationProjectId(
@@ -114,29 +126,43 @@ function hashWithPreservedDoc(
   const current = readInvoiceReceiptDoc(hash);
   const currentProjectId = projectIdFromHash(hash);
   if (current && projectId && currentProjectId === projectId) {
-    return buildInvoiceReceiptHash(projectId, page, current.kind, current.incomeId);
+    return buildInvoiceReceiptHash(projectId, page, current.kind, current.incomeId, hash);
   }
-  return buildQuotationProjectHash(projectId, page);
+  return buildQuotationProjectHash(projectId, page, hash);
 }
 
-export function setQuotationClientHash(
-  page: QuotationClientPage,
-  id?: string | null,
-  options?: { preserveDoc?: boolean },
-): void {
-  const projectId = id?.trim() || '';
-  const next = options?.preserveDoc
-    ? hashWithPreservedDoc(projectId, page)
-    : buildQuotationProjectHash(projectId, page);
+/** Update list filter/sort on the current Pitching or Project page without a new history entry. */
+export function setQuotationListHash(page: QuotationClientPage, query: QuotationListQuery): void {
   try {
     const loc = globalThis.window?.location;
     if (!loc) return;
+    const params = new URLSearchParams();
+    writeQuotationListQueryParams(params, query);
+    const next = quotationHashFromParams(page, params);
     const current = loc.hash.replace(/^#/, '');
     if (current === next) return;
+    const history = globalThis.window.history;
+    if (history?.replaceState) {
+      history.replaceState(history.state, '', `${loc.pathname}${loc.search}#${next}`);
+      return;
+    }
     loc.hash = `#${next}`;
   } catch {
     /* ignore */
   }
+}
+
+/** @returns true when Ctrl/Cmd+click opened a new tab instead of this one */
+export function setQuotationClientHash(
+  page: QuotationClientPage,
+  id?: string | null,
+  options?: { preserveDoc?: boolean },
+): boolean {
+  const projectId = id?.trim() || '';
+  const next = options?.preserveDoc
+    ? hashWithPreservedDoc(projectId, page)
+    : buildQuotationProjectHash(projectId, page);
+  return applyLocationHash(next);
 }
 
 export function writeSelectedQuotationProjectId(id: string | null): void {
@@ -153,11 +179,11 @@ export function openQuotationProjectDetail(
   projectId: string,
   status: string | undefined,
   _navigateTo?: (module: string, subModule?: string) => void,
-): void {
+): boolean {
   const id = projectId.trim();
-  if (!id) return;
+  if (!id) return false;
   writeSelectedQuotationProjectId(id);
-  setQuotationClientHash(quotationProjectSubModule(status), id, { preserveDoc: true });
+  return setQuotationClientHash(quotationProjectSubModule(status), id, { preserveDoc: true });
 }
 
 export function readQuotationClientPage(
@@ -183,12 +209,14 @@ export function buildInvoiceReceiptHash(
   page: QuotationClientPage,
   kind: InvoiceReceiptDocKind,
   incomeId: string,
+  sourceHash = globalThis.window?.location?.hash ?? '',
 ): string {
   const params = new URLSearchParams();
   params.set(QUOTATION_PROJECT_QUERY_KEY, projectId.trim());
   params.set(QUOTATION_DOC_QUERY_KEY, kind);
   params.set(QUOTATION_INCOME_QUERY_KEY, incomeId.trim());
-  return `${quotationSectionModuleFromHash()}/${page}?${params.toString()}`;
+  appendListQuery(params, sourceHash);
+  return quotationHashFromParams(page, params);
 }
 
 export function openInvoiceReceiptEditor(
@@ -196,17 +224,8 @@ export function openInvoiceReceiptEditor(
   page: QuotationClientPage,
   kind: InvoiceReceiptDocKind,
   incomeId: string,
-): void {
-  const next = buildInvoiceReceiptHash(projectId, page, kind, incomeId);
-  try {
-    const loc = globalThis.window?.location;
-    if (!loc) return;
-    const current = loc.hash.replace(/^#/, '');
-    if (current === next) return;
-    loc.hash = `#${next}`;
-  } catch {
-    /* ignore */
-  }
+): boolean {
+  return applyLocationHash(buildInvoiceReceiptHash(projectId, page, kind, incomeId));
 }
 
 export function closeInvoiceReceiptEditor(projectId: string, page: QuotationClientPage): void {

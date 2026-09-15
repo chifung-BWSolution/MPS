@@ -1,3 +1,5 @@
+import { applyLocationHash, buildSameOriginHref } from './appNavigation';
+
 /** @deprecated Session fallback; detail is opened from the hash `id` query. */
 export const SELECTED_WEBSITE_KEY = 'mps_selected_website_id';
 
@@ -54,14 +56,7 @@ export function buildWebsiteDetailHref(
   websiteId: string,
   page: WebsiteListPage = 'list',
 ): string {
-  const hash = buildWebsiteDetailHash(websiteId, page);
-  try {
-    const loc = globalThis.window?.location;
-    if (!loc) return `#${hash}`;
-    return `${loc.pathname}${loc.search}#${hash}`;
-  } catch {
-    return `#${hash}`;
-  }
+  return buildSameOriginHref(buildWebsiteDetailHash(websiteId, page));
 }
 
 export function readWebsiteListPage(
@@ -83,17 +78,9 @@ export function readSelectedWebsiteId(
   }
 }
 
-export function setWebsiteDetailHash(page: WebsiteListPage, id?: string | null): void {
-  const next = buildWebsiteDetailHash(id?.trim() || '', page);
-  try {
-    const loc = globalThis.window?.location;
-    if (!loc) return;
-    const current = loc.hash.replace(/^#/, '').replace(/^\/+/, '');
-    if (current === next) return;
-    loc.hash = `#${next}`;
-  } catch {
-    /* ignore */
-  }
+/** @returns true when Ctrl/Cmd+click opened a new tab instead of this one */
+export function setWebsiteDetailHash(page: WebsiteListPage, id?: string | null): boolean {
+  return applyLocationHash(buildWebsiteDetailHash(id?.trim() || '', page));
 }
 
 export function writeSelectedWebsiteId(id: string | null): void {
@@ -106,13 +93,14 @@ export function writeSelectedWebsiteId(id: string | null): void {
 }
 
 /** Persist website id and open 網站+系統 detail via a shareable hash. */
+/** @returns true when Ctrl/Cmd+click opened a new tab instead of this one */
 export function openWebsiteDetail(
   websiteProfileId: string,
   _navigateTo?: (module: string, subModule?: string) => void,
   page: WebsiteListPage = 'list',
-): void {
+): boolean {
   const id = websiteProfileId.trim();
-  if (!id) return;
+  if (!id) return false;
   writeSelectedWebsiteId(id);
-  setWebsiteDetailHash(page, id);
+  return setWebsiteDetailHash(page, id);
 }

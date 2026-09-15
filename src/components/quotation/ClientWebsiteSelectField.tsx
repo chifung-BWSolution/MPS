@@ -8,18 +8,16 @@ import {
   websiteFormDataToProfile,
   type WebsiteFormData,
 } from '@/components/website/WebsiteFormModal';
-import { useApp } from '@/context/AppContext';
 import { useBrands } from '@/hooks/useBrands';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
-import type { PitchingProjectType } from '@/data/pitchingData';
 import {
   clientWebsiteNameForType,
   clientWebsiteNameStem,
   suggestedClientWebsiteFormDefaults,
   toClientWebsiteSelectOptions,
 } from '@/lib/clientWebsiteDefaults';
-import { openWebsiteDetail } from '@/lib/websiteNavigation';
+import { buildWebsiteDetailHref } from '@/lib/websiteNavigation';
 
 export function ClientWebsiteSelectField({
   value,
@@ -40,11 +38,10 @@ export function ClientWebsiteSelectField({
   companyNameEn?: string;
   clientName?: string;
   displayName?: string;
-  projectTypes: PitchingProjectType[];
+  projectTypes: string | readonly string[] | null | undefined;
   showOpenLink?: boolean;
   disabled?: boolean;
 }) {
-  const { navigateTo } = useApp();
   const { profiles, addProfile } = useWebsiteProfiles();
   const { companies } = useCompanies();
   const { brands } = useBrands();
@@ -113,13 +110,12 @@ export function ClientWebsiteSelectField({
           <p className="text-[11px] text-muted-foreground mt-1 truncate">{selected.domainUrl}</p>
         )}
         {showOpenLink && value && (
-          <button
-            type="button"
-            onClick={() => openWebsiteDetail(value, navigateTo)}
+          <a
+            href={buildWebsiteDetailHref(value)}
             className="mt-1.5 inline-flex items-center gap-1 text-[12px] text-teal-700 hover:text-teal-800"
           >
             <ExternalLink size={12} /> 開啟網站/系統
-          </button>
+          </a>
         )}
       </div>
       {showQuickAdd && (

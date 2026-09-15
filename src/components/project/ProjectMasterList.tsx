@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 
 type Props = {
   relatedTypes: ProjectRelatedType[];
-  onSelectProject?: (projectId: string) => void;
+  onSelectProject?: (projectId: string, event?: import('@/lib/appNavigation').ModifierClickEvent) => void;
   showTypeFilter?: boolean;
 };
 
@@ -111,7 +111,8 @@ export function ProjectMasterList({ relatedTypes, onSelectProject, showTypeFilte
               <tr
                 key={p.id}
                 className="border-t border-border/40 hover:bg-teal-50/40 cursor-pointer transition-colors"
-                onClick={() => onSelectProject?.(p.id)}
+                onClick={(e) => onSelectProject?.(p.id, e)}
+                onAuxClick={(e) => onSelectProject?.(p.id, e)}
               >
                 <td className="px-3 py-2.5">
                   <div className="text-[13px] font-medium">{p.name}</div>

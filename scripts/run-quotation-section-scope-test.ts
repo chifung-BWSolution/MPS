@@ -13,7 +13,6 @@ import {
   isQuotationSectionModule,
   MARKET_PROJECT_TYPES,
   matchesSectionProjectTypes,
-  mergeScopedProjectTypes,
   projectTypeOptionsForSection,
   SYSTEM_DEV_PROJECT_TYPES,
 } from '../src/lib/quotationSectionScope';
@@ -23,24 +22,28 @@ assert.equal(isQuotationSectionModule('system-dev'), true);
 assert.equal(isQuotationSectionModule('website'), false);
 
 assert.deepEqual([...allowedProjectTypesForSection('quotation')], ['bwl_event', 'bwg_gift']);
-assert.deepEqual([...allowedProjectTypesForSection('system-dev')], ['bwl_event', 'bwt_web']);
+assert.deepEqual([...allowedProjectTypesForSection('system-dev')], ['bwt_system', 'bwt_web']);
 assert.deepEqual(
   projectTypeOptionsForSection('quotation').map((opt) => opt.id),
   [...MARKET_PROJECT_TYPES],
 );
 assert.deepEqual(
   projectTypeOptionsForSection('system-dev').map((opt) => opt.id),
-  [...SYSTEM_DEV_PROJECT_TYPES],
+  ['bwt_web', 'bwt_system'],
 );
 
 assert.equal(matchesSectionProjectTypes(['bwl_event'], MARKET_PROJECT_TYPES), true);
 assert.equal(matchesSectionProjectTypes(['bwg_gift'], MARKET_PROJECT_TYPES), true);
 assert.equal(matchesSectionProjectTypes(['bwt_web'], MARKET_PROJECT_TYPES), false);
 assert.equal(matchesSectionProjectTypes(['bwt_system'], MARKET_PROJECT_TYPES), false);
+assert.equal(matchesSectionProjectTypes('bwl_event', MARKET_PROJECT_TYPES), true);
 assert.equal(matchesSectionProjectTypes(['bwl_event', 'bwt_web'], MARKET_PROJECT_TYPES), true);
 assert.equal(matchesSectionProjectTypes([], MARKET_PROJECT_TYPES), true);
+assert.equal(matchesSectionProjectTypes('', MARKET_PROJECT_TYPES), true);
 
 assert.equal(matchesSectionProjectTypes(['bwt_web'], SYSTEM_DEV_PROJECT_TYPES), true);
+assert.equal(matchesSectionProjectTypes(['bwt_system'], SYSTEM_DEV_PROJECT_TYPES), true);
+assert.equal(matchesSectionProjectTypes(['bwl_event'], SYSTEM_DEV_PROJECT_TYPES), false);
 assert.equal(matchesSectionProjectTypes(['bwg_gift'], SYSTEM_DEV_PROJECT_TYPES), false);
 
 const rows = [
@@ -56,16 +59,19 @@ assert.deepEqual(
 );
 assert.deepEqual(
   filterBySectionProjectTypes(rows, SYSTEM_DEV_PROJECT_TYPES).map((row) => row.id),
-  ['1', '2', '5'],
+  ['2', '4', '5'],
 );
 
 assert.deepEqual(
-  mergeScopedProjectTypes(['bwl_event', 'bwt_web'], ['bwg_gift'], MARKET_PROJECT_TYPES),
-  ['bwg_gift', 'bwt_web'],
-);
-assert.deepEqual(
-  mergeScopedProjectTypes(['bwl_event', 'bwg_gift'], ['bwt_web'], SYSTEM_DEV_PROJECT_TYPES),
-  ['bwt_web', 'bwg_gift'],
+  filterBySectionProjectTypes(
+    [
+      { id: 'a', projectTypeId: 'bwl_event' },
+      { id: 'b', projectTypeId: 'bwt_web' },
+      { id: 'c', projectTypeId: '' },
+    ],
+    MARKET_PROJECT_TYPES,
+  ).map((row) => row.id),
+  ['a', 'c'],
 );
 
 assert.equal(quotationSectionModuleFromHash('#quotation/pitching'), 'quotation');
@@ -101,6 +107,8 @@ assert.match(menu, /id: 'quotation'/);
 assert.match(menu, /label: '市場項目管理'/);
 assert.match(menu, /id: 'system-dev'/);
 assert.match(menu, /label: '系統開發管理'/);
+assert.match(menu, /id: 'project-types'/);
+assert.match(menu, /label: '項目類型', section: '設置'/);
 assert.doesNotMatch(menu, /label: '項目管理'/);
 
 const home = readFileSync(join(root, 'src/components/home.tsx'), 'utf8');

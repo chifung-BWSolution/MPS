@@ -370,7 +370,7 @@ export function ProjectSourceDialog({
       signedDate: form.signedDate || undefined,
       handoverDate: form.handoverDate || undefined,
       description: form.description.trim() || undefined,
-      projectTypes: form.projectTypes,
+      projectTypeId: form.projectTypeId,
       assignedPm: '',
       assignedPmName: selectedStaff?.label || '',
       mainPmId: form.mainPmId.trim() || undefined,

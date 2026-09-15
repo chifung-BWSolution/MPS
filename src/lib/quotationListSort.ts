@@ -24,7 +24,7 @@ export type QuotationListSortDir = 'asc' | 'desc';
 
 export type QuotationListSortable = Pick<
   PitchingRecord,
-  'inquiryDate' | 'status' | 'projectTypes' | 'displayName' | 'clientName' | 'mainPmName'
+  'inquiryDate' | 'status' | 'projectTypeId' | 'displayName' | 'clientName' | 'mainPmName'
 > & {
   income?: number | null;
   expense?: number | null;
@@ -63,7 +63,7 @@ export function getQuotationListSortValue(
     case 'remainingDays':
       return calcRemainingDays(record.inquiryDate, record.status, asOfDate);
     case 'projectTypes': {
-      const label = formatProjectTypes(record.projectTypes);
+      const label = formatProjectTypes(record.projectTypeId);
       return label === '—' ? null : label;
     }
     case 'displayName':

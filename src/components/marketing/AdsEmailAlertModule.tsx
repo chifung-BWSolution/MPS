@@ -33,9 +33,12 @@ import {
 } from '@/lib/adsEmailAlert';
 import { daysAgoIso, todayIso } from '@/lib/adsDailySeries';
 import {
+  buildFacebookAdsCampaignHref,
+  buildGoogleAdsCampaignHref,
   setFacebookAdsCampaignHash,
   setGoogleAdsCampaignHash,
 } from '@/lib/adsCampaignNavigation';
+import { openInNewTab, shouldOpenHrefInNewTab, type ModifierClickEvent } from '@/lib/appNavigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -107,18 +110,26 @@ function platformBadge(platform: AdsCostTrendCampaign['platform']) {
 function openCampaignDetail(
   campaign: AdsCostTrendCampaign,
   range: { preset: '30d' | 'custom'; from: string; to: string },
+  event?: ModifierClickEvent,
 ) {
-  if (campaign.platform === 'google') {
-    setGoogleAdsCampaignHash({
-      campaignKey: `${campaign.accountId}:${campaign.campaignId}`,
-      ...range,
-    });
-    return;
-  }
-  setFacebookAdsCampaignHash({
+  const opts = {
     campaignKey: `${campaign.accountId}:${campaign.campaignId}`,
     ...range,
-  });
+  };
+  if (shouldOpenHrefInNewTab(event)) {
+    event?.preventDefault?.();
+    openInNewTab(
+      campaign.platform === 'google'
+        ? buildGoogleAdsCampaignHref(opts)
+        : buildFacebookAdsCampaignHref(opts),
+    );
+    return;
+  }
+  if (campaign.platform === 'google') {
+    setGoogleAdsCampaignHash(opts);
+    return;
+  }
+  setFacebookAdsCampaignHash(opts);
 }
 
 function MetricStack({
@@ -487,7 +498,7 @@ export function AdsEmailAlertModule() {
                       periodMode={periodMode}
                       isOpen={isOpen}
                       onToggle={() => toggleBrand(row.brandId)}
-                      onOpenCampaign={(campaign) => openCampaignDetail(campaign, campaignDetailRange)}
+                      onOpenCampaign={(campaign, event) => openCampaignDetail(campaign, campaignDetailRange, event)}
                     />
                   );
                 })}
@@ -523,7 +534,7 @@ function BrandBlock({
   periodMode: AdsCostTrendPeriodMode;
   isOpen: boolean;
   onToggle: () => void;
-  onOpenCampaign: (campaign: AdsCostTrendCampaign) => void;
+  onOpenCampaign: (campaign: AdsCostTrendCampaign, event?: ModifierClickEvent) => void;
 }) {
   const { currentId, previousId } = comparisonBucketIds(buckets, periodMode);
   const latestCells = metricCellsForBucket(row, currentId, previousId);
@@ -581,7 +592,8 @@ function BrandBlock({
             key={`${row.brandId}:${campaign.key}`}
             role="button"
             tabIndex={0}
-            onClick={() => onOpenCampaign(campaign)}
+            onClick={(e) => onOpenCampaign(campaign, e)}
+            onAuxClick={(e) => onOpenCampaign(campaign, e)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();

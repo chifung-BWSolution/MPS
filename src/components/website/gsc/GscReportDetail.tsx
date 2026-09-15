@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { useApp } from '@/context/AppContext';
 import { resolveDateRange } from '@/hooks/useGoogleAdsData';
 import { useGscSiteDetail } from '@/hooks/useGscSiteDetail';
 import { gscPermissionLabel, isGscAnalyticsReadable } from '@/lib/analyticsToolConnections';
 import { setGscReportHash } from '@/lib/gscNavigation';
 import { formatGscCtr, formatGscPosition, pctChange } from '@/lib/gscReport';
-import { openWebsiteDetail } from '@/lib/websiteNavigation';
+import { buildWebsiteDetailHref } from '@/lib/websiteNavigation';
 import type { DateRangePreset } from '@/types/googleAds';
 import type { AdsKpiItem } from '@/components/marketing/campaign-detail/types';
 import { AdsKpiCard } from '@/components/marketing/campaign-detail/AdsKpiCard';
@@ -133,7 +132,6 @@ export function GscReportDetail({
   dataMinDate?: string | null;
   dataMaxDate?: string | null;
 }) {
-  const { navigateTo } = useApp();
   const [preset, setPreset] = useState<DateRangePreset>(initialPreset || '30d');
   const [customFrom, setCustomFrom] = useState(initialFrom || daysAgoIso(30));
   const [customTo, setCustomTo] = useState(initialTo || todayIso());
@@ -209,12 +207,8 @@ export function GscReportDetail({
             </p>
           </div>
           {site?.websiteProfileId ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => openWebsiteDetail(site.websiteProfileId as string, navigateTo)}
-            >
-              開啟網站資料
+            <Button asChild variant="outline" size="sm">
+              <a href={buildWebsiteDetailHref(site.websiteProfileId as string)}>開啟網站資料</a>
             </Button>
           ) : null}
         </div>

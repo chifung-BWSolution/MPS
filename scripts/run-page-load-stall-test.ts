@@ -153,6 +153,7 @@ const quotation = read('src/components/quotation/QuotationModule.tsx');
 assert.match(quotation, /if \(subModule === 'pitching'\)/);
 assert.match(quotation, /return <PitchingModule/);
 assert.match(quotation, /subModule === 'doc-types'/);
+assert.match(quotation, /subModule === 'project-types'/);
 assert.match(quotation, /QuotationDocsList/);
 assert.doesNotMatch(quotation, /useQuotations\(/);
 assert.doesNotMatch(quotation, /QuotationEntriesSection/);

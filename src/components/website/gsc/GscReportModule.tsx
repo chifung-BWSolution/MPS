@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { useApp } from '@/context/AppContext';
 import { resolveDateRange } from '@/hooks/useGoogleAdsData';
 import { useGscReport } from '@/hooks/useGscReport';
 import { gscPermissionLabel, isGscAnalyticsReadable } from '@/lib/analyticsToolConnections';
-import { parseGscReportHashQuery, setGscReportHash } from '@/lib/gscNavigation';
+import { buildGscReportHref, parseGscReportHashQuery, setGscReportHash } from '@/lib/gscNavigation';
+import { appHrefClickProps } from '@/lib/appNavigation';
 import { formatGscCtr, formatGscPosition } from '@/lib/gscReport';
-import { openWebsiteDetail } from '@/lib/websiteNavigation';
+import { buildWebsiteDetailHref } from '@/lib/websiteNavigation';
 import type { DateRangePreset } from '@/types/googleAds';
 import type { GscSiteRow } from '@/types/gsc';
 import { Button } from '@/components/ui/button';
@@ -103,7 +103,6 @@ function readInitialListRange() {
 }
 
 export function GscReportModule() {
-  const { navigateTo } = useApp();
   const [hashQuery, setHashQuery] = useState(() => parseGscReportHashQuery());
 
   useEffect(() => {
@@ -377,7 +376,15 @@ export function GscReportModule() {
                     key={row.siteUrl}
                     role="button"
                     tabIndex={0}
-                    onClick={() => openSite(row)}
+                    {...appHrefClickProps(
+                      buildGscReportHref({
+                        siteUrl: row.siteUrl,
+                        preset,
+                        from: range.from,
+                        to: range.to,
+                      }),
+                      () => openSite(row),
+                    )}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
@@ -389,16 +396,13 @@ export function GscReportModule() {
                     <td className="px-3 py-2.5">
                       {row.matchedDomain || row.websiteName ? (
                         row.websiteProfileId ? (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openWebsiteDetail(row.websiteProfileId as string, navigateTo);
-                            }}
+                          <a
+                            href={buildWebsiteDetailHref(row.websiteProfileId as string)}
+                            onClick={(e) => e.stopPropagation()}
                             className="text-left text-teal-700 hover:text-teal-800 hover:underline"
                           >
                             {row.matchedDomain || row.websiteName}
-                          </button>
+                          </a>
                         ) : (
                           <span>{row.matchedDomain || row.websiteName}</span>
                         )

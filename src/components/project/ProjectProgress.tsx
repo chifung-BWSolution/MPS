@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-export function ProjectProgress({ onSelectProject }: { onSelectProject?: (projectId: string) => void }) {
+export function ProjectProgress({ onSelectProject }: { onSelectProject?: (projectId: string, event?: import('@/lib/appNavigation').ModifierClickEvent) => void }) {
   const { projects, loading } = useProjects({ activeOnly: true });
   const { data: hoursMap, loading: hoursLoading } = useProjectHours(30);
   const { orgLine } = useProjectOrgLabels();
@@ -82,7 +82,8 @@ export function ProjectProgress({ onSelectProject }: { onSelectProject?: (projec
           <button
             key={p.id}
             type="button"
-            onClick={() => onSelectProject?.(p.id)}
+            onClick={(e) => onSelectProject?.(p.id, e)}
+            onAuxClick={(e) => onSelectProject?.(p.id, e)}
             className="w-full text-left bg-white rounded-md border border-[rgba(13,26,45,0.08)] p-4 hover:border-teal-200 transition-colors"
           >
             <div className="flex items-center justify-between gap-3 mb-2">

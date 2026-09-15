@@ -16,7 +16,8 @@ import {
   type WebsiteCategoryFilter,
   type WebsiteTypeFilter,
 } from '@/components/website/WebsiteListFilterBar';
-import { openWebsiteDetail } from '@/lib/websiteNavigation';
+import { appHrefClickProps } from '@/lib/appNavigation';
+import { buildWebsiteDetailHref, openWebsiteDetail } from '@/lib/websiteNavigation';
 import { groupAnalyticsAccountsByName, type WebsiteToolCell } from '@/lib/analyticsToolConnections';
 import type { WebsiteProfileFull } from '@/types/app';
 import { cn } from '@/lib/utils';
@@ -222,7 +223,7 @@ export function AnalyticsConnectionsModule() {
               return (
                 <tr
                   key={site.id}
-                  onClick={() => openWebsiteDetail(site.id)}
+                  {...appHrefClickProps(buildWebsiteDetailHref(site.id), () => openWebsiteDetail(site.id))}
                   className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer"
                 >
                   <td className="px-4 py-3">

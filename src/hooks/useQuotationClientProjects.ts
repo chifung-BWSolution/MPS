@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, peekCachedQuery } from '@/lib/queryCache';
-import { PITCHING_CURRENCY, optionalIsoDate, type PitchingExpenseItem, type PitchingProjectType, type PitchingRecord, type PitchingStatus } from '@/data/pitchingData';
+import { PITCHING_CURRENCY, optionalIsoDate, type PitchingExpenseItem, type PitchingRecord, type PitchingStatus } from '@/data/pitchingData';
 
 /** Supabase table shared by Pitching and Project pages */
 export const QUOTATION_CLIENT_PROJECT_TABLE = 'quotation_client_project';
@@ -34,7 +34,7 @@ type DbRow = {
   signed_date: string | null;
   handover_date: string | null;
   description: string | null;
-  project_types: string[] | null;
+  project_types: string | null;
   assigned_pm: string | null;
   assigned_pm_name: string | null;
   main_pm_id: string | null;
@@ -112,7 +112,7 @@ function mapRow(row: DbRow): PitchingRecord {
     signedDate: optionalIsoDate(row.signed_date),
     handoverDate: optionalIsoDate(row.handover_date),
     description: row.description ?? undefined,
-    projectTypes: (row.project_types || []) as PitchingProjectType[],
+    projectTypeId: row.project_types || '',
     asanaTaskGid: row.asana_task_gid ?? undefined,
     asanaProjectGid: row.asana_project_gid ?? undefined,
     asanaProjectName: row.asana_project_name ?? undefined,
@@ -145,7 +145,7 @@ export type QuotationClientProjectUpdate = Partial<
     | 'signedDate'
     | 'handoverDate'
     | 'description'
-    | 'projectTypes'
+    | 'projectTypeId'
     | 'assignedPmName'
     | 'mainPmId'
     | 'mainPmName'
@@ -223,7 +223,7 @@ export function useQuotationClientProjects() {
         signed_date: optionalIsoDate(data.signedDate) ?? null,
         handover_date: optionalIsoDate(data.handoverDate) ?? null,
         description: data.description ?? null,
-        project_types: data.projectTypes,
+        project_types: data.projectTypeId?.trim() || null,
         assigned_pm: data.assignedPm || null,
         assigned_pm_name: data.assignedPmName || '',
         main_pm_id: data.mainPmId?.trim() || null,
@@ -287,7 +287,7 @@ export function useQuotationClientProjects() {
     if (data.signedDate !== undefined) row.signed_date = optionalIsoDate(data.signedDate) ?? null;
     if (data.handoverDate !== undefined) row.handover_date = optionalIsoDate(data.handoverDate) ?? null;
     if (data.description !== undefined) row.description = data.description || null;
-    if (data.projectTypes !== undefined) row.project_types = data.projectTypes;
+    if (data.projectTypeId !== undefined) row.project_types = data.projectTypeId.trim() || null;
     if (data.assignedPmName !== undefined) row.assigned_pm_name = data.assignedPmName || '';
     if (data.mainPmId !== undefined) row.main_pm_id = data.mainPmId?.trim() || null;
     if (data.asanaLink !== undefined) row.asana_link = data.asanaLink || null;

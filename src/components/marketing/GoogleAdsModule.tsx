@@ -1,18 +1,19 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, Pencil, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { useApp } from '@/context/AppContext';
 import { resolveDateRange, useGoogleAdsData } from '@/hooks/useGoogleAdsData';
 import { useBrands } from '@/hooks/useBrands';
 import { normalizeGoogleAdsObjectives, type DateRangePreset, type GoogleAdsCampaign } from '@/types/googleAds';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { openWebsiteDetail } from '@/lib/websiteNavigation';
+import { buildWebsiteDetailHref } from '@/lib/websiteNavigation';
 import {
+  buildGoogleAdsCampaignHref,
   parseAdsCampaignHashQuery,
   setGoogleAdsCampaignHash,
 } from '@/lib/adsCampaignNavigation';
+import { appHrefClickProps } from '@/lib/appNavigation';
 import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
 import { GoogleAdsCampaignDetail } from './campaign-detail/GoogleAdsCampaignDetail';
@@ -145,7 +146,6 @@ function readInitialListRange() {
 }
 
 export function GoogleAdsModule() {
-  const { navigateTo } = useApp();
   const [hashQuery, setHashQuery] = useState(() => parseAdsCampaignHashQuery());
 
   useEffect(() => {
@@ -567,7 +567,15 @@ export function GoogleAdsModule() {
                     key={c.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => openCampaign(c)}
+                    {...appHrefClickProps(
+                      buildGoogleAdsCampaignHref({
+                        campaignKey: c.id,
+                        preset,
+                        from: range.from,
+                        to: range.to,
+                      }),
+                      () => openCampaign(c),
+                    )}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
@@ -592,18 +600,15 @@ export function GoogleAdsModule() {
                       {c.matchedWebsites.length > 0 ? (
                         <div className="space-y-0.5">
                           {c.matchedWebsites.map((w) => (
-                            <button
+                            <a
                               key={`${w.websiteProfileId}:${w.domain}`}
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openWebsiteDetail(w.websiteProfileId, navigateTo);
-                              }}
+                              href={buildWebsiteDetailHref(w.websiteProfileId)}
+                              onClick={(e) => e.stopPropagation()}
                               className="block text-left text-[12px] leading-snug text-teal-700 hover:text-teal-800 hover:underline"
                               title="開啟網站詳情"
                             >
                               {w.domain}
-                            </button>
+                            </a>
                           ))}
                         </div>
                       ) : (

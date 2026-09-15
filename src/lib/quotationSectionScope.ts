@@ -9,8 +9,8 @@ export type QuotationSectionModule = (typeof QUOTATION_SECTION_MODULES)[number];
 /** 市場項目管理：活動 + 禮品 */
 export const MARKET_PROJECT_TYPES = ['bwl_event', 'bwg_gift'] as const satisfies readonly PitchingProjectType[];
 
-/** 系統開發管理：活動 + 網頁 */
-export const SYSTEM_DEV_PROJECT_TYPES = ['bwl_event', 'bwt_web'] as const satisfies readonly PitchingProjectType[];
+/** 系統開發管理：系統 + 網頁 */
+export const SYSTEM_DEV_PROJECT_TYPES = ['bwt_system', 'bwt_web'] as const satisfies readonly PitchingProjectType[];
 
 export function isQuotationSectionModule(module: string): module is QuotationSectionModule {
   return module === 'quotation' || module === 'system-dev';
@@ -26,41 +26,25 @@ export function projectTypeOptionsForSection(module: string) {
 }
 
 /**
- * A record belongs to the section when it has no types yet (so it can be classified)
- * or at least one of the section's allowed types.
+ * A record belongs to the section when it has no type yet (so it can be classified)
+ * or its type is one of the section's allowed ids/codes.
  */
 export function matchesSectionProjectTypes(
-  types: readonly PitchingProjectType[] | null | undefined,
-  allowed: readonly PitchingProjectType[],
+  value: string | readonly string[] | null | undefined,
+  allowed: readonly string[],
 ): boolean {
-  const list = types ?? [];
-  if (list.length === 0) return true;
+  const list = value == null ? [] : Array.isArray(value) ? value : [value];
+  const refs = list.map((item) => String(item).trim()).filter(Boolean);
+  if (refs.length === 0) return true;
   const allowedSet = new Set<string>(allowed);
-  return list.some((type) => allowedSet.has(type));
+  return refs.some((ref) => allowedSet.has(ref));
 }
 
-export function filterBySectionProjectTypes<T extends { projectTypes: readonly PitchingProjectType[] }>(
+export function filterBySectionProjectTypes<T extends { projectTypes?: readonly string[]; projectTypeId?: string }>(
   records: T[],
-  allowed: readonly PitchingProjectType[],
+  allowed: readonly string[],
 ): T[] {
-  return records.filter((record) => matchesSectionProjectTypes(record.projectTypes, allowed));
-}
-
-/** Keep types outside this section; replace only the section's own types from the form. */
-export function mergeScopedProjectTypes(
-  existing: readonly PitchingProjectType[] | null | undefined,
-  selected: readonly PitchingProjectType[],
-  allowed: readonly PitchingProjectType[],
-): PitchingProjectType[] {
-  const allowedSet = new Set<string>(allowed);
-  const preserved = (existing ?? []).filter((type) => !allowedSet.has(type));
-  const next = selected.filter((type) => allowedSet.has(type));
-  const seen = new Set<PitchingProjectType>();
-  const out: PitchingProjectType[] = [];
-  for (const type of [...next, ...preserved]) {
-    if (seen.has(type)) continue;
-    seen.add(type);
-    out.push(type);
-  }
-  return out;
+  return records.filter((record) =>
+    matchesSectionProjectTypes(record.projectTypeId || record.projectTypes, allowed),
+  );
 }

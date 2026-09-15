@@ -46,7 +46,8 @@ export interface PitchingRecord {
   /** Project handover / delivery date (交付日期). */
   handoverDate?: string;
   description?: string;
-  projectTypes: PitchingProjectType[];
+  /** quotation_project_types.id */
+  projectTypeId?: string;
   asanaLink?: string;
   /** Optional FK to webandsystem_list.id (client website / system). */
   webandsystemListId?: string;
@@ -220,25 +221,48 @@ export function resolvePitchingFormClient(
   return { clientId: matched.value, clientName: matched.label };
 }
 
-export function formatProjectTypes(types: PitchingProjectType[]): string {
-  if (!types.length) return '—';
-  return types
-    .map((t) => PITCHING_PROJECT_TYPE_OPTIONS.find((o) => o.id === t)?.label ?? t)
+let projectTypeLabelOverrides: { id: string; label: string }[] = [];
+let projectTypeWebsiteRefs = new Set<string>(['bwt_web', 'bwt_system']);
+
+/** Labels from quotation_project_types, used when the lookup table has loaded. */
+export function setProjectTypeLabelOverrides(options: { id: string; label: string }[]) {
+  projectTypeLabelOverrides = options;
+}
+
+export function setProjectTypeWebsiteRefs(refs: readonly string[]) {
+  projectTypeWebsiteRefs = new Set(refs.length ? refs : ['bwt_web', 'bwt_system']);
+}
+
+function projectTypeRefs(value: string | readonly string[] | null | undefined): string[] {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  const single = String(value).trim();
+  return single ? [single] : [];
+}
+
+export function formatProjectTypes(value: string | readonly string[] | null | undefined): string {
+  const refs = projectTypeRefs(value);
+  if (!refs.length) return '—';
+  const options = projectTypeLabelOverrides.length ? projectTypeLabelOverrides : PITCHING_PROJECT_TYPE_OPTIONS;
+  return refs
+    .map((ref) => options.find((option) => option.id === ref)?.label ?? ref)
     .join('、');
 }
 
 /** Website/system picker is only relevant for BWT-網頁 or BWT-系統. */
-export function projectTypesNeedWebsiteLink(types: readonly PitchingProjectType[]): boolean {
-  return types.includes('bwt_web') || types.includes('bwt_system');
+export function projectTypesNeedWebsiteLink(
+  value: string | readonly string[] | null | undefined,
+): boolean {
+  return projectTypeRefs(value).some((ref) => projectTypeWebsiteRefs.has(ref));
 }
 
-/** Filter records by selected project type id (or all). */
+/** Filter records by selected project type id/code (or all). */
 export function matchesProjectTypeFilter(
-  types: PitchingProjectType[],
+  value: string | readonly string[] | null | undefined,
   filter: string,
 ): boolean {
   if (filter === 'all') return true;
-  return types.includes(filter as PitchingProjectType);
+  return projectTypeRefs(value).includes(filter);
 }
 
 /** Pitching estimated income / expense amounts are always stored and shown as HKD. */

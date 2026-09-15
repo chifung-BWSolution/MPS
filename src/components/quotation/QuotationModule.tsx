@@ -3,6 +3,7 @@ import { PitchingModule } from '@/components/quotation/PitchingModule';
 import { ProjectModule } from '@/components/quotation/ProjectModule';
 import { AsanaPendingModule } from '@/components/quotation/AsanaPendingModule';
 import { QuotationDocTypesSettings } from '@/components/quotation/QuotationDocTypesSettings';
+import { QuotationProjectTypesSettings } from '@/components/quotation/QuotationProjectTypesSettings';
 import { QuotationDocsList } from '@/components/quotation/QuotationDocsList';
 import { QuotationSectionProvider } from '@/context/QuotationSectionContext';
 import type { QuotationSectionModule } from '@/lib/quotationSectionScope';
@@ -34,6 +35,20 @@ function QuotationSectionPages({ subModule }: { subModule?: string }) {
           </p>
         </div>
         <QuotationDocTypesSettings />
+      </div>
+    );
+  }
+
+  if (subModule === 'project-types') {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-[32px] font-bold tracking-tight">項目類型</h1>
+          <p className="text-[14px] text-muted-foreground mt-1">
+            管理項目可選用的類型，以及 Pitching 編號前綴。
+          </p>
+        </div>
+        <QuotationProjectTypesSettings />
       </div>
     );
   }

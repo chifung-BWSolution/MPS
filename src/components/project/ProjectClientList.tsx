@@ -1,7 +1,7 @@
 import { FileText } from 'lucide-react';
 import { ProjectMasterList } from './ProjectMasterList';
 
-export function ProjectClientList({ onSelectProject }: { onSelectProject?: (projectId: string) => void }) {
+export function ProjectClientList({ onSelectProject }: { onSelectProject?: (projectId: string, event?: import('@/lib/appNavigation').ModifierClickEvent) => void }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">

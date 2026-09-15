@@ -1,6 +1,6 @@
 import type { WebsiteFormData } from '../components/website/WebsiteFormModal';
-import type { PitchingProjectType } from '../data/pitchingData';
 import type { ProfileType, WebsiteProfileFull } from '../types/app';
+import { resolveProjectTypeCode } from './quotationProjectTypes';
 import type { SearchableSelectOption } from '../components/ui/searchable-select';
 
 export const UNLINKED_WEBSITE_OPTION: SearchableSelectOption = {
@@ -8,9 +8,17 @@ export const UNLINKED_WEBSITE_OPTION: SearchableSelectOption = {
   label: '尚未連結',
 };
 
-export function clientWebsiteProfileType(projectTypes: PitchingProjectType[]): ProfileType {
-  const hasSystem = projectTypes.includes('bwt_system');
-  const hasWeb = projectTypes.includes('bwt_web');
+function projectTypeRefs(value: string | readonly string[] | null | undefined): string[] {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  const single = String(value).trim();
+  return single ? [single] : [];
+}
+
+export function clientWebsiteProfileType(projectTypes: string | readonly string[] | null | undefined): ProfileType {
+  const refs = projectTypeRefs(projectTypes).map((ref) => resolveProjectTypeCode(ref) || ref);
+  const hasSystem = refs.includes('bwt_system');
+  const hasWeb = refs.includes('bwt_web');
   if (hasSystem && !hasWeb) return 'system';
   return 'website';
 }
@@ -40,7 +48,7 @@ export function suggestedClientWebsiteFormDefaults(input: {
   companyNameEn?: string;
   clientName?: string;
   displayName?: string;
-  projectTypes: PitchingProjectType[];
+  projectTypes: string | readonly string[] | null | undefined;
 }): WebsiteFormData {
   const profileType = clientWebsiteProfileType(input.projectTypes);
   const stem = clientWebsiteNameStem(input);

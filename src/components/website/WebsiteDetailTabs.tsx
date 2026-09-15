@@ -11,6 +11,7 @@ import {
 } from '@/data/websiteDetailData';
 import { useSeoKeywords } from '@/hooks/useSeoKeywords';
 import { gscPermissionLabel, isGscAnalyticsReadable } from '@/lib/analyticsToolConnections';
+import { appHrefClickProps } from '@/lib/appNavigation';
 import { setGscReportHash } from '@/lib/gscNavigation';
 import { writeSelectedWebsiteId } from '@/lib/websiteNavigation';
 import {
@@ -24,7 +25,9 @@ import { GscOAuthPanel } from '@/components/website/GscOAuthPanel';
 import { useWebsitePaidAds } from '@/hooks/useWebsitePaidAds';
 import {
   buildFacebookAdsCampaignHash,
+  buildFacebookAdsCampaignHref,
   buildGoogleAdsCampaignHash,
+  buildGoogleAdsCampaignHref,
   setFacebookAdsCampaignHash,
   setGoogleAdsCampaignHash,
 } from '@/lib/adsCampaignNavigation';
@@ -663,7 +666,15 @@ export function WebsiteAdsTab({ site }: { site: WebsiteProfileFull }) {
                           key={c.key}
                           role="button"
                           tabIndex={0}
-                          onClick={() => openGoogleCampaign(c)}
+                          {...appHrefClickProps(
+                            buildGoogleAdsCampaignHref({
+                              campaignKey: c.key,
+                              preset,
+                              from: dateFrom,
+                              to: dateTo,
+                            }),
+                            () => openGoogleCampaign(c),
+                          )}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
                               e.preventDefault();
@@ -750,7 +761,13 @@ export function WebsiteAdsTab({ site }: { site: WebsiteProfileFull }) {
                           key={c.key}
                           role="button"
                           tabIndex={0}
-                          onClick={() => openFacebookCampaign(c)}
+                          {...appHrefClickProps(
+                            buildFacebookAdsCampaignHref({
+                              campaignKey: c.key,
+                              ...dateQuery,
+                            }),
+                            () => openFacebookCampaign(c),
+                          )}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
                               e.preventDefault();

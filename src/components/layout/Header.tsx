@@ -2,9 +2,10 @@ import { useApp, mainMenuItems } from '@/context/AppContext';
 import { Search, Bell, Plus, Home } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
+import { AppLink } from '@/components/AppLink';
 
 export function Header() {
-  const { user, sidebarCollapsed, currentModule, currentSubModule, navigateTo } = useApp();
+  const { user, sidebarCollapsed, currentModule, currentSubModule } = useApp();
   const [searchFocused, setSearchFocused] = useState(false);
 
   const currentMenu = mainMenuItems.find(m => m.id === currentModule);
@@ -19,13 +20,13 @@ export function Header() {
     >
       {/* Left: Breadcrumb */}
       <div className="flex items-center gap-2">
-        <button
-          onClick={() => navigateTo('dashboard')}
-          className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-teal-600 transition-colors"
+        <AppLink
+          module="dashboard"
+          className="flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-teal-600 transition-colors no-underline"
         >
           <Home size={13} />
           <span>首頁</span>
-        </button>
+        </AppLink>
         {currentModule !== 'dashboard' && (
           <>
             <span className="text-[13px] text-muted-foreground">/</span>

@@ -21,6 +21,7 @@ import {
   Code,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { AppLink } from '@/components/AppLink';
 
 const moduleIcons: Record<string, React.ElementType> = {
   'dashboard': LayoutDashboard,
@@ -56,7 +57,7 @@ function getRoleLabel(role: string) {
 }
 
 export function Sidebar() {
-  const { user, currentModule, currentSubModule, navigateTo, sidebarCollapsed, setSidebarCollapsed } = useApp();
+  const { user, currentModule, currentSubModule, sidebarCollapsed, setSidebarCollapsed } = useApp();
 
   // Get the current module's menu item
   const currentMenuData = mainMenuItems.find(m => m.id === currentModule);
@@ -87,17 +88,17 @@ export function Sidebar() {
       {/* Back to Dashboard shortcut */}
       {currentModule !== 'dashboard' && (
         <div className="px-2 pt-2">
-          <button
-            onClick={() => navigateTo('dashboard')}
+          <AppLink
+            module="dashboard"
             className={cn(
-              'w-full flex items-center gap-2 px-3 py-2 rounded-md text-[12px] text-muted-foreground hover:text-teal-600 hover:bg-teal-50 transition-all duration-200',
+              'w-full flex items-center gap-2 px-3 py-2 rounded-md text-[12px] text-muted-foreground hover:text-teal-600 hover:bg-teal-50 transition-all duration-200 no-underline',
               sidebarCollapsed && 'justify-center px-0'
             )}
             title={sidebarCollapsed ? '返回首頁' : undefined}
           >
             <Home size={14} className="shrink-0" />
             {!sidebarCollapsed && <span>返回首頁</span>}
-          </button>
+          </AppLink>
         </div>
       )}
 
@@ -125,10 +126,11 @@ export function Sidebar() {
                       {subItem.section}
                     </div>
                   )}
-                  <button
-                    onClick={() => navigateTo(currentModule, subItem.id)}
+                  <AppLink
+                    module={currentModule}
+                    subModule={subItem.id}
                     className={cn(
-                      'w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-all duration-200',
+                      'w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-all duration-200 no-underline',
                       isSubActive
                         ? 'bg-teal-50 text-teal-700 border border-teal-100'
                         : 'text-[#0d1a2d]/70 hover:bg-[#f5f8fc] hover:text-[#0d1a2d]',
@@ -150,7 +152,7 @@ export function Sidebar() {
                         isSubActive ? 'bg-teal-500' : 'bg-[#0d1a2d]/20'
                       )} />
                     )}
-                  </button>
+                  </AppLink>
                 </li>
               );
             })}
@@ -167,9 +169,10 @@ export function Sidebar() {
       {/* User Profile Section */}
       <div className="p-3 border-t border-[rgba(13,26,45,0.06)]">
         {!sidebarCollapsed ? (
-          <div
-            onClick={() => navigateTo('settings', 'profile')}
-            className="flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-[#f5f8fc] transition-colors cursor-pointer"
+          <AppLink
+            module="settings"
+            subModule="profile"
+            className="flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-[#f5f8fc] transition-colors cursor-pointer no-underline text-inherit"
             title="查看個人設定"
           >
             <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center shrink-0">
@@ -185,18 +188,19 @@ export function Sidebar() {
                 {getRoleLabel(user.role)}
               </span>
             </div>
-          </div>
+          </AppLink>
         ) : (
           <div className="flex justify-center">
-            <div
-              onClick={() => navigateTo('settings', 'profile')}
-              className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center cursor-pointer"
+            <AppLink
+              module="settings"
+              subModule="profile"
+              className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center cursor-pointer no-underline"
               title={`${user.name} - 查看個人設定`}
             >
               <span className="text-teal-700 text-xs font-bold">
                 {user.name.charAt(0)}
               </span>
-            </div>
+            </AppLink>
           </div>
         )}
       </div>

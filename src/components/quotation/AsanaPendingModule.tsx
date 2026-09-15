@@ -4,7 +4,9 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { useQuotationSection } from '@/context/QuotationSectionContext';
-import { filterBySectionProjectTypes, mergeScopedProjectTypes } from '@/lib/quotationSectionScope';
+import { filterBySectionProjectTypes } from '@/lib/quotationSectionScope';
+import { useQuotationProjectTypes } from '@/hooks/useQuotationProjectTypes';
+import { projectTypeIdFromCodes } from '@/lib/quotationProjectTypes';
 import { useAsanaSyncedTasks, type AsanaSyncedTask } from '@/hooks/useAsanaSyncedTasks';
 import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
@@ -50,6 +52,7 @@ function formDefaultsFromTask(
   clientOptions: QuotationClientSelectOption[],
   staffOptions: { value: string; label: string }[],
   fallbackPmId: string,
+  projectTypeId: string,
 ): PitchingFormValues {
   const matched = matchClientOption(task.clientName, clientOptions);
   const matchedPm =
@@ -63,7 +66,7 @@ function formDefaultsFromTask(
     signedDate: '',
     handoverDate: '',
     description: task.description,
-    projectTypes: task.projectTypes,
+    projectTypeId,
     mainPmId: matchedPm || fallbackPmId,
     webandsystemListId: '',
     asanaLink: task.asanaLink,
@@ -72,7 +75,8 @@ function formDefaultsFromTask(
 
 export function AsanaPendingModule() {
   const { systemUser } = useAuth();
-  const { allowedTypes, typeOptions } = useQuotationSection();
+  const { allowedCodes, typeOptions } = useQuotationSection();
+  const { types } = useQuotationProjectTypes();
   const {
     tasks,
     loading,
@@ -109,14 +113,15 @@ export function AsanaPendingModule() {
             clientOptions,
             staffOptions,
             systemUser?.staff_id ?? '',
+            projectTypeIdFromCodes(importingTask.projectTypes, types),
           )
         : null,
-    [importingTask, clientOptions, staffOptions, systemUser?.staff_id],
+    [importingTask, clientOptions, staffOptions, systemUser?.staff_id, types],
   );
 
   const sectionTasks = useMemo(
-    () => filterBySectionProjectTypes(tasks, allowedTypes),
-    [tasks, allowedTypes],
+    () => filterBySectionProjectTypes(tasks, allowedCodes),
+    [tasks, allowedCodes],
   );
   const sectionPendingCount = sectionTasks.filter((task) => !task.imported).length;
   const sectionImportedCount = sectionTasks.filter((task) => task.imported).length;
@@ -171,7 +176,7 @@ export function AsanaPendingModule() {
       signedDate: form.signedDate || undefined,
       handoverDate: form.handoverDate || undefined,
       description: form.description.trim() || undefined,
-      projectTypes: mergeScopedProjectTypes(importingTask.projectTypes, form.projectTypes, allowedTypes),
+      projectTypeId: form.projectTypeId,
       assignedPm: importingTask.assignedPm,
       assignedPmName: selectedStaff?.label || importingTask.assignedPmName || '',
       mainPmId: form.mainPmId.trim() || undefined,
@@ -303,7 +308,7 @@ export function AsanaPendingModule() {
         >
           <option value="all">全部項目類型</option>
           {typeOptions.map((opt) => (
-            <option key={opt.id} value={opt.id}>
+            <option key={opt.id} value={opt.code}>
               {opt.label}
             </option>
           ))}

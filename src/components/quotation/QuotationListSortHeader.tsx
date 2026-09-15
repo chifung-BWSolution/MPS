@@ -26,9 +26,18 @@ export const QUOTATION_LIST_MONEY_LABELS: Record<
   actual: { income: '總收入', expense: '總支出', gp: '實際 GP' },
 };
 
-export function useQuotationListSort<T extends QuotationListSortable>(records: T[]) {
-  const [sortKey, setSortKey] = useState<QuotationListSortKey>('inquiryDate');
-  const [sortDir, setSortDir] = useState<QuotationListSortDir>('desc');
+export function useQuotationListSort<T extends QuotationListSortable>(
+  records: T[],
+  controlled?: {
+    sortKey: QuotationListSortKey;
+    sortDir: QuotationListSortDir;
+    onSortChange: (key: QuotationListSortKey, dir: QuotationListSortDir) => void;
+  },
+) {
+  const [internalKey, setInternalKey] = useState<QuotationListSortKey>('inquiryDate');
+  const [internalDir, setInternalDir] = useState<QuotationListSortDir>('desc');
+  const sortKey = controlled?.sortKey ?? internalKey;
+  const sortDir = controlled?.sortDir ?? internalDir;
 
   const sorted = useMemo(
     () => sortQuotationListRecords(records, sortKey, sortDir),
@@ -37,8 +46,12 @@ export function useQuotationListSort<T extends QuotationListSortable>(records: T
 
   const onSort = (key: QuotationListSortKey) => {
     const next = nextQuotationListSort(sortKey, sortDir, key);
-    setSortKey(next.key);
-    setSortDir(next.dir);
+    if (controlled) {
+      controlled.onSortChange(next.key, next.dir);
+      return;
+    }
+    setInternalKey(next.key);
+    setInternalDir(next.dir);
   };
 
   return { sorted, sortKey, sortDir, onSort };
