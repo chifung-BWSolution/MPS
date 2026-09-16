@@ -2,9 +2,9 @@ export const SLA_DURATION_UNITS = ['days', 'hours', 'minutes'] as const;
 export type SlaDurationUnit = (typeof SLA_DURATION_UNITS)[number];
 
 export const SLA_DURATION_UNIT_LABELS: Record<SlaDurationUnit, string> = {
-  days: '日 Days',
-  hours: '小時 Hours',
-  minutes: '分鐘 Minutes',
+  days: '日',
+  hours: '小時',
+  minutes: '分鐘',
 };
 
 export type SlaDuration = {

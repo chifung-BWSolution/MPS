@@ -85,13 +85,25 @@ assert.match(pitching, /handleSlaPersist/);
 assert.match(pitching, /activeTab === 'sla'/);
 
 const tab = read('src/components/quotation/PitchingSlaTab.tsx');
+assert.match(tab, /IT 與系統可靠性指標/);
 assert.match(tab, /IT and System Reliability Metrics/);
-assert.match(tab, /Service Availability \(Uptime\)/);
-assert.match(tab, /Mean Time to Repair \(MTTR\)/);
+assert.match(tab, /zh="服務可用率"/);
+assert.match(tab, /en="Service Availability \(Uptime\)"/);
+assert.match(tab, /zh="平均修復時間"/);
+assert.match(tab, /en="Mean Time to Repair \(MTTR\)"/);
+assert.match(tab, /客戶支援與服務台指標/);
 assert.match(tab, /Customer Support and Help Desk Metrics/);
-assert.match(tab, /CS Opening Hours/);
-assert.match(tab, /First Response Time \(FRT\)/);
+assert.match(tab, /zh="客服開放時間"/);
+assert.match(tab, /en="CS Opening Hours"/);
+assert.match(tab, /zh="首次回應時間"/);
+assert.match(tab, /en="First Response Time \(FRT\)"/);
 assert.match(tab, /type="time"/);
+assert.match(tab, /w-\[4\.75rem\] shrink-0/);
 assert.match(tab, /onPersist\(nextSla\)/);
+
+const labels = read('src/lib/projectSla.ts');
+assert.match(labels, /days: '日'/);
+assert.match(labels, /hours: '小時'/);
+assert.match(labels, /minutes: '分鐘'/);
 
 console.log('pitching sla: ok');
