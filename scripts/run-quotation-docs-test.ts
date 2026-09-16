@@ -206,8 +206,9 @@ assert.match(list, /useQuotationClientProjects/);
 assert.match(list, /toQuotationClientProjectSelectOptions/);
 assert.match(list, /addDoc/);
 assert.match(list, /updateDoc/);
-assert.match(list, /deleteDoc/);
-assert.match(list, /DeleteConfirmModal/);
+assert.doesNotMatch(list, /deleteDoc/);
+assert.doesNotMatch(list, /DeleteConfirmModal/);
+assert.doesNotMatch(list, /Trash2/);
 assert.match(list, /新增文件/);
 assert.match(list, /請選擇客戶項目/);
 

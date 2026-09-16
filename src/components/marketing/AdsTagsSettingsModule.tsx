@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAdsTags } from '@/hooks/useAdsTags';
 import {
@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
+import { CrudModal } from '@/components/ui/crud-modal';
 import { cn } from '@/lib/utils';
 
 type TagForm = {
@@ -26,13 +26,12 @@ const emptyForm = (): TagForm => ({
 });
 
 export function AdsTagsSettingsModule() {
-  const { tags, loading, error, addTag, updateTag, deleteTag } = useAdsTags();
+  const { tags, loading, error, addTag, updateTag } = useAdsTags();
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<AdsTag | null>(null);
   const [form, setForm] = useState<TagForm>(emptyForm());
   const [saving, setSaving] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<AdsTag | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -90,17 +89,6 @@ export function AdsTagsSettingsModule() {
       return;
     }
     toast.success(tag.isActive ? '已停用標籤' : '已啟用標籤');
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!deleteTarget) return;
-    const result = await deleteTag(deleteTarget.id);
-    if (!result.ok) {
-      toast.error('刪除標籤失敗', { description: result.error });
-      return;
-    }
-    toast.success('已刪除標籤');
-    setDeleteTarget(null);
   };
 
   return (
@@ -191,14 +179,6 @@ export function AdsTagsSettingsModule() {
                         >
                           <Pencil size={14} />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(tag)}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-rose-50 hover:text-rose-700"
-                          title="刪除"
-                        >
-                          <Trash2 size={14} />
-                        </button>
                       </div>
                     </td>
                   </tr>
@@ -271,14 +251,6 @@ export function AdsTagsSettingsModule() {
           </div>
         </div>
       </CrudModal>
-
-      <DeleteConfirmModal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={() => void handleConfirmDelete()}
-        itemName={deleteTarget?.name || ''}
-        canDelete
-      />
     </div>
   );
 }

@@ -55,8 +55,8 @@ assert.match(page, /新增類型/);
 assert.match(page, /顯示名稱/);
 assert.match(page, /代碼前綴/);
 assert.match(page, /識別碼/);
-assert.match(page, /countUsage/);
-assert.match(page, /DeleteConfirmModal/);
+assert.doesNotMatch(page, /DeleteConfirmModal/);
+assert.doesNotMatch(page, /Trash2/);
 
 const createMigration = read('supabase/migrations/20260915031835_create_quotation_project_types.sql');
 assert.match(createMigration, /CREATE TABLE IF NOT EXISTS public\.quotation_project_types/);

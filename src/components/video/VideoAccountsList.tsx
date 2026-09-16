@@ -18,7 +18,6 @@ import {
   filterVchannelAccounts,
 } from '@/lib/vchannelAccountList';
 import {
-  VchannelAccountDeleteModal,
   VchannelAccountFormModal,
   accountToForm,
   emptyAccountForm,
@@ -67,14 +66,12 @@ export function VideoAccountsList() {
     error: accountsError,
     addAccount,
     updateAccount,
-    deleteAccount,
   } = useVchannelAccounts();
 
   const [saving, setSaving] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [accountForm, setAccountForm] = useState(emptyAccountForm);
-  const [deleteAccountTarget, setDeleteAccountTarget] = useState<{ id: string; label: string } | null>(null);
   const [accountSortKey, setAccountSortKey] = useState<AccountSortKey>('vchannel');
   const [accountSortDir, setAccountSortDir] = useState<AccountSortDir>('asc');
   const [searchQuery, setSearchQuery] = useState('');
@@ -127,12 +124,6 @@ export function VideoAccountsList() {
       return;
     }
     setShowAccountModal(false);
-  };
-
-  const confirmDeleteAccount = async () => {
-    if (!deleteAccountTarget) return;
-    await deleteAccount(deleteAccountTarget.id);
-    setDeleteAccountTarget(null);
   };
 
   const toggleAccountActive = async (account: typeof accounts[0]) => {
@@ -273,15 +264,6 @@ export function VideoAccountsList() {
                   <td className="px-3 py-2">
                     <div className="flex gap-2">
                       <button onClick={() => openEditAccount(acc)} className="text-teal-600 hover:underline">編輯</button>
-                      <button
-                        onClick={() => setDeleteAccountTarget({
-                          id: acc.id,
-                          label: `${formatChannelCodes(acc.vchannelCodes)} / ${accountPlatformLabel(acc.platform)}`,
-                        })}
-                        className="text-rose-500 hover:underline"
-                      >
-                        刪除
-                      </button>
                     </div>
                   </td>
                 </tr>
@@ -303,11 +285,6 @@ export function VideoAccountsList() {
         setForm={setAccountForm}
         saving={saving}
         onSave={saveAccount}
-      />
-      <VchannelAccountDeleteModal
-        target={deleteAccountTarget}
-        onClose={() => setDeleteAccountTarget(null)}
-        onConfirm={confirmDeleteAccount}
       />
     </div>
   );

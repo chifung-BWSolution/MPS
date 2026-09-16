@@ -11,7 +11,6 @@ import {
   List,
   Building2,
   Edit,
-  Trash2,
   X,
   FolderKanban,
   Tags,
@@ -19,12 +18,11 @@ import {
 } from 'lucide-react';
 
 export function CompanyManagementSettings() {
-  const { companies: companiesData, loading, addCompany, updateCompany, deleteCompany } = useCompanies();
+  const { companies: companiesData, loading, addCompany, updateCompany } = useCompanies();
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Company | null>(null);
 
   const filteredCompanies = companiesData.filter((c) => {
     const q = searchQuery.toLowerCase();
@@ -56,7 +54,6 @@ export function CompanyManagementSettings() {
 
   const handleAdd = () => { setEditingCompany(null); setIsModalOpen(true); };
   const handleEdit = (company: Company) => { setEditingCompany(company); setIsModalOpen(true); };
-  const handleDeleteClick = (company: Company) => setDeleteTarget(company);
 
   const handleSave = async (formData: Partial<Company>) => {
     if (editingCompany) {
@@ -92,13 +89,6 @@ export function CompanyManagementSettings() {
     }
     setIsModalOpen(false);
     setEditingCompany(null);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (deleteTarget) {
-      await deleteCompany(deleteTarget.id);
-    }
-    setDeleteTarget(null);
   };
 
   if (loading) {
@@ -167,7 +157,6 @@ export function CompanyManagementSettings() {
           getYearProgress={getYearProgress}
           maskBankAccount={maskBankAccount}
           onEdit={handleEdit}
-          onDelete={handleDeleteClick}
         />
       ) : (
         <TableView
@@ -175,7 +164,6 @@ export function CompanyManagementSettings() {
           getBrandCount={getBrandCount}
           getActiveProjectCount={getActiveProjectCount}
           onEdit={handleEdit}
-          onDelete={handleDeleteClick}
         />
       )}
 
@@ -201,58 +189,6 @@ export function CompanyManagementSettings() {
           onClose={() => { setIsModalOpen(false); setEditingCompany(null); }}
         />
       )}
-
-      {deleteTarget && (
-        <DeleteConfirmModal
-          name={deleteTarget.companyNameZh}
-          onConfirm={handleConfirmDelete}
-          onCancel={() => setDeleteTarget(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-// === Delete Confirm Modal ===
-function DeleteConfirmModal({
-  name,
-  onConfirm,
-  onCancel,
-}: {
-  name: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[200] p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-[400px]">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border/50">
-          <h3 className="text-[16px] font-bold text-[#0d1a2d]">確認刪除</h3>
-          <button onClick={onCancel} className="p-1.5 rounded-md hover:bg-muted transition-colors">
-            <X size={16} className="text-muted-foreground" />
-          </button>
-        </div>
-        <div className="px-6 py-5">
-          <p className="text-[14px] text-[#0d1a2d]">
-            確定要刪除 <span className="font-bold">「{name}」</span> 的項目嗎？
-          </p>
-          <p className="text-[12px] text-muted-foreground mt-1.5">此操作無法復原。</p>
-        </div>
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border/50 bg-muted/20">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 rounded-lg text-[13px] font-medium text-muted-foreground hover:text-[#0d1a2d] hover:bg-muted transition-colors"
-          >
-            否
-          </button>
-          <button
-            onClick={onConfirm}
-            className="px-5 py-2 bg-rose-600 text-white rounded-lg text-[13px] font-medium hover:bg-rose-700 transition-colors duration-200 active:scale-[0.97]"
-          >
-            是，確認刪除
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -265,7 +201,6 @@ function CardView({
   getYearProgress,
   maskBankAccount,
   onEdit,
-  onDelete,
 }: {
   companies: Company[];
   getBrandCount: (id: string) => number;
@@ -273,7 +208,6 @@ function CardView({
   getYearProgress: (id: string) => number;
   maskBankAccount: (account: string) => string;
   onEdit: (company: Company) => void;
-  onDelete: (company: Company) => void;
 }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -365,13 +299,6 @@ function CardView({
                 <Edit size={12} />
                 編輯
               </button>
-              <button
-                onClick={() => onDelete(company)}
-                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 transition-colors"
-              >
-                <Trash2 size={12} />
-                刪除
-              </button>
             </div>
           </div>
         );
@@ -386,13 +313,11 @@ function TableView({
   getBrandCount,
   getActiveProjectCount,
   onEdit,
-  onDelete,
 }: {
   companies: Company[];
   getBrandCount: (id: string) => number;
   getActiveProjectCount: (id: string) => number;
   onEdit: (company: Company) => void;
-  onDelete: (company: Company) => void;
 }) {
   return (
     <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] overflow-hidden">
@@ -452,13 +377,6 @@ function TableView({
                       className="text-teal-600 hover:text-teal-700 text-[12px] font-medium hover:underline"
                     >
                       編輯
-                    </button>
-                    <span className="text-border">|</span>
-                    <button
-                      onClick={() => onDelete(company)}
-                      className="text-rose-600 hover:text-rose-700 text-[12px] font-medium hover:underline"
-                    >
-                      刪除
                     </button>
                   </div>
                 </td>

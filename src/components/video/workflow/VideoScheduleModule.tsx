@@ -35,7 +35,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 type TalentOption = { id: string; displayName: string };
 
 export function VideoScheduleModule() {
-  const { loading: workflowLoading, getPreReviewVideos, getById, addVideo, updateVideo, deleteVideo, advanceToProduction } = useVideoWorkflow();
+  const { loading: workflowLoading, getPreReviewVideos, getById, addVideo, updateVideo, advanceToProduction } = useVideoWorkflow();
   const { channels } = useVchannels();
 
   const [vchannelFilter, setVchannelFilter] = useState('all');
@@ -171,10 +171,6 @@ export function VideoScheduleModule() {
 
   const handleEnterProduction = async (videoId: string): Promise<string | null> => {
     return advanceToProduction(videoId);
-  };
-
-  const handleDelete = async (videoId: string): Promise<string | null> => {
-    return deleteVideo(videoId);
   };
 
   const weekRowCount = Math.max(1, Math.ceil(calendarDays.length / 7));
@@ -360,7 +356,6 @@ export function VideoScheduleModule() {
         onClose={() => { setModalOpen(false); setEditingId(null); }}
         onSave={handleSave}
         onEnterProduction={editingVideo?.stage === 'prep' || !editingVideo ? handleEnterProduction : undefined}
-        onDelete={editingVideo ? handleDelete : undefined}
       />
     </div>
   );

@@ -13,6 +13,7 @@ import {
   monthGridDays,
   periodRange,
   periodTitle,
+  resolveImportantDateProjectName,
   sectionFromBrand,
   shiftPeriod,
   startOfLocalWeek,
@@ -41,6 +42,8 @@ assert.deepEqual(defaultKindFilters(), {
   expense: true,
   schedule: true,
 });
+assert.equal(resolveImportantDateProjectName({ displayName: '  現場演出  ' }), '現場演出');
+assert.equal(resolveImportantDateProjectName({ displayName: '' }), '');
 
 const events = buildImportantDateEvents({
   today: '2026-09-16',
@@ -126,6 +129,7 @@ const income = events.find((event) => event.id === 'income:inc-1');
 assert.ok(income);
 assert.equal(income?.brand, 'BWL');
 assert.equal(income?.title, '主要收入 第1期');
+assert.equal(income?.projectName, 'BWL 活動');
 assert.equal(income?.overdue, true);
 assert.equal(income?.section, 'quotation');
 assert.equal(importantDateProjectHash(income!), 'quotation/projects?id=p-bwl');
@@ -134,13 +138,17 @@ const expense = events.find((event) => event.id === 'expense:exp-1');
 assert.ok(expense);
 assert.equal(expense?.brand, 'BWT');
 assert.equal(expense?.title, 'Hosting 第2期');
+assert.equal(expense?.projectName, 'BWT 網站');
 assert.equal(expense?.section, 'system-dev');
 assert.equal(importantDateProjectHash(expense!), 'system-dev/pitching?id=p-bwt');
 
 const schedule = events.find((event) => event.id === 'schedule:sch-1');
 assert.ok(schedule);
 assert.equal(schedule?.title, '初稿提交');
+assert.equal(schedule?.projectName, 'BWL 活動');
 assert.equal(schedule?.brand, 'BWL');
+
+assert.ok(events.every((event) => event.projectName === 'BWL 活動' || event.projectName === 'BWT 網站'));
 
 const bwlOnly = filterImportantDateEvents(events, { BWL: true, BWT: false }, defaultKindFilters());
 assert.equal(bwlOnly.every((event) => event.brand !== 'BWT'), true);
@@ -187,6 +195,9 @@ assert.match(page, /defaultBrandFilters\(moduleId\)/);
 assert.match(page, /useState<ImportantDateView>\('month'\)/);
 assert.match(page, /IMPORTANT_DATE_BRANDS/);
 assert.match(page, /IMPORTANT_DATE_KIND_LABELS/);
+assert.match(page, /text-black">\{event\.projectName\}/);
+assert.match(page, /\{event\.projectName\}/);
+assert.doesNotMatch(page, /projectCode \|\| event\.projectName/);
 
 const lib = read('src/lib/importantDates.ts');
 assert.match(lib, /項目日期/);
@@ -194,6 +205,8 @@ assert.match(lib, /收入到期/);
 assert.match(lib, /支出到期/);
 assert.match(lib, /自訂排程/);
 assert.match(lib, /section === 'system-dev' \? 'BWT' : 'BWL'/);
+assert.match(lib, /resolveImportantDateProjectName/);
+assert.match(lib, /quotation_client_project\.display_name/);
 
 const hook = read('src/hooks/useImportantDates.ts');
 assert.match(hook, /INCOMES_TABLE/);

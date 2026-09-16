@@ -14,7 +14,6 @@ import {
   List,
   Tags,
   Edit,
-  Trash2,
   X,
   FolderKanban,
   TrendingUp,
@@ -27,14 +26,13 @@ function companyKey(c: Company) {
 }
 
 export function BrandManagementSettings() {
-  const { brands: brandsData, loading: brandsLoading, addBrand, updateBrand, deleteBrand } = useBrands();
+  const { brands: brandsData, loading: brandsLoading, addBrand, updateBrand } = useBrands();
   const { companies, loading: companiesLoading } = useCompanies();
   const [viewMode, setViewMode] = useState<'card' | 'table'>('table');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCompanyId, setFilterCompanyId] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Brand | null>(null);
 
   const filteredBrands = brandsData.filter((b) => {
     const q = searchQuery.toLowerCase();
@@ -70,7 +68,6 @@ export function BrandManagementSettings() {
 
   const handleAdd = () => { setEditingBrand(null); setIsModalOpen(true); };
   const handleEdit = (brand: Brand) => { setEditingBrand(brand); setIsModalOpen(true); };
-  const handleDeleteClick = (brand: Brand) => setDeleteTarget(brand);
 
   const handleToggleActive = async (brand: Brand) => {
     const next = !brand.isActive;
@@ -108,18 +105,6 @@ export function BrandManagementSettings() {
     }
     setIsModalOpen(false);
     setEditingBrand(null);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (deleteTarget) {
-      const err = await deleteBrand(deleteTarget.id);
-      if (err) {
-        toast.error('刪除失敗', { description: err.message });
-        return;
-      }
-      toast.success('品牌已刪除');
-    }
-    setDeleteTarget(null);
   };
 
   const loading = brandsLoading || companiesLoading;
@@ -206,7 +191,6 @@ export function BrandManagementSettings() {
           getActiveProjectCount={getActiveProjectCount}
           getYearPlanProgress={getYearPlanProgress}
           onEdit={handleEdit}
-          onDelete={handleDeleteClick}
           onToggleActive={handleToggleActive}
         />
       ) : (
@@ -217,7 +201,6 @@ export function BrandManagementSettings() {
           getActiveProjectCount={getActiveProjectCount}
           getYearPlanProgress={getYearPlanProgress}
           onEdit={handleEdit}
-          onDelete={handleDeleteClick}
           onToggleActive={handleToggleActive}
         />
       )}
@@ -244,57 +227,6 @@ export function BrandManagementSettings() {
           onClose={() => { setIsModalOpen(false); setEditingBrand(null); }}
         />
       )}
-
-      {deleteTarget && (
-        <DeleteConfirmModal
-          name={deleteTarget.displayName}
-          onConfirm={handleConfirmDelete}
-          onCancel={() => setDeleteTarget(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-function DeleteConfirmModal({
-  name,
-  onConfirm,
-  onCancel,
-}: {
-  name: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 m-0 bg-black/40 flex items-center justify-center z-[200] p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-[400px]">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border/50">
-          <h3 className="text-[16px] font-bold text-[#0d1a2d]">確認刪除</h3>
-          <button onClick={onCancel} className="p-1.5 rounded-md hover:bg-muted transition-colors">
-            <X size={16} className="text-muted-foreground" />
-          </button>
-        </div>
-        <div className="px-6 py-5">
-          <p className="text-[14px] text-[#0d1a2d]">
-            確定要刪除 <span className="font-bold">「{name}」</span> 嗎？
-          </p>
-          <p className="text-[12px] text-muted-foreground mt-1.5">此操作無法復原。</p>
-        </div>
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border/50 bg-muted/20">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 rounded-lg text-[13px] font-medium text-muted-foreground hover:text-[#0d1a2d] hover:bg-muted transition-colors"
-          >
-            否
-          </button>
-          <button
-            onClick={onConfirm}
-            className="px-5 py-2 bg-rose-600 text-white rounded-lg text-[13px] font-medium hover:bg-rose-700 transition-colors duration-200 active:scale-[0.97]"
-          >
-            是，確認刪除
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -327,7 +259,6 @@ function BrandCardView({
   getActiveProjectCount,
   getYearPlanProgress,
   onEdit,
-  onDelete,
   onToggleActive,
 }: {
   brands: Brand[];
@@ -336,7 +267,6 @@ function BrandCardView({
   getActiveProjectCount: (id: string) => number;
   getYearPlanProgress: (id: string) => { progress: number; target: number } | null;
   onEdit: (brand: Brand) => void;
-  onDelete: (brand: Brand) => void;
   onToggleActive: (brand: Brand) => void;
 }) {
   return (
@@ -413,13 +343,6 @@ function BrandCardView({
                 <Edit size={12} />
                 編輯
               </button>
-              <button
-                onClick={() => onDelete(brand)}
-                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 transition-colors"
-              >
-                <Trash2 size={12} />
-                刪除
-              </button>
             </div>
           </div>
         );
@@ -435,7 +358,6 @@ function BrandTableView({
   getActiveProjectCount,
   getYearPlanProgress,
   onEdit,
-  onDelete,
   onToggleActive,
 }: {
   brands: Brand[];
@@ -444,7 +366,6 @@ function BrandTableView({
   getActiveProjectCount: (id: string) => number;
   getYearPlanProgress: (id: string) => { progress: number; target: number } | null;
   onEdit: (brand: Brand) => void;
-  onDelete: (brand: Brand) => void;
   onToggleActive: (brand: Brand) => void;
 }) {
   return (
@@ -501,13 +422,6 @@ function BrandTableView({
                         className="text-teal-600 hover:text-teal-700 text-[12px] font-medium hover:underline"
                       >
                         編輯
-                      </button>
-                      <span className="text-border">|</span>
-                      <button
-                        onClick={() => onDelete(brand)}
-                        className="text-rose-600 hover:text-rose-700 text-[12px] font-medium hover:underline"
-                      >
-                        刪除
                       </button>
                     </div>
                   </td>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Eye, EyeOff, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Eye, EyeOff, Pencil, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { useVideoLoginMethods } from '@/hooks/useVideoLoginMethods';
 import {
@@ -19,7 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
+import { CrudModal } from '@/components/ui/crud-modal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 
@@ -81,7 +81,7 @@ function maskPassword(password: string) {
 }
 
 export function VideoLoginMethodsModule() {
-  const { items, loading, error, addItem, updateItem, deleteItem } = useVideoLoginMethods();
+  const { items, loading, error, addItem, updateItem } = useVideoLoginMethods();
   const [search, setSearch] = useState('');
   const [methodFilter, setMethodFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -90,7 +90,6 @@ export function VideoLoginMethodsModule() {
   const [form, setForm] = useState<LoginMethodForm>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<VideoLoginMethod | null>(null);
 
   const loginMethodMetrics = useMemo(() => loginMethodListMetrics(items), [items]);
   const filtered = useMemo(
@@ -165,17 +164,6 @@ export function VideoLoginMethodsModule() {
       return;
     }
     toast.success(item.isActive ? '已停用登入方式' : '已啟用登入方式');
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!deleteTarget) return;
-    const result = await deleteItem(deleteTarget.id);
-    if (!result.ok) {
-      toast.error('刪除登入方式失敗', { description: result.error });
-      return;
-    }
-    toast.success('已刪除登入方式');
-    setDeleteTarget(null);
   };
 
   return (
@@ -341,14 +329,6 @@ export function VideoLoginMethodsModule() {
                           title="編輯"
                         >
                           <Pencil size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(item)}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-rose-50 hover:text-rose-700"
-                          title="刪除"
-                        >
-                          <Trash2 size={14} />
                         </button>
                       </div>
                     </td>
@@ -525,14 +505,6 @@ export function VideoLoginMethodsModule() {
           </div>
         </div>
       </CrudModal>
-
-      <DeleteConfirmModal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={() => void handleConfirmDelete()}
-        itemName={deleteTarget?.displayName || ''}
-        canDelete
-      />
     </div>
   );
 }

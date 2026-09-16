@@ -1,12 +1,11 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Edit, Trash2, KeyRound, Loader2 } from 'lucide-react';
+import { Plus, Search, Edit, KeyRound, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EmptyDash, MutedFieldBadge } from '@/components/ui/nullable-badge';
 import { formatLinkedLoginMethods, type Vchannel } from '@/types/vchannel';
 import { useVchannels } from '@/hooks/useVchannels';
 import { useVchannelAccounts } from '@/hooks/useVchannelAccounts';
 import { useBrands } from '@/hooks/useBrands';
-import { DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   CHANNEL_LIST_ACCOUNT_COLUMNS,
@@ -59,7 +58,7 @@ function ChannelNameCell({ internalName, publicName }: { internalName: string; p
 }
 
 export function VideoChannelsList() {
-  const { channels, loading, error, fetchChannels, deleteChannel } = useVchannels();
+  const { channels, loading, error, fetchChannels } = useVchannels();
   const { brands } = useBrands();
   const {
     accounts,
@@ -88,9 +87,6 @@ export function VideoChannelsList() {
   const [expandedChannelId, setExpandedChannelId] = useState<string | null>(null);
 
   const [channelDialog, setChannelDialog] = useState<{ mode: 'add' } | { mode: 'edit'; channel: Vchannel } | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Vchannel | null>(null);
-  const [deleteReasons, setDeleteReasons] = useState<string[]>([]);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [loginMethodsChannel, setLoginMethodsChannel] = useState<Vchannel | null>(null);
@@ -143,24 +139,6 @@ export function VideoChannelsList() {
 
   const openEditChannel = (channel: Vchannel) => {
     setChannelDialog({ mode: 'edit', channel });
-  };
-
-  const handleDeleteClick = (channel: Vchannel) => {
-    const linked = accountsForChannel(channel.channelCode);
-    setDeleteTarget(channel);
-    setDeleteReasons(linked.length > 0 ? [`此頻道有 ${linked.length} 條平台帳號記錄，請先刪除帳號。`] : []);
-    setShowDeleteModal(true);
-  };
-
-  const confirmDelete = async () => {
-    if (!deleteTarget || deleteReasons.length > 0) return;
-    const err = await deleteChannel(deleteTarget.id);
-    if (err) {
-      setDeleteReasons([err.message]);
-      return;
-    }
-    setShowDeleteModal(false);
-    setDeleteTarget(null);
   };
 
   const openAddAccount = (prefillCode?: string) => {
@@ -319,7 +297,6 @@ export function VideoChannelsList() {
                           <div className="flex items-center gap-1">
                             <button onClick={() => openEditChannel(channel)} className="p-1 hover:bg-muted rounded" title="編輯"><Edit size={12} className="text-teal-600" /></button>
                             <button onClick={() => setLoginMethodsChannel(channel)} className="p-1 hover:bg-muted rounded" title="帳戶登入方式"><KeyRound size={12} className="text-blue-600" /></button>
-                            <button onClick={() => handleDeleteClick(channel)} className="p-1 hover:bg-muted rounded" title="刪除"><Trash2 size={12} className="text-rose-500" /></button>
                           </div>
                         </td>
                       </tr>
@@ -411,15 +388,6 @@ export function VideoChannelsList() {
           await fetchChannels();
           await fetchAccounts();
         }}
-      />
-
-      <DeleteConfirmModal
-        isOpen={showDeleteModal}
-        onClose={() => setShowDeleteModal(false)}
-        onConfirm={confirmDelete}
-        itemName={deleteTarget?.internalName || ''}
-        canDelete={deleteReasons.length === 0}
-        reasons={deleteReasons}
       />
 
       <VchannelAccountFormModal

@@ -108,7 +108,7 @@ function EventChip({
         {event.kind === 'income' || event.kind === 'expense' ? `$ ${event.title}` : event.title}
       </div>
       <div className={cn('truncate text-current/70', compact ? 'text-[9px] leading-3' : 'text-[10px] leading-3')}>
-        {event.projectCode || event.projectName}
+        {event.projectName}
         {amount ? ` · ${amount}` : ''}
         {event.overdue ? ' · 逾期' : ''}
       </div>
@@ -144,7 +144,10 @@ function ListEventRow({ event }: { event: ImportantDateEvent }) {
             <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-700">逾期</span>
           )}
         </div>
-        <div className="mt-0.5 truncate text-[13px] text-muted-foreground">{event.subtitle}</div>
+        <div className="mt-0.5 truncate text-[13px] text-black">{event.projectName}</div>
+        {event.subtitle && event.subtitle !== event.projectName && (
+          <div className="mt-0.5 truncate text-[13px] text-muted-foreground">{event.subtitle}</div>
+        )}
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
           {event.projectCode && <span>{event.projectCode}</span>}
           {event.pmName && <span>{event.pmName}</span>}

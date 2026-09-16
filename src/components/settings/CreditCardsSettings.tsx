@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CreditCard, Edit, Plus, Save, Trash2 } from 'lucide-react';
+import { CreditCard, Edit, Plus, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useCompanies } from '@/hooks/useCompanies';
@@ -22,7 +22,7 @@ import {
   type CreditCardInput,
   type CreditCardRecord,
 } from '@/lib/creditCards';
-import { CrudModal, CrudModalFooter, DeleteConfirmModal } from '@/components/ui/crud-modal';
+import { CrudModal, CrudModalFooter } from '@/components/ui/crud-modal';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Switch } from '@/components/ui/switch';
 import type { Brand, Company } from '@/types/app';
@@ -80,13 +80,12 @@ function toInput(draft: Draft): CreditCardInput {
 }
 
 export function CreditCardsSettings() {
-  const { cards, loading, error, addCard, updateCard, deleteCard } = useCreditCards();
+  const { cards, loading, error, addCard, updateCard } = useCreditCards();
   const { companies, loading: companiesLoading } = useCompanies();
   const { brands, loading: brandsLoading } = useBrands();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<CreditCardRecord | null>(null);
-  const [deletingCard, setDeletingCard] = useState<CreditCardRecord | null>(null);
   const [saving, setSaving] = useState(false);
 
   const visibleCards = useMemo(() => {
@@ -122,17 +121,6 @@ export function CreditCardsSettings() {
     toast.success(editingCard ? '信用卡已更新' : '信用卡已新增');
     setIsModalOpen(false);
     setEditingCard(null);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!deletingCard) return;
-    const { error: err } = await deleteCard(deletingCard.id);
-    if (err) {
-      toast.error('刪除失敗', { description: err.message });
-      return;
-    }
-    toast.success('信用卡已刪除');
-    setDeletingCard(null);
   };
 
   if (loading || companiesLoading || brandsLoading) {
@@ -218,13 +206,6 @@ export function CreditCardsSettings() {
                   >
                     <Edit size={13} />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeletingCard(card)}
-                    className="text-muted-foreground hover:text-rose-500 p-1 rounded hover:bg-rose-50"
-                  >
-                    <Trash2 size={13} />
-                  </button>
                 </div>
                 <div className="flex items-start justify-between mb-3 pr-14">
                   <div className="flex items-start gap-2 min-w-0">
@@ -302,19 +283,6 @@ export function CreditCardsSettings() {
           }}
         />
       )}
-
-      <DeleteConfirmModal
-        isOpen={Boolean(deletingCard)}
-        onClose={() => setDeletingCard(null)}
-        onConfirm={() => void handleConfirmDelete()}
-        itemName={deletingCard ? cardTitle(deletingCard) : ''}
-        canDelete
-        description={
-          deletingCard
-            ? `確定要刪除「${cardTitle(deletingCard)}」（•••• ${deletingCard.lastFour}）嗎？此操作無法撤銷。`
-            : undefined
-        }
-      />
     </div>
   );
 }

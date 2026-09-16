@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, type ReactNode } from 'react';
-import { Search, Plus, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil, Clock, FolderOpen, Wallet, Banknote, PieChart, CalendarDays } from 'lucide-react';
+import { Search, Plus, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil, Clock, FolderOpen, Wallet, Banknote, PieChart, CalendarDays, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -61,6 +61,7 @@ import { PitchingCostAnalysisTab } from '@/components/quotation/PitchingCostAnal
 import { PitchingFollowUpsTab } from '@/components/quotation/PitchingFollowUpsTab';
 import { PitchingWorkHoursTab } from '@/components/quotation/PitchingWorkHoursTab';
 import { PitchingScheduleTab } from '@/components/quotation/PitchingScheduleTab';
+import { PitchingSlaTab } from '@/components/quotation/PitchingSlaTab';
 import { PitchingStatusConversionModal } from '@/components/quotation/PitchingStatusConversionModal';
 import { allowedStatusTargets, isAllowedStatusTransition, needsConversionPopup } from '@/lib/clientProjectStatus';
 import { QuotationBvCard } from '@/components/quotation/QuotationBvCard';
@@ -963,7 +964,9 @@ export function PitchingDetail({
   onEdit: () => void;
   onSave: (id: string, data: QuotationClientProjectUpdate) => Promise<{ error: { message: string } | null }>;
 }) {
-  const [activeTab, setActiveTab] = useState<'info' | 'schedule' | 'followups' | 'hours' | 'docs' | 'income' | 'budget' | 'expense' | 'cost'>('info');
+  const [activeTab, setActiveTab] = useState<
+    'info' | 'schedule' | 'followups' | 'hours' | 'docs' | 'income' | 'budget' | 'expense' | 'cost' | 'sla'
+  >('info');
   const [draft, setDraft] = useState<DetailDraft>(() => draftFromRecord(record, clientOptions));
   const [saving, setSaving] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<PitchingStatus | null>(null);
@@ -983,6 +986,12 @@ export function PitchingDetail({
     // Reset when the viewed row changes — not when the client list refreshes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record.id, record.updatedAt]);
+
+  useEffect(() => {
+    if (draft.status !== 'confirmed' && activeTab === 'sla') {
+      setActiveTab('info');
+    }
+  }, [draft.status, activeTab]);
 
   const remaining = calcRemainingDays(draft.inquiryDate, draft.status);
 
@@ -1053,6 +1062,9 @@ export function PitchingDetail({
     estimatedExpenses?: PitchingExpenseItem[];
   }) => persist(patch, '預計收入支出已更新');
 
+  const handleSlaPersist = async (sla: QuotationClientProjectUpdate['sla']) =>
+    persist({ sla }, 'SLA 已更新');
+
   const closeDocEditor = () => {
     closeInvoiceReceiptEditor(record.id, clientPage);
     setDocEditor(null);
@@ -1073,17 +1085,21 @@ export function PitchingDetail({
     );
   }
 
-  const tabs = [
-    { id: 'info', label: '基本資訊', icon: FileText },
-    { id: 'schedule', label: '項目排程', icon: CalendarDays },
-    { id: 'followups', label: '跟進記錄', icon: MessageSquare },
-    { id: 'hours', label: '工作時數', icon: Clock },
-    { id: 'docs', label: '項目文件', icon: FolderOpen },
-    { id: 'budget', label: '預計收入支出', icon: DollarSign },
-    { id: 'income', label: '收入', icon: Wallet },
-    { id: 'expense', label: '支出', icon: Banknote },
-    { id: 'cost', label: '成本分析', icon: PieChart },
-  ] as const;
+  const showSlaTab = draft.status === 'confirmed';
+  const tabs = (
+    [
+      { id: 'info', label: '基本資訊', icon: FileText },
+      { id: 'schedule', label: '項目排程', icon: CalendarDays },
+      { id: 'followups', label: '跟進記錄', icon: MessageSquare },
+      { id: 'hours', label: '工作時數', icon: Clock },
+      { id: 'docs', label: '項目文件', icon: FolderOpen },
+      { id: 'sla', label: 'SLA', icon: ShieldCheck },
+      { id: 'budget', label: '預計收入支出', icon: DollarSign },
+      { id: 'income', label: '收入', icon: Wallet },
+      { id: 'expense', label: '支出', icon: Banknote },
+      { id: 'cost', label: '成本分析', icon: PieChart },
+    ] as const
+  ).filter((tab) => tab.id !== 'sla' || showSlaTab);
 
   return (
     <div className="space-y-6">
@@ -1249,6 +1265,10 @@ export function PitchingDetail({
 
       {activeTab === 'docs' && (
         <PitchingDocsTab projectId={record.id} />
+      )}
+
+      {showSlaTab && activeTab === 'sla' && (
+        <PitchingSlaTab sla={record.sla} saving={saving} onPersist={handleSlaPersist} />
       )}
 
       {activeTab === 'income' && (

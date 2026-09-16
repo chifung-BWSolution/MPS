@@ -33,8 +33,8 @@ const page = read('src/components/quotation/QuotationDocTypesSettings.tsx');
 assert.match(page, /useQuotationDocTypes/);
 assert.match(page, /新增類型/);
 assert.match(page, /顯示名稱/);
-assert.match(page, /countUsage/);
-assert.match(page, /DeleteConfirmModal/);
+assert.doesNotMatch(page, /DeleteConfirmModal/);
+assert.doesNotMatch(page, /Trash2/);
 
 const migration = read('supabase/migrations/20260907082750_create_quotation_doc_types.sql');
 assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.quotation_doc_types/);

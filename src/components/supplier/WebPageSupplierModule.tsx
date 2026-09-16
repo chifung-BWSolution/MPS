@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Search, Plus, Edit, Trash2 } from 'lucide-react';
+import { Search, Plus, Edit } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
 import { useSupplierTypes } from '@/hooks/useSupplierTypes';
-import { useBacklinkPurchases } from '@/hooks/useBacklinkPurchases';
 import type { WebPageSupplier } from '@/types/marketingOps';
-import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
+import { CrudModal } from '@/components/ui/crud-modal';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -33,21 +32,14 @@ export function WebPageSupplierModule() {
     suppliers: webPageSuppliers,
     addSupplier,
     updateSupplier,
-    deleteSupplier,
   } = useWebPageSuppliers();
   const { types: supplierTypes } = useSupplierTypes();
-  const { purchases: backlinkPurchases } = useBacklinkPurchases();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editing, setEditing] = useState<WebPageSupplier | null>(null);
   const [form, setForm] = useState<Omit<WebPageSupplier, 'id'>>(emptyForm);
-  const [deleteTarget, setDeleteTarget] = useState<WebPageSupplier | null>(null);
-  const [deleteCheck, setDeleteCheck] = useState<{ canDelete: boolean; reasons: string[] }>({
-    canDelete: true,
-    reasons: [],
-  });
   const [saving, setSaving] = useState(false);
 
   const typeMap = useMemo(
@@ -106,31 +98,6 @@ export function WebPageSupplierModule() {
     }
     setShowEditModal(false);
     setEditing(null);
-  };
-
-  const handleDeleteClick = (supplier: WebPageSupplier) => {
-    const refCount = backlinkPurchases.filter((p) => p.webSupplierId === supplier.id).length;
-    if (refCount > 0) {
-      setDeleteCheck({
-        canDelete: false,
-        reasons: [`此網頁供應商仍有 ${refCount} 筆反向連結購買紀錄，無法刪除`],
-      });
-    } else {
-      setDeleteCheck({ canDelete: true, reasons: [] });
-    }
-    setDeleteTarget(supplier);
-  };
-
-  const confirmDelete = async () => {
-    if (!deleteTarget || !deleteCheck.canDelete || saving) return;
-    setSaving(true);
-    const error = await deleteSupplier(deleteTarget.id);
-    setSaving(false);
-    if (error) {
-      toast.error(`刪除失敗：${error.message}`);
-      return;
-    }
-    setDeleteTarget(null);
   };
 
   const renderFormFields = (
@@ -337,9 +304,6 @@ export function WebPageSupplierModule() {
                       <button onClick={() => handleEdit(supplier)} className="p-1 hover:bg-muted rounded transition-colors" title="編輯">
                         <Edit size={12} className="text-teal-600" />
                       </button>
-                      <button onClick={() => handleDeleteClick(supplier)} className="p-1 hover:bg-muted rounded transition-colors" title="刪除">
-                        <Trash2 size={12} className="text-rose-500" />
-                      </button>
                     </div>
                   </td>
                 </tr>
@@ -379,15 +343,6 @@ export function WebPageSupplierModule() {
           </Button>
         </div>
       </CrudModal>
-
-      <DeleteConfirmModal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={confirmDelete}
-        itemName={deleteTarget?.displayName || ''}
-        canDelete={deleteCheck.canDelete}
-        reasons={deleteCheck.reasons}
-      />
     </div>
   );
 }

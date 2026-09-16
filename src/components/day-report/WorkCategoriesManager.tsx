@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Edit2, Trash2, GripVertical, Globe, Building2, FolderOpen, Tag, Check, X, Info, Save, MonitorSmartphone, Megaphone, Video, Users } from 'lucide-react';
+import { Plus, Edit2, GripVertical, Globe, Building2, FolderOpen, Tag, Check, X, Info, Save, MonitorSmartphone, Megaphone, Video, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { WorkCategory } from '@/data/dayReportDataV2';
@@ -166,7 +166,7 @@ const availableColors = [
 // Main Work Categories Manager
 // ============================
 export function WorkCategoriesManager() {
-  const { types: categories, loading, addType, updateType, deleteType } = useDayReportTypes();
+  const { types: categories, loading, addType, updateType } = useDayReportTypes();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{
     label: string;
@@ -187,7 +187,6 @@ export function WorkCategoriesManager() {
     relationType: 'webandsystem' as CategoryRelationType,
     associatedModules: [] as ProjectModuleGroup[],
   });
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   function getDefaultDescription(cat: WorkCategory): string {
     switch (cat) {
@@ -271,15 +270,6 @@ export function WorkCategoriesManager() {
     setNewForm({ label: '', description: '', icon: '📋', color: 'text-blue-700', bg: 'bg-blue-100', relationType: 'webandsystem', associatedModules: [] });
     setShowAddNew(false);
     toast.success(`已新增「${newLabel}」工作類型`, { description: '新類型已加入列表並預設啟用' });
-  };
-
-  const deleteCategory = async (id: string) => {
-    const cat = categories.find(c => c.id === id);
-    await deleteType(id);
-    setDeleteConfirmId(null);
-    if (cat) {
-      toast.success(`已刪除「${cat.label}」工作類型`, { description: '此類型已從列表中移除' });
-    }
   };
 
   const toggleModule = (modules: ProjectModuleGroup[], module: ProjectModuleGroup): ProjectModuleGroup[] => {
@@ -505,7 +495,6 @@ export function WorkCategoriesManager() {
             const relationConfig = relationTypeLabels[cat.relationType] ?? relationTypeLabels.none;
             const RelationIcon = relationConfig.icon;
             const associatedModules = Array.isArray(cat.associatedModules) ? cat.associatedModules : [];
-            const isConfirmingDelete = deleteConfirmId === cat.id;
 
             return (
               <div key={cat.id} className={cn('px-5 py-3 transition-colors', isEditing ? 'bg-amber-50/50' : 'hover:bg-muted/10', !cat.isActive && 'opacity-50')}>
@@ -674,20 +663,6 @@ export function WorkCategoriesManager() {
                       <button onClick={() => startEditing(cat)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-blue-50 hover:bg-blue-100 transition-colors text-blue-700 text-[11px] font-medium border border-blue-200" title="編輯此類型">
                         <Edit2 size={12} />編輯
                       </button>
-                      {isConfirmingDelete ? (
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => deleteCategory(cat.id)} className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-rose-100 text-rose-600 hover:bg-rose-200 transition-colors text-[11px] font-medium border border-rose-200" title="確認刪除">
-                            <Check size={11} />確認
-                          </button>
-                          <button onClick={() => setDeleteConfirmId(null)} className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors text-[11px] font-medium border border-gray-200" title="取消">
-                            <X size={11} />取消
-                          </button>
-                        </div>
-                      ) : (
-                        <button onClick={() => setDeleteConfirmId(cat.id)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-md hover:bg-rose-50 transition-colors text-muted-foreground hover:text-rose-600 text-[11px] font-medium border border-border/40 hover:border-rose-200" title="刪除此類型">
-                          <Trash2 size={12} />刪除
-                        </button>
-                      )}
                     </div>
                   </div>
                 )}

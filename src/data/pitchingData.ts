@@ -2,6 +2,8 @@
  * Pitching Records Data & Types
  */
 
+import type { ProjectSla } from '@/lib/projectSla';
+
 export type PitchingStatus = 'initial' | 'following_up' | 'confirmed' | 'closed';
 
 export type PitchingProjectType = 'bwl_event' | 'bwt_web' | 'bwt_system' | 'bwg_gift';
@@ -74,6 +76,8 @@ export interface PitchingRecord {
   lastFollowUpDate?: string;
   estimatedIncome?: number;
   estimatedExpenses?: PitchingExpenseItem[];
+  /** Service level agreement JSON stored on quotation_client_project.sla */
+  sla?: ProjectSla;
   createdAt: string;
   updatedAt: string;
   /** @deprecated legacy field */

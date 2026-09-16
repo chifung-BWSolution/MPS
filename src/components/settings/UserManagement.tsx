@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import {
-  Search, Edit, Trash2, Shield, Users, UserPlus, UserCheck,
+  Search, Edit, Shield, Users, UserPlus, UserCheck,
   X, Save, RefreshCw, Chrome, CheckCircle2, Clock,
   AlertTriangle
 } from 'lucide-react';
@@ -208,28 +208,6 @@ export function UserManagement() {
     }
   };
 
-  // Remove system user
-  const handleRemoveUser = async (user: SystemUser) => {
-    if (!confirm(`確定要移除「${user.display_name}」的系統存取權限嗎？\n此操作不會影響員工列表中的資料。`)) return;
-    try {
-      try {
-        await invokeProvisionStaffAuth({ mode: 'disable', usersId: user.id });
-      } catch (provisionErr) {
-        console.warn('Failed to disable Auth user:', provisionErr);
-      }
-      const { error } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', user.id);
-
-      if (error) throw error;
-      setSystemUsers(prev => prev.filter(u => u.id !== user.id));
-      toast.success(`已移除「${user.display_name}」的系統存取權限`);
-    } catch (err: any) {
-      toast.error('刪除失敗', { description: err.message });
-    }
-  };
-
   // Filter users
   const filteredUsers = systemUsers.filter(u => {
     const matchSearch = !searchTerm ||
@@ -414,13 +392,6 @@ export function UserManagement() {
                           title="編輯"
                         >
                           <Edit size={13} />
-                        </button>
-                        <button
-                          onClick={() => handleRemoveUser(user)}
-                          className="text-muted-foreground hover:text-rose-500"
-                          title="移除"
-                        >
-                          <Trash2 size={13} />
                         </button>
                       </div>
                     </td>

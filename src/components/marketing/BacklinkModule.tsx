@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, Search, ArrowLeft, Eye, Edit, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, Search, ArrowLeft, Eye, Edit, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBacklinkPurchases } from '@/hooks/useBacklinkPurchases';
 import { useBrands } from '@/hooks/useBrands';
@@ -22,7 +22,7 @@ import {
 } from '@/lib/backlinkCurrency';
 import type { BacklinkPurchase } from '@/types/marketingOps';
 import { BrandFieldBadge } from '@/components/ui/nullable-badge';
-import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
+import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -177,7 +177,6 @@ export function BacklinkModule() {
     purchases: backlinkPurchases,
     addPurchase,
     updatePurchase,
-    deletePurchase,
   } = useBacklinkPurchases();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -192,7 +191,6 @@ export function BacklinkModule() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [form, setForm] = useState<PurchaseForm>(() => createEmptyForm());
   const [editing, setEditing] = useState<(BacklinkPurchase & { notes?: string }) | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<BacklinkPurchase | null>(null);
   const [saving, setSaving] = useState(false);
 
   const supplierMap = useMemo(() => new Map(webPageSuppliers.map((s) => [s.id, s])), [webPageSuppliers]);
@@ -407,18 +405,6 @@ export function BacklinkModule() {
     }
     setShowEditModal(false);
     setEditing(null);
-  };
-
-  const confirmDelete = async () => {
-    if (!deleteTarget || saving) return;
-    setSaving(true);
-    const error = await deletePurchase(deleteTarget.id);
-    setSaving(false);
-    if (error) {
-      toast.error(`刪除失敗：${error.message}`);
-      return;
-    }
-    setDeleteTarget(null);
   };
 
   if (selectedRecord) {
@@ -700,9 +686,6 @@ export function BacklinkModule() {
                     <button onClick={() => handleEdit(record)} className="p-1 hover:bg-muted rounded" title="編輯">
                       <Edit size={12} className="text-teal-600" />
                     </button>
-                    <button onClick={() => setDeleteTarget(record)} className="p-1 hover:bg-muted rounded" title="刪除">
-                      <Trash2 size={12} className="text-rose-500" />
-                    </button>
                   </div>
                 </td>
               </tr>
@@ -737,19 +720,6 @@ export function BacklinkModule() {
           <Button className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSaveEdit}>儲存</Button>
         </div>
       </CrudModal>
-
-      <DeleteConfirmModal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={confirmDelete}
-        itemName={
-          deleteTarget
-            ? `${supplierMap.get(deleteTarget.webSupplierId)?.displayName || '紀錄'} · ${deleteTarget.purchaseDate}`
-            : ''
-        }
-        canDelete={true}
-        reasons={[]}
-      />
     </div>
   );
 }

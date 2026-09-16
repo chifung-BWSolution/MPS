@@ -32,8 +32,8 @@ assert.match(page, /SUPPLIER_TYPE_CATEGORIES/);
 assert.match(page, /新增類型/);
 assert.match(page, /顯示名稱/);
 assert.match(page, /分類/);
-assert.match(page, /countUsage/);
-assert.match(page, /DeleteConfirmModal/);
+assert.doesNotMatch(page, /DeleteConfirmModal/);
+assert.doesNotMatch(page, /Trash2/);
 
 const migration = read('supabase/migrations/20260903082743_expand_suppliers_and_create_supplier_types.sql');
 assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.supplier_types/);

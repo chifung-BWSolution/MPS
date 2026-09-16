@@ -1802,7 +1802,7 @@ export function SubmitReportPage() {
                   ).map(t => (<option key={t.id} value={t.id}>{t.icon} {t.label}</option>))}
                 </select>
               </div>
-              <div className="lg:col-span-2">
+              <div className="md:col-span-2 lg:col-span-5">
                 {(() => {
                   const required = isRelationRequired(formRelationType);
                   const label =
@@ -1855,16 +1855,16 @@ export function SubmitReportPage() {
                   placeholder="0"
                 />
               </div>
-              <div className="lg:col-span-3">
-                <label className="text-[13px] font-semibold text-muted-foreground block mb-1">工作內容 *</label>
-                <textarea
-                  value={form.title}
-                  onChange={(e) => updateForm('title', e.target.value)}
-                  rows={3}
-                  className="w-full px-2.5 py-2 border border-border rounded-md text-[15px] resize-y leading-relaxed"
-                  placeholder="簡述工作內容...（可換行）"
-                />
-              </div>
+            </div>
+            <div className="mb-3">
+              <label className="text-[13px] font-semibold text-muted-foreground block mb-1">工作內容 *</label>
+              <textarea
+                value={form.title}
+                onChange={(e) => updateForm('title', e.target.value)}
+                rows={3}
+                className="w-full px-2.5 py-2 border border-border rounded-md text-[15px] resize-y leading-relaxed"
+                placeholder="簡述工作內容...（可換行）"
+              />
             </div>
 
             <div className="mb-3 p-3 rounded-md bg-purple-50/50 border border-purple-100">

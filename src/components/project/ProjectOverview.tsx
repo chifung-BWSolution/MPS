@@ -1,8 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import {
-  Globe, Server, Users, Video, FolderKanban, Plus, Search, Pencil, Trash2, Star,
+  Globe, Server, Users, Video, FolderKanban, Plus, Search, Pencil, Star,
 } from 'lucide-react';
-import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
 import { useProjectHours } from '@/hooks/useProjectHours';
@@ -20,7 +19,6 @@ import {
 } from '@/hooks/useProjects';
 import { ProjectCategoryBadge } from '@/components/ui/project-category-badge';
 import { BrandFieldBadge, CompanyFieldBadge, EmptyDash, StatusFieldBadge } from '@/components/ui/nullable-badge';
-import { DeleteConfirmModal } from '@/components/ui/crud-modal';
 import { ProjectSourceDialog } from '@/components/project/ProjectSourceDialog';
 
 type KindFilter = 'all' | Exclude<ProjectKind, 'manual'>;
@@ -100,7 +98,7 @@ function LevelBadge({ level }: { level?: ProjectLevel | null }) {
 
 export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projectId: string, event?: import('@/lib/appNavigation').ModifierClickEvent) => void }) {
   const { selectedCompanyId, selectedBrandId } = useApp();
-  const { projects, loading, reload, deleteProject } = useProjects();
+  const { projects, loading, reload } = useProjects();
   const { companies, brands, companyLabel, brandLabel } = useProjectOrgLabels();
   const { data: hoursMap } = useProjectHours(30);
 
@@ -111,7 +109,6 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
   const [statusFilter, setStatusFilter] = useState('all');
   const [levelFilter, setLevelFilter] = useState<ProjectLevel[]>([]);
   const [dialog, setDialog] = useState<{ mode: 'add' } | { mode: 'edit'; project: MasterProject } | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<MasterProject | null>(null);
 
   const uniqueCompanies = useMemo(() => {
     const ids = new Set(projects.map(p => p.companyListId).filter((id): id is string => !!id));
@@ -163,23 +160,6 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
   const toggleLevelFilter = (lvl: ProjectLevel) => {
     setLevelFilter(prev => prev.includes(lvl) ? prev.filter(x => x !== lvl) : [...prev, lvl]);
   };
-
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    const result = await deleteProject(deleteTarget);
-    if (result.error) {
-      toast.error('刪除失敗', { description: result.error.message });
-      return;
-    }
-    toast.success('項目已刪除');
-    setDeleteTarget(null);
-  };
-
-  const deleteDescription = deleteTarget
-    ? deleteTarget.relatedType === 'manual'
-      ? `確定要刪除「${deleteTarget.name}」嗎？此操作無法撤銷。`
-      : `「${deleteTarget.name}」來自來源模組（${projectKindLabel(projectKindOf(deleteTarget))}）。刪除後會一併從來源資料移除，且無法撤銷。`
-    : '';
 
   return (
     <div>
@@ -361,14 +341,6 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
                           >
                             <Pencil size={13} className="text-muted-foreground" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteTarget(project)}
-                            className="p-1.5 hover:bg-muted rounded-md transition-colors"
-                            title="刪除項目"
-                          >
-                            <Trash2 size={13} className="text-rose-500" />
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -398,14 +370,6 @@ export function ProjectOverview({ onSelectProject }: { onSelectProject?: (projec
           }}
         />
       )}
-      <DeleteConfirmModal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={() => { void handleDelete(); }}
-        itemName={deleteTarget?.name || ''}
-        canDelete
-        description={deleteDescription}
-      />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Plus, Phone, Mail, Building2, Pencil, Trash2, Loader2 } from 'lucide-react';
+import { Search, Plus, Phone, Mail, Building2, Pencil, Loader2 } from 'lucide-react';
 import { BrandFieldBadge, StatusFieldBadge } from '@/components/ui/nullable-badge';
 import { toast } from 'sonner';
 import { ClientFormModal } from '@/components/crm/ClientFormModal';
@@ -18,7 +18,7 @@ function BrandBadge({ label }: { label: string }) {
 }
 
 export function CRMModule({ subModule }: { subModule?: string }) {
-  const { records: clients, loading, addClient, updateClient, deleteClient } = useQuotationClientList();
+  const { records: clients, loading, addClient, updateClient } = useQuotationClientList();
   const { brands } = useBrands();
   const brandLabel = (id: string) => {
     const brand = brands.find((b) => b.id === id);
@@ -70,13 +70,6 @@ export function CRMModule({ subModule }: { subModule?: string }) {
   const openEditModal = (client: QuotationClient) => {
     setEditingClient(client);
     setShowModal(true);
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('確定要刪除此客戶嗎？')) return;
-    const ok = await deleteClient(id);
-    if (ok) toast.success('客戶已刪除');
-    else toast.error('刪除失敗');
   };
 
   const handleSave = async (input: QuotationClientInput) => {
@@ -243,9 +236,6 @@ export function CRMModule({ subModule }: { subModule?: string }) {
                       )}
                       <button type="button" onClick={() => openEditModal(client)} className="p-1.5 text-muted-foreground hover:text-teal-600 hover:bg-teal-50 rounded transition-colors" title="編輯">
                         <Pencil size={13} />
-                      </button>
-                      <button type="button" onClick={() => void handleDelete(client.id)} className="p-1.5 text-muted-foreground hover:text-rose-600 hover:bg-rose-50 rounded transition-colors" title="刪除">
-                        <Trash2 size={13} />
                       </button>
                     </div>
                   </td>

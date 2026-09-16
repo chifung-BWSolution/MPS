@@ -181,6 +181,13 @@ function projectPmName(project: ImportantDateProject): string | undefined {
   return project.mainPmName?.trim() || project.assignedPmName?.trim() || undefined;
 }
 
+/** Always use quotation_client_project.display_name — never code, client, or Asana names. */
+export function resolveImportantDateProjectName(
+  project: Pick<ImportantDateProject, 'displayName'>,
+): string {
+  return project.displayName?.trim() ?? '';
+}
+
 function incomeTitle(row: ImportantDateIncome): string {
   const type = row.type?.trim() || '收入';
   return row.installmentNumber != null ? `${type} 第${row.installmentNumber}期` : type;
@@ -217,7 +224,7 @@ function eventBase(
     brand,
     projectId: project.id,
     projectCode: project.pitchingId?.trim() || undefined,
-    projectName: project.displayName,
+    projectName: resolveImportantDateProjectName(project),
     clientName: project.clientName?.trim() || undefined,
     pmName: projectPmName(project),
     projectStatus: project.status,
@@ -241,7 +248,7 @@ export function buildProjectDateEvents(
         date,
         kind: 'project',
         title: field.label,
-        subtitle: project.displayName,
+        subtitle: resolveImportantDateProjectName(project),
         overdue: false,
       });
     }
@@ -266,7 +273,7 @@ export function buildIncomeDateEvents(
       date,
       kind: 'income',
       title: incomeTitle(row),
-      subtitle: project.displayName,
+      subtitle: resolveImportantDateProjectName(project),
       amount: row.billedAmount,
       currency: row.currency,
       outstanding: row.outstanding,
@@ -296,7 +303,7 @@ export function buildExpenseDateEvents(
       date,
       kind: 'expense',
       title: expenseTitle(row),
-      subtitle: project.displayName,
+      subtitle: resolveImportantDateProjectName(project),
       amount: row.billedAmount,
       currency: row.currency,
       outstanding: row.outstanding,
@@ -325,7 +332,7 @@ export function buildScheduleDateEvents(
       date,
       kind: 'schedule',
       title: row.title,
-      subtitle: row.description?.trim() || project.displayName,
+      subtitle: row.description?.trim() || resolveImportantDateProjectName(project),
       overdue: false,
     });
   }

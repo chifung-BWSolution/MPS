@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Vchannel, VchannelAccount } from '@/types/vchannel';
 import { videoLoginMethodLabel, videoTwoFaLabel, type VideoLoginMethod } from '@/types/videoLoginMethod';
@@ -7,7 +7,6 @@ import { useVideoLoginMethods } from '@/hooks/useVideoLoginMethods';
 import { accountPickerLabel } from '@/lib/vchannelAccountLink';
 import {
   collectRelatedLoginMethods,
-  otherAccountLinksForMethod,
   planBulkLoginMethodLinks,
   planLoginMethodAccountLinkPatches,
   type LoginMethodLinkPatch,
@@ -20,7 +19,7 @@ import {
 } from '@/lib/videoLoginMethodForm';
 import { accountPlatformLabel } from '@/lib/vchannelPlatformStatus';
 import { formatLinkedLoginMethods } from '@/types/vchannel';
-import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
+import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
@@ -59,7 +58,7 @@ export function VchannelAccountLoginMethodsDialog({
   allAccounts: VchannelAccount[];
   updateAccount: (id: string, updates: Partial<VchannelAccount>) => Promise<Error | null>;
 }) {
-  const { items, loading, error, refresh, addItem, updateItem, deleteItem } = useVideoLoginMethods();
+  const { items, loading, error, refresh, addItem, updateItem } = useVideoLoginMethods();
   const [mode, setMode] = useState<EditorMode>('idle');
   const [editing, setEditing] = useState<VideoLoginMethod | null>(null);
   const [form, setForm] = useState<LoginMethodForm>(emptyLoginMethodForm());
@@ -67,7 +66,6 @@ export function VchannelAccountLoginMethodsDialog({
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
   const [linkMethodIds, setLinkMethodIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<VideoLoginMethod | null>(null);
 
   const relatedRows = useMemo(
     () => collectRelatedLoginMethods(accounts, items),
@@ -193,22 +191,6 @@ export function VchannelAccountLoginMethodsDialog({
     toast.success('已連結登入方式');
     resetEditor();
   };
-
-  const handleConfirmDelete = async () => {
-    if (!deleteTarget) return;
-    const result = await deleteItem(deleteTarget.id);
-    if (!result.ok) {
-      toast.error('刪除登入方式失敗', { description: result.error });
-      return;
-    }
-    toast.success('已刪除登入方式');
-    if (editing?.id === deleteTarget.id) resetEditor();
-    setDeleteTarget(null);
-  };
-
-  const otherLinks = deleteTarget
-    ? otherAccountLinksForMethod(allAccounts, accounts.map(account => account.id), deleteTarget.id)
-    : [];
 
   const canMutate = accounts.length > 0;
 
@@ -469,14 +451,6 @@ export function VchannelAccountLoginMethodsDialog({
                             >
                               <Pencil size={14} />
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeleteTarget(method)}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-rose-50 hover:text-rose-700"
-                              title="刪除"
-                            >
-                              <Trash2 size={14} />
-                            </button>
                           </div>
                         </td>
                       </tr>
@@ -488,19 +462,6 @@ export function VchannelAccountLoginMethodsDialog({
           </section>
         </div>
       </CrudModal>
-
-      <DeleteConfirmModal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={() => void handleConfirmDelete()}
-        itemName={deleteTarget?.displayName || ''}
-        canDelete
-        description={
-          otherLinks.length > 0
-            ? `此登入方式亦關聯其他頻道的 ${otherLinks.length} 個帳戶，刪除後會一併移除。`
-            : undefined
-        }
-      />
     </>
   );
 }

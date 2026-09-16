@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSupplierTypes } from '@/hooks/useSupplierTypes';
 import { SUPPLIER_TYPE_CATEGORIES, type SupplierType, type SupplierTypeCategory } from '@/types/marketingOps';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { CrudModal, DeleteConfirmModal } from '@/components/ui/crud-modal';
+import { CrudModal } from '@/components/ui/crud-modal';
 import { cn } from '@/lib/utils';
 
 type TypeForm = {
@@ -22,17 +22,12 @@ const emptyForm = (): TypeForm => ({
 });
 
 export function SupplierTypesSettings() {
-  const { types, loading, error, addType, updateType, deleteType, countUsage } = useSupplierTypes();
+  const { types, loading, error, addType, updateType } = useSupplierTypes();
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<SupplierType | null>(null);
   const [form, setForm] = useState<TypeForm>(emptyForm());
   const [saving, setSaving] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<SupplierType | null>(null);
-  const [deleteCheck, setDeleteCheck] = useState<{ canDelete: boolean; reasons: string[] }>({
-    canDelete: true,
-    reasons: [],
-  });
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -94,34 +89,6 @@ export function SupplierTypesSettings() {
       return;
     }
     toast.success(type.isActive ? '已停用類型' : '已啟用類型');
-  };
-
-  const handleDeleteClick = async (type: SupplierType) => {
-    const usage = await countUsage(type.id);
-    if (usage.error) {
-      toast.error('無法檢查使用狀況', { description: usage.error });
-      return;
-    }
-    const reasons: string[] = [];
-    if (usage.supplierCount > 0) {
-      reasons.push(`仍有 ${usage.supplierCount} 個供應商使用此類型，無法刪除`);
-    }
-    if (usage.expenseCount > 0) {
-      reasons.push(`仍有 ${usage.expenseCount} 筆支出使用此類型，無法刪除`);
-    }
-    setDeleteCheck({ canDelete: reasons.length === 0, reasons });
-    setDeleteTarget(type);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!deleteTarget || !deleteCheck.canDelete) return;
-    const result = await deleteType(deleteTarget.id);
-    if (!result.ok) {
-      toast.error('刪除類型失敗', { description: result.error });
-      return;
-    }
-    toast.success('已刪除供應商類型');
-    setDeleteTarget(null);
   };
 
   return (
@@ -193,14 +160,6 @@ export function SupplierTypesSettings() {
                         title="編輯"
                       >
                         <Pencil size={12} className="text-teal-600" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleDeleteClick(type)}
-                        className="p-1 hover:bg-muted rounded transition-colors"
-                        title="刪除"
-                      >
-                        <Trash2 size={12} className="text-rose-500" />
                       </button>
                     </div>
                   </td>
@@ -280,15 +239,6 @@ export function SupplierTypesSettings() {
           </div>
         </div>
       </CrudModal>
-
-      <DeleteConfirmModal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={() => void handleConfirmDelete()}
-        itemName={deleteTarget?.displayName || ''}
-        canDelete={deleteCheck.canDelete}
-        reasons={deleteCheck.reasons}
-      />
     </div>
   );
 }

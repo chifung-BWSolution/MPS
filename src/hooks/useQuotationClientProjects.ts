@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, peekCachedQuery } from '@/lib/queryCache';
 import { PITCHING_CURRENCY, optionalIsoDate, type PitchingExpenseItem, type PitchingRecord, type PitchingStatus } from '@/data/pitchingData';
+import { parseProjectSla, type ProjectSla } from '@/lib/projectSla';
 
 /** Supabase table shared by Pitching and Project pages */
 export const QUOTATION_CLIENT_PROJECT_TABLE = 'quotation_client_project';
@@ -47,6 +48,7 @@ type DbRow = {
   notes: string | null;
   estimated_income: number | null;
   estimated_expenses: PitchingExpenseItem[] | null;
+  sla: ProjectSla | null;
   created_at: string;
   updated_at: string;
   quotation_client_list?: ClientListEmbed;
@@ -132,6 +134,7 @@ function mapRow(row: DbRow): PitchingRecord {
     notes: row.notes ?? undefined,
     estimatedIncome: row.estimated_income != null ? Number(row.estimated_income) : undefined,
     estimatedExpenses: parseExpenses(row.estimated_expenses),
+    sla: parseProjectSla(row.sla),
     followUps: [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -161,6 +164,7 @@ export type QuotationClientProjectUpdate = Partial<
     | 'notes'
     | 'estimatedIncome'
     | 'estimatedExpenses'
+    | 'sla'
   >
 >;
 
@@ -312,6 +316,7 @@ export function useQuotationClientProjects() {
     if (data.notes !== undefined) row.notes = data.notes || null;
     if (data.estimatedIncome !== undefined) row.estimated_income = data.estimatedIncome;
     if (data.estimatedExpenses !== undefined) row.estimated_expenses = data.estimatedExpenses;
+    if (data.sla !== undefined) row.sla = data.sla;
 
     const { data: updated, error: err } = await supabase
       .from(QUOTATION_CLIENT_PROJECT_TABLE)

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ExternalLink, FileText, FolderOpen, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { ExternalLink, FileText, FolderOpen, Pencil, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
@@ -21,7 +21,6 @@ import { buildQuotationProjectHref } from '@/lib/quotationProjectNavigation';
 import { pitchingStatusConfig } from '@/data/pitchingData';
 import { useQuotationSection } from '@/context/QuotationSectionContext';
 import { filterBySectionProjectTypes } from '@/lib/quotationSectionScope';
-import { DeleteConfirmModal } from '@/components/ui/crud-modal';
 import {
   QuotationDocFormDialog,
   emptyQuotationDocFormDraft,
@@ -36,7 +35,7 @@ function expiryBadge(status: ReturnType<typeof quotationDocExpiryStatus>) {
 
 export function QuotationDocsList() {
   const { allowedTypes } = useQuotationSection();
-  const { rows, loading, error, addDoc, updateDoc, deleteDoc } = useQuotationDocsList();
+  const { rows, loading, error, addDoc, updateDoc } = useQuotationDocsList();
   const { types } = useQuotationDocTypes();
   const { records: projects, loading: projectsLoading, updateRecord } = useQuotationClientProjects();
   const [searchQuery, setSearchQuery] = useState('');
@@ -45,7 +44,6 @@ export function QuotationDocsList() {
   const [editing, setEditing] = useState<QuotationListDoc | null>(null);
   const [draft, setDraft] = useState<QuotationDocFormDraft>(emptyQuotationDocFormDraft());
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState<QuotationListDoc | null>(null);
 
   const typeById = useMemo(() => new Map(types.map((type) => [type.id, type])), [types]);
 
@@ -212,17 +210,6 @@ export function QuotationDocsList() {
     closeModal();
   };
 
-  const handleDelete = async () => {
-    if (!deleting) return;
-    const { error: delErr } = await deleteDoc(deleting.id);
-    if (delErr) {
-      toast.error(`刪除失敗：${delErr.message}`);
-      return;
-    }
-    toast.success('已刪除文件');
-    setDeleting(null);
-  };
-
   return (
     <div className="space-y-6">
       <div>
@@ -385,14 +372,6 @@ export function QuotationDocsList() {
                           >
                             <Pencil size={13} />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleting(row)}
-                            className="p-1.5 rounded-md text-muted-foreground hover:bg-rose-50 hover:text-rose-600 transition-colors"
-                            aria-label={`刪除 ${row.fileName}`}
-                          >
-                            <Trash2 size={13} />
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -424,15 +403,6 @@ export function QuotationDocsList() {
           options: projectOptions,
           disabled: projectsLoading,
         }}
-      />
-
-      <DeleteConfirmModal
-        isOpen={Boolean(deleting)}
-        onClose={() => setDeleting(null)}
-        onConfirm={() => void handleDelete()}
-        itemName={deleting?.fileName || '文件'}
-        canDelete
-        description={`確定要刪除「${deleting?.fileName || ''}」嗎？檔案會一併從儲存空間移除。`}
       />
     </div>
   );

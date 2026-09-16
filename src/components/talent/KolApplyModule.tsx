@@ -4,7 +4,6 @@ import {
   Loader2,
   Plus,
   Search,
-  Trash2,
   Upload,
   UserRound,
   X,
@@ -743,26 +742,6 @@ export function KolApplyModule() {
     }
   };
 
-  const deleteRow = async (row: KolApplyRow) => {
-    if (!confirm(`確定刪除「${row.name || '此申請'}」？`)) return;
-    setBusyId(row.id);
-    try {
-      const { error: err } = await supabase.from('kol_apply').delete().eq('id', row.id);
-      if (err) throw err;
-      toast.success('已刪除');
-      setSelected((prev) => {
-        const next = new Set(prev);
-        next.delete(row.id);
-        return next;
-      });
-      await load();
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : '刪除失敗');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
   return (
     <div className="space-y-0">
       <div className="sticky top-[calc(48px+var(--app-banner-h))] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
@@ -984,15 +963,6 @@ export function KolApplyModule() {
                               拒絕
                             </Button>
                           )}
-                          <button
-                            type="button"
-                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-md disabled:opacity-50"
-                            disabled={busy}
-                            onClick={() => void deleteRow(row)}
-                            title="刪除"
-                          >
-                            <Trash2 size={15} />
-                          </button>
                         </div>
                       </td>
                     </tr>
