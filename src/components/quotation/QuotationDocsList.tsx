@@ -6,11 +6,14 @@ import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
 import { useQuotationDocTypes } from '@/hooks/useQuotationDocTypes';
 import { useQuotationDocsList } from '@/hooks/useQuotationDocs';
 import {
+  contractDatesFromProject,
   formatDocDate,
   formatFileSize,
   isImageDoc,
   quotationDocExpiryStatus,
+  signedContractProjectDates,
   toQuotationClientProjectSelectOptions,
+  validateContractDates,
   validateQuotationDocDates,
   type QuotationListDoc,
 } from '@/lib/quotationDocs';
@@ -35,7 +38,7 @@ export function QuotationDocsList() {
   const { allowedTypes } = useQuotationSection();
   const { rows, loading, error, addDoc, updateDoc, deleteDoc } = useQuotationDocsList();
   const { types } = useQuotationDocTypes();
-  const { records: projects, loading: projectsLoading } = useQuotationClientProjects();
+  const { records: projects, loading: projectsLoading, updateRecord } = useQuotationClientProjects();
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [modalOpen, setModalOpen] = useState(false);
@@ -117,12 +120,14 @@ export function QuotationDocsList() {
 
   const openEdit = (row: QuotationListDoc) => {
     setEditing(row);
+    const project = projects.find((item) => item.id === row.quotationClientProjectId);
     setDraft({
       projectId: row.quotationClientProjectId,
       docTypeId: row.docTypeId,
       documentDate: row.documentDate ?? '',
       expiryDate: row.expiryDate ?? '',
       file: null,
+      ...contractDatesFromProject(project),
     });
     setModalOpen(true);
   };
@@ -153,6 +158,14 @@ export function QuotationDocsList() {
       toast.error(dateError);
       return;
     }
+    const contractPatch = signedContractProjectDates(draft);
+    const contractError = contractPatch
+      ? validateContractDates(contractPatch.contractStartDate, contractPatch.contractEndDate)
+      : null;
+    if (contractError) {
+      toast.error(contractError);
+      return;
+    }
 
     setSaving(true);
     if (editing) {
@@ -163,12 +176,11 @@ export function QuotationDocsList() {
         expiryDate: draft.expiryDate,
         file: draft.file ?? undefined,
       });
-      setSaving(false);
       if (saveErr) {
+        setSaving(false);
         toast.error(`更新失敗：${saveErr.message}`);
         return;
       }
-      toast.success('已更新文件');
     } else if (draft.file) {
       const { error: addErr } = await addDoc({
         projectId,
@@ -180,13 +192,23 @@ export function QuotationDocsList() {
         expiryDate: draft.expiryDate,
         file: draft.file,
       });
-      setSaving(false);
       if (addErr) {
+        setSaving(false);
         toast.error(`新增失敗：${addErr.message}`);
         return;
       }
-      toast.success('已上傳文件');
     }
+    if (contractPatch) {
+      const { error: projectErr } = await updateRecord(projectId, contractPatch);
+      setSaving(false);
+      if (projectErr) {
+        toast.error(`文件已儲存，但合約日期更新失敗：${projectErr.message}`);
+        return;
+      }
+    } else {
+      setSaving(false);
+    }
+    toast.success(editing ? '已更新文件' : '已上傳文件');
     closeModal();
   };
 
@@ -387,7 +409,14 @@ export function QuotationDocsList() {
         onClose={closeModal}
         editing={editing}
         draft={draft}
-        onDraftChange={setDraft}
+        onDraftChange={(next) => {
+          if (next.projectId === draft.projectId) {
+            setDraft(next);
+            return;
+          }
+          const project = projects.find((item) => item.id === next.projectId);
+          setDraft({ ...next, ...contractDatesFromProject(project) });
+        }}
         types={dialogTypes}
         saving={saving}
         onSave={() => void handleSave()}

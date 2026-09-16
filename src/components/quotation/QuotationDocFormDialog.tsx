@@ -4,6 +4,7 @@ import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/s
 import {
   QUOTATION_DOC_MAX_SIZE_MB,
   formatFileSize,
+  isSignedQuotationContractDocType,
   type QuotationDoc,
   type QuotationDocType,
 } from '@/lib/quotationDocs';
@@ -13,6 +14,8 @@ export type QuotationDocFormDraft = {
   docTypeId: string;
   documentDate: string;
   expiryDate: string;
+  contractStartDate: string;
+  contractEndDate: string;
   file: File | null;
 };
 
@@ -22,6 +25,8 @@ export function emptyQuotationDocFormDraft(): QuotationDocFormDraft {
     docTypeId: '',
     documentDate: '',
     expiryDate: '',
+    contractStartDate: '',
+    contractEndDate: '',
     file: null,
   };
 }
@@ -154,6 +159,30 @@ export function QuotationDocFormDialog({
             />
           </div>
         </div>
+        {isSignedQuotationContractDocType(draft.docTypeId) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <span className="text-[12px] text-muted-foreground block mb-1">合約開始日期</span>
+              <Input
+                type="date"
+                value={draft.contractStartDate}
+                onChange={(e) => onDraftChange({ ...draft, contractStartDate: e.target.value })}
+                className="text-[13px]"
+                aria-label="合約開始日期"
+              />
+            </div>
+            <div>
+              <span className="text-[12px] text-muted-foreground block mb-1">合約結束日期</span>
+              <Input
+                type="date"
+                value={draft.contractEndDate}
+                onChange={(e) => onDraftChange({ ...draft, contractEndDate: e.target.value })}
+                className="text-[13px]"
+                aria-label="合約結束日期"
+              />
+            </div>
+          </div>
+        )}
       </div>
     </CrudModal>
   );

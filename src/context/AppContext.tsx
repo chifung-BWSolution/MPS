@@ -86,6 +86,7 @@ const quotationSectionSubMenus: SubMenuItem[] = [
   { id: 'projects', label: 'Project' },
   { id: 'list', label: '報價單列表' },
   { id: 'clients', label: '客戶列表' },
+  { id: 'important-dates', label: '重要日子' },
   { id: 'doc-types', label: '文件類型', section: '設置' },
   { id: 'project-types', label: '項目類型', section: '設置' },
 ];

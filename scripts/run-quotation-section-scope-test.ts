@@ -109,6 +109,8 @@ assert.match(menu, /id: 'system-dev'/);
 assert.match(menu, /label: '系統開發管理'/);
 assert.match(menu, /id: 'project-types'/);
 assert.match(menu, /label: '項目類型', section: '設置'/);
+assert.match(menu, /id: 'important-dates'/);
+assert.match(menu, /label: '重要日子'/);
 assert.doesNotMatch(menu, /label: '項目管理'/);
 
 const home = readFileSync(join(root, 'src/components/home.tsx'), 'utf8');
@@ -117,5 +119,6 @@ assert.match(home, /sectionModule="system-dev"/);
 
 const quotationModule = readFileSync(join(root, 'src/components/quotation/QuotationModule.tsx'), 'utf8');
 assert.match(quotationModule, /QuotationSectionProvider/);
+assert.match(quotationModule, /ImportantDatesModule/);
 
 console.log('quotation section scope: ok');

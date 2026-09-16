@@ -4,11 +4,15 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useQuotationDocs } from '@/hooks/useQuotationDocs';
 import { useQuotationDocTypes } from '@/hooks/useQuotationDocTypes';
+import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
 import {
+  contractDatesFromProject,
   formatDocDate,
   formatFileSize,
   isImageDoc,
   quotationDocExpiryStatus,
+  signedContractProjectDates,
+  validateContractDates,
   validateQuotationDocDates,
   type QuotationDoc,
 } from '@/lib/quotationDocs';
@@ -27,7 +31,9 @@ function expiryBadge(status: ReturnType<typeof quotationDocExpiryStatus>) {
 
 export function PitchingDocsTab({ projectId }: { projectId: string }) {
   const { rows, loading, error, addDoc, updateDoc, deleteDoc } = useQuotationDocs(projectId);
+  const { records: projects, updateRecord } = useQuotationClientProjects();
   const { types } = useQuotationDocTypes();
+  const project = useMemo(() => projects.find((row) => row.id === projectId), [projects, projectId]);
   const [typeFilter, setTypeFilter] = useState('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<QuotationDoc | null>(null);
@@ -67,7 +73,11 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
 
   const openCreate = () => {
     setEditing(null);
-    setDraft(emptyQuotationDocFormDraft());
+    setDraft({
+      ...emptyQuotationDocFormDraft(),
+      projectId,
+      ...contractDatesFromProject(project),
+    });
     setModalOpen(true);
   };
 
@@ -79,6 +89,7 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
       documentDate: row.documentDate ?? '',
       expiryDate: row.expiryDate ?? '',
       file: null,
+      ...contractDatesFromProject(project),
     });
     setModalOpen(true);
   };
@@ -104,6 +115,14 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
       toast.error(dateError);
       return;
     }
+    const contractPatch = signedContractProjectDates(draft);
+    const contractError = contractPatch
+      ? validateContractDates(contractPatch.contractStartDate, contractPatch.contractEndDate)
+      : null;
+    if (contractError) {
+      toast.error(contractError);
+      return;
+    }
 
     setSaving(true);
     if (editing) {
@@ -113,12 +132,11 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
         expiryDate: draft.expiryDate,
         file: draft.file ?? undefined,
       });
-      setSaving(false);
       if (saveErr) {
+        setSaving(false);
         toast.error(`更新失敗：${saveErr.message}`);
         return;
       }
-      toast.success('已更新文件');
     } else if (draft.file) {
       const { error: addErr } = await addDoc({
         docTypeId,
@@ -129,13 +147,23 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
         expiryDate: draft.expiryDate,
         file: draft.file,
       });
-      setSaving(false);
       if (addErr) {
+        setSaving(false);
         toast.error(`新增失敗：${addErr.message}`);
         return;
       }
-      toast.success('已上傳文件');
     }
+    if (contractPatch) {
+      const { error: projectErr } = await updateRecord(projectId, contractPatch);
+      setSaving(false);
+      if (projectErr) {
+        toast.error(`文件已儲存，但合約日期更新失敗：${projectErr.message}`);
+        return;
+      }
+    } else {
+      setSaving(false);
+    }
+    toast.success(editing ? '已更新文件' : '已上傳文件');
     closeModal();
   };
 

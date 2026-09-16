@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, type ReactNode } from 'react';
-import { Search, Plus, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil, Clock, FolderOpen, Wallet, Banknote, PieChart } from 'lucide-react';
+import { Search, Plus, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil, Clock, FolderOpen, Wallet, Banknote, PieChart, CalendarDays } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -60,6 +60,7 @@ import { PitchingExpenseTab } from '@/components/quotation/PitchingExpenseTab';
 import { PitchingCostAnalysisTab } from '@/components/quotation/PitchingCostAnalysisTab';
 import { PitchingFollowUpsTab } from '@/components/quotation/PitchingFollowUpsTab';
 import { PitchingWorkHoursTab } from '@/components/quotation/PitchingWorkHoursTab';
+import { PitchingScheduleTab } from '@/components/quotation/PitchingScheduleTab';
 import { PitchingStatusConversionModal } from '@/components/quotation/PitchingStatusConversionModal';
 import { allowedStatusTargets, isAllowedStatusTransition, needsConversionPopup } from '@/lib/clientProjectStatus';
 import { QuotationBvCard } from '@/components/quotation/QuotationBvCard';
@@ -79,6 +80,8 @@ export type PitchingFormValues = {
   inquiryDate: string;
   signedDate: string;
   handoverDate: string;
+  contractStartDate: string;
+  contractEndDate: string;
   description: string;
   projectTypeId: string;
   mainPmId: string;
@@ -105,6 +108,8 @@ const emptyForm = (defaultMainPmId = ''): PitchingFormValues => ({
   inquiryDate: todayIso(),
   signedDate: '',
   handoverDate: '',
+  contractStartDate: '',
+  contractEndDate: '',
   description: '',
   projectTypeId: '',
   mainPmId: defaultMainPmId,
@@ -121,6 +126,8 @@ function formFromRecord(record: PitchingRecord, clientOptions: ClientOption[]): 
     inquiryDate: record.inquiryDate,
     signedDate: optionalIsoDate(record.signedDate) ?? '',
     handoverDate: optionalIsoDate(record.handoverDate) ?? '',
+    contractStartDate: optionalIsoDate(record.contractStartDate) ?? '',
+    contractEndDate: optionalIsoDate(record.contractEndDate) ?? '',
     description: record.description ?? '',
     projectTypeId: record.projectTypeId ?? '',
     mainPmId: record.mainPmId ?? '',
@@ -137,6 +144,8 @@ export function pitchingFormToUpdate(form: PitchingFormValues): QuotationClientP
     inquiryDate: form.inquiryDate,
     signedDate: form.signedDate,
     handoverDate: form.handoverDate,
+    contractStartDate: form.contractStartDate,
+    contractEndDate: form.contractEndDate,
     description: form.description.trim() || undefined,
     projectTypeId: form.projectTypeId,
     mainPmId: form.mainPmId.trim(),
@@ -457,6 +466,10 @@ export function PitchingFormModal({
       toast.error('請選擇查詢日期');
       return;
     }
+    if (form.contractStartDate && form.contractEndDate && form.contractEndDate < form.contractStartDate) {
+      toast.error('合約結束日期不可早於開始日期');
+      return;
+    }
     if (!form.projectTypeId) {
       toast.error('請選擇專案類型');
       return;
@@ -576,7 +589,7 @@ export function PitchingFormModal({
               )}
             </div>
             <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">交付日期 Handover Date</label>
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1">交付日期/活動日期 Handover Date</label>
               <Input
                 type="date"
                 value={form.handoverDate}
@@ -588,6 +601,41 @@ export function PitchingFormModal({
               {form.handoverDate && (
                 <p className="text-[11px] text-muted-foreground mt-1">
                   已選：{formatEnquiryDateLabel(form.handoverDate)}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1">合約開始日期 Contract Start Date</label>
+              <Input
+                type="date"
+                value={form.contractStartDate}
+                min={`${currentYear - 2}-01-01`}
+                max={`${currentYear + 2}-12-31`}
+                onChange={(e) => setForm((prev) => ({ ...prev, contractStartDate: e.target.value }))}
+                className="h-9 text-[13px] w-full"
+              />
+              {form.contractStartDate && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  已選：{formatEnquiryDateLabel(form.contractStartDate)}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="text-[12px] font-medium text-muted-foreground block mb-1">合約結束日期 Contract End Date</label>
+              <Input
+                type="date"
+                value={form.contractEndDate}
+                min={`${currentYear - 2}-01-01`}
+                max={`${currentYear + 2}-12-31`}
+                onChange={(e) => setForm((prev) => ({ ...prev, contractEndDate: e.target.value }))}
+                className="h-9 text-[13px] w-full"
+              />
+              {form.contractEndDate && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  已選：{formatEnquiryDateLabel(form.contractEndDate)}
                 </p>
               )}
             </div>
@@ -853,6 +901,8 @@ type DetailDraft = {
   inquiryDate: string;
   signedDate: string;
   handoverDate: string;
+  contractStartDate: string;
+  contractEndDate: string;
   description: string;
   projectTypeId: string;
   webandsystemListId: string;
@@ -871,6 +921,8 @@ function draftFromRecord(record: PitchingRecord, clientOptions: ClientOption[]):
     inquiryDate: record.inquiryDate,
     signedDate: optionalIsoDate(record.signedDate) ?? '',
     handoverDate: optionalIsoDate(record.handoverDate) ?? '',
+    contractStartDate: optionalIsoDate(record.contractStartDate) ?? '',
+    contractEndDate: optionalIsoDate(record.contractEndDate) ?? '',
     description: record.description ?? '',
     projectTypeId: record.projectTypeId ?? '',
     webandsystemListId: record.webandsystemListId ?? '',
@@ -911,7 +963,7 @@ export function PitchingDetail({
   onEdit: () => void;
   onSave: (id: string, data: QuotationClientProjectUpdate) => Promise<{ error: { message: string } | null }>;
 }) {
-  const [activeTab, setActiveTab] = useState<'info' | 'followups' | 'hours' | 'docs' | 'income' | 'budget' | 'expense' | 'cost'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'schedule' | 'followups' | 'hours' | 'docs' | 'income' | 'budget' | 'expense' | 'cost'>('info');
   const [draft, setDraft] = useState<DetailDraft>(() => draftFromRecord(record, clientOptions));
   const [saving, setSaving] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<PitchingStatus | null>(null);
@@ -1023,6 +1075,7 @@ export function PitchingDetail({
 
   const tabs = [
     { id: 'info', label: '基本資訊', icon: FileText },
+    { id: 'schedule', label: '項目排程', icon: CalendarDays },
     { id: 'followups', label: '跟進記錄', icon: MessageSquare },
     { id: 'hours', label: '工作時數', icon: Clock },
     { id: 'docs', label: '項目文件', icon: FolderOpen },
@@ -1117,7 +1170,9 @@ export function PitchingDetail({
                   </div>
                   <ReadOnlyField label="查詢日期">{draft.inquiryDate || '—'}</ReadOnlyField>
                   <ReadOnlyField label="簽約日期">{draft.signedDate || '—'}</ReadOnlyField>
-                  <ReadOnlyField label="交付日期">{draft.handoverDate || '—'}</ReadOnlyField>
+                  <ReadOnlyField label="交付日期/活動日期">{draft.handoverDate || '—'}</ReadOnlyField>
+                  <ReadOnlyField label="合約開始日期">{draft.contractStartDate || '—'}</ReadOnlyField>
+                  <ReadOnlyField label="合約結束日期">{draft.contractEndDate || '—'}</ReadOnlyField>
                   <ReadOnlyField label="剩餘天數">
                     {remaining === null ? '—' : remaining <= 0 ? `逾期 ${Math.abs(remaining)} 天` : `${remaining} 天`}
                   </ReadOnlyField>
@@ -1174,6 +1229,10 @@ export function PitchingDetail({
             </p>
           </div>
         </div>
+      )}
+
+      {activeTab === 'schedule' && (
+        <PitchingScheduleTab relatedType="quotation_client" relatedId={record.id} />
       )}
 
       {activeTab === 'followups' && (
@@ -1321,6 +1380,8 @@ export function PitchingModule() {
       inquiryDate: form.inquiryDate,
       signedDate: form.signedDate || undefined,
       handoverDate: form.handoverDate || undefined,
+      contractStartDate: form.contractStartDate || undefined,
+      contractEndDate: form.contractEndDate || undefined,
       description: form.description.trim() || undefined,
       projectTypeId: form.projectTypeId,
       assignedPm: '',

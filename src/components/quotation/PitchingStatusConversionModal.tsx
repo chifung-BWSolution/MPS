@@ -17,15 +17,24 @@ import {
   missingConfirmedFields,
   missingFollowingUpFields,
 } from '@/lib/clientProjectStatus';
-import { isQuotationListDocType, validateQuotationDocDates } from '@/lib/quotationDocs';
+import {
+  contractDatesFromProject,
+  isQuotationListDocType,
+  signedContractProjectDates,
+  validateContractDates,
+  validateQuotationDocDates,
+} from '@/lib/quotationDocs';
 import { useQuotationDocs } from '@/hooks/useQuotationDocs';
 import { useQuotationDocTypes } from '@/hooks/useQuotationDocTypes';
+import {
+  useQuotationClientProjects,
+  type QuotationClientProjectUpdate,
+} from '@/hooks/useQuotationClientProjects';
 import {
   QuotationDocFormDialog,
   emptyQuotationDocFormDraft,
   type QuotationDocFormDraft,
 } from '@/components/quotation/QuotationDocFormDialog';
-import type { QuotationClientProjectUpdate } from '@/hooks/useQuotationClientProjects';
 
 function nextExpenseId() {
   return `exp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -47,6 +56,7 @@ export function PitchingStatusConversionModal({
   const isConfirmed = target === 'confirmed';
   const { rows: docs, loading: docsLoading, addDoc } = useQuotationDocs(isConfirmed ? record.id : undefined);
   const { types } = useQuotationDocTypes();
+  const { updateRecord } = useQuotationClientProjects();
   const listTypes = useMemo(
     () => types.filter((type) => isQuotationListDocType(type.id)),
     [types],
@@ -100,6 +110,7 @@ export function PitchingStatusConversionModal({
       ...emptyQuotationDocFormDraft(),
       projectId: record.id,
       docTypeId: listTypes[0]?.id ?? '',
+      ...contractDatesFromProject(record),
     });
     setDocDialogOpen(true);
   };
@@ -119,6 +130,14 @@ export function PitchingStatusConversionModal({
       toast.error(dateError);
       return;
     }
+    const contractPatch = signedContractProjectDates(docDraft);
+    const contractError = contractPatch
+      ? validateContractDates(contractPatch.contractStartDate, contractPatch.contractEndDate)
+      : null;
+    if (contractError) {
+      toast.error(contractError);
+      return;
+    }
     setDocSaving(true);
     const { error } = await addDoc({
       docTypeId,
@@ -129,10 +148,20 @@ export function PitchingStatusConversionModal({
       expiryDate: docDraft.expiryDate,
       file: docDraft.file,
     });
-    setDocSaving(false);
     if (error) {
+      setDocSaving(false);
       toast.error(`上傳失敗：${error.message}`);
       return;
+    }
+    if (contractPatch) {
+      const { error: projectErr } = await updateRecord(record.id, contractPatch);
+      setDocSaving(false);
+      if (projectErr) {
+        toast.error(`文件已儲存，但合約日期更新失敗：${projectErr.message}`);
+        return;
+      }
+    } else {
+      setDocSaving(false);
     }
     toast.success('已上傳文件');
     setDocDialogOpen(false);

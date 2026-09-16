@@ -45,6 +45,10 @@ export interface PitchingRecord {
   signedDate?: string;
   /** Project handover / delivery date (交付日期). */
   handoverDate?: string;
+  /** Contract period start (合約開始日期). */
+  contractStartDate?: string;
+  /** Contract period end (合約結束日期). */
+  contractEndDate?: string;
   description?: string;
   /** quotation_project_types.id */
   projectTypeId?: string;

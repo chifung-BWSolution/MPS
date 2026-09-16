@@ -369,6 +369,8 @@ export function ProjectSourceDialog({
       inquiryDate: form.inquiryDate,
       signedDate: form.signedDate || undefined,
       handoverDate: form.handoverDate || undefined,
+      contractStartDate: form.contractStartDate || undefined,
+      contractEndDate: form.contractEndDate || undefined,
       description: form.description.trim() || undefined,
       projectTypeId: form.projectTypeId,
       assignedPm: '',

@@ -33,6 +33,8 @@ type DbRow = {
   inquiry_date: string;
   signed_date: string | null;
   handover_date: string | null;
+  contract_start_date: string | null;
+  contract_end_date: string | null;
   description: string | null;
   project_types: string | null;
   assigned_pm: string | null;
@@ -111,6 +113,8 @@ function mapRow(row: DbRow): PitchingRecord {
     inquiryDate: String(row.inquiry_date).slice(0, 10),
     signedDate: optionalIsoDate(row.signed_date),
     handoverDate: optionalIsoDate(row.handover_date),
+    contractStartDate: optionalIsoDate(row.contract_start_date),
+    contractEndDate: optionalIsoDate(row.contract_end_date),
     description: row.description ?? undefined,
     projectTypeId: row.project_types || '',
     asanaTaskGid: row.asana_task_gid ?? undefined,
@@ -144,6 +148,8 @@ export type QuotationClientProjectUpdate = Partial<
     | 'inquiryDate'
     | 'signedDate'
     | 'handoverDate'
+    | 'contractStartDate'
+    | 'contractEndDate'
     | 'description'
     | 'projectTypeId'
     | 'assignedPmName'
@@ -222,6 +228,8 @@ export function useQuotationClientProjects() {
         inquiry_date: data.inquiryDate,
         signed_date: optionalIsoDate(data.signedDate) ?? null,
         handover_date: optionalIsoDate(data.handoverDate) ?? null,
+        contract_start_date: optionalIsoDate(data.contractStartDate) ?? null,
+        contract_end_date: optionalIsoDate(data.contractEndDate) ?? null,
         description: data.description ?? null,
         project_types: data.projectTypeId?.trim() || null,
         assigned_pm: data.assignedPm || null,
@@ -286,6 +294,12 @@ export function useQuotationClientProjects() {
     if (data.inquiryDate !== undefined) row.inquiry_date = data.inquiryDate;
     if (data.signedDate !== undefined) row.signed_date = optionalIsoDate(data.signedDate) ?? null;
     if (data.handoverDate !== undefined) row.handover_date = optionalIsoDate(data.handoverDate) ?? null;
+    if (data.contractStartDate !== undefined) {
+      row.contract_start_date = optionalIsoDate(data.contractStartDate) ?? null;
+    }
+    if (data.contractEndDate !== undefined) {
+      row.contract_end_date = optionalIsoDate(data.contractEndDate) ?? null;
+    }
     if (data.description !== undefined) row.description = data.description || null;
     if (data.projectTypeId !== undefined) row.project_types = data.projectTypeId.trim() || null;
     if (data.assignedPmName !== undefined) row.assigned_pm_name = data.assignedPmName || '';

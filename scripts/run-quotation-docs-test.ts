@@ -9,7 +9,9 @@ import {
   QUOTATION_DOCS_BUCKET,
   QUOTATION_DOCS_TABLE,
   QUOTATION_LIST_DOC_TYPE_IDS,
+  SIGNED_QUOTATION_CONTRACT_DOC_TYPE_ID,
   isQuotationListDocType,
+  isSignedQuotationContractDocType,
   formatQuotationClientProjectOptionLabel,
   toQuotationClientProjectSelectOptions,
   addDaysIso,
@@ -22,6 +24,7 @@ import {
   quotationDocExpiryStatus,
   quotationDocStoragePath,
   sanitizeFileName,
+  validateContractDates,
   validateQuotationDocDates,
 } from '../src/lib/quotationDocs';
 
@@ -88,9 +91,14 @@ assert.deepEqual([...QUOTATION_LIST_DOC_TYPE_IDS], [
   '577a9f77-008d-45b2-90da-40c467fdc3d5',
   'd2b6c029-5850-43b5-80fd-5855b5c80699',
 ]);
+assert.equal(SIGNED_QUOTATION_CONTRACT_DOC_TYPE_ID, '577a9f77-008d-45b2-90da-40c467fdc3d5');
 assert.equal(isQuotationListDocType('577a9f77-008d-45b2-90da-40c467fdc3d5'), true);
 assert.equal(isQuotationListDocType('d2b6c029-5850-43b5-80fd-5855b5c80699'), true);
 assert.equal(isQuotationListDocType('other'), false);
+assert.equal(isSignedQuotationContractDocType('577a9f77-008d-45b2-90da-40c467fdc3d5'), true);
+assert.equal(isSignedQuotationContractDocType('d2b6c029-5850-43b5-80fd-5855b5c80699'), false);
+assert.equal(validateContractDates('2026-01-10', '2026-01-09'), '合約結束日期不可早於開始日期');
+assert.equal(validateContractDates('2026-01-10', '2026-01-11'), null);
 
 assert.equal(formatQuotationClientProjectOptionLabel('CityU 網站', '香港城市大學'), 'CityU 網站（香港城市大學）');
 assert.equal(formatQuotationClientProjectOptionLabel(' 內部項目 ', '—'), '內部項目');
@@ -157,6 +165,9 @@ assert.match(dialog, /客戶項目/);
 assert.match(dialog, /SearchableSelect/);
 assert.match(dialog, /請選擇客戶項目/);
 assert.match(dialog, /搜尋項目或客戶/);
+assert.match(dialog, /isSignedQuotationContractDocType/);
+assert.match(dialog, /合約開始日期/);
+assert.match(dialog, /合約結束日期/);
 
 const tab = read('src/components/quotation/PitchingDocsTab.tsx');
 assert.match(tab, /項目文件/);

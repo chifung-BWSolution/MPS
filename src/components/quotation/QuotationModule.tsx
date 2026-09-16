@@ -2,6 +2,7 @@ import { CRMModule } from '@/components/crm/CRMModule';
 import { PitchingModule } from '@/components/quotation/PitchingModule';
 import { ProjectModule } from '@/components/quotation/ProjectModule';
 import { AsanaPendingModule } from '@/components/quotation/AsanaPendingModule';
+import { ImportantDatesModule } from '@/components/quotation/ImportantDatesModule';
 import { QuotationDocTypesSettings } from '@/components/quotation/QuotationDocTypesSettings';
 import { QuotationProjectTypesSettings } from '@/components/quotation/QuotationProjectTypesSettings';
 import { QuotationDocsList } from '@/components/quotation/QuotationDocsList';
@@ -23,6 +24,10 @@ function QuotationSectionPages({ subModule }: { subModule?: string }) {
 
   if (subModule === 'clients') {
     return <CRMModule subModule="list" />;
+  }
+
+  if (subModule === 'important-dates') {
+    return <ImportantDatesModule />;
   }
 
   if (subModule === 'doc-types') {

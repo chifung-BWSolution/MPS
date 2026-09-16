@@ -30,9 +30,9 @@ assert.match(hook, /\| 'handoverDate'/);
 
 const pitching = read('src/components/quotation/PitchingModule.tsx');
 assert.match(pitching, /簽約日期 Signed Date/);
-assert.match(pitching, /交付日期 Handover Date/);
+assert.match(pitching, /交付日期\/活動日期 Handover Date/);
 assert.match(pitching, /label="簽約日期"/);
-assert.match(pitching, /label="交付日期"/);
+assert.match(pitching, /label="交付日期\/活動日期"/);
 assert.match(pitching, /signedDate: form\.signedDate/);
 assert.match(pitching, /handoverDate: form\.handoverDate/);
 assert.match(pitching, /signedDate: draft\.signedDate/);

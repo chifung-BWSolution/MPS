@@ -7,9 +7,12 @@ export const QUOTATION_DOC_EXPIRING_SOON_DAYS = 30;
 export const QUOTATION_DOC_TYPES_TABLE = 'quotation_doc_types';
 export const QUOTATION_DOC_TYPE_PRESETS = ['報價單', '項目合約', '參考圖片'] as const;
 
+/** 已簽署報價單/合約 — shows contract start/end date pickers on the docs dialog. */
+export const SIGNED_QUOTATION_CONTRACT_DOC_TYPE_ID = '577a9f77-008d-45b2-90da-40c467fdc3d5';
+
 /** Doc types shown on /#quotation/list (報價單 / 已簽署報價單/合約). */
 export const QUOTATION_LIST_DOC_TYPE_IDS = [
-  '577a9f77-008d-45b2-90da-40c467fdc3d5',
+  SIGNED_QUOTATION_CONTRACT_DOC_TYPE_ID,
   'd2b6c029-5850-43b5-80fd-5855b5c80699',
 ] as const;
 
@@ -55,6 +58,10 @@ export type QuotationListDoc = QuotationDoc & {
 
 export function isQuotationListDocType(id: string | null | undefined): boolean {
   return Boolean(id && (QUOTATION_LIST_DOC_TYPE_IDS as readonly string[]).includes(id));
+}
+
+export function isSignedQuotationContractDocType(id: string | null | undefined): boolean {
+  return id === SIGNED_QUOTATION_CONTRACT_DOC_TYPE_ID;
 }
 
 export type QuotationClientProjectSelectOption = {
@@ -236,6 +243,37 @@ export function validateQuotationDocDates(
   const end = optionalIsoDate(expiryDate);
   if (start && end && end < start) return '到期日不可早於文件日期';
   return null;
+}
+
+export function validateContractDates(
+  startDate: string | undefined,
+  endDate: string | undefined,
+): string | null {
+  const start = optionalIsoDate(startDate);
+  const end = optionalIsoDate(endDate);
+  if (start && end && end < start) return '合約結束日期不可早於開始日期';
+  return null;
+}
+
+export function contractDatesFromProject(
+  project?: { contractStartDate?: string; contractEndDate?: string } | null,
+): { contractStartDate: string; contractEndDate: string } {
+  return {
+    contractStartDate: optionalIsoDate(project?.contractStartDate) ?? '',
+    contractEndDate: optionalIsoDate(project?.contractEndDate) ?? '',
+  };
+}
+
+export function signedContractProjectDates(draft: {
+  docTypeId: string;
+  contractStartDate: string;
+  contractEndDate: string;
+}): { contractStartDate: string; contractEndDate: string } | null {
+  if (!isSignedQuotationContractDocType(draft.docTypeId)) return null;
+  return {
+    contractStartDate: draft.contractStartDate,
+    contractEndDate: draft.contractEndDate,
+  };
 }
 
 export function isImageDoc(mimeType: string | undefined, fileName: string): boolean {
