@@ -5,7 +5,7 @@ import type { StaffAssignment } from '@/types/videoWorkflow';
 import {
   resolveStaffOptionId,
   type StaffDirectoryOption,
-} from '@/services/videoOutputWorkLogService';
+} from '@/services/staffDirectoryService';
 
 type Props = {
   label: string;

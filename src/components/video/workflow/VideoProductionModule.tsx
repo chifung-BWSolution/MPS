@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Edit2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/context/AuthContext';
 import { useVideoWorkflow } from '@/hooks/useVideoWorkflow';
 import { useVideoWorkflowListFilter } from '@/hooks/useVideoWorkflowListFilter';
 import type { ProductionProgress, VideoWorkflowMock } from '@/types/videoWorkflow';
@@ -28,7 +27,6 @@ import {
 } from '@/components/video/workflow/workflowListLayout';
 import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
-import { resolveStaffUuid } from '@/services/reportLinkService';
 
 function ProductionListRow({
   video,
@@ -102,8 +100,7 @@ function ProductionListRow({
 }
 
 export function VideoProductionModule() {
-  const { systemUser } = useAuth();
-  const { getByStage, getById, saveProductionWithWorkLogs, submitForReview } = useVideoWorkflow();
+  const { getByStage, getById, updateVideo, submitForReview } = useVideoWorkflow();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [submitTargetId, setSubmitTargetId] = useState<string | null>(null);
   const [revisionTargetId, setRevisionTargetId] = useState<string | null>(null);
@@ -133,16 +130,11 @@ export function VideoProductionModule() {
     plannedPublishDate?: string;
   }): Promise<string | null> => {
     if (!editingId) return '找不到影片';
-    const staffId = await resolveStaffUuid(systemUser);
-    return saveProductionWithWorkLogs(
-      editingId,
-      {
-        productionProgress: payload.productionProgress,
-        storagePath: payload.storagePath,
-        plannedPublishDate: payload.plannedPublishDate,
-      },
-      staffId ?? undefined,
-    );
+    return updateVideo(editingId, {
+      productionProgress: payload.productionProgress,
+      storagePath: payload.storagePath,
+      plannedPublishDate: payload.plannedPublishDate,
+    });
   };
 
   const confirmSubmit = async () => {

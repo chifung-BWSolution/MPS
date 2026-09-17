@@ -104,3 +104,31 @@ export async function resolveRelatedProjectHubIds(
   }
   return { data: { projectIds, writeProjectId }, error: null };
 }
+
+/**
+ * IDs that day_report_entries.related_id may use for this source row:
+ * the module id itself, its projects-hub id(s), and (for websites) linked pitching ids.
+ */
+export async function resolveRelatedDayReportIds(
+  relatedType: string | undefined | null,
+  relatedId: string | undefined | null,
+): Promise<{ data: string[]; error: { message: string } | null }> {
+  const sourceId = relatedId?.trim() || '';
+  if (!sourceId) return { data: [], error: { message: '缺少項目' } };
+
+  const ids = new Set<string>([sourceId]);
+  const hubs = await resolveRelatedProjectHubIds(relatedType, relatedId);
+  if (hubs.error && !hubs.data) {
+    // Still query the source id so hours can load before a hub row exists.
+  } else {
+    for (const id of hubs.data?.projectIds ?? []) ids.add(id);
+  }
+
+  if (relatedType === 'webandsystem') {
+    const linked = await linkedClientProjectIdsForWebsite(sourceId);
+    if (linked.error) return { data: [...ids], error: linked.error };
+    for (const id of linked.data) ids.add(id);
+  }
+
+  return { data: [...ids], error: null };
+}

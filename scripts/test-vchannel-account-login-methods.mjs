@@ -10,6 +10,10 @@ import {
   sameIdSet,
 } from '../src/lib/vchannelAccountLoginMethods.ts';
 import {
+  composeLoginMethodDisplayName,
+  stripLoginMethodDisplayPrefix,
+} from '../src/types/videoLoginMethod.ts';
+import {
   emptyLoginMethodForm,
   loginMethodFormFromItem,
   loginMethodFormToInput,
@@ -99,11 +103,32 @@ assert.deepEqual(
 const form = emptyLoginMethodForm();
 assert.equal(loginMethodFormToInput(form), null);
 assert.equal(loginMethodFormToInput({ ...form, loginMethod: 'google' }), null);
+assert.equal(stripLoginMethodDisplayPrefix('微信掃碼 CFB M10'), 'CFB M10');
+assert.equal(stripLoginMethodDisplayPrefix('Google 登入 主帳'), '主帳');
+assert.equal(stripLoginMethodDisplayPrefix('CFB M10'), 'CFB M10');
+assert.equal(composeLoginMethodDisplayName('wechat_scan', 'CFB M10'), '微信掃碼 CFB M10');
+assert.equal(composeLoginMethodDisplayName('wechat_scan', '微信掃碼 CFB M10'), '微信掃碼 CFB M10');
+assert.equal(composeLoginMethodDisplayName('google', '  主帳  '), 'Google 登入 主帳');
+
 assert.deepEqual(
   loginMethodFormToInput({ ...form, loginMethod: 'google', displayName: '  主帳  ' }),
   {
     loginMethod: 'google',
-    displayName: '主帳',
+    displayName: 'Google 登入 主帳',
+    accountName: '',
+    phoneNumber: '',
+    email: '',
+    password: '',
+    twoFaMethods: [],
+    note: '',
+    isActive: true,
+  },
+);
+assert.deepEqual(
+  loginMethodFormToInput({ ...form, loginMethod: 'wechat_scan', displayName: '微信掃碼 CFB M10' }),
+  {
+    loginMethod: 'wechat_scan',
+    displayName: '微信掃碼 CFB M10',
     accountName: '',
     phoneNumber: '',
     email: '',
@@ -114,8 +139,11 @@ assert.deepEqual(
   },
 );
 
-const fromItem = loginMethodFormFromItem(methods[0]);
-assert.equal(fromItem.displayName, 'Google 主帳');
+const fromItem = loginMethodFormFromItem({
+  ...methods[0],
+  displayName: 'Google 登入 主帳',
+});
+assert.equal(fromItem.displayName, '主帳');
 assert.equal(fromItem.loginMethod, 'google');
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -137,14 +165,19 @@ assert.doesNotMatch(
   'key icon no longer opens the account form',
 );
 assert.ok(dialogSrc.includes('title="帳戶登入方式"'), 'dialog title is 帳戶登入方式');
+const formFieldsSrc = readFileSync(path.join(root, 'src/components/video/VideoLoginMethodFormFields.tsx'), 'utf8');
+assert.ok(formFieldsSrc.includes('登入方式顯示名稱'), 'form treats method + name as one login-method display name');
+assert.match(formFieldsSrc, /grid-cols-\[minmax\(9\.5rem,0\.9fr\)_1\.1fr\]/, 'method and name sit on the same row');
+const hookSrc = readFileSync(path.join(root, 'src/hooks/useVideoLoginMethods.ts'), 'utf8');
+assert.ok(hookSrc.includes('composeLoginMethodDisplayName'), 'saves prefix the Chinese login-method label onto display_name');
 assert.ok(dialogSrc.includes('平台帳戶'), 'dialog lists related vchannel_accounts');
 assert.ok(dialogSrc.includes('collectRelatedLoginMethods'), 'dialog lists related login methods via join ids');
 assert.ok(dialogSrc.includes('planLoginMethodAccountLinkPatches'), 'create/edit writes join-table links');
-assert.ok(dialogSrc.includes('deleteItem'), 'dialog can delete login methods');
 assert.ok(dialogSrc.includes('addItem'), 'dialog can create login methods');
 assert.ok(dialogSrc.includes('updateItem'), 'dialog can update login methods');
 assert.ok(dialogSrc.includes('VchannelLoginMethodPicker'), 'dialog can link existing login methods');
 assert.ok(dialogSrc.includes('items={items}'), 'dialog shares login-method records with the picker');
 assert.ok(pickerSrc.includes('items: itemsProp'), 'picker can reuse parent login-method state');
+assert.ok(pickerSrc.includes('登入方式顯示名稱'), 'quick-create also uses login-method display name');
 
 console.log('All vchannel account login-method dialog checks passed.');

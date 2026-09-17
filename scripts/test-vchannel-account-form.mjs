@@ -61,8 +61,9 @@ const checks = [
       && !formModalSrc.includes('type="checkbox"'),
   },
   {
-    name: 'listing shows linked login methods and is_active toggle',
+    name: 'listing shows linked login methods, remarks after 登入方式, and is_active toggle',
     ok: accountsSrc.includes('linkedLoginMethods')
+      && /loginMethod[\s\S]*acc\.notes[\s\S]*feedhiveManaged/.test(accountsSrc)
       && accountsSrc.includes('toggleAccountActive')
       && accountsSrc.includes('acc.isActive ? \'啟用\' : \'停用\''),
   },

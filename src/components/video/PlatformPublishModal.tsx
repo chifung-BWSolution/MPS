@@ -13,11 +13,7 @@ import {
 import { CrudModal } from '@/components/ui/crud-modal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { fetchWorkLogsByVideoId, saveWorkLogsForVideo } from '@/services/videoOutputWorkLogService';
-import { resolveStaffUuid, localDateString } from '@/services/reportLinkService';
-import { syncVideoPendingReport } from '@/services/videoReportLinkService';
-import { useAuth } from '@/context/AuthContext';
-import type { VideoWorkLogDraft } from '@/types/videoOutputWorkLog';
+import { localDateString } from '@/services/reportLinkService';
 
 type Props = {
   video: VideoOutput;
@@ -30,7 +26,6 @@ function emptyUrlMap(): Record<PlatformPublishKey, string> {
 }
 
 export function PlatformPublishModal({ video, onClose, onSave }: Props) {
-  const { systemUser } = useAuth();
   const [selectedKey, setSelectedKey] = useState<PlatformPublishKey>(MEDIA_PLATFORM_PUBLISH_KEYS[0]);
   const [urls, setUrls] = useState<Record<PlatformPublishKey, string>>(() => {
     const initial = emptyUrlMap();
@@ -43,10 +38,8 @@ export function PlatformPublishModal({ video, onClose, onSave }: Props) {
   const [publishedDate, setPublishedDate] = useState(
     () => video.publishedDate?.trim() || localDateString(),
   );
-  const [hours, setHours] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
   const previewPublish = useMemo(
     () => mergePlatformUrls(video.platformPublish, urls),
@@ -59,13 +52,6 @@ export function PlatformPublishModal({ video, onClose, onSave }: Props) {
 
   const handleSubmit = async () => {
     setFormError(null);
-    setSaveNotice(null);
-
-    const hoursNum = parseFloat(hours);
-    if (hours.trim() && (Number.isNaN(hoursNum) || hoursNum <= 0)) {
-      setFormError('工時必須大於 0');
-      return;
-    }
 
     if (!publishedDate.trim()) {
       setFormError('請選擇實際發佈日期');
@@ -81,53 +67,6 @@ export function PlatformPublishModal({ video, onClose, onSave }: Props) {
       if (err) {
         setFormError(err.message || '儲存失敗');
         return;
-      }
-
-      const staffId = await resolveStaffUuid(systemUser);
-      if (hoursNum > 0 && staffId) {
-        const existingLogs = await fetchWorkLogsByVideoId(video.id);
-        const publishLog: VideoWorkLogDraft = {
-          staffId,
-          workDate: resolvedPublishedDate,
-          hours: hoursNum,
-          workType: 'other',
-          notes: '平台發佈',
-        };
-        await saveWorkLogsForVideo(video.id, [...existingLogs.map(l => ({
-          id: l.id,
-          staffId: l.staffId,
-          staffName: l.staffName,
-          workDate: l.workDate,
-          hours: l.hours,
-          workType: l.workType,
-          notes: l.notes,
-        })), publishLog], staffId);
-
-        const updatedVideo: VideoOutput = {
-          ...video,
-          platformPublish,
-          publishedDate: resolvedPublishedDate,
-        };
-        const allLogs = [...existingLogs.map(l => ({
-          staffId: l.staffId,
-          staffName: l.staffName,
-          workDate: l.workDate,
-          hours: l.hours,
-          workType: l.workType,
-          notes: l.notes,
-        })), publishLog];
-
-        const syncResult = await syncVideoPendingReport(updatedVideo, allLogs, staffId);
-        if (syncResult.action === 'created' || syncResult.action === 'updated') {
-          setSaveNotice(`已加入待匯報（${hoursNum.toFixed(1)}h）`);
-          setTimeout(() => onClose(), 800);
-          return;
-        }
-        if (syncResult.reason === 'consumed') {
-          setSaveNotice('發佈已保存；匯報項已提交，工時不會自動更新已提交記錄');
-          setTimeout(() => onClose(), 1200);
-          return;
-        }
       }
 
       onClose();
@@ -159,9 +98,6 @@ export function PlatformPublishModal({ video, onClose, onSave }: Props) {
       <div className="space-y-4">
         {formError && (
           <p className="text-[12px] text-rose-600 bg-rose-50 border border-rose-200 rounded px-3 py-2">{formError}</p>
-        )}
-        {saveNotice && (
-          <p className="text-[12px] text-teal-700 bg-teal-50 border border-teal-200 rounded px-3 py-2">{saveNotice}</p>
         )}
 
         <p className="text-[12px] text-muted-foreground">{video.title}</p>
@@ -210,22 +146,6 @@ export function PlatformPublishModal({ video, onClose, onSave }: Props) {
               填寫 URL 即視為該平台已發佈；留空則清除該平台記錄。
             </p>
           </div>
-        </div>
-
-        <div className="border-t border-border pt-4">
-          <label className="text-[12px] font-medium mb-1 block">工時（小時）</label>
-          <Input
-            type="number"
-            min={0}
-            step={0.5}
-            value={hours}
-            onChange={e => setHours(e.target.value)}
-            placeholder="選填；保存後自動帶入工作匯報"
-            className="h-9 text-[13px] max-w-[200px]"
-          />
-          <p className="text-[11px] text-muted-foreground mt-1.5">
-            填寫工時後，保存時將自動同步至「工作匯報」待匯報項。
-          </p>
         </div>
 
         <div className="flex justify-end gap-2 pt-2">

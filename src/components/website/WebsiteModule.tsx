@@ -532,7 +532,12 @@ function WebsiteDetail({
                 </div>
               </div>
               <div className="space-y-3">
-                <QuotationBvCard relatedType="webandsystem" relatedId={site.id} variant="embedded" />
+                <QuotationBvCard
+                  relatedType="webandsystem"
+                  relatedId={site.id}
+                  variant="embedded"
+                  projectTitle={site.websiteName}
+                />
 
                 {/* Budget */}
                 {site.budgetTotal && (

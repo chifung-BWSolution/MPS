@@ -218,31 +218,30 @@ export function VchannelLoginMethodPicker({
         <div className="rounded-md border border-teal-200 bg-teal-50/40 p-3 space-y-3">
           <div className="text-[12px] font-medium text-teal-800">快速新增登入方式</div>
           <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">登入方式 *</label>
-            <Select
-              value={quickCreate.loginMethod || undefined}
-              onValueChange={(next: VideoLoginMethodKind) =>
-                setQuickCreate(prev => prev ? { ...prev, loginMethod: next } : prev)
-              }
-            >
-              <SelectTrigger className="h-9 text-[13px] bg-white">
-                <SelectValue placeholder="選擇登入方式" />
-              </SelectTrigger>
-              <SelectContent className="z-[120]">
-                {VIDEO_LOGIN_METHOD_OPTIONS.map(option => (
-                  <SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">顯示名稱 *</label>
-            <Input
-              value={quickCreate.displayName}
-              onChange={e => setQuickCreate(prev => prev ? { ...prev, displayName: e.target.value } : prev)}
-              placeholder="在本系統顯示的名稱"
-              className="h-9 text-[13px] bg-white"
-            />
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">登入方式顯示名稱 *</label>
+            <div className="grid grid-cols-[minmax(9.5rem,0.9fr)_1.1fr] gap-2">
+              <Select
+                value={quickCreate.loginMethod || undefined}
+                onValueChange={(next: VideoLoginMethodKind) =>
+                  setQuickCreate(prev => prev ? { ...prev, loginMethod: next } : prev)
+                }
+              >
+                <SelectTrigger className="h-9 text-[13px] bg-white">
+                  <SelectValue placeholder="登入方式" />
+                </SelectTrigger>
+                <SelectContent className="z-[120]">
+                  {VIDEO_LOGIN_METHOD_OPTIONS.map(option => (
+                    <SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                value={quickCreate.displayName}
+                onChange={e => setQuickCreate(prev => prev ? { ...prev, displayName: e.target.value } : prev)}
+                placeholder="例如 CFB M10"
+                className="h-9 text-[13px] bg-white"
+              />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

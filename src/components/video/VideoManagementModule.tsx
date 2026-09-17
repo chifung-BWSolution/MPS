@@ -30,7 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { PlatformPublishModal } from '@/components/video/PlatformPublishModal';
 import { CoordinationRecordModal } from '@/components/video/CoordinationRecordModal';
-import { fetchWorkLogTotalsByVideoIds } from '@/services/videoOutputWorkLogService';
+import { sumProductionProgressHours } from '@/lib/videoWorkflowUtils';
 import { WorkflowStatusSummaryBar } from '@/components/video/workflow/WorkflowStatusSummaryBar';
 import { CopyStoragePathButton } from '@/components/video/workflow/workflowListLayout';
 import { VideoCoordinationStatusView } from '@/components/video/VideoCoordinationStatusView';
@@ -229,28 +229,13 @@ export function VideoManagementModule() {
   const [publishingVideo, setPublishingVideo] = useState<VideoOutput | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
-  const [workLogTotals, setWorkLogTotals] = useState<Map<string, number>>(new Map());
-
-  const refreshWorkLogTotals = useCallback(async (videoIds: string[]) => {
-    if (videoIds.length === 0) {
-      setWorkLogTotals(new Map());
-      return;
+  const workLogTotals = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const video of videos) {
+      totals.set(video.id, sumProductionProgressHours(video.productionProgress));
     }
-    try {
-      const totals = await fetchWorkLogTotalsByVideoIds(videoIds);
-      setWorkLogTotals(totals);
-    } catch {
-      // keep existing totals on refresh failure
-    }
-  }, []);
-
-  useEffect(() => {
-    if (videos.length === 0) {
-      setWorkLogTotals(new Map());
-      return;
-    }
-    void refreshWorkLogTotals(videos.map(v => v.id));
-  }, [videos, refreshWorkLogTotals]);
+    return totals;
+  }, [videos]);
 
   const yearOptions = useMemo(
     () => buildProductionYearOptions(videos.map(v => v.productionYear)),
@@ -312,7 +297,6 @@ export function VideoManagementModule() {
 
   const handleClosePublishModal = () => {
     setPublishingVideo(null);
-    void refreshWorkLogTotals(videos.map(v => v.id));
   };
 
   const handleSaveRecord = async (input: Partial<VideoOutputInput>) => {

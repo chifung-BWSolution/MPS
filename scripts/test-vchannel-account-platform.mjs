@@ -3,6 +3,7 @@ import {
   CHANNEL_LIST_ACCOUNT_COLUMNS,
   PLATFORM_KEYS,
   accountLabelForPlatform,
+  accountLabelsForPlatform,
   accountPlatformLabel,
   formatPlatformStatusNote,
   normalizeAccountPlatform,
@@ -73,6 +74,9 @@ const sampleAccounts = [
   { platform: 'instagram', accountLabel: '  ' },
 ];
 
+assert.deepEqual(accountLabelsForPlatform(sampleAccounts, 'facebook'), ['Franco FB', 'Franco FB Ads']);
+assert.deepEqual(accountLabelsForPlatform(sampleAccounts, 'instagram'), ['Franco IG']);
+assert.deepEqual(accountLabelsForPlatform(sampleAccounts, 'linkedin'), []);
 assert.equal(accountLabelForPlatform(sampleAccounts, 'facebook'), 'Franco FB / Franco FB Ads');
 assert.equal(accountLabelForPlatform(sampleAccounts, 'instagram'), 'Franco IG');
 assert.equal(accountLabelForPlatform(sampleAccounts, 'threads'), 'Franco Threads');

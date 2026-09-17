@@ -4,6 +4,8 @@ import { resolveRelatedProjectHubIds } from '@/lib/resolveProjectHub';
 import {
   QUOTATION_BV_TABLE,
   parseBvRatio,
+  sumBvRatios,
+  wouldExceedStaffBvPool,
   type QuotationBvInput,
   type QuotationBvRecord,
 } from '@/lib/quotationBv';
@@ -142,5 +144,62 @@ export function useQuotationBv(relatedType: string | undefined, relatedId: strin
     return { error: err };
   }, []);
 
-  return { rows, hubProjectId, loading, error, refresh, addRow, updateRow, deleteRow };
+  const saveBulk = useCallback(
+    async (inputs: QuotationBvInput[]) => {
+      if (!hubProjectId) return { error: { message: '缺少項目' } };
+
+      const next: QuotationBvInput[] = [];
+      const seen = new Set<string>();
+      for (const input of inputs) {
+        const staffId = input.staffId.trim();
+        if (!staffId) return { error: { message: '請選擇協作者' } };
+        if (seen.has(staffId)) return { error: { message: '同一同事不可重複分配' } };
+        const bvRatio = parseBvRatio(input.bvRatio);
+        if (bvRatio == null) return { error: { message: 'BV 比例須為大於 0、不大於協作者上限的數字' } };
+        seen.add(staffId);
+        next.push({ staffId, bvRatio });
+      }
+
+      if (wouldExceedStaffBvPool(0, sumBvRatios(next.map((row) => row.bvRatio)))) {
+        return { error: { message: '協作者 BV 合計不可超過上限' } };
+      }
+
+      const existingByStaff = new Map(rows.map((row) => [row.staffId, row]));
+      const nextStaff = new Set(next.map((row) => row.staffId));
+      const now = new Date().toISOString();
+
+      for (const item of next) {
+        const existing = existingByStaff.get(item.staffId);
+        if (existing) {
+          if (existing.bvRatio === item.bvRatio) continue;
+          const { error: err } = await supabase
+            .from(QUOTATION_BV_TABLE)
+            .update({ bv_ratio: item.bvRatio, updated_at: now })
+            .eq('id', existing.id);
+          if (err) return { error: err };
+        } else {
+          const { error: err } = await supabase.from(QUOTATION_BV_TABLE).insert({
+            project_id: hubProjectId,
+            staff_id: item.staffId,
+            bv_ratio: item.bvRatio,
+            created_at: now,
+            updated_at: now,
+          });
+          if (err) return { error: err };
+        }
+      }
+
+      for (const row of rows) {
+        if (nextStaff.has(row.staffId)) continue;
+        const { error: err } = await supabase.from(QUOTATION_BV_TABLE).delete().eq('id', row.id);
+        if (err) return { error: err };
+      }
+
+      await refresh();
+      return { error: null };
+    },
+    [hubProjectId, rows, refresh],
+  );
+
+  return { rows, hubProjectId, loading, error, refresh, addRow, updateRow, deleteRow, saveBulk };
 }

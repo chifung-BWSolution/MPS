@@ -1,65 +1,27 @@
 import { useMemo, useState } from 'react';
-import { Eye, EyeOff, Pencil, Plus, Search } from 'lucide-react';
+import { Pencil, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { useVideoLoginMethods } from '@/hooks/useVideoLoginMethods';
 import {
   VIDEO_LOGIN_METHOD_OPTIONS,
-  VIDEO_TWO_FA_OPTIONS,
-  normalizeTwoFaMethods,
   videoLoginMethodLabel,
   videoTwoFaLabel,
   type VideoLoginMethod,
   type VideoLoginMethodInput,
-  type VideoLoginMethodKind,
-  type VideoTwoFaMethod,
 } from '@/types/videoLoginMethod';
+import {
+  emptyLoginMethodForm,
+  loginMethodFormFromItem,
+  loginMethodFormToInput,
+  type LoginMethodForm,
+} from '@/lib/videoLoginMethodForm';
 import { filterVideoLoginMethods, loginMethodListMetrics } from '@/lib/videoLoginMethodList';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
 import { CrudModal } from '@/components/ui/crud-modal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-
-type LoginMethodForm = {
-  loginMethod: VideoLoginMethodKind | '';
-  displayName: string;
-  accountName: string;
-  phoneNumber: string;
-  email: string;
-  password: string;
-  twoFaMethods: VideoTwoFaMethod[];
-  note: string;
-  isActive: boolean;
-};
-
-const emptyForm = (): LoginMethodForm => ({
-  loginMethod: '',
-  displayName: '',
-  accountName: '',
-  phoneNumber: '',
-  email: '',
-  password: '',
-  twoFaMethods: [],
-  note: '',
-  isActive: true,
-});
-
-function formFromItem(item: VideoLoginMethod): LoginMethodForm {
-  return {
-    loginMethod: item.loginMethod,
-    displayName: item.displayName,
-    accountName: item.accountName,
-    phoneNumber: item.phoneNumber,
-    email: item.email,
-    password: item.password,
-    twoFaMethods: item.twoFaMethods,
-    note: item.note,
-    isActive: item.isActive,
-  };
-}
+import { VideoLoginMethodFormFields } from './VideoLoginMethodFormFields';
 
 function toInput(item: VideoLoginMethod, overrides: Partial<VideoLoginMethodInput> = {}): VideoLoginMethodInput {
   return {
@@ -87,7 +49,7 @@ export function VideoLoginMethodsModule() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<VideoLoginMethod | null>(null);
-  const [form, setForm] = useState<LoginMethodForm>(emptyForm());
+  const [form, setForm] = useState<LoginMethodForm>(emptyLoginMethodForm());
   const [saving, setSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -99,49 +61,26 @@ export function VideoLoginMethodsModule() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm(emptyForm());
+    setForm(emptyLoginMethodForm());
     setShowPassword(false);
     setModalOpen(true);
   };
 
   const openEdit = (item: VideoLoginMethod) => {
     setEditing(item);
-    setForm(formFromItem(item));
+    setForm(loginMethodFormFromItem(item));
     setShowPassword(false);
     setModalOpen(true);
   };
 
-  const toggleTwoFa = (method: VideoTwoFaMethod, checked: boolean) => {
-    setForm((prev) => {
-      const next = checked
-        ? [...prev.twoFaMethods, method]
-        : prev.twoFaMethods.filter((value) => value !== method);
-      return { ...prev, twoFaMethods: normalizeTwoFaMethods(next) };
-    });
-  };
-
   const handleSave = async () => {
-    if (!form.loginMethod) {
-      toast.error('請選擇登入方式');
-      return;
-    }
-    if (!form.displayName.trim()) {
-      toast.error('請輸入顯示名稱');
+    const payload = loginMethodFormToInput(form);
+    if (!payload) {
+      toast.error(!form.loginMethod ? '請選擇登入方式' : '請輸入顯示名稱');
       return;
     }
 
     setSaving(true);
-    const payload = {
-      loginMethod: form.loginMethod,
-      displayName: form.displayName,
-      accountName: form.accountName,
-      phoneNumber: form.phoneNumber,
-      email: form.email,
-      password: form.password,
-      twoFaMethods: form.twoFaMethods,
-      note: form.note,
-      isActive: form.isActive,
-    };
     const result = editing
       ? await updateItem(editing.id, payload)
       : await addItem(payload);
@@ -346,150 +285,12 @@ export function VideoLoginMethodsModule() {
         size="md"
       >
         <div className="space-y-4">
-          <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">
-              登入方式 *
-            </label>
-            <Select
-              value={form.loginMethod || undefined}
-              onValueChange={(value: VideoLoginMethodKind) =>
-                setForm((prev) => ({ ...prev, loginMethod: value }))
-              }
-            >
-              <SelectTrigger className="h-9 text-[13px]">
-                <SelectValue placeholder="選擇登入方式" />
-              </SelectTrigger>
-              <SelectContent>
-                {VIDEO_LOGIN_METHOD_OPTIONS.map((option) => (
-                  <SelectItem key={option.id} value={option.id}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">
-              顯示名稱 *
-            </label>
-            <Input
-              value={form.displayName}
-              onChange={(e) => setForm((prev) => ({ ...prev, displayName: e.target.value }))}
-              placeholder="在本系統顯示的名稱"
-              className="h-9 text-[13px]"
-            />
-          </div>
-
-          <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">
-              帳號名稱
-            </label>
-            <Input
-              value={form.accountName}
-              onChange={(e) => setForm((prev) => ({ ...prev, accountName: e.target.value }))}
-              placeholder="帳號 / 用戶名稱 / 用戶 ID"
-              className="h-9 text-[13px]"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">
-                電話號碼
-              </label>
-              <Input
-                value={form.phoneNumber}
-                onChange={(e) => setForm((prev) => ({ ...prev, phoneNumber: e.target.value }))}
-                placeholder="例如 +852 9123 4567"
-                className="h-9 text-[13px]"
-              />
-            </div>
-            <div>
-              <label className="text-[12px] font-medium text-muted-foreground block mb-1">
-                電郵
-              </label>
-              <Input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
-                placeholder="name@example.com"
-                className="h-9 text-[13px]"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">
-              密碼
-            </label>
-            <div className="relative">
-              <Input
-                type={showPassword ? 'text' : 'password'}
-                value={form.password}
-                onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
-                className="h-9 text-[13px] pr-10"
-                autoComplete="new-password"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                title={showPassword ? '隱藏密碼' : '顯示密碼'}
-              >
-                {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-2">
-              雙重驗證方式（可多選）
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {VIDEO_TWO_FA_OPTIONS.map((option) => {
-                const checked = form.twoFaMethods.includes(option.id);
-                return (
-                  <label
-                    key={option.id}
-                    className={cn(
-                      'flex items-center gap-2 rounded-md border px-3 py-2 text-[13px] cursor-pointer',
-                      checked ? 'border-teal-200 bg-teal-50' : 'border-border hover:bg-muted/30',
-                    )}
-                  >
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={(value) => toggleTwoFa(option.id, value === true)}
-                    />
-                    {option.label}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
-            <label className="text-[12px] font-medium text-muted-foreground block mb-1">
-              備註
-            </label>
-            <Textarea
-              value={form.note}
-              onChange={(e) => setForm((prev) => ({ ...prev, note: e.target.value }))}
-              placeholder="補充說明、注意事項…"
-              className="min-h-[72px] text-[13px]"
-            />
-          </div>
-
-          <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-            <div>
-              <div className="text-[13px] font-medium">啟用</div>
-              <div className="text-[11px] text-muted-foreground">停用後此登入方式會標示為停用</div>
-            </div>
-            <Switch
-              checked={form.isActive}
-              onCheckedChange={(checked) => setForm((prev) => ({ ...prev, isActive: checked }))}
-            />
-          </div>
+          <VideoLoginMethodFormFields
+            form={form}
+            setForm={setForm}
+            showPassword={showPassword}
+            onTogglePassword={() => setShowPassword(prev => !prev)}
+          />
 
           <div className="flex justify-end gap-2 pt-2 border-t border-border">
             <Button variant="secondary" disabled={saving} onClick={() => setModalOpen(false)}>

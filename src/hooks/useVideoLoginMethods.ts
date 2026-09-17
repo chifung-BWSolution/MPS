@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
+  composeLoginMethodDisplayName,
   isVideoLoginMethodKind,
   normalizeTwoFaMethods,
+  stripLoginMethodDisplayPrefix,
   type VideoLoginMethod,
   type VideoLoginMethodInput,
   type VideoLoginMethodKind,
@@ -52,7 +54,7 @@ function mapRow(row: VideoLoginMethodRow): VideoLoginMethod {
 function toDbRow(input: VideoLoginMethodInput) {
   return {
     login_method: input.loginMethod,
-    display_name: input.displayName.trim(),
+    display_name: composeLoginMethodDisplayName(input.loginMethod, input.displayName),
     account_name: input.accountName?.trim() || null,
     phone_number: input.phoneNumber?.trim() || null,
     email: input.email?.trim() || null,
@@ -94,13 +96,13 @@ export function useVideoLoginMethods() {
   }, [refresh]);
 
   const addItem = useCallback(async (input: VideoLoginMethodInput) => {
-    const displayName = input.displayName.trim();
+    const displayNameRest = stripLoginMethodDisplayPrefix(input.displayName);
     if (!input.loginMethod) return { ok: false as const, error: '請選擇登入方式' };
-    if (!displayName) return { ok: false as const, error: '請輸入顯示名稱' };
+    if (!displayNameRest) return { ok: false as const, error: '請輸入顯示名稱' };
 
     const { data, error: insertError } = await supabase
       .from(TABLE)
-      .insert(toDbRow({ ...input, displayName }))
+      .insert(toDbRow({ ...input, displayName: displayNameRest }))
       .select(SELECT_COLUMNS)
       .single();
 
@@ -112,13 +114,13 @@ export function useVideoLoginMethods() {
   }, []);
 
   const updateItem = useCallback(async (id: string, input: VideoLoginMethodInput) => {
-    const displayName = input.displayName.trim();
+    const displayNameRest = stripLoginMethodDisplayPrefix(input.displayName);
     if (!input.loginMethod) return { ok: false as const, error: '請選擇登入方式' };
-    if (!displayName) return { ok: false as const, error: '請輸入顯示名稱' };
+    if (!displayNameRest) return { ok: false as const, error: '請輸入顯示名稱' };
 
     const { data, error: updateError } = await supabase
       .from(TABLE)
-      .update(toDbRow({ ...input, displayName }))
+      .update(toDbRow({ ...input, displayName: displayNameRest }))
       .eq('id', id)
       .select(SELECT_COLUMNS)
       .single();

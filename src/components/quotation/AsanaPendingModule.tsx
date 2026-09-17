@@ -22,7 +22,6 @@ import {
 import {
   ASANA_CASE_CLOSED_REASONS,
   type AsanaCaseClosedFilter,
-  type AsanaExpiredFilter,
   type AsanaImportFilter,
   matchesAsanaPendingFilters,
 } from '@/lib/asanaPendingFilters';
@@ -95,7 +94,6 @@ export function AsanaPendingModule() {
   const { options: staffOptions } = useActiveStaffOptions([systemUser?.staff_id]);
 
   const [importFilter, setImportFilter] = useState<AsanaImportFilter>('pending');
-  const [expiredFilter, setExpiredFilter] = useState<AsanaExpiredFilter>('all');
   const [caseClosedFilter, setCaseClosedFilter] = useState<AsanaCaseClosedFilter>('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [projectTypeFilter, setProjectTypeFilter] = useState('all');
@@ -133,7 +131,6 @@ export function AsanaPendingModule() {
       if (
         !matchesAsanaPendingFilters(task, {
           importFilter,
-          expiredFilter,
           caseClosedFilter,
         })
       ) {
@@ -152,7 +149,7 @@ export function AsanaPendingModule() {
         formatProjectTypes(task.projectTypes).toLowerCase().includes(query)
       );
     });
-  }, [sectionTasks, importFilter, expiredFilter, caseClosedFilter, projectTypeFilter, searchQuery]);
+  }, [sectionTasks, importFilter, caseClosedFilter, projectTypeFilter, searchQuery]);
 
   const handleSync = async () => {
     try {
@@ -288,15 +285,6 @@ export function AsanaPendingModule() {
           <option value="all">全部匯入狀態</option>
         </select>
         <select
-          value={expiredFilter}
-          onChange={(e) => setExpiredFilter(e.target.value as AsanaExpiredFilter)}
-          className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
-        >
-          <option value="all">全部期限</option>
-          <option value="expired">已過期</option>
-          <option value="not_expired">未過期</option>
-        </select>
-        <select
           value={caseClosedFilter}
           onChange={(e) => setCaseClosedFilter(e.target.value as AsanaCaseClosedFilter)}
           className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
@@ -366,7 +354,11 @@ export function AsanaPendingModule() {
                     <tr key={task.asanaTaskGid} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                       <td className="px-4 py-3 text-[13px] text-muted-foreground tabular-nums">{task.inquiryDate}</td>
                       <td className="px-4 py-3 text-[13px]">
-                        <RemainingDaysCell inquiryDate={task.inquiryDate} status="initial" />
+                        {task.imported ? (
+                          <span className="text-emerald-600 font-medium">已匯入</span>
+                        ) : (
+                          <RemainingDaysCell inquiryDate={task.inquiryDate} status="initial" />
+                        )}
                       </td>
                       <td className="px-4 py-3 text-[13px] max-w-[180px]">{task.asanaProjectName || '—'}</td>
                       <td className="px-4 py-3 text-[14px] font-medium">{task.displayName}</td>

@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
 import { Plus, Search, Edit, KeyRound, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EmptyDash, MutedFieldBadge } from '@/components/ui/nullable-badge';
@@ -13,11 +13,12 @@ import {
   PLATFORM_LABELS,
   STATUS_KIND_COLORS,
   STATUS_KIND_LABELS,
-  accountLabelForPlatform,
+  accountLabelsForPlatform,
   accountPlatformLabel,
   platformStatusSummary,
 } from '@/lib/vchannelPlatformStatus';
-import { fetchWorkLogTotalsByVchannelIds } from '@/services/videoOutputWorkLogService';
+import { useVideoWorkflow } from '@/hooks/useVideoWorkflow';
+import { sumProductionProgressHours } from '@/lib/videoWorkflowUtils';
 import {
   VchannelAccountFormModal,
   accountToForm,
@@ -34,14 +35,22 @@ function ChannelWorkHoursCell({ hours }: { hours?: number }) {
   return <span className="font-medium text-teal-700 whitespace-nowrap">{hours.toFixed(1)}h</span>;
 }
 
-function ChannelAccountLabelCell({ label }: { label: string }) {
-  if (!label) {
+function ChannelAccountLabelCell({ labels }: { labels: string[] }) {
+  if (labels.length === 0) {
     return <EmptyDash />;
   }
   return (
-    <span className="text-[11px] font-medium truncate max-w-[140px] inline-block align-bottom" title={label}>
-      {label}
-    </span>
+    <div className="flex flex-col gap-0.5 min-w-0 max-w-[160px]">
+      {labels.map((label, index) => (
+        <span
+          key={`${index}-${label}`}
+          className="text-[11px] font-medium truncate leading-tight"
+          title={label}
+        >
+          {label}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -58,6 +67,7 @@ function ChannelNameCell({ internalName, publicName }: { internalName: string; p
 }
 
 export function VideoChannelsList() {
+  const { videos } = useVideoWorkflow();
   const { channels, loading, error, fetchChannels } = useVchannels();
   const { brands } = useBrands();
   const {
@@ -93,28 +103,17 @@ export function VideoChannelsList() {
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [accountForm, setAccountForm] = useState(emptyAccountForm);
   const [savingAccount, setSavingAccount] = useState(false);
-  const [channelWorkHours, setChannelWorkHours] = useState<Map<string, number>>(new Map());
-
-  const refreshChannelWorkHours = useCallback(async (channelIds: string[]) => {
-    if (channelIds.length === 0) {
-      setChannelWorkHours(new Map());
-      return;
+  const channelWorkHours = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const video of videos) {
+      if (!video.vchannelId) continue;
+      totals.set(
+        video.vchannelId,
+        (totals.get(video.vchannelId) ?? 0) + sumProductionProgressHours(video.productionProgress),
+      );
     }
-    try {
-      const totals = await fetchWorkLogTotalsByVchannelIds(channelIds);
-      setChannelWorkHours(totals);
-    } catch {
-      // keep existing totals on refresh failure
-    }
-  }, []);
-
-  useEffect(() => {
-    if (channels.length === 0) {
-      setChannelWorkHours(new Map());
-      return;
-    }
-    void refreshChannelWorkHours(channels.map(ch => ch.id));
-  }, [channels, refreshChannelWorkHours]);
+    return totals;
+  }, [videos]);
 
   const brandFilterOptions = useMemo(
     () => [...new Set(channels.map(c => channelBrandLabel(c)).filter(code => code && code !== '—'))].sort(),
@@ -263,7 +262,7 @@ export function VideoChannelsList() {
                   const linkedAccounts = accountsForChannel(channel.channelCode);
                   return (
                     <Fragment key={channel.id}>
-                      <tr className="border-t border-border/50 hover:bg-muted/10">
+                      <tr className="border-t border-border/50 hover:bg-muted/10 [&>td]:align-top">
                         <td className="px-3 py-3">
                           <button
                             onClick={() => setExpandedChannelId(isExpanded ? null : channel.id)}
@@ -281,8 +280,8 @@ export function VideoChannelsList() {
                           <span className={cn('text-[11px] font-bold px-2 py-0.5 rounded', iConfig.bg, iConfig.color)}>{iConfig.label}</span>
                         </td>
                         {CHANNEL_LIST_ACCOUNT_COLUMNS.map(col => (
-                          <td key={col.key} className="px-3 py-3">
-                            <ChannelAccountLabelCell label={accountLabelForPlatform(linkedAccounts, col.key)} />
+                          <td key={col.key} className="px-3 py-3 align-top">
+                            <ChannelAccountLabelCell labels={accountLabelsForPlatform(linkedAccounts, col.key)} />
                           </td>
                         ))}
                         <td className="px-3 py-3 text-right">

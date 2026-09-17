@@ -219,6 +219,11 @@ export const mainMenuItems: MainMenuItem[] = [
     id: 'finance',
     label: '會計財務',
     subMenus: [
+      { id: 'bv-allocation', label: 'BV 分配' },
+      { id: 'due-soon', label: '即將到期支出' },
+      { id: 'receivables', label: '應收未收' },
+      { id: 'payables', label: '應付未付' },
+      { id: 'bad-debts', label: '壞帳列表' },
       { id: 'recurring', label: '自動續訂管理' },
     ],
   },

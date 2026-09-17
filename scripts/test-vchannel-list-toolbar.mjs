@@ -22,6 +22,7 @@ function account(partial) {
     loginMethodIds: partial.loginMethodIds ?? [],
     linkedLoginMethods: partial.linkedLoginMethods ?? [],
     feedhiveManaged: partial.feedhiveManaged ?? false,
+    notes: partial.notes,
     isActive: partial.isActive ?? true,
   };
 }
@@ -44,6 +45,9 @@ function method(partial) {
 assert.match(videoModuleSrc, /resolvedTab === 'channels'/);
 assert.match(videoModuleSrc, /resolvedTab === 'accounts'/);
 assert.match(videoModuleSrc, /resolvedTab === 'login-methods'/);
+assert.match(channelsSrc, /accountLabelsForPlatform/);
+assert.match(channelsSrc, /flex flex-col/);
+assert.doesNotMatch(channelsSrc, /accountLabelForPlatform/);
 
 for (const [name, src, title] of [
   ['channels', channelsSrc, '頻道設定'],
@@ -58,9 +62,9 @@ for (const [name, src, title] of [
 }
 
 const rows = [
-  account({ id: '1', vchannelCodes: ['V12', 'V14'], accountLabel: 'Franco', platform: 'douyin', accountId: 'cfb_m04', isActive: true }),
-  account({ id: '2', vchannelCodes: ['V01'], accountLabel: 'BW Branding', platform: 'facebook', accountId: 'bw_design', isActive: false }),
-  account({ id: '3', vchannelCodes: ['V12'], accountLabel: 'BW Wine', platform: 'facebook', accountId: 'bw_wine', isActive: true }),
+  account({ id: '1', vchannelCodes: ['V12', 'V14'], accountLabel: 'Franco', platform: 'douyin', accountId: 'cfb_m04', notes: '待開專頁', isActive: true }),
+  account({ id: '2', vchannelCodes: ['V01'], accountLabel: 'BW Branding', platform: 'facebook', accountId: 'bw_design', notes: '需掃碼登入', isActive: false }),
+  account({ id: '3', vchannelCodes: ['V12'], accountLabel: 'BW Wine', platform: 'facebook', accountId: 'bw_wine', notes: '限定手機登入', isActive: true }),
 ];
 
 assert.deepEqual(accountListMetrics(rows), { total: 3, active: 2, channels: 3 });
@@ -72,6 +76,7 @@ assert.deepEqual(filterVchannelAccounts(rows, { searchQuery: 'v12' }).map(r => r
 assert.deepEqual(filterVchannelAccounts(rows, { platformFilter: 'facebook' }).map(r => r.id), ['2', '3']);
 assert.deepEqual(filterVchannelAccounts(rows, { statusFilter: 'inactive' }).map(r => r.id), ['2']);
 assert.deepEqual(filterVchannelAccounts(rows, { searchQuery: 'wine', platformFilter: 'facebook', statusFilter: 'active' }).map(r => r.id), ['3']);
+assert.deepEqual(filterVchannelAccounts(rows, { searchQuery: '掃碼' }).map(r => r.id), ['2']);
 
 const methods = [
   method({ id: 'a', displayName: 'Google 主帳', loginMethod: 'google', email: 'a@example.com', twoFaMethods: ['authenticator'], isActive: true }),

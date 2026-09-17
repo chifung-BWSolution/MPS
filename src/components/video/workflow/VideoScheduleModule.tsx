@@ -12,7 +12,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useVideoWorkflow } from '@/hooks/useVideoWorkflow';
 import { useVchannels } from '@/hooks/useVchannels';
-import { fetchStaffDirectoryOptions } from '@/services/videoOutputWorkLogService';
+import { fetchStaffDirectoryOptions } from '@/services/staffDirectoryService';
 import { supabase } from '@/lib/supabase';
 import {
   buildProductionYearOptions,

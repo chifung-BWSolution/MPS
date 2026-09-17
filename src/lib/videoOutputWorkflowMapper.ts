@@ -207,5 +207,3 @@ export function createVideoDbRow(payload: {
     platform_publish: {},
   };
 }
-
-export const PRODUCTION_WORK_LOG_PREFIX = '[製作]';

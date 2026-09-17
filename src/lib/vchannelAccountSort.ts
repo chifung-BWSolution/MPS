@@ -7,6 +7,7 @@ export type AccountSortKey =
   | 'platform'
   | 'accountId'
   | 'loginMethod'
+  | 'notes'
   | 'feedhive'
   | 'isActive';
 
@@ -18,6 +19,7 @@ export const ACCOUNT_SORT_COLUMNS: { key: AccountSortKey; label: string }[] = [
   { key: 'platform', label: '平台' },
   { key: 'accountId', label: '賬號ID' },
   { key: 'loginMethod', label: '登入方式' },
+  { key: 'notes', label: '備註' },
   { key: 'feedhive', label: 'FeedHive' },
   { key: 'isActive', label: '狀態' },
 ];
@@ -34,6 +36,8 @@ export function accountSortValue(account: VchannelAccount, key: AccountSortKey):
       return account.accountId ?? '';
     case 'loginMethod':
       return formatLinkedLoginMethods(account);
+    case 'notes':
+      return account.notes ?? '';
     case 'feedhive':
       return account.feedhiveManaged ? 1 : 0;
     case 'isActive':

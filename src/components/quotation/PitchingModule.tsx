@@ -42,6 +42,11 @@ import {
   calcClientProjectProgress,
   calcRemainingDays,
   clientProjectProgressConfig,
+  formatPitchingRemainingDays,
+  matchesPitchingDealFilter,
+  pitchingRemainingDaysTone,
+  pitchingRemainingDaysToneClass,
+  type PitchingDealFilter,
   formatProjectTypes,
   formatMainPmName,
   formatRelatedClientName,
@@ -317,9 +322,35 @@ export function RemainingDaysCell({
 
   const days = calcRemainingDays(inquiryDate, status);
   if (days === null) return <span className="text-muted-foreground">—</span>;
-  const color =
-    days <= 0 ? 'text-rose-600 font-semibold' : days <= 7 ? 'text-amber-600 font-medium' : 'text-foreground';
-  return <span className={cn('tabular-nums', color)}>{days <= 0 ? `逾期 ${Math.abs(days)} 天` : `${days} 天`}</span>;
+  const tone = pitchingRemainingDaysTone(days);
+  return (
+    <span className={cn(days > 0 && 'tabular-nums', pitchingRemainingDaysToneClass[tone])}>
+      {formatPitchingRemainingDays(days)}
+    </span>
+  );
+}
+
+const listFilterSelectClass =
+  'text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500';
+
+export function PitchingDealFilterSelect({
+  value,
+  onChange,
+}: {
+  value: PitchingDealFilter;
+  onChange: (next: PitchingDealFilter) => void;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as PitchingDealFilter)}
+      className={listFilterSelectClass}
+    >
+      <option value="all">全部狀態</option>
+      <option value="hide_failed">隱藏未能成交</option>
+      <option value="show_failed">顯示未能成交</option>
+    </select>
+  );
 }
 
 function ProjectTypeSelect({
@@ -745,7 +776,7 @@ function PitchingList({
   const { query, setQuery } = useQuotationListQuery('pitching');
   const searchQuery = query.q;
   const projectTypeFilter = query.type;
-  const statusFilter = query.status;
+  const dealFilter = query.status;
 
   const withMoney = useMemo(
     () => records.map((record) => ({ ...record, ...estimatedMoneyFor(record) })),
@@ -755,7 +786,7 @@ function PitchingList({
   const filtered = useMemo(() => {
     return withMoney.filter((p) => {
       if (!matchesProjectTypeFilter(p.projectTypeId, projectTypeFilter)) return false;
-      if (statusFilter !== 'all' && p.status !== statusFilter) return false;
+      if (!matchesPitchingDealFilter(p.status, p.inquiryDate, dealFilter)) return false;
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         return (
@@ -769,7 +800,7 @@ function PitchingList({
       }
       return true;
     });
-  }, [withMoney, searchQuery, projectTypeFilter, statusFilter]);
+  }, [withMoney, searchQuery, projectTypeFilter, dealFilter]);
   const { sorted, sortKey, sortDir, onSort } = useQuotationListSort(filtered, {
     sortKey: query.sort,
     sortDir: query.dir,
@@ -825,17 +856,10 @@ function PitchingList({
             </option>
           ))}
         </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => setQuery({ status: e.target.value })}
-          className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
-        >
-          <option value="all">全部狀態</option>
-          <option value="initial">初步提案</option>
-          <option value="following_up">跟進中</option>
-          <option value="confirmed">確認項目</option>
-          <option value="closed">已結案</option>
-        </select>
+        <PitchingDealFilterSelect
+          value={dealFilter}
+          onChange={(status) => setQuery({ status })}
+        />
       </div>
 
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-hidden">
@@ -1190,7 +1214,7 @@ export function PitchingDetail({
                   <ReadOnlyField label="合約開始日期">{draft.contractStartDate || '—'}</ReadOnlyField>
                   <ReadOnlyField label="合約結束日期">{draft.contractEndDate || '—'}</ReadOnlyField>
                   <ReadOnlyField label="剩餘天數">
-                    {remaining === null ? '—' : remaining <= 0 ? `逾期 ${Math.abs(remaining)} 天` : `${remaining} 天`}
+                    {formatPitchingRemainingDays(remaining)}
                   </ReadOnlyField>
                 </div>
                 <div className="space-y-4 min-w-0">
@@ -1236,7 +1260,11 @@ export function PitchingDetail({
                 </div>
               </div>
             </div>
-            <QuotationBvCard relatedType="quotation_client" relatedId={record.id} />
+            <QuotationBvCard
+              relatedType="quotation_client"
+              relatedId={record.id}
+              projectTitle={draft.displayName || record.displayName}
+            />
           </div>
           <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6">
             <span className="text-[12px] text-muted-foreground block mb-1">提案描述</span>

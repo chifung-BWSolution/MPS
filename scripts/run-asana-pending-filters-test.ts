@@ -53,50 +53,36 @@ const closedFresh = {
 
 const defaults = {
   importFilter: 'pending' as const,
-  expiredFilter: 'all' as const,
   caseClosedFilter: 'pending' as const,
 };
 
-assert.equal(matchesAsanaPendingFilters(openFresh, defaults, '2026-08-25'), true);
-assert.equal(matchesAsanaPendingFilters(importedExpired, defaults, '2026-08-25'), false);
-assert.equal(matchesAsanaPendingFilters(closedFresh, defaults, '2026-08-25'), false);
+assert.equal(matchesAsanaPendingFilters(openFresh, defaults), true);
+assert.equal(matchesAsanaPendingFilters(importedExpired, defaults), false);
+assert.equal(matchesAsanaPendingFilters(closedFresh, defaults), false);
 
 assert.equal(
-  matchesAsanaPendingFilters(importedExpired, { ...defaults, importFilter: 'imported' }, '2026-08-25'),
+  matchesAsanaPendingFilters(importedExpired, { ...defaults, importFilter: 'imported' }),
   true,
 );
 assert.equal(
-  matchesAsanaPendingFilters(openFresh, { ...defaults, importFilter: 'imported' }, '2026-08-25'),
+  matchesAsanaPendingFilters(openFresh, { ...defaults, importFilter: 'imported' }),
   false,
 );
 assert.equal(
-  matchesAsanaPendingFilters(importedExpired, { ...defaults, importFilter: 'all' }, '2026-08-25'),
-  true,
-);
-
-assert.equal(
-  matchesAsanaPendingFilters(importedExpired, { ...defaults, importFilter: 'all', expiredFilter: 'expired' }, '2026-08-25'),
-  true,
-);
-assert.equal(
-  matchesAsanaPendingFilters(openFresh, { ...defaults, expiredFilter: 'expired' }, '2026-08-25'),
-  false,
-);
-assert.equal(
-  matchesAsanaPendingFilters(openFresh, { ...defaults, expiredFilter: 'not_expired' }, '2026-08-25'),
+  matchesAsanaPendingFilters(importedExpired, { ...defaults, importFilter: 'all' }),
   true,
 );
 
 assert.equal(
-  matchesAsanaPendingFilters(closedFresh, { ...defaults, caseClosedFilter: 'closed' }, '2026-08-25'),
+  matchesAsanaPendingFilters(closedFresh, { ...defaults, caseClosedFilter: 'closed' }),
   true,
 );
 assert.equal(
-  matchesAsanaPendingFilters(openFresh, { ...defaults, caseClosedFilter: 'closed' }, '2026-08-25'),
+  matchesAsanaPendingFilters(openFresh, { ...defaults, caseClosedFilter: 'closed' }),
   false,
 );
 assert.equal(
-  matchesAsanaPendingFilters(closedFresh, { ...defaults, caseClosedFilter: 'all' }, '2026-08-25'),
+  matchesAsanaPendingFilters(closedFresh, { ...defaults, caseClosedFilter: 'all' }),
   true,
 );
 
@@ -128,10 +114,10 @@ assert.match(api, /closeAsanaSyncedTask/);
 
 const pending = read('src/components/quotation/AsanaPendingModule.tsx');
 assert.match(pending, /取消跟進/);
-assert.match(pending, /expiredFilter/);
 assert.match(pending, /caseClosedFilter/);
 assert.match(pending, /value="imported"/);
-assert.match(pending, /value="not_expired"/);
+assert.doesNotMatch(pending, /PitchingDealFilterSelect/);
+assert.doesNotMatch(pending, /dealFilter/);
 assert.match(pending, /value="closed"/);
 assert.match(pending, /colSpan=\{8\}/);
 assert.doesNotMatch(pending, />\s*狀態\s*</);

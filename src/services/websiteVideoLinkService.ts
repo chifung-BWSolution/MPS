@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { mapVideoOutputRow } from '@/lib/videoOutputUtils';
 import type { VideoOutput } from '@/types/videoOutput';
-import { fetchWorkLogTotalsByVideoIds } from '@/services/videoOutputWorkLogService';
+import { sumProductionProgressHours } from '@/lib/videoWorkflowUtils';
 
 const VIDEO_SELECT = `
   *,
@@ -58,8 +58,6 @@ export async function fetchLinkedVideosForWebsite(
     }),
   );
 
-  const hoursMap = await fetchWorkLogTotalsByVideoIds(videoIds);
-
   return links
     .map(link => {
       const video = videoMap.get(link.video_output_id as string);
@@ -67,7 +65,7 @@ export async function fetchLinkedVideosForWebsite(
       return {
         ...video,
         linkId: link.id as string,
-        totalHours: hoursMap.get(video.id) ?? 0,
+        totalHours: sumProductionProgressHours(video.productionProgress),
       };
     })
     .filter((v): v is WebsiteLinkedVideo => v !== null);

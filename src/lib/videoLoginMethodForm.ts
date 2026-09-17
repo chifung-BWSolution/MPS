@@ -1,5 +1,7 @@
 import {
+  composeLoginMethodDisplayName,
   normalizeTwoFaMethods,
+  stripLoginMethodDisplayPrefix,
   type VideoLoginMethod,
   type VideoLoginMethodInput,
   type VideoLoginMethodKind,
@@ -33,7 +35,7 @@ export const emptyLoginMethodForm = (): LoginMethodForm => ({
 export function loginMethodFormFromItem(item: VideoLoginMethod): LoginMethodForm {
   return {
     loginMethod: item.loginMethod,
-    displayName: item.displayName,
+    displayName: stripLoginMethodDisplayPrefix(item.displayName),
     accountName: item.accountName,
     phoneNumber: item.phoneNumber,
     email: item.email,
@@ -46,11 +48,11 @@ export function loginMethodFormFromItem(item: VideoLoginMethod): LoginMethodForm
 
 export function loginMethodFormToInput(form: LoginMethodForm): VideoLoginMethodInput | null {
   if (!form.loginMethod) return null;
-  const displayName = form.displayName.trim();
-  if (!displayName) return null;
+  const displayNameRest = stripLoginMethodDisplayPrefix(form.displayName);
+  if (!displayNameRest) return null;
   return {
     loginMethod: form.loginMethod,
-    displayName,
+    displayName: composeLoginMethodDisplayName(form.loginMethod, displayNameRest),
     accountName: form.accountName,
     phoneNumber: form.phoneNumber,
     email: form.email,

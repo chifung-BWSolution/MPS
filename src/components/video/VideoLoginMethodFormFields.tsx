@@ -38,37 +38,33 @@ export function VideoLoginMethodFormFields({
     <div className="space-y-4">
       <div>
         <label className="text-[12px] font-medium text-muted-foreground block mb-1">
-          登入方式 *
+          登入方式顯示名稱 *
         </label>
-        <Select
-          value={form.loginMethod || undefined}
-          onValueChange={(value: VideoLoginMethodKind) =>
-            setForm(prev => ({ ...prev, loginMethod: value }))
-          }
-        >
-          <SelectTrigger className="h-9 text-[13px]">
-            <SelectValue placeholder="選擇登入方式" />
-          </SelectTrigger>
-          <SelectContent className="z-[120]">
-            {VIDEO_LOGIN_METHOD_OPTIONS.map(option => (
-              <SelectItem key={option.id} value={option.id}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div>
-        <label className="text-[12px] font-medium text-muted-foreground block mb-1">
-          顯示名稱 *
-        </label>
-        <Input
-          value={form.displayName}
-          onChange={e => setForm(prev => ({ ...prev, displayName: e.target.value }))}
-          placeholder="在本系統顯示的名稱"
-          className="h-9 text-[13px]"
-        />
+        <div className="grid grid-cols-[minmax(9.5rem,0.9fr)_1.1fr] gap-2">
+          <Select
+            value={form.loginMethod || undefined}
+            onValueChange={(value: VideoLoginMethodKind) =>
+              setForm(prev => ({ ...prev, loginMethod: value }))
+            }
+          >
+            <SelectTrigger className="h-9 text-[13px]">
+              <SelectValue placeholder="登入方式" />
+            </SelectTrigger>
+            <SelectContent className="z-[120]">
+              {VIDEO_LOGIN_METHOD_OPTIONS.map(option => (
+                <SelectItem key={option.id} value={option.id}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            value={form.displayName}
+            onChange={e => setForm(prev => ({ ...prev, displayName: e.target.value }))}
+            placeholder="例如 CFB M10"
+            className="h-9 text-[13px]"
+          />
+        </div>
       </div>
 
       <div>

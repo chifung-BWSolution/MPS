@@ -249,6 +249,9 @@ export function VideoAccountsList() {
                       <span className="truncate block text-muted-foreground" title={acc.loginMethod}>{acc.loginMethod || '—'}</span>
                     )}
                   </td>
+                  <td className="px-3 py-2 max-w-[220px]">
+                    <span className="truncate block" title={acc.notes}>{acc.notes || '—'}</span>
+                  </td>
                   <td className="px-3 py-2">{acc.feedhiveManaged ? '✓' : '—'}</td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">

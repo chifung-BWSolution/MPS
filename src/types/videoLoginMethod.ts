@@ -60,6 +60,42 @@ export function videoLoginMethodLabel(kind: string): string {
   return VIDEO_LOGIN_METHOD_OPTIONS.find((option) => option.id === kind)?.label ?? kind;
 }
 
+const LOGIN_METHOD_LABELS_BY_LENGTH = [...VIDEO_LOGIN_METHOD_OPTIONS]
+  .map((option) => option.label)
+  .sort((a, b) => b.length - a.length);
+
+/** Strip a known Chinese login-method label so the form only edits the custom name. */
+export function stripLoginMethodDisplayPrefix(displayName: string): string {
+  let name = displayName.trim();
+  let changed = true;
+  while (changed && name) {
+    changed = false;
+    for (const label of LOGIN_METHOD_LABELS_BY_LENGTH) {
+      if (name === label) {
+        name = '';
+        changed = true;
+        break;
+      }
+      if (name.startsWith(`${label} `)) {
+        name = name.slice(label.length).trim();
+        changed = true;
+        break;
+      }
+    }
+  }
+  return name;
+}
+
+/** Persist display_name as "<中文登入方式> <自訂名稱>", e.g. "微信掃碼 CFB M10". */
+export function composeLoginMethodDisplayName(
+  kind: VideoLoginMethodKind,
+  displayName: string,
+): string {
+  const prefix = videoLoginMethodLabel(kind);
+  const rest = stripLoginMethodDisplayPrefix(displayName);
+  return rest ? `${prefix} ${rest}` : prefix;
+}
+
 export function videoTwoFaLabel(method: string): string {
   return VIDEO_TWO_FA_OPTIONS.find((option) => option.id === method)?.label ?? method;
 }

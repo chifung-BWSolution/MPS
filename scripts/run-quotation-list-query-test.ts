@@ -26,17 +26,38 @@ assert.match(pitchingSrc, /setQuery\(\{ q:/);
 assert.match(projectSrc, /setQuery\(\{ q:/);
 assert.match(pitchingSrc, /onSortChange: \(key, dir\) => setQuery\(\{ sort: key, dir \}\)/);
 assert.match(projectSrc, /onSortChange: \(key, dir\) => setQuery\(\{ sort: key, dir \}\)/);
+assert.match(pitchingSrc, /PitchingDealFilterSelect/);
+assert.doesNotMatch(projectSrc, /PitchingDealFilterSelect/);
+const pendingSrc = readFileSync(join(root, 'src/components/quotation/AsanaPendingModule.tsx'), 'utf8');
+assert.doesNotMatch(pendingSrc, /PitchingDealFilterSelect/);
+assert.match(pitchingSrc, /matchesPitchingDealFilter/);
+assert.match(projectSrc, /matchesClientProjectProgressFilter/);
+assert.equal(DEFAULT_QUOTATION_LIST_QUERY.status, 'hide_failed');
+assert.equal(DEFAULT_QUOTATION_LIST_QUERY.progress, 'all');
 
 assert.deepEqual(parseQuotationListQuery(new URLSearchParams()), DEFAULT_QUOTATION_LIST_QUERY);
 assert.deepEqual(
-  parseQuotationListQuery(new URLSearchParams('q=acme&type=bwt_web&status=confirmed&sort=displayName&dir=asc')),
+  parseQuotationListQuery(new URLSearchParams('q=acme&type=bwt_web&status=all&sort=displayName&dir=asc')),
   {
     q: 'acme',
     type: 'bwt_web',
-    status: 'confirmed',
+    status: 'all',
+    progress: 'all',
     sort: 'displayName',
     dir: 'asc',
   },
+);
+assert.deepEqual(
+  parseQuotationListQuery(new URLSearchParams('status=show_failed')),
+  { ...DEFAULT_QUOTATION_LIST_QUERY, status: 'show_failed' },
+);
+assert.deepEqual(
+  parseQuotationListQuery(new URLSearchParams('progress=in_progress')),
+  { ...DEFAULT_QUOTATION_LIST_QUERY, progress: 'in_progress' },
+);
+assert.deepEqual(
+  parseQuotationListQuery(new URLSearchParams('status=confirmed&expired=all')),
+  DEFAULT_QUOTATION_LIST_QUERY,
 );
 assert.deepEqual(
   parseQuotationListQuery(new URLSearchParams('status=nope&sort=unknown&dir=sideways')),
@@ -49,18 +70,26 @@ assert.equal(written.toString(), '');
 writeQuotationListQueryParams(written, {
   q: '  acme  ',
   type: 'bwt_web',
-  status: 'confirmed',
+  status: 'all',
+  progress: 'all',
   sort: 'income',
   dir: 'desc',
 });
-assert.equal(written.toString(), 'q=acme&type=bwt_web&status=confirmed&sort=income&dir=desc');
+assert.equal(written.toString(), 'q=acme&type=bwt_web&status=all&sort=income&dir=desc');
+writeQuotationListQueryParams(written, {
+  ...DEFAULT_QUOTATION_LIST_QUERY,
+  status: 'show_failed',
+  progress: 'completed',
+});
+assert.equal(written.toString(), 'status=show_failed&progress=completed');
 
 assert.deepEqual(
-  readQuotationListQuery('#quotation/projects?id=proj-1&q=acme&type=bwt_web&status=confirmed&sort=displayName&dir=asc'),
+  readQuotationListQuery('#quotation/projects?id=proj-1&q=acme&type=bwt_web&progress=pending&sort=displayName&dir=asc'),
   {
     q: 'acme',
     type: 'bwt_web',
-    status: 'confirmed',
+    status: 'hide_failed',
+    progress: 'pending',
     sort: 'displayName',
     dir: 'asc',
   },
@@ -92,25 +121,26 @@ Object.defineProperty(globalThis, 'sessionStorage', {
 setQuotationListHash('projects', {
   q: 'acme',
   type: 'bwt_web',
-  status: 'confirmed',
+  status: 'hide_failed',
+  progress: 'pending',
   sort: 'displayName',
   dir: 'asc',
 });
 assert.equal(
   location.hash,
-  '#quotation/projects?q=acme&type=bwt_web&status=confirmed&sort=displayName&dir=asc',
+  '#quotation/projects?q=acme&type=bwt_web&progress=pending&sort=displayName&dir=asc',
 );
 
 openQuotationProjectDetail('proj-1', 'confirmed');
 assert.equal(
   location.hash,
-  '#quotation/projects?id=proj-1&q=acme&type=bwt_web&status=confirmed&sort=displayName&dir=asc',
+  '#quotation/projects?id=proj-1&q=acme&type=bwt_web&progress=pending&sort=displayName&dir=asc',
 );
 
 setQuotationClientHash('projects', null);
 assert.equal(
   location.hash,
-  '#quotation/projects?q=acme&type=bwt_web&status=confirmed&sort=displayName&dir=asc',
+  '#quotation/projects?q=acme&type=bwt_web&progress=pending&sort=displayName&dir=asc',
 );
 
 assert.equal(

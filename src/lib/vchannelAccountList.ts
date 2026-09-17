@@ -56,6 +56,7 @@ export function filterVchannelAccounts(
       acc.accountId,
       formatLinkedLoginMethods(acc),
       acc.loginMethod,
+      acc.notes,
     ]
       .join(' ')
       .toLowerCase()

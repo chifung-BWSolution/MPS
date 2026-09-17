@@ -154,6 +154,86 @@ export function calcRemainingDays(
   return PITCHING_FOLLOW_UP_DAYS - elapsed;
 }
 
+/** Label when the 45-day follow-up window has elapsed. */
+export const PITCHING_EXPIRED_LABEL = '未能成交項目';
+
+/** Display remaining days, or 未能成交項目 after the 45-day window. */
+export function formatPitchingRemainingDays(days: number | null): string {
+  if (days == null) return '—';
+  if (days <= 0) return PITCHING_EXPIRED_LABEL;
+  return `${days} 天`;
+}
+
+export type PitchingRemainingDaysTone = 'empty' | 'grey' | 'green' | 'yellow' | 'orange' | 'red';
+
+export const pitchingRemainingDaysToneClass: Record<PitchingRemainingDaysTone, string> = {
+  empty: 'text-muted-foreground',
+  grey: 'text-slate-400',
+  green: 'text-emerald-600 font-medium',
+  yellow: 'text-yellow-600 font-medium',
+  orange: 'text-orange-600 font-medium',
+  red: 'text-rose-600 font-medium',
+};
+
+/**
+ * 剩餘天數 color: 1-7 green, 8-14 yellow, 15-28 orange, 29-45 red,
+ * 未能成交項目 grey. Day 14 stays yellow; orange starts at 15.
+ */
+export function pitchingRemainingDaysTone(days: number | null): PitchingRemainingDaysTone {
+  if (days == null) return 'empty';
+  if (days <= 0) return 'grey';
+  if (days <= 7) return 'green';
+  if (days <= 14) return 'yellow';
+  if (days <= 28) return 'orange';
+  return 'red';
+}
+
+export function isPitchingFollowUpExpired(
+  inquiryDate: string,
+  asOfDate: string = localTodayIso(),
+): boolean {
+  const days = calcRemainingDays(inquiryDate, undefined, asOfDate);
+  return days != null && days <= 0;
+}
+
+/** Pitching / Asana-pending 狀態 filter. */
+export type PitchingDealFilter = 'all' | 'hide_failed' | 'show_failed';
+
+export const DEFAULT_PITCHING_DEAL_FILTER: PitchingDealFilter = 'hide_failed';
+
+export function isPitchingDealFilter(value: string): value is PitchingDealFilter {
+  return value === 'all' || value === 'hide_failed' || value === 'show_failed';
+}
+
+export function isFailedDeal(
+  status: PitchingStatus,
+  inquiryDate: string,
+  asOfDate?: string,
+): boolean {
+  if (status !== 'initial' && status !== 'closed') return false;
+  return isPitchingFollowUpExpired(inquiryDate, asOfDate);
+}
+
+/**
+ * 全部狀態: hide confirmed.
+ * 隱藏未能成交: hide confirmed and hide expired initial.
+ * 顯示未能成交: only expired initial/closed.
+ */
+export function matchesPitchingDealFilter(
+  status: PitchingStatus,
+  inquiryDate: string,
+  dealFilter: PitchingDealFilter,
+  asOfDate?: string,
+): boolean {
+  const expired = isPitchingFollowUpExpired(inquiryDate, asOfDate);
+  if (dealFilter === 'show_failed') {
+    return (status === 'initial' || status === 'closed') && expired;
+  }
+  if (status === 'confirmed') return false;
+  if (dealFilter === 'hide_failed' && status === 'initial' && expired) return false;
+  return true;
+}
+
 /** Confirmed-project timeline vs 簽約日期 / 交付日期. */
 export type ClientProjectProgress = 'pending' | 'in_progress' | 'completed';
 
@@ -185,6 +265,24 @@ export function calcClientProjectProgress(
   if (today < start) return 'pending';
   if (today > handover) return 'completed';
   return 'in_progress';
+}
+
+export type ClientProjectProgressFilter = 'all' | ClientProjectProgress;
+
+export const DEFAULT_CLIENT_PROJECT_PROGRESS_FILTER: ClientProjectProgressFilter = 'all';
+
+export function isClientProjectProgressFilter(value: string): value is ClientProjectProgressFilter {
+  return value === 'all' || value === 'pending' || value === 'in_progress' || value === 'completed';
+}
+
+export function matchesClientProjectProgressFilter(
+  startDate: string | undefined,
+  handoverDate: string | undefined,
+  progressFilter: ClientProjectProgressFilter,
+  asOfDate?: string,
+): boolean {
+  if (progressFilter === 'all') return true;
+  return calcClientProjectProgress(startDate, handoverDate, asOfDate) === progressFilter;
 }
 
 export function formatMainPmName(record: Pick<PitchingRecord, 'mainPmName'>): string {

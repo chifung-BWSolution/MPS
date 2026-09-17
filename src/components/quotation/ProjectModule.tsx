@@ -22,11 +22,14 @@ import {
   type PitchingFormValues,
 } from '@/components/quotation/PitchingModule';
 import {
+  clientProjectProgressConfig,
   formatProjectTypes,
   formatMainPmName,
   formatRelatedClientName,
   matchesProjectTypeFilter,
+  matchesClientProjectProgressFilter,
   isProjectPageRecord,
+  type ClientProjectProgressFilter,
   type PitchingRecord,
 } from '@/data/pitchingData';
 import {
@@ -50,7 +53,7 @@ function ProjectList({
   const { query, setQuery } = useQuotationListQuery('projects');
   const searchQuery = query.q;
   const projectTypeFilter = query.type;
-  const statusFilter = query.status;
+  const progressFilter = query.progress;
   const { actuals, loading: actualsLoading, error: actualsError } = useQuotationProjectActuals();
 
   const withMoney = useMemo(
@@ -67,7 +70,7 @@ function ProjectList({
   const filtered = useMemo(() => {
     return withMoney.filter((p) => {
       if (!matchesProjectTypeFilter(p.projectTypeId, projectTypeFilter)) return false;
-      if (statusFilter !== 'all' && p.status !== statusFilter) return false;
+      if (!matchesClientProjectProgressFilter(p.signedDate, p.handoverDate, progressFilter)) return false;
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         return (
@@ -81,7 +84,7 @@ function ProjectList({
       }
       return true;
     });
-  }, [withMoney, searchQuery, projectTypeFilter, statusFilter]);
+  }, [withMoney, searchQuery, projectTypeFilter, progressFilter]);
   const { sorted, sortKey, sortDir, onSort } = useQuotationListSort(filtered, {
     sortKey: query.sort,
     sortDir: query.dir,
@@ -137,12 +140,14 @@ function ProjectList({
           ))}
         </select>
         <select
-          value={statusFilter}
-          onChange={(e) => setQuery({ status: e.target.value })}
+          value={progressFilter}
+          onChange={(e) => setQuery({ progress: e.target.value as ClientProjectProgressFilter })}
           className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
         >
-          <option value="all">全部狀態</option>
-          <option value="confirmed">確認項目</option>
+          <option value="all">全部工程進度</option>
+          <option value="pending">{clientProjectProgressConfig.pending.label}</option>
+          <option value="in_progress">{clientProjectProgressConfig.in_progress.label}</option>
+          <option value="completed">{clientProjectProgressConfig.completed.label}</option>
         </select>
       </div>
 

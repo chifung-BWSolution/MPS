@@ -12,16 +12,17 @@ function account(partial) {
     loginMethodIds: partial.loginMethodIds ?? [],
     linkedLoginMethods: partial.linkedLoginMethods ?? [],
     feedhiveManaged: partial.feedhiveManaged ?? false,
+    notes: partial.notes,
     isActive: partial.isActive ?? true,
   };
 }
 
 const rows = [
-  account({ id: '1', vchannelCodes: ['V12', 'V14'], accountLabel: 'Franco梵高管理新思維', platform: 'douyin', accountId: 'cfb_m04', loginMethod: 'cfb.m04@chifung.net', feedhiveManaged: false }),
-  account({ id: '2', vchannelCodes: ['V01'], accountLabel: 'BW Branding Design', platform: 'facebook', accountId: 'bw_designcentre', loginMethod: 'feedhive統一管理', feedhiveManaged: true }),
-  account({ id: '3', vchannelCodes: ['V13'], accountLabel: 'Project Connect 設計工程報價易', platform: 'instagram', accountId: '', loginMethod: '', feedhiveManaged: false }),
-  account({ id: '4', vchannelCodes: ['V02'], accountLabel: 'ACI Events', platform: 'wechat_channels', accountId: 'login: franco.think', loginMethod: 'QR', feedhiveManaged: true }),
-  account({ id: '5', vchannelCodes: ['V12'], accountLabel: 'BW Wine Official', platform: 'facebook', accountId: 'bw_wine', loginMethod: 'a@example.com', feedhiveManaged: false }),
+  account({ id: '1', vchannelCodes: ['V12', 'V14'], accountLabel: 'Franco梵高管理新思維', platform: 'douyin', accountId: 'cfb_m04', loginMethod: 'cfb.m04@chifung.net', notes: '待開專頁', feedhiveManaged: false }),
+  account({ id: '2', vchannelCodes: ['V01'], accountLabel: 'BW Branding Design', platform: 'facebook', accountId: 'bw_designcentre', loginMethod: 'feedhive統一管理', notes: '已由feedhive統一管理', feedhiveManaged: true }),
+  account({ id: '3', vchannelCodes: ['V13'], accountLabel: 'Project Connect 設計工程報價易', platform: 'instagram', accountId: '', loginMethod: '', notes: '', feedhiveManaged: false }),
+  account({ id: '4', vchannelCodes: ['V02'], accountLabel: 'ACI Events', platform: 'wechat_channels', accountId: 'login: franco.think', loginMethod: 'QR', notes: '需掃碼登入', feedhiveManaged: true }),
+  account({ id: '5', vchannelCodes: ['V12'], accountLabel: 'BW Wine Official', platform: 'facebook', accountId: 'bw_wine', loginMethod: 'a@example.com', notes: '限定手機登入', feedhiveManaged: false }),
 ];
 
 const byVchannelAsc = sortVchannelAccounts(rows, 'vchannel', 'asc').map(r => r.id);
@@ -77,6 +78,9 @@ const withLinked = [
 
 const byLinkedLogin = sortVchannelAccounts(withLinked, 'loginMethod', 'asc').map(r => r.id);
 assert.deepEqual(byLinkedLogin, ['b', 'a'], 'loginMethod sort uses linked display names');
+
+const byNotesAsc = sortVchannelAccounts(rows, 'notes', 'asc').map(r => r.id);
+assert.deepEqual(byNotesAsc, ['3', '2', '1', '5', '4'], 'notes asc sorts empty first, then Chinese locale order');
 
 const byActiveDesc = sortVchannelAccounts(withLinked, 'isActive', 'desc').map(r => r.id);
 assert.deepEqual(byActiveDesc, ['b', 'a'], 'isActive desc puts enabled accounts first');

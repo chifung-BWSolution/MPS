@@ -39,6 +39,10 @@ export function roundBvRatio(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+export function formatBvRatio(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, '');
+}
+
 export function parseBvRatio(raw: string | number): number | null {
   const value = typeof raw === 'number' ? raw : Number(String(raw).trim());
   if (!Number.isFinite(value)) return null;
@@ -72,4 +76,84 @@ export function isStaffBvComplete(staffRatios: Array<number | null | undefined>)
 /** One-shot remap from the old 100% staff pool onto the 70% staff pool. */
 export function scaleLegacyStaffBvRatio(value: number): number {
   return Math.max(0.01, roundBvRatio((value * STAFF_BV_POOL) / BV_RATIO_TOTAL));
+}
+
+export type QuotationBvHourStat = {
+  staffId: string;
+  staffName: string;
+  position?: string;
+  hours: number;
+  entryCount: number;
+};
+
+export type QuotationBvDraftRow = {
+  id?: string;
+  staffId: string;
+  staffName: string;
+  position: string;
+  hours: number;
+  entryCount: number;
+  bvRatio: string;
+};
+
+/**
+ * Split the 70% staff pool by each person's share of related day-report hours.
+ * Largest-remainder rounding so the suggestions add up to STAFF_BV_POOL when any hours exist.
+ */
+export function suggestStaffBvFromHours(hours: Array<number | null | undefined>): number[] {
+  const safe = hours.map((value) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0));
+  const total = safe.reduce((sum, value) => sum + value, 0);
+  if (total <= 0) return hours.map(() => 0);
+
+  const raw = safe.map((value) => (value / total) * STAFF_BV_POOL);
+  const floors = raw.map((value) => Math.floor(value * 100) / 100);
+  let leftoverCents = Math.round((STAFF_BV_POOL - floors.reduce((sum, value) => sum + value, 0)) * 100);
+
+  const order = raw
+    .map((value, index) => ({ index, frac: value - floors[index], hours: safe[index] }))
+    .sort((a, b) => b.frac - a.frac || b.hours - a.hours || a.index - b.index);
+
+  const result = [...floors];
+  for (const item of order) {
+    if (leftoverCents <= 0) break;
+    if (safe[item.index] <= 0) continue;
+    result[item.index] = roundBvRatio(result[item.index] + 0.01);
+    leftoverCents -= 1;
+  }
+  return result;
+}
+
+export function mergeBvDraftStaff(
+  assigned: Array<Pick<QuotationBvRecord, 'id' | 'staffId' | 'staffName' | 'bvRatio'>>,
+  hours: QuotationBvHourStat[],
+): QuotationBvDraftRow[] {
+  const hourMap = new Map(hours.map((row) => [row.staffId, row]));
+  const assignedIds = new Set(assigned.map((row) => row.staffId));
+
+  const fromAssigned = assigned.map((row) => {
+    const stat = hourMap.get(row.staffId);
+    return {
+      id: row.id,
+      staffId: row.staffId,
+      staffName: row.staffName,
+      position: stat?.position?.trim() || '',
+      hours: stat?.hours || 0,
+      entryCount: stat?.entryCount || 0,
+      bvRatio: formatBvRatio(row.bvRatio),
+    };
+  });
+
+  const fromHours = hours
+    .filter((row) => !assignedIds.has(row.staffId))
+    .sort((a, b) => b.hours - a.hours || a.staffName.localeCompare(b.staffName, 'zh-Hant'))
+    .map((row) => ({
+      staffId: row.staffId,
+      staffName: row.staffName,
+      position: row.position?.trim() || '',
+      hours: row.hours,
+      entryCount: row.entryCount,
+      bvRatio: '',
+    }));
+
+  return [...fromAssigned, ...fromHours];
 }

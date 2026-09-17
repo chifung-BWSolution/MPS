@@ -8,7 +8,6 @@ import {
   type ReactNode,
 } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 import type { VideoOutput } from '@/types/videoOutput';
 import type { PrepAssignments } from '@/types/videoOutputWorkflow';
 import type { VideoWorkflowMock, VideoWorkflowStage, VideoWorkflowUpdate } from '@/types/videoWorkflow';
@@ -24,9 +23,6 @@ import {
   normalizeVideoWorkflow,
 } from '@/lib/videoWorkflowUtils';
 import { inferProjectCategory } from '@/lib/videoOutputUtils';
-import { fetchWorkLogsByVideoId, saveWorkLogsForVideo } from '@/services/videoOutputWorkLogService';
-import { mergeProductionProgressWorkLogs } from '@/services/productionProgressWorkLogService';
-import { resolveStaffUuid } from '@/services/reportLinkService';
 
 const SELECT_QUERY = `
   *,
@@ -52,12 +48,6 @@ type VideoWorkflowContextValue = {
   approveReview: (id: string, reviewedBy: string) => Promise<string | null>;
   rejectReview: (id: string, reason: string, reviewedBy: string) => Promise<string | null>;
   completePublish: (id: string, patch: VideoWorkflowUpdate) => Promise<string | null>;
-  saveProductionWithWorkLogs: (
-    id: string,
-    patch: VideoWorkflowUpdate,
-    staffId?: string,
-    staffName?: string,
-  ) => Promise<string | null>;
 };
 
 const VideoWorkflowContext = createContext<VideoWorkflowContextValue | null>(null);
@@ -67,7 +57,6 @@ function toWorkflowList(rows: VideoOutput[]): VideoWorkflowMock[] {
 }
 
 export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
-  const { systemUser } = useAuth();
   const [rawVideos, setRawVideos] = useState<VideoOutput[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -102,16 +91,6 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
         : [mapped, ...prev];
       return next;
     });
-  }, []);
-
-  const fetchOne = useCallback(async (id: string): Promise<VideoOutput | null> => {
-    const { data, error: fetchError } = await supabase
-      .from('video_output')
-      .select(SELECT_QUERY)
-      .eq('id', id)
-      .single();
-    if (fetchError || !data) return null;
-    return mapVideoOutputRow(data as never);
   }, []);
 
   const applyPatch = useCallback(async (id: string, patch: VideoWorkflowUpdate): Promise<string | null> => {
@@ -284,38 +263,6 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
     return applyPatch(id, { ...patch, stage: 'published' });
   }, [applyPatch]);
 
-  const saveProductionWithWorkLogs = useCallback(async (
-    id: string,
-    patch: VideoWorkflowUpdate,
-    staffId?: string,
-    staffName?: string,
-  ): Promise<string | null> => {
-    const err = await applyPatch(id, patch);
-    if (err) return err;
-
-    if (!patch.productionProgress) return null;
-
-    const staffUuid = staffId ?? (await resolveStaffUuid(systemUser)) ?? undefined;
-    if (!staffUuid) return null;
-
-    try {
-      const existingLogs = await fetchWorkLogsByVideoId(id);
-      const merged = mergeProductionProgressWorkLogs(
-        existingLogs,
-        patch.productionProgress,
-        staffUuid,
-        staffName,
-      );
-      await saveWorkLogsForVideo(id, merged, staffUuid);
-    } catch (e) {
-      return e instanceof Error ? e.message : '工時同步失敗';
-    }
-
-    const refreshed = await fetchOne(id);
-    if (refreshed) upsertLocal(refreshed);
-    return null;
-  }, [applyPatch, systemUser, fetchOne, upsertLocal]);
-
   const value = useMemo(
     () => ({
       loading,
@@ -336,7 +283,6 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
       approveReview,
       rejectReview,
       completePublish,
-      saveProductionWithWorkLogs,
     }),
     [
       loading,
@@ -357,7 +303,6 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
       approveReview,
       rejectReview,
       completePublish,
-      saveProductionWithWorkLogs,
     ],
   );
 

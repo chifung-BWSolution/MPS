@@ -1,4 +1,4 @@
-import { calcRemainingDays } from '@/data/pitchingData';
+import { isPitchingFollowUpExpired } from '@/data/pitchingData';
 
 export const ASANA_CASE_CLOSED_REASONS = [
   '客戶沒有回覆',
@@ -14,7 +14,6 @@ export const ASANA_CASE_CLOSED_REASONS = [
 export type AsanaCaseClosedReason = (typeof ASANA_CASE_CLOSED_REASONS)[number];
 
 export type AsanaImportFilter = 'all' | 'pending' | 'imported';
-export type AsanaExpiredFilter = 'all' | 'expired' | 'not_expired';
 export type AsanaCaseClosedFilter = 'all' | 'pending' | 'closed';
 
 export type AsanaPendingFilterTask = {
@@ -38,25 +37,18 @@ export function formatAsanaCaseReopenedComment(staffName: string): string {
 }
 
 export function isAsanaTaskExpired(inquiryDate: string, asOfDate?: string): boolean {
-  const days = calcRemainingDays(inquiryDate, 'initial', asOfDate);
-  return days != null && days <= 0;
+  return isPitchingFollowUpExpired(inquiryDate, asOfDate);
 }
 
 export function matchesAsanaPendingFilters(
   task: AsanaPendingFilterTask,
   filters: {
     importFilter: AsanaImportFilter;
-    expiredFilter: AsanaExpiredFilter;
     caseClosedFilter: AsanaCaseClosedFilter;
   },
-  asOfDate?: string,
 ): boolean {
   if (filters.importFilter === 'pending' && task.imported) return false;
   if (filters.importFilter === 'imported' && !task.imported) return false;
-
-  const expired = isAsanaTaskExpired(task.inquiryDate, asOfDate);
-  if (filters.expiredFilter === 'expired' && !expired) return false;
-  if (filters.expiredFilter === 'not_expired' && expired) return false;
 
   const closed = isAsanaTaskCaseClosed(task.caseClosedReason);
   if (filters.caseClosedFilter === 'pending' && closed) return false;

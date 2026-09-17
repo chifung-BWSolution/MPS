@@ -47,6 +47,16 @@ export function emptyProductionProgress(): ProductionProgress {
   };
 }
 
+export function sumProductionProgressHours(
+  progress?: ProductionProgress | null,
+): number {
+  if (!progress) return 0;
+  return PRODUCTION_TASK_KEYS.reduce((sum, key) => {
+    const hours = progress[key]?.hours;
+    return sum + (typeof hours === 'number' && hours > 0 ? hours : 0);
+  }, 0);
+}
+
 export function normalizeProductionProgress(video: VideoWorkflowMock): ProductionProgress {
   if (video.productionProgress) {
     const p = video.productionProgress;
