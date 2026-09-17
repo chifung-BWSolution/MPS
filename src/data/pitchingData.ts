@@ -216,7 +216,7 @@ export function isFailedDeal(
 
 /**
  * 全部狀態: hide confirmed.
- * 隱藏未能成交: hide confirmed and hide expired initial.
+ * 隱藏未能成交: hide confirmed and hide expired initial/closed.
  * 顯示未能成交: only expired initial/closed.
  */
 export function matchesPitchingDealFilter(
@@ -230,7 +230,9 @@ export function matchesPitchingDealFilter(
     return (status === 'initial' || status === 'closed') && expired;
   }
   if (status === 'confirmed') return false;
-  if (dealFilter === 'hide_failed' && status === 'initial' && expired) return false;
+  if (dealFilter === 'hide_failed' && (status === 'initial' || status === 'closed') && expired) {
+    return false;
+  }
   return true;
 }
 

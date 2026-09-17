@@ -84,7 +84,8 @@ assert.equal(matchesPitchingDealFilter('confirmed', '2026-08-25', 'all', '2026-0
 assert.equal(matchesPitchingDealFilter('initial', '2026-07-11', 'all', '2026-08-25'), true);
 assert.equal(matchesPitchingDealFilter('initial', '2026-07-11', 'hide_failed', '2026-08-25'), false);
 assert.equal(matchesPitchingDealFilter('initial', '2026-08-25', 'hide_failed', '2026-08-25'), true);
-assert.equal(matchesPitchingDealFilter('closed', '2026-07-11', 'hide_failed', '2026-08-25'), true);
+assert.equal(matchesPitchingDealFilter('closed', '2026-07-11', 'hide_failed', '2026-08-25'), false);
+assert.equal(matchesPitchingDealFilter('closed', '2026-08-25', 'hide_failed', '2026-08-25'), true);
 assert.equal(matchesPitchingDealFilter('following_up', '2026-07-11', 'hide_failed', '2026-08-25'), true);
 assert.equal(matchesPitchingDealFilter('confirmed', '2026-08-25', 'hide_failed', '2026-08-25'), false);
 assert.equal(matchesPitchingDealFilter('initial', '2026-07-11', 'show_failed', '2026-08-25'), true);
