@@ -117,6 +117,7 @@ assert.match(pending, /取消跟進/);
 assert.match(pending, /caseClosedFilter/);
 assert.match(pending, /value="imported"/);
 assert.doesNotMatch(pending, /PitchingDealFilterSelect/);
+assert.doesNotMatch(pending, /PitchingStatusFilterSelect/);
 assert.doesNotMatch(pending, /dealFilter/);
 assert.match(pending, /value="closed"/);
 assert.match(pending, /colSpan=\{8\}/);

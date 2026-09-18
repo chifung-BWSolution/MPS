@@ -529,6 +529,6 @@ export function importantDateProjectHash(
 
 export function formatImportantDateAmount(amount: number | undefined, currency?: string): string | undefined {
   if (amount == null || !Number.isFinite(amount)) return undefined;
-  const value = `$${amount.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+  const value = `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   return currency ? `${value} ${currency}` : value;
 }

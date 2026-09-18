@@ -76,4 +76,9 @@ assert.doesNotMatch(pitching, /ProjectTypeMultiSelect/);
 assert.match(pitching, /projectTypeId/);
 assert.match(hook, /code,/);
 
+const pending = read('src/components/quotation/AsanaPendingModule.tsx');
+assert.match(pending, /projectTypeId: ''/);
+assert.doesNotMatch(pending, /projectTypeIdFromCodes/);
+assert.doesNotMatch(pending, /useQuotationProjectTypes/);
+
 console.log('quotation project types: ok');

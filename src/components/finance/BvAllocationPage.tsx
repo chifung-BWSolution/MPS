@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Lock, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Lock, SlidersHorizontal, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useFinanceBvAllocation } from '@/hooks/useFinanceBvAllocation';
@@ -59,7 +59,7 @@ function BvHeaders({
       <FinanceSortableTh label="交付日期" sortKey="handoverDate" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
       <FinanceSortableTh label="項目" sortKey="projectName" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
       <FinanceSortableTh label="項目類型" sortKey="projectTypeLabel" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
-      <FinanceSortableTh label="主要 PM" sortKey="mainPmName" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+      <FinanceSortableTh label="人員" sortKey="staffNames" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
       <FinanceSortableTh label="項目狀態" sortKey="projectStatus" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
       <FinanceSortableTh label="BV 人數" sortKey="staffCount" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
       <FinanceSortableTh label="Ratio%" sortKey="totalRatio" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
@@ -387,19 +387,37 @@ function BvGroupRows({
         <td className="px-4 py-3 text-[13px] text-muted-foreground tabular-nums whitespace-nowrap">
           {formatIncomeDate(group.handoverDate)}
         </td>
-        <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
-          <FinanceProjectLink
-            name={group.projectName}
-            quotationClientProjectId={group.quotationClientProjectId}
-            projectStatus={group.projectStatus}
-            websiteId={group.websiteId}
-          />
+        <td className="px-4 py-3">
+          <span onClick={(event) => event.stopPropagation()}>
+            <FinanceProjectLink
+              name={group.projectName}
+              quotationClientProjectId={group.quotationClientProjectId}
+              projectStatus={group.projectStatus}
+              websiteId={group.websiteId}
+            />
+          </span>
           {group.pitchingCode && (
             <p className="text-[11px] text-muted-foreground mt-0.5">{group.pitchingCode}</p>
           )}
         </td>
         <td className="px-4 py-3 text-[13px]">{group.projectTypeLabel || '—'}</td>
-        <td className="px-4 py-3 text-[13px]">{group.mainPmName || '—'}</td>
+        <td className="px-4 py-3 text-[13px]" title={group.staffNames || undefined}>
+          {group.staffNameItems.length === 0 ? (
+            '—'
+          ) : (
+            <span className="inline-flex flex-wrap items-center gap-x-1">
+              {group.staffNameItems.map((row, index) => (
+                <span key={row.staffId || `${row.staffName}-${index}`} className="inline-flex items-center gap-0.5">
+                  {row.isMainPm && (
+                    <Star size={12} className="text-amber-500 fill-amber-500 shrink-0" aria-label="主要 PM" />
+                  )}
+                  {row.staffName}
+                  {index < group.staffNameItems.length - 1 ? '、' : ''}
+                </span>
+              ))}
+            </span>
+          )}
+        </td>
         <td className="px-4 py-3 text-[13px]">{projectStatusLabel(group.projectStatus)}</td>
         <td className="px-4 py-3 text-[13px] tabular-nums">{group.staffCount}</td>
         <td className={cn('px-4 py-3 text-[13px] font-medium tabular-nums whitespace-nowrap', ratioTone(group.ratioStatus))}>

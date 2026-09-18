@@ -6,13 +6,17 @@ import {
   calcRemainingDays,
   clientProjectProgressConfig,
   DEFAULT_PITCHING_DEAL_FILTER,
+  DEFAULT_PITCHING_STATUS_FILTER,
   formatPitchingRemainingDays,
   isFailedDeal,
   isPitchingFollowUpExpired,
+  isPitchingStatusFilter,
   pitchingRemainingDaysTone,
   localTodayIso,
   matchesClientProjectProgressFilter,
   matchesPitchingDealFilter,
+  matchesPitchingStatusFilter,
+  PITCHING_LIST_STATUS_OPTIONS,
   PITCHING_EXPIRED_LABEL,
 } from '../src/data/pitchingData';
 
@@ -73,6 +77,16 @@ assert.equal(pitchingRemainingDaysTone(46), 'red');
 assert.equal(pitchingRemainingDaysTone(0), 'grey');
 assert.equal(pitchingRemainingDaysTone(-3), 'grey');
 assert.equal(DEFAULT_PITCHING_DEAL_FILTER, 'hide_failed');
+assert.equal(DEFAULT_PITCHING_STATUS_FILTER, 'all');
+assert.deepEqual(PITCHING_LIST_STATUS_OPTIONS, ['initial', 'following_up', 'closed']);
+assert.equal(isPitchingStatusFilter('confirmed'), false);
+assert.equal(isPitchingStatusFilter('initial'), true);
+assert.equal(matchesPitchingStatusFilter('initial', 'all'), true);
+assert.equal(matchesPitchingStatusFilter('confirmed', 'all'), true);
+assert.equal(matchesPitchingStatusFilter('initial', 'initial'), true);
+assert.equal(matchesPitchingStatusFilter('following_up', 'initial'), false);
+assert.equal(matchesPitchingStatusFilter('closed', 'closed'), true);
+assert.equal(matchesPitchingStatusFilter('confirmed', 'closed'), false);
 assert.equal(isPitchingFollowUpExpired('2026-07-11', '2026-08-25'), true);
 assert.equal(isPitchingFollowUpExpired('2026-07-12', '2026-08-25'), false);
 assert.equal(isFailedDeal('initial', '2026-07-11', '2026-08-25'), true);
@@ -119,6 +133,9 @@ const pitching = readFileSync(
 assert.match(pitching, /formatPitchingRemainingDays/);
 assert.match(pitching, /pitchingRemainingDaysTone/);
 assert.match(pitching, /PitchingDealFilterSelect/);
+assert.match(pitching, /PitchingStatusFilterSelect/);
+assert.match(pitching, /PITCHING_LIST_STATUS_OPTIONS/);
+assert.match(pitching, /全部項目狀態/);
 assert.match(pitching, /隱藏未能成交/);
 assert.match(pitching, /顯示未能成交/);
 assert.doesNotMatch(pitching, /逾期/);
@@ -135,6 +152,7 @@ assert.doesNotMatch(projects, /PitchingDealFilterSelect/);
 assert.doesNotMatch(projects, /全部狀態/);
 assert.doesNotMatch(projects, /全部期限/);
 assert.doesNotMatch(pending, /PitchingDealFilterSelect/);
+assert.doesNotMatch(pending, /PitchingStatusFilterSelect/);
 assert.doesNotMatch(pending, /DEFAULT_PITCHING_DEAL_FILTER/);
 
 const closeExpired = readFileSync(

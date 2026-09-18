@@ -108,5 +108,9 @@ assert.match(modal, /QUOTATION_LIST_DOC_TYPE_IDS|isQuotationListDocType/);
 assert.match(modal, /QuotationDocFormDialog/);
 assert.match(modal, /estimatedIncome/);
 assert.match(modal, /estimatedExpenses/);
+assert.match(modal, /CurrencyPicker/);
+assert.match(modal, /toHkd/);
+assert.match(modal, /formatMoney/);
+assert.doesNotMatch(modal, /amount\.toLocaleString/);
 
 console.log('pitching status flow: ok');

@@ -3,6 +3,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
+import { CurrencyPicker, StoredHkdHint } from '@/components/ui/currency-picker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -12,6 +13,14 @@ import {
   type PitchingRecord,
   type PitchingStatus,
 } from '@/data/pitchingData';
+import {
+  DEFAULT_CURRENCY,
+  convertMoneyInput,
+  formatMoney,
+  moneyInputFromHkd,
+  toHkd,
+  type SystemCurrency,
+} from '@/lib/currency';
 import {
   hasQualifyingQuotationDoc,
   missingConfirmedFields,
@@ -40,6 +49,11 @@ function nextExpenseId() {
   return `exp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function parseDraftAmount(raw: string): number | undefined {
+  const parsed = Number.parseFloat(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
 export function PitchingStatusConversionModal({
   record,
   target,
@@ -62,11 +76,17 @@ export function PitchingStatusConversionModal({
     [types],
   );
 
-  const [incomeDraft, setIncomeDraft] = useState(
-    record.estimatedIncome != null ? String(record.estimatedIncome) : '',
-  );
+  const [incomeDraft, setIncomeDraft] = useState({
+    amount: record.estimatedIncome != null ? moneyInputFromHkd(record.estimatedIncome, DEFAULT_CURRENCY) : '',
+    currency: DEFAULT_CURRENCY as SystemCurrency,
+  });
   const [expenses, setExpenses] = useState<PitchingExpenseItem[]>(record.estimatedExpenses ?? []);
-  const [expenseDraft, setExpenseDraft] = useState({ name: '', amount: '', notes: '' });
+  const [expenseDraft, setExpenseDraft] = useState({
+    name: '',
+    amount: '',
+    notes: '',
+    currency: DEFAULT_CURRENCY as SystemCurrency,
+  });
   const [signedDate, setSignedDate] = useState(record.signedDate ?? '');
   const [handoverDate, setHandoverDate] = useState(record.handoverDate ?? '');
   const [docDialogOpen, setDocDialogOpen] = useState(false);
@@ -78,7 +98,8 @@ export function PitchingStatusConversionModal({
   const [docSaving, setDocSaving] = useState(false);
 
   const qualifyingDocs = docs.filter((doc) => isQuotationListDocType(doc.docTypeId));
-  const parsedIncome = incomeDraft.trim() === '' ? undefined : Number(incomeDraft);
+  const parsedAmount = parseDraftAmount(incomeDraft.amount);
+  const parsedIncome = parsedAmount == null ? undefined : toHkd(parsedAmount, incomeDraft.currency);
   const draftRecord = {
     estimatedIncome: parsedIncome,
     estimatedExpenses: expenses,
@@ -87,8 +108,8 @@ export function PitchingStatusConversionModal({
   };
 
   const addExpense = () => {
-    const amount = parseFloat(expenseDraft.amount);
-    if (!expenseDraft.name.trim() || !Number.isFinite(amount) || amount < 0) {
+    const parsed = parseDraftAmount(expenseDraft.amount);
+    if (!expenseDraft.name.trim() || parsed == null) {
       toast.error('請填寫費用名稱與有效金額');
       return;
     }
@@ -97,12 +118,12 @@ export function PitchingStatusConversionModal({
       {
         id: nextExpenseId(),
         name: expenseDraft.name.trim(),
-        amount,
+        amount: toHkd(parsed, expenseDraft.currency),
         currency: PITCHING_CURRENCY,
         notes: expenseDraft.notes.trim() || undefined,
       },
     ]);
-    setExpenseDraft({ name: '', amount: '', notes: '' });
+    setExpenseDraft({ name: '', amount: '', notes: '', currency: DEFAULT_CURRENCY });
   };
 
   const openDocDialog = () => {
@@ -253,18 +274,30 @@ export function PitchingStatusConversionModal({
 
           {showBudget && (
             <div className="space-y-4">
-              <div>
-                <Label className="text-[12px]">預計收入（{PITCHING_CURRENCY}）*</Label>
+              <div className="space-y-3">
+                <Label className="text-[12px]">預計收入 *</Label>
+                <CurrencyPicker
+                  value={incomeDraft.currency}
+                  onChange={(currency) =>
+                    setIncomeDraft((prev) => ({
+                      ...prev,
+                      currency,
+                      amount: convertMoneyInput(prev.amount, prev.currency, currency),
+                    }))
+                  }
+                  disabled={saving}
+                />
                 <Input
                   type="number"
                   min="0"
-                  step="1"
-                  value={incomeDraft}
-                  onChange={(e) => setIncomeDraft(e.target.value)}
+                  step="0.01"
+                  value={incomeDraft.amount}
+                  onChange={(e) => setIncomeDraft((prev) => ({ ...prev, amount: e.target.value }))}
                   placeholder="20000"
-                  className="mt-1 h-9 text-[13px]"
+                  className="h-9 text-[13px]"
                   disabled={saving}
                 />
+                <StoredHkdHint amount={parsedAmount ?? null} currency={incomeDraft.currency} />
               </div>
               <div className="space-y-2">
                 <Label className="text-[12px]">預計支出 *</Label>
@@ -285,7 +318,7 @@ export function PitchingStatusConversionModal({
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="text-[13px] tabular-nums">
-                            ${item.amount.toLocaleString('en-US')} {PITCHING_CURRENCY}
+                            {formatMoney(item.amount, PITCHING_CURRENCY)}
                           </span>
                           <button
                             type="button"
@@ -300,6 +333,17 @@ export function PitchingStatusConversionModal({
                     ))}
                   </div>
                 )}
+                <CurrencyPicker
+                  value={expenseDraft.currency}
+                  onChange={(currency) =>
+                    setExpenseDraft((prev) => ({
+                      ...prev,
+                      currency,
+                      amount: convertMoneyInput(prev.amount, prev.currency, currency),
+                    }))
+                  }
+                  disabled={saving}
+                />
                 <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_1fr_auto] gap-2">
                   <Input
                     value={expenseDraft.name}
@@ -311,7 +355,7 @@ export function PitchingStatusConversionModal({
                   <Input
                     type="number"
                     min="0"
-                    step="1"
+                    step="0.01"
                     value={expenseDraft.amount}
                     onChange={(e) => setExpenseDraft((prev) => ({ ...prev, amount: e.target.value }))}
                     placeholder="金額"
@@ -329,6 +373,10 @@ export function PitchingStatusConversionModal({
                     <Plus size={13} /> 新增
                   </Button>
                 </div>
+                <StoredHkdHint
+                  amount={parseDraftAmount(expenseDraft.amount) ?? null}
+                  currency={expenseDraft.currency}
+                />
               </div>
             </div>
           )}

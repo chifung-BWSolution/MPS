@@ -11,7 +11,9 @@ import {
   companyBvDetailRow,
   filterBvAllocations,
   formatBvPercent,
+  formatBvStaffNames,
   groupBvAllocations,
+  listBvStaffNames,
   isLinkedWebsiteListing,
   nextBvAllocationSort,
   projectStatusLabel,
@@ -50,6 +52,15 @@ assert.match(page, /companyBvDetailRow/);
 assert.match(page, /QuotationBvBulkPanel/);
 assert.match(page, /批量設定/);
 assert.match(page, /useQuotationBv/);
+assert.match(page, /label="人員"/);
+assert.match(page, /sortKey="staffNames"/);
+assert.match(page, /group\.staffNames/);
+assert.match(page, /staffNameItems/);
+assert.match(page, /<Star /);
+assert.match(page, /aria-label="主要 PM"/);
+assert.doesNotMatch(page, /FinanceSortableTh label="主要 PM"/);
+assert.match(page, /<td className="px-4 py-3">\s*<span onClick=\{\(event\) => event\.stopPropagation\(\)\}>\s*<FinanceProjectLink/);
+assert.doesNotMatch(page, /<td className="px-4 py-3" onClick=\{\(event\) => event\.stopPropagation\(\)\}>/);
 
 const hook = read('src/hooks/useFinanceBvAllocation.ts');
 assert.match(hook, /QUOTATION_BV_TABLE/);
@@ -59,6 +70,8 @@ assert.match(hook, /project_id/);
 assert.match(hook, /staff:staffs!staff_id/);
 assert.match(hook, /from\(PROJECTS_TABLE\)/);
 assert.match(hook, /webandsystem_list_id/);
+assert.match(hook, /main_pm_id/);
+assert.match(hook, /mainPmId/);
 
 assert.equal(DEFAULT_BV_RATIO_FILTER, 'all');
 assert.equal(DEFAULT_BV_ALLOCATION_SORT_KEY, 'signedDate');
@@ -97,6 +110,7 @@ const projects = new Map<string, BvAllocationProjectInfo>([
       projectId: 'p-complete',
       projectName: 'Alpha Home',
       pitchingCode: 'BWA-001',
+      mainPmId: 's-ada',
       mainPmName: 'Ada',
       signedDate: '2026-09-10',
       projectStatus: 'confirmed',
@@ -107,6 +121,7 @@ const projects = new Map<string, BvAllocationProjectInfo>([
     project({
       projectId: 'p-under',
       projectName: 'Beta School',
+      mainPmId: 's-ben',
       mainPmName: 'Ben',
       signedDate: '2026-08-01',
     }),
@@ -116,6 +131,8 @@ const projects = new Map<string, BvAllocationProjectInfo>([
     project({
       projectId: 'p-over',
       projectName: 'Gamma Mall',
+      mainPmId: 's-dan',
+      mainPmName: 'Dan',
       signedDate: '2026-10-01',
     }),
   ],
@@ -144,14 +161,71 @@ const byId = new Map(groups.map((group) => [group.projectId, group]));
 assert.equal(byId.get('p-complete')?.totalRatio, BV_RATIO_TOTAL);
 assert.equal(byId.get('p-complete')?.ratioStatus, 'equal');
 assert.equal(byId.get('p-complete')?.staffCount, 2);
+assert.equal(byId.get('p-complete')?.staffNames, 'Ada、Ben');
+assert.deepEqual(byId.get('p-complete')?.staffNameItems, [
+  { staffId: 's-ada', staffName: 'Ada', isMainPm: true },
+  { staffId: 's-ben', staffName: 'Ben', isMainPm: false },
+]);
 assert.equal(byId.get('p-under')?.totalRatio, 50);
 assert.equal(byId.get('p-under')?.ratioStatus, 'under');
+assert.equal(byId.get('p-under')?.staffNames, 'Ada');
+assert.deepEqual(byId.get('p-under')?.staffNameItems, [
+  { staffId: 's-ada', staffName: 'Ada', isMainPm: false },
+]);
 assert.equal(byId.get('p-over')?.totalRatio, 110);
 assert.equal(byId.get('p-over')?.ratioStatus, 'over');
+assert.equal(byId.get('p-over')?.staffNames, 'Dan、Cara');
+assert.deepEqual(byId.get('p-over')?.staffNameItems, [
+  { staffId: 's-dan', staffName: 'Dan', isMainPm: true },
+  { staffId: 's-cara', staffName: 'Cara', isMainPm: false },
+]);
 assert.equal(byId.get('p-empty')?.staffCount, 0);
 assert.equal(byId.get('p-empty')?.staff.length, 0);
+assert.equal(byId.get('p-empty')?.staffNames, '');
+assert.deepEqual(byId.get('p-empty')?.staffNameItems, []);
 assert.equal(byId.get('p-empty')?.totalRatio, COMPANY_BV_RATIO);
 assert.equal(byId.get('p-empty')?.ratioStatus, 'under');
+assert.equal(formatBvStaffNames([]), '');
+assert.equal(
+  formatBvStaffNames([
+    staff({ id: 'z1', projectId: 'p-empty', staffId: 's-ghost', staffName: 'Ghost', bvRatio: 0 }),
+    staff({ id: 'z2', projectId: 'p-empty', staffId: 's-ada', staffName: 'Ada', bvRatio: 40 }),
+    staff({ id: 'z3', projectId: 'p-empty', staffId: 's-ben', staffName: 'Ben', bvRatio: 20 }),
+  ]),
+  'Ada、Ben',
+);
+assert.equal(
+  formatBvStaffNames(
+    [
+      staff({ id: 'z2', projectId: 'p-empty', staffId: 's-ada', staffName: 'Ada', bvRatio: 40 }),
+      staff({ id: 'z3', projectId: 'p-empty', staffId: 's-ben', staffName: 'Ben', bvRatio: 20 }),
+    ],
+    { id: 's-ben' },
+  ),
+  'Ben、Ada',
+);
+assert.deepEqual(
+  listBvStaffNames(
+    [
+      staff({ id: 'z2', projectId: 'p-empty', staffId: 's-ada', staffName: 'Ada', bvRatio: 40 }),
+      staff({ id: 'z3', projectId: 'p-empty', staffId: 's-ben', staffName: 'Ben', bvRatio: 20 }),
+    ],
+    { name: 'Ben' },
+  ),
+  [
+    { staffId: 's-ben', staffName: 'Ben', isMainPm: true },
+    { staffId: 's-ada', staffName: 'Ada', isMainPm: false },
+  ],
+);
+
+const leftover = groupBvAllocations(
+  [
+    staff({ id: 'gone', projectId: 'p-empty', staffId: 's-ghost', staffName: 'Ghost', bvRatio: 0 }),
+  ],
+  projects,
+);
+assert.equal(leftover.find((row) => row.projectId === 'p-empty')?.staffNames, '');
+assert.equal(leftover.find((row) => row.projectId === 'p-empty')?.staffCount, 0);
 
 assert.deepEqual(filterBvAllocations(groups, { ratioStatus: 'equal' }).map((row) => row.projectId), [
   'p-complete',
@@ -257,5 +331,6 @@ assert.deepEqual(
 const cityu = linkedGroups.find((row) => row.projectId === 'p-qcp');
 assert.equal(cityu?.staffCount, 2);
 assert.deepEqual(cityu?.staff.map((row) => row.staffId).sort(), ['s-ada', 's-lee']);
+assert.equal(cityu?.staffNames, 'Lee、Ada');
 
 console.log('finance bv allocation: ok');

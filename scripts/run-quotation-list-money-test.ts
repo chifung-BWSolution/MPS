@@ -86,7 +86,8 @@ assert.equal(actuals.q3, undefined);
 assert.deepEqual(projectActualsFor('q3', actuals), { income: 0, expense: 0, gp: 0 });
 assert.deepEqual(projectActualsFor('missing', {}), { income: 0, expense: 0, gp: 0 });
 
-assert.match(formatQuotationListMoney(1234.5), /^\$/);
+assert.equal(formatQuotationListMoney(249.6), '$249.60');
+assert.equal(formatQuotationListMoney(1234.5), '$1,234.50');
 assert.equal(quotationListGpClass(1200), 'text-emerald-600');
 assert.equal(quotationListGpClass(-50), 'text-rose-600');
 assert.equal(quotationListGpClass(0), '');

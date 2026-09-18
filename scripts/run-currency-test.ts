@@ -47,6 +47,7 @@ assert.equal(parseSystemCurrency('USD'), 'USD');
 assert.equal(parseSystemCurrency('yen'), 'HKD');
 assert.equal(isSystemCurrency('RMB'), true);
 assert.equal(formatMoney(1200), '$1,200.00 HKD');
+assert.equal(formatMoney(249.6), '$249.60 HKD');
 assert.match(formatFxHint('RMB'), /1\.15/);
 
 const backlink = read('src/lib/backlinkCurrency.ts');
@@ -69,6 +70,8 @@ for (const file of [
   'src/components/quotation/PitchingExpenseTab.tsx',
   'src/components/quotation/PitchingBulkIncomeDialog.tsx',
   'src/components/quotation/PitchingBulkExpenseDialog.tsx',
+  'src/components/quotation/PitchingBudgetTab.tsx',
+  'src/components/quotation/PitchingStatusConversionModal.tsx',
 ]) {
   const source = read(file);
   assert.match(source, /CurrencyPicker/);

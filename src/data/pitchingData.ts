@@ -104,6 +104,29 @@ export const PITCHING_STATUS_OPTIONS: PitchingStatus[] = [
   'closed',
 ];
 
+/** Pitching list status filter — confirmed lives on /projects, not /pitching. */
+export const PITCHING_LIST_STATUS_OPTIONS: Exclude<PitchingStatus, 'confirmed'>[] = [
+  'initial',
+  'following_up',
+  'closed',
+];
+
+export type PitchingStatusFilter = 'all' | (typeof PITCHING_LIST_STATUS_OPTIONS)[number];
+
+export const DEFAULT_PITCHING_STATUS_FILTER: PitchingStatusFilter = 'all';
+
+export function isPitchingStatusFilter(value: string): value is PitchingStatusFilter {
+  return value === 'all' || (PITCHING_LIST_STATUS_OPTIONS as readonly string[]).includes(value);
+}
+
+export function matchesPitchingStatusFilter(
+  status: PitchingStatus,
+  statusFilter: PitchingStatusFilter,
+): boolean {
+  if (statusFilter === 'all') return true;
+  return status === statusFilter;
+}
+
 /** Project page: same table as Pitching, filtered by status 確認項目. */
 export function isProjectPageRecord(
   record: Pick<PitchingRecord, 'status'>,

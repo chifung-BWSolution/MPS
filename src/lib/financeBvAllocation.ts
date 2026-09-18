@@ -32,6 +32,17 @@ export type BvAllocationStaffRow = {
   bvRatio: number;
 };
 
+export type BvStaffNameItem = {
+  staffId: string;
+  staffName: string;
+  isMainPm: boolean;
+};
+
+export type BvMainPmRef = {
+  id?: string;
+  name?: string;
+};
+
 export type BvAllocationGroup = {
   projectId: string;
   projectName: string;
@@ -43,11 +54,14 @@ export type BvAllocationGroup = {
   websiteId?: string;
   projectStatus?: string;
   projectTypeLabel?: string;
+  mainPmId?: string;
   mainPmName?: string;
   signedDate?: string;
   handoverDate?: string;
   estimatedIncome?: number;
   estimatedProfit?: number;
+  staffNameItems: BvStaffNameItem[];
+  staffNames: string;
   staffCount: number;
   staffTotal: number;
   totalRatio: number;
@@ -57,7 +71,7 @@ export type BvAllocationGroup = {
 
 export type BvAllocationProjectInfo = Omit<
   BvAllocationGroup,
-  'staffCount' | 'staffTotal' | 'totalRatio' | 'ratioStatus' | 'staff'
+  'staffNameItems' | 'staffNames' | 'staffCount' | 'staffTotal' | 'totalRatio' | 'ratioStatus' | 'staff'
 >;
 
 export type BvAllocationSortKey =
@@ -65,7 +79,7 @@ export type BvAllocationSortKey =
   | 'handoverDate'
   | 'projectName'
   | 'projectTypeLabel'
-  | 'mainPmName'
+  | 'staffNames'
   | 'projectStatus'
   | 'staffCount'
   | 'totalRatio'
@@ -111,12 +125,60 @@ export function remapLinkedWebsiteBvProjectId(
   return owners.length === 1 ? owners[0].projectId : projectId;
 }
 
+export function isActiveBvStaffRow(row: BvAllocationStaffRow): boolean {
+  return Number.isFinite(row.bvRatio) && row.bvRatio > 0;
+}
+
+export function isBvStaffMainPm(row: BvAllocationStaffRow, mainPm?: BvMainPmRef): boolean {
+  const pmId = mainPm?.id?.trim();
+  if (pmId) return row.staffId.trim() === pmId;
+  const pmName = mainPm?.name?.trim();
+  if (pmName) return row.staffName.trim() === pmName;
+  return false;
+}
+
+/** Distinct collaborator names that still have a staff BV row. Main PM is first when they also have BV. */
+export function listBvStaffNames(
+  staff: BvAllocationStaffRow[],
+  mainPm?: BvMainPmRef,
+): BvStaffNameItem[] {
+  const seen = new Set<string>();
+  const items: BvStaffNameItem[] = [];
+  const ordered = [...staff].filter(isActiveBvStaffRow).sort((a, b) => {
+    const pmDelta = Number(isBvStaffMainPm(b, mainPm)) - Number(isBvStaffMainPm(a, mainPm));
+    if (pmDelta !== 0) return pmDelta;
+    return b.bvRatio - a.bvRatio || a.staffName.localeCompare(b.staffName, 'zh-Hant');
+  });
+
+  for (const row of ordered) {
+    const key = row.staffId.trim() || row.staffName.trim();
+    const name = row.staffName.trim();
+    if (!key || !name || name === '—' || seen.has(key)) continue;
+    seen.add(key);
+    items.push({
+      staffId: row.staffId,
+      staffName: name,
+      isMainPm: isBvStaffMainPm(row, mainPm),
+    });
+  }
+  return items;
+}
+
+export function formatBvStaffNames(staff: BvAllocationStaffRow[], mainPm?: BvMainPmRef): string {
+  return listBvStaffNames(staff, mainPm)
+    .map((row) => row.staffName)
+    .join('、');
+}
+
 function buildGroup(
   projectId: string,
   staff: BvAllocationStaffRow[],
   info: BvAllocationProjectInfo | undefined,
 ): BvAllocationGroup {
-  const ratios = staff.map((row) => row.bvRatio);
+  const activeStaff = staff.filter(isActiveBvStaffRow);
+  const mainPm = { id: info?.mainPmId, name: info?.mainPmName };
+  const staffNameItems = listBvStaffNames(activeStaff, mainPm);
+  const ratios = activeStaff.map((row) => row.bvRatio);
   const staffTotal = sumBvRatios(ratios);
   const totalRatio = projectBvTotal(ratios);
   return {
@@ -130,16 +192,19 @@ function buildGroup(
     websiteId: info?.websiteId,
     projectStatus: info?.projectStatus,
     projectTypeLabel: info?.projectTypeLabel,
+    mainPmId: info?.mainPmId,
     mainPmName: info?.mainPmName,
     signedDate: info?.signedDate,
     handoverDate: info?.handoverDate,
     estimatedIncome: info?.estimatedIncome,
     estimatedProfit: info?.estimatedProfit,
-    staffCount: staff.length,
+    staffNameItems,
+    staffNames: staffNameItems.map((row) => row.staffName).join('、'),
+    staffCount: activeStaff.length,
     staffTotal,
     totalRatio,
     ratioStatus: classifyBvRatioStatus(totalRatio),
-    staff,
+    staff: activeStaff,
   };
 }
 
@@ -196,7 +261,7 @@ export function filterBvAllocations(
       group.pitchingCode,
       group.clientName,
       group.projectTypeLabel,
-      group.mainPmName,
+      group.staffNames,
       group.projectStatus,
       projectStatusLabel(group.projectStatus),
       ...group.staff.map((row) => row.staffName),
@@ -243,8 +308,8 @@ function sortValue(group: BvAllocationGroup, key: BvAllocationSortKey): string |
       return group.projectName;
     case 'projectTypeLabel':
       return group.projectTypeLabel ?? null;
-    case 'mainPmName':
-      return group.mainPmName ?? null;
+    case 'staffNames':
+      return group.staffNames || null;
     case 'projectStatus':
       return projectStatusLabel(group.projectStatus);
     case 'staffCount':

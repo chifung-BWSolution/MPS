@@ -50,6 +50,7 @@ type QcpDbRow = {
   estimated_income: number | string | null;
   estimated_expenses: unknown;
   webandsystem_list_id: string | null;
+  main_pm_id: string | null;
   main_pm?: { display_name: string | null } | Array<{ display_name: string | null }> | null;
 };
 
@@ -198,7 +199,7 @@ export function useFinanceBvAllocation() {
           supabase
             .from(QUOTATION_CLIENT_PROJECT_TABLE)
             .select(
-              'id, display_name, pitching_code, client_name, status, project_types, signed_date, handover_date, estimated_income, estimated_expenses, webandsystem_list_id, main_pm:staffs!main_pm_id ( display_name )',
+              'id, display_name, pitching_code, client_name, status, project_types, signed_date, handover_date, estimated_income, estimated_expenses, webandsystem_list_id, main_pm_id, main_pm:staffs!main_pm_id ( display_name )',
             )
             .in('id', chunk),
         ),
@@ -243,6 +244,7 @@ export function useFinanceBvAllocation() {
             relatedType === 'webandsystem' ? relatedId : optionalText(qcp?.webandsystem_list_id),
           projectStatus: optionalText(qcp?.status),
           projectTypeLabel: projectType?.display || (relatedType === 'webandsystem' ? '網站系統' : undefined),
+          mainPmId: optionalText(qcp?.main_pm_id),
           mainPmName: optionalText(firstJoin(qcp?.main_pm)?.display_name),
           signedDate: optionalIsoDate(qcp?.signed_date),
           handoverDate: optionalIsoDate(qcp?.handover_date),

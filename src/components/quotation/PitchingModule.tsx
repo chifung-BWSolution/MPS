@@ -38,15 +38,18 @@ import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   pitchingStatusConfig,
+  PITCHING_LIST_STATUS_OPTIONS,
   PITCHING_STATUS_OPTIONS,
   calcClientProjectProgress,
   calcRemainingDays,
   clientProjectProgressConfig,
   formatPitchingRemainingDays,
   matchesPitchingDealFilter,
+  matchesPitchingStatusFilter,
   pitchingRemainingDaysTone,
   pitchingRemainingDaysToneClass,
   type PitchingDealFilter,
+  type PitchingStatusFilter,
   formatProjectTypes,
   formatMainPmName,
   formatRelatedClientName,
@@ -349,6 +352,29 @@ export function PitchingDealFilterSelect({
       <option value="all">全部狀態</option>
       <option value="hide_failed">隱藏未能成交</option>
       <option value="show_failed">顯示未能成交</option>
+    </select>
+  );
+}
+
+export function PitchingStatusFilterSelect({
+  value,
+  onChange,
+}: {
+  value: PitchingStatusFilter;
+  onChange: (next: PitchingStatusFilter) => void;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as PitchingStatusFilter)}
+      className={listFilterSelectClass}
+    >
+      <option value="all">全部項目狀態</option>
+      {PITCHING_LIST_STATUS_OPTIONS.map((status) => (
+        <option key={status} value={status}>
+          {pitchingStatusConfig[status].label}
+        </option>
+      ))}
     </select>
   );
 }
@@ -777,6 +803,7 @@ function PitchingList({
   const searchQuery = query.q;
   const projectTypeFilter = query.type;
   const dealFilter = query.status;
+  const projectStatusFilter = query.projectStatus;
 
   const withMoney = useMemo(
     () => records.map((record) => ({ ...record, ...estimatedMoneyFor(record) })),
@@ -786,6 +813,7 @@ function PitchingList({
   const filtered = useMemo(() => {
     return withMoney.filter((p) => {
       if (!matchesProjectTypeFilter(p.projectTypeId, projectTypeFilter)) return false;
+      if (!matchesPitchingStatusFilter(p.status, projectStatusFilter)) return false;
       if (!matchesPitchingDealFilter(p.status, p.inquiryDate, dealFilter)) return false;
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
@@ -800,7 +828,7 @@ function PitchingList({
       }
       return true;
     });
-  }, [withMoney, searchQuery, projectTypeFilter, dealFilter]);
+  }, [withMoney, searchQuery, projectTypeFilter, projectStatusFilter, dealFilter]);
   const { sorted, sortKey, sortDir, onSort } = useQuotationListSort(filtered, {
     sortKey: query.sort,
     sortDir: query.dir,
@@ -856,6 +884,10 @@ function PitchingList({
             </option>
           ))}
         </select>
+        <PitchingStatusFilterSelect
+          value={projectStatusFilter}
+          onChange={(projectStatus) => setQuery({ projectStatus })}
+        />
         <PitchingDealFilterSelect
           value={dealFilter}
           onChange={(status) => setQuery({ status })}

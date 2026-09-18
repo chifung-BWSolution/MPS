@@ -22,6 +22,10 @@ const budget = readFileSync(
 );
 assert.doesNotMatch(budget, /currencyDraft/);
 assert.doesNotMatch(budget, /onIncomeChange/);
+assert.match(budget, /CurrencyPicker/);
+assert.match(budget, /toHkd/);
+assert.match(budget, /formatMoney/);
+assert.doesNotMatch(budget, /maximumFractionDigits:\s*0/);
 assert.match(budget, /PITCHING_CURRENCY/);
 assert.match(budget, /onPersist/);
 assert.match(budget, /<form/);

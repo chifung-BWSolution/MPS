@@ -9,6 +9,7 @@ import {
   defaultKindFilters,
   eventsInRange,
   filterImportantDateEvents,
+  formatImportantDateAmount,
   importantDateProjectHash,
   monthGridDays,
   periodRange,
@@ -44,6 +45,8 @@ assert.deepEqual(defaultKindFilters(), {
 });
 assert.equal(resolveImportantDateProjectName({ displayName: '  現場演出  ' }), '現場演出');
 assert.equal(resolveImportantDateProjectName({ displayName: '' }), '');
+assert.equal(formatImportantDateAmount(249.6, 'HKD'), '$249.60 HKD');
+assert.equal(formatImportantDateAmount(1200), '$1,200.00');
 
 const events = buildImportantDateEvents({
   today: '2026-09-16',

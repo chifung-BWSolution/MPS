@@ -5,8 +5,6 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { useQuotationSection } from '@/context/QuotationSectionContext';
 import { filterBySectionProjectTypes } from '@/lib/quotationSectionScope';
-import { useQuotationProjectTypes } from '@/hooks/useQuotationProjectTypes';
-import { projectTypeIdFromCodes } from '@/lib/quotationProjectTypes';
 import { useAsanaSyncedTasks, type AsanaSyncedTask } from '@/hooks/useAsanaSyncedTasks';
 import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
@@ -51,7 +49,6 @@ function formDefaultsFromTask(
   clientOptions: QuotationClientSelectOption[],
   staffOptions: { value: string; label: string }[],
   fallbackPmId: string,
-  projectTypeId: string,
 ): PitchingFormValues {
   const matched = matchClientOption(task.clientName, clientOptions);
   const matchedPm =
@@ -67,7 +64,7 @@ function formDefaultsFromTask(
     contractStartDate: '',
     contractEndDate: '',
     description: task.description,
-    projectTypeId,
+    projectTypeId: '',
     mainPmId: matchedPm || fallbackPmId,
     webandsystemListId: '',
     asanaLink: task.asanaLink,
@@ -77,7 +74,6 @@ function formDefaultsFromTask(
 export function AsanaPendingModule() {
   const { systemUser } = useAuth();
   const { allowedCodes, typeOptions } = useQuotationSection();
-  const { types } = useQuotationProjectTypes();
   const {
     tasks,
     loading,
@@ -113,10 +109,9 @@ export function AsanaPendingModule() {
             clientOptions,
             staffOptions,
             systemUser?.staff_id ?? '',
-            projectTypeIdFromCodes(importingTask.projectTypes, types),
           )
         : null,
-    [importingTask, clientOptions, staffOptions, systemUser?.staff_id, types],
+    [importingTask, clientOptions, staffOptions, systemUser?.staff_id],
   );
 
   const sectionTasks = useMemo(
