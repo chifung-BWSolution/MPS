@@ -17,6 +17,9 @@ import {
   KolCooperationForm,
 } from '@/components/talent/KolCooperationForm';
 import {
+  cooperationOwnerId,
+  cooperationOwnerTable,
+  cooperationPerson,
   cooperationRowToForm,
   deleteCooperationRecord,
   formatSupabaseError,
@@ -44,7 +47,9 @@ export function KolCooperatedModule() {
     try {
       const { data, error } = await supabase
         .from('kol_cooperation')
-        .select('*, kol_profile(name, instagram_account, phone)')
+        .select(
+          '*, kol_profile(name, instagram_account, phone), kol_new_beauty(name, instagram_account, phone)'
+        )
         .order('cooperated_at', { ascending: false });
       if (error) throw error;
       setRows((data as KolCooperationRow[]) || []);
@@ -69,8 +74,11 @@ export function KolCooperatedModule() {
       if (dateTo && recordDate > dateTo) return false;
 
       if (!q) return true;
-      const name = (r.kol_profile?.name || '').toLowerCase();
-      return name.includes(q);
+      const person = cooperationPerson(r);
+      const hay = [person?.name, person?.instagram_account, person?.phone]
+        .map((value) => (value || '').toLowerCase())
+        .join(' ');
+      return hay.includes(q);
     });
   }, [rows, search, platformFilter, dateFrom, dateTo]);
 
@@ -94,12 +102,13 @@ export function KolCooperatedModule() {
     }
   };
 
-  const editingFixedKol = editingRow?.kol_profile
+  const editingPerson = editingRow ? cooperationPerson(editingRow) : null;
+  const editingFixedKol = editingRow && editingPerson
     ? {
-        id: editingRow.kol_profile_id,
-        name: editingRow.kol_profile.name,
-        instagram_account: editingRow.kol_profile.instagram_account,
-        phone: editingRow.kol_profile.phone,
+        id: cooperationOwnerId(editingRow),
+        name: editingPerson.name,
+        instagram_account: editingPerson.instagram_account,
+        phone: editingPerson.phone,
       }
     : null;
 
@@ -128,7 +137,7 @@ export function KolCooperatedModule() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜尋 KOL 名稱"
+            placeholder="搜尋姓名、IG、電話"
             className="pl-8 h-9 text-[13px]"
           />
         </div>
@@ -214,6 +223,7 @@ export function KolCooperatedModule() {
                 key={editingRow?.id || 'new'}
                 createdBy={createdBy}
                 fixedKol={editingFixedKol}
+                kolTable={editingRow ? cooperationOwnerTable(editingRow) : 'kol_profile'}
                 recordId={editingRow?.id}
                 initialValues={editingRow ? cooperationRowToForm(editingRow) : undefined}
                 submitLabel={editingRow ? '儲存變更' : '儲存合作記錄'}

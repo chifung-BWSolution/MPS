@@ -8,7 +8,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import {
+  cooperationPerson,
   emptyCooperationForm,
+  ensureKolOwnerFromApply,
   formatSupabaseError,
   KOL_COOP_PRESET_PLATFORMS,
   parseCooperationPlatformLinks,
@@ -63,11 +65,114 @@ export function CooperationPlatformLinks({
   );
 }
 
+export type KolPickerSource = 'profile' | 'new-beauty' | 'apply';
+
 export interface KolPickerOption {
   id: string;
   name: string | null;
   instagram_account: string | null;
   phone: string | null;
+  source?: KolPickerSource;
+  /** Set when the hit already has a kol_profile / kol_new_beauty row. */
+  table?: KolTableName;
+  /** Set for kol_apply hits. Unset table means the profile is created on save. */
+  applyId?: string;
+}
+
+const PICKER_SOURCE_LABEL: Record<KolPickerSource, string> = {
+  profile: '資料庫',
+  'new-beauty': '新美容',
+  apply: '申請',
+};
+
+function pickerOptionKey(option: KolPickerOption): string {
+  return `${option.source || 'profile'}:${option.applyId || option.table || 'profile'}:${option.id}`;
+}
+
+function ilikeOr(columns: string[], raw: string): string {
+  const term = raw.replace(/[%_\\"]/g, '').trim();
+  if (!term) return '';
+  const pattern = `%${term}%`;
+  return columns.map((column) => `${column}.ilike."${pattern}"`).join(',');
+}
+
+interface PickerProfileRow {
+  id: string;
+  name: string | null;
+  instagram_account: string | null;
+  phone: string | null;
+}
+
+interface PickerApplyRow extends PickerProfileRow {
+  kol_profile_id: string | null;
+  kol_new_beauty_id: string | null;
+}
+
+function mergeKolPickerHits(
+  profiles: PickerProfileRow[],
+  newBeauty: PickerProfileRow[],
+  applies: PickerApplyRow[],
+  limit = 12
+): KolPickerOption[] {
+  const profileIds = new Set(profiles.map((row) => row.id));
+  const newBeautyIds = new Set(newBeauty.map((row) => row.id));
+  const groups: KolPickerOption[][] = [
+    profiles.map((row) => ({ ...row, source: 'profile' as const, table: 'kol_profile' as const })),
+    newBeauty.map((row) => ({
+      ...row,
+      source: 'new-beauty' as const,
+      table: 'kol_new_beauty' as const,
+    })),
+    [],
+  ];
+
+  for (const row of applies) {
+    if (row.kol_profile_id && profileIds.has(row.kol_profile_id)) continue;
+    if (row.kol_new_beauty_id && newBeautyIds.has(row.kol_new_beauty_id)) continue;
+    const display = {
+      name: row.name,
+      instagram_account: row.instagram_account,
+      phone: row.phone,
+      source: 'apply' as const,
+      applyId: row.id,
+    };
+    if (row.kol_new_beauty_id) {
+      groups[2].push({
+        ...display,
+        id: row.kol_new_beauty_id,
+        table: 'kol_new_beauty',
+      });
+    } else if (row.kol_profile_id) {
+      groups[2].push({
+        ...display,
+        id: row.kol_profile_id,
+        table: 'kol_profile',
+      });
+    } else {
+      groups[2].push({ ...display, id: row.id });
+    }
+  }
+
+  const merged: KolPickerOption[] = [];
+  const cursors = groups.map(() => 0);
+  const seen = new Set<string>();
+  while (merged.length < limit) {
+    let added = false;
+    for (let i = 0; i < groups.length; i++) {
+      const item = groups[i][cursors[i]];
+      if (!item) continue;
+      cursors[i] += 1;
+      added = true;
+      const key = item.table ? `${item.table}:${item.id}` : `apply:${item.applyId}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(item);
+      }
+      if (merged.length >= limit) break;
+    }
+    if (!added) break;
+  }
+  return merged;
 }
 
 function PlatformPicker({
@@ -182,14 +287,41 @@ function KolPicker({
     }
     setLoading(true);
     try {
-      const pattern = `%${term}%`;
-      const { data, error } = await supabase
-        .from('kol_profile')
-        .select('id, name, instagram_account, phone')
-        .ilike('name', pattern)
-        .limit(12);
-      if (error) throw error;
-      setOptions((data as KolPickerOption[]) || []);
+      const profileFilter = ilikeOr(['name', 'instagram_account', 'phone'], term);
+      const applyFilter = ilikeOr(['name', 'instagram_account', 'phone', 'email'], term);
+      if (!profileFilter || !applyFilter) {
+        setOptions([]);
+        setLoading(false);
+        return;
+      }
+      const [profiles, newBeauty, applies] = await Promise.all([
+        supabase
+          .from('kol_profile')
+          .select('id, name, instagram_account, phone')
+          .or(profileFilter)
+          .limit(12),
+        supabase
+          .from('kol_new_beauty')
+          .select('id, name, instagram_account, phone')
+          .or(profileFilter)
+          .limit(12),
+        supabase
+          .from('kol_apply')
+          .select('id, name, instagram_account, phone, kol_profile_id, kol_new_beauty_id')
+          .or(applyFilter)
+          .neq('audit_status', 'rejected')
+          .limit(12),
+      ]);
+      if (profiles.error) throw profiles.error;
+      if (newBeauty.error) throw newBeauty.error;
+      if (applies.error) throw applies.error;
+      setOptions(
+        mergeKolPickerHits(
+          (profiles.data as PickerProfileRow[]) || [],
+          (newBeauty.data as PickerProfileRow[]) || [],
+          (applies.data as PickerApplyRow[]) || []
+        )
+      );
     } catch (e: unknown) {
       toast.error(formatSupabaseError(e, '搜尋 KOL 失敗'));
       setOptions([]);
@@ -210,8 +342,17 @@ function KolPicker({
       <div className="rounded-lg border border-teal-200 bg-teal-50/50 px-3 py-2 text-[13px]">
         <p className="font-medium text-slate-800">{k.name || '（未填姓名）'}</p>
         <p className="text-slate-500 text-[12px] mt-0.5">
-          {[k.instagram_account, k.phone].filter(Boolean).join(' · ') || '—'}
+          {[
+            k.source ? PICKER_SOURCE_LABEL[k.source] : null,
+            k.instagram_account,
+            k.phone,
+          ]
+            .filter(Boolean)
+            .join(' · ') || '—'}
         </p>
+        {k.source === 'apply' && !k.table && (
+          <p className="text-[11px] text-slate-500 mt-1">儲存合作記錄時會一併加入 KOL 資料庫</p>
+        )}
         {!fixedKol && (
           <Button
             type="button"
@@ -239,7 +380,7 @@ function KolPicker({
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="搜尋姓名"
+          placeholder="搜尋姓名、IG、電話、電郵"
           className="pl-8 h-9 text-[13px]"
         />
         {loading && (
@@ -249,7 +390,7 @@ function KolPicker({
       {options.length > 0 && (
         <ul className="max-h-44 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-sm">
           {options.map((opt) => (
-            <li key={opt.id}>
+            <li key={pickerOptionKey(opt)}>
               <button
                 type="button"
                 className="w-full text-left px-3 py-2 text-[13px] hover:bg-slate-50 border-b border-slate-50 last:border-0"
@@ -261,6 +402,9 @@ function KolPicker({
                 }}
               >
                 <span className="font-medium">{opt.name || '（未填姓名）'}</span>
+                {opt.source && (
+                  <span className="ml-2 text-[11px] text-teal-700">{PICKER_SOURCE_LABEL[opt.source]}</span>
+                )}
                 <span className="text-slate-500 ml-2 text-[12px]">
                   {[opt.instagram_account, opt.phone].filter(Boolean).join(' · ')}
                 </span>
@@ -295,6 +439,8 @@ export function KolCooperationForm({
 }) {
   const isEditing = Boolean(recordId);
   const [kolId, setKolId] = useState(initialValues?.kol_profile_id || fixedKol?.id || '');
+  const [ownerTable, setOwnerTable] = useState<KolTableName>(kolTable);
+  const [pendingApplyId, setPendingApplyId] = useState<string | null>(null);
   const [form, setForm] = useState(() => {
     if (initialValues) {
       const { kol_profile_id: _kolProfileId, ...rest } = initialValues;
@@ -312,8 +458,8 @@ export function KolCooperationForm({
   }, [initialValues]);
 
   const canSubmit = useMemo(
-    () => Boolean(kolId && form.project_name.trim() && form.cooperation_content.trim()),
-    [kolId, form.project_name, form.cooperation_content]
+    () => Boolean((kolId || pendingApplyId) && form.project_name.trim() && form.cooperation_content.trim()),
+    [kolId, pendingApplyId, form.project_name, form.cooperation_content]
   );
 
   const handleSubmit = async () => {
@@ -331,20 +477,31 @@ export function KolCooperationForm({
     }
     setSaving(true);
     try {
+      let ownerId = kolId;
+      let table = ownerTable;
+      if (pendingApplyId) {
+        const owner = await ensureKolOwnerFromApply(pendingApplyId);
+        ownerId = owner.id;
+        table = owner.table;
+      }
       const payload: KolCooperationFormValues = {
-        kol_profile_id: kolId,
+        kol_profile_id: ownerId,
         ...form,
       };
       if (recordId) {
-        await updateCooperationRecord(recordId, payload, kolTable);
+        await updateCooperationRecord(recordId, payload, table);
         toast.success('已更新合作記錄');
       } else {
-        await saveCooperationRecord(payload, createdBy, kolTable);
+        await saveCooperationRecord(payload, createdBy, table);
         toast.success('已儲存合作記錄');
       }
       if (!isEditing) {
         setForm(emptyCooperationForm());
-        if (!fixedKol) setKolId('');
+        if (!fixedKol) {
+          setKolId('');
+          setPendingApplyId(null);
+          setOwnerTable(kolTable);
+        }
       }
       onSuccess();
     } catch (e: unknown) {
@@ -357,7 +514,25 @@ export function KolCooperationForm({
   return (
     <div className="flex flex-col min-h-0 flex-1">
       <div className="space-y-4 flex-1 min-h-0 overflow-y-auto pr-0.5">
-      <KolPicker value={kolId} fixedKol={fixedKol} onChange={(id) => setKolId(id)} />
+      <KolPicker
+        value={kolId}
+        fixedKol={fixedKol}
+        onChange={(id, option) => {
+          if (!id) {
+            setKolId('');
+            setPendingApplyId(null);
+            return;
+          }
+          if (option?.applyId && !option.table) {
+            setPendingApplyId(option.applyId);
+            setKolId(id);
+            return;
+          }
+          setPendingApplyId(null);
+          setKolId(id);
+          if (option?.table) setOwnerTable(option.table);
+        }}
+      />
 
       <div className="space-y-1">
         <Label className="text-[12px] text-slate-600">合作項目名稱（S2）</Label>
@@ -457,22 +632,24 @@ export function CooperationRecordList({
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {rows.map((r) => {
+            const person = cooperationPerson(r);
+            return (
             <tr key={r.id} className="border-t border-slate-100 align-top">
               <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
                 {new Date(r.cooperated_at).toLocaleDateString('zh-HK')}
               </td>
               <td className="px-3 py-2.5 font-medium text-slate-800">
-                {r.kol_profile?.name || '—'}
-                {r.kol_profile?.instagram_account && (
+                {person?.name || '—'}
+                {person?.instagram_account && (
                   <span className="block text-[11px] font-normal text-teal-600">
-                    {r.kol_profile.instagram_account}
+                    {person.instagram_account}
                   </span>
                 )}
               </td>
               <td className="px-3 py-2.5 text-slate-800">{r.project_name || '—'}</td>
               <td className="px-3 py-2.5">
-                <CooperationPlatformLinks platforms={r.platforms} kolProfile={r.kol_profile} />
+                <CooperationPlatformLinks platforms={r.platforms} kolProfile={person} />
               </td>
               <td className="px-3 py-2.5 text-slate-600 max-w-xs">
                 <p className="line-clamp-3">{r.cooperation_content || r.evaluation || '—'}</p>
@@ -510,7 +687,8 @@ export function CooperationRecordList({
                 </td>
               )}
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

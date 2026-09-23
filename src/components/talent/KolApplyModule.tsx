@@ -28,10 +28,7 @@ import {
   normalizeInstagramAccount,
 } from '@/lib/instagram';
 import { supabase } from '@/lib/supabase';
-import {
-  resolvePrimaryCategoryFromThemes,
-  resolveSourceSystemFromApply,
-} from '@/components/talent/kolWorkflow';
+import { promoteKolApply } from '@/components/talent/kolCooperation';
 
 // =====================================================================
 // Types
@@ -614,125 +611,10 @@ export function KolApplyModule() {
   const approveAndAddToDb = async (row: KolApplyRow) => {
     setBusyId(row.id);
     try {
-      const primaryCategory = resolvePrimaryCategoryFromThemes(row);
-      const sourceSystem = resolveSourceSystemFromApply(row);
-      const isNewBeauty = sourceSystem === 'beauty18';
-
-      const profilePayload = {
-        name: row.name,
-        salutation: row.salutation,
-        email: row.email,
-        phone: row.phone,
-        age_group: row.age_group,
-        birth_month: row.birth_month,
-        residence_area: row.residence_area,
-        work_area: row.work_area,
-        blog_themes: row.blog_themes || [],
-        specialty: row.specialty,
-        instagram_account: row.instagram_account,
-        instagram_followers: row.instagram_followers,
-        facebook_url: row.facebook_url,
-        facebook_likes: row.facebook_likes,
-        xiaohongshu_url: row.xiaohongshu_url,
-        xiaohongshu_followers: row.xiaohongshu_followers,
-        youtube_url: row.youtube_url,
-        youtube_subscribers: row.youtube_subscribers,
-        openrice_url: row.openrice_url,
-        openrice_level: row.openrice_level,
-        blog_url: row.blog_url,
-        blog_subscribers: row.blog_subscribers,
-        other_channels: row.other_channels,
-        other_followers: row.other_followers,
-        publish_platforms: row.publish_platforms,
-        tasting_frequency: row.tasting_frequency,
-        tasting_experience: row.tasting_experience,
-        model_experience: row.model_experience,
-        on_camera_experience: row.on_camera_experience,
-        wine_club: row.wine_club,
-        cooperation_intent: row.cooperation_intent,
-        available_times: row.available_times,
-        video_blog_promo: row.video_blog_promo,
-        facebook_live_interest: row.facebook_live_interest,
-        photo_url: row.photo_url,
-        work_photo_url: row.work_photo_url,
-        raw_payload: {
-          ...(row.raw_payload || {}),
-          fromKolApplyId: row.id,
-          source: row.source,
-        },
-        source_created_at: row.applied_at,
-        source_status: 'from_apply',
-        primary_category: primaryCategory,
-        source_system: sourceSystem,
-        lifecycle_status: 'unprocessed' as const,
-        ...(isNewBeauty ? { kol_apply_id: row.id } : {}),
-      };
-
-      if (isNewBeauty) {
-        let newBeautyId = row.kol_new_beauty_id;
-        if (!newBeautyId) {
-          const { data, error: insErr } = await supabase
-            .from('kol_new_beauty')
-            .insert(profilePayload)
-            .select('id')
-            .single();
-          if (insErr) throw insErr;
-          newBeautyId = data.id as string;
-        } else {
-          const { error: updProfileErr } = await supabase
-            .from('kol_new_beauty')
-            .update(profilePayload)
-            .eq('id', newBeautyId);
-          if (updProfileErr) throw updProfileErr;
-        }
-
-        const { error: updErr } = await supabase
-          .from('kol_apply')
-          .update({
-            audit_status: 'added_to_db',
-            kol_new_beauty_id: newBeautyId,
-            kol_profile_id: null,
-            reviewed_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', row.id);
-        if (updErr) throw updErr;
-
-        toast.success('已批准並加入新美容KOL');
-        closeDetail();
-        await load();
-        return;
-      }
-
-      let profileId = row.kol_profile_id;
-      if (!profileId) {
-        const { data, error: insErr } = await supabase
-          .from('kol_profile')
-          .insert(profilePayload)
-          .select('id')
-          .single();
-        if (insErr) throw insErr;
-        profileId = data.id as string;
-      } else {
-        const { error: updProfileErr } = await supabase
-          .from('kol_profile')
-          .update(profilePayload)
-          .eq('id', profileId);
-        if (updProfileErr) throw updProfileErr;
-      }
-
-      const { error: updErr } = await supabase
-        .from('kol_apply')
-        .update({
-          audit_status: 'added_to_db',
-          kol_profile_id: profileId,
-          reviewed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', row.id);
-      if (updErr) throw updErr;
-
-      toast.success('已批准並加入KOL 資料庫');
+      const owner = await promoteKolApply(row, { updateExisting: true });
+      toast.success(
+        owner.table === 'kol_new_beauty' ? '已批准並加入新美容KOL' : '已批准並加入KOL 資料庫'
+      );
       closeDetail();
       await load();
     } catch (e: unknown) {
