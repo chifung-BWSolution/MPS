@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, Pencil, RefreshCw, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Download, Pencil, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { resolveDateRange, useGoogleAdsData } from '@/hooks/useGoogleAdsData';
 import { useBrands } from '@/hooks/useBrands';
@@ -14,6 +14,7 @@ import {
   setGoogleAdsCampaignHash,
 } from '@/lib/adsCampaignNavigation';
 import { appHrefClickProps } from '@/lib/appNavigation';
+import { downloadXlsx, microsToAmount } from '@/lib/downloadXlsx';
 import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
 import { GoogleAdsCampaignDetail } from './campaign-detail/GoogleAdsCampaignDetail';
@@ -353,6 +354,34 @@ export function GoogleAdsModule() {
     });
   };
 
+  const downloadTable = () => {
+    if (filtered.length === 0) return;
+    try {
+      downloadXlsx(
+        `google-ads_${range.from}_${range.to}.xlsx`,
+        'Google Ads',
+        filtered.map((c) => ({
+          帳戶: c.accountName || c.customerId,
+          '帳戶 ID': c.customerId,
+          Campaign: c.campaignName,
+          標籤: (tagsByCampaignId.get(c.id) ?? []).map((tag) => tag.name).join(', '),
+          網站: c.matchedWebsites.map((w) => w.domain).join(', '),
+          類型: c.advertisingChannelType || '',
+          目標: normalizeGoogleAdsObjectives(c.objectives).join(', '),
+          狀態: c.status,
+          'Impr.': c.impressions,
+          Clicks: c.clicks,
+          Cost: microsToAmount(c.costMicros),
+          'Conv.': c.conversions,
+        })),
+        { moneyColumns: ['Cost'] },
+      );
+      toast.success(`已下載 ${filtered.length} 筆`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '下載失敗');
+    }
+  };
+
   if (hashQuery.campaign) {
     return (
       <GoogleAdsCampaignDetail
@@ -392,6 +421,15 @@ export function GoogleAdsModule() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={downloadTable}
+              disabled={loading || filtered.length === 0}
+            >
+              <Download size={14} className="mr-1.5" />
+              下載 Excel
+            </Button>
             <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
               重新載入
             </Button>

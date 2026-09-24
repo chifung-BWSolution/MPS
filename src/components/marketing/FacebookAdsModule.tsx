@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, Pencil, RefreshCw, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Download, Pencil, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { resolveDateRange, useFacebookAdsData } from '@/hooks/useFacebookAdsData';
 import { useBrands } from '@/hooks/useBrands';
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CrudModal } from '@/components/ui/crud-modal';
+import { downloadXlsx, microsToAmount } from '@/lib/downloadXlsx';
 import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
 import {
@@ -361,6 +362,40 @@ export function FacebookAdsModule() {
     });
   };
 
+  const downloadTable = () => {
+    if (filtered.length === 0) return;
+    try {
+      downloadXlsx(
+        `facebook-ads_${range.from}_${range.to}.xlsx`,
+        'Facebook Ads',
+        filtered.map((c) => ({
+          帳戶: c.accountName || c.adAccountId,
+          '帳戶 ID': c.adAccountId,
+          Business: c.businessName || '',
+          Campaign: c.campaignName,
+          標籤: (tagsByCampaignId.get(c.id) ?? []).map((tag) => tag.name).join(', '),
+          品牌: c.brandCode
+            ? `${c.brandCode}${
+                c.brandDisplayName && c.brandDisplayName !== c.brandCode
+                  ? ` · ${c.brandDisplayName}`
+                  : ''
+              }`
+            : '',
+          Objective: c.objective || '',
+          狀態: c.status,
+          'Impr.': c.impressions,
+          Clicks: c.clicks,
+          Spend: microsToAmount(c.spendMicros),
+          'Conv.': c.conversions,
+        })),
+        { moneyColumns: ['Spend'] },
+      );
+      toast.success(`已下載 ${filtered.length} 筆`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '下載失敗');
+    }
+  };
+
   if (hashQuery.campaign) {
     return (
       <FacebookAdsCampaignDetail
@@ -404,6 +439,15 @@ export function FacebookAdsModule() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={downloadTable}
+              disabled={loading || filtered.length === 0}
+            >
+              <Download size={14} className="mr-1.5" />
+              下載 Excel
+            </Button>
             <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
               重新載入
             </Button>
