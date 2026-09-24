@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, Download, Pencil, RefreshCw, Search } from 'lucide-react';
+import { ArrowUpDown, Download, Pencil, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { resolveDateRange, useGoogleAdsData } from '@/hooks/useGoogleAdsData';
 import { useBrands } from '@/hooks/useBrands';
@@ -14,6 +14,7 @@ import {
   setGoogleAdsCampaignHash,
 } from '@/lib/adsCampaignNavigation';
 import { appHrefClickProps } from '@/lib/appNavigation';
+import { formatBidStrategy } from '@/lib/adsBidStrategy';
 import { downloadXlsx, microsToAmount } from '@/lib/downloadXlsx';
 import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,9 @@ type SortKey =
   | 'type'
   | 'objectives'
   | 'status'
+  | 'dailyBudget'
+  | 'bidStrategy'
+  | 'eligibleKeywords'
   | 'impressions'
   | 'clicks'
   | 'cost'
@@ -62,6 +66,14 @@ function getSortValue(c: GoogleAdsCampaign, key: SortKey): string | number {
       return (c.objectives ?? []).join(', ');
     case 'status':
       return c.status;
+    case 'dailyBudget':
+      return c.dailyBudgetMicros ?? -1;
+    case 'bidStrategy':
+      return formatBidStrategy(c.biddingStrategyType);
+    case 'eligibleKeywords':
+      return (c.advertisingChannelType || '').toUpperCase() === 'SEARCH'
+        ? (c.eligibleKeywordCount ?? -1)
+        : -1;
     case 'impressions':
       return c.impressions;
     case 'clicks':
@@ -89,20 +101,22 @@ function SortableTh({
   onSort: (key: SortKey) => void;
 }) {
   const active = activeKey === sortKey;
-  const Icon = active ? (sortDir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
   return (
-    <th className={cn('font-medium px-3 py-2.5', align === 'right' ? 'text-right' : 'text-left')}>
+    <th
+      aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      className={cn('font-medium px-3 py-2.5', align === 'right' ? 'text-right' : 'text-left')}
+    >
       <button
         type="button"
         onClick={() => onSort(sortKey)}
         className={cn(
-          'inline-flex items-center gap-1 hover:text-foreground transition-colors',
-          align === 'right' && 'flex-row-reverse',
+          'inline-flex w-full items-center gap-1 whitespace-nowrap hover:text-foreground transition-colors',
+          align === 'right' ? 'justify-end' : 'justify-start',
           active ? 'text-foreground' : 'text-muted-foreground',
         )}
       >
         <span>{label}</span>
-        <Icon size={12} className={cn(active ? 'text-teal-600' : 'opacity-40')} />
+        <ArrowUpDown size={12} className={cn('shrink-0', active ? 'text-teal-600' : 'opacity-40')} />
       </button>
     </th>
   );
@@ -298,7 +312,12 @@ export function GoogleAdsModule() {
     } else {
       setSortKey(key);
       setSortDir(
-        key === 'impressions' || key === 'clicks' || key === 'cost' || key === 'conversions'
+        key === 'dailyBudget' ||
+        key === 'eligibleKeywords' ||
+        key === 'impressions' ||
+        key === 'clicks' ||
+        key === 'cost' ||
+        key === 'conversions'
           ? 'desc'
           : 'asc',
       );
@@ -369,12 +388,18 @@ export function GoogleAdsModule() {
           類型: c.advertisingChannelType || '',
           目標: normalizeGoogleAdsObjectives(c.objectives).join(', '),
           狀態: c.status,
+          每日預算: c.dailyBudgetMicros == null ? '' : microsToAmount(c.dailyBudgetMicros),
+          出價策略: formatBidStrategy(c.biddingStrategyType),
+          符合資格關鍵字:
+            (c.advertisingChannelType || '').toUpperCase() === 'SEARCH'
+              ? (c.eligibleKeywordCount ?? '')
+              : 'N/A',
           'Impr.': c.impressions,
           Clicks: c.clicks,
           Cost: microsToAmount(c.costMicros),
           'Conv.': c.conversions,
         })),
-        { moneyColumns: ['Cost'] },
+        { moneyColumns: ['每日預算', 'Cost'] },
       );
       toast.success(`已下載 ${filtered.length} 筆`);
     } catch (err) {
@@ -577,6 +602,9 @@ export function GoogleAdsModule() {
                 <SortableTh label="類型" sortKey="type" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortableTh label="目標" sortKey="objectives" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortableTh label="狀態" sortKey="status" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SortableTh label="每日預算" sortKey="dailyBudget" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
+                <SortableTh label="出價策略" sortKey="bidStrategy" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SortableTh label="符合資格關鍵字" sortKey="eligibleKeywords" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
                 <SortableTh label="Impr." sortKey="impressions" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
                 <SortableTh label="Clicks" sortKey="clicks" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
                 <SortableTh label="Cost" sortKey="cost" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
@@ -587,14 +615,14 @@ export function GoogleAdsModule() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={14} className="px-3 py-8 text-center text-muted-foreground">
                     載入中…
                   </td>
                 </tr>
               )}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={14} className="px-3 py-8 text-center text-muted-foreground">
                     此日期區間尚無資料。請先到「廣告數據同步」執行完整歷史回填，或按 Refresh recent。
                   </td>
                 </tr>
@@ -660,6 +688,19 @@ export function GoogleAdsModule() {
                       {formatObjectives(c.objectives)}
                     </td>
                     <td className="px-3 py-2.5">{statusBadge(c.status)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {c.dailyBudgetMicros == null ? '—' : formatMoneyFromMicros(c.dailyBudgetMicros)}
+                    </td>
+                    <td className="px-3 py-2.5 text-muted-foreground">
+                      {formatBidStrategy(c.biddingStrategyType) || '—'}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {(c.advertisingChannelType || '').toUpperCase() === 'SEARCH' ? (
+                        c.eligibleKeywordCount == null ? '—' : c.eligibleKeywordCount.toLocaleString()
+                      ) : (
+                        <span className="text-slate-300">N/A</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2.5 text-right tabular-nums">
                       {c.impressions.toLocaleString()}
                     </td>

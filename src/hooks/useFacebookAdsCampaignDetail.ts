@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { mergeWebsitesByDomain } from '@/lib/adsWebsiteDisplay';
 import { resolveFacebookBrandListId } from '@/lib/facebookAdsBrand';
 import {
   mergeActionBreakdowns,
@@ -21,6 +20,8 @@ type CampaignMetaRow = {
   status: string;
   objective: string | null;
   brand_list_id: string | null;
+  daily_budget_micros?: number | string | null;
+  bidding_strategy_type?: string | null;
 };
 
 type AccountRow = {
@@ -191,11 +192,11 @@ export function useFacebookAdsCampaignDetail(
     const prev = previousPeriod(dateFrom, dateTo);
 
     try {
-      const [metaRes, accountRes, websiteRes, currentRows, previousRows] = await Promise.all([
+      const [metaRes, accountRes, currentRows, previousRows] = await Promise.all([
         supabase
           .from('facebook_ads_campaigns')
           .select(
-            'id,ad_account_id,campaign_id,campaign_name,status,objective,brand_list_id',
+            'id,ad_account_id,campaign_id,campaign_name,status,objective,brand_list_id,daily_budget_micros,bidding_strategy_type',
           )
           .eq('id', campaignKey)
           .maybeSingle(),
@@ -204,17 +205,12 @@ export function useFacebookAdsCampaignDetail(
           .select('ad_account_id,account_name,currency_code,business_key,business_name')
           .eq('ad_account_id', adAccountId)
           .maybeSingle(),
-        supabase
-          .from('facebook_ads_account_websites')
-          .select('matched_domain,website_profile_id')
-          .eq('ad_account_id', adAccountId),
         fetchDailyRows(adAccountId, campaignId, dateFrom, dateTo),
         fetchDailyRows(adAccountId, campaignId, prev.from, prev.to),
       ]);
 
       if (metaRes.error) throw metaRes.error;
       if (accountRes.error) throw accountRes.error;
-      if (websiteRes.error) throw websiteRes.error;
 
       const meta = metaRes.data as CampaignMetaRow | null;
       const account = accountRes.data as AccountRow | null;
@@ -241,18 +237,6 @@ export function useFacebookAdsCampaignDetail(
       const brandCode = brand?.brand_code;
       const brandDisplayName = brand?.display_name;
 
-      const matchedWebsites = mergeWebsitesByDomain(
-        ((websiteRes.data as Array<{
-          matched_domain: string;
-          website_profile_id: string;
-        }> | null) ?? [])
-          .map((link) => ({
-            domain: (link.matched_domain || '').trim(),
-            websiteProfileId: (link.website_profile_id || '').trim(),
-          }))
-          .filter((w) => w.domain && w.websiteProfileId),
-      );
-
       const series = fillSeries(dateFrom, dateTo, currentRows);
       const prevSeries = fillSeries(prev.from, prev.to, previousRows);
 
@@ -270,14 +254,23 @@ export function useFacebookAdsCampaignDetail(
         brandListId,
         brandCode,
         brandDisplayName,
-        matchedWebsites,
+        dailyBudgetMicros:
+          meta?.daily_budget_micros == null ? null : Number(meta.daily_budget_micros),
+        biddingStrategyType: meta?.bidding_strategy_type ?? null,
+        matchedWebsites: [],
         series,
         totals: sumSeries(series),
         previousTotals: sumSeries(prevSeries),
       });
     } catch (e) {
       setDetail(null);
-      setError(e instanceof Error ? e.message : String(e));
+      const message =
+        e instanceof Error
+          ? e.message
+          : e && typeof e === 'object' && 'message' in e
+            ? String((e as { message: unknown }).message)
+            : String(e);
+      setError(message);
     } finally {
       setLoading(false);
     }

@@ -53,31 +53,45 @@ export function AdsKpiCard({
         <div className="text-[18px] font-bold tabular-nums leading-tight mt-0.5 truncate">
           {item.hover ?? item.value}
         </div>
-        <div className="mt-1 flex items-center gap-1.5">
-          <DeltaBadge deltaPct={item.deltaPct} />
-          <span className="text-[10px] text-muted-foreground">vs 前一期間</span>
-        </div>
-      </div>
-      <div className={cn('w-[72px] h-[36px] shrink-0', onClick && 'pointer-events-none')}>
-        {chartData.some((d) => d.v > 0) ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
-              <Area
-                type="monotone"
-                dataKey="v"
-                stroke={stroke}
-                fill={stroke}
-                fillOpacity={0.12}
-                strokeWidth={1.5}
-                isAnimationActive={false}
-                dot={false}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+        {item.snapshotBadge ? (
+          <div className="mt-1 flex items-center gap-1.5 min-w-0">
+            <span className="shrink-0 text-[11px] font-medium text-slate-600">{item.snapshotBadge}</span>
+            <span
+              className="text-[10px] text-muted-foreground truncate"
+              title={item.description || undefined}
+            >
+              {item.description || '—'}
+            </span>
+          </div>
         ) : (
-          <div className="h-full w-full rounded bg-slate-50" />
+          <div className="mt-1 flex items-center gap-1.5">
+            <DeltaBadge deltaPct={item.deltaPct} />
+            <span className="text-[10px] text-muted-foreground">vs 前一期間</span>
+          </div>
         )}
       </div>
+      {!item.snapshotBadge ? (
+        <div className={cn('w-[72px] h-[36px] shrink-0', onClick && 'pointer-events-none')}>
+          {chartData.some((d) => d.v > 0) ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
+                <Area
+                  type="monotone"
+                  dataKey="v"
+                  stroke={stroke}
+                  fill={stroke}
+                  fillOpacity={0.12}
+                  strokeWidth={1.5}
+                  isAnimationActive={false}
+                  dot={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full w-full rounded bg-slate-50" />
+          )}
+        </div>
+      ) : null}
     </div>
   );
 

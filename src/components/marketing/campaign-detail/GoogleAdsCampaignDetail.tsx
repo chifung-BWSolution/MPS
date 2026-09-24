@@ -7,11 +7,19 @@ import {
   parseCampaignKey,
   setGoogleAdsCampaignHash,
 } from '@/lib/adsCampaignNavigation';
+import { formatBidStrategy } from '@/lib/adsBidStrategy';
 import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import { openWebsiteDetail } from '@/lib/websiteNavigation';
 import type { DateRangePreset, GoogleAdsMetricTotals } from '@/types/googleAds';
 import { AdsCampaignDetailShell } from './AdsCampaignDetailShell';
+import { GoogleAdsChangeHistory } from './GoogleAdsChangeHistory';
+import { useGoogleAdsCampaignChangeHistory } from '@/hooks/useGoogleAdsCampaignChangeHistory';
 import type { AdsCampaignDetailViewModel, AdsKpiItem } from './types';
+
+const DETAIL_TABS = [
+  { id: 'overview', label: '概覽' },
+  { id: 'changes', label: '變更記錄' },
+];
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -32,10 +40,28 @@ function pctChange(current: number, previous: number): number | null {
   return ((current - previous) / Math.abs(previous)) * 100;
 }
 
+function dailyBudgetKpi(
+  dailyBudgetMicros?: number | null,
+  biddingStrategyType?: string | null,
+): AdsKpiItem {
+  return {
+    id: 'daily-budget',
+    label: 'Daily budget',
+    value: dailyBudgetMicros == null ? '—' : formatMoneyFromMicros(dailyBudgetMicros),
+    deltaPct: null,
+    sparkline: [],
+    snapshotBadge: 'Current',
+    description: formatBidStrategy(biddingStrategyType) || '—',
+    hint: 'Current daily budget and bid strategy. This does not change with the date range.',
+  };
+}
+
 function buildKpis(
   totals: GoogleAdsMetricTotals,
   previous: GoogleAdsMetricTotals,
   series: { impressions: number; clicks: number; costMicros: number; conversions: number; ctr: number; averageCpcMicros: number }[],
+  dailyBudgetMicros?: number | null,
+  biddingStrategyType?: string | null,
 ): AdsKpiItem[] {
   const costSpark = series.map((p) => p.costMicros / 1_000_000);
   const cpaSpark = series.map((p) =>
@@ -43,6 +69,7 @@ function buildKpis(
   );
 
   const items: AdsKpiItem[] = [
+    dailyBudgetKpi(dailyBudgetMicros, biddingStrategyType),
     {
       id: 'impressions',
       label: 'Impressions',
@@ -111,6 +138,7 @@ export function GoogleAdsCampaignDetail({
   const { navigateTo } = useApp();
   const parsed = parseCampaignKey(campaignKey);
 
+  const [detailTab, setDetailTab] = useState('overview');
   const [preset, setPreset] = useState<DateRangePreset>(initialPreset || '30d');
   const [customFrom, setCustomFrom] = useState(initialFrom || daysAgoIso(30));
   const [customTo, setCustomTo] = useState(initialTo || todayIso());
@@ -123,6 +151,10 @@ export function GoogleAdsCampaignDetail({
       dataMaxDate,
     ),
   );
+
+  useEffect(() => {
+    setDetailTab('overview');
+  }, [campaignKey]);
 
   useEffect(() => {
     if (initialPreset) setPreset(initialPreset);
@@ -244,7 +276,13 @@ export function GoogleAdsCampaignDetail({
         ctr: p.ctr,
         cpc: p.averageCpcMicros / 1_000_000,
       })),
-      kpis: buildKpis(detail.totals, detail.previousTotals, detail.series),
+      kpis: buildKpis(
+        detail.totals,
+        detail.previousTotals,
+        detail.series,
+        detail.dailyBudgetMicros,
+        detail.biddingStrategyType,
+      ),
       breakdowns,
     };
   }, [
@@ -264,6 +302,14 @@ export function GoogleAdsCampaignDetail({
     breakdownsLoading,
     breakdownsError,
   ]);
+
+  const changeHistory = useGoogleAdsCampaignChangeHistory(
+    parsed?.customerId ?? null,
+    parsed?.campaignId ?? null,
+    range.from,
+    range.to,
+    detailTab === 'changes',
+  );
 
   const onBack = () => {
     setGoogleAdsCampaignHash({
@@ -308,6 +354,21 @@ export function GoogleAdsCampaignDetail({
         onCustomFromChange: setCustomFrom,
         onCustomToChange: setCustomTo,
       }}
+      detailTabs={DETAIL_TABS}
+      activeDetailTab={detailTab}
+      onDetailTabChange={setDetailTab}
+      detailTabContent={
+        <GoogleAdsChangeHistory
+          sessions={changeHistory.sessions}
+          campaignName={model.campaignName}
+          loading={changeHistory.loading}
+          error={changeHistory.error}
+          queriedFrom={changeHistory.queriedFrom}
+          queriedTo={changeHistory.queriedTo}
+          clamped={changeHistory.clamped}
+          detailAvailable={changeHistory.detailAvailable}
+        />
+      }
     />
   );
 }

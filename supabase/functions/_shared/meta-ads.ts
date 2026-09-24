@@ -39,6 +39,9 @@ export type CampaignMetaRow = {
   campaign_name: string;
   status: string;
   objective: string | null;
+  daily_budget_micros: number | null;
+  bidding_strategy_type: string | null;
+  eligible_keyword_count: number | null;
   last_synced_at: string;
   updated_at: string;
 };
@@ -369,16 +372,24 @@ export async function fetchAllAccounts(nowIso: string): Promise<{
   return { credentials, accounts: unique };
 }
 
+/** Meta budget fields are in the currency offset (cents for USD/HKD). */
+function metaBudgetToMicros(amount: unknown): number | null {
+  if (amount == null || amount === "") return null;
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * 10_000);
+}
+
 async function fetchCampaignMeta(
   cred: MetaCredential,
   adAccountId: string,
   nowIso: string,
 ): Promise<CampaignMetaRow[]> {
   const rows = await graphGetAll(cred, `/${adAccountId}/campaigns`, {
-    fields: "id,name,status,effective_status,objective",
+    fields: "id,name,status,effective_status,objective,daily_budget,bid_strategy",
     limit: "200",
   });
-  return rows.map((row) => {
+  const campaigns = rows.map((row) => {
     const campaignId = String(row.id || "");
     return {
       id: `${adAccountId}:${campaignId}`,
@@ -387,10 +398,39 @@ async function fetchCampaignMeta(
       campaign_name: String(row.name || campaignId),
       status: mapCampaignStatus(row.effective_status, row.status),
       objective: (row.objective as string) || null,
+      daily_budget_micros: metaBudgetToMicros(row.daily_budget),
+      bidding_strategy_type: String(row.bid_strategy || "").trim() || null,
+      eligible_keyword_count: null,
       last_synced_at: nowIso,
       updated_at: nowIso,
     };
   });
+
+  // Ad-set budgets apply when the campaign itself has no daily budget.
+  try {
+    const adsets = await graphGetAll(cred, `/${adAccountId}/adsets`, {
+      fields: "campaign_id,daily_budget,effective_status",
+      limit: "500",
+    });
+    const sums = new Map<string, number>();
+    for (const row of adsets) {
+      const status = String(row.effective_status || "");
+      if (status === "DELETED" || status === "ARCHIVED") continue;
+      const micros = metaBudgetToMicros(row.daily_budget);
+      const campaignId = String(row.campaign_id || "");
+      if (micros == null || !campaignId) continue;
+      sums.set(campaignId, (sums.get(campaignId) ?? 0) + micros);
+    }
+    for (const campaign of campaigns) {
+      if (campaign.daily_budget_micros != null) continue;
+      const sum = sums.get(campaign.campaign_id);
+      if (sum) campaign.daily_budget_micros = sum;
+    }
+  } catch {
+    // Keep campaign-level budgets if the ad set query fails.
+  }
+
+  return campaigns;
 }
 
 async function fetchDailyInsights(
@@ -453,6 +493,9 @@ async function fetchDailyInsights(
         campaign_name: String(row.campaign_name || campaignId),
         status: "UNKNOWN",
         objective: null,
+        daily_budget_micros: null,
+        bidding_strategy_type: null,
+        eligible_keyword_count: null,
         last_synced_at: nowIso,
         updated_at: nowIso,
       });
@@ -943,4 +986,289 @@ export async function fetchLiveFacebookCampaignBreakdowns(
     ),
   ]);
   return { adSets, ads, placements, errors };
+}
+
+/** Account activity queries stay bounded so a wide date preset cannot page the whole account. */
+export const CHANGE_HISTORY_MAX_DAYS = 90;
+const CHANGE_HISTORY_PAGE_LIMIT = 25;
+
+export type MetaChangeHistoryCategory =
+  | "budget"
+  | "bidding"
+  | "audience"
+  | "location"
+  | "language"
+  | "conversions"
+  | "ads"
+  | "status"
+  | "feeds"
+  | "other";
+
+export type MetaChangeHistoryLine = {
+  text: string;
+  category: MetaChangeHistoryCategory;
+};
+
+export type MetaChangeHistorySession = {
+  id: string;
+  userEmail: string;
+  clientType: string;
+  changeDateTime: string;
+  adGroupName: string;
+  assetGroupName: string;
+  lines: MetaChangeHistoryLine[];
+};
+
+export function changeHistoryWindow(
+  dateFrom: string,
+  dateTo: string,
+): { from: string; to: string } | null {
+  if (!ISO_DATE_RE.test(dateFrom) || !ISO_DATE_RE.test(dateTo) || dateFrom > dateTo) return null;
+  const end = new Date(`${dateTo}T00:00:00Z`);
+  const start = new Date(`${dateFrom}T00:00:00Z`);
+  const span = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  if (span <= CHANGE_HISTORY_MAX_DAYS) return { from: dateFrom, to: dateTo };
+  const clamped = new Date(end);
+  clamped.setUTCDate(clamped.getUTCDate() - (CHANGE_HISTORY_MAX_DAYS - 1));
+  return { from: clamped.toISOString().slice(0, 10), to: dateTo };
+}
+
+function parseExtra(raw: unknown): Record<string, unknown> {
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) return raw as Record<string, unknown>;
+  if (typeof raw !== "string" || !raw.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function extraText(extra: Record<string, unknown>, key: string): string {
+  const value = extra[key];
+  if (value == null) return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return "";
+}
+
+function formatActivityWhen(raw: unknown): string {
+  const value = String(raw || "").trim();
+  if (!value) return "";
+  if (/^\d+$/.test(value)) {
+    const ms = Number(value) < 1e12 ? Number(value) * 1000 : Number(value);
+    return new Date(ms).toISOString();
+  }
+  return value.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
+}
+
+function inWindow(when: string, dateFrom: string, dateTo: string): boolean {
+  const day = when.slice(0, 10);
+  if (!ISO_DATE_RE.test(day)) return true;
+  return day >= dateFrom && day <= dateTo;
+}
+
+function moneyLabel(value: string, currency: string): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return value || "—";
+  const formatted = (n / 100).toLocaleString("zh-HK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return currency ? `${currency} ${formatted}` : formatted;
+}
+
+function statusLabel(value: string): string {
+  const key = value.trim().toUpperCase();
+  if (key === "ACTIVE" || key === "ENABLED" || value === "1") return "啟用中";
+  if (key === "PAUSED" || key === "INACTIVE" || value === "2") return "已暫停";
+  if (key === "DELETED" || key === "ARCHIVED") return "已刪除";
+  if (key === "PENDING_REVIEW") return "審核中";
+  if (key === "DISAPPROVED") return "未獲准";
+  return value || "—";
+}
+
+function changedPair(extra: Record<string, unknown>, money = false): { oldValue: string; newValue: string } {
+  const currency = extraText(extra, "currency");
+  const oldRaw = extraText(extra, "old_value");
+  const newRaw = extraText(extra, "new_value");
+  if (money) {
+    return { oldValue: moneyLabel(oldRaw, currency), newValue: moneyLabel(newRaw, currency) };
+  }
+  return { oldValue: oldRaw, newValue: newRaw };
+}
+
+function withValues(label: string, oldValue: string, newValue: string): string {
+  if (oldValue && newValue && oldValue !== newValue) {
+    return `${label}已從「${oldValue}」變更為「${newValue}」`;
+  }
+  if (newValue) return `${label}：${newValue}`;
+  if (oldValue) return `已移除${label}「${oldValue}」`;
+  return `${label}已變更`;
+}
+
+function activityCategory(eventType: string, extra: Record<string, unknown>): MetaChangeHistoryCategory {
+  const blob = `${eventType} ${extraText(extra, "type")}`.toLowerCase();
+  if (blob.includes("run_status") || blob.includes("status")) return "status";
+  if (blob.includes("budget") || blob.includes("spend") || blob.includes("payment_amount")) return "budget";
+  if (blob.includes("bid")) return "bidding";
+  if (blob.includes("locale") || blob.includes("language")) return "language";
+  if (blob.includes("geo") || blob.includes("location") || blob.includes("city") || blob.includes("region")) {
+    return "location";
+  }
+  if (blob.includes("conversion") || blob.includes("pixel") || blob.includes("optimization_goal")) {
+    return "conversions";
+  }
+  if (blob.includes("catalog") || blob.includes("product_set") || blob.includes("feed")) return "feeds";
+  if (blob.includes("target") || blob.includes("audience")) return "audience";
+  if (
+    blob.includes("creative") ||
+    blob.includes("ad_review") ||
+    (blob.includes("update_ad_") && !blob.includes("ad_set") && !blob.includes("adset"))
+  ) {
+    return "ads";
+  }
+  return "other";
+}
+
+function describeActivity(eventType: string, extra: Record<string, unknown>): MetaChangeHistoryLine {
+  const category = activityCategory(eventType, extra);
+  const type = eventType.toLowerCase();
+  if (type.includes("run_status")) {
+    const pair = changedPair(extra);
+    const oldValue = statusLabel(pair.oldValue);
+    const newValue = statusLabel(pair.newValue);
+    const subject = type.includes("ad_set") ? "廣告群組" : type.includes("campaign") ? "廣告系列" : "廣告";
+    return { category: "status", text: withValues(`${subject}狀態`, oldValue === "—" ? "" : oldValue, newValue === "—" ? "" : newValue) };
+  }
+  if (type.includes("budget") || type.includes("spend_cap") || extraText(extra, "type") === "payment_amount") {
+    const pair = changedPair(extra, true);
+    const oldN = Number(extraText(extra, "old_value"));
+    const newN = Number(extraText(extra, "new_value"));
+    if (Number.isFinite(oldN) && Number.isFinite(newN) && newN !== oldN) {
+      return {
+        category: "budget",
+        text: newN > oldN ? "已提高 1 個廣告預算金額" : "已降低 1 個廣告預算金額",
+      };
+    }
+    return { category: "budget", text: withValues("廣告預算", pair.oldValue, pair.newValue) };
+  }
+  if (type.includes("name")) {
+    const pair = changedPair(extra);
+    const subject = type.includes("ad_set") ? "廣告群組" : type.includes("campaign") ? "廣告系列" : "廣告";
+    return { category: "other", text: withValues(`${subject}名稱`, pair.oldValue, pair.newValue) };
+  }
+  if (type.includes("bid")) {
+    const pair = changedPair(extra, extraText(extra, "type") === "payment_amount" || Boolean(extraText(extra, "currency")));
+    return { category: "bidding", text: withValues("出價", pair.oldValue, pair.newValue) };
+  }
+  if (type.includes("target")) return { category, text: "目標設定已變更" };
+  if (type.includes("creative")) return { category: "ads", text: "廣告素材已變更" };
+  if (type.startsWith("create_")) {
+    const subject = type.includes("ad_set") ? "廣告群組" : type.includes("campaign") ? "廣告系列" : "廣告";
+    return { category: type.includes("ad") && !type.includes("ad_set") && !type.includes("campaign") ? "ads" : "other", text: `已新增${subject}` };
+  }
+  if (type.includes("schedule") || type.includes("duration")) return { category: "other", text: "投放日程已變更" };
+  if (type.includes("optimization_goal") || type.includes("conversion")) {
+    return { category: "conversions", text: "轉換目標已變更" };
+  }
+  const translated = extraText(extra, "translated_event_type");
+  return { category, text: translated || "設定已變更" };
+}
+
+type ActivityObject = {
+  kind: "campaign" | "adset" | "ad";
+  adSetName: string;
+  adName: string;
+};
+
+async function fetchCampaignObjectIndex(
+  cred: MetaCredential,
+  campaignId: string,
+): Promise<Map<string, ActivityObject>> {
+  const index = new Map<string, ActivityObject>();
+  index.set(campaignId, { kind: "campaign", adSetName: "", adName: "" });
+  const [adSets, ads] = await Promise.all([
+    graphGetAll(cred, `/${campaignId}/adsets`, { fields: "id,name", limit: "200" }, 10),
+    graphGetAll(cred, `/${campaignId}/ads`, { fields: "id,name,adset_id", limit: "200" }, 10),
+  ]);
+  const adSetNames = new Map<string, string>();
+  for (const row of adSets) {
+    const id = String(row.id || "");
+    const name = String(row.name || "");
+    if (!id) continue;
+    adSetNames.set(id, name);
+    index.set(id, { kind: "adset", adSetName: name, adName: "" });
+  }
+  for (const row of ads) {
+    const id = String(row.id || "");
+    if (!id) continue;
+    const adSetId = String(row.adset_id || "");
+    index.set(id, {
+      kind: "ad",
+      adSetName: adSetNames.get(adSetId) || "",
+      adName: String(row.name || ""),
+    });
+  }
+  return index;
+}
+
+export async function fetchCampaignChangeHistory(
+  cred: MetaCredential,
+  adAccountId: string,
+  campaignId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<MetaChangeHistorySession[]> {
+  const index = await fetchCampaignObjectIndex(cred, campaignId);
+  const rows = await graphGetAll(
+    cred,
+    `/${adAccountId}/activities`,
+    {
+      fields:
+        "actor_name,application_name,date_time_in_timezone,event_time,event_type,extra_data,object_id,object_name,object_type,translated_event_type",
+      since: dateFrom,
+      until: `${dateTo}T23:59:59`,
+      limit: "100",
+    },
+    CHANGE_HISTORY_PAGE_LIMIT,
+  );
+
+  const sessions: MetaChangeHistorySession[] = [];
+  for (const row of rows) {
+    const objectId = String(row.object_id || "");
+    const extra = parseExtra(row.extra_data);
+    const extraCampaignId = extraText(extra, "campaign_id");
+    const known = index.get(objectId);
+    if (!known && extraCampaignId !== campaignId && objectId !== campaignId) continue;
+
+    const when = formatActivityWhen(row.date_time_in_timezone || row.event_time);
+    if (!inWindow(when, dateFrom, dateTo)) continue;
+
+    const eventType = String(row.event_type || "");
+    if (row.translated_event_type) extra.translated_event_type = row.translated_event_type;
+    const line = describeActivity(eventType, extra);
+    const objectType = String(row.object_type || "").toUpperCase();
+    const objectName = String(row.object_name || "");
+    let adGroupName = known?.adSetName || "";
+    let assetGroupName = known?.adName || "";
+    if (!known && (objectType === "ADSET" || objectType === "ADGROUP")) adGroupName = objectName;
+    if (!known && objectType === "AD") assetGroupName = objectName;
+    if (known?.kind === "adset" && !adGroupName) adGroupName = objectName;
+
+    sessions.push({
+      id: `${objectId}:${when}:${eventType}:${sessions.length}`,
+      userEmail: String(row.actor_name || ""),
+      clientType: String(row.application_name || ""),
+      changeDateTime: when,
+      adGroupName,
+      assetGroupName,
+      lines: [line],
+    });
+  }
+
+  return sessions.sort((a, b) => b.changeDateTime.localeCompare(a.changeDateTime));
 }

@@ -127,6 +127,46 @@ export type LiveCampaignBreakdownsResponse = {
   max_days?: number;
 };
 
+export type CampaignChangeHistoryResponse = {
+  success?: boolean;
+  customerId?: string;
+  campaignId?: string;
+  from?: string;
+  to?: string;
+  requestedFrom?: string;
+  requestedTo?: string;
+  clamped?: boolean;
+  maxDays?: number;
+  queriedFrom?: string | null;
+  queriedTo?: string | null;
+  detailAvailable?: boolean;
+  fetchedAt?: string;
+  sessions?: import('@/types/googleAds').GoogleAdsChangeHistorySession[];
+  error?: string;
+  max_days?: number;
+};
+
+export function invokeGoogleAdsCampaignChangeHistory(
+  opts: {
+    customerId: string;
+    campaignId: string;
+    from: string;
+    to: string;
+  },
+  signal?: AbortSignal,
+) {
+  return invokeFunction<CampaignChangeHistoryResponse>(
+    'supabase-functions-google-ads-campaign-change-history',
+    {
+      customerId: opts.customerId,
+      campaignId: opts.campaignId,
+      from: opts.from,
+      to: opts.to,
+    },
+    { retries: 1, signal },
+  );
+}
+
 export function invokeGoogleAdsCampaignBreakdowns(
   opts: {
     customerId: string;

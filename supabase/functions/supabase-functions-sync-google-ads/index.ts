@@ -7,6 +7,7 @@ import {
   getAccessToken,
   linkGoogleCampaignWebsites,
   LOGIN_CUSTOMER_ID,
+  syncCampaignDailyBudgets,
   syncCampaignObjectives,
   toIsoDate,
 } from "../_shared/google-ads.ts";
@@ -97,6 +98,7 @@ Deno.serve(async (req) => {
       enabledIds,
       errors,
     );
+    await syncCampaignDailyBudgets(supabase, accessToken, enabledIds, errors);
 
     for (let i = 0; i < daily.length; i += 500) {
       const chunk = daily.slice(i, i + 500);

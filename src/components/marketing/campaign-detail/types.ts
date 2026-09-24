@@ -24,6 +24,13 @@ export type AdsKpiItem = {
   hint?: string;
   /** Optional rich hover (Facebook Conv. breakdown). */
   hover?: ReactNode;
+  /**
+   * Snapshot metrics (daily budget) do not follow the date-range filter.
+   * When set, the card shows this badge instead of a period-over-period delta.
+   */
+  snapshotBadge?: string;
+  /** Secondary line under a snapshot metric, e.g. the bid strategy. */
+  description?: string;
 };
 
 export type AdsLinkedWebsite = {
@@ -96,6 +103,11 @@ export type AdsDateRangeControls = {
   onCustomToChange: (value: string) => void;
 };
 
+export type AdsCampaignDetailTab = {
+  id: string;
+  label: string;
+};
+
 export type AdsCampaignDetailShellProps = {
   model: AdsCampaignDetailViewModel;
   dateRange: AdsDateRangeControls;
@@ -104,4 +116,10 @@ export type AdsCampaignDetailShellProps = {
   onBack: () => void;
   onOpenWebsite?: (websiteProfileId: string) => void;
   headerExtra?: ReactNode;
+  /** Sub-tabs under the campaign header. Omit to keep a single overview. */
+  detailTabs?: AdsCampaignDetailTab[];
+  activeDetailTab?: string;
+  onDetailTabChange?: (id: string) => void;
+  /** Rendered when the active sub-tab is not `overview`. */
+  detailTabContent?: ReactNode;
 };

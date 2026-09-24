@@ -17,6 +17,11 @@ export type FacebookAdsCampaign = {
   campaignId: string;
   campaignName: string;
   status: string;
+  /** Daily budget in micros. Null when the platform has not reported one. */
+  dailyBudgetMicros?: number | null;
+  biddingStrategyType?: string | null;
+  /** Meta campaigns do not have search keywords; left null. */
+  eligibleKeywordCount?: number | null;
   objective?: string;
   /** Manual FK → brand_list.id */
   brandListId?: string | null;
@@ -110,6 +115,10 @@ export type FacebookAdsCampaignDetail = {
   brandListId?: string | null;
   brandCode?: string;
   brandDisplayName?: string;
+  /** Current daily budget in micros. Independent of the selected date range. */
+  dailyBudgetMicros?: number | null;
+  /** Current bid strategy. Independent of the selected date range. */
+  biddingStrategyType?: string | null;
   matchedWebsites: Array<{ domain: string; websiteProfileId: string }>;
   series: FacebookAdsDailyMetricPoint[];
   totals: FacebookAdsMetricTotals;
@@ -139,6 +148,34 @@ export type FacebookAdsAdRow = {
   spendMicros: number;
   conversions: number;
   ctr: number;
+};
+
+export type FacebookAdsChangeHistoryCategory =
+  | 'budget'
+  | 'bidding'
+  | 'audience'
+  | 'location'
+  | 'language'
+  | 'conversions'
+  | 'ads'
+  | 'status'
+  | 'feeds'
+  | 'other';
+
+export type FacebookAdsChangeHistoryLine = {
+  text: string;
+  category: FacebookAdsChangeHistoryCategory;
+};
+
+/** One Meta activity row, shaped like the Google Ads change-history table. */
+export type FacebookAdsChangeHistorySession = {
+  id: string;
+  userEmail: string;
+  clientType: string;
+  changeDateTime: string;
+  adGroupName: string;
+  assetGroupName: string;
+  lines: FacebookAdsChangeHistoryLine[];
 };
 
 export type FacebookAdsPlacementRow = {

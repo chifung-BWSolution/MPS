@@ -23,6 +23,9 @@ type CampaignMetaRow = {
   campaign_name: string;
   status: string;
   advertising_channel_type: string | null;
+  daily_budget_micros?: number | string | null;
+  bidding_strategy_type?: string | null;
+  eligible_keyword_count?: number | string | null;
   objectives?: string[] | null;
   last_synced_at: string | null;
 };
@@ -131,7 +134,7 @@ export function useGoogleAdsData(
         .select('*')
         .order('descriptive_name', { ascending: true }),
       supabase.from('google_ads_campaigns').select(
-        'id,customer_id,campaign_id,campaign_name,status,advertising_channel_type,objectives,last_synced_at',
+        'id,customer_id,campaign_id,campaign_name,status,advertising_channel_type,objectives,daily_budget_micros,bidding_strategy_type,eligible_keyword_count,last_synced_at',
       ),
       supabase
         .from('google_ads_sync_runs')
@@ -234,6 +237,11 @@ export function useGoogleAdsData(
           campaignId: row.campaign_id,
           campaignName: meta?.campaign_name || row.campaign_id,
           status: meta?.status || 'UNKNOWN',
+          dailyBudgetMicros:
+            meta?.daily_budget_micros == null ? null : Number(meta.daily_budget_micros),
+          biddingStrategyType: meta?.bidding_strategy_type ?? null,
+          eligibleKeywordCount:
+            meta?.eligible_keyword_count == null ? null : Number(meta.eligible_keyword_count),
           advertisingChannelType: meta?.advertising_channel_type ?? undefined,
           objectives: normalizeGoogleAdsObjectives(meta?.objectives),
           impressions,

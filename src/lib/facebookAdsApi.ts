@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import type {
   FacebookAdsAdRow,
   FacebookAdsAdSetRow,
+  FacebookAdsChangeHistorySession,
   FacebookAdsPlacementRow,
 } from '@/types/facebookAds';
 
@@ -123,6 +124,43 @@ export type LiveFacebookCampaignBreakdownsResponse = {
   error?: string;
   max_days?: number;
 };
+
+export type FacebookCampaignChangeHistoryResponse = {
+  success?: boolean;
+  adAccountId?: string;
+  campaignId?: string;
+  from?: string;
+  to?: string;
+  queriedFrom?: string | null;
+  queriedTo?: string | null;
+  clamped?: boolean;
+  detailAvailable?: boolean;
+  maxDays?: number;
+  fetchedAt?: string;
+  sessions?: FacebookAdsChangeHistorySession[];
+  error?: string;
+};
+
+export function invokeFacebookAdsCampaignChangeHistory(
+  opts: {
+    adAccountId: string;
+    campaignId: string;
+    from: string;
+    to: string;
+  },
+  signal?: AbortSignal,
+) {
+  return invokeFunction<FacebookCampaignChangeHistoryResponse>(
+    'supabase-functions-facebook-ads-campaign-change-history',
+    {
+      adAccountId: opts.adAccountId,
+      campaignId: opts.campaignId,
+      from: opts.from,
+      to: opts.to,
+    },
+    { retries: 1, signal },
+  );
+}
 
 export function invokeFacebookAdsCampaignBreakdowns(
   opts: {

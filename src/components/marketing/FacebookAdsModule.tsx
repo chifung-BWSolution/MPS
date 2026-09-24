@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, Download, Pencil, RefreshCw, Search } from 'lucide-react';
+import { ArrowUpDown, Download, Pencil, RefreshCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { resolveDateRange, useFacebookAdsData } from '@/hooks/useFacebookAdsData';
 import { useBrands } from '@/hooks/useBrands';
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CrudModal } from '@/components/ui/crud-modal';
+import { formatBidStrategy } from '@/lib/adsBidStrategy';
 import { downloadXlsx, microsToAmount } from '@/lib/downloadXlsx';
 import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,8 @@ type SortKey =
   | 'brand'
   | 'objective'
   | 'status'
+  | 'dailyBudget'
+  | 'bidStrategy'
   | 'impressions'
   | 'clicks'
   | 'spend'
@@ -51,6 +54,10 @@ function getSortValue(c: FacebookAdsCampaign, key: SortKey): string | number {
       return c.objective || '';
     case 'status':
       return c.status;
+    case 'dailyBudget':
+      return c.dailyBudgetMicros ?? -1;
+    case 'bidStrategy':
+      return formatBidStrategy(c.biddingStrategyType);
     case 'impressions':
       return c.impressions;
     case 'clicks':
@@ -78,20 +85,22 @@ function SortableTh({
   onSort: (key: SortKey) => void;
 }) {
   const active = activeKey === sortKey;
-  const Icon = active ? (sortDir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
   return (
-    <th className={cn('font-medium px-3 py-2.5', align === 'right' ? 'text-right' : 'text-left')}>
+    <th
+      aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      className={cn('font-medium px-3 py-2.5', align === 'right' ? 'text-right' : 'text-left')}
+    >
       <button
         type="button"
         onClick={() => onSort(sortKey)}
         className={cn(
-          'inline-flex items-center gap-1 hover:text-foreground transition-colors',
-          align === 'right' && 'flex-row-reverse',
+          'inline-flex w-full items-center gap-1 whitespace-nowrap hover:text-foreground transition-colors',
+          align === 'right' ? 'justify-end' : 'justify-start',
           active ? 'text-foreground' : 'text-muted-foreground',
         )}
       >
         <span>{label}</span>
-        <Icon size={12} className={cn(active ? 'text-teal-600' : 'opacity-40')} />
+        <ArrowUpDown size={12} className={cn('shrink-0', active ? 'text-teal-600' : 'opacity-40')} />
       </button>
     </th>
   );
@@ -280,7 +289,11 @@ export function FacebookAdsModule() {
     } else {
       setSortKey(key);
       setSortDir(
-        key === 'impressions' || key === 'clicks' || key === 'spend' || key === 'conversions'
+        key === 'dailyBudget' ||
+        key === 'impressions' ||
+        key === 'clicks' ||
+        key === 'spend' ||
+        key === 'conversions'
           ? 'desc'
           : 'asc',
       );
@@ -383,12 +396,14 @@ export function FacebookAdsModule() {
             : '',
           Objective: c.objective || '',
           狀態: c.status,
+          每日預算: c.dailyBudgetMicros == null ? '' : microsToAmount(c.dailyBudgetMicros),
+          出價策略: formatBidStrategy(c.biddingStrategyType),
           'Impr.': c.impressions,
           Clicks: c.clicks,
           Spend: microsToAmount(c.spendMicros),
           'Conv.': c.conversions,
         })),
-        { moneyColumns: ['Spend'] },
+        { moneyColumns: ['每日預算', 'Spend'] },
       );
       toast.success(`已下載 ${filtered.length} 筆`);
     } catch (err) {
@@ -597,6 +612,8 @@ export function FacebookAdsModule() {
                 <SortableTh label="品牌" sortKey="brand" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortableTh label="Objective" sortKey="objective" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortableTh label="狀態" sortKey="status" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                <SortableTh label="每日預算" sortKey="dailyBudget" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
+                <SortableTh label="出價策略" sortKey="bidStrategy" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
                 <SortableTh label="Impr." sortKey="impressions" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
                 <SortableTh label="Clicks" sortKey="clicks" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
                 <SortableTh label="Spend" sortKey="spend" activeKey={sortKey} sortDir={sortDir} align="right" onSort={onSort} />
@@ -607,14 +624,14 @@ export function FacebookAdsModule() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={12} className="px-3 py-8 text-center text-muted-foreground">
                     載入中…
                   </td>
                 </tr>
               )}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={12} className="px-3 py-8 text-center text-muted-foreground">
                     {campaigns.length === 0
                       ? '此日期區間尚無資料。請先到「廣告數據同步」執行完整歷史回填，或按 Refresh recent。'
                       : '沒有符合目前篩選的 Campaign。'}
@@ -686,6 +703,12 @@ export function FacebookAdsModule() {
                       {c.objective || '—'}
                     </td>
                     <td className="px-3 py-2.5">{statusBadge(c.status)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {c.dailyBudgetMicros == null ? '—' : formatMoneyFromMicros(c.dailyBudgetMicros)}
+                    </td>
+                    <td className="px-3 py-2.5 text-muted-foreground">
+                      {formatBidStrategy(c.biddingStrategyType) || '—'}
+                    </td>
                     <td className="px-3 py-2.5 text-right tabular-nums">
                       {c.impressions.toLocaleString()}
                     </td>

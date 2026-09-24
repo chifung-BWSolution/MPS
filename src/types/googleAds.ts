@@ -23,6 +23,11 @@ export type GoogleAdsCampaign = {
   campaignId: string;
   campaignName: string;
   status: string;
+  /** Daily budget in micros. Null when the platform has not reported one. */
+  dailyBudgetMicros?: number | null;
+  biddingStrategyType?: string | null;
+  /** Google Ads keywords with system serving status ELIGIBLE. */
+  eligibleKeywordCount?: number | null;
   advertisingChannelType?: string;
   /** Biddable conversion-goal categories and campaign optimization goals. */
   objectives?: string[];
@@ -112,6 +117,10 @@ export type GoogleAdsCampaignDetail = {
   objectives?: string[];
   accountName?: string;
   currencyCode?: string;
+  /** Current daily budget in micros. Independent of the selected date range. */
+  dailyBudgetMicros?: number | null;
+  /** Current bid strategy. Independent of the selected date range. */
+  biddingStrategyType?: string | null;
   matchedWebsites: GoogleAdsMatchedWebsite[];
   series: GoogleAdsDailyMetricPoint[];
   totals: GoogleAdsMetricTotals;
@@ -253,6 +262,34 @@ export function normalizeGoogleAdsObjectives(raw?: string[] | null): string[] {
   }
   return out.sort((a, b) => a.localeCompare(b));
 }
+
+export type GoogleAdsChangeHistoryCategory =
+  | 'budget'
+  | 'bidding'
+  | 'audience'
+  | 'location'
+  | 'language'
+  | 'conversions'
+  | 'ads'
+  | 'status'
+  | 'feeds'
+  | 'other';
+
+export type GoogleAdsChangeHistoryLine = {
+  text: string;
+  category: GoogleAdsChangeHistoryCategory;
+};
+
+/** One Google Ads change-history row: a single mutate, not one resource. */
+export type GoogleAdsChangeHistorySession = {
+  id: string;
+  userEmail: string;
+  clientType: string;
+  changeDateTime: string;
+  adGroupName: string;
+  assetGroupName: string;
+  lines: GoogleAdsChangeHistoryLine[];
+};
 
 export function normalizeGoogleAdsBreakdownChannel(
   raw?: string | null,

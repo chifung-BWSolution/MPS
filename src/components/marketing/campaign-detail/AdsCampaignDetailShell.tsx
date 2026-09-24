@@ -79,6 +79,10 @@ export function AdsCampaignDetailShell({
   onBack,
   onOpenWebsite,
   headerExtra,
+  detailTabs,
+  activeDetailTab = 'overview',
+  onDetailTabChange,
+  detailTabContent,
 }: AdsCampaignDetailShellProps) {
   const [advisorOpen, setAdvisorOpen] = useState(false);
   const campaignRowId =
@@ -226,17 +230,41 @@ export function AdsCampaignDetailShell({
               {dateRange.rangeFrom} → {dateRange.rangeTo}
             </span>
           )}
-          {error ? <span className="text-[12px] text-red-600">{error}</span> : null}
+          {error && activeDetailTab === 'overview' ? (
+            <span className="text-[12px] text-red-600">{error}</span>
+          ) : null}
         </div>
+
+        {detailTabs && detailTabs.length > 0 ? (
+          <div className="flex items-center gap-1 -mb-3">
+            {detailTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onDetailTabChange?.(tab.id)}
+                className={cn(
+                  'px-3 py-2 text-[13px] font-medium border-b-2 whitespace-nowrap transition-colors',
+                  activeDetailTab === tab.id
+                    ? 'border-teal-600 text-teal-700'
+                    : 'border-transparent text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
-      {loading && !model.series.length ? (
+      {activeDetailTab !== 'overview' ? (
+        detailTabContent
+      ) : loading && !model.series.length ? (
         <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md px-4 py-16 text-center text-muted-foreground text-[13px]">
           載入 campaign 詳情…
         </div>
       ) : (
         <div className={cn('space-y-4', loading && 'opacity-70 pointer-events-none')}>
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
             {model.kpis.map((kpi) => (
               <AdsKpiCard key={kpi.id} item={kpi} />
             ))}

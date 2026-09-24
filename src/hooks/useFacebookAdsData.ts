@@ -30,6 +30,9 @@ type CampaignMetaRow = {
   campaign_name: string;
   status: string;
   objective: string | null;
+  daily_budget_micros?: number | string | null;
+  bidding_strategy_type?: string | null;
+  eligible_keyword_count?: number | string | null;
   brand_list_id: string | null;
   last_synced_at: string | null;
 };
@@ -132,7 +135,7 @@ export function useFacebookAdsData(dateFrom: string, dateTo: string) {
         .select('*')
         .order('account_name', { ascending: true }),
       supabase.from('facebook_ads_campaigns').select(
-        'id,ad_account_id,campaign_id,campaign_name,status,objective,brand_list_id,last_synced_at',
+        'id,ad_account_id,campaign_id,campaign_name,status,objective,brand_list_id,daily_budget_micros,bidding_strategy_type,eligible_keyword_count,last_synced_at',
       ),
       supabase
         .from('brand_list')
@@ -217,6 +220,11 @@ export function useFacebookAdsData(dateFrom: string, dateTo: string) {
           campaignId: row.campaign_id,
           campaignName: meta?.campaign_name || row.campaign_id,
           status: meta?.status || 'UNKNOWN',
+          dailyBudgetMicros:
+            meta?.daily_budget_micros == null ? null : Number(meta.daily_budget_micros),
+          biddingStrategyType: meta?.bidding_strategy_type ?? null,
+          eligibleKeywordCount:
+            meta?.eligible_keyword_count == null ? null : Number(meta.eligible_keyword_count),
           objective: meta?.objective ?? undefined,
           brandListId: brandId,
           brandCode: brand?.brand_code,

@@ -236,6 +236,7 @@ export type CampaignMetaRow = {
   campaign_name: string;
   status: string;
   advertising_channel_type: string | null;
+  daily_budget_micros: number | null;
   last_synced_at: string;
   updated_at: string;
 };
@@ -254,6 +255,7 @@ export async function fetchDailyMetricsForRange(
       campaign.name,
       campaign.status,
       campaign.advertising_channel_type,
+      campaign_budget.amount_micros,
       metrics.impressions,
       metrics.clicks,
       metrics.cost_micros,
@@ -297,6 +299,12 @@ export async function fetchDailyMetricsForRange(
           status: String(nestGet(row, "campaign.status") ?? "UNKNOWN"),
           advertising_channel_type:
             String(nestGet(row, "campaign.advertisingChannelType") ?? "") || null,
+          daily_budget_micros: (() => {
+            const raw = nestGet(row, "campaignBudget.amountMicros");
+            if (raw == null || raw === "") return null;
+            const n = asInt(raw);
+            return n > 0 ? n : null;
+          })(),
           last_synced_at: nowIso,
           updated_at: nowIso,
         });
@@ -460,6 +468,90 @@ export async function applyCampaignObjectives(
   return updated;
 }
 
+/** Write each campaign's daily budget onto existing google_ads_campaigns rows. */
+export async function syncCampaignDailyBudgets(
+  supabase: SupabaseClient,
+  accessToken: string,
+  customerIds: string[],
+  errors: string[],
+): Promise<number> {
+  const query = `
+    SELECT campaign.id, campaign.bidding_strategy_type, campaign_budget.amount_micros
+    FROM campaign
+  `;
+  const keywordQuery = `
+    SELECT campaign.id
+    FROM ad_group_criterion
+    WHERE ad_group_criterion.type = KEYWORD
+      AND ad_group_criterion.status = ENABLED
+      AND ad_group_criterion.negative = FALSE
+      AND ad_group_criterion.system_serving_status = ELIGIBLE
+  `;
+  const updates: {
+    id: string;
+    daily_budget_micros: number | null;
+    bidding_strategy_type: string | null;
+    eligible_keyword_count: number | null;
+  }[] = [];
+  await mapPool(customerIds, ACCOUNT_CONCURRENCY, async (customerId) => {
+    try {
+      const rows = await gaqlQuery(accessToken, customerId, query);
+      const keywordCounts = new Map<string, number>();
+      let keywordQueryOk = false;
+      try {
+        const keywordRows = await gaqlQuery(accessToken, customerId, keywordQuery);
+        keywordQueryOk = true;
+        for (const row of keywordRows) {
+          const campaignId = String(nestGet(row, "campaign.id") ?? "");
+          if (!campaignId) continue;
+          keywordCounts.set(campaignId, (keywordCounts.get(campaignId) ?? 0) + 1);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        errors.push(`${customerId} eligible keywords: ${msg.slice(0, 160)}`);
+      }
+      for (const row of rows) {
+        const campaignId = String(nestGet(row, "campaign.id") ?? "");
+        if (!campaignId) continue;
+        const raw = nestGet(row, "campaignBudget.amountMicros");
+        const n = raw == null || raw === "" ? null : asInt(raw);
+        const strategy = String(nestGet(row, "campaign.biddingStrategyType") ?? "").trim();
+        updates.push({
+          id: `${customerId}:${campaignId}`,
+          daily_budget_micros: n && n > 0 ? n : null,
+          bidding_strategy_type: strategy && strategy !== "UNSPECIFIED" && strategy !== "UNKNOWN" ? strategy : null,
+          eligible_keyword_count: keywordQueryOk ? (keywordCounts.get(campaignId) ?? 0) : null,
+        });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push(`${customerId} daily budget: ${msg.slice(0, 160)}`);
+    }
+  });
+
+  let updated = 0;
+  for (let i = 0; i < updates.length; i += 40) {
+    const chunk = updates.slice(i, i + 40);
+    const results = await Promise.all(
+      chunk.map((row) =>
+        supabase
+          .from("google_ads_campaigns")
+          .update({
+            daily_budget_micros: row.daily_budget_micros,
+            bidding_strategy_type: row.bidding_strategy_type,
+            eligible_keyword_count: row.eligible_keyword_count,
+          })
+          .eq("id", row.id),
+      ),
+    );
+    for (const result of results) {
+      if (result.error) errors.push(`daily budget: ${result.error.message}`.slice(0, 160));
+      else updated += 1;
+    }
+  }
+  return updated;
+}
+
 export async function syncCampaignObjectives(
   supabase: SupabaseClient,
   accessToken: string,
@@ -477,6 +569,11 @@ export async function syncCampaignObjectives(
 
 /** Max inclusive day span for live campaign breakdown fetches. */
 export const LIVE_BREAKDOWN_MAX_DAYS = 92;
+/** change_status keeps the latest change per resource for the past 90 days. */
+export const CHANGE_STATUS_MAX_DAYS = 90;
+/** change_event field detail only retains the past 30 days, and the query window cannot exceed 30 days. */
+export const CHANGE_HISTORY_MAX_DAYS = 30;
+export const CHANGE_HISTORY_ROW_LIMIT = 10000;
 
 /** Channel types that expose live breakdown panels in the UI. */
 export type LiveBreakdownChannel =
@@ -678,6 +775,1073 @@ export function validateLiveBreakdownRange(
     };
   }
   return { ok: true, days };
+}
+
+function utcTodayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addIsoDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Clamp a requested range onto the 90-day change_status window ending today. */
+export function clampChangeHistoryRange(
+  dateFrom: string,
+  dateTo: string,
+): { ok: true; from: string; to: string; clamped: boolean } | { ok: false; error: string } {
+  if (!ISO_DATE_RE.test(dateFrom) || !ISO_DATE_RE.test(dateTo)) {
+    return { ok: false, error: "日期格式無效（需 YYYY-MM-DD）" };
+  }
+  if (dateFrom > dateTo) {
+    return { ok: false, error: "開始日期不可晚於結束日期" };
+  }
+  const today = utcTodayIso();
+  const earliest = addIsoDays(today, -(CHANGE_STATUS_MAX_DAYS - 1));
+  const from = dateFrom < earliest ? earliest : dateFrom;
+  const to = dateTo > today ? today : dateTo;
+  if (from > to) {
+    return {
+      ok: false,
+      error: `Google Ads 變更狀態只保留近 ${CHANGE_STATUS_MAX_DAYS} 日（${earliest} 起）`,
+    };
+  }
+  return { ok: true, from, to, clamped: from !== dateFrom || to !== dateTo };
+}
+
+/** Overlap of a status range with the 30-day change_event window. */
+export function changeEventWindow(
+  dateFrom: string,
+  dateTo: string,
+): { from: string; to: string } | null {
+  const today = utcTodayIso();
+  const earliest = addIsoDays(today, -(CHANGE_HISTORY_MAX_DAYS - 1));
+  const from = dateFrom < earliest ? earliest : dateFrom;
+  const to = dateTo > today ? today : dateTo;
+  if (from > to) return null;
+  return { from, to };
+}
+
+const CHANGE_RESOURCE_KEY: Record<string, string> = {
+  AD: "ad",
+  AD_GROUP: "adGroup",
+  AD_GROUP_AD: "adGroupAd",
+  AD_GROUP_ASSET: "adGroupAsset",
+  AD_GROUP_BID_MODIFIER: "adGroupBidModifier",
+  AD_GROUP_CRITERION: "adGroupCriterion",
+  AD_GROUP_FEED: "adGroupFeed",
+  ASSET: "asset",
+  ASSET_SET: "assetSet",
+  ASSET_SET_ASSET: "assetSetAsset",
+  CAMPAIGN: "campaign",
+  CAMPAIGN_ASSET: "campaignAsset",
+  CAMPAIGN_ASSET_SET: "campaignAssetSet",
+  CAMPAIGN_BUDGET: "campaignBudget",
+  CAMPAIGN_CRITERION: "campaignCriterion",
+  CAMPAIGN_FEED: "campaignFeed",
+  CUSTOMER_ASSET: "customerAsset",
+  FEED: "feed",
+  FEED_ITEM: "feedItem",
+};
+
+function snakeToCamel(segment: string): string {
+  return segment.replace(/_([a-z0-9])/gi, (_, c: string) => c.toUpperCase());
+}
+
+function changedFieldPaths(mask: unknown): string[] {
+  if (!mask) return [];
+  if (typeof mask === "string") {
+    return mask.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+  if (typeof mask === "object" && Array.isArray((mask as { paths?: unknown }).paths)) {
+    return ((mask as { paths: unknown[] }).paths).map((p) => String(p).trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function lookupField(obj: unknown, path: string): unknown {
+  const parts = path.split(".").filter(Boolean).map(snakeToCamel);
+  let cur: unknown = obj;
+  for (const part of parts) {
+    if (!cur || typeof cur !== "object") return undefined;
+    cur = (cur as Record<string, unknown>)[part];
+  }
+  return cur;
+}
+
+function resourceBody(wrapper: unknown, resourceType: string): unknown {
+  if (!wrapper || typeof wrapper !== "object") return null;
+  const rec = wrapper as Record<string, unknown>;
+  const key = CHANGE_RESOURCE_KEY[resourceType];
+  if (key && rec[key] != null) return rec[key];
+  const keys = Object.keys(rec);
+  if (keys.length === 1) return rec[keys[0]];
+  return wrapper;
+}
+
+function toSnakePath(field: string): string {
+  return field
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
+    .toLowerCase();
+}
+
+const ENUM_LABELS: Record<string, string> = {
+  ENABLED: "已啟用",
+  PAUSED: "已暫停",
+  REMOVED: "已移除",
+  UNKNOWN: "未知",
+  UNSPECIFIED: "未指定",
+  BROAD: "廣泛比對",
+  PHRASE: "詞句配對",
+  EXACT: "完全比對",
+  SEARCH: "搜尋",
+  DISPLAY: "多媒體",
+  SHOPPING: "購物",
+  VIDEO: "影片",
+  MULTI_CHANNEL: "多管道",
+  PERFORMANCE_MAX: "最高成效",
+  DEMAND_GEN: "需求開發",
+  LOCAL: "本地",
+  SMART: "智能",
+  HOTEL: "酒店",
+  TRAVEL: "旅遊",
+  STANDARD: "標準",
+  ACCELERATED: "加速",
+  DAILY: "每日",
+  CUSTOM_PERIOD: "自訂期間",
+  FIXED_DAILY: "固定每日",
+  LEARNING: "學習中",
+  LIMITED: "受限",
+  ELIGIBLE: "符合資格",
+  NOT_ELIGIBLE: "不符合資格",
+  PENDING: "待處理",
+  APPROVED: "已核准",
+  DISAPPROVED: "已拒登",
+  AREA_OF_INTEREST: "興趣地區",
+  PRESENCE: "所在位置",
+  PRESENCE_OR_INTEREST: "所在位置或興趣地區",
+  ANYWHERE: "任何網頁",
+  TOP_OF_PAGE: "網頁頂端",
+  ABSOLUTE_TOP_OF_PAGE: "網頁絕對頂端",
+  OPTIMIZE: "最佳化",
+  ROTATE_FOREVER: "無限輪播",
+  CONVERSION_OPTIMIZE: "轉換最佳化",
+  ROTATE: "輪播",
+  GOOD: "良好",
+  EXCELLENT: "極佳",
+  AVERAGE: "一般",
+  POOR: "欠佳",
+  BELOW_AVERAGE: "低於平均",
+  ABOVE_AVERAGE: "高於平均",
+  TRUE: "是",
+  FALSE: "否",
+};
+
+function formatChangeValue(path: string, value: unknown, depth = 0): string {
+  if (value == null || value === "") return "—";
+  const last = toSnakePath(path.split(".").pop() || "");
+  if (
+    /micros$/.test(last) &&
+    (typeof value === "number" || (typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value)))
+  ) {
+    const n = Number(value) / 1_000_000;
+    if (Number.isFinite(n)) {
+      return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+    }
+  }
+  if (typeof value === "boolean") return value ? "是" : "否";
+  if (typeof value === "number") return String(value);
+  if (typeof value === "string") {
+    if (value.startsWith("customers/")) {
+      const tail = value.split("/").pop() || value;
+      return tail.includes("~") ? tail.split("~").pop() || tail : tail;
+    }
+    const enumLabel = ENUM_LABELS[value.trim().toUpperCase()];
+    if (enumLabel && /^[A-Z0-9_]+$/.test(value.trim())) return enumLabel;
+    return value;
+  }
+  if (Array.isArray(value)) {
+    if (!value.length) return "—";
+    return value
+      .slice(0, 8)
+      .map((item) => formatChangeValue(path, item, depth + 1))
+      .filter((item) => item && item !== "—")
+      .join("、") + (value.length > 8 ? ` 及其他 ${value.length - 8} 項` : "");
+  }
+  if (depth > 2 || !value || typeof value !== "object") return "—";
+  const entries = Object.entries(value as Record<string, unknown>).filter(([key, item]) => {
+    if (item == null || item === "") return false;
+    const snake = toSnakePath(key);
+    if (snake === "resource_name") return false;
+    if (typeof item === "string" && item.startsWith("customers/") && snake.endsWith("_constant")) return false;
+    return true;
+  });
+  if (!entries.length) return "—";
+  if (entries.length === 1) {
+    const [key, item] = entries[0];
+    const snake = toSnakePath(key);
+    if (snake === "text" || snake === "name" || snake === "description") {
+      return formatChangeValue(key, item, depth + 1);
+    }
+  }
+  return entries
+    .slice(0, 6)
+    .map(([key, item]) => `${fieldLabel(key)}：${formatChangeValue(key, item, depth + 1)}`)
+    .join("；");
+}
+
+export type CampaignChangeFieldDiff = {
+  field: string;
+  oldValue: string;
+  newValue: string;
+};
+
+export type CampaignChangeEventRow = {
+  resourceName: string;
+  changeDateTime: string;
+  userEmail: string;
+  clientType: string;
+  resourceType: string;
+  changedResourceName: string;
+  adGroupResource: string;
+  operation: string;
+  changedFields: string[];
+  changes: CampaignChangeFieldDiff[];
+  keywordText: string;
+};
+
+function mapChangeEventRow(row: GaqlRow): CampaignChangeEventRow {
+  const event = (nestGet(row, "changeEvent") ?? row) as GaqlRow;
+  const resourceType = String(event.changeResourceType ?? "");
+  const oldBody = resourceBody(event.oldResource, resourceType);
+  const newBody = resourceBody(event.newResource, resourceType);
+  const fields = changedFieldPaths(event.changedFields);
+  const changes = fields.map((field) => ({
+    field,
+    oldValue: formatChangeValue(field, lookupField(oldBody, field)),
+    newValue: formatChangeValue(field, lookupField(newBody, field)),
+  }));
+  const keywordText = String(
+    lookupField(newBody, "keyword.text") ?? lookupField(oldBody, "keyword.text") ?? "",
+  );
+  return {
+    resourceName: String(event.resourceName ?? ""),
+    changeDateTime: String(event.changeDateTime ?? ""),
+    userEmail: String(event.userEmail ?? ""),
+    clientType: String(event.clientType ?? ""),
+    resourceType,
+    changedResourceName: String(event.changeResourceName ?? ""),
+    adGroupResource: String(event.adGroup ?? ""),
+    operation: String(event.resourceChangeOperation ?? ""),
+    changedFields: fields,
+    changes,
+    keywordText,
+  };
+}
+
+const STATUS_RESOURCE_FIELD: Record<string, string> = {
+  AD_GROUP: "adGroup",
+  AD_GROUP_AD: "adGroupAd",
+  AD_GROUP_BID_MODIFIER: "adGroupBidModifier",
+  AD_GROUP_CRITERION: "adGroupCriterion",
+  AD_GROUP_FEED: "adGroupFeed",
+  CAMPAIGN: "campaign",
+  CAMPAIGN_CRITERION: "campaignCriterion",
+  CAMPAIGN_FEED: "campaignFeed",
+  FEED: "feed",
+  FEED_ITEM: "feedItem",
+  SHARED_SET: "sharedSet",
+  CAMPAIGN_SHARED_SET: "campaignSharedSet",
+  ASSET: "asset",
+  CUSTOMER_ASSET: "customerAsset",
+  CAMPAIGN_ASSET: "campaignAsset",
+  AD_GROUP_ASSET: "adGroupAsset",
+};
+
+export type CampaignChangeStatusRow = {
+  resourceName: string;
+  resourceType: string;
+  resourceStatus: string;
+  lastChangeDateTime: string;
+  adGroupResource: string;
+  assetGroupResource: string;
+};
+
+function specificStatusResource(status: GaqlRow): string {
+  const resourceType = String(status.resourceType ?? "");
+  const preferred = STATUS_RESOURCE_FIELD[resourceType];
+  if (preferred) {
+    const value = status[preferred];
+    if (typeof value === "string" && value) return value;
+  }
+  for (const value of Object.values(status)) {
+    if (typeof value !== "string" || !value.startsWith("customers/")) continue;
+    if (value.includes("/changeStatus/")) continue;
+    return value;
+  }
+  return String(status.resourceName ?? "");
+}
+
+function mapChangeStatusRow(row: GaqlRow): CampaignChangeStatusRow {
+  const status = (nestGet(row, "changeStatus") ?? row) as GaqlRow;
+  const resourceName = specificStatusResource(status);
+  return {
+    resourceName,
+    resourceType: String(status.resourceType ?? ""),
+    resourceStatus: String(status.resourceStatus ?? ""),
+    lastChangeDateTime: String(status.lastChangeDateTime ?? ""),
+    adGroupResource: String(status.adGroup ?? ""),
+    assetGroupResource: resourceName.includes("/assetGroups/") ? resourceName : "",
+  };
+}
+
+export async function fetchCampaignChangeStatuses(
+  accessToken: string,
+  customerId: string,
+  campaignId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<CampaignChangeStatusRow[]> {
+  const campaignResource = `customers/${customerId}/campaigns/${campaignId}`;
+  const query = `
+    SELECT
+      change_status.resource_name,
+      change_status.last_change_date_time,
+      change_status.resource_status,
+      change_status.resource_type,
+      change_status.ad_group,
+      change_status.ad_group_ad,
+      change_status.ad_group_bid_modifier,
+      change_status.ad_group_criterion,
+      change_status.campaign,
+      change_status.campaign_criterion
+    FROM change_status
+    WHERE change_status.last_change_date_time >= '${dateFrom}'
+      AND change_status.last_change_date_time <= '${dateTo} 23:59:59'
+      AND change_status.campaign = '${campaignResource}'
+    ORDER BY change_status.last_change_date_time DESC
+    LIMIT ${CHANGE_HISTORY_ROW_LIMIT}
+  `;
+  const rows = await gaqlQuery(accessToken, customerId, query);
+  return rows.map(mapChangeStatusRow);
+}
+
+export type CampaignChangeStatusGroup = CampaignChangeStatusRow & {
+  events: CampaignChangeEventRow[];
+};
+
+export function groupChangeEventsByStatus(
+  statuses: CampaignChangeStatusRow[],
+  events: CampaignChangeEventRow[],
+): CampaignChangeStatusGroup[] {
+  const groups: CampaignChangeStatusGroup[] = statuses.map((status) => ({
+    ...status,
+    events: [],
+  }));
+  const byResource = new Map<string, CampaignChangeStatusGroup>();
+  for (const group of groups) {
+    if (group.resourceName && !byResource.has(group.resourceName)) {
+      byResource.set(group.resourceName, group);
+    }
+  }
+  const orphans = new Map<string, CampaignChangeStatusGroup>();
+  for (const event of events) {
+    const key = event.changedResourceName;
+    const match = key ? byResource.get(key) : undefined;
+    if (match) {
+      match.events.push(event);
+      continue;
+    }
+    const orphanKey = key || event.resourceName;
+    let orphan = orphans.get(orphanKey);
+    if (!orphan) {
+      orphan = {
+        resourceName: orphanKey,
+        resourceType: event.resourceType,
+        resourceStatus: "",
+        lastChangeDateTime: event.changeDateTime,
+        adGroupResource: orphanKey.includes("/adGroups/") || orphanKey.includes("/adGroup")
+          ? orphanKey
+          : "",
+        assetGroupResource: orphanKey.includes("/assetGroups/") ? orphanKey : "",
+        events: [],
+      };
+      orphans.set(orphanKey, orphan);
+    }
+    orphan.events.push(event);
+    if (event.changeDateTime > orphan.lastChangeDateTime) {
+      orphan.lastChangeDateTime = event.changeDateTime;
+    }
+  }
+  for (const group of groups) {
+    group.events.sort((a, b) => b.changeDateTime.localeCompare(a.changeDateTime));
+  }
+  const orphanGroups = [...orphans.values()];
+  for (const group of orphanGroups) {
+    group.events.sort((a, b) => b.changeDateTime.localeCompare(a.changeDateTime));
+  }
+  return [...groups, ...orphanGroups].sort((a, b) =>
+    b.lastChangeDateTime.localeCompare(a.lastChangeDateTime)
+  );
+}
+
+function resourceId(resourceName: string, marker: string): string {
+  const idx = resourceName.indexOf(marker);
+  if (idx < 0) return "";
+  const rest = resourceName.slice(idx + marker.length);
+  const id = rest.split(/[~/?]/)[0] || "";
+  return /^\d+$/.test(id) ? id : "";
+}
+
+export async function attachChangeGroupNames(
+  accessToken: string,
+  customerId: string,
+  campaignId: string,
+  groups: CampaignChangeStatusGroup[],
+): Promise<Array<CampaignChangeStatusGroup & { adGroupName: string; assetGroupName: string }>> {
+  const adGroupIds = new Set<string>();
+  const assetGroupIds = new Set<string>();
+  for (const group of groups) {
+    const adId = resourceId(group.adGroupResource, "/adGroups/") ||
+      resourceId(group.resourceName, "/adGroups/") ||
+      resourceId(group.resourceName, "/adGroupAds/") ||
+      resourceId(group.resourceName, "/adGroupCriteria/");
+    const assetId = resourceId(group.assetGroupResource, "/assetGroups/") ||
+      resourceId(group.resourceName, "/assetGroups/");
+    if (adId) adGroupIds.add(adId);
+    if (assetId) assetGroupIds.add(assetId);
+  }
+
+  const adGroupNames = new Map<string, string>();
+  const assetGroupNames = new Map<string, string>();
+  if (adGroupIds.size) {
+    const ids = [...adGroupIds].join(", ");
+    const rows = await gaqlQuery(
+      accessToken,
+      customerId,
+      `SELECT ad_group.id, ad_group.name FROM ad_group WHERE campaign.id = ${campaignId} AND ad_group.id IN (${ids})`,
+    );
+    for (const row of rows) {
+      adGroupNames.set(String(nestGet(row, "adGroup.id") ?? ""), String(nestGet(row, "adGroup.name") ?? ""));
+    }
+  }
+  if (assetGroupIds.size) {
+    const ids = [...assetGroupIds].join(", ");
+    const rows = await gaqlQuery(
+      accessToken,
+      customerId,
+      `SELECT asset_group.id, asset_group.name FROM asset_group WHERE campaign.id = ${campaignId} AND asset_group.id IN (${ids})`,
+    );
+    for (const row of rows) {
+      assetGroupNames.set(
+        String(nestGet(row, "assetGroup.id") ?? ""),
+        String(nestGet(row, "assetGroup.name") ?? ""),
+      );
+    }
+  }
+
+  return groups.map((group) => {
+    const adId = resourceId(group.adGroupResource, "/adGroups/") ||
+      resourceId(group.resourceName, "/adGroups/") ||
+      resourceId(group.resourceName, "/adGroupAds/") ||
+      resourceId(group.resourceName, "/adGroupCriteria/");
+    const assetId = resourceId(group.assetGroupResource, "/assetGroups/") ||
+      resourceId(group.resourceName, "/assetGroups/");
+    return {
+      ...group,
+      adGroupName: adGroupNames.get(adId) || "",
+      assetGroupName: assetGroupNames.get(assetId) || "",
+    };
+  });
+}
+
+export async function fetchCampaignChangeHistory(
+  accessToken: string,
+  customerId: string,
+  campaignId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<CampaignChangeEventRow[]> {
+  const campaignResource = `customers/${customerId}/campaigns/${campaignId}`;
+  const query = `
+    SELECT
+      change_event.resource_name,
+      change_event.change_date_time,
+      change_event.change_resource_name,
+      change_event.user_email,
+      change_event.client_type,
+      change_event.change_resource_type,
+      change_event.ad_group,
+      change_event.old_resource,
+      change_event.new_resource,
+      change_event.resource_change_operation,
+      change_event.changed_fields
+    FROM change_event
+    WHERE change_event.change_date_time >= '${dateFrom}'
+      AND change_event.change_date_time <= '${dateTo} 23:59:59'
+      AND change_event.campaign = '${campaignResource}'
+    ORDER BY change_event.change_date_time DESC
+    LIMIT ${CHANGE_HISTORY_ROW_LIMIT}
+  `;
+  const rows = await gaqlQuery(accessToken, customerId, query);
+  return rows.map(mapChangeEventRow);
+}
+
+export type ChangeHistoryCategory =
+  | "budget"
+  | "bidding"
+  | "audience"
+  | "location"
+  | "language"
+  | "conversions"
+  | "ads"
+  | "status"
+  | "feeds"
+  | "other";
+
+export type ChangeHistoryLine = {
+  text: string;
+  category: ChangeHistoryCategory;
+};
+
+export type ChangeHistorySession = {
+  id: string;
+  userEmail: string;
+  clientType: string;
+  changeDateTime: string;
+  adGroupResource: string;
+  assetGroupResource: string;
+  adGroupName: string;
+  assetGroupName: string;
+  lines: ChangeHistoryLine[];
+};
+
+const FIELD_LABELS: Record<string, string> = {
+  name: "名稱",
+  status: "狀態",
+  type: "類型",
+  resource_name: "資源名稱",
+  id: "編號",
+  labels: "標籤",
+  start_date: "開始日期",
+  end_date: "結束日期",
+  final_urls: "最終到達網址",
+  final_mobile_urls: "行動版最終到達網址",
+  final_url_suffix: "最終到達網址尾碼",
+  tracking_url_template: "追蹤網址範本",
+  url_custom_parameters: "自訂參數",
+  display_url: "顯示網址",
+  path1: "路徑 1",
+  path2: "路徑 2",
+  amount_micros: "廣告預算金額",
+  total_amount_micros: "總預算金額",
+  delivery_method: "投放方式",
+  period: "預算期間",
+  explicitly_shared: "共用預算",
+  reference_count: "參照次數",
+  advertising_channel_type: "廣告管道類型",
+  advertising_channel_sub_type: "廣告管道子類型",
+  bidding_strategy: "出價策略",
+  bidding_strategy_type: "出價策略類型",
+  campaign_budget: "廣告預算",
+  serving_status: "放送狀態",
+  ad_serving_optimization_status: "廣告輪播",
+  experiment_type: "實驗類型",
+  payment_mode: "付款模式",
+  optimization_score: "最佳化分數",
+  primary_status: "主要狀態",
+  primary_status_reasons: "主要狀態原因",
+  network_settings: "聯播網設定",
+  target_google_search: "Google 搜尋聯播網",
+  target_search_network: "搜尋聯播網",
+  target_content_network: "多媒體聯播網",
+  target_partner_search_network: "搜尋合作夥伴聯播網",
+  target_youtube: "YouTube",
+  target_google_tv_network: "Google TV 聯播網",
+  geo_target_type_setting: "地區目標類型",
+  positive_geo_target_type: "指定地區的目標對象",
+  negative_geo_target_type: "排除地區的目標對象",
+  frequency_caps: "頻率上限",
+  targeting_setting: "指定目標設定",
+  target_restrictions: "指定目標限制",
+  audience_setting: "目標對象設定",
+  use_audience_grouped: "使用目標對象分組",
+  brand_guidelines_enabled: "品牌規範",
+  contains_eu_political_advertising: "歐盟政治廣告",
+  video_brand_safety_suitability: "影片品牌安全",
+  listing_type: "刊登類型",
+  shopping_setting: "購物設定",
+  merchant_id: "Merchant Center 編號",
+  feed_label: "資料提供標籤",
+  campaign_priority: "廣告系列優先順序",
+  enable_local: "啟用本地產品",
+  hotel_setting: "酒店設定",
+  hotel_center_id: "酒店中心編號",
+  dynamic_search_ads_setting: "動態搜尋廣告設定",
+  domain_name: "網域名稱",
+  language_code: "語言代碼",
+  use_supplied_urls_only: "只使用提供的網址",
+  selective_optimization: "選擇性最佳化",
+  conversion_actions: "轉換動作",
+  optimization_goal_setting: "最佳化目標",
+  optimization_goal_types: "最佳化目標類型",
+  manual_cpc: "手動單次點擊出價",
+  enhanced_cpc_enabled: "加強型單次點擊出價",
+  manual_cpm: "手動千次曝光出價",
+  manual_cpv: "手動單次收視出價",
+  maximize_conversions: "盡量爭取轉換",
+  maximize_conversion_value: "盡量爭取轉換價值",
+  target_cpa: "目標單次轉換出價",
+  target_cpa_micros: "目標單次轉換出價",
+  target_roas: "目標廣告投資報酬率",
+  target_impression_share: "目標曝光佔有率",
+  target_spend: "目標支出",
+  target_spend_micros: "目標支出",
+  percent_cpc: "百分比單次點擊出價",
+  commission: "佣金",
+  commission_rate_micros: "佣金率",
+  location: "位置",
+  location_fraction_micros: "目標曝光佔有率",
+  cpc_bid_ceiling_micros: "單次點擊出價上限",
+  cpc_bid_floor_micros: "單次點擊出價下限",
+  cpc_bid_micros: "單次點擊出價",
+  cpm_bid_micros: "千次曝光出價",
+  cpv_bid_micros: "單次收視出價",
+  percent_cpc_bid_micros: "百分比單次點擊出價",
+  effective_target_cpa_micros: "有效目標單次轉換出價",
+  effective_target_roas: "有效目標廣告投資報酬率",
+  effective_target_cpa_source: "有效目標單次轉換出價來源",
+  effective_target_roas_source: "有效目標廣告投資報酬率來源",
+  ad_rotation_mode: "廣告輪播模式",
+  display_custom_bid_dimension: "多媒體自訂出價維度",
+  fixed_cpm: "固定千次曝光出價",
+  target_cpm: "目標千次曝光出價",
+  target_frequency_goal: "目標頻率",
+  "manual_cpc.enhanced_cpc_enabled": "加強型單次點擊出價",
+  "maximize_conversions.target_cpa_micros": "目標單次轉換出價",
+  "maximize_conversion_value.target_roas": "目標廣告投資報酬率",
+  "target_cpa.target_cpa_micros": "目標單次轉換出價",
+  "target_roas.target_roas": "目標廣告投資報酬率",
+  "campaign_budget.amount_micros": "廣告預算金額",
+  keyword: "關鍵字",
+  "keyword.text": "關鍵字",
+  "keyword.match_type": "比對類型",
+  match_type: "比對類型",
+  negative: "排除",
+  bid_modifier: "出價調整",
+  cpc_bid: "單次點擊出價",
+  quality_info: "品質資訊",
+  quality_score: "品質分數",
+  creative_quality_score: "廣告品質",
+  post_click_quality_score: "到達網頁體驗",
+  search_predicted_ctr: "預期點閱率",
+  age_range: "年齡",
+  gender: "性別",
+  income_range: "家庭收入",
+  parental_status: "親職狀態",
+  user_list: "使用者名單",
+  user_interest: "興趣",
+  life_event: "人生大事",
+  geo_target_constant: "地區",
+  language_constant: "語言",
+  topic: "主題",
+  topic_constant: "主題",
+  placement: "刊登位置",
+  youtube_video: "YouTube 影片",
+  youtube_channel: "YouTube 頻道",
+  webpage: "網頁",
+  criterion_name: "條件名稱",
+  proximity: "鄰近地區",
+  radius: "半徑",
+  radius_units: "半徑單位",
+  address: "地址",
+  listing_group: "產品群組",
+  custom_audience: "自訂目標對象",
+  custom_affinity: "自訂相似目標對象",
+  combined_audience: "組合目標對象",
+  audience: "目標對象",
+  mobile_application: "流動應用程式",
+  mobile_app_category: "應用程式類別",
+  app_id: "應用程式編號",
+  device: "裝置",
+  ad_schedule: "廣告時段",
+  day_of_week: "星期",
+  start_hour: "開始小時",
+  start_minute: "開始分鐘",
+  end_hour: "結束小時",
+  end_minute: "結束分鐘",
+  ip_block: "IP 位址",
+  ip_address: "IP 位址",
+  headlines: "標題",
+  descriptions: "說明",
+  headline: "標題",
+  description: "說明",
+  long_headline: "詳細標題",
+  business_name: "商家名稱",
+  call_to_action_text: "號召用語",
+  marketing_images: "行銷圖片",
+  square_marketing_images: "方形行銷圖片",
+  logo_images: "標誌",
+  youtube_videos: "YouTube 影片",
+  text: "文字",
+  pinned_field: "固定位置",
+  asset_performance_label: "素材成效",
+  ad_strength: "廣告效力",
+  policy_summary: "政策摘要",
+  approval_status: "核准狀態",
+  review_status: "審核狀態",
+  added_by_google_ads: "由 Google Ads 新增",
+  device_preference: "裝置偏好",
+  system_managed_resource_source: "系統管理來源",
+  field_type: "素材欄位類型",
+  source: "來源",
+  primary_status_details: "主要狀態詳情",
+  asset: "素材",
+  image_asset: "圖片素材",
+  text_asset: "文字素材",
+  youtube_video_asset: "YouTube 影片素材",
+  media_bundle_asset: "媒體套件",
+  lead_form_asset: "潛在客戶表單",
+  call_asset: "通話素材",
+  callout_asset: "宣傳資訊",
+  sitelink_asset: "網站連結",
+  structured_snippet_asset: "結構化摘要",
+  promotion_asset: "促銷活動",
+  price_asset: "價格素材",
+  mobile_app_asset: "流動應用程式素材",
+  link_text: "連結文字",
+  description1: "說明 1",
+  description2: "說明 2",
+  callout_text: "宣傳文字",
+  header: "標題",
+  values: "值",
+  promotion_target: "促銷目標",
+  discount_modifier: "折扣類型",
+  percent_off: "折扣百分比",
+  money_amount_off: "折扣金額",
+  promotion_code: "促銷代碼",
+  orders_over_amount: "最低消費金額",
+  language: "語言",
+  country_code: "國家代碼",
+  phone_number: "電話號碼",
+  country_code_phone: "電話國家代碼",
+  conversion_type_id: "轉換類型編號",
+  conversion_reporting_state: "轉換報表狀態",
+  call_conversion_action: "通話轉換動作",
+  call_only: "只限通話",
+  video_id: "影片編號",
+  channel_id: "頻道編號",
+  file_size: "檔案大小",
+  mime_type: "檔案類型",
+  full_size: "完整尺寸",
+  height_pixels: "高度（像素）",
+  width_pixels: "寬度（像素）",
+  url: "網址",
+  youtube_video_title: "YouTube 影片標題",
+  youtube_video_id: "YouTube 影片編號",
+  automated: "自動產生",
+  action_items: "建議動作",
+  asset_automation_settings: "素材自動化設定",
+  asset_automation_type: "素材自動化類型",
+  asset_automation_status: "素材自動化狀態",
+  demand_gen_ad_strength: "需求開發廣告效力",
+  ad_group_ad_asset_automation_settings: "廣告素材自動化設定",
+};
+
+const MATCH_TYPE_LABELS: Record<string, string> = {
+  BROAD: "廣泛比對關鍵字",
+  PHRASE: "詞句配對關鍵字",
+  EXACT: "完全比對關鍵字",
+};
+
+function timestampMicros(resourceName: string): string {
+  const match = resourceName.match(/changeEvents\/(\d+)~/);
+  return match?.[1] || "";
+}
+
+function fieldLabel(field: string): string {
+  const key = toSnakePath(field);
+  if (FIELD_LABELS[key]) return FIELD_LABELS[key];
+  const last = key.split(".").pop() || key;
+  if (FIELD_LABELS[last]) return FIELD_LABELS[last];
+  return last.replace(/_micros$/, "").replace(/_/g, "");
+}
+
+function isStatusField(field: string): boolean {
+  const key = toSnakePath(field);
+  return key === "status" || key.endsWith(".status");
+}
+
+function isBudgetAmount(field: string): boolean {
+  return toSnakePath(field).includes("amount_micros");
+}
+
+function isBiddingField(field: string, resourceType: string): boolean {
+  const f = field.toLowerCase();
+  return (
+    resourceType === "AD_GROUP_BID_MODIFIER" ||
+    f.includes("cpc") ||
+    f.includes("cpa") ||
+    f.includes("roas") ||
+    f.includes("bidding") ||
+    f.includes("bid")
+  );
+}
+
+function criterionKind(event: CampaignChangeEventRow): "location" | "language" | "audience" | "keyword" | "" {
+  const blob = `${event.changedFields.join(" ")} ${event.changes.map((c) => `${c.field} ${c.oldValue} ${c.newValue}`).join(" ")}`.toLowerCase();
+  if (blob.includes("location") || blob.includes("proximity") || blob.includes("geo_target")) return "location";
+  if (blob.includes("language")) return "language";
+  if (blob.includes("user_list") || blob.includes("user_interest") || blob.includes("audience")) return "audience";
+  if (blob.includes("keyword") || event.resourceType.includes("CRITERION")) return "keyword";
+  return "";
+}
+
+function lineCategory(event: CampaignChangeEventRow, field: string): ChangeHistoryCategory {
+  if (isStatusField(field)) return "status";
+  if (event.resourceType === "CAMPAIGN_BUDGET" || isBudgetAmount(field)) return "budget";
+  if (isBiddingField(field, event.resourceType)) return "bidding";
+  if (event.resourceType === "FEED" || event.resourceType === "FEED_ITEM" || event.resourceType.includes("FEED")) {
+    return "feeds";
+  }
+  const kind = criterionKind(event);
+  if (kind === "location") return "location";
+  if (kind === "language") return "language";
+  if (kind === "audience") return "audience";
+  const f = field.toLowerCase();
+  if (f.includes("conversion")) return "conversions";
+  if (
+    event.resourceType === "AD" ||
+    event.resourceType === "AD_GROUP_AD" ||
+    event.resourceType.includes("ASSET")
+  ) {
+    return "ads";
+  }
+  return "other";
+}
+
+function moneyDirection(oldValue: string, newValue: string): "up" | "down" | "" {
+  const oldN = Number(String(oldValue).replace(/,/g, ""));
+  const newN = Number(String(newValue).replace(/,/g, ""));
+  if (!Number.isFinite(oldN) || !Number.isFinite(newN) || oldN === newN) return "";
+  return newN > oldN ? "up" : "down";
+}
+
+function keywordPhrase(event: CampaignChangeEventRow): string {
+  const match = event.changes.find((c) => toSnakePath(c.field).includes("match_type"));
+  const raw = (match?.newValue && match.newValue !== "—" ? match.newValue : match?.oldValue) || "";
+  const fromEnum = MATCH_TYPE_LABELS[raw.toUpperCase()];
+  if (fromEnum) return fromEnum;
+  if (raw.includes("廣泛")) return "廣泛比對關鍵字";
+  if (raw.includes("詞句")) return "詞句配對關鍵字";
+  if (raw.includes("完全")) return "完全比對關鍵字";
+  return "關鍵字";
+}
+
+function keywordSentence(event: CampaignChangeEventRow): string {
+  const verb = event.operation === "REMOVE" ? "已移除" : event.operation === "CREATE" ? "已新增" : "已變更";
+  const phrase = keywordPhrase(event);
+  return event.keywordText
+    ? `${verb}「${phrase}」：${event.keywordText}`
+    : `${verb} 1 個「${phrase}」`;
+}
+
+function describeChange(event: CampaignChangeEventRow, change: CampaignChangeFieldDiff): string {
+  const field = change.field;
+  const category = lineCategory(event, field);
+  if (event.resourceType === "CAMPAIGN" && isStatusField(field)) return "廣告系列已變更";
+  if (event.resourceType === "CAMPAIGN_BUDGET" && (isStatusField(field) || isBudgetAmount(field))) {
+    const dir = moneyDirection(change.oldValue, change.newValue);
+    if (dir === "up") return "已提高 1 個廣告預算金額";
+    if (dir === "down") return "已降低 1 個廣告預算金額";
+    return "廣告預算已變更";
+  }
+  if (event.resourceType === "AD_GROUP" && isStatusField(field)) return "廣告群組已變更";
+  if (category === "conversions" && /default|account/i.test(`${change.oldValue} ${change.newValue}`)) {
+    return "已使用帳戶預設目標";
+  }
+  if (category === "conversions") return "標準目標有變";
+  if (
+    (event.operation === "REMOVE" || event.operation === "CREATE") &&
+    criterionKind(event) === "keyword"
+  ) {
+    return keywordSentence(event);
+  }
+  if (criterionKind(event) === "keyword" && event.keywordText && !toSnakePath(field).includes("keyword.text")) {
+    const label = fieldLabel(field);
+    const body = change.oldValue !== "—" && change.newValue !== "—"
+      ? `${label}已從「${change.oldValue}」變更為「${change.newValue}」`
+      : change.newValue !== "—"
+      ? `${label}：${change.newValue}`
+      : label;
+    return `關鍵字「${event.keywordText}」${body}`;
+  }
+  if (event.resourceType === "CAMPAIGN" && field.toLowerCase() === "name" && change.oldValue !== "—" && change.newValue !== "—") {
+    return `廣告系列名稱已從「${change.oldValue}」變更為「${change.newValue}」`;
+  }
+  const label = fieldLabel(field);
+  if (change.oldValue !== "—" && change.newValue !== "—") {
+    return `${label}已從「${change.oldValue}」變更為「${change.newValue}」`;
+  }
+  if (change.newValue !== "—") return `${label}：${change.newValue}`;
+  if (change.oldValue !== "—") return `已移除${label}「${change.oldValue}」`;
+  return label;
+}
+
+function withRecommendationPrefix(event: CampaignChangeEventRow, text: string): string {
+  if (!/RECOMMENDATION/i.test(event.clientType)) return text;
+  if (text.startsWith("已套用的建議")) return text;
+  return `已套用的建議：${text}`;
+}
+
+function collapseKeywordLines(lines: ChangeHistoryLine[]): ChangeHistoryLine[] {
+  const counts = new Map<string, { count: number; category: ChangeHistoryCategory; index: number }>();
+  const out: ChangeHistoryLine[] = [];
+  lines.forEach((line, index) => {
+    const match = line.text.match(/^(已移除|已新增) 1 個「(.+)」$/);
+    if (!match) {
+      out.push(line);
+      return;
+    }
+    const key = `${match[1]}|${match[2]}|${line.category}`;
+    const existing = counts.get(key);
+    if (existing) {
+      existing.count += 1;
+      out[existing.index] = {
+        category: line.category,
+        text: `${match[1]} ${existing.count} 個「${match[2]}」`,
+      };
+      return;
+    }
+    counts.set(key, { count: 1, category: line.category, index: out.length });
+    out.push(line);
+  });
+  return out;
+}
+
+function eventLines(event: CampaignChangeEventRow): ChangeHistoryLine[] {
+  if (
+    (event.operation === "REMOVE" || event.operation === "CREATE") &&
+    criterionKind(event) === "keyword"
+  ) {
+    return [{
+      category: "other",
+      text: withRecommendationPrefix(event, keywordSentence(event)),
+    }];
+  }
+  const changes = (event.changes.length
+    ? event.changes
+    : [{ field: event.operation || "change", oldValue: "—", newValue: "—" }]
+  ).filter((change) => {
+    const key = toSnakePath(change.field);
+    return key !== "resource_name" && !key.endsWith(".resource_name");
+  });
+  const lines = changes.map((change) => ({
+    category: lineCategory(event, change.field),
+    text: withRecommendationPrefix(event, describeChange(event, change)),
+  }));
+  const seen = new Set<string>();
+  return collapseKeywordLines(lines).filter((line) => {
+    if (seen.has(line.text)) return false;
+    seen.add(line.text);
+    return true;
+  });
+}
+
+export function groupChangeEventsIntoSessions(events: CampaignChangeEventRow[]): ChangeHistorySession[] {
+  const order: string[] = [];
+  const sessions = new Map<string, ChangeHistorySession>();
+  for (const event of events) {
+    const stamp = timestampMicros(event.resourceName) || event.changeDateTime;
+    const key = `${stamp}|${event.userEmail}`;
+    let session = sessions.get(key);
+    if (!session) {
+      session = {
+        id: key,
+        userEmail: event.userEmail,
+        clientType: event.clientType,
+        changeDateTime: event.changeDateTime,
+        adGroupResource: event.adGroupResource,
+        assetGroupResource: event.changedResourceName.includes("/assetGroups/")
+          ? event.changedResourceName
+          : "",
+        adGroupName: "",
+        assetGroupName: "",
+        lines: [],
+      };
+      sessions.set(key, session);
+      order.push(key);
+    }
+    if (!session.adGroupResource && event.adGroupResource) session.adGroupResource = event.adGroupResource;
+    if (!session.adGroupResource && /\/adGroups\/|\/adGroupAds\/|\/adGroupCriteria\//.test(event.changedResourceName)) {
+      session.adGroupResource = event.changedResourceName;
+    }
+    if (!session.assetGroupResource && event.changedResourceName.includes("/assetGroups/")) {
+      session.assetGroupResource = event.changedResourceName;
+    }
+    if (event.changeDateTime > session.changeDateTime) session.changeDateTime = event.changeDateTime;
+    session.lines.push(...eventLines(event));
+  }
+  return order
+    .map((key) => {
+      const session = sessions.get(key)!;
+      return { ...session, lines: collapseKeywordLines(session.lines) };
+    })
+    .sort((a, b) => b.changeDateTime.localeCompare(a.changeDateTime));
+}
+
+export async function attachSessionNames(
+  accessToken: string,
+  customerId: string,
+  campaignId: string,
+  sessions: ChangeHistorySession[],
+): Promise<ChangeHistorySession[]> {
+  const adGroupIds = new Set<string>();
+  const assetGroupIds = new Set<string>();
+  for (const session of sessions) {
+    const adId = resourceId(session.adGroupResource, "/adGroups/") ||
+      resourceId(session.adGroupResource, "/adGroupAds/") ||
+      resourceId(session.adGroupResource, "/adGroupCriteria/");
+    const assetId = resourceId(session.assetGroupResource, "/assetGroups/");
+    if (adId) adGroupIds.add(adId);
+    if (assetId) assetGroupIds.add(assetId);
+  }
+  const adGroupNames = new Map<string, string>();
+  const assetGroupNames = new Map<string, string>();
+  if (adGroupIds.size) {
+    const rows = await gaqlQuery(
+      accessToken,
+      customerId,
+      `SELECT ad_group.id, ad_group.name FROM ad_group WHERE campaign.id = ${campaignId} AND ad_group.id IN (${[...adGroupIds].join(", ")})`,
+    );
+    for (const row of rows) {
+      adGroupNames.set(String(nestGet(row, "adGroup.id") ?? ""), String(nestGet(row, "adGroup.name") ?? ""));
+    }
+  }
+  if (assetGroupIds.size) {
+    const rows = await gaqlQuery(
+      accessToken,
+      customerId,
+      `SELECT asset_group.id, asset_group.name FROM asset_group WHERE campaign.id = ${campaignId} AND asset_group.id IN (${[...assetGroupIds].join(", ")})`,
+    );
+    for (const row of rows) {
+      assetGroupNames.set(String(nestGet(row, "assetGroup.id") ?? ""), String(nestGet(row, "assetGroup.name") ?? ""));
+    }
+  }
+  return sessions.map((session) => {
+    const adId = resourceId(session.adGroupResource, "/adGroups/") ||
+      resourceId(session.adGroupResource, "/adGroupAds/") ||
+      resourceId(session.adGroupResource, "/adGroupCriteria/");
+    const assetId = resourceId(session.assetGroupResource, "/assetGroups/");
+    return {
+      ...session,
+      adGroupName: adGroupNames.get(adId) || "",
+      assetGroupName: assetGroupNames.get(assetId) || "",
+    };
+  });
 }
 
 function withCtr(impressions: number, clicks: number): number {

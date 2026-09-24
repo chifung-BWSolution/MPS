@@ -1,6 +1,8 @@
 export { AdsCampaignDetailShell } from './AdsCampaignDetailShell';
 export { GoogleAdsCampaignDetail } from './GoogleAdsCampaignDetail';
+export { GoogleAdsChangeHistory } from './GoogleAdsChangeHistory';
 export { FacebookAdsCampaignDetail } from './FacebookAdsCampaignDetail';
+export { FacebookAdsChangeHistory } from './FacebookAdsChangeHistory';
 export { AdsCampaignAdvisorDock } from './AdsCampaignAdvisorDock';
 export { AdsCampaignAdvisorChat } from './AdsCampaignAdvisorChat';
 export {

@@ -6,11 +6,19 @@ import {
   parseCampaignKey,
   setFacebookAdsCampaignHash,
 } from '@/lib/adsCampaignNavigation';
+import { formatBidStrategy } from '@/lib/adsBidStrategy';
 import { formatMoneyFromMicros } from '@/lib/formatMoney';
 import { FacebookAdsConversionHover } from '@/components/marketing/FacebookAdsConversionHover';
 import type { DateRangePreset, FacebookAdsMetricTotals } from '@/types/facebookAds';
 import { AdsCampaignDetailShell } from './AdsCampaignDetailShell';
+import { FacebookAdsChangeHistory } from './FacebookAdsChangeHistory';
+import { useFacebookAdsCampaignChangeHistory } from '@/hooks/useFacebookAdsCampaignChangeHistory';
 import type { AdsCampaignDetailViewModel, AdsKpiItem } from './types';
+
+const DETAIL_TABS = [
+  { id: 'overview', label: '概覽' },
+  { id: 'changes', label: '變更記錄' },
+];
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -31,6 +39,22 @@ function pctChange(current: number, previous: number): number | null {
   return ((current - previous) / Math.abs(previous)) * 100;
 }
 
+function dailyBudgetKpi(
+  dailyBudgetMicros?: number | null,
+  biddingStrategyType?: string | null,
+): AdsKpiItem {
+  return {
+    id: 'daily-budget',
+    label: 'Daily budget',
+    value: dailyBudgetMicros == null ? '—' : formatMoneyFromMicros(dailyBudgetMicros),
+    deltaPct: null,
+    sparkline: [],
+    snapshotBadge: 'Current',
+    description: formatBidStrategy(biddingStrategyType) || '—',
+    hint: 'Current daily budget and bid strategy. This does not change with the date range.',
+  };
+}
+
 function buildKpis(
   totals: FacebookAdsMetricTotals,
   previous: FacebookAdsMetricTotals,
@@ -43,6 +67,8 @@ function buildKpis(
     averageCpcMicros: number;
   }[],
   dateLabel: string,
+  dailyBudgetMicros?: number | null,
+  biddingStrategyType?: string | null,
 ): AdsKpiItem[] {
   const costSpark = series.map((p) => p.spendMicros / 1_000_000);
   const cpaSpark = series.map((p) =>
@@ -50,6 +76,7 @@ function buildKpis(
   );
 
   return [
+    dailyBudgetKpi(dailyBudgetMicros, biddingStrategyType),
     {
       id: 'impressions',
       label: 'Impressions',
@@ -146,6 +173,7 @@ export function FacebookAdsCampaignDetail({
   const adAccountId = parsed?.customerId ?? null;
   const campaignId = parsed?.campaignId ?? null;
 
+  const [detailTab, setDetailTab] = useState('overview');
   const [preset, setPreset] = useState<DateRangePreset>(initialPreset || '30d');
   const [customFrom, setCustomFrom] = useState(initialFrom || daysAgoIso(30));
   const [customTo, setCustomTo] = useState(initialTo || todayIso());
@@ -158,6 +186,10 @@ export function FacebookAdsCampaignDetail({
       dataMaxDate,
     ),
   );
+
+  useEffect(() => {
+    setDetailTab('overview');
+  }, [campaignKey]);
 
   useEffect(() => {
     if (initialPreset) setPreset(initialPreset);
@@ -252,6 +284,8 @@ export function FacebookAdsCampaignDetail({
         detail.previousTotals,
         detail.series,
         `${range.from} → ${range.to}`,
+        detail.dailyBudgetMicros,
+        detail.biddingStrategyType,
       ),
       facebookBreakdowns,
     };
@@ -269,6 +303,14 @@ export function FacebookAdsCampaignDetail({
     breakdownsLoading,
     breakdownsError,
   ]);
+
+  const changeHistory = useFacebookAdsCampaignChangeHistory(
+    adAccountId,
+    campaignId,
+    range.from,
+    range.to,
+    detailTab === 'changes',
+  );
 
   const onBack = () => {
     setFacebookAdsCampaignHash({
@@ -312,6 +354,20 @@ export function FacebookAdsCampaignDetail({
         onCustomFromChange: setCustomFrom,
         onCustomToChange: setCustomTo,
       }}
+      detailTabs={DETAIL_TABS}
+      activeDetailTab={detailTab}
+      onDetailTabChange={setDetailTab}
+      detailTabContent={
+        <FacebookAdsChangeHistory
+          sessions={changeHistory.sessions}
+          campaignName={model.campaignName}
+          loading={changeHistory.loading}
+          error={changeHistory.error}
+          queriedFrom={changeHistory.queriedFrom}
+          queriedTo={changeHistory.queriedTo}
+          clamped={changeHistory.clamped}
+        />
+      }
     />
   );
 }

@@ -11,6 +11,8 @@ type CampaignMetaRow = {
   status: string;
   advertising_channel_type: string | null;
   objectives?: string[] | null;
+  daily_budget_micros?: number | string | null;
+  bidding_strategy_type?: string | null;
 };
 
 type AccountRow = {
@@ -181,7 +183,7 @@ export function useGoogleAdsCampaignDetail(
           supabase
             .from('google_ads_campaigns')
             .select(
-              'id,customer_id,campaign_id,campaign_name,status,advertising_channel_type,objectives',
+              'id,customer_id,campaign_id,campaign_name,status,advertising_channel_type,objectives,daily_budget_micros,bidding_strategy_type',
             )
             .eq('id', campaignKey)
             .maybeSingle(),
@@ -228,6 +230,9 @@ export function useGoogleAdsCampaignDetail(
         objectives: normalizeGoogleAdsObjectives(meta?.objectives),
         accountName: account?.descriptive_name || undefined,
         currencyCode: account?.currency_code ?? undefined,
+        dailyBudgetMicros:
+          meta?.daily_budget_micros == null ? null : Number(meta.daily_budget_micros),
+        biddingStrategyType: meta?.bidding_strategy_type ?? null,
         matchedWebsites,
         series,
         totals: sumSeries(series),
