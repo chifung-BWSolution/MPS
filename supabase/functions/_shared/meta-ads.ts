@@ -1065,6 +1065,17 @@ function formatActivityWhen(raw: unknown): string {
   return value.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
 }
 
+/** Stable across date windows. The old suffix was the match index inside one query. */
+function activityKeyFingerprint(parts: string[]): string {
+  let hash = 0x811c9dc5;
+  const input = parts.join("\u001f");
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
 function inWindow(when: string, dateFrom: string, dateTo: string): boolean {
   const day = when.slice(0, 10);
   if (!ISO_DATE_RE.test(day)) return true;
@@ -1079,6 +1090,92 @@ function moneyLabel(value: string, currency: string): string {
     maximumFractionDigits: 2,
   });
   return currency ? `${currency} ${formatted}` : formatted;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  if (typeof value === "string" && value.trim().startsWith("{")) {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function readMinorAmount(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return null;
+}
+
+function budgetPeriodLabel(raw: string): string {
+  const key = raw.trim().toLowerCase();
+  if (!key) return "";
+  if (key.includes("lifetime")) return "終身";
+  if (key.includes("daily") || key === "day" || key.includes("單日")) return "單日";
+  return "";
+}
+
+function budgetNodes(extra: Record<string, unknown>): Record<string, unknown>[] {
+  const nodes: Record<string, unknown>[] = [];
+  for (const key of ["old_value", "new_value"]) {
+    const value = extra[key];
+    const record = asRecord(value);
+    if (record) nodes.push(record);
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const row = asRecord(item);
+        if (row) nodes.push(row);
+      }
+    }
+  }
+  return nodes;
+}
+
+/** Meta stores budget edits as minor units, often nested under composite payment_amount objects. */
+function describeBudgetChange(extra: Record<string, unknown>): string {
+  let oldAmount = readMinorAmount(extra.old_value);
+  let newAmount = readMinorAmount(extra.new_value);
+  let currency = extraText(extra, "currency");
+  let period = budgetPeriodLabel(extraText(extra, "additional_value"));
+
+  for (const node of budgetNodes(extra)) {
+    const type = extraText(node, "type").toLowerCase();
+    const moneyNode = !type || type === "payment_amount" || type.includes("budget") || "currency" in node;
+    if (!moneyNode) continue;
+    const nestedOld = readMinorAmount(node.old_value);
+    const nestedNew = readMinorAmount(node.new_value);
+    if (nestedOld != null) oldAmount = nestedOld;
+    if (nestedNew != null) newAmount = nestedNew;
+    if (!currency) currency = extraText(node, "currency");
+    if (!period) {
+      period = budgetPeriodLabel(extraText(node, "additional_value"));
+      if (!period && node.daily_budget != null) period = "單日";
+      if (!period && node.lifetime_budget != null) period = "終身";
+    }
+  }
+
+  const dollar = (amount: number) => {
+    const formatted = (amount / 100).toLocaleString("zh-HK", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    const code = currency.trim().toUpperCase();
+    if (!code || code === "HKD" || code === "USD" || code === "SGD" || code === "AUD" || code === "CAD" || code === "NZD" || code === "TWD") {
+      return `$${formatted}`;
+    }
+    return `${code} ${formatted}`;
+  };
+
+  if (oldAmount != null && newAmount != null && oldAmount !== newAmount) {
+    return `從 ${dollar(oldAmount)}—更新為${dollar(newAmount)}${period}`;
+  }
+  if (newAmount != null && newAmount !== 0) return `廣告預算：${dollar(newAmount)}${period}`;
+  if (oldAmount != null && oldAmount !== 0) return `已移除廣告預算「${dollar(oldAmount)}」`;
+  return "廣告預算已變更";
 }
 
 function statusLabel(value: string): string {
@@ -1145,16 +1242,7 @@ function describeActivity(eventType: string, extra: Record<string, unknown>): Me
     return { category: "status", text: withValues(`${subject}狀態`, oldValue === "—" ? "" : oldValue, newValue === "—" ? "" : newValue) };
   }
   if (type.includes("budget") || type.includes("spend_cap") || extraText(extra, "type") === "payment_amount") {
-    const pair = changedPair(extra, true);
-    const oldN = Number(extraText(extra, "old_value"));
-    const newN = Number(extraText(extra, "new_value"));
-    if (Number.isFinite(oldN) && Number.isFinite(newN) && newN !== oldN) {
-      return {
-        category: "budget",
-        text: newN > oldN ? "已提高 1 個廣告預算金額" : "已降低 1 個廣告預算金額",
-      };
-    }
-    return { category: "budget", text: withValues("廣告預算", pair.oldValue, pair.newValue) };
+    return { category: "budget", text: describeBudgetChange(extra) };
   }
   if (type.includes("name")) {
     const pair = changedPair(extra);
@@ -1259,8 +1347,15 @@ export async function fetchCampaignChangeHistory(
     if (!known && objectType === "AD") assetGroupName = objectName;
     if (known?.kind === "adset" && !adGroupName) adGroupName = objectName;
 
+    const extraRaw = typeof row.extra_data === "string"
+      ? row.extra_data
+      : JSON.stringify(row.extra_data ?? "");
     sessions.push({
-      id: `${objectId}:${when}:${eventType}:${sessions.length}`,
+      id: `${objectId}:${when}:${eventType}:${activityKeyFingerprint([
+        String(row.actor_name || ""),
+        String(row.application_name || ""),
+        extraRaw,
+      ])}`,
       userEmail: String(row.actor_name || ""),
       clientType: String(row.application_name || ""),
       changeDateTime: when,

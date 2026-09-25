@@ -1,10 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Check } from 'lucide-react';
+import { fetchUserStaffIds } from '@/components/day-report/userStaffLookup';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { useActiveStaffOptions } from '@/hooks/useActiveStaffOptions';
+import { useFacebookAdsChangeHistoryStaff } from '@/hooks/useFacebookAdsChangeHistoryStaff';
 import { cn } from '@/lib/utils';
 import type {
   FacebookAdsChangeHistoryCategory,
   FacebookAdsChangeHistorySession,
 } from '@/types/facebookAds';
+
+const CLEAR_STAFF = '__none__';
 
 const FILTERS: { id: 'all' | FacebookAdsChangeHistoryCategory; label: string }[] = [
   { id: 'all', label: '所有變更' },
@@ -57,6 +63,31 @@ export function FacebookAdsChangeHistory({
   clamped: boolean;
 }) {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]['id']>('all');
+  const activityKeys = useMemo(() => sessions.map((session) => session.id), [sessions]);
+  const staffAssignments = useFacebookAdsChangeHistoryStaff(activityKeys);
+  const assignedIds = useMemo(() => Object.values(staffAssignments.byKey), [staffAssignments.byKey]);
+  const { options: activeStaff } = useActiveStaffOptions(assignedIds);
+  const [systemStaffIds, setSystemStaffIds] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchUserStaffIds().then((ids) => {
+      if (!cancelled) setSystemStaffIds(new Set(ids));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const staffOptions = useMemo(() => {
+    const assigned = new Set(assignedIds);
+    return [...activeStaff]
+      .filter((row) => systemStaffIds?.has(row.value) || assigned.has(row.value))
+      .sort((a, b) => a.label.localeCompare(b.label, 'en', { sensitivity: 'base' }))
+      .map(({ value, label, keywords }) => ({ value, label, keywords }));
+  }, [activeStaff, assignedIds, systemStaffIds]);
+  const staffSelectOptions = useMemo(
+    () => [{ value: CLEAR_STAFF, label: '—' }, ...staffOptions],
+    [staffOptions],
+  );
   const visible = useMemo(
     () =>
       filter === 'all'
@@ -94,12 +125,16 @@ export function FacebookAdsChangeHistory({
         ))}
       </div>
       {error ? <div className="text-[12px] text-red-600">{error}</div> : null}
+      {staffAssignments.error ? (
+        <div className="text-[12px] text-red-600">{staffAssignments.error}</div>
+      ) : null}
       <div className="bg-white border border-[rgba(13,26,45,0.08)] rounded-md overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-[rgba(13,26,45,0.08)] bg-slate-50/80 text-left text-[12px] text-muted-foreground">
                 <th className="px-3 py-2 font-medium whitespace-nowrap">用戶 / 日期和時間</th>
+                <th className="px-3 py-2 font-medium whitespace-nowrap">負責同事</th>
                 <th className="px-3 py-2 font-medium whitespace-nowrap">工具</th>
                 <th className="px-3 py-2 font-medium min-w-[240px]">變更</th>
                 <th className="px-3 py-2 font-medium whitespace-nowrap">廣告系列</th>
@@ -110,13 +145,13 @@ export function FacebookAdsChangeHistory({
             <tbody>
               {loading && !sessions.length ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-12 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-3 py-12 text-center text-muted-foreground">
                     載入變更記錄…
                   </td>
                 </tr>
               ) : visible.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-12 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-3 py-12 text-center text-muted-foreground">
                     此區間沒有變更記錄
                   </td>
                 </tr>
@@ -128,6 +163,20 @@ export function FacebookAdsChangeHistory({
                       <div className="mt-0.5 text-[12px] text-muted-foreground tabular-nums">
                         {formatWhen(session.changeDateTime)}
                       </div>
+                    </td>
+                    <td className="px-3 py-2.5 min-w-[160px]">
+                      <SearchableSelect
+                        value={staffAssignments.byKey[session.id] || ''}
+                        onValueChange={(value) => {
+                          void staffAssignments.setStaff(session.id, value === CLEAR_STAFF ? '' : value);
+                        }}
+                        options={staffSelectOptions}
+                        placeholder="選擇同事"
+                        searchPlaceholder="搜尋同事"
+                        emptyText="沒有在職員工"
+                        disabled={staffAssignments.savingKey === session.id}
+                        className="h-8 min-w-[148px] text-[12px]"
+                      />
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">{toolLabel(session.clientType)}</td>
                     <td className="px-3 py-2.5">
