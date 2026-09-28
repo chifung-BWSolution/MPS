@@ -131,19 +131,30 @@ export function InvoiceEditor({
     }
   };
 
+  const deliverPdf = async (blob: Blob) => {
+    await downloadPdfBlob(blob, invoiceFilename(state.form.invoiceNo, state.form.billToName));
+  };
+
   const downloadOnly = async () => {
     try {
-      const blob = await pdfBlobFromDocument(buildPdf());
-      downloadPdfBlob(blob, invoiceFilename(state.form.invoiceNo, state.form.billToName));
+      await deliverPdf(await pdfBlobFromDocument(buildPdf()));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '下載失敗');
     }
   };
 
   const handleDownload = async () => {
+    const blobPromise = pdfBlobFromDocument(buildPdf());
     const saved = await persist();
-    if (!saved) return;
-    await downloadOnly();
+    if (!saved) {
+      void blobPromise.catch(() => undefined);
+      return;
+    }
+    try {
+      await deliverPdf(await blobPromise);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '下載失敗');
+    }
   };
 
   const summaryRows = [

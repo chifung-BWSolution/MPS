@@ -118,19 +118,30 @@ export function ReceiptEditor({
     }
   };
 
+  const deliverPdf = async (blob: Blob) => {
+    await downloadPdfBlob(blob, receiptFilename(state.form.receiptNo, state.form.receivedFromName));
+  };
+
   const downloadOnly = async () => {
     try {
-      const blob = await pdfBlobFromDocument(buildPdf());
-      downloadPdfBlob(blob, receiptFilename(state.form.receiptNo, state.form.receivedFromName));
+      await deliverPdf(await pdfBlobFromDocument(buildPdf()));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '下載失敗');
     }
   };
 
   const handleDownload = async () => {
+    const blobPromise = pdfBlobFromDocument(buildPdf());
     const saved = await persist();
-    if (!saved) return;
-    await downloadOnly();
+    if (!saved) {
+      void blobPromise.catch(() => undefined);
+      return;
+    }
+    try {
+      await deliverPdf(await blobPromise);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '下載失敗');
+    }
   };
 
   const summaryRows = [

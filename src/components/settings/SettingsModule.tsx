@@ -10,6 +10,7 @@ import { TermsConditionsSettings } from './TermsConditionsSettings';
 import { StaffDirectory } from './StaffDirectory';
 import { UserManagement } from './UserManagement';
 import { useAuth } from '@/context/AuthContext';
+import { mainMenuItems } from '@/context/AppContext';
 import { supabase } from '@/lib/supabase';
 import { canAccessSettings } from '@/lib/permissions';
 import { useSystemOptions } from '@/hooks/useSystemOptions';
@@ -44,7 +45,7 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
       case 'email-connection': return { title: '電郵連接', subtitle: '以 Resend 寄出所有系統電郵。請把 re_xxxxxxxxx 換成正式 API key。' };
       case 'companies': return { title: '公司管理', subtitle: '管理多間公司資料及銀行帳戶。' };
       case 'brands': return { title: '品牌管理', subtitle: '管理品牌，每個品牌歸屬於一間公司。' };
-      case 'roles': return { title: '角色權限', subtitle: '查看及設定各角色的存取權限。' };
+      case 'roles': return { title: '角色權限', subtitle: '各身份標籤目前的存取範圍。標籤在員工列表或用戶管理設定。' };
       case 'options': return { title: '選項設定', subtitle: '管理網站／系統建立表單的開發平台選項。' };
       case 'credit-cards': return { title: '信用卡管理', subtitle: '管理公司付款信用卡。' };
       case 'quotation-settings': return { title: '客戶報價設定', subtitle: '管理報價類型、預設服務項目及付款安排。' };
@@ -509,35 +510,45 @@ function UserModal({ user, onSave, onClose }: { user: UserItem | null; onSave: (
 }
 
 function RolesSection() {
-  const roles = [
-    { role: '管理層 (Management)', modules: '所有模組', permissions: '全部操作、審批、報告檢視、系統設定、人力成本報告' },
-    { role: '項目經理 (PM)', modules: 'Dashboard、Day Report、Project、Website、Marketing、Video、Supplier、Quotation', permissions: '項目管理、網站管理、任務分配、審批日報' },
-    { role: '設計師 (Designer)', modules: 'Dashboard、Day Report、Video、Marketing、Tools', permissions: '提交匯報、上傳內容、管理自己的任務' },
-    { role: '會計 (Accountant)', modules: 'Dashboard、Finance、Report、Supplier', permissions: '財務管理、付款記錄、報告匯出' },
-    { role: '文案同事 (Copywriter)', modules: 'Dashboard、Day Report、Articles、Social Posts、Marketing', permissions: '文章管理、社交媒體Post、工作匯報' },
-    { role: '影片剪輯 (Video Editor)', modules: 'Dashboard、Day Report、Video、Video Channels', permissions: '影片中心、工作匯報' },
-    { role: '市場推廣 (Marketing)', modules: 'Dashboard、Day Report、SEO、Paid Ads、Social Posts、Marketing', permissions: 'SEO升級、付費廣告、社交媒體' },
+  const navModules = mainMenuItems.map((item) => item.label).join('、');
+  const settingsRoles = [
+    { role: 'Super Admin', tag: 'super_admin', calendar: '工作日曆可切換全部部門' },
+    { role: '公司行政', tag: 'company_admin', calendar: '工作日曆可切換全部部門' },
+    { role: '管理層', tag: 'management', calendar: '工作日曆可切換全部部門' },
+    { role: '系統開發', tag: 'system_dev', calendar: '工作日曆只看自己所屬部門' },
   ];
 
   return (
-    <div className="space-y-5">
-      <h3 className="text-[18px] font-bold">角色權限說明</h3>
-      <p className="text-[13px] text-muted-foreground">以下是系統內各角色的職責及可存取模組。</p>
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-[18px] font-bold">目前的存取規則</h3>
+        <p className="text-[13px] text-muted-foreground mt-1">
+          模組名稱與頂部導覽一致，每一項為一個模組。
+        </p>
+      </div>
+
+      <div className="border border-border/50 rounded-md p-4 space-y-2 text-[13px]">
+        <p><span className="font-medium">系統設定：</span>選單只對下方四個身份顯示。其餘身份打開設定頁會看到無權限提示；直接打開「個人設定」仍可查看自己的資料。</p>
+        <p><span className="font-medium">工作日曆：</span>Super Admin、公司行政、管理層可切換全部部門。系統開發與其餘身份只看自己在員工資料中的部門。</p>
+        <p><span className="font-medium">身份標籤：</span>存在用戶資料的 role_tag，在「員工列表」或「用戶管理」指定。這頁只說明現況，不能在此修改權限。</p>
+      </div>
+
       <div className="space-y-3">
-        {roles.map((r) => (
-          <div key={r.role} className="border border-border/50 rounded-md p-4">
+        {settingsRoles.map((r) => (
+          <div key={r.tag} className="border border-border/50 rounded-md p-4">
             <div className="flex items-center gap-2 mb-2">
               <Shield size={14} className="text-teal-600" />
               <h4 className="text-[14px] font-bold">{r.role}</h4>
+              <span className="text-[11px] text-muted-foreground">{r.tag}</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[12px]">
+            <div className="space-y-1 text-[12px]">
               <div>
-                <span className="text-muted-foreground font-medium">可見模組：</span>
-                <span>{r.modules}</span>
+                <span className="text-muted-foreground font-medium">模組：</span>
+                <span>{navModules}</span>
               </div>
               <div>
-                <span className="text-muted-foreground font-medium">操作權限：</span>
-                <span>{r.permissions}</span>
+                <span className="text-muted-foreground font-medium">額外範圍：</span>
+                <span>{r.calendar}</span>
               </div>
             </div>
           </div>
