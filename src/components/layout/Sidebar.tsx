@@ -107,7 +107,7 @@ export function Sidebar() {
         {hasSubMenus ? (
           <ul className="space-y-0.5">
             {currentMenuData.subMenus.map((subItem, index) => {
-              const isSubActive = currentSubModule === subItem.id;
+              const isSubActive = !subItem.linkTo && currentSubModule === subItem.id;
               const prevSection = index > 0 ? currentMenuData.subMenus[index - 1]?.section : undefined;
               const showSection =
                 !sidebarCollapsed &&
@@ -127,8 +127,8 @@ export function Sidebar() {
                     </div>
                   )}
                   <AppLink
-                    module={currentModule}
-                    subModule={subItem.id}
+                    module={subItem.linkTo?.module ?? currentModule}
+                    subModule={subItem.linkTo?.subModule ?? subItem.id}
                     className={cn(
                       'w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-all duration-200 no-underline',
                       isSubActive

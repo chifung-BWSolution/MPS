@@ -51,13 +51,33 @@ function formatReportDate(iso: string): string {
 
 async function resolveRelatedIds(quotationClientProjectId: string): Promise<string[]> {
   const ids = new Set<string>([quotationClientProjectId]);
-  const { data } = await supabase
+  const [{ data: clientHub }, { data: clientProject }] = await Promise.all([
+    supabase
+      .from('projects')
+      .select('id')
+      .eq('related_type', 'quotation_client')
+      .eq('related_id', quotationClientProjectId)
+      .maybeSingle(),
+    supabase
+      .from('quotation_client_project')
+      .select('webandsystem_list_id')
+      .eq('id', quotationClientProjectId)
+      .maybeSingle(),
+  ]);
+  if (clientHub?.id) ids.add(String(clientHub.id));
+
+  const websiteId = String(clientProject?.webandsystem_list_id || '').trim();
+  if (!websiteId) return [...ids];
+
+  // Day reports store either the website id or its projects-hub id.
+  ids.add(websiteId);
+  const { data: websiteHub } = await supabase
     .from('projects')
     .select('id')
-    .eq('related_type', 'quotation_client')
-    .eq('related_id', quotationClientProjectId)
+    .eq('related_type', 'webandsystem')
+    .eq('related_id', websiteId)
     .maybeSingle();
-  if (data?.id) ids.add(data.id);
+  if (websiteHub?.id) ids.add(String(websiteHub.id));
   return [...ids];
 }
 

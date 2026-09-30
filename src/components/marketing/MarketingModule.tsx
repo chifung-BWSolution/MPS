@@ -4,6 +4,7 @@ import { FacebookAdsModule } from './FacebookAdsModule';
 import { AdsCostTrendModule } from './AdsCostTrendModule';
 import { AdsClickTrendModule } from './AdsClickTrendModule';
 import { AdsComparisonModule } from './AdsComparisonModule';
+import { AdsChangeHistoryModule } from './AdsChangeHistoryModule';
 import { BacklinkModule } from './BacklinkModule';
 import { AdsDataSyncModule } from './AdsDataSyncModule';
 import { AdsTagsSettingsModule } from './AdsTagsSettingsModule';
@@ -37,6 +38,7 @@ export function MarketingModule({ subModule }: { subModule?: string }) {
       case 'ads-cost-trend': return { title: '廣告成本趨勢', subtitle: '以品牌檢視 Google Ads / Facebook Ads 成本（預設 30 日區間，可切換按月）。' };
       case 'ads-click-trend': return { title: '廣告點擊趨勢', subtitle: '以品牌檢視 Google Ads / Facebook Ads 曝光、點擊、轉換與 CPC/CPA（預設 30 日區間，可切換按月）。' };
       case 'ads-comparison': return { title: '廣告比較圖表', subtitle: '並排比較最多三個 Campaign 的每日成效（Google Ads / Facebook Ads）。' };
+      case 'ads-change-history': return { title: '廣告變更記錄', subtitle: '依日期區間檢視 Google Ads 與 Facebook Ads 的 Campaign 變更記錄。' };
       case 'backlink': return { title: '反向連結 Backlinks', subtitle: '記錄各平台反向連結購買及費用。' };
       case 'ads-data-sync': return { title: '廣告數據同步', subtitle: '觸發並監控 Google Ads、Facebook Ads、GA4 與 Search Console 同步。日常增量由每日 cron 處理。' };
       case 'ads-tags': return { title: '廣告標籤', subtitle: '管理 Google Ads / Facebook Ads Campaign 共用標籤，並以啟用狀態控制是否可套用。' };
@@ -68,6 +70,7 @@ export function MarketingModule({ subModule }: { subModule?: string }) {
       {activeTab === 'ads-cost-trend' && <AdsCostTrendModule />}
       {activeTab === 'ads-click-trend' && <AdsClickTrendModule />}
       {activeTab === 'ads-comparison' && <AdsComparisonModule />}
+      {activeTab === 'ads-change-history' && <AdsChangeHistoryModule />}
       {activeTab === 'backlink' && <BacklinkModule />}
       {activeTab === 'ads-data-sync' && <AdsDataSyncModule />}
       {activeTab === 'ads-tags' && <AdsTagsSettingsModule />}

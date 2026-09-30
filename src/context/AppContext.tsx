@@ -10,6 +10,8 @@ export interface SubMenuItem {
   label: string;
   /** Optional sidebar section heading (Traditional Chinese) */
   section?: string;
+  /** Opens another module instead of a page in the current one. */
+  linkTo?: { module: string; subModule: string };
 }
 
 export function resolveSubModule(module: string, sub?: string): string {
@@ -22,7 +24,7 @@ export function resolveSubModule(module: string, sub?: string): string {
   if (module === 'marketing' && (sub === 'google-ads-sync' || sub === 'facebook-ads-sync')) {
     return 'ads-data-sync';
   }
-  return menuItem?.subMenus.some(s => s.id === sub) ? sub : defaultSub;
+  return menuItem?.subMenus.some(s => s.id === sub && !s.linkTo) ? sub : defaultSub;
 }
 
 /** Resolve module + submenu, including hashes that moved to another top-level item. */
@@ -87,6 +89,11 @@ const quotationSectionSubMenus: SubMenuItem[] = [
   { id: 'list', label: '報價單列表' },
   { id: 'clients', label: '客戶列表' },
   { id: 'important-dates', label: '重要日子' },
+  {
+    id: 'project-ar',
+    label: '項目AR收款',
+    linkTo: { module: 'finance', subModule: 'receivables' },
+  },
   { id: 'doc-types', label: '文件類型', section: '設置' },
   { id: 'project-types', label: '項目類型', section: '設置' },
 ];
@@ -152,6 +159,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'ads-cost-trend', label: '廣告成本趨勢', section: '廣告' },
       { id: 'ads-click-trend', label: '廣告點擊趨勢', section: '廣告' },
       { id: 'ads-comparison', label: '廣告比較圖表', section: '廣告' },
+      { id: 'ads-change-history', label: '廣告變更記錄', section: '廣告' },
       { id: 'backlink', label: '反向連結 Backlinks', section: '內容' },
       { id: 'ads-data-sync', label: '廣告數據同步', section: '設定' },
       { id: 'ads-tags', label: '廣告標籤', section: '設定' },

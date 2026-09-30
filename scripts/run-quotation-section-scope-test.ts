@@ -111,6 +111,8 @@ assert.match(menu, /id: 'project-types'/);
 assert.match(menu, /label: '項目類型', section: '設置'/);
 assert.match(menu, /id: 'important-dates'/);
 assert.match(menu, /label: '重要日子'/);
+assert.match(menu, /label: '項目AR收款'/);
+assert.match(menu, /linkTo: \{ module: 'finance', subModule: 'receivables' \}/);
 assert.doesNotMatch(menu, /label: '項目管理'/);
 
 const home = readFileSync(join(root, 'src/components/home.tsx'), 'utf8');
