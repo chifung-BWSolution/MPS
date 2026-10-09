@@ -171,6 +171,7 @@ export function AsanaPendingModule() {
       handoverDate: form.handoverDate || undefined,
       contractStartDate: form.contractStartDate || undefined,
       contractEndDate: form.contractEndDate || undefined,
+      servicePeriods: form.servicePeriods,
       description: form.description.trim() || undefined,
       projectTypeId: form.projectTypeId,
       assignedPm: importingTask.assignedPm,

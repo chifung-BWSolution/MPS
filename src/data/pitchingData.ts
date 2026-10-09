@@ -3,6 +3,7 @@
  */
 
 import type { ProjectSla } from '@/lib/projectSla';
+import type { ServicePeriods } from '@/lib/servicePeriods';
 
 export type PitchingStatus = 'initial' | 'following_up' | 'confirmed' | 'closed';
 
@@ -51,6 +52,11 @@ export interface PitchingRecord {
   contractStartDate?: string;
   /** Contract period end (合約結束日期). */
   contractEndDate?: string;
+  /**
+   * Named period ranges for 系統開發管理 (可修改期 / 測試期 / 保養期 and future keys).
+   * Stored as quotation_client_project.service_periods.
+   */
+  servicePeriods?: ServicePeriods;
   description?: string;
   /** quotation_project_types.id */
   projectTypeId?: string;

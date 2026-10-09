@@ -3,10 +3,13 @@ import { useFinanceIncomes } from '@/hooks/useFinanceLedgers';
 import {
   DEFAULT_LEDGER_SORT_DIR,
   DEFAULT_RECEIVABLE_SORT_KEY,
+  daysUntilDue,
   filterReceivables,
   formatFinanceMoney,
+  formatRemainingDays,
   incomeStatusLabel,
   nextLedgerSort,
+  remainingDaysClass,
   sortReceivables,
   summarizeReceivables,
   type FinanceIncomeRow,
@@ -42,6 +45,7 @@ function ReceivableHeaders({
   return (
     <tr className="border-b border-border bg-muted/30">
       <FinanceSortableTh label="到期日" sortKey="dueDate" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+      <th className={financeHeaderClass} />
       <FinanceSortableTh label="項目" sortKey="projectName" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
       <FinanceSortableTh label="客戶" sortKey="clientName" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
       <FinanceSortableTh label="類型" sortKey="typeLabel" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
@@ -125,39 +129,45 @@ function ReceivableList({ records }: { records: FinanceIncomeRow[] }) {
               />
             </thead>
             <tbody>
-              {sorted.map((record) => (
-                <tr key={record.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                  <td className="px-4 py-3 text-[13px] text-muted-foreground tabular-nums">
-                    {formatIncomeDate(record.dueDate)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <FinanceProjectLink
-                      name={record.projectName}
-                      quotationClientProjectId={record.quotationClientProjectId}
-                      projectStatus={record.projectStatus}
-                    />
-                  </td>
-                  <td className="px-4 py-3 text-[13px]">{record.clientName || '—'}</td>
-                  <td className="px-4 py-3 text-[13px]">{record.typeLabel}</td>
-                  <td className="px-4 py-3 text-[13px] tabular-nums">{record.installmentNumber ?? '—'}</td>
-                  <td className="px-4 py-3 text-[13px] font-medium tabular-nums whitespace-nowrap">
-                    {formatFinanceMoney(record.billedAmount)}
-                  </td>
-                  <td className="px-4 py-3 text-[13px] tabular-nums whitespace-nowrap">
-                    {formatFinanceMoney(record.paymentAmount)}
-                  </td>
-                  <td className="px-4 py-3 text-[13px] font-medium tabular-nums whitespace-nowrap text-rose-700">
-                    {formatFinanceMoney(record.outstanding)}
-                  </td>
-                  <td className="px-4 py-3 text-[13px]">{incomeStatusLabel(record.paymentStatus)}</td>
-                  <td className="px-4 py-3 text-[13px] text-muted-foreground max-w-[220px] truncate">
-                    {record.remarks || '—'}
-                  </td>
-                </tr>
-              ))}
+              {sorted.map((record) => {
+                const days = daysUntilDue(record.dueDate, asOf);
+                return (
+                  <tr key={record.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-3 text-[13px] text-muted-foreground tabular-nums">
+                      {formatIncomeDate(record.dueDate)}
+                    </td>
+                    <td className={cn('px-4 py-3 text-[13px] tabular-nums whitespace-nowrap', remainingDaysClass(days))}>
+                      {formatRemainingDays(days)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <FinanceProjectLink
+                        name={record.projectName}
+                        quotationClientProjectId={record.quotationClientProjectId}
+                        projectStatus={record.projectStatus}
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-[13px]">{record.clientName || '—'}</td>
+                    <td className="px-4 py-3 text-[13px]">{record.typeLabel}</td>
+                    <td className="px-4 py-3 text-[13px] tabular-nums">{record.installmentNumber ?? '—'}</td>
+                    <td className="px-4 py-3 text-[13px] font-medium tabular-nums whitespace-nowrap">
+                      {formatFinanceMoney(record.billedAmount)}
+                    </td>
+                    <td className="px-4 py-3 text-[13px] tabular-nums whitespace-nowrap">
+                      {formatFinanceMoney(record.paymentAmount)}
+                    </td>
+                    <td className="px-4 py-3 text-[13px] font-medium tabular-nums whitespace-nowrap text-rose-700">
+                      {formatFinanceMoney(record.outstanding)}
+                    </td>
+                    <td className="px-4 py-3 text-[13px]">{incomeStatusLabel(record.paymentStatus)}</td>
+                    <td className="px-4 py-3 text-[13px] text-muted-foreground max-w-[220px] truncate">
+                      {record.remarks || '—'}
+                    </td>
+                  </tr>
+                );
+              })}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={10} className={cn(financeHeaderClass, 'py-8 text-center font-normal normal-case tracking-normal')}>
+                  <td colSpan={11} className={cn(financeHeaderClass, 'py-8 text-center font-normal normal-case tracking-normal')}>
                     沒有找到符合條件的應收未收紀錄
                   </td>
                 </tr>

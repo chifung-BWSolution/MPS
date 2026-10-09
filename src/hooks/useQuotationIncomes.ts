@@ -13,6 +13,7 @@ import {
   type QuotationIncomeInput,
 } from '@/lib/quotationIncomes';
 import { DEFAULT_CURRENCY, parseSystemCurrency } from '@/lib/currency';
+import { INVOICES_TABLE, RECEIPTS_TABLE } from '@/lib/invoiceReceipts';
 
 type DbRow = {
   id: string;
@@ -120,6 +121,22 @@ function inputToRow(
     Object.assign(row, fileMetaColumns(input));
   }
   return row;
+}
+
+async function deleteIncomeDocuments(incomeIds: string[]) {
+  if (incomeIds.length === 0) return null;
+  const { error: receiptError } = await supabase
+    .from(RECEIPTS_TABLE)
+    .delete()
+    .in('income_id', incomeIds);
+  if (receiptError) return { message: receiptError.message };
+
+  const { error: invoiceError } = await supabase
+    .from(INVOICES_TABLE)
+    .delete()
+    .in('income_id', incomeIds);
+  if (invoiceError) return { message: invoiceError.message };
+  return null;
 }
 
 async function removeStorageObject(path: string | undefined) {
@@ -276,6 +293,8 @@ export function useQuotationIncomes(projectId: string | undefined) {
 
   const deleteIncome = useCallback(async (id: string) => {
     const current = rows.find((row) => row.id === id);
+    const documentsError = await deleteIncomeDocuments([id]);
+    if (documentsError) return { error: documentsError };
     const { error: err } = await supabase.from(INCOMES_TABLE).delete().eq('id', id);
     if (err) return { error: { message: err.message } };
     await removeStorageObject(current?.paymentRecordStoragePath);
@@ -315,6 +334,8 @@ export function useQuotationIncomes(projectId: string | undefined) {
 
     if (deleteIds.length > 0) {
       const removing = rows.filter((row) => deleteIds.includes(row.id));
+      const documentsError = await deleteIncomeDocuments(deleteIds);
+      if (documentsError) return { data: null, error: documentsError };
       const { error: err } = await supabase.from(INCOMES_TABLE).delete().in('id', deleteIds);
       if (err) return { data: null, error: { message: err.message } };
       await Promise.all(removing.map((row) => removeStorageObject(row.paymentRecordStoragePath)));

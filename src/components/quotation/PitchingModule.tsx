@@ -81,6 +81,14 @@ import {
 } from '@/components/quotation/QuotationListSortHeader';
 import { estimatedMoneyFor, QUOTATION_LIST_COLUMN_COUNT } from '@/lib/quotationListMoney';
 import { toExternalHref } from '@/lib/externalUrl';
+import {
+  SERVICE_PERIOD_FIELDS,
+  parseServicePeriods,
+  servicePeriodDate,
+  validateServicePeriods,
+  withServicePeriodDate,
+  type ServicePeriods,
+} from '@/lib/servicePeriods';
 
 export type PitchingFormValues = {
   clientId: string;
@@ -91,6 +99,7 @@ export type PitchingFormValues = {
   handoverDate: string;
   contractStartDate: string;
   contractEndDate: string;
+  servicePeriods: ServicePeriods;
   description: string;
   projectTypeId: string;
   mainPmId: string;
@@ -119,6 +128,7 @@ const emptyForm = (defaultMainPmId = ''): PitchingFormValues => ({
   handoverDate: '',
   contractStartDate: '',
   contractEndDate: '',
+  servicePeriods: {},
   description: '',
   projectTypeId: '',
   mainPmId: defaultMainPmId,
@@ -137,6 +147,7 @@ function formFromRecord(record: PitchingRecord, clientOptions: ClientOption[]): 
     handoverDate: optionalIsoDate(record.handoverDate) ?? '',
     contractStartDate: optionalIsoDate(record.contractStartDate) ?? '',
     contractEndDate: optionalIsoDate(record.contractEndDate) ?? '',
+    servicePeriods: parseServicePeriods(record.servicePeriods),
     description: record.description ?? '',
     projectTypeId: record.projectTypeId ?? '',
     mainPmId: record.mainPmId ?? '',
@@ -155,6 +166,7 @@ export function pitchingFormToUpdate(form: PitchingFormValues): QuotationClientP
     handoverDate: form.handoverDate,
     contractStartDate: form.contractStartDate,
     contractEndDate: form.contractEndDate,
+    servicePeriods: parseServicePeriods(form.servicePeriods),
     description: form.description.trim() || undefined,
     projectTypeId: form.projectTypeId,
     mainPmId: form.mainPmId.trim(),
@@ -169,6 +181,53 @@ function formatEnquiryDateLabel(iso: string): string {
   if (parts.length !== 3) return iso;
   const [y, m, d] = parts;
   return `${y}年${parseInt(m!, 10)}月${parseInt(d!, 10)}日`;
+}
+
+function ServicePeriodDateFields({
+  periods,
+  onChange,
+}: {
+  periods: ServicePeriods;
+  onChange: (next: ServicePeriods) => void;
+}) {
+  const currentYear = new Date().getFullYear();
+  return (
+    <div className="space-y-4">
+      {SERVICE_PERIOD_FIELDS.map((field) => (
+        <div key={field.key} className="space-y-2">
+          <p className="text-[12px] font-medium text-foreground">
+            {field.labelZh} {field.labelEn}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {(['startDate', 'endDate'] as const).map((bound) => {
+              const value = servicePeriodDate(periods, field.key, bound);
+              const boundLabel = bound === 'startDate' ? '開始日期' : '結束日期';
+              const boundEn = bound === 'startDate' ? 'Start Date' : 'End Date';
+              return (
+                <div key={bound}>
+                  <label className="text-[12px] font-medium text-muted-foreground block mb-1">
+                    {boundLabel} {boundEn}
+                  </label>
+                  <Input
+                    type="date"
+                    value={value}
+                    min={`${currentYear - 2}-01-01`}
+                    max={`${currentYear + 2}-12-31`}
+                    aria-label={`${field.labelZh}${boundLabel}`}
+                    onChange={(e) => onChange(withServicePeriodDate(periods, field.key, bound, e.target.value))}
+                    className="h-9 text-[13px] w-full"
+                  />
+                  {value ? (
+                    <p className="text-[11px] text-muted-foreground mt-1">已選：{formatEnquiryDateLabel(value)}</p>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function PitchingStatusBadge({
@@ -450,6 +509,8 @@ export function PitchingFormModal({
   /** Hide the website/system picker when creating a project from the website dialog. */
   hideWebsiteField?: boolean;
 }) {
+  const { moduleId } = useQuotationSection();
+  const showServicePeriods = moduleId === 'system-dev';
   const [form, setForm] = useState<PitchingFormValues>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [showQuickAddClient, setShowQuickAddClient] = useState(false);
@@ -466,6 +527,7 @@ export function PitchingFormModal({
       setForm({
         ...emptyForm(fallbackPm),
         ...defaultValues,
+        servicePeriods: parseServicePeriods(defaultValues?.servicePeriods),
         mainPmId: defaultValues?.mainPmId?.trim() || fallbackPm,
       });
     }
@@ -527,6 +589,13 @@ export function PitchingFormModal({
     if (form.contractStartDate && form.contractEndDate && form.contractEndDate < form.contractStartDate) {
       toast.error('合約結束日期不可早於開始日期');
       return;
+    }
+    if (showServicePeriods) {
+      const periodError = validateServicePeriods(form.servicePeriods);
+      if (periodError) {
+        toast.error(periodError);
+        return;
+      }
     }
     if (!form.projectTypeId) {
       toast.error('請選擇專案類型');
@@ -698,6 +767,13 @@ export function PitchingFormModal({
               )}
             </div>
           </div>
+
+          {showServicePeriods && (
+            <ServicePeriodDateFields
+              periods={form.servicePeriods}
+              onChange={(servicePeriods) => setForm((prev) => ({ ...prev, servicePeriods }))}
+            />
+          )}
 
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1.5">專案類型 Project Type *</label>
@@ -960,6 +1036,7 @@ type DetailDraft = {
   handoverDate: string;
   contractStartDate: string;
   contractEndDate: string;
+  servicePeriods: ServicePeriods;
   description: string;
   projectTypeId: string;
   webandsystemListId: string;
@@ -980,6 +1057,7 @@ function draftFromRecord(record: PitchingRecord, clientOptions: ClientOption[]):
     handoverDate: optionalIsoDate(record.handoverDate) ?? '',
     contractStartDate: optionalIsoDate(record.contractStartDate) ?? '',
     contractEndDate: optionalIsoDate(record.contractEndDate) ?? '',
+    servicePeriods: parseServicePeriods(record.servicePeriods),
     description: record.description ?? '',
     projectTypeId: record.projectTypeId ?? '',
     webandsystemListId: record.webandsystemListId ?? '',
@@ -1027,6 +1105,8 @@ export function PitchingDetail({
   const [saving, setSaving] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<PitchingStatus | null>(null);
   const [docEditor, setDocEditor] = useState(() => readInvoiceReceiptDoc());
+  const { moduleId } = useQuotationSection();
+  const showServicePeriods = moduleId === 'system-dev';
   const clientCompany = companyNamesForClient(draft.clientId, clientOptions);
   const clientPage = quotationProjectSubModule(record.status);
 
@@ -1245,6 +1325,16 @@ export function PitchingDetail({
                   <ReadOnlyField label="交付日期/活動日期">{draft.handoverDate || '—'}</ReadOnlyField>
                   <ReadOnlyField label="合約開始日期">{draft.contractStartDate || '—'}</ReadOnlyField>
                   <ReadOnlyField label="合約結束日期">{draft.contractEndDate || '—'}</ReadOnlyField>
+                  {showServicePeriods && SERVICE_PERIOD_FIELDS.map((field) => (
+                    <div key={field.key} className="space-y-4">
+                      <ReadOnlyField label={`${field.labelZh}開始日期`}>
+                        {servicePeriodDate(draft.servicePeriods, field.key, 'startDate') || '—'}
+                      </ReadOnlyField>
+                      <ReadOnlyField label={`${field.labelZh}結束日期`}>
+                        {servicePeriodDate(draft.servicePeriods, field.key, 'endDate') || '—'}
+                      </ReadOnlyField>
+                    </div>
+                  ))}
                   <ReadOnlyField label="剩餘天數">
                     {formatPitchingRemainingDays(remaining)}
                   </ReadOnlyField>
@@ -1462,6 +1552,7 @@ export function PitchingModule() {
       handoverDate: form.handoverDate || undefined,
       contractStartDate: form.contractStartDate || undefined,
       contractEndDate: form.contractEndDate || undefined,
+      servicePeriods: parseServicePeriods(form.servicePeriods),
       description: form.description.trim() || undefined,
       projectTypeId: form.projectTypeId,
       assignedPm: '',

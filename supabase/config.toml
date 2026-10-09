@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.send-email]
 verify_jwt = true
+
+[functions.receivables-alert]
+verify_jwt = true

@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, peekCachedQuery } from '@/lib/queryCache';
 import { PITCHING_CURRENCY, optionalIsoDate, type PitchingExpenseItem, type PitchingRecord, type PitchingStatus } from '@/data/pitchingData';
 import { parseProjectSla, type ProjectSla } from '@/lib/projectSla';
+import { parseServicePeriods, type ServicePeriods } from '@/lib/servicePeriods';
 
 /** Supabase table shared by Pitching and Project pages */
 export const QUOTATION_CLIENT_PROJECT_TABLE = 'quotation_client_project';
@@ -36,6 +37,7 @@ type DbRow = {
   handover_date: string | null;
   contract_start_date: string | null;
   contract_end_date: string | null;
+  service_periods: ServicePeriods | null;
   description: string | null;
   project_types: string | null;
   assigned_pm: string | null;
@@ -117,6 +119,7 @@ function mapRow(row: DbRow): PitchingRecord {
     handoverDate: optionalIsoDate(row.handover_date),
     contractStartDate: optionalIsoDate(row.contract_start_date),
     contractEndDate: optionalIsoDate(row.contract_end_date),
+    servicePeriods: parseServicePeriods(row.service_periods),
     description: row.description ?? undefined,
     projectTypeId: row.project_types || '',
     asanaTaskGid: row.asana_task_gid ?? undefined,
@@ -153,6 +156,7 @@ export type QuotationClientProjectUpdate = Partial<
     | 'handoverDate'
     | 'contractStartDate'
     | 'contractEndDate'
+    | 'servicePeriods'
     | 'description'
     | 'projectTypeId'
     | 'assignedPmName'
@@ -234,6 +238,7 @@ export function useQuotationClientProjects() {
         handover_date: optionalIsoDate(data.handoverDate) ?? null,
         contract_start_date: optionalIsoDate(data.contractStartDate) ?? null,
         contract_end_date: optionalIsoDate(data.contractEndDate) ?? null,
+        service_periods: parseServicePeriods(data.servicePeriods),
         description: data.description ?? null,
         project_types: data.projectTypeId?.trim() || null,
         assigned_pm: data.assignedPm || null,
@@ -304,6 +309,7 @@ export function useQuotationClientProjects() {
     if (data.contractEndDate !== undefined) {
       row.contract_end_date = optionalIsoDate(data.contractEndDate) ?? null;
     }
+    if (data.servicePeriods !== undefined) row.service_periods = parseServicePeriods(data.servicePeriods);
     if (data.description !== undefined) row.description = data.description || null;
     if (data.projectTypeId !== undefined) row.project_types = data.projectTypeId.trim() || null;
     if (data.assignedPmName !== undefined) row.assigned_pm_name = data.assignedPmName || '';

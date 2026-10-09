@@ -159,6 +159,11 @@ assert.match(migration, /ADD COLUMN IF NOT EXISTS bank_notes text/);
 assert.doesNotMatch(migration, /bubble_id/);
 assert.doesNotMatch(migration, /\bincome text\b/);
 
+const cascadeMigration = read('supabase/migrations/20261005071210_incomes_documents_on_delete_cascade.sql');
+assert.match(cascadeMigration, /invoices_income_id_fkey/);
+assert.match(cascadeMigration, /receipts_income_id_fkey/);
+assert.match(cascadeMigration, /REFERENCES public\.incomes\(id\)\s+ON DELETE CASCADE/);
+
 const dropSystemLabel = read('supabase/migrations/20260909073956_drop_invoice_receipt_system_label.sql');
 assert.match(dropSystemLabel, /DROP COLUMN IF EXISTS system_label/);
 assert.match(dropSystemLabel, /ALTER TABLE public\.invoices/);
