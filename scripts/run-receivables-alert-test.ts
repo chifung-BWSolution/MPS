@@ -8,6 +8,7 @@ import {
   customerFollowUpMessage,
   daysUntilDue,
   hongKongIsoDate,
+  isReceivablesAlertLine,
   projectDetailHref,
   receivablesAlertIdempotencyKey,
   receivablesPageHref,
@@ -24,6 +25,10 @@ const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
 assert.equal(hongKongIsoDate(new Date('2026-10-08T16:30:00.000Z')), '2026-10-09');
 assert.equal(daysUntilDue('2026-10-01', '2026-10-09'), -8);
 assert.equal(daysUntilDue('2026-10-09', '2026-10-09'), 0);
+assert.equal(isReceivablesAlertLine({ outstanding: 1, dueDate: '2026-11-08' }, '2026-10-09'), true);
+assert.equal(isReceivablesAlertLine({ outstanding: 1, dueDate: '2026-11-09' }, '2026-10-09'), false);
+assert.equal(isReceivablesAlertLine({ outstanding: 1, dueDate: '2026-09-01' }, '2026-10-09'), true);
+assert.equal(isReceivablesAlertLine({ outstanding: 1 }, '2026-10-09'), false);
 assert.equal(whatsappDigits('9123 4567'), '85291234567');
 assert.equal(whatsappDigits('+852 9123 4567'), '85291234567');
 assert.equal(whatsappDigits('123'), null);
@@ -88,6 +93,31 @@ const projects: ReceivableAlertProject[] = [
       },
     ],
   },
+  {
+    projectId: 'proj-later',
+    projectName: '遠期尾款專案',
+    projectStatus: 'confirmed',
+    clientName: '稍後客戶',
+    lines: [
+      {
+        id: 'income-later',
+        typeLabel: '遠期尾款',
+        billedAmount: 9000,
+        paymentAmount: 0,
+        outstanding: 9000,
+        dueDate: '2026-12-01',
+        paymentStatus: 'Not Received',
+      },
+      {
+        id: 'income-open',
+        typeLabel: '未定到期',
+        billedAmount: 100,
+        paymentAmount: 0,
+        outstanding: 100,
+        paymentStatus: 'Not Received',
+      },
+    ],
+  },
 ];
 
 const email = buildReceivablesAlertEmail({
@@ -127,8 +157,11 @@ assert.equal(
 assert.match(whatsappHref('91234567', '你好') ?? '', /^https:\/\/wa\.me\/85291234567\?text=/);
 
 const empty = buildReceivablesAlertEmail({ asOf: '2026-10-09', projects: [] });
-assert.match(empty.subject, /目前沒有未收款項/);
-assert.match(empty.html, /目前沒有未收金額大於 0/);
+assert.match(email.html, /未來 30 日內到期/);
+assert.doesNotMatch(email.html, /遠期尾款/);
+assert.doesNotMatch(email.text, /遠期尾款/);
+assert.match(empty.subject, /目前沒有逾期或 30 日內到期的未收款項/);
+assert.match(empty.html, /目前沒有已逾期或 30 日內到期的未收款項/);
 
 const many = buildReceivablesAlertEmail({
   asOf: '2026-10-09',
@@ -159,12 +192,18 @@ assert.match(fn, /sendResendEmail/);
 assert.match(fn, /service_role/);
 assert.match(fn, /RECEIVABLES_ALERT_TO/);
 assert.match(fn, /selectAlertRecipients\(Deno\.env\.get\("RECEIVABLES_ALERT_TO"\)\)/);
-assert.equal(DEFAULT_RECEIVABLES_ALERT_RECIPIENTS.length, 4);
+assert.equal(DEFAULT_RECEIVABLES_ALERT_RECIPIENTS.length, 5);
+assert.ok(DEFAULT_RECEIVABLES_ALERT_RECIPIENTS.includes('angel.kaffa@gmail.com'));
 assert.match(fn, /\.gt\("outstanding", 0\)/);
 assert.match(config, /\[functions\.receivables-alert\]/);
 assert.match(migration, /receivables-alert-daily/);
-assert.match(migration, /0 1 \* \* 1-5/);
+assert.match(migration, /0 1 \* \* 1/);
+assert.doesNotMatch(migration, /1-5/);
+assert.match(email.html, /每週一早上/);
 assert.match(migration, /functions\/v1\/receivables-alert/);
 assert.match(migration, /cron\.schedule/);
+const monday = read('supabase/migrations/20261009094741_receivables_alert_monday_only.sql');
+assert.match(monday, /0 1 \* \* 1/);
+assert.match(monday, /receivables-alert-daily/);
 
 console.log('receivables alert checks passed');

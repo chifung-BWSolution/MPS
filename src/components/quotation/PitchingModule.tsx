@@ -38,14 +38,16 @@ import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   pitchingStatusConfig,
+  PITCHING_EXPIRED_LABEL,
   PITCHING_LIST_STATUS_OPTIONS,
   PITCHING_STATUS_OPTIONS,
-  calcClientProjectProgress,
   calcRemainingDays,
+  clientProjectColumnProgress,
   clientProjectProgressConfig,
   formatPitchingRemainingDays,
   matchesPitchingDealFilter,
   matchesPitchingStatusFilter,
+  pitchingListCardCounts,
   pitchingRemainingDaysTone,
   pitchingRemainingDaysToneClass,
   type PitchingDealFilter,
@@ -371,8 +373,8 @@ export function RemainingDaysCell({
   signedDate?: string;
   handoverDate?: string;
 }) {
+  const progress = clientProjectColumnProgress(status, signedDate, handoverDate);
   if (status === 'confirmed') {
-    const progress = calcClientProjectProgress(signedDate, handoverDate);
     if (!progress) return <span className="text-muted-foreground">—</span>;
     const config = clientProjectProgressConfig[progress];
     return (
@@ -886,11 +888,10 @@ function PitchingList({
     [records],
   );
 
-  const filtered = useMemo(() => {
+  const listScoped = useMemo(() => {
     return withMoney.filter((p) => {
       if (!matchesProjectTypeFilter(p.projectTypeId, projectTypeFilter)) return false;
       if (!matchesPitchingStatusFilter(p.status, projectStatusFilter)) return false;
-      if (!matchesPitchingDealFilter(p.status, p.inquiryDate, dealFilter)) return false;
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         return (
@@ -904,36 +905,37 @@ function PitchingList({
       }
       return true;
     });
-  }, [withMoney, searchQuery, projectTypeFilter, projectStatusFilter, dealFilter]);
+  }, [withMoney, searchQuery, projectTypeFilter, projectStatusFilter]);
+  const filtered = useMemo(
+    () => listScoped.filter((p) => matchesPitchingDealFilter(p.status, p.inquiryDate, dealFilter)),
+    [listScoped, dealFilter],
+  );
   const { sorted, sortKey, sortDir, onSort } = useQuotationListSort(filtered, {
     sortKey: query.sort,
     sortDir: query.dir,
     onSortChange: (key, dir) => setQuery({ sort: key, dir }),
   });
 
-  const totalCount = filtered.length;
-  const activeCount = filtered.filter((p) => p.status === 'initial' || p.status === 'following_up' || p.status === 'confirmed').length;
-  const closedCount = filtered.filter((p) => p.status === 'closed').length;
-  const conversionRate = totalCount > 0 ? Math.round((closedCount / totalCount) * 100) : 0;
+  const cards = useMemo(() => pitchingListCardCounts(filtered, listScoped), [filtered, listScoped]);
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
           <span className="text-[13px] font-medium text-muted-foreground">Pitching 總數</span>
-          <span className="text-[22px] font-bold block mt-1">{totalCount}</span>
+          <span className="text-[22px] font-bold block mt-1">{cards.total}</span>
         </div>
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
-          <span className="text-[13px] font-medium text-muted-foreground">進行中</span>
-          <span className="text-[22px] font-bold block mt-1 text-amber-600">{activeCount}</span>
+          <span className="text-[13px] font-medium text-muted-foreground">{pitchingStatusConfig.initial.label}</span>
+          <span className={`text-[22px] font-bold block mt-1 ${pitchingStatusConfig.initial.color}`}>{cards.initial}</span>
         </div>
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
-          <span className="text-[13px] font-medium text-muted-foreground">已結案</span>
-          <span className="text-[22px] font-bold block mt-1 text-emerald-600">{closedCount}</span>
+          <span className="text-[13px] font-medium text-muted-foreground">{pitchingStatusConfig.following_up.label}</span>
+          <span className={`text-[22px] font-bold block mt-1 ${pitchingStatusConfig.following_up.color}`}>{cards.followingUp}</span>
         </div>
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
-          <span className="text-[13px] font-medium text-muted-foreground">結案率</span>
-          <span className="text-[22px] font-bold block mt-1 text-teal-600">{conversionRate}%</span>
+          <span className="text-[13px] font-medium text-muted-foreground">{PITCHING_EXPIRED_LABEL}</span>
+          <span className="text-[22px] font-bold block mt-1 text-slate-500">{cards.failed}</span>
         </div>
       </div>
 
@@ -1506,7 +1508,7 @@ export function PitchingModule() {
 
   const handleView = (record: PitchingRecord) => {
     if (openQuotationProjectDetail(record.id, record.status)) return;
-    if (record.status !== 'confirmed') openDetail(record.id);
+    if (quotationProjectSubModule(record.status) !== 'projects') openDetail(record.id);
   };
 
   const openCreateModal = () => {

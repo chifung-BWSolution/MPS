@@ -23,14 +23,17 @@ import {
 } from '@/components/quotation/PitchingModule';
 import {
   clientProjectProgressConfig,
+  projectListCardCounts,
   formatProjectTypes,
   formatMainPmName,
   formatRelatedClientName,
   matchesProjectTypeFilter,
   matchesClientProjectProgressFilter,
+  matchesProjectPageStatusFilter,
   isProjectPageRecord,
   type ClientProjectProgressFilter,
   type PitchingRecord,
+  type ProjectPageStatusFilter,
 } from '@/data/pitchingData';
 import {
   QuotationClientProjectTableHeaders,
@@ -53,6 +56,7 @@ function ProjectList({
   const { query, setQuery } = useQuotationListQuery('projects');
   const searchQuery = query.q;
   const projectTypeFilter = query.type;
+  const statusFilter = query.projectState;
   const progressFilter = query.progress;
   const { actuals, loading: actualsLoading, error: actualsError } = useQuotationProjectActuals();
 
@@ -70,6 +74,7 @@ function ProjectList({
   const filtered = useMemo(() => {
     return withMoney.filter((p) => {
       if (!matchesProjectTypeFilter(p.projectTypeId, projectTypeFilter)) return false;
+      if (!matchesProjectPageStatusFilter(p.status, statusFilter)) return false;
       if (!matchesClientProjectProgressFilter(p.signedDate, p.handoverDate, progressFilter)) return false;
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
@@ -84,35 +89,33 @@ function ProjectList({
       }
       return true;
     });
-  }, [withMoney, searchQuery, projectTypeFilter, progressFilter]);
+  }, [withMoney, searchQuery, projectTypeFilter, statusFilter, progressFilter]);
   const { sorted, sortKey, sortDir, onSort } = useQuotationListSort(filtered, {
     sortKey: query.sort,
     sortDir: query.dir,
     onSortChange: (key, dir) => setQuery({ sort: key, dir }),
   });
 
-  const totalCount = filtered.length;
-  const confirmedCount = filtered.filter((p) => p.status === 'confirmed').length;
-  const closedCount = filtered.filter((p) => p.status === 'closed').length;
+  const cards = useMemo(() => projectListCardCounts(filtered), [filtered]);
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
           <span className="text-[13px] font-medium text-muted-foreground">Project 總數</span>
-          <span className="text-[22px] font-bold block mt-1">{totalCount}</span>
+          <span className="text-[22px] font-bold block mt-1">{cards.total}</span>
         </div>
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
-          <span className="text-[13px] font-medium text-muted-foreground">確認項目</span>
-          <span className="text-[22px] font-bold block mt-1 text-teal-600">{confirmedCount}</span>
+          <span className="text-[13px] font-medium text-muted-foreground">{clientProjectProgressConfig.pending.label}</span>
+          <span className={`text-[22px] font-bold block mt-1 ${clientProjectProgressConfig.pending.color}`}>{cards.pending}</span>
         </div>
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
-          <span className="text-[13px] font-medium text-muted-foreground">已成交開工</span>
-          <span className="text-[22px] font-bold block mt-1 text-emerald-600">{confirmedCount}</span>
+          <span className="text-[13px] font-medium text-muted-foreground">{clientProjectProgressConfig.in_progress.label}</span>
+          <span className={`text-[22px] font-bold block mt-1 ${clientProjectProgressConfig.in_progress.color}`}>{cards.inProgress}</span>
         </div>
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5">
-          <span className="text-[13px] font-medium text-muted-foreground">已結案</span>
-          <span className="text-[22px] font-bold block mt-1 text-slate-600">{closedCount}</span>
+          <span className="text-[13px] font-medium text-muted-foreground">{clientProjectProgressConfig.completed.label}</span>
+          <span className={`text-[22px] font-bold block mt-1 ${clientProjectProgressConfig.completed.color}`}>{cards.completed}</span>
         </div>
       </div>
 
@@ -138,6 +141,16 @@ function ProjectList({
               {opt.label}
             </option>
           ))}
+        </select>
+        <select
+          value={statusFilter}
+          aria-label="項目狀態"
+          onChange={(e) => setQuery({ projectState: e.target.value as ProjectPageStatusFilter })}
+          className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
+        >
+          <option value="all">所有狀態</option>
+          <option value="confirmed">已確認</option>
+          <option value="closed">已結案</option>
         </select>
         <select
           value={progressFilter}
@@ -243,7 +256,7 @@ export function ProjectModule() {
 
   const handleView = (record: PitchingRecord) => {
     if (openQuotationProjectDetail(record.id, record.status)) return;
-    if (record.status === 'confirmed') openDetail(record.id);
+    if (isProjectPageRecord(record)) openDetail(record.id);
   };
 
   const openEditModal = (record: PitchingRecord) => {
@@ -334,7 +347,7 @@ export function ProjectModule() {
         <div>
           <h1 className="text-[22px] font-bold">Project</h1>
           <p className="text-[13px] text-muted-foreground mt-1">
-            顯示 Pitching 中狀態為「確認項目」的專案（與 Pitching 共用 quotation_client_project 資料表）。
+            顯示狀態為「已確認」或「已結案」的專案，預設只顯示已確認（與 Pitching 共用 quotation_client_project 資料表）。
           </p>
           {lastSyncedAt && (
             <p className="text-[11px] text-muted-foreground mt-1">

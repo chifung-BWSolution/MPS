@@ -4,6 +4,7 @@ import {
   calendarDaysBetween,
   calcClientProjectProgress,
   calcRemainingDays,
+  clientProjectColumnProgress,
   clientProjectProgressConfig,
   DEFAULT_PITCHING_DEAL_FILTER,
   DEFAULT_PITCHING_STATUS_FILTER,
@@ -13,9 +14,13 @@ import {
   isPitchingStatusFilter,
   pitchingRemainingDaysTone,
   localTodayIso,
+  isProjectPageRecord,
   matchesClientProjectProgressFilter,
   matchesPitchingDealFilter,
+  matchesProjectPageStatusFilter,
   matchesPitchingStatusFilter,
+  pitchingListCardCounts,
+  projectListCardCounts,
   PITCHING_LIST_STATUS_OPTIONS,
   PITCHING_EXPIRED_LABEL,
 } from '../src/data/pitchingData';
@@ -106,6 +111,16 @@ assert.equal(matchesPitchingDealFilter('initial', '2026-07-11', 'show_failed', '
 assert.equal(matchesPitchingDealFilter('closed', '2026-07-11', 'show_failed', '2026-08-25'), true);
 assert.equal(matchesPitchingDealFilter('following_up', '2026-07-11', 'show_failed', '2026-08-25'), false);
 assert.equal(matchesPitchingDealFilter('initial', '2026-08-25', 'show_failed', '2026-08-25'), false);
+assert.equal(isProjectPageRecord({ status: 'confirmed' }), true);
+assert.equal(isProjectPageRecord({ status: 'closed' }), true);
+assert.equal(isProjectPageRecord({ status: 'initial' }), false);
+assert.equal(matchesProjectPageStatusFilter('confirmed', 'confirmed'), true);
+assert.equal(matchesProjectPageStatusFilter('closed', 'confirmed'), false);
+assert.equal(matchesProjectPageStatusFilter('closed', 'closed'), true);
+assert.equal(matchesProjectPageStatusFilter('confirmed', 'all'), true);
+assert.equal(matchesProjectPageStatusFilter('closed', 'all'), true);
+assert.equal(matchesProjectPageStatusFilter('initial', 'all'), false);
+assert.equal(matchesProjectPageStatusFilter('following_up', 'confirmed'), false);
 assert.equal(matchesClientProjectProgressFilter('2026-09-10', '2026-09-20', 'all', '2026-09-09'), true);
 assert.equal(matchesClientProjectProgressFilter('2026-09-10', '2026-09-20', 'pending', '2026-09-09'), true);
 assert.equal(matchesClientProjectProgressFilter('2026-09-10', '2026-09-20', 'in_progress', '2026-09-15'), true);
@@ -138,6 +153,13 @@ assert.match(pitching, /PITCHING_LIST_STATUS_OPTIONS/);
 assert.match(pitching, /全部項目狀態/);
 assert.match(pitching, /隱藏未能成交/);
 assert.match(pitching, /顯示未能成交/);
+assert.match(pitching, /pitchingListCardCounts/);
+assert.match(pitching, /clientProjectColumnProgress/);
+assert.match(pitching, /pitchingStatusConfig\.initial\.label/);
+assert.match(pitching, /pitchingStatusConfig\.following_up\.label/);
+assert.match(pitching, /PITCHING_EXPIRED_LABEL/);
+assert.match(pitching, /cards\.failed/);
+assert.doesNotMatch(pitching, /結案率/);
 assert.doesNotMatch(pitching, /逾期/);
 assert.doesNotMatch(pitching, /全部期限/);
 
@@ -146,8 +168,20 @@ const projects = readFileSync(
   'utf8',
 );
 assert.match(projects, /matchesClientProjectProgressFilter/);
+assert.match(projects, /matchesProjectPageStatusFilter/);
+assert.match(projects, /所有狀態/);
+assert.match(projects, /已確認/);
+assert.match(projects, /已結案/);
 assert.match(projects, /全部工程進度/);
 assert.match(projects, /clientProjectProgressConfig\.pending\.label/);
+assert.match(projects, /projectListCardCounts/);
+assert.match(projects, /clientProjectProgressConfig\.in_progress\.label/);
+assert.match(projects, /clientProjectProgressConfig\.completed\.label/);
+assert.match(projects, /cards\.pending/);
+assert.match(projects, /cards\.inProgress/);
+assert.match(projects, /cards\.completed/);
+assert.doesNotMatch(projects, /已成交開工/);
+assert.doesNotMatch(projects, /確認項目/);
 assert.doesNotMatch(projects, /PitchingDealFilterSelect/);
 assert.doesNotMatch(projects, /全部狀態/);
 assert.doesNotMatch(projects, /全部期限/);
@@ -163,5 +197,61 @@ assert.match(closeExpired, /UPDATE public\.quotation_client_project/);
 assert.match(closeExpired, /status = 'closed'/);
 assert.match(closeExpired, /status = 'initial'/);
 assert.match(closeExpired, /inquiry_date <= \(\(timezone\('Asia\/Hong_Kong', now\(\)\)\)::date - 45\)/);
+
+const asOf = '2026-08-25';
+const pitchingRows = [
+  { status: 'initial' as const, inquiryDate: '2026-08-25' },
+  { status: 'initial' as const, inquiryDate: '2026-07-11' },
+  { status: 'following_up' as const, inquiryDate: '2026-07-11' },
+  { status: 'closed' as const, inquiryDate: '2026-07-11' },
+  { status: 'closed' as const, inquiryDate: '2026-08-25' },
+  { status: 'confirmed' as const, inquiryDate: '2026-08-25' },
+];
+const hideFailed = pitchingRows.filter((row) =>
+  matchesPitchingDealFilter(row.status, row.inquiryDate, 'hide_failed', asOf),
+);
+assert.deepEqual(pitchingListCardCounts(hideFailed, pitchingRows, asOf), {
+  total: 3,
+  initial: 1,
+  followingUp: 1,
+  failed: 2,
+});
+const showFailed = pitchingRows.filter((row) =>
+  matchesPitchingDealFilter(row.status, row.inquiryDate, 'show_failed', asOf),
+);
+assert.deepEqual(pitchingListCardCounts(showFailed, pitchingRows, asOf), {
+  total: 2,
+  initial: 1,
+  followingUp: 0,
+  failed: 2,
+});
+const followingOnly = pitchingRows.filter((row) => row.status === 'following_up');
+assert.deepEqual(pitchingListCardCounts(followingOnly, followingOnly, asOf), {
+  total: 1,
+  initial: 0,
+  followingUp: 1,
+  failed: 0,
+});
+
+assert.equal(clientProjectColumnProgress('closed', '2026-09-10', '2026-09-20', '2026-09-15'), null);
+assert.equal(clientProjectColumnProgress('initial', '2026-09-10', '2026-09-20', '2026-09-15'), null);
+assert.equal(
+  clientProjectColumnProgress('confirmed', '2026-09-10', '2026-09-20', '2026-09-15'),
+  calcClientProjectProgress('2026-09-10', '2026-09-20', '2026-09-15'),
+);
+assert.equal(clientProjectColumnProgress('confirmed', undefined, '2026-09-20', '2026-09-15'), null);
+assert.deepEqual(
+  projectListCardCounts(
+    [
+      { status: 'confirmed', signedDate: '2026-09-20', handoverDate: '2026-09-30' },
+      { status: 'confirmed', signedDate: '2026-09-10', handoverDate: '2026-09-20' },
+      { status: 'confirmed', signedDate: '2026-09-01', handoverDate: '2026-09-10' },
+      { status: 'closed', signedDate: '2026-09-10', handoverDate: '2026-09-20' },
+      { status: 'confirmed', signedDate: undefined, handoverDate: '2026-09-20' },
+    ],
+    '2026-09-15',
+  ),
+  { total: 5, pending: 1, inProgress: 1, completed: 1 },
+);
 
 console.log('pitching remaining days: ok');

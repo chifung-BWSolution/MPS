@@ -55,6 +55,7 @@ import {
   splitBilledAmounts,
   spreadDueDates,
   summarizeExpenses,
+  bulkSettleExpensePlan,
   validateBulkExpenseInput,
   validateExpenseInput,
 } from '../src/lib/quotationExpenses.ts';
@@ -169,6 +170,31 @@ assert.equal(validateBulkExpenseInput({
     { dueDate: '2026-02-01', installmentNumber: '2', billedAmount: '100' },
   ],
 }), null);
+assert.deepEqual(
+  bulkSettleExpensePlan(
+    [{ id: 'a', billedAmount: 800, dueDate: '2026-04-01', installmentNumber: 1 }],
+    { paymentMethod: 'Transfer', paymentStatus: 'Paid', creditCardId: 'card-1' },
+  ),
+  {
+    items: [{
+      id: 'a',
+      payment: {
+        paymentAmount: 800,
+        paymentDate: '2026-04-01',
+        paymentMethod: 'Transfer',
+        paymentStatus: 'Paid',
+        creditCardId: null,
+      },
+    }],
+  },
+);
+assert.equal(
+  bulkSettleExpensePlan(
+    [{ id: 'a', billedAmount: 800, dueDate: '2026-04-01', installmentNumber: 1 }],
+    { paymentMethod: 'Credit Card', paymentStatus: 'Paid', creditCardId: '' },
+  ).error,
+  '請選擇信用卡',
+);
 assert.equal(validateBulkExpenseInput({
   supplierTypesId: '',
   supplierId: 's1',
@@ -666,6 +692,10 @@ assert.match(tab, /rounded-full text-\[10px\][\s\S]*週期/);
 assert.doesNotMatch(tab, /單次 \/ 週期/);
 assert.doesNotMatch(tab, /應收合計/);
 assert.doesNotMatch(tab, /完成收款/);
+assert.match(tab, /批量完成付款/);
+assert.match(tab, /BulkSettlePaymentDialog/);
+assert.match(tab, /settleSelectedExpenses/);
+assert.match(tab, /全選支出/);
 assert.match(tab, /CurrencyPicker/);
 assert.match(tab, /amountsToHkd/);
 assert.match(tab, /draft\.currency/);

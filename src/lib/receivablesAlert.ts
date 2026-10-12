@@ -2,6 +2,8 @@ import { CANONICAL_SITE_URL } from './siteUrl.ts';
 
 /** Lines kept in one email so Gmail does not clip the message. */
 export const RECEIVABLES_ALERT_MAX_LINES = 40;
+/** Include overdue rows and rows due within this many days. Later due dates stay off the email. */
+export const RECEIVABLES_ALERT_DUE_WITHIN_DAYS = 30;
 /** Resend allows at most 50 recipients on a single send. */
 export const RECEIVABLES_ALERT_RECIPIENT_BATCH = 50;
 
@@ -11,6 +13,7 @@ export const DEFAULT_RECEIVABLES_ALERT_RECIPIENTS = [
   'brandingworks.ebiz@gmail.com',
   'franco.kaffa@gmail.com',
   'brandingworks.finance@gmail.com',
+  'angel.kaffa@gmail.com',
 ] as const;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -185,6 +188,29 @@ export function receivablesAlertIdempotencyKey(asOf: string, batchIndex: number)
   return `receivables-alert/${asOf}/batch-${batchIndex}`.slice(0, 256);
 }
 
+/** Overdue, due today, or due within the next 30 days. Rows with no due date are left out. */
+export function isReceivablesAlertLine(
+  line: Pick<ReceivableAlertLine, 'outstanding' | 'dueDate'>,
+  asOf: string,
+  withinDays = RECEIVABLES_ALERT_DUE_WITHIN_DAYS,
+): boolean {
+  if (!(Number.isFinite(line.outstanding) && line.outstanding > 0)) return false;
+  const days = daysUntilDue(line.dueDate, asOf);
+  return days != null && days <= withinDays;
+}
+
+export function filterReceivableProjects(
+  projects: ReceivableAlertProject[],
+  asOf: string,
+): ReceivableAlertProject[] {
+  return projects
+    .map((project) => ({
+      ...project,
+      lines: project.lines.filter((line) => isReceivablesAlertLine(line, asOf)),
+    }))
+    .filter((project) => project.lines.length > 0);
+}
+
 export function summarizeReceivableProjects(
   projects: ReceivableAlertProject[],
   asOf: string,
@@ -246,12 +272,12 @@ export function buildReceivablesAlertEmail(input: {
 }): ReceivablesAlertEmail {
   const asOf = input.asOf;
   const siteOrigin = normalizeOrigin(input.siteOrigin || CANONICAL_SITE_URL);
-  const sorted = sortReceivableProjects(input.projects, asOf).filter((project) => project.lines.length > 0);
+  const sorted = sortReceivableProjects(filterReceivableProjects(input.projects, asOf), asOf);
   const summary = summarizeReceivableProjects(sorted, asOf);
   const { visible, omittedLineCount } = selectVisibleProjects(sorted, RECEIVABLES_ALERT_MAX_LINES);
   const pageHref = receivablesPageHref(siteOrigin);
   const subject = summary.count === 0
-    ? `應收未收日報 ${formatAlertDate(asOf)} — 目前沒有未收款項`
+    ? `應收未收日報 ${formatAlertDate(asOf)} — 目前沒有逾期或 30 日內到期的未收款項`
     : `應收未收日報 ${formatAlertDate(asOf)} — 未收 ${summary.count} 筆（逾期 ${summary.overdue}）`;
 
   return {
@@ -272,15 +298,15 @@ function renderHtml(input: {
   omittedLineCount: number;
 }): string {
   const preview = input.summary.count === 0
-    ? `應收未收日報 ${formatAlertDate(input.asOf)}：目前沒有未收款項。`
-    : `應收未收日報：未收 ${input.summary.count} 筆，逾期 ${input.summary.overdue} 筆，未收合計 ${formatAlertMoney(input.summary.outstanding)}。`;
+    ? `應收未收日報 ${formatAlertDate(input.asOf)}：目前沒有逾期或 30 日內到期的未收款項。`
+    : `應收未收日報：逾期或 30 日內到期 ${input.summary.count} 筆，其中逾期 ${input.summary.overdue} 筆，未收合計 ${formatAlertMoney(input.summary.outstanding)}。`;
 
   const projects = input.visible.length === 0
-    ? `<p style="margin:0;color:#0d1a2d;">目前沒有未收金額大於 0 的收入紀錄。</p>`
+    ? `<p style="margin:0;color:#0d1a2d;">目前沒有已逾期或 30 日內到期的未收款項。</p>`
     : input.visible.map((project) => renderProjectHtml(project, input.asOf, input.siteOrigin)).join('');
 
   const omitted = input.omittedLineCount > 0
-    ? `<p style="margin:20px 0 0;color:#4b5b70;">另有 ${input.omittedLineCount} 筆未收未列在這封郵件。請開啟應收未收頁面查看全部。</p>`
+    ? `<p style="margin:20px 0 0;color:#4b5b70;">另有 ${input.omittedLineCount} 筆逾期或 30 日內到期的未收未列在這封郵件。請開啟應收未收頁面查看。</p>`
     : '';
 
   return `<!DOCTYPE html>
@@ -304,7 +330,7 @@ function renderHtml(input: {
           </tr>
           <tr>
             <td style="padding:20px 24px 8px;">
-              <p style="margin:0 0 8px;font-size:14px;line-height:1.6;color:#4b5b70;">基準日 ${escapeHtml(formatAlertDate(input.asOf))}（香港時間）。內容與系統「應收未收」相同：列出未收金額大於 0 的收入（應收 − 實收 − 壞帳）。</p>
+              <p style="margin:0 0 8px;font-size:14px;line-height:1.6;color:#4b5b70;">基準日 ${escapeHtml(formatAlertDate(input.asOf))}（香港時間）。只列出已逾期，以及未來 30 日內到期、且未收金額大於 0 的收入。更遠的到期日不會出現在這封郵件。</p>
               ${summaryTable(input.summary)}
               <p style="margin:16px 0 0;">${actionButton(input.pageHref, '開啟應收未收頁面', '#0d1a2d')}</p>
             </td>
@@ -317,7 +343,7 @@ function renderHtml(input: {
           </tr>
           <tr>
             <td style="padding:16px 24px 24px;border-top:1px solid #d7dee8;">
-              <p style="margin:0;font-size:12px;line-height:1.6;color:#4b5b70;">此郵件由 MPS 每個工作日早上自動發送給系統用戶，方便跟進未收款項。WhatsApp 與電郵按鈕會帶上該項目的未收明細，方便直接聯絡客戶。「開啟項目」會進入客戶項目詳情。</p>
+              <p style="margin:0;font-size:12px;line-height:1.6;color:#4b5b70;">此郵件由 MPS 每週一早上自動發送給系統用戶，方便跟進未收款項。WhatsApp 與電郵按鈕會帶上該項目的未收明細，方便直接聯絡客戶。「開啟項目」會進入客戶項目詳情。</p>
             </td>
           </tr>
         </table>
@@ -433,6 +459,7 @@ function renderText(input: {
     'MPS 財務 — 應收未收日報',
     '',
     `基準日 ${formatAlertDate(input.asOf)}（香港時間）`,
+    '範圍：已逾期，以及未來 30 日內到期的未收款項。',
     `未收筆數：${input.summary.count}`,
     `逾期筆數：${input.summary.overdue}`,
     `應收合計：${formatAlertMoney(input.summary.billed)}`,
@@ -444,7 +471,7 @@ function renderText(input: {
   ];
 
   if (input.visible.length === 0) {
-    lines.push('目前沒有未收金額大於 0 的收入紀錄。');
+    lines.push('目前沒有已逾期或 30 日內到期的未收款項。');
   }
 
   input.visible.forEach((project, index) => {
@@ -479,10 +506,10 @@ function renderText(input: {
   });
 
   if (input.omittedLineCount > 0) {
-    lines.push(`另有 ${input.omittedLineCount} 筆未收未列在這封郵件。請開啟應收未收頁面查看全部。`, '');
+    lines.push(`另有 ${input.omittedLineCount} 筆逾期或 30 日內到期的未收未列在這封郵件。請開啟應收未收頁面查看。`, '');
   }
 
-  lines.push('此郵件由 MPS 每個工作日早上自動發送給系統用戶。');
+  lines.push('此郵件由 MPS 每週一早上自動發送給系統用戶。');
   return lines.join('\n');
 }
 

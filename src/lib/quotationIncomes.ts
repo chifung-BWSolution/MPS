@@ -141,7 +141,6 @@ export function nextInstallmentNumber(
 }
 
 export const DEFAULT_BULK_INSTALLMENT_COUNT = 2;
-export const MAX_BULK_INSTALLMENT_COUNT = 24;
 
 export const BULK_DATE_MODES = ['even', 'weekly', 'monthly', 'quarterly', 'yearly'] as const;
 export type BulkDateMode = (typeof BULK_DATE_MODES)[number];
@@ -358,6 +357,51 @@ export function findInstallmentCollision(
   return null;
 }
 
+export function paymentRecordPathStillUsed(
+  path: string | null | undefined,
+  rows: Array<{ id?: string; paymentRecordStoragePath?: string | null }>,
+  exceptIds?: Iterable<string>,
+): boolean {
+  const trimmed = path?.trim();
+  if (!trimmed) return false;
+  const skip = new Set(exceptIds ?? []);
+  return rows.some((row) => {
+    if (row.id && skip.has(row.id)) return false;
+    return row.paymentRecordStoragePath === trimmed;
+  });
+}
+
+export type BulkSettleIncomePayment = {
+  paymentAmount: number;
+  paymentDate: string;
+  paymentMethod: IncomePaymentMethod;
+  paymentStatus: IncomePaymentStatus;
+};
+
+export function bulkSettleIncomePlan(
+  rows: Array<Pick<QuotationIncome, 'id' | 'billedAmount' | 'dueDate' | 'installmentNumber'>>,
+  settlement: { paymentMethod: IncomePaymentMethod; paymentStatus: IncomePaymentStatus },
+): { items: Array<{ id: string; payment: BulkSettleIncomePayment }> } | { error: string } {
+  const missing = rows.filter((row) => !optionalIsoDate(row.dueDate));
+  if (missing.length > 0) {
+    const labels = missing.map((row) => (
+      row.installmentNumber != null ? `第 ${row.installmentNumber} 期` : '未填期數'
+    ));
+    return { error: `以下資料缺少到期日，無法以到期日作為收款日期：${labels.join('、')}` };
+  }
+  return {
+    items: rows.map((row) => ({
+      id: row.id,
+      payment: {
+        paymentAmount: row.billedAmount,
+        paymentDate: optionalIsoDate(row.dueDate) ?? '',
+        paymentMethod: settlement.paymentMethod,
+        paymentStatus: settlement.paymentStatus,
+      },
+    })),
+  };
+}
+
 export function incomeToWriteInput(
   row: QuotationIncome,
   overrides: Partial<QuotationIncomeInput> = {},
@@ -444,7 +488,6 @@ export function validateBulkIncomeInput(input: {
   }
   const count = parseInstallmentNumber(input.installmentCount);
   if (count == null) return '請填寫期數數量';
-  if (count > MAX_BULK_INSTALLMENT_COUNT) return `期數數量不可超過 ${MAX_BULK_INSTALLMENT_COUNT}`;
   if (input.rows.length !== count) return '期數列表與期數數量不一致';
   const seen = new Set<number>();
   for (let i = 0; i < input.rows.length; i += 1) {

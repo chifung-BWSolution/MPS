@@ -2,11 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { resolveRelatedProjectHubIds } from '@/lib/resolveProjectHub';
 import {
+  bulkSettleExpensePlan,
   CREATE_RECURRING_EXPENSE_RPC,
   EXPENSES_TABLE,
   EXPENSE_PAYMENT_RECORDS_BUCKET,
   EXPENSE_RELATED_TYPE_PROJECT,
   RECURRING_EXPENSES_TABLE,
+  type ExpensePaymentMethod,
+  type ExpensePaymentStatus,
   type ExpenseSourceRelatedType,
   expenseCreditCardId,
   expenseGroupKey,
@@ -22,6 +25,7 @@ import {
   nextRecurringDueDate,
   optionalIsoDate,
   paidRecurringExpenseFields,
+  paymentRecordPathStillUsed,
   type PaymentRecordFileAction,
   type QuotationExpense,
   type QuotationExpenseInput,
@@ -569,7 +573,11 @@ export function useQuotationExpenses(
       return { data: null, error: { message: err.message } };
     }
 
-    if (fileAction !== 'keep' && current?.paymentRecordStoragePath) {
+    if (
+      fileAction !== 'keep'
+      && current?.paymentRecordStoragePath
+      && !paymentRecordPathStillUsed(current.paymentRecordStoragePath, rows, [id])
+    ) {
       await removeStorageObject(current.paymentRecordStoragePath);
     }
 
@@ -582,7 +590,9 @@ export function useQuotationExpenses(
     const current = rows.find((row) => row.id === id);
     const { error: err } = await supabase.from(EXPENSES_TABLE).delete().eq('id', id);
     if (err) return { error: { message: err.message } };
-    await removeStorageObject(current?.paymentRecordStoragePath);
+    if (!paymentRecordPathStillUsed(current?.paymentRecordStoragePath, rows, [id])) {
+      await removeStorageObject(current?.paymentRecordStoragePath);
+    }
     setRows((prev) => prev.filter((row) => row.id !== id));
     return { error: null };
   }, [rows]);
@@ -625,7 +635,11 @@ export function useQuotationExpenses(
       const removing = rows.filter((row) => deleteIds.includes(row.id));
       const { error: err } = await supabase.from(EXPENSES_TABLE).delete().in('id', deleteIds);
       if (err) return { data: null, error: { message: err.message } };
-      await Promise.all(removing.map((row) => removeStorageObject(row.paymentRecordStoragePath)));
+      await Promise.all(removing.map((row) => (
+        paymentRecordPathStillUsed(row.paymentRecordStoragePath, rows, deleteIds)
+          ? Promise.resolve()
+          : removeStorageObject(row.paymentRecordStoragePath)
+      )));
     }
 
     const deleted = new Set(deleteIds);
@@ -636,6 +650,104 @@ export function useQuotationExpenses(
     ].sort(compareExpenses));
 
     return { data: [...updated, ...created], error: null };
+  }, [projectId, rows]);
+
+  const settleSelectedExpenses = useCallback(async (input: {
+    ids: string[];
+    paymentMethod: ExpensePaymentMethod;
+    paymentStatus: ExpensePaymentStatus;
+    creditCardId?: string | null;
+    file?: File | null;
+  }) => {
+    if (!projectId) return { data: null as QuotationExpense[] | null, error: { message: '缺少項目' } };
+    const uniqueIds = [...new Set(input.ids)];
+    const selected = uniqueIds.flatMap((id) => {
+      const row = rows.find((item) => item.id === id);
+      return row ? [row] : [];
+    });
+    if (selected.length === 0) return { data: null, error: { message: '請先選擇支出' } };
+    if (selected.length !== uniqueIds.length) {
+      return { data: null, error: { message: '部分已選資料已不存在，請重新選擇' } };
+    }
+    if (!isExpensePaymentMethod(input.paymentMethod)) return { data: null, error: { message: '請選擇付款方式' } };
+    if (!isExpensePaymentStatus(input.paymentStatus)) return { data: null, error: { message: '請選擇付款狀態' } };
+
+    const plan = bulkSettleExpensePlan(selected, {
+      paymentMethod: input.paymentMethod,
+      paymentStatus: input.paymentStatus,
+      creditCardId: input.creditCardId,
+    });
+    if ('error' in plan) return { data: null, error: { message: plan.error } };
+
+    let uploaded: { path: string; url: string } | null = null;
+    if (input.file) {
+      const result = await uploadExpensePaymentRecordFile(projectId, input.file);
+      if (result.error || !result.data) {
+        return { data: null, error: result.error ?? { message: '上傳失敗' } };
+      }
+      uploaded = result.data;
+    }
+
+    const updated: QuotationExpense[] = [];
+    const applyUpdated = (next: QuotationExpense[]) => {
+      const byId = new Map(next.map((row) => [row.id, row]));
+      setRows((prev) => prev.map((row) => byId.get(row.id) ?? row).sort(compareExpenses));
+    };
+    const releaseUnusedRecords = async (doneIds: string[]) => {
+      if (!uploaded) return;
+      const done = new Set(doneIds);
+      const oldPaths = new Set(
+        selected.flatMap((row) => (done.has(row.id) && row.paymentRecordStoragePath ? [row.paymentRecordStoragePath] : [])),
+      );
+      for (const path of oldPaths) {
+        if (path === uploaded.path) continue;
+        if (!paymentRecordPathStillUsed(path, rows, doneIds)) await removeStorageObject(path);
+      }
+    };
+
+    for (const item of plan.items) {
+      const patch: Record<string, unknown> = {
+        payment_amount: item.payment.paymentAmount,
+        payment_date: item.payment.paymentDate,
+        payment_method: item.payment.paymentMethod,
+        payment_status: item.payment.paymentStatus,
+        credit_card_id: item.payment.creditCardId,
+        updated_at: new Date().toISOString(),
+      };
+      if (uploaded && input.file) {
+        patch.payment_record_file_name = input.file.name;
+        patch.payment_record_file_url = uploaded.url;
+        patch.payment_record_storage_path = uploaded.path;
+        patch.payment_record_file_size = input.file.size;
+        patch.payment_record_mime_type = input.file.type || null;
+      }
+      const { data, error: err } = await selectExpenseRow((columns) =>
+        supabase
+          .from(EXPENSES_TABLE)
+          .update(patch)
+          .eq('id', item.id)
+          .select(columns)
+          .single(),
+      );
+      if (err) {
+        if (updated.length === 0 && uploaded) await removeStorageObject(uploaded.path);
+        if (updated.length > 0) {
+          applyUpdated(updated);
+          await releaseUnusedRecords(updated.map((row) => row.id));
+        }
+        return {
+          data: updated.length > 0 ? updated : null,
+          error: {
+            message: updated.length > 0 ? `已完成 ${updated.length} 筆，其餘失敗：${err.message}` : err.message,
+          },
+        };
+      }
+      updated.push(mapRow(data as DbRow));
+    }
+
+    applyUpdated(updated);
+    await releaseUnusedRecords(updated.map((row) => row.id));
+    return { data: updated, error: null };
   }, [projectId, rows]);
 
   const setRecurringExpenseStatus = useCallback(async (
@@ -736,6 +848,7 @@ export function useQuotationExpenses(
     updateExpense,
     deleteExpense,
     saveBulkExpenses,
+    settleSelectedExpenses,
     setRecurringExpenseStatus,
     saveGroupRecurring,
   };

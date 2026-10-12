@@ -2,7 +2,7 @@
 --
 -- Production job:
 --   jobname : receivables-alert-daily
---   schedule: 0 1 * * 1-5   -- 09:00 Asia/Hong_Kong, Monday–Friday
+--   schedule: 0 1 * * 1     -- 09:00 Asia/Hong_Kong, Monday only
 --   target  : /functions/v1/receivables-alert
 --   body    : {}
 --
@@ -53,7 +53,7 @@ BEGIN
 
   PERFORM cron.schedule(
     'receivables-alert-daily',
-    '0 1 * * 1-5',
+    '0 1 * * 1',
     new_cmd
   );
 END

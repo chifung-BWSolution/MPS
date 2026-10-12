@@ -133,11 +133,30 @@ export function matchesPitchingStatusFilter(
   return status === statusFilter;
 }
 
-/** Project page: same table as Pitching, filtered by status 確認項目. */
+/** Project pages list confirmed and closed rows from the same table as Pitching. */
 export function isProjectPageRecord(
   record: Pick<PitchingRecord, 'status'>,
 ): boolean {
-  return record.status === 'confirmed';
+  return record.status === 'confirmed' || record.status === 'closed';
+}
+
+/** Project list 項目狀態: 已確認 is the default. */
+export type ProjectPageStatusFilter = 'all' | 'confirmed' | 'closed';
+
+export const DEFAULT_PROJECT_PAGE_STATUS_FILTER: ProjectPageStatusFilter = 'confirmed';
+
+export function isProjectPageStatusFilter(value: string): value is ProjectPageStatusFilter {
+  return value === 'all' || value === 'confirmed' || value === 'closed';
+}
+
+/** 所有狀態 is confirmed or closed. Other values match that status only. */
+export function matchesProjectPageStatusFilter(
+  status: PitchingStatus,
+  statusFilter: ProjectPageStatusFilter,
+): boolean {
+  if (status !== 'confirmed' && status !== 'closed') return false;
+  if (statusFilter === 'all') return true;
+  return status === statusFilter;
 }
 
 /** Days from enquiry date until follow-up deadline (45-day window). */
@@ -265,6 +284,33 @@ export function matchesPitchingDealFilter(
   return true;
 }
 
+export type PitchingListCardCounts = {
+  total: number;
+  initial: number;
+  followingUp: number;
+  failed: number;
+};
+
+/**
+ * /pitching metric cards.
+ * `visible` is the current list (search, type, status, and the 未能成交 dropdown).
+ * `dealScope` is that list before the 未能成交 dropdown, so 未能成交項目 can apply 顯示未能成交.
+ */
+export function pitchingListCardCounts(
+  visible: ReadonlyArray<Pick<PitchingRecord, 'status'>>,
+  dealScope: ReadonlyArray<Pick<PitchingRecord, 'status' | 'inquiryDate'>>,
+  asOfDate?: string,
+): PitchingListCardCounts {
+  return {
+    total: visible.length,
+    initial: visible.filter((row) => row.status === 'initial').length,
+    followingUp: visible.filter((row) => row.status === 'following_up').length,
+    failed: dealScope.filter((row) =>
+      matchesPitchingDealFilter(row.status, row.inquiryDate, 'show_failed', asOfDate),
+    ).length,
+  };
+}
+
 /** Confirmed-project timeline vs 簽約日期 / 交付日期. */
 export type ClientProjectProgress = 'pending' | 'in_progress' | 'completed';
 
@@ -296,6 +342,47 @@ export function calcClientProjectProgress(
   if (today < start) return 'pending';
   if (today > handover) return 'completed';
   return 'in_progress';
+}
+
+/**
+ * 項目進度 column on /projects.
+ * Only confirmed rows use 簽約日期 / 交付日期. Other statuses are not a progress bucket.
+ */
+export function clientProjectColumnProgress(
+  status: PitchingStatus,
+  startDate: string | undefined,
+  handoverDate: string | undefined,
+  asOfDate?: string,
+): ClientProjectProgress | null {
+  if (status !== 'confirmed') return null;
+  return calcClientProjectProgress(startDate, handoverDate, asOfDate);
+}
+
+export type ProjectListCardCounts = {
+  total: number;
+  pending: number;
+  inProgress: number;
+  completed: number;
+};
+
+/** /projects metric cards, counted from the current list with 項目進度 column logic. */
+export function projectListCardCounts(
+  visible: ReadonlyArray<Pick<PitchingRecord, 'status' | 'signedDate' | 'handoverDate'>>,
+  asOfDate?: string,
+): ProjectListCardCounts {
+  const counts: ProjectListCardCounts = {
+    total: visible.length,
+    pending: 0,
+    inProgress: 0,
+    completed: 0,
+  };
+  for (const row of visible) {
+    const progress = clientProjectColumnProgress(row.status, row.signedDate, row.handoverDate, asOfDate);
+    if (progress === 'pending') counts.pending += 1;
+    else if (progress === 'in_progress') counts.inProgress += 1;
+    else if (progress === 'completed') counts.completed += 1;
+  }
+  return counts;
 }
 
 export type ClientProjectProgressFilter = 'all' | ClientProjectProgress;

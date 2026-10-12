@@ -21,6 +21,8 @@ import {
   summarizeIncomes,
   validateIncomeInput,
   validateBulkIncomeInput,
+  bulkSettleIncomePlan,
+  paymentRecordPathStillUsed,
   BULK_BILLED_TOTAL_MISMATCH,
   billedSumMatchesTotal,
   BULK_DATE_MODE_LABELS,
@@ -224,6 +226,44 @@ assert.equal(validateBulkIncomeInput({
   installmentCount: '1',
   rows: [{ dueDate: '2026-01-01', installmentNumber: '1', billedAmount: '' }],
 }), '第 1 期請填寫應收金額');
+assert.deepEqual(
+  bulkSettleIncomePlan(
+    [{ id: 'a', billedAmount: 1000, dueDate: '2026-03-01', installmentNumber: 2 }],
+    { paymentMethod: 'Transfer', paymentStatus: 'Received' },
+  ),
+  {
+    items: [{
+      id: 'a',
+      payment: {
+        paymentAmount: 1000,
+        paymentDate: '2026-03-01',
+        paymentMethod: 'Transfer',
+        paymentStatus: 'Received',
+      },
+    }],
+  },
+);
+assert.equal(
+  'error' in bulkSettleIncomePlan(
+    [{ id: 'b', billedAmount: 100, dueDate: '', installmentNumber: 3 }],
+    { paymentMethod: 'Transfer', paymentStatus: 'Received' },
+  ),
+  true,
+);
+assert.equal(
+  paymentRecordPathStillUsed('shared/file.pdf', [
+    { id: 'a', paymentRecordStoragePath: 'shared/file.pdf' },
+    { id: 'b', paymentRecordStoragePath: 'shared/file.pdf' },
+  ], ['a']),
+  true,
+);
+assert.equal(
+  paymentRecordPathStillUsed('shared/file.pdf', [
+    { id: 'a', paymentRecordStoragePath: 'shared/file.pdf' },
+    { id: 'b', paymentRecordStoragePath: 'other.pdf' },
+  ], ['a']),
+  false,
+);
 assert.equal(formatIncomeMoney(1200), '$1,200.00 HKD');
 assert.equal(formatIncomeDate('2026-09-04'), '2026/09/04');
 
@@ -410,6 +450,10 @@ assert.match(tab, /DEFAULT_INCOME_TYPE/);
 assert.match(tab, /nextInstallmentNumber\(rows, type\)/);
 assert.match(tab, /款項資訊/);
 assert.match(tab, /完成收款/);
+assert.match(tab, /批量完成收款/);
+assert.match(tab, /BulkSettlePaymentDialog/);
+assert.match(tab, /settleSelectedIncomes/);
+assert.match(tab, /全選收入/);
 assert.match(tab, /於完成收款時填寫/);
 assert.match(tab, /aria-label="收款日期"/);
 assert.match(tab, /groupIncomesByType/);

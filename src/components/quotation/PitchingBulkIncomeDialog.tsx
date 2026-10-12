@@ -11,7 +11,6 @@ import {
   DEFAULT_BULK_INSTALLMENT_COUNT,
   DEFAULT_INCOME_TYPE,
   INCOME_TYPE_PRESETS,
-  MAX_BULK_INSTALLMENT_COUNT,
   billedInputFromPercent,
   billedSumMatchesTotal,
   defaultBulkDateRange,
@@ -95,12 +94,10 @@ function rebuildRows(
   options?: { resetInstallments?: boolean },
 ): BulkDraft {
   const next = { ...draft, ...patch };
-  const parsedCount = parseInstallmentNumber(next.installmentCount);
-  if (parsedCount == null) {
+  const count = parseInstallmentNumber(next.installmentCount);
+  if (count == null) {
     return { ...next, rows: [] };
   }
-  const count = Math.min(parsedCount, MAX_BULK_INSTALLMENT_COUNT);
-  if (count !== parsedCount) next.installmentCount = String(count);
 
   if (next.dateMode === 'even') {
     const range = normalizeDateRange(next.startDate, next.endDate);
@@ -565,7 +562,6 @@ export function PitchingBulkIncomeDialog({
               <Input
                 type="number"
                 min="1"
-                max={MAX_BULK_INSTALLMENT_COUNT}
                 step="1"
                 value={draft.installmentCount}
                 onChange={(e) => patchHeader({ installmentCount: e.target.value })}

@@ -2,12 +2,15 @@ import {
   DEFAULT_CLIENT_PROJECT_PROGRESS_FILTER,
   DEFAULT_PITCHING_DEAL_FILTER,
   DEFAULT_PITCHING_STATUS_FILTER,
+  DEFAULT_PROJECT_PAGE_STATUS_FILTER,
   isClientProjectProgressFilter,
   isPitchingDealFilter,
   isPitchingStatusFilter,
+  isProjectPageStatusFilter,
   type ClientProjectProgressFilter,
   type PitchingDealFilter,
   type PitchingStatusFilter,
+  type ProjectPageStatusFilter,
 } from '../data/pitchingData';
 import {
   defaultQuotationListSortDir,
@@ -21,6 +24,7 @@ export const QUOTATION_LIST_QUERY_KEYS = [
   'type',
   'status',
   'projectStatus',
+  'projectState',
   'progress',
   'sort',
   'dir',
@@ -31,6 +35,7 @@ export type QuotationListQuery = {
   type: string;
   status: PitchingDealFilter;
   projectStatus: PitchingStatusFilter;
+  projectState: ProjectPageStatusFilter;
   progress: ClientProjectProgressFilter;
   sort: QuotationListSortKey;
   dir: QuotationListSortDir;
@@ -41,6 +46,7 @@ export const DEFAULT_QUOTATION_LIST_QUERY: QuotationListQuery = {
   type: 'all',
   status: DEFAULT_PITCHING_DEAL_FILTER,
   projectStatus: DEFAULT_PITCHING_STATUS_FILTER,
+  projectState: DEFAULT_PROJECT_PAGE_STATUS_FILTER,
   progress: DEFAULT_CLIENT_PROJECT_PROGRESS_FILTER,
   sort: 'inquiryDate',
   dir: 'desc',
@@ -64,6 +70,10 @@ export function parseQuotationListQuery(params: URLSearchParams): QuotationListQ
   const projectStatus = isPitchingStatusFilter(projectStatusRaw)
     ? projectStatusRaw
     : DEFAULT_QUOTATION_LIST_QUERY.projectStatus;
+  const projectStateRaw = params.get('projectState')?.trim() || '';
+  const projectState = isProjectPageStatusFilter(projectStateRaw)
+    ? projectStateRaw
+    : DEFAULT_QUOTATION_LIST_QUERY.projectState;
   const progressRaw = params.get('progress')?.trim() || '';
   const progress = isClientProjectProgressFilter(progressRaw)
     ? progressRaw
@@ -72,7 +82,7 @@ export function parseQuotationListQuery(params: URLSearchParams): QuotationListQ
   const sort = isSortKey(sortRaw) ? sortRaw : DEFAULT_QUOTATION_LIST_QUERY.sort;
   const dirRaw = params.get('dir')?.trim() || '';
   const dir = isSortDir(dirRaw) ? dirRaw : defaultQuotationListSortDir(sort);
-  return { q, type, status, projectStatus, progress, sort, dir };
+  return { q, type, status, projectStatus, projectState, progress, sort, dir };
 }
 
 export function writeQuotationListQueryParams(
@@ -90,6 +100,9 @@ export function writeQuotationListQueryParams(
   }
   if (query.projectStatus && query.projectStatus !== DEFAULT_QUOTATION_LIST_QUERY.projectStatus) {
     params.set('projectStatus', query.projectStatus);
+  }
+  if (query.projectState && query.projectState !== DEFAULT_QUOTATION_LIST_QUERY.projectState) {
+    params.set('projectState', query.projectState);
   }
   if (query.progress && query.progress !== DEFAULT_QUOTATION_LIST_QUERY.progress) {
     params.set('progress', query.progress);
@@ -125,6 +138,7 @@ export function quotationListQueryEqual(a: QuotationListQuery, b: QuotationListQ
     a.type === b.type &&
     a.status === b.status &&
     a.projectStatus === b.projectStatus &&
+    a.projectState === b.projectState &&
     a.progress === b.progress &&
     a.sort === b.sort &&
     a.dir === b.dir

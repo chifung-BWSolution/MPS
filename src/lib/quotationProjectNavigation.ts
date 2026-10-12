@@ -24,7 +24,7 @@ export type InvoiceReceiptDocKind = 'invoice' | 'receipt';
 export type QuotationClientPage = 'pitching' | 'projects';
 
 export function quotationProjectSubModule(status: string | undefined): QuotationClientPage {
-  return status === 'confirmed' ? 'projects' : 'pitching';
+  return status === 'confirmed' || status === 'closed' ? 'projects' : 'pitching';
 }
 
 function hashPathAndQuery(hash: string): { path: string; params: URLSearchParams } {

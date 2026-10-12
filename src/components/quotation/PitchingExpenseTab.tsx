@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Banknote, ExternalLink, FileSpreadsheet, Paperclip, Pause, Pencil, Plus, Repeat, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -27,6 +27,8 @@ import {
   groupExpensesByType,
   hasFilledPaymentAmount,
   isCreditCardPaymentMethod,
+  isExpensePaymentMethod,
+  isExpensePaymentStatus,
   isRecurringExpenseFrequency,
   nextExpenseInstallmentNumber,
   optionalExpensePaymentMethod,
@@ -45,7 +47,9 @@ import {
   type RecurringExpenseFrequency,
   type RecurringExpenseSummary,
 } from '@/lib/quotationExpenses';
+import { PitchingAdsMonthlyExpenses } from '@/components/quotation/PitchingAdsMonthlyExpenses';
 import { PitchingBulkExpenseDialog } from '@/components/quotation/PitchingBulkExpenseDialog';
+import { BulkSettlePaymentDialog, SelectionCheckbox } from '@/components/quotation/BulkSettlePaymentDialog';
 import { ShopifyBillingImportDialog } from '@/components/quotation/ShopifyBillingImportDialog';
 import { isShopifyWebsitePlatform } from '@/lib/shopifyBillingCsv';
 import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
@@ -196,6 +200,7 @@ export function PitchingExpenseTab({
     updateExpense,
     deleteExpense,
     saveBulkExpenses,
+    settleSelectedExpenses,
     setRecurringExpenseStatus,
     saveGroupRecurring,
   } = useQuotationExpenses(relatedType, relatedId);
@@ -217,6 +222,9 @@ export function PitchingExpenseTab({
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkEditing, setBulkEditing] = useState<QuotationExpense[] | null>(null);
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [settleOpen, setSettleOpen] = useState(false);
+  const [settleSaving, setSettleSaving] = useState(false);
   const [shopifyImportOpen, setShopifyImportOpen] = useState(false);
   const [shopifyImportSaving, setShopifyImportSaving] = useState(false);
   const [recurringGroup, setRecurringGroup] = useState<ExpenseTypeGroup | null>(null);
@@ -225,6 +233,22 @@ export function PitchingExpenseTab({
 
   const summary = useMemo(() => summarizeExpenses(rows), [rows]);
   const groups = useMemo(() => groupExpensesByType(rows), [rows]);
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const settleCardOptions = useMemo(
+    () => cards.filter((card) => card.isActive).map((card) => ({
+      value: card.id,
+      label: formatCreditCardOptionLabel(card),
+    })),
+    [cards],
+  );
+
+  useEffect(() => {
+    const live = new Set(rows.map((row) => row.id));
+    setSelectedIds((prev) => {
+      const next = prev.filter((id) => live.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [rows]);
   const outstandingPreview = computeOutstanding(
     parseMoney(draft.billedAmount) ?? 0,
     parseMoney(draft.paymentAmount) ?? 0,
@@ -355,6 +379,66 @@ export function PitchingExpenseTab({
     closeBulk();
   };
 
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  };
+
+  const toggleSelectedGroup = (ids: string[]) => {
+    setSelectedIds((prev) => {
+      const allSelected = ids.every((id) => prev.includes(id));
+      if (allSelected) return prev.filter((id) => !ids.includes(id));
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      return [...next];
+    });
+  };
+
+  const toggleSelectedAll = () => {
+    setSelectedIds((prev) => (prev.length === rows.length ? [] : rows.map((row) => row.id)));
+  };
+
+  const handleSettle = async (input: {
+    paymentMethod: string;
+    paymentStatus: string;
+    creditCardId: string;
+    file: File | null;
+  }) => {
+    if (!isExpensePaymentMethod(input.paymentMethod) || !isExpensePaymentStatus(input.paymentStatus)) {
+      toast.error('請選擇付款方式與付款狀態');
+      return;
+    }
+    const ids = selectedIds;
+    setSettleSaving(true);
+    const result = await settleSelectedExpenses({
+      ids,
+      paymentMethod: input.paymentMethod,
+      paymentStatus: input.paymentStatus,
+      creditCardId: input.creditCardId,
+      file: input.file,
+    });
+    setSettleSaving(false);
+    if (result.data?.length) {
+      const done = new Set(result.data.map((row) => row.id));
+      setSelectedIds((prev) => prev.filter((id) => !done.has(id)));
+    }
+    if (result.error) {
+      toast.error(result.error.message);
+      return;
+    }
+    toast.success(`已完成 ${result.data?.length ?? ids.length} 筆付款`);
+    setSettleOpen(false);
+  };
+
+  const handleAdsMonthlyAdd = async (input: QuotationExpenseWriteInput) => {
+    const result = await addExpense(input);
+    if (result.error) {
+      toast.error(`新增失敗：${result.error.message}`);
+      return result;
+    }
+    toast.success('已加入廣告支出');
+    return result;
+  };
+
   const handleShopifyImport = async (
     items: Array<{ input: QuotationExpenseWriteInput }>,
   ) => {
@@ -469,7 +553,32 @@ export function PitchingExpenseTab({
       </div>
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <span className="text-[12px] text-muted-foreground">共 {rows.length} 筆</span>
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-[12px] text-muted-foreground">共 {rows.length} 筆</span>
+          {rows.length > 0 && (
+            <label className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground">
+              <SelectionCheckbox
+                checked={selectedIds.length === rows.length}
+                indeterminate={selectedIds.length > 0 && selectedIds.length < rows.length}
+                onChange={toggleSelectedAll}
+                label="全選支出"
+              />
+              全選
+            </label>
+          )}
+          {selectedIds.length > 0 && (
+            <>
+              <span className="text-[12px] text-muted-foreground">已選 {selectedIds.length} 筆</span>
+              <button
+                type="button"
+                onClick={() => setSettleOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors active:scale-[0.97]"
+              >
+                批量完成付款
+              </button>
+            </>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {canImportShopify && (
             <button
@@ -610,6 +719,17 @@ export function PitchingExpenseTab({
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-border bg-muted/10">
+                      <th className="w-10 px-3 py-3">
+                        <SelectionCheckbox
+                          checked={group.rows.every((row) => selectedIdSet.has(row.id))}
+                          indeterminate={
+                            group.rows.some((row) => selectedIdSet.has(row.id))
+                            && !group.rows.every((row) => selectedIdSet.has(row.id))
+                          }
+                          onChange={() => toggleSelectedGroup(group.rows.map((row) => row.id))}
+                          label={`選擇 ${group.supplierLabel}`}
+                        />
+                      </th>
                       <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">期數</th>
                       <th className="text-right text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">應付</th>
                       <th className="text-left text-[12px] font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">到期日</th>
@@ -626,7 +746,20 @@ export function PitchingExpenseTab({
                   </thead>
                   <tbody>
                     {group.rows.map((row) => (
-                      <tr key={row.id} className="border-b border-border/50 last:border-b-0 hover:bg-muted/20">
+                      <tr
+                        key={row.id}
+                        className={cn(
+                          'border-b border-border/50 last:border-b-0 hover:bg-muted/20',
+                          selectedIdSet.has(row.id) && 'bg-teal-50/70',
+                        )}
+                      >
+                        <td className="px-3 py-3">
+                          <SelectionCheckbox
+                            checked={selectedIdSet.has(row.id)}
+                            onChange={() => toggleSelected(row.id)}
+                            label={`選擇 ${group.supplierLabel} 第 ${row.installmentNumber ?? '—'} 期`}
+                          />
+                        </td>
                         <td className="px-4 py-3 text-[13px] tabular-nums">
                           <div className="flex items-center gap-1.5">
                             <span>{row.installmentNumber ?? '—'}</span>
@@ -751,6 +884,18 @@ export function PitchingExpenseTab({
             );
           })}
         </div>
+      )}
+
+      {relatedType === 'quotation_client' && linkedWebsiteId.trim() && (
+        <PitchingAdsMonthlyExpenses
+          key={linkedWebsiteId.trim()}
+          websiteId={linkedWebsiteId.trim()}
+          expenses={rows}
+          expensesLoading={loading}
+          supplierTypes={supplierTypes}
+          suppliers={suppliers}
+          onAdd={handleAdsMonthlyAdd}
+        />
       )}
 
       <CrudModal
@@ -1179,6 +1324,18 @@ export function PitchingExpenseTab({
         suppliers={suppliers}
         onClose={closeBulk}
         onSave={handleBulkSave}
+      />
+
+      <BulkSettlePaymentDialog
+        open={settleOpen}
+        kind="expense"
+        count={selectedIds.length}
+        saving={settleSaving}
+        creditCardOptions={settleCardOptions}
+        onClose={() => {
+          if (!settleSaving) setSettleOpen(false);
+        }}
+        onSubmit={(input) => void handleSettle(input)}
       />
 
       {canImportShopify && (

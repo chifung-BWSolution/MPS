@@ -40,6 +40,7 @@ assert.match(pitchingSrc, /matchesPitchingStatusFilter/);
 assert.match(projectSrc, /matchesClientProjectProgressFilter/);
 assert.equal(DEFAULT_QUOTATION_LIST_QUERY.status, 'hide_failed');
 assert.equal(DEFAULT_QUOTATION_LIST_QUERY.projectStatus, 'all');
+assert.equal(DEFAULT_QUOTATION_LIST_QUERY.projectState, 'confirmed');
 assert.equal(DEFAULT_QUOTATION_LIST_QUERY.progress, 'all');
 
 assert.deepEqual(parseQuotationListQuery(new URLSearchParams()), DEFAULT_QUOTATION_LIST_QUERY);
@@ -50,6 +51,7 @@ assert.deepEqual(
     type: 'bwt_web',
     status: 'all',
     projectStatus: 'all',
+    projectState: 'confirmed',
     progress: 'all',
     sort: 'displayName',
     dir: 'asc',
@@ -76,6 +78,18 @@ assert.deepEqual(
   DEFAULT_QUOTATION_LIST_QUERY,
 );
 assert.deepEqual(
+  parseQuotationListQuery(new URLSearchParams('projectState=all')),
+  { ...DEFAULT_QUOTATION_LIST_QUERY, projectState: 'all' },
+);
+assert.deepEqual(
+  parseQuotationListQuery(new URLSearchParams('projectState=closed')),
+  { ...DEFAULT_QUOTATION_LIST_QUERY, projectState: 'closed' },
+);
+assert.deepEqual(
+  parseQuotationListQuery(new URLSearchParams('projectState=initial')),
+  DEFAULT_QUOTATION_LIST_QUERY,
+);
+assert.deepEqual(
   parseQuotationListQuery(new URLSearchParams('status=nope&sort=unknown&dir=sideways')),
   DEFAULT_QUOTATION_LIST_QUERY,
 );
@@ -88,11 +102,15 @@ writeQuotationListQueryParams(written, {
   type: 'bwt_web',
   status: 'all',
   projectStatus: 'closed',
+  projectState: 'all',
   progress: 'all',
   sort: 'income',
   dir: 'desc',
 });
-assert.equal(written.toString(), 'q=acme&type=bwt_web&status=all&projectStatus=closed&sort=income&dir=desc');
+assert.equal(
+  written.toString(),
+  'q=acme&type=bwt_web&status=all&projectStatus=closed&projectState=all&sort=income&dir=desc',
+);
 writeQuotationListQueryParams(written, {
   ...DEFAULT_QUOTATION_LIST_QUERY,
   status: 'show_failed',
@@ -107,6 +125,7 @@ assert.deepEqual(
     type: 'bwt_web',
     status: 'hide_failed',
     projectStatus: 'all',
+    projectState: 'confirmed',
     progress: 'pending',
     sort: 'displayName',
     dir: 'asc',
@@ -141,6 +160,7 @@ setQuotationListHash('projects', {
   type: 'bwt_web',
   status: 'hide_failed',
   projectStatus: 'all',
+  projectState: 'confirmed',
   progress: 'pending',
   sort: 'displayName',
   dir: 'asc',

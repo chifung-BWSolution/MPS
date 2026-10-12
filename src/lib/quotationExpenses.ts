@@ -26,6 +26,7 @@ import {
   nextInstallmentNumber,
   normalizeDateRange,
   optionalIsoDate,
+  paymentRecordPathStillUsed,
   parseInstallmentNumber,
   parseLocalIsoDate,
   parseMoney,
@@ -324,7 +325,47 @@ export function findExpenseInstallmentCollision(
 
 export const BULK_EXPENSE_BILLED_TOTAL_MISMATCH = '應付合計須等於總金額';
 export const DEFAULT_BULK_EXPENSE_INSTALLMENT_COUNT = 2;
-export const MAX_BULK_EXPENSE_INSTALLMENT_COUNT = 24;
+
+export type BulkSettleExpensePayment = {
+  paymentAmount: number;
+  paymentDate: string;
+  paymentMethod: ExpensePaymentMethod;
+  paymentStatus: ExpensePaymentStatus;
+  creditCardId: string | null;
+};
+
+export function bulkSettleExpensePlan(
+  rows: Array<Pick<QuotationExpense, 'id' | 'billedAmount' | 'dueDate' | 'installmentNumber'>>,
+  settlement: {
+    paymentMethod: ExpensePaymentMethod;
+    paymentStatus: ExpensePaymentStatus;
+    creditCardId?: string | null;
+  },
+): { items: Array<{ id: string; payment: BulkSettleExpensePayment }> } | { error: string } {
+  if (isCreditCardPaymentMethod(settlement.paymentMethod) && !settlement.creditCardId?.trim()) {
+    return { error: '請選擇信用卡' };
+  }
+  const missing = rows.filter((row) => !optionalIsoDate(row.dueDate));
+  if (missing.length > 0) {
+    const labels = missing.map((row) => (
+      row.installmentNumber != null ? `第 ${row.installmentNumber} 期` : '未填期數'
+    ));
+    return { error: `以下資料缺少到期日，無法以到期日作為付款日期：${labels.join('、')}` };
+  }
+  const creditCardId = expenseCreditCardId(settlement.paymentMethod, settlement.creditCardId);
+  return {
+    items: rows.map((row) => ({
+      id: row.id,
+      payment: {
+        paymentAmount: row.billedAmount,
+        paymentDate: optionalIsoDate(row.dueDate) ?? '',
+        paymentMethod: settlement.paymentMethod,
+        paymentStatus: settlement.paymentStatus,
+        creditCardId,
+      },
+    })),
+  };
+}
 
 export function expenseToWriteInput(
   row: QuotationExpense,
@@ -421,9 +462,6 @@ export function validateBulkExpenseInput(input: {
   }
   const count = parseInstallmentNumber(input.installmentCount);
   if (count == null) return '請填寫期數數量';
-  if (count > MAX_BULK_EXPENSE_INSTALLMENT_COUNT) {
-    return `期數數量不可超過 ${MAX_BULK_EXPENSE_INSTALLMENT_COUNT}`;
-  }
   if (input.rows.length !== count) return '期數列表與期數數量不一致';
   const seen = new Set<number>();
   for (let i = 0; i < input.rows.length; i += 1) {
@@ -600,6 +638,7 @@ export {
   isBulkDateMode,
   normalizeDateRange,
   optionalIsoDate,
+  paymentRecordPathStillUsed,
   parseInstallmentNumber,
   parseLocalIsoDate,
   parseMoney,
