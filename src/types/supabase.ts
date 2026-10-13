@@ -93,13 +93,14 @@ export type Database = {
         Row: {
           created_at: string | null
           id: string
+          is_completed: boolean
           is_half_day: boolean
           is_holiday: boolean
           is_leave: boolean
           is_weekend: boolean
-          leave_type: string | null
           office_location: string
           ot_hours: number
+          otc_staff_id: number | null
           report_date: string
           reviewed_at: string | null
           reviewer_id: string | null
@@ -118,9 +119,9 @@ export type Database = {
           is_holiday?: boolean
           is_leave?: boolean
           is_weekend?: boolean
-          leave_type?: string | null
           office_location?: string
           ot_hours?: number
+          otc_staff_id?: number | null
           report_date: string
           reviewed_at?: string | null
           reviewer_id?: string | null
@@ -139,9 +140,9 @@ export type Database = {
           is_holiday?: boolean
           is_leave?: boolean
           is_weekend?: boolean
-          leave_type?: string | null
           office_location?: string
           ot_hours?: number
+          otc_staff_id?: number | null
           report_date?: string
           reviewed_at?: string | null
           reviewer_id?: string | null
@@ -222,6 +223,7 @@ export type Database = {
           entry_date: string | null
           full_name: string | null
           id: string
+          otc_staff_id: number | null
           otc_staff_sync_id: string | null
           position: string | null
           private_email: string | null
@@ -246,6 +248,7 @@ export type Database = {
           entry_date?: string | null
           full_name?: string | null
           id?: string
+          otc_staff_id?: number | null
           otc_staff_sync_id?: string | null
           position?: string | null
           private_email?: string | null
@@ -270,6 +273,7 @@ export type Database = {
           entry_date?: string | null
           full_name?: string | null
           id?: string
+          otc_staff_id?: number | null
           otc_staff_sync_id?: string | null
           position?: string | null
           private_email?: string | null

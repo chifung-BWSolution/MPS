@@ -83,7 +83,7 @@ function TodayTeamReports() {
   };
 
   const [dbStaff, setDbStaff] = useState<TodayStaff[]>([]);
-  const [dbReports, setDbReports] = useState<Array<{ id: string; staff_id: string; report_date: string; total_hours: number; target_hours: number; ot_hours: number; is_leave: boolean; leave_type: string | null; status: string }>>([]);
+  const [dbReports, setDbReports] = useState<Array<{ id: string; staff_id: string; report_date: string; total_hours: number; target_hours: number; ot_hours: number; is_leave: boolean; status: string }>>([]);
   const [dbEntries, setDbEntries] = useState<Array<{ id: string; day_report_id: string; staff_id: string; category: string; title: string; hours: number; outcome_url: string | null; growth_experience: string | null; is_ai_assisted: boolean; ai_tools: any; related_name: string | null }>>([]);
   const [staffLoading, setStaffLoading] = useState(true);
   const [reportsLoading, setReportsLoading] = useState(true);
@@ -163,7 +163,7 @@ function TodayTeamReports() {
       try {
         const { data: reportData, error: reportErr } = await supabase
           .from('day_reports')
-          .select('id, staff_id, report_date, total_hours, target_hours, ot_hours, is_leave, leave_type, status')
+          .select('id, staff_id, report_date, total_hours, target_hours, ot_hours, is_leave, status')
           .eq('report_date', targetDate);
 
         if (reportErr) {
@@ -460,7 +460,7 @@ function TodayTeamReports() {
                       <div className="flex items-center gap-2">
                         <span className="text-[14px] font-bold">{staffName}</span>
                         {fillStatus === 'incomplete' && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">未完成</span>}
-                        {report.is_leave && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">{report.leave_type || '請假'}</span>}
+                        {report.is_leave && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">請假</span>}
                         {hasAi && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 flex items-center gap-0.5"><Bot size={9} />AI</span>}
                       </div>
                     </div>

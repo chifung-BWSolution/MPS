@@ -465,8 +465,15 @@ export function SubmitReportPage() {
 
   const insertReport = useCallback(async (staffId: string, date: string): Promise<DayReportHeader> => {
     const currentOffice = officeRef.current;
+    const { data: staffRow, error: staffError } = await supabase
+      .from('staffs')
+      .select('otc_staff_id')
+      .eq('id', staffId)
+      .maybeSingle();
+    if (staffError) throw new Error(staffError.message);
     const payload = {
       staff_id: staffId,
+      otc_staff_id: staffRow?.otc_staff_id ?? null,
       report_date: date,
       total_hours: 0,
       target_hours: getFullDayHours(currentOffice),

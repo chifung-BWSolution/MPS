@@ -45,7 +45,6 @@ interface DayReportLite {
   staff_id: string;
   report_date: string;
   is_leave: boolean;
-  leave_type: string | null;
   status: string | null;
   total_hours: number;
   target_hours: number;
@@ -125,15 +124,6 @@ function formatPeriodLabel(periodType: PeriodType, anchor: Date): string {
   return `${anchor.getFullYear()}/${anchor.getMonth() + 1}`;
 }
 
-function leaveShortLabel(leaveType: string | null | undefined): string {
-  const t = (leaveType || '').trim();
-  if (!t) return '假';
-  if (/例|annual|年假/i.test(t)) return '例';
-  if (/病|sick/i.test(t)) return '病';
-  if (/事/i.test(t)) return '事';
-  return t.slice(0, 1);
-}
-
 function resolveDayStatus(
   dateStr: string | null,
   report: DayReportLite | undefined,
@@ -155,11 +145,9 @@ function resolveDayStatus(
 function StatusCell({
   dateStr,
   status,
-  leaveType,
 }: {
   dateStr: string | null;
   status: DayStatus;
-  leaveType?: string | null;
 }) {
   if (!dateStr || status === 'empty') {
     return <div className="h-9 rounded bg-transparent" />;
@@ -190,7 +178,7 @@ function StatusCell({
       )}
       {status === 'leave' && (
         <span className="w-3.5 h-3.5 rounded-full bg-amber-600 text-white text-[8px] font-bold flex items-center justify-center leading-none">
-          {leaveShortLabel(leaveType)}
+          假
         </span>
       )}
       {status === 'rest' && (
@@ -294,7 +282,7 @@ export function WorkInspection() {
           const chunk = staffIds.slice(i, i + chunkSize);
           const { data } = await supabase
             .from('day_reports')
-            .select('id, staff_id, report_date, is_leave, leave_type, status, total_hours, target_hours')
+            .select('id, staff_id, report_date, is_leave, status, total_hours, target_hours')
             .in('staff_id', chunk)
             .gte('report_date', dateRange.start)
             .lte('report_date', dateRange.end)
@@ -565,7 +553,6 @@ export function WorkInspection() {
                     key={key}
                     dateStr={dateStr}
                     status={status}
-                    leaveType={report?.leave_type}
                   />
                 );
               })}

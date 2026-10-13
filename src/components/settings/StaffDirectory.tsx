@@ -8,7 +8,7 @@ import { invokeProvisionStaffAuth } from '@/lib/provisionStaffAuthApi';
 const STAFF_SELECT =
   'id, display_name, full_name, chinese_name, position, user_role, status, work_email, private_email, work_phone, private_phone, profile_pic_url, base_location, team_name, company_list_id, brand_list_id, entry_date, termination_date';
 
-/** Local staffs row — identity is staffs.id (uuid). Never key UI by otc_staff_sync_id. */
+/** Local staffs row — identity is staffs.id (uuid). Never key UI by otc_staff_sync_id or otc_staff_id. */
 interface StaffRow {
   id: string;
   display_name: string | null;

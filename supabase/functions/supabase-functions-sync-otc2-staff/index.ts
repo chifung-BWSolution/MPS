@@ -78,6 +78,8 @@ interface BrandListRow {
 /** Allowed staffs write columns only. Never include local `id`. */
 interface StaffsUpsertRow {
   otc_staff_sync_id: string;
+  /** OTC2 staff_sync.staff_id */
+  otc_staff_id: number | null;
   display_name: string;
   full_name: string | null;
   chinese_name: string | null;
@@ -97,6 +99,13 @@ interface StaffsUpsertRow {
   termination_date: string | null;
   synced_at: string;
   updated_at: string;
+}
+
+function toOtcStaffId(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = typeof value === "number" ? value : Number(String(value).trim());
+  if (!Number.isInteger(n)) return null;
+  return n;
 }
 
 function toDateString(value: string | null | undefined): string | null {
@@ -168,6 +177,7 @@ function mapStaffSyncRow(
 
   return {
     otc_staff_sync_id: staff.id,
+    otc_staff_id: toOtcStaffId(staff.staff_id),
     display_name: staff.display_name ?? "",
     full_name: staff.full_name,
     chinese_name: staff.chinese_name,

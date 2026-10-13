@@ -35,7 +35,7 @@ export function remapStaleStaffUuid(value: string | null | undefined): string {
 
 /**
  * Pick one staffs.id. Only `users.staff_id` / session staff_id (remapped).
- * Never use staffs.work_email or staffs.otc_staff_sync_id.
+ * Never use staffs.work_email, staffs.otc_staff_sync_id, or staffs.otc_staff_id.
  */
 export function chooseStaffUuid(options: {
   loginStaffId?: string | null;

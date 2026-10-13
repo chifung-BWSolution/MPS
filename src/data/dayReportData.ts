@@ -37,7 +37,6 @@ export interface DailyReport {
   status: ReportStatus;
   isLeave: boolean;
   isHalfDay: boolean;
-  leaveType?: string;
   entries: WorkEntry[];
   submittedAt?: string;
   reviewedAt?: string;
@@ -165,7 +164,6 @@ export const dailyReports: (DailyReport & { __sampleData: true })[] = [
     status: 'approved',
     isLeave: true,
     isHalfDay: false,
-    leaveType: '年假',
     submittedAt: '2025-01-19T09:00:00',
     entries: [],
   },

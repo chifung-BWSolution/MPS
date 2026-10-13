@@ -55,7 +55,6 @@ interface DayReport {
   total_hours: number;
   target_hours: number;
   is_leave: boolean;
-  leave_type: string | null;
 }
 
 interface DayReportEntry {
@@ -142,7 +141,6 @@ type PersonalDayData = {
   dateStr: string;
   label: string;
   isLeave: boolean;
-  leaveType: string | null;
   isOff: boolean;
   hoursByCategory: Record<string, number>;
   totalHours: number;
@@ -493,7 +491,7 @@ export function TeamDashboard() {
 
       const { data: reportData } = await supabase
         .from('day_reports')
-        .select('id, staff_id, report_date, total_hours, target_hours, is_leave, leave_type')
+        .select('id, staff_id, report_date, total_hours, target_hours, is_leave')
         .gte('report_date', dateRange.start)
         .lte('report_date', dateRange.end)
         .in('staff_id', allowedStaffIds)
@@ -763,7 +761,6 @@ export function TeamDashboard() {
         dateStr,
         label: formatDayLabel(dateStr),
         isLeave,
-        leaveType: report?.leave_type || null,
         isOff,
         hoursByCategory,
         totalHours,
@@ -806,7 +803,7 @@ export function TeamDashboard() {
         <div className="flex flex-wrap items-center gap-1">
           {day.isLeave && (
             <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
-              請假{day.leaveType ? ` · ${day.leaveType}` : ''}
+              請假
             </span>
           )}
           {day.isOff && (
@@ -1237,7 +1234,7 @@ export function TeamDashboard() {
                           <div className="flex items-center gap-2 text-[11px]">
                             {day.report?.is_leave && (
                               <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
-                                請假{day.report.leave_type ? ` · ${day.report.leave_type}` : ''}
+                                請假
                               </span>
                             )}
                             {day.report && !day.report.is_leave && getDayReportCompletionStatus(
