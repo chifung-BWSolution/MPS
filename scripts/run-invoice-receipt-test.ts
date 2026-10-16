@@ -13,6 +13,8 @@ import {
   RECEIPTS_TABLE,
   buildMainItemName,
   canViewDocumentMoney,
+  companyCodeFromProjectTypeInitial,
+  companyListIdForCompanyCode,
   defaultCompanyListId,
   documentExistsColor,
   documentYymm,
@@ -55,6 +57,34 @@ assert.equal(RECEIPT_LINE_ITEMS_TABLE, 'receipt_line_items');
 
 assert.equal(defaultCompanyListId(), DEFAULT_COMPANY_LIST_ID);
 assert.equal(DEFAULT_COMPANY_LIST_ID, 'c1779783081242');
+assert.equal(companyCodeFromProjectTypeInitial('BWT-S'), 'BWT');
+assert.equal(companyCodeFromProjectTypeInitial('bwt-w'), 'BWT');
+assert.equal(companyCodeFromProjectTypeInitial('BWT-E'), 'BWT');
+assert.equal(companyCodeFromProjectTypeInitial('BWL-B'), 'BWL');
+assert.equal(companyCodeFromProjectTypeInitial('BWL-E'), 'BWL');
+assert.equal(companyCodeFromProjectTypeInitial('BWG-G'), 'BWG');
+assert.equal(companyCodeFromProjectTypeInitial('  '), '');
+assert.equal(
+  companyListIdForCompanyCode('BWG', [
+    { id: 'c1788946779033', company_code: 'BWG' },
+    { id: 'c1788946771748', company_code: 'bwg' },
+    { id: 'c1788946774512', company_code: 'BWG' },
+  ]),
+  'c1788946771748',
+);
+assert.equal(
+  companyListIdForCompanyCode('BWL', [
+    { id: 'c1779782989086', company_code: 'BWL' },
+    { id: 'c1779783081242', company_code: 'BWT' },
+  ]),
+  'c1779782989086',
+);
+assert.equal(
+  companyListIdForCompanyCode('BWT', [{ id: 'c1779783081242', company_code: 'BWT' }]),
+  'c1779783081242',
+);
+assert.equal(companyListIdForCompanyCode('', [{ id: 'c1779782989086', company_code: 'BWL' }]), DEFAULT_COMPANY_LIST_ID);
+assert.equal(companyListIdForCompanyCode('ZZZ', []), DEFAULT_COMPANY_LIST_ID);
 
 assert.equal(toCents(10.005), 1001);
 assert.equal(invoiceGrossTotal(1, 1000, [{ quantity: 2, price: 50 }]), 1100);
@@ -179,7 +209,8 @@ assert.doesNotMatch(hook, /system_label|systemLabel|systemLabelFromProjectTypes/
 assert.match(hook, /assertInvoiceFloor/);
 assert.match(hook, /toErrorMessage/);
 assert.match(hook, /DEFAULT_INVOICE_NOTE/);
-assert.match(hook, /defaultCompanyListId/);
+assert.match(hook, /companyListIdForCompanyCode/);
+assert.match(hook, /quotation_project_types \( code_initial \)/);
 assert.match(hook, /project_types/);
 
 const incomesLib = read('src/lib/quotationIncomes.ts');
