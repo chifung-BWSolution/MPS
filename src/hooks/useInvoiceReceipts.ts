@@ -13,8 +13,9 @@ import {
   RECEIPT_LINE_ITEMS_TABLE,
   RECEIPTS_TABLE,
   buildMainItemName,
+  companyCodeFromProjectTypeInitial,
+  companyListIdForCompanyCode,
   companyToBrandingSource,
-  defaultCompanyListId,
   invoiceGrossTotal,
   invoiceMainAmount,
   invoiceMeetsFloor,
@@ -115,6 +116,10 @@ type CompanyDbRow = {
   contact_phone: string | null;
 };
 
+type ProjectTypeEmbed = {
+  code_initial: string | null;
+};
+
 type ProjectEmbed = {
   id: string;
   display_name: string;
@@ -122,6 +127,7 @@ type ProjectEmbed = {
   client_id: string | null;
   client_name: string | null;
   project_types: string | null;
+  quotation_project_types?: ProjectTypeEmbed | ProjectTypeEmbed[] | null;
   quotation_client_list?: {
     company_name_zh: string | null;
     company_name_en: string | null;
@@ -136,6 +142,12 @@ type ProjectEmbed = {
 function firstClientEmbed(embed: ProjectEmbed['quotation_client_list']) {
   if (!embed) return null;
   return Array.isArray(embed) ? embed[0] ?? null : embed;
+}
+
+function firstCodeInitial(embed: ProjectEmbed['quotation_project_types']): string {
+  if (!embed) return '';
+  const row = Array.isArray(embed) ? embed[0] : embed;
+  return row?.code_initial?.trim() ?? '';
 }
 
 export type WriteResult = { success: boolean; id?: string; error?: string };
@@ -513,7 +525,7 @@ export type InvoicePrefillContext = {
   customerName: string;
   siteAddress: string;
   projectTypeId: string;
-  defaultCompanyListId: string;
+  projectTypeCodeInitial: string;
   sameTypeSum: number;
   dueDate?: string;
   paymentDate?: string;
@@ -534,7 +546,7 @@ async function loadPrefillContext(incomeId: string): Promise<InvoicePrefillConte
   const [{ data: projectRow, error: projectError }, { data: siblingRows }] = await Promise.all([
     supabase
       .from(QUOTATION_CLIENT_PROJECT_TABLE)
-      .select('id, display_name, pitching_code, client_id, client_name, project_types, quotation_client_list ( company_name_zh, company_name_en, address )')
+      .select('id, display_name, pitching_code, client_id, client_name, project_types, quotation_project_types ( code_initial ), quotation_client_list ( company_name_zh, company_name_en, address )')
       .eq('id', projectId)
       .maybeSingle(),
     supabase
@@ -562,11 +574,18 @@ async function loadPrefillContext(incomeId: string): Promise<InvoicePrefillConte
     }),
     siteAddress: client?.address?.trim() || '',
     projectTypeId: project?.project_types ?? '',
-    defaultCompanyListId: defaultCompanyListId(),
+    projectTypeCodeInitial: firstCodeInitial(project?.quotation_project_types),
     sameTypeSum,
     dueDate: optionalIsoDate((incomeRow as IncomeDbRow).due_date),
     paymentDate: optionalIsoDate((incomeRow as IncomeDbRow).payment_date),
   };
+}
+
+function defaultCompanyListIdForPrefill(
+  codeInitial: string,
+  companyRows: CompanyDbRow[],
+): string {
+  return companyListIdForCompanyCode(companyCodeFromProjectTypeInitial(codeInitial), companyRows);
 }
 
 function resolveDefaultCompany(
@@ -618,7 +637,11 @@ export async function loadInvoiceEditor(incomeId: string): Promise<InvoiceEditor
     return { form: saved, lines: saved.lines, saved, income: saved.income, companies, companyRows: companyIdPairs };
   }
 
-  const company = resolveDefaultCompany(companies, companyRows, prefill.defaultCompanyListId);
+  const company = resolveDefaultCompany(
+    companies,
+    companyRows,
+    defaultCompanyListIdForPrefill(prefill.projectTypeCodeInitial, companyRows),
+  );
   const amount = prefill.income.amount ?? 0;
   const form: InvoiceForm = {
     invoiceNo: nextInvoiceNo(count),
@@ -677,7 +700,7 @@ export async function loadReceiptEditor(incomeId: string): Promise<ReceiptEditor
   const company = resolveDefaultCompany(
     companies,
     companyRows,
-    prefill.defaultCompanyListId,
+    defaultCompanyListIdForPrefill(prefill.projectTypeCodeInitial, companyRows),
     linkedInvoice?.companyId,
   );
   const amount = prefill.income.amount ?? 0;
