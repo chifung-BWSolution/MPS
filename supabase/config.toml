@@ -36,6 +36,12 @@ enable_signup = true
 double_confirm_changes = true
 enable_confirmations = false
 
+# User access tokens are ES256. The gateway JWT check still uses the retired
+# HS256 secret and rejects a normal logged-in session before this function runs.
+# The function validates the session itself with auth.getUser().
+[functions.provision-staff-auth]
+verify_jwt = false
+
 [functions.gsc-oauth]
 verify_jwt = false
 

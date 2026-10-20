@@ -10,6 +10,23 @@ export type ProvisionStaffAuthResult = {
   reason?: string;
 };
 
+async function readInvokeError(error: unknown): Promise<string> {
+  const fallback = error instanceof Error ? error.message : String(error);
+  const context = (error as { context?: { json?: () => Promise<unknown> } }).context;
+  if (!context || typeof context.json !== 'function') return fallback;
+  try {
+    const body = await context.json();
+    if (body && typeof body === 'object') {
+      const record = body as { error?: unknown; message?: unknown };
+      if (typeof record.error === 'string' && record.error) return record.error;
+      if (typeof record.message === 'string' && record.message) return record.message;
+    }
+  } catch {
+    // Response body was not JSON.
+  }
+  return fallback;
+}
+
 export async function invokeProvisionStaffAuth(input: {
   mode: ProvisionStaffAuthMode;
   staffId?: string;
@@ -30,8 +47,9 @@ export async function invokeProvisionStaffAuth(input: {
   });
 
   if (error) {
-    console.warn('[provision-staff-auth] invoke failed:', error.message);
-    throw new Error(error.message);
+    const message = await readInvokeError(error);
+    console.warn('[provision-staff-auth] invoke failed:', message);
+    throw new Error(message);
   }
   if (data?.error) {
     throw new Error(data.error);

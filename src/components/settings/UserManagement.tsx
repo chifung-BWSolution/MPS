@@ -156,8 +156,11 @@ export function UserManagement() {
           toast.warning('已加入白名單，但尚未設定私人電話，暫時無法用電郵登入');
         }
       } catch (provisionErr) {
-        console.warn('Failed to provision Auth user:', provisionErr);
-        toast.warning('已加入白名單，但 Auth 帳號尚未建立，請稍後再試電郵登入');
+        const detail = provisionErr instanceof Error ? provisionErr.message : String(provisionErr);
+        console.warn('Failed to provision Auth user:', detail);
+        toast.warning('已加入白名單，但 Auth 帳號尚未建立，請稍後再試電郵登入', {
+          description: detail,
+        });
       }
       setSystemUsers(prev => {
         const without = prev.filter(u => u.staff_id !== mapped.staff_id);

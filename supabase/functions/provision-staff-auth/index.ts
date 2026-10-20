@@ -68,8 +68,11 @@ Deno.serve(async (req: Request) => {
     const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: `Bearer ${token}` } },
     });
-    const { data: userData, error: userError } = await userClient.auth.getUser();
+    // Pass the bearer token explicitly. getUser() with no argument looks for a
+    // stored session, which an edge function does not have.
+    const { data: userData, error: userError } = await userClient.auth.getUser(token);
     if (userError || !userData.user) {
+      console.warn("[provision-staff-auth] rejected session:", userError?.message || "no user");
       return json(401, { error: "Invalid session" });
     }
   }
