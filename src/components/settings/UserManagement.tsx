@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import {
-  Search, Edit, Shield, Users, UserPlus, UserCheck,
+  Search, Edit, Shield, Users, UserPlus, UserCheck, UserX,
   X, Save, RefreshCw, Chrome, CheckCircle2, Clock,
   AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { invokeProvisionStaffAuth } from '@/lib/provisionStaffAuthApi';
+import { useAuth } from '@/context/AuthContext';
 
 // Role labels matching PRD
 const ROLE_OPTIONS: { value: string; label: string; color: string }[] = [
@@ -94,10 +95,12 @@ function mapUsersRow(row: any): SystemUser {
 }
 
 export function UserManagement() {
+  const { systemUser: currentUser } = useAuth();
   const [systemUsers, setSystemUsers] = useState<SystemUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
+  const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
 
   // Modal states
   const [showStaffPicker, setShowStaffPicker] = useState(false);
@@ -208,6 +211,45 @@ export function UserManagement() {
       setEditingUser(null);
     } catch (err: any) {
       toast.error('更新失敗', { description: err.message });
+    }
+  };
+
+  // Remove the login allowlist row and ban the Auth user.
+  // staffs and work history stay; login_logs.user_id is set null by FK.
+  const handleDeactivateUser = async (user: SystemUser) => {
+    if (currentUser?.id === user.id) {
+      toast.error('不能停用目前登入中的帳戶');
+      return;
+    }
+    const confirmed = window.confirm(
+      `停用「${user.display_name || user.email}」的登入帳戶？\n\n員工資料、日報與其他工作紀錄會保留。此人將無法再登入，直到重新加入系統使用者。`,
+    );
+    if (!confirmed) return;
+
+    setDeactivatingId(user.id);
+    try {
+      try {
+        await invokeProvisionStaffAuth({
+          mode: 'disable',
+          usersId: user.id,
+          staffId: user.staff_id,
+        });
+      } catch (provisionErr) {
+        const detail = provisionErr instanceof Error ? provisionErr.message : String(provisionErr);
+        console.warn('Failed to ban Auth user:', detail);
+        toast.warning('Auth 帳號未能封鎖，仍會移出登入白名單', { description: detail });
+      }
+
+      const { error } = await supabase.from('users').delete().eq('id', user.id);
+      if (error) throw error;
+
+      setSystemUsers(prev => prev.filter(u => u.id !== user.id));
+      toast.success(`已停用「${user.display_name || user.email}」`);
+    } catch (err: any) {
+      console.error('Failed to deactivate user:', err);
+      toast.error('停用失敗', { description: err.message });
+    } finally {
+      setDeactivatingId(null);
     }
   };
 
@@ -395,6 +437,16 @@ export function UserManagement() {
                           title="編輯"
                         >
                           <Edit size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeactivateUser(user)}
+                          disabled={deactivatingId === user.id || currentUser?.id === user.id}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded border border-rose-200 text-rose-700 text-[11px] font-medium hover:bg-rose-50 disabled:opacity-40 disabled:pointer-events-none"
+                          title="停用帳戶"
+                        >
+                          <UserX size={12} />
+                          停用帳戶
                         </button>
                       </div>
                     </td>
