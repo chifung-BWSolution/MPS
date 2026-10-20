@@ -4,8 +4,11 @@ import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, pee
 import { setProjectTypeLabelOverrides, setProjectTypeWebsiteRefs } from '@/data/pitchingData';
 import {
   QUOTATION_PROJECT_TYPES_TABLE,
+  QUOTATION_PROJECT_TYPE_CODE_PATTERN,
   isQuotationProjectTypeSection,
   setProjectTypeCodeMap,
+  isProjectTypeUuid,
+  projectTypeUuidFromRef,
   normalizeProjectTypeCode,
   normalizeProjectTypeCodeInitial,
   validateProjectTypeCode,
@@ -68,6 +71,28 @@ function applyCatalogOverrides(rows: QuotationProjectType[]) {
     .filter((type) => type.section === 'system-dev' || type.code === 'bwt_web' || type.code === 'bwt_system')
     .flatMap((type) => [type.id, type.code]);
   setProjectTypeWebsiteRefs(websiteRefs);
+}
+
+/**
+ * quotation_client_project.project_types is a UUID FK.
+ * Forms can still hold a slug (bwt_system) when the type catalog has not replaced the fallback buttons.
+ */
+export async function resolveProjectTypeUuid(ref: string | null | undefined): Promise<string | null> {
+  const value = ref?.trim() ?? '';
+  if (!value) return null;
+  const cached = peekCachedQuery<QuotationProjectType[]>(QUERY_CACHE_KEYS.quotationProjectTypes) ?? [];
+  const fromCache = projectTypeUuidFromRef(value, cached);
+  if (fromCache) return fromCache;
+  if (isProjectTypeUuid(value)) return value;
+  if (!QUOTATION_PROJECT_TYPE_CODE_PATTERN.test(value)) return null;
+
+  const { data, error } = await supabase
+    .from(QUOTATION_PROJECT_TYPES_TABLE)
+    .select('id')
+    .eq('code', value)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.id ?? null;
 }
 
 async function fetchQuotationProjectTypes(): Promise<QuotationProjectType[]> {

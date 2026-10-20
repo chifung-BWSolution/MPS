@@ -447,17 +447,28 @@ function ProjectTypeSelect({
   value: string;
   onChange: (next: string) => void;
 }) {
-  const { typeOptions: sectionOptions, scoped } = useQuotationSection();
+  const { moduleId, scoped, typeOptions: sectionOptions } = useQuotationSection();
   const { types } = useQuotationProjectTypes();
-  const typeOptions = !scoped && types.length
-    ? types.filter((type) => type.isActive).map((type) => ({ id: type.id, label: type.display }))
-    : sectionOptions;
+  const catalogOptions = useMemo(() => {
+    const rows = (scoped ? types.filter((type) => type.section === moduleId) : types).filter(
+      (type) => type.isActive,
+    );
+    return rows.map((type) => ({ id: type.id, code: type.code, label: type.display }));
+  }, [moduleId, scoped, types]);
+  const typeOptions = catalogOptions.length ? catalogOptions : sectionOptions;
+
+  useEffect(() => {
+    if (!value || catalogOptions.length === 0) return;
+    const match = catalogOptions.find((opt) => opt.id === value || opt.code === value);
+    if (!match || match.id === value) return;
+    onChange(match.id);
+  }, [catalogOptions, onChange, value]);
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
         {typeOptions.map((opt) => {
-          const selected = value === opt.id;
+          const selected = value === opt.id || value === opt.code;
           return (
             <button
               key={opt.id}

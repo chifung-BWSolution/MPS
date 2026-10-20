@@ -8,6 +8,7 @@ import {
   normalizeProjectTypeCode,
   normalizeProjectTypeCodeInitial,
   projectTypeIdFromCodes,
+  projectTypeUuidFromRef,
   slugifyProjectTypeCode,
   validateProjectTypeCode,
   validateProjectTypeCodeInitial,
@@ -28,6 +29,9 @@ assert.equal(collapseProjectTypeCodes(['bwt_web', 'bwt_system']), 'bwt_system');
 assert.equal(collapseProjectTypeCodes(['bwt_system', 'bwt_web']), 'bwt_system');
 assert.equal(collapseProjectTypeCodes(['bwt_web']), 'bwt_web');
 assert.equal(projectTypeIdFromCodes(['bwt_web', 'bwt_system'], [{ id: 'uuid-s', code: 'bwt_system' }]), 'uuid-s');
+assert.equal(projectTypeUuidFromRef('bwt_system', [{ id: 'uuid-s', code: 'bwt_system' }]), 'uuid-s');
+assert.equal(projectTypeUuidFromRef('uuid-s', [{ id: 'uuid-s', code: 'bwt_system' }]), 'uuid-s');
+assert.equal(projectTypeUuidFromRef('missing', [{ id: 'uuid-s', code: 'bwt_system' }]), null);
 
 const menu = read('src/context/AppContext.tsx');
 assert.match(menu, /id: 'quotation'/);
@@ -48,6 +52,12 @@ assert.match(hook, /const deleteType/);
 assert.match(hook, /const countUsage/);
 assert.match(hook, /from\('quotation_client_project'\)/);
 assert.match(hook, /\.eq\('project_types', id\)/);
+assert.match(hook, /resolveProjectTypeUuid/);
+assert.match(hook, /\.eq\('code', value\)/);
+
+const projects = read('src/hooks/useQuotationClientProjects.ts');
+assert.match(projects, /projectTypeIdForWrite/);
+assert.match(projects, /resolveProjectTypeUuid/);
 
 const page = read('src/components/quotation/QuotationProjectTypesSettings.tsx');
 assert.match(page, /useQuotationProjectTypes/);

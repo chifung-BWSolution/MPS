@@ -4,6 +4,7 @@ import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, pee
 import { PITCHING_CURRENCY, optionalIsoDate, type PitchingExpenseItem, type PitchingRecord, type PitchingStatus } from '@/data/pitchingData';
 import { parseProjectSla, type ProjectSla } from '@/lib/projectSla';
 import { parseServicePeriods, type ServicePeriods } from '@/lib/servicePeriods';
+import { resolveProjectTypeUuid } from '@/hooks/useQuotationProjectTypes';
 
 /** Supabase table shared by Pitching and Project pages */
 export const QUOTATION_CLIENT_PROJECT_TABLE = 'quotation_client_project';
@@ -228,6 +229,8 @@ export function useQuotationClientProjects() {
     ) => {
       const id = `pitch_${Date.now()}`;
       const now = new Date().toISOString();
+      const projectType = await projectTypeIdForWrite(data.projectTypeId);
+      if (projectType.error) return { data: null, error: projectType.error };
       const row = {
         id,
         client_id: data.clientId?.trim() || null,
@@ -240,7 +243,7 @@ export function useQuotationClientProjects() {
         contract_end_date: optionalIsoDate(data.contractEndDate) ?? null,
         service_periods: parseServicePeriods(data.servicePeriods),
         description: data.description ?? null,
-        project_types: data.projectTypeId?.trim() || null,
+        project_types: projectType.id,
         assigned_pm: data.assignedPm || null,
         assigned_pm_name: data.assignedPmName || '',
         main_pm_id: data.mainPmId?.trim() || null,
@@ -262,6 +265,7 @@ export function useQuotationClientProjects() {
         .single();
       const record: PitchingRecord = {
         ...data,
+        projectTypeId: projectType.id ?? undefined,
         id: inserted?.id ?? id,
         pitchingId: inserted?.pitching_code || data.pitchingId || inserted?.id || id,
         mainPmName: data.mainPmName || (data.mainPmId ? data.assignedPmName : undefined),
@@ -311,7 +315,13 @@ export function useQuotationClientProjects() {
     }
     if (data.servicePeriods !== undefined) row.service_periods = parseServicePeriods(data.servicePeriods);
     if (data.description !== undefined) row.description = data.description || null;
-    if (data.projectTypeId !== undefined) row.project_types = data.projectTypeId.trim() || null;
+    let resolvedProjectTypeId: string | null | undefined;
+    if (data.projectTypeId !== undefined) {
+      const projectType = await projectTypeIdForWrite(data.projectTypeId);
+      if (projectType.error) return { error: projectType.error };
+      resolvedProjectTypeId = projectType.id;
+      row.project_types = projectType.id;
+    }
     if (data.assignedPmName !== undefined) row.assigned_pm_name = data.assignedPmName || '';
     if (data.mainPmId !== undefined) row.main_pm_id = data.mainPmId?.trim() || null;
     if (data.asanaLink !== undefined) row.asana_link = data.asanaLink || null;
@@ -339,6 +349,7 @@ export function useQuotationClientProjects() {
             ? {
                 ...r,
                 ...data,
+                ...(resolvedProjectTypeId !== undefined ? { projectTypeId: resolvedProjectTypeId ?? '' } : {}),
                 pitchingId: updated?.pitching_code || r.pitchingId,
                 updatedAt: now,
               }
@@ -350,6 +361,35 @@ export function useQuotationClientProjects() {
   }, []);
 
   return { records, loading, error, lastSyncedAt, refresh, addRecord, updateStatus, updateRecord };
+}
+
+type ProjectTypeWriteError = { message: string; code: string; details: string; hint: string };
+
+function projectTypeWriteError(message: string): ProjectTypeWriteError {
+  return { message, code: '22P02', details: '', hint: '' };
+}
+
+function unknownErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return '無法解析專案類型';
+}
+
+/** Store quotation_project_types.id. Accepts a UUID or a slug such as bwt_system. */
+async function projectTypeIdForWrite(
+  ref: string | null | undefined,
+): Promise<{ id: string | null; error: ProjectTypeWriteError | null }> {
+  const raw = ref?.trim() ?? '';
+  if (!raw) return { id: null, error: null };
+  try {
+    const id = await resolveProjectTypeUuid(raw);
+    if (!id) return { id: null, error: projectTypeWriteError('找不到專案類型，請重新選擇') };
+    return { id, error: null };
+  } catch (error) {
+    return { id: null, error: projectTypeWriteError(unknownErrorMessage(error)) };
+  }
 }
 
 /** @deprecated Use useQuotationClientProjects */

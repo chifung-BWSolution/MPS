@@ -89,6 +89,27 @@ export function projectTypeIdFromCodes(
   return types.find((type) => type.code === code)?.id ?? '';
 }
 
+const PROJECT_TYPE_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Map a form value (catalog UUID or legacy slug such as bwt_system) to quotation_project_types.id. */
+export function projectTypeUuidFromRef(
+  ref: string | null | undefined,
+  types: readonly Pick<QuotationProjectType, 'id' | 'code'>[],
+): string | null {
+  const value = ref?.trim() ?? '';
+  if (!value) return null;
+  const byId = types.find((type) => type.id === value);
+  if (byId) return byId.id;
+  const byCode = types.find((type) => type.code === value);
+  if (byCode) return byCode.id;
+  return null;
+}
+
+export function isProjectTypeUuid(value: string | null | undefined): boolean {
+  return !!value && PROJECT_TYPE_UUID_RE.test(value.trim());
+}
+
 let projectTypeCodeByRef = new Map<string, string>();
 
 export function setProjectTypeCodeMap(types: readonly Pick<QuotationProjectType, 'id' | 'code'>[]) {
