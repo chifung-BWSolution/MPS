@@ -19,6 +19,7 @@ import { Calendar as DayPickerCalendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { SearchableProjectSelect } from '@/components/day-report/SearchableProjectSelect';
 import { WorkInspection } from '@/components/day-report/WorkInspection';
+import { DayReportSubmitLink } from '@/components/day-report/DayReportSubmitLink';
 import { getDayReportCompletionStatus, sumEntryHours } from '@/lib/dayReportCompletion';
 import { StaffOrgFilterSelects } from '@/components/day-report/StaffOrgFilterSelects';
 import {
@@ -781,21 +782,19 @@ export function TeamDashboard() {
     detailStaffId === staffId && detailDateFilter === dateFilter;
 
   const renderPersonalDayCard = (day: PersonalDayData) => {
-    const selected = isDetailSelected(selectedStaffId || '', day.dateStr);
+    if (!selectedStaffId) return null;
     return (
-    <button
-      type="button"
+    <DayReportSubmitLink
       key={day.dateStr}
-      onClick={() => openStaffDetail(selectedStaffId || '', day.dateStr)}
+      staffId={selectedStaffId}
+      date={day.dateStr}
       className={cn(
-        'bg-white rounded-lg border shadow-sm p-2.5 space-y-2 min-w-0 text-left w-full transition-colors cursor-pointer',
-        selected
-          ? 'border-teal-500 ring-2 ring-teal-100 bg-teal-50/40'
-          : day.fillStatus === 'incomplete'
-            ? 'border-amber-200 hover:border-amber-300 hover:shadow bg-amber-50/20'
-            : day.fillStatus === 'missing' && !day.isOff
-              ? 'border-rose-100 hover:border-rose-200 hover:shadow bg-rose-50/20'
-              : 'border-[rgba(13,26,45,0.08)] hover:border-teal-300 hover:shadow',
+        'block bg-white rounded-lg border shadow-sm p-2.5 space-y-2 min-w-0 text-left w-full transition-colors cursor-pointer',
+        day.fillStatus === 'incomplete'
+          ? 'border-amber-200 hover:border-amber-300 hover:shadow bg-amber-50/20'
+          : day.fillStatus === 'missing' && !day.isOff
+            ? 'border-rose-100 hover:border-rose-200 hover:shadow bg-rose-50/20'
+            : 'border-[rgba(13,26,45,0.08)] hover:border-teal-300 hover:shadow',
       )}
     >
       <div className="space-y-1">
@@ -838,7 +837,7 @@ export function TeamDashboard() {
         totalHours={(day.isLeave || day.isOff) ? 0 : day.totalHours}
         layout="stack"
       />
-    </button>
+    </DayReportSubmitLink>
     );
   };
 
@@ -853,7 +852,7 @@ export function TeamDashboard() {
           <p className="text-[13px] text-muted-foreground mt-0.5">
             {viewTab === 'inspection'
               ? '按團隊查看每人匯報填寫情況 — 支援周報／月報、人名、公司、品牌與團隊篩選。'
-              : '按週／月統計工作類別工時與占比 — 週統計可自選日期範圍 · 點擊卡片於右側查看工作內容。'}
+              : '按週／月統計工作類別工時與占比 — 週統計可自選日期範圍 · 點擊日期查看當日匯報。'}
           </p>
         </div>
 
@@ -1150,7 +1149,7 @@ export function TeamDashboard() {
             ) : (
               <div className="space-y-3">
                 <div className="text-[13px] text-muted-foreground">
-                  {getStaffName(selectedStaffId || '')} · 每日工作類別工時 · 點擊日期卡片於右側查看詳情
+                  {getStaffName(selectedStaffId || '')} · 每日工作類別工時 · 點擊日期卡片查看當日匯報
                 </div>
 
                 {periodType === 'week' ? (
@@ -1207,6 +1206,7 @@ export function TeamDashboard() {
                       : formatPeriodLabel(periodType, anchorDate, dateRange.start, dateRange.end)}
                     {' · '}
                     <span className="font-semibold text-teal-700">{detailTotalHours}h</span>
+                    {' · 點擊日期查看當日匯報'}
                   </p>
                 </div>
                 <button
@@ -1229,7 +1229,11 @@ export function TeamDashboard() {
                   <div className="space-y-4">
                     {detailEntriesByDate.map((day) => (
                       <div key={day.dateStr} className="space-y-2">
-                        <div className="flex items-center justify-between gap-2">
+                        <DayReportSubmitLink
+                          staffId={detailStaffId || ''}
+                          date={day.dateStr}
+                          className="flex items-center justify-between gap-2 rounded-md px-1 py-1 -mx-1 hover:bg-teal-50"
+                        >
                           <h4 className="text-[13px] font-bold">{day.label}</h4>
                           <div className="flex items-center gap-2 text-[11px]">
                             {day.report?.is_leave && (
@@ -1250,7 +1254,7 @@ export function TeamDashboard() {
                               {roundHours(day.items.reduce((s, e) => s + (Number(e.hours) || 0), 0))}h
                             </span>
                           </div>
-                        </div>
+                        </DayReportSubmitLink>
 
                         {day.report?.is_leave && day.items.length === 0 ? (
                           <p className="text-[12px] text-muted-foreground px-1">當日請假，無工作項目</p>

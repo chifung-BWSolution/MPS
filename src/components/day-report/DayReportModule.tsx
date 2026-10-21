@@ -49,6 +49,7 @@ import {
   nextTeamAfterScopeChange,
 } from '@/components/day-report/staffOrgFilter';
 import { getDayReportCompletionStatus, sumEntryHours } from '@/lib/dayReportCompletion';
+import { DayReportSubmitLink } from '@/components/day-report/DayReportSubmitLink';
 
 // ============================
 // Today Team Reports (Read-Only)
@@ -69,7 +70,6 @@ function TodayTeamReports() {
   const [selectedCompanyId, setSelectedCompanyId] = useState(STAFF_ORG_ALL);
   const [selectedBrandId, setSelectedBrandId] = useState(STAFF_ORG_ALL);
   const [selectedTeam, setSelectedTeam] = useState(STAFF_ORG_ALL);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   type TodayStaff = {
     id: string;
@@ -92,7 +92,6 @@ function TodayTeamReports() {
 
   const applyTargetDate = (dateStr: string) => {
     setTargetDate(dateStr);
-    setExpandedId(null);
     setDatePickerOpen(false);
   };
 
@@ -396,7 +395,7 @@ function TodayTeamReports() {
               </button>
             </div>
             <p className="text-[12px] text-muted-foreground mt-1">
-              {completedCount} 人已完成
+              點擊人員查看該日匯報 · {completedCount} 人已完成
               {incompleteCount > 0 && <span className="text-amber-600"> · {incompleteCount} 人未完成</span>}
               {notSubmittedStaff.length > 0 && <span className="text-rose-500"> · {notSubmittedStaff.length} 人未提交</span>}
             </p>
@@ -453,7 +452,13 @@ function TodayTeamReports() {
               const fillStatus = reportFillStatus(report);
               const loggedHours = sumEntryHours(entries);
               return (
-                <div key={report.id} className="px-5 py-3.5 hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => setExpandedId(expandedId === report.id ? null : report.id)}>
+                <DayReportSubmitLink
+                  key={report.id}
+                  staffId={report.staff_id}
+                  date={targetDate}
+                  title={`查看 ${staffName} 的匯報`}
+                  className="block px-5 py-3.5 hover:bg-teal-50/40 transition-colors cursor-pointer"
+                >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-gradient-to-br from-teal-100 to-teal-200 flex items-center justify-center text-[13px] font-bold text-teal-700">{staffName.slice(0, 1)}</div>
@@ -477,7 +482,7 @@ function TodayTeamReports() {
                   </div>
                   {/* Entry summary */}
                   <div className="ml-12 space-y-1">
-                    {entries.slice(0, expandedId === report.id ? undefined : 3).map(entry => {
+                    {entries.slice(0, 3).map(entry => {
                       const config = categoryLookup[entry.category] || { bg: 'bg-gray-50', color: 'text-gray-600', icon: '📋', label: entry.category };
                       return (
                         <div key={entry.id} className="flex items-center gap-2">
@@ -490,21 +495,9 @@ function TodayTeamReports() {
                         </div>
                       );
                     })}
-                    {expandedId !== report.id && entries.length > 3 && <span className="text-[12px] text-muted-foreground">+{entries.length - 3} 項其他工作</span>}
+                    {entries.length > 3 && <span className="text-[12px] text-muted-foreground">+{entries.length - 3} 項其他工作</span>}
                   </div>
-                  {/* Expanded detail view */}
-                  {expandedId === report.id && entries.some(e => e.outcome_url || e.growth_experience) && (
-                    <div className="ml-12 mt-2 pt-2 border-t border-border/30">
-                      <span className="text-[11px] font-semibold text-teal-600 block mb-1">📌 成果輸出</span>
-                      {entries.filter(e => e.outcome_url || e.growth_experience).map(entry => (
-                        <div key={entry.id + '-outcome'} className="text-[12px] text-muted-foreground flex items-center gap-1 mb-0.5">
-                          {entry.outcome_url && <><Link size={10} className="text-teal-500" /><span className="truncate">{entry.outcome_url}</span></>}
-                          {entry.growth_experience && <><Sparkles size={10} className="text-emerald-500" /><span>{entry.growth_experience}</span></>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                </DayReportSubmitLink>
               );
             })}
 
@@ -523,13 +516,19 @@ function TodayTeamReports() {
                   <span className="text-[12px] font-semibold text-rose-600">缺交名單 ({notSubmittedStaff.length})</span>
                 </div>
                 {notSubmittedStaff.map(staff => (
-                  <div key={staff.id} className="px-5 py-3.5 opacity-60">
+                  <DayReportSubmitLink
+                    key={staff.id}
+                    staffId={staff.id}
+                    date={targetDate}
+                    title={`查看 ${staff.display_name} 的匯報`}
+                    className="block px-5 py-3.5 opacity-60 hover:opacity-100 hover:bg-muted/20 transition-colors"
+                  >
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-[13px] font-bold text-gray-400">{staff.display_name.slice(0, 1)}</div>
                       <span className="text-[14px] font-medium text-muted-foreground">{staff.display_name}</span>
                       <span className="text-[11px] px-1.5 py-0.5 rounded bg-rose-50 text-rose-500 border border-rose-200">未提交</span>
                     </div>
-                  </div>
+                  </DayReportSubmitLink>
                 ))}
               </>
             )}

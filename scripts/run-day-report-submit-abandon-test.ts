@@ -6,11 +6,14 @@ import {
   getDayReportCompletionStatus,
   isAbandonedEmptyDayReport,
   toDayReportWeekCard,
-} from '../src/lib/dayReportCompletion';
+} from '../src/lib/dayReportCompletion.ts';
 
 assert.equal(isAbandonedEmptyDayReport({ is_leave: false }, 0), true);
 assert.equal(isAbandonedEmptyDayReport({ is_leave: false }, 1), false);
 assert.equal(isAbandonedEmptyDayReport({ is_leave: true }, 0), false);
+assert.equal(isAbandonedEmptyDayReport({ is_leave: false, is_half_day: true }, 0), false);
+assert.equal(isAbandonedEmptyDayReport({ is_leave: false, target_hours: 4 }, 0), false);
+assert.equal(isAbandonedEmptyDayReport({ is_leave: false, target_hours: 4.5 }, 0), false);
 assert.equal(isAbandonedEmptyDayReport(null, 0), false);
 
 const created = toDayReportWeekCard({
@@ -29,6 +32,7 @@ const submitSrc = readFileSync(join(root, 'src/components/day-report/SubmitRepor
 assert.match(submitSrc, /upsertLocalDbReport/);
 assert.match(submitSrc, /abandonEmptyReport/);
 assert.match(submitSrc, /isAbandonedEmptyDayReport/);
+assert.match(submitSrc, /is_leave, is_half_day, target_hours/);
 assert.match(submitSrc, /loadDbReports\(\{ silent: true \}\)/);
 assert.doesNotMatch(submitSrc, /if \(date > todayStr\) return/);
 assert.doesNotMatch(submitSrc, /disabled=\{d\.isFuture\}/);

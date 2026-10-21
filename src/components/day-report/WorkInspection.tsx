@@ -22,6 +22,7 @@ import {
   nextTeamAfterScopeChange,
 } from '@/components/day-report/staffOrgFilter';
 import { getDayReportCompletionStatus } from '@/lib/dayReportCompletion';
+import { DayReportSubmitLink } from '@/components/day-report/DayReportSubmitLink';
 
 // ============================
 // Types
@@ -145,19 +146,24 @@ function resolveDayStatus(
 function StatusCell({
   dateStr,
   status,
+  staffId,
 }: {
   dateStr: string | null;
   status: DayStatus;
+  staffId?: string;
 }) {
-  if (!dateStr || status === 'empty') {
+  if (!dateStr || status === 'empty' || !staffId) {
     return <div className="h-9 rounded bg-transparent" />;
   }
 
   const dayNum = parseDateStr(dateStr).getDate();
 
   return (
-    <div className={cn(
-      'h-9 rounded border flex flex-col items-center justify-center gap-0.5 min-w-0',
+    <DayReportSubmitLink
+      staffId={staffId}
+      date={dateStr}
+      className={cn(
+      'h-9 rounded border flex flex-col items-center justify-center gap-0.5 min-w-0 cursor-pointer hover:ring-2 hover:ring-teal-200 transition-shadow',
       status === 'missing' && 'border-rose-100 bg-rose-50/40',
       status === 'future' && 'border-transparent bg-slate-50/60',
       status === 'filled' && 'border-emerald-100 bg-emerald-50/50',
@@ -189,7 +195,7 @@ function StatusCell({
       {(status === 'missing' || status === 'future') && (
         <span className="w-3.5 h-3.5" />
       )}
-    </div>
+    </DayReportSubmitLink>
   );
 }
 
@@ -553,6 +559,7 @@ export function WorkInspection() {
                     key={key}
                     dateStr={dateStr}
                     status={status}
+                    staffId={dateStr ? member.id : undefined}
                   />
                 );
               })}
@@ -674,6 +681,7 @@ export function WorkInspection() {
           <span className="w-3.5 h-3.5 rounded border border-rose-100 bg-rose-50/40" />
           未填報
         </span>
+        <span className="text-muted-foreground">· 點擊日期查看當日匯報</span>
       </div>
 
       {loading ? (

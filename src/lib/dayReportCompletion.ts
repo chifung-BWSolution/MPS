@@ -47,17 +47,29 @@ export function getDayReportCompletionStatus(
   return hoursEqual(entryHoursSum, getRequiredDayHours(report)) ? 'complete' : 'incomplete';
 }
 
+function isHalfDayTarget(hours: number): boolean {
+  const tenths = Math.round(hours * 10);
+  return tenths === 40 || tenths === 45;
+}
+
 /**
- * Date-open auto-creates a header. If the user leaves without any entries,
- * that empty non-leave header is an abandoned draft and should be deleted.
- * Leave days are kept — they are a completed report with no tasks.
+ * Date-open auto-creates a full-day header. If the user leaves without any
+ * entries, that empty header is an abandoned draft and should be deleted.
+ * Leave days and half-day headers are kept: a half day with no task lines is
+ * an unfinished report, not a blank draft.
  */
 export function isAbandonedEmptyDayReport(
-  report: { is_leave?: boolean | null } | null | undefined,
+  report: {
+    is_leave?: boolean | null;
+    is_half_day?: boolean | null;
+    target_hours?: number | null;
+  } | null | undefined,
   entryCount: number,
 ): boolean {
   if (!report) return false;
   if (report.is_leave) return false;
+  if (report.is_half_day) return false;
+  if (isHalfDayTarget(Number(report.target_hours))) return false;
   return !Number.isFinite(entryCount) || entryCount <= 0;
 }
 

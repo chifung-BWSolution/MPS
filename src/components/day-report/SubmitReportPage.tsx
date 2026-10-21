@@ -40,6 +40,11 @@ import {
   type DayReportCompletionStatus,
   type DayReportWeekCard,
 } from '@/lib/dayReportCompletion';
+import { applyLocationHash } from '@/lib/appNavigation';
+import {
+  buildDayReportSubmitHash,
+  parseDayReportSubmitQuery,
+} from '@/lib/dayReportNavigation';
 import {
   consumePendingItems,
   pullPendingItems,
@@ -106,10 +111,15 @@ function getFullDayHours(office: OfficeLocation): number {
   return office === 'sz' ? 7.5 : 8;
 }
 
+function getHalfDayHours(office: OfficeLocation): number {
+  return office === 'sz' ? 4.5 : 4;
+}
+
 function inferHoursPreset(hours: number, office: OfficeLocation): HoursPreset {
   const full = getFullDayHours(office);
+  const half = getHalfDayHours(office);
   if (hours === 0) return 'off';
-  if (hours === 4) return 'half';
+  if (hours === half) return 'half';
   if (hours === full) return 'full';
   return 'custom';
 }
@@ -212,10 +222,15 @@ export function SubmitReportPage() {
   const { systemUser } = useAuth();
 
   const [office, setOffice] = useState<OfficeLocation>('hk');
-  const [selectedDate, setSelectedDate] = useState<string>(() => toLocalDateStr(new Date()));
-  const [laterWeekSunday, setLaterWeekSunday] = useState<string>(() =>
-    toLocalDateStr(startOfWeekSunday(new Date())),
-  );
+  const [viewQuery, setViewQuery] = useState(parseDayReportSubmitQuery);
+  const [selfStaffId, setSelfStaffId] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>(() => (
+    parseDayReportSubmitQuery().date || toLocalDateStr(new Date())
+  ));
+  const [laterWeekSunday, setLaterWeekSunday] = useState<string>(() => {
+    const date = parseDayReportSubmitQuery().date;
+    return toLocalDateStr(startOfWeekSunday(date ? parseWeekDateStr(date) : new Date()));
+  });
   const [weekPickerOpen, setWeekPickerOpen] = useState(false);
 
   const [form, setForm] = useState<ReportFormEntry>(createBlankForm);
@@ -227,6 +242,7 @@ export function SubmitReportPage() {
   const [savedTargetHours, setSavedTargetHours] = useState<number>(8);
   const [savedHoursPreset, setSavedHoursPreset] = useState<HoursPreset>('full');
   const fullDayHours = getFullDayHours(office);
+  const halfDayHours = getHalfDayHours(office);
 
   const [isPulling, setIsPulling] = useState(false);
   const [isSavingTask, setIsSavingTask] = useState(false);
@@ -238,10 +254,16 @@ export function SubmitReportPage() {
   const [savedEntries, setSavedEntries] = useState<SavedEntry[]>([]);
   const [isLoadingExisting, setIsLoadingExisting] = useState(true);
 
-  const [currentStaffId, setCurrentStaffId] = useState<string | null>(null);
+  const [currentStaffId, setCurrentStaffId] = useState<string | null>(() => parseDayReportSubmitQuery().staffId);
   const [currentStaffName, setCurrentStaffName] = useState<string>('');
-  const [staffIdResolved, setStaffIdResolved] = useState(false);
-  const { count: pendingCount, refresh: refreshPendingCount } = usePendingReportItems(currentStaffId, selectedDate);
+  const [staffIdResolved, setStaffIdResolved] = useState(() => !!parseDayReportSubmitQuery().staffId);
+  const readOnly = !!viewQuery.staffId && (!selfStaffId || viewQuery.staffId !== selfStaffId);
+  const allowCreateRef = useRef(true);
+  allowCreateRef.current = !readOnly;
+  const { count: pendingCount, refresh: refreshPendingCount } = usePendingReportItems(
+    readOnly ? null : currentStaffId,
+    selectedDate,
+  );
 
   const [dbReports, setDbReports] = useState<DayReportWeekCard[]>([]);
   const [isLoadingDbReports, setIsLoadingDbReports] = useState(true);
@@ -298,11 +320,11 @@ export function SubmitReportPage() {
   const applyHoursPreset = useCallback((preset: HoursPreset, officeLoc: OfficeLocation = office) => {
     setHoursPreset(preset);
     if (preset === 'full') setTargetHours(getFullDayHours(officeLoc));
-    else if (preset === 'half') setTargetHours(4);
+    else if (preset === 'half') setTargetHours(getHalfDayHours(officeLoc));
     else if (preset === 'off') setTargetHours(0);
     else if (preset === 'custom') {
       setTargetHours((prev) => {
-        if (prev === 0 || prev === 4 || prev === getFullDayHours(officeLoc)) {
+        if (prev === 0 || prev === getHalfDayHours(officeLoc) || prev === getFullDayHours(officeLoc)) {
           return getFullDayHours(officeLoc);
         }
         return prev;
@@ -508,7 +530,7 @@ export function SubmitReportPage() {
         .eq('day_report_id', reportId),
       supabase
         .from('day_reports')
-        .select('is_leave')
+        .select('is_leave, is_half_day, target_hours')
         .eq('id', reportId)
         .eq('staff_id', staffId)
         .maybeSingle(),
@@ -536,6 +558,7 @@ export function SubmitReportPage() {
   }, []);
 
   const abandonEmptyReport = useCallback(async (snapshot: CurrentReportSnap) => {
+    if (!allowCreateRef.current) return;
     if (!snapshot.id || !snapshot.staffId) return;
     if (snapshot.isLeave) return;
     const deleted = await deleteEmptyReportById(snapshot.id, snapshot.staffId);
@@ -570,6 +593,10 @@ export function SubmitReportPage() {
         applyHeader(existing.header, staffId, date);
         setSavedEntries(existing.entries);
         upsertLocalDbReport(existing.header, date, sumEntryHours(existing.entries));
+      } else if (!allowCreateRef.current) {
+        currentReportRef.current = { id: null, staffId, date, isLeave: false };
+        setExistingReportId(null);
+        setSavedEntries([]);
       } else {
         const report = await insertReport(staffId, date);
         if (seq !== openSeqRef.current) {
@@ -610,25 +637,63 @@ export function SubmitReportPage() {
   ]);
 
   useEffect(() => {
+    const sync = () => setViewQuery(parseDayReportSubmitQuery());
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
+  }, []);
+
+  useEffect(() => {
+    if (!viewQuery.date) return;
+    setSelectedDate(viewQuery.date);
+    setLaterWeekSunday((sunday) => {
+      const window = getTwoWeekWindow(parseWeekDateStr(sunday));
+      if (viewQuery.date! >= window.windowStart && viewQuery.date! <= window.windowEnd) return sunday;
+      return toLocalDateStr(startOfWeekSunday(parseWeekDateStr(viewQuery.date!)));
+    });
+  }, [viewQuery.date]);
+
+  useEffect(() => {
     if (!systemUser) {
-      setStaffIdResolved(false);
+      setSelfStaffId(null);
+      if (!viewQuery.staffId) setStaffIdResolved(false);
       return;
     }
-    setCurrentStaffName(systemUser.display_name);
+    if (!viewQuery.staffId) setCurrentStaffName(systemUser.display_name);
     const sessionId = staffUuidFromSession(systemUser);
     if (sessionId) {
-      setCurrentStaffId(sessionId);
+      setSelfStaffId(sessionId);
       setStaffIdResolved(true);
       return;
     }
     let aborted = false;
     void resolveStaffUuid(systemUser, { refreshFromLogin: true }).then((realId) => {
       if (aborted) return;
-      setCurrentStaffId(realId);
+      setSelfStaffId(realId);
       setStaffIdResolved(true);
     });
     return () => { aborted = true; };
-  }, [systemUser]);
+  }, [systemUser, viewQuery.staffId]);
+
+  useEffect(() => {
+    const id = viewQuery.staffId || selfStaffId;
+    setCurrentStaffId(id);
+    if (viewQuery.staffId) setStaffIdResolved(true);
+  }, [viewQuery.staffId, selfStaffId]);
+
+  useEffect(() => {
+    const id = viewQuery.staffId;
+    if (!id) return;
+    let cancelled = false;
+    void supabase
+      .from('staffs')
+      .select('display_name')
+      .eq('id', id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled && data?.display_name) setCurrentStaffName(data.display_name);
+      });
+    return () => { cancelled = true; };
+  }, [viewQuery.staffId]);
 
   const officeInitializedRef = useRef(false);
   useEffect(() => {
@@ -636,8 +701,8 @@ export function SubmitReportPage() {
     officeInitializedRef.current = true;
     const derived = officeFromBaseLocation(systemUser.office);
     setOffice(derived);
-    applyHoursPreset('full', derived);
-  }, [systemUser, applyHoursPreset]);
+    if (!viewQuery.staffId) applyHoursPreset('full', derived);
+  }, [systemUser, applyHoursPreset, viewQuery.staffId]);
 
   useEffect(() => {
     loadDbReports();
@@ -656,7 +721,7 @@ export function SubmitReportPage() {
       skipEnsureKeyRef.current = null;
     }
     void openDateRef.current(currentStaffId, selectedDate);
-  }, [currentStaffId, selectedDate, staffIdResolved]);
+  }, [currentStaffId, selectedDate, staffIdResolved, readOnly]);
 
   const abandonEmptyReportRef = useRef(abandonEmptyReport);
   abandonEmptyReportRef.current = abandonEmptyReport;
@@ -684,7 +749,7 @@ export function SubmitReportPage() {
 
   const selectDate = (date: string) => {
     if (date === selectedDate) {
-      if (!existingReportId && currentStaffId) {
+      if (!existingReportId && currentStaffId && allowCreateRef.current) {
         skipEnsureKeyRef.current = null;
         void openDate(currentStaffId, date);
       }
@@ -697,8 +762,11 @@ export function SubmitReportPage() {
       date,
       isLeave: false,
     };
-    void abandonEmptyReport(previous);
+    if (allowCreateRef.current) void abandonEmptyReport(previous);
     setSelectedDate(date);
+    if (viewQuery.staffId) {
+      applyLocationHash(buildDayReportSubmitHash(viewQuery.staffId, date));
+    }
   };
 
   type FrequentItem = {
@@ -829,7 +897,7 @@ export function SubmitReportPage() {
   }, [currentStaffId, resolveRelationType]);
 
   useEffect(() => {
-    if (!currentStaffId) {
+    if (!currentStaffId || readOnly) {
       setRecentFrequentItems([]);
       return;
     }
@@ -837,7 +905,7 @@ export function SubmitReportPage() {
       void loadRecentFrequentItems();
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [currentStaffId, loadRecentFrequentItems]);
+  }, [currentStaffId, loadRecentFrequentItems, readOnly]);
 
   const totalHours = savedEntries.reduce((sum, e) => sum + (e.hours || 0), 0);
   const otHours = Math.max(0, totalHours - fullDayHours);
@@ -1015,7 +1083,7 @@ export function SubmitReportPage() {
 
   const hoursSaveSeqRef = useRef(0);
   const handleUpdateTargetHours = useCallback(async () => {
-    if (!existingReportId) return;
+    if (readOnly || !existingReportId) return;
     if (hoursPreset === 'custom' && !(targetHours > 0)) return;
     const seq = ++hoursSaveSeqRef.current;
     setIsUpdatingHours(true);
@@ -1062,6 +1130,7 @@ export function SubmitReportPage() {
     isDayOff,
     loadDbReports,
     office,
+    readOnly,
     selectedDate,
     targetHours,
     totalHours,
@@ -1069,7 +1138,7 @@ export function SubmitReportPage() {
   ]);
 
   useEffect(() => {
-    if (!existingReportId || isLoadingExisting || !targetHoursDirty) return;
+    if (readOnly || !existingReportId || isLoadingExisting || !targetHoursDirty) return;
     if (hoursPreset === 'custom' && !(targetHours > 0)) return;
     const delay = hoursPreset === 'custom' ? 450 : 80;
     const timer = window.setTimeout(() => {
@@ -1081,13 +1150,16 @@ export function SubmitReportPage() {
     handleUpdateTargetHours,
     hoursPreset,
     isLoadingExisting,
+    readOnly,
     targetHours,
     targetHoursDirty,
   ]);
 
   const switchOffice = async (next: OfficeLocation) => {
+    if (readOnly) return;
     setOffice(next);
     if (hoursPreset === 'full') setTargetHours(getFullDayHours(next));
+    else if (hoursPreset === 'half') setTargetHours(getHalfDayHours(next));
     if (!existingReportId) return;
     const { error } = await supabase
       .from('day_reports')
@@ -1318,12 +1390,22 @@ export function SubmitReportPage() {
 
   return (
     <div className="space-y-4">
+      {readOnly && (
+        <div className="px-4 py-2.5 rounded-lg border border-sky-200 bg-sky-50 text-[13px] text-sky-800">
+          正在查看 <strong>{currentStaffName || '此同事'}</strong> 在 {formatDateFull(selectedDate)} 的匯報。
+        </div>
+      )}
       <div className="bg-gradient-to-r from-teal-50/80 to-white rounded-lg border border-teal-100 px-5 py-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <MapPin size={14} className="text-teal-600" />
               <span className="text-[14px] font-semibold text-teal-700">辦公室：</span>
+              {readOnly ? (
+                <span className="text-[14px] font-medium text-teal-800">
+                  {office === 'hk' ? '🇭🇰 香港' : '🇨🇳 深圳'}
+                </span>
+              ) : (
               <div className="flex items-center gap-0.5 p-0.5 bg-teal-100/60 rounded-md">
                 <button
                   type="button"
@@ -1340,12 +1422,14 @@ export function SubmitReportPage() {
                   🇨🇳 深圳
                 </button>
               </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <FileText size={14} className="text-teal-600" />
               <span className="text-[14px] font-semibold text-teal-700">📝 工作匯報</span>
             </div>
           </div>
+          {!readOnly && (
           <button
             type="button"
             onClick={() => void handleRefreshPending()}
@@ -1355,6 +1439,7 @@ export function SubmitReportPage() {
             <RefreshCw size={12} className={isPulling ? 'animate-spin' : ''} />
             {isPulling ? '刷新中...' : '刷新待匯報'}
           </button>
+          )}
         </div>
         {pendingCount > 0 && (
           <p className="text-[13px] text-teal-700 bg-teal-50 border border-teal-100 rounded-md px-3 py-2 mt-2">
@@ -1363,7 +1448,9 @@ export function SubmitReportPage() {
         )}
         <p className="text-[13px] text-teal-600/70 mt-2">
           {office === 'hk' ? '🇭🇰 香港辦公室' : '🇨🇳 深圳辦公室'} ·
-          可按週瀏覽並補交未匯報的工作日（含週六加班），亦可點選未來日期預先填寫
+          {readOnly
+            ? '可按週切換，查看此同事各日匯報'
+            : '可按週瀏覽並補交未匯報的工作日（含週六加班），亦可點選未來日期預先填寫'}
         </p>
       </div>
 
@@ -1515,9 +1602,13 @@ export function SubmitReportPage() {
               <span className="text-[14px] text-muted-foreground">載入當日任務...</span>
             </div>
           ) : !existingReportId ? (
-            <p className="text-[13px] text-muted-foreground py-6 text-center">此日沒有匯報記錄。再點一次日期即可重新建立。</p>
+            <p className="text-[13px] text-muted-foreground py-6 text-center">
+              {readOnly ? '此日尚未提交匯報' : '此日沒有匯報記錄。再點一次日期即可重新建立。'}
+            </p>
           ) : savedEntries.length === 0 ? (
-            <p className="text-[13px] text-muted-foreground py-6 text-center">此日尚未新增任務</p>
+            <p className="text-[13px] text-muted-foreground py-6 text-center">
+              {readOnly ? '此日尚未填寫工作項目' : '此日尚未新增任務'}
+            </p>
           ) : (
             <div className="space-y-2">
               {savedEntries.map((entry) => {
@@ -1544,7 +1635,13 @@ export function SubmitReportPage() {
                         {entry.relatedName || '—'} · {entry.hours}h
                       </p>
                       <p className="text-[12px] text-muted-foreground truncate">{entry.title || '未命名任務'}</p>
+                      {readOnly && (entry.outcomeUrl || entry.growthExperience) && (
+                        <p className="text-[12px] text-teal-700 truncate">
+                          {entry.outcomeUrl || entry.growthExperience}
+                        </p>
+                      )}
                     </div>
+                    {!readOnly && (
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         type="button"
@@ -1563,6 +1660,7 @@ export function SubmitReportPage() {
                         刪除
                       </button>
                     </div>
+                    )}
                   </div>
                 );
               })}
@@ -1629,10 +1727,15 @@ export function SubmitReportPage() {
 
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-rose-50 border-2 border-rose-300 flex-wrap min-w-0">
               <span className="text-[13px] font-semibold text-rose-700 shrink-0">目標工時：</span>
+              {readOnly ? (
+                <span className="text-[13px] font-medium text-rose-800">
+                  {isDayOff ? '放假 (0h)' : `${targetHours}h`}
+                </span>
+              ) : (
               <div className="flex items-center gap-1.5 flex-wrap">
                 {([
                   { id: 'full' as const, label: `全日 (${fullDayHours === 7.5 ? '7.5' : '8'}h)` },
-                  { id: 'half' as const, label: '半日 (4h)' },
+                  { id: 'half' as const, label: `半日 (${halfDayHours}h)` },
                   { id: 'custom' as const, label: '自訂工作時數' },
                   { id: 'off' as const, label: '放假 (0h)' },
                 ]).map((opt) => (
@@ -1672,6 +1775,7 @@ export function SubmitReportPage() {
                   </span>
                 )}
               </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-border/60">
@@ -1715,7 +1819,7 @@ export function SubmitReportPage() {
               )}
             </div>
 
-            {existingReportId && !isTodaySelected && (
+            {existingReportId && !isTodaySelected && !readOnly && (
               <button
                 type="button"
                 onClick={() => void handleDeleteReport()}
@@ -1734,6 +1838,8 @@ export function SubmitReportPage() {
             )}
           </div>
 
+          {!readOnly && (
+          <>
           <div className="bg-white rounded-lg border border-border/60 px-4 py-3">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="flex items-center gap-1 text-[14px] font-medium text-muted-foreground shrink-0">
@@ -2131,6 +2237,8 @@ export function SubmitReportPage() {
               )}
             </div>
           </div>
+          </>
+          )}
 
           <div className="flex flex-col gap-2 pt-4 border-t border-border/40 bg-white rounded-lg px-5 py-4 border border-border/60 shadow-sm sticky bottom-0">
             {formError && (
@@ -2141,9 +2249,10 @@ export function SubmitReportPage() {
             )}
             {currentStaffId && (
               <div className="text-[13px] text-muted-foreground">
-                提交者：<span className="font-medium text-teal-700">{currentStaffName || currentStaffId}</span>
+                {readOnly ? '匯報人' : '提交者'}：<span className="font-medium text-teal-700">{currentStaffName || currentStaffId}</span>
               </div>
             )}
+            {!readOnly && (
             <div className="flex items-center justify-end">
               <button
                 type="button"
@@ -2172,6 +2281,7 @@ export function SubmitReportPage() {
                         : '新增任務'}
               </button>
             </div>
+            )}
           </div>
       </div>
     </div>
