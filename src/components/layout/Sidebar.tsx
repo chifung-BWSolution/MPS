@@ -106,9 +106,9 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-3 px-2">
         {hasSubMenus ? (
           <ul className="space-y-0.5">
-            {currentMenuData.subMenus.map((subItem, index) => {
+            {currentMenuData.subMenus.filter((subItem) => !subItem.hidden).map((subItem, index, visibleItems) => {
               const isSubActive = !subItem.linkTo && currentSubModule === subItem.id;
-              const prevSection = index > 0 ? currentMenuData.subMenus[index - 1]?.section : undefined;
+              const prevSection = index > 0 ? visibleItems[index - 1]?.section : undefined;
               const showSection =
                 !sidebarCollapsed &&
                 !!subItem.section &&

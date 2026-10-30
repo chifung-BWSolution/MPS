@@ -233,6 +233,12 @@ export function InvoicePDFDocument({
         </View>
 
         <View style={styles.footerSection}>
+          {form.serviceRenewalNote ? (
+            <View style={styles.noteBlock}>
+              <Text style={styles.noteTitle}>服務說明 Service Note:</Text>
+              <Text style={styles.noteContent}>{form.serviceRenewalNote}</Text>
+            </View>
+          ) : null}
           {form.note ? (
             <View style={styles.noteBlock}>
               <Text style={styles.noteTitle}>備註 Note:</Text>

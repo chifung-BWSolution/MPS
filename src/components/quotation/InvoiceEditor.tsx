@@ -27,6 +27,8 @@ import {
   invoiceMainAmount,
   invoiceMeetsFloor,
   invoiceNetTotal,
+  buildServiceRenewalMessage,
+  serviceRenewalTotal,
 } from '@/lib/invoiceReceipts';
 import { applyPrimaryCompanyChange } from '@/lib/pdfBranding';
 import { downloadPdfBlob, openPdfPreview, pdfBlobFromDocument } from '@/lib/invoiceReceiptPdf';
@@ -44,6 +46,12 @@ export function InvoiceEditor({
   const { state, setState, loading, error, refresh } = useInvoiceEditor(incomeId);
   const [saving, setSaving] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [showRenewalOverride, setShowRenewalOverride] = useState<{ incomeId: string; value: boolean } | null>(null);
+  const [launchOverride, setLaunchOverride] = useState<{ incomeId: string; value: string } | null>(null);
+  const [monthlyOverride, setMonthlyOverride] = useState<{ incomeId: string; value: number } | null>(null);
+  const [periodOverride, setPeriodOverride] = useState<{ incomeId: string; value: number } | null>(null);
+  const [totalOverride, setTotalOverride] = useState<{ incomeId: string; value: number } | null>(null);
+  const [textEdit, setTextEdit] = useState<{ incomeId: string; value: boolean } | null>(null);
 
   const totals = useMemo(() => {
     if (!state) return null;
@@ -62,6 +70,40 @@ export function InvoiceEditor({
     return { mainAmount, subTotal, gross, discount, net, floorOk };
   }, [state]);
 
+  const forThisIncome = <T,>(slot: { incomeId: string; value: T } | null): T | undefined => (
+    slot && slot.incomeId === incomeId ? slot.value : undefined
+  );
+  const launchDate = forThisIncome(launchOverride) ?? state?.renewalSource.launchDate ?? '';
+  const monthlyAmount = forThisIncome(monthlyOverride) ?? totals?.net ?? 0;
+  const periodCount = forThisIncome(periodOverride) ?? state?.renewalSource.incomeCount ?? 0;
+  const totalTouched = totalOverride?.incomeId === incomeId;
+  const totalIncomeAmount = totalOverride?.incomeId === incomeId
+    ? totalOverride.value
+    : serviceRenewalTotal(monthlyAmount, periodCount);
+  const monthlyTouched = monthlyOverride?.incomeId === incomeId;
+  const hasFieldOverride = launchOverride?.incomeId === incomeId
+    || monthlyTouched
+    || periodOverride?.incomeId === incomeId
+    || totalTouched;
+  const hasWebsite = state?.renewalSource.hasWebsite ?? false;
+  const defaultNote = state
+    ? buildServiceRenewalMessage({
+      launchDate: state.renewalSource.launchDate,
+      dueDate: state.form.dueDate,
+      monthlyAmount: totals?.net ?? 0,
+      periodCount: state.renewalSource.incomeCount,
+      totalAmount: serviceRenewalTotal(totals?.net ?? 0, state.renewalSource.incomeCount),
+      hasWebsite,
+    })
+    : '';
+  const savedNote = state?.form.serviceRenewalNote.trim() ?? '';
+  const renewalCustom = textEdit?.incomeId === incomeId
+    ? textEdit.value
+    : !hasFieldOverride && savedNote !== '' && savedNote !== defaultNote;
+  const renewalVisible = showRenewalOverride?.incomeId === incomeId
+    ? showRenewalOverride.value
+    : (state?.income.installmentNo ?? 0) >= 2;
+
   if (loading) {
     return <p className="text-[13px] text-muted-foreground py-10">載入發票中…</p>;
   }
@@ -76,6 +118,26 @@ export function InvoiceEditor({
 
   const patchForm = (updates: Partial<typeof state.form>) => {
     setState({ ...state, form: { ...state.form, ...updates } });
+  };
+
+  const renewalMessage = (input: {
+    launchDate: string;
+    dueDate: string;
+    monthlyAmount: number;
+    periodCount: number;
+    totalAmount: number;
+  }) => buildServiceRenewalMessage({ ...input, hasWebsite: state.renewalSource.hasWebsite });
+
+  const followInvoiceTotal = (net: number) => {
+    if (renewalCustom || monthlyTouched) return null;
+    const total = totalTouched ? totalIncomeAmount : serviceRenewalTotal(net, periodCount);
+    return renewalMessage({
+      launchDate,
+      dueDate: state.form.dueDate,
+      monthlyAmount: net,
+      periodCount,
+      totalAmount: total,
+    });
   };
 
   const primaryCompany = state.companies.find((c) => c.id === state.form.companyId) ?? null;
@@ -103,9 +165,33 @@ export function InvoiceEditor({
     return true;
   };
 
+  const syncRenewal = (
+    next: {
+      launchDate: string;
+      dueDate: string;
+      monthlyAmount: number;
+      periodCount: number;
+      totalAmount: number;
+    },
+    formPatch: Partial<typeof state.form> = {},
+  ) => {
+    const patch: Partial<typeof state.form> = { ...formPatch };
+    if (!renewalCustom) patch.serviceRenewalNote = renewalMessage(next);
+    if (Object.keys(patch).length > 0) patchForm(patch);
+  };
+
+  const resetRenewalMessage = () => {
+    setLaunchOverride(null);
+    setMonthlyOverride(null);
+    setPeriodOverride(null);
+    setTotalOverride(null);
+    setTextEdit({ incomeId, value: false });
+    patchForm({ serviceRenewalNote: defaultNote });
+  };
+
   const buildPdf = () =>
     createElement(InvoicePDFDocument, {
-      form: state.form,
+      form: renewalVisible ? state.form : { ...state.form, serviceRenewalNote: '' },
       lines: state.lines,
       company: primaryCompany,
       mainAmount: totals.mainAmount,
@@ -206,7 +292,21 @@ export function InvoiceEditor({
                 </div>
                 <div>
                   <FieldLabel>到期日 Due Date</FieldLabel>
-                  <Input className={editorInputClass} type="date" value={state.form.dueDate} onChange={(e) => patchForm({ dueDate: e.target.value })} />
+                  <Input
+                    className={editorInputClass}
+                    type="date"
+                    value={state.form.dueDate}
+                    onChange={(e) => {
+                      const dueDate = e.target.value;
+                      syncRenewal({
+                        launchDate,
+                        dueDate,
+                        monthlyAmount,
+                        periodCount,
+                        totalAmount: totalIncomeAmount,
+                      }, { dueDate });
+                    }}
+                  />
                 </div>
                 <div>
                   <FieldLabel>收款人 Receiver</FieldLabel>
@@ -236,7 +336,17 @@ export function InvoiceEditor({
                     type="number"
                     className={editorInputClass}
                     value={state.form.mainItemQty}
-                    onChange={(e) => patchForm({ mainItemQty: Number(e.target.value) || 0 })}
+                    onChange={(e) => {
+                      const mainItemQty = Number(e.target.value) || 0;
+                      const note = followInvoiceTotal(invoiceNetTotal(
+                        mainItemQty,
+                        state.form.mainItemPrice,
+                        state.lines,
+                        state.form.enableDiscount,
+                        state.form.discountAmount,
+                      ));
+                      patchForm({ mainItemQty, ...(note != null ? { serviceRenewalNote: note } : {}) });
+                    }}
                   />
                 </div>
                 <div>
@@ -245,7 +355,17 @@ export function InvoiceEditor({
                     type="number"
                     className={editorInputClass}
                     value={state.form.mainItemPrice}
-                    onChange={(e) => patchForm({ mainItemPrice: Number(e.target.value) || 0 })}
+                    onChange={(e) => {
+                      const mainItemPrice = Number(e.target.value) || 0;
+                      const note = followInvoiceTotal(invoiceNetTotal(
+                        state.form.mainItemQty,
+                        mainItemPrice,
+                        state.lines,
+                        state.form.enableDiscount,
+                        state.form.discountAmount,
+                      ));
+                      patchForm({ mainItemPrice, ...(note != null ? { serviceRenewalNote: note } : {}) });
+                    }}
                   />
                 </div>
                 <div>
@@ -261,14 +381,39 @@ export function InvoiceEditor({
                 <AddLineItemButton onClick={() => setState({ ...state, lines: addEmptyLine(state.lines) })} />
               )}
             >
-              <DocumentLineItemsTable lines={state.lines} onChange={(lines) => setState({ ...state, lines })} />
+              <DocumentLineItemsTable
+                lines={state.lines}
+                onChange={(lines) => {
+                  const note = followInvoiceTotal(invoiceNetTotal(
+                    state.form.mainItemQty,
+                    state.form.mainItemPrice,
+                    lines,
+                    state.form.enableDiscount,
+                    state.form.discountAmount,
+                  ));
+                  setState({
+                    ...state,
+                    lines,
+                    form: note != null ? { ...state.form, serviceRenewalNote: note } : state.form,
+                  });
+                }}
+              />
             </EditorCard>
 
             <EditorCard title="折扣" subtitle="Discount">
               <label className="inline-flex items-center gap-2 text-[13px]">
                 <Switch
                   checked={state.form.enableDiscount}
-                  onCheckedChange={(enableDiscount) => patchForm({ enableDiscount })}
+                  onCheckedChange={(enableDiscount) => {
+                    const note = followInvoiceTotal(invoiceNetTotal(
+                      state.form.mainItemQty,
+                      state.form.mainItemPrice,
+                      state.lines,
+                      enableDiscount,
+                      state.form.discountAmount,
+                    ));
+                    patchForm({ enableDiscount, ...(note != null ? { serviceRenewalNote: note } : {}) });
+                  }}
                 />
                 啟用折扣
               </label>
@@ -280,9 +425,172 @@ export function InvoiceEditor({
                   </div>
                   <div>
                     <FieldLabel>折扣金額</FieldLabel>
-                    <Input className={editorInputClass} type="number" value={state.form.discountAmount} onChange={(e) => patchForm({ discountAmount: Number(e.target.value) || 0 })} />
+                    <Input
+                      className={editorInputClass}
+                      type="number"
+                      value={state.form.discountAmount}
+                      onChange={(e) => {
+                        const discountAmount = Number(e.target.value) || 0;
+                        const note = followInvoiceTotal(invoiceNetTotal(
+                          state.form.mainItemQty,
+                          state.form.mainItemPrice,
+                          state.lines,
+                          state.form.enableDiscount,
+                          discountAmount,
+                        ));
+                        patchForm({ discountAmount, ...(note != null ? { serviceRenewalNote: note } : {}) });
+                      }}
+                    />
                   </div>
                 </div>
+              )}
+            </EditorCard>
+
+            <EditorCard
+              title="服務說明"
+              subtitle="Service note"
+              extra={renewalCustom && renewalVisible ? (
+                <button
+                  type="button"
+                  className="text-[12px] font-medium text-blue-700 hover:underline"
+                  onClick={resetRenewalMessage}
+                >
+                  重設為預設
+                </button>
+              ) : null}
+            >
+              <label className="inline-flex items-center gap-2 text-[13px]">
+                <Switch
+                  checked={renewalVisible}
+                  onCheckedChange={(checked) => setShowRenewalOverride({ incomeId, value: checked })}
+                />
+                顯示上線及下年度服務費說明
+              </label>
+              <p className="text-[12px] text-muted-foreground">
+                期數為 2 或以上時預設開啟。此開關只影響本次預覽與下載，不會另外儲存。
+              </p>
+              {renewalVisible && (
+                <>
+                  {!renewalCustom && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <FieldLabel>上線日期</FieldLabel>
+                        <Input
+                          type="date"
+                          className={editorInputClass}
+                          value={launchDate}
+                          onChange={(e) => {
+                            const nextLaunch = e.target.value;
+                            setLaunchOverride({ incomeId, value: nextLaunch });
+                            syncRenewal({
+                              launchDate: nextLaunch,
+                              dueDate: state.form.dueDate,
+                              monthlyAmount,
+                              periodCount,
+                              totalAmount: totalIncomeAmount,
+                            });
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <FieldLabel>發票到期日</FieldLabel>
+                        <Input
+                          type="date"
+                          className={editorInputClass}
+                          value={state.form.dueDate}
+                          onChange={(e) => {
+                            const dueDate = e.target.value;
+                            syncRenewal({
+                              launchDate,
+                              dueDate,
+                              monthlyAmount,
+                              periodCount,
+                              totalAmount: totalIncomeAmount,
+                            }, { dueDate });
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <FieldLabel>發票金額</FieldLabel>
+                        <Input
+                          type="number"
+                          className={editorInputClass}
+                          value={monthlyAmount}
+                          onChange={(e) => {
+                            const monthly = Number(e.target.value);
+                            const nextMonthly = Number.isFinite(monthly) ? monthly : 0;
+                            const total = serviceRenewalTotal(nextMonthly, periodCount);
+                            setMonthlyOverride({ incomeId, value: nextMonthly });
+                            setTotalOverride(null);
+                            syncRenewal({
+                              launchDate,
+                              dueDate: state.form.dueDate,
+                              monthlyAmount: nextMonthly,
+                              periodCount,
+                              totalAmount: total,
+                            });
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <FieldLabel>總期數</FieldLabel>
+                        <Input
+                          type="number"
+                          className={editorInputClass}
+                          value={periodCount}
+                          onChange={(e) => {
+                            const periods = Number(e.target.value);
+                            const nextPeriods = Number.isFinite(periods) ? periods : 0;
+                            const total = serviceRenewalTotal(monthlyAmount, nextPeriods);
+                            setPeriodOverride({ incomeId, value: nextPeriods });
+                            setTotalOverride(null);
+                            syncRenewal({
+                              launchDate,
+                              dueDate: state.form.dueDate,
+                              monthlyAmount,
+                              periodCount: nextPeriods,
+                              totalAmount: total,
+                            });
+                          }}
+                        />
+                        <p className="text-[11px] text-muted-foreground mt-1">預設為同一客戶項目的收入筆數，對應說明中的「× n 個月」。</p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <FieldLabel>收入合計</FieldLabel>
+                        <Input
+                          type="number"
+                          className={editorInputClass}
+                          value={totalIncomeAmount}
+                          onChange={(e) => {
+                            const total = Number(e.target.value);
+                            const nextTotal = Number.isFinite(total) ? total : 0;
+                            setTotalOverride({ incomeId, value: nextTotal });
+                            syncRenewal({
+                              launchDate,
+                              dueDate: state.form.dueDate,
+                              monthlyAmount,
+                              periodCount,
+                              totalAmount: nextTotal,
+                            });
+                          }}
+                        />
+                        <p className="text-[11px] text-muted-foreground mt-1">預設為發票金額 × 總期數。</p>
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <FieldLabel>說明全文</FieldLabel>
+                    <Textarea
+                      rows={4}
+                      className={editorInputClass}
+                      value={state.form.serviceRenewalNote}
+                      onChange={(e) => {
+                        setTextEdit({ incomeId, value: true });
+                        patchForm({ serviceRenewalNote: e.target.value });
+                      }}
+                    />
+                  </div>
+                </>
               )}
             </EditorCard>
 

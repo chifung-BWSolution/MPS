@@ -23,6 +23,8 @@ export interface WebsiteFormData {
   level: WebsiteLevel;
   status: 'development' | 'live' | 'maintenance' | 'archived';
   notes: string;
+  /** YYYY-MM-DD. Empty when the site has not gone live. */
+  launchDate: string;
   profileType: ProfileType;
   projectCategory: ProjectCategory;
   systemType?: SystemType;
@@ -41,6 +43,7 @@ export const emptyFormData: WebsiteFormData = {
   level: 3,
   status: 'development',
   notes: '',
+  launchDate: '',
   profileType: 'website',
   projectCategory: 'internal',
   systemType: undefined,
@@ -72,6 +75,7 @@ export function websiteFormDataToProfile(
     level: data.level,
     status: data.status,
     notes: data.notes || undefined,
+    launchDate: data.launchDate.trim() || undefined,
     pagesCount: 0,
     articlesCount: 0,
     videosCount: 0,
@@ -361,6 +365,17 @@ export function WebsiteFormModal({
                 ) : null}
               </p>
             ) : null}
+          </div>
+
+          <div>
+            <label className="text-[12px] font-medium text-muted-foreground block mb-1">上線日期</label>
+            <input
+              type="date"
+              value={form.launchDate}
+              onChange={(e) => handleChange('launchDate', e.target.value)}
+              className="w-full px-3 py-2 border border-border rounded-md text-[13px] outline-none focus:ring-1 focus:ring-teal-600 bg-white"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">綁定域名並正式上線的日期。發票的服務說明會預設使用此日期。</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

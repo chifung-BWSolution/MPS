@@ -1,18 +1,76 @@
-import { Eye, EyeOff } from 'lucide-react';
+import { ChevronsUpDown, Eye, EyeOff } from 'lucide-react';
 import {
   VIDEO_LOGIN_METHOD_OPTIONS,
   VIDEO_TWO_FA_OPTIONS,
+  normalizeLoginMethods,
   normalizeTwoFaMethods,
+  videoLoginMethodLabel,
   type VideoLoginMethodKind,
   type VideoTwoFaMethod,
 } from '@/types/videoLoginMethod';
 import type { LoginMethodForm } from '@/lib/videoLoginMethodForm';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+
+export function LoginMethodKindMultiSelect({
+  value,
+  onChange,
+  triggerClassName,
+}: {
+  value: VideoLoginMethodKind[];
+  onChange: (next: VideoLoginMethodKind[]) => void;
+  triggerClassName?: string;
+}) {
+  const selected = normalizeLoginMethods(value);
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className={cn(
+            'h-9 w-full justify-between px-3 text-[13px] font-normal',
+            triggerClassName,
+          )}
+        >
+          <span className={cn('truncate text-left', selected.length === 0 && 'text-muted-foreground')}>
+            {selected.length > 0 ? selected.map(videoLoginMethodLabel).join('、') : '登入方式'}
+          </span>
+          <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="z-[120] w-[220px] p-2" align="start">
+        <div className="space-y-1">
+          {VIDEO_LOGIN_METHOD_OPTIONS.map(option => {
+            const checked = selected.includes(option.id);
+            return (
+              <label
+                key={option.id}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] hover:bg-muted/40"
+              >
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={(next) => {
+                    const values = next === true
+                      ? [...selected, option.id]
+                      : selected.filter(id => id !== option.id);
+                    onChange(normalizeLoginMethods(values));
+                  }}
+                />
+                {option.label}
+              </label>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export function VideoLoginMethodFormFields({
   form,
@@ -41,23 +99,10 @@ export function VideoLoginMethodFormFields({
           登入方式顯示名稱 *
         </label>
         <div className="grid grid-cols-[minmax(9.5rem,0.9fr)_1.1fr] gap-2">
-          <Select
-            value={form.loginMethod || undefined}
-            onValueChange={(value: VideoLoginMethodKind) =>
-              setForm(prev => ({ ...prev, loginMethod: value }))
-            }
-          >
-            <SelectTrigger className="h-9 text-[13px]">
-              <SelectValue placeholder="登入方式" />
-            </SelectTrigger>
-            <SelectContent className="z-[120]">
-              {VIDEO_LOGIN_METHOD_OPTIONS.map(option => (
-                <SelectItem key={option.id} value={option.id}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <LoginMethodKindMultiSelect
+            value={form.loginMethods}
+            onChange={(loginMethods) => setForm(prev => ({ ...prev, loginMethods }))}
+          />
           <Input
             value={form.displayName}
             onChange={e => setForm(prev => ({ ...prev, displayName: e.target.value }))}

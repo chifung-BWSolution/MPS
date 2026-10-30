@@ -14,7 +14,7 @@ import {
 import {
   emptyLoginMethodForm,
   loginMethodFormFromItem,
-  loginMethodFormToInput,
+  loginMethodFormToInputs,
   type LoginMethodForm,
 } from '@/lib/videoLoginMethodForm';
 import { accountPlatformLabel } from '@/lib/vchannelPlatformStatus';
@@ -58,7 +58,7 @@ export function VchannelAccountLoginMethodsDialog({
   allAccounts: VchannelAccount[];
   updateAccount: (id: string, updates: Partial<VchannelAccount>) => Promise<Error | null>;
 }) {
-  const { items, loading, error, refresh, addItem, updateItem } = useVideoLoginMethods();
+  const { items, loading, error, refresh, saveGroup } = useVideoLoginMethods();
   const [mode, setMode] = useState<EditorMode>('idle');
   const [editing, setEditing] = useState<VideoLoginMethod | null>(null);
   const [form, setForm] = useState<LoginMethodForm>(emptyLoginMethodForm());
@@ -101,7 +101,7 @@ export function VchannelAccountLoginMethodsDialog({
       .filter(account => account.loginMethodIds.includes(item.id))
       .map(account => account.id);
     setEditing(item);
-    setForm(loginMethodFormFromItem(item));
+    setForm(loginMethodFormFromItem(item, items));
     setShowPassword(false);
     setSelectedAccountIds(linkedIds);
     setLinkMethodIds([]);
@@ -126,9 +126,9 @@ export function VchannelAccountLoginMethodsDialog({
   };
 
   const handleSaveMethod = async () => {
-    const payload = loginMethodFormToInput(form);
+    const payload = loginMethodFormToInputs(form);
     if (!payload) {
-      toast.error(!form.loginMethod ? '請選擇登入方式' : '請輸入顯示名稱');
+      toast.error(form.loginMethods.length === 0 ? '請選擇登入方式' : '請輸入顯示名稱');
       return;
     }
     if (selectedAccountIds.length === 0) {
@@ -137,24 +137,20 @@ export function VchannelAccountLoginMethodsDialog({
     }
 
     setSaving(true);
-    let methodId = editing?.id ?? '';
-    if (editing) {
-      const result = await updateItem(editing.id, payload);
-      if (result.ok === false) {
-        setSaving(false);
-        toast.error('更新登入方式失敗', { description: result.error });
-        return;
-      }
-    } else {
-      const result = await addItem(payload);
-      if (result.ok === false) {
-        setSaving(false);
-        toast.error('新增登入方式失敗', { description: result.error });
-        return;
-      }
-      methodId = result.item.id;
+    const result = await saveGroup(
+      payload,
+      editing ? { groupId: editing.credentialGroupId, anchorId: editing.id } : undefined,
+    );
+    if (result.ok === false) {
+      setSaving(false);
+      toast.error(editing ? '更新登入方式失敗' : '新增登入方式失敗', { description: result.error });
+      return;
     }
-    const patches = planLoginMethodAccountLinkPatches(accounts, methodId, selectedAccountIds);
+    const patches = editing
+      ? (result.removedIds.includes(editing.id)
+        ? []
+        : planLoginMethodAccountLinkPatches(accounts, editing.id, selectedAccountIds))
+      : planBulkLoginMethodLinks(accounts, result.items.map((item) => item.id), selectedAccountIds);
     const linkError = await applyLinkPatches(patches, updateAccount);
     setSaving(false);
 
@@ -324,7 +320,7 @@ export function VchannelAccountLoginMethodsDialog({
                       value={linkMethodIds}
                       onChange={setLinkMethodIds}
                       items={items}
-                      addItem={addItem}
+                      saveGroup={saveGroup}
                     />
                   </div>
                 ) : (

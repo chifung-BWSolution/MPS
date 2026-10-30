@@ -53,3 +53,9 @@ verify_jwt = true
 
 [functions.otc-leave-day-report]
 verify_jwt = true
+
+# User access tokens are ES256. The gateway JWT check still uses the retired
+# HS256 secret and rejects a normal logged-in session before this function runs.
+# The function validates the session itself with auth.getUser().
+[functions.bwa-projects]
+verify_jwt = false

@@ -6,7 +6,6 @@ import type {
 } from '@/types/videoWorkflow';
 
 export type PrepAssignments = {
-  copywriting?: StaffAssignment;
   script?: StaffAssignment;
   model?: ModelAssignment;
   photographer?: StaffAssignment;

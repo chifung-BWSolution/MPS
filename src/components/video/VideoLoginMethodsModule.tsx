@@ -7,12 +7,11 @@ import {
   videoLoginMethodLabel,
   videoTwoFaLabel,
   type VideoLoginMethod,
-  type VideoLoginMethodInput,
 } from '@/types/videoLoginMethod';
 import {
   emptyLoginMethodForm,
   loginMethodFormFromItem,
-  loginMethodFormToInput,
+  loginMethodFormToInputs,
   type LoginMethodForm,
 } from '@/lib/videoLoginMethodForm';
 import { filterVideoLoginMethods, loginMethodListMetrics } from '@/lib/videoLoginMethodList';
@@ -23,27 +22,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import { VideoLoginMethodFormFields } from './VideoLoginMethodFormFields';
 
-function toInput(item: VideoLoginMethod, overrides: Partial<VideoLoginMethodInput> = {}): VideoLoginMethodInput {
-  return {
-    loginMethod: item.loginMethod,
-    displayName: item.displayName,
-    accountName: item.accountName,
-    phoneNumber: item.phoneNumber,
-    email: item.email,
-    password: item.password,
-    twoFaMethods: item.twoFaMethods,
-    note: item.note,
-    isActive: item.isActive,
-    ...overrides,
-  };
-}
-
 function maskPassword(password: string) {
   return password ? '••••••••' : '—';
 }
 
 export function VideoLoginMethodsModule() {
-  const { items, loading, error, addItem, updateItem } = useVideoLoginMethods();
+  const { items, loading, error, saveGroup, setGroupActive } = useVideoLoginMethods();
   const [search, setSearch] = useState('');
   const [methodFilter, setMethodFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -68,22 +52,23 @@ export function VideoLoginMethodsModule() {
 
   const openEdit = (item: VideoLoginMethod) => {
     setEditing(item);
-    setForm(loginMethodFormFromItem(item));
+    setForm(loginMethodFormFromItem(item, items));
     setShowPassword(false);
     setModalOpen(true);
   };
 
   const handleSave = async () => {
-    const payload = loginMethodFormToInput(form);
+    const payload = loginMethodFormToInputs(form);
     if (!payload) {
-      toast.error(!form.loginMethod ? '請選擇登入方式' : '請輸入顯示名稱');
+      toast.error(form.loginMethods.length === 0 ? '請選擇登入方式' : '請輸入顯示名稱');
       return;
     }
 
     setSaving(true);
-    const result = editing
-      ? await updateItem(editing.id, payload)
-      : await addItem(payload);
+    const result = await saveGroup(
+      payload,
+      editing ? { groupId: editing.credentialGroupId, anchorId: editing.id } : undefined,
+    );
     setSaving(false);
 
     if (!result.ok) {
@@ -97,7 +82,7 @@ export function VideoLoginMethodsModule() {
   };
 
   const handleToggleActive = async (item: VideoLoginMethod) => {
-    const result = await updateItem(item.id, toInput(item, { isActive: !item.isActive }));
+    const result = await setGroupActive(item, !item.isActive);
     if (!result.ok) {
       toast.error('更新狀態失敗', { description: result.error });
       return;

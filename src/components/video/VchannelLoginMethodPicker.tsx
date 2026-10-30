@@ -3,12 +3,12 @@ import { Check, ChevronsUpDown, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useVideoLoginMethods } from '@/hooks/useVideoLoginMethods';
 import {
-  VIDEO_LOGIN_METHOD_OPTIONS,
   videoLoginMethodLabel,
   type VideoLoginMethod,
   type VideoLoginMethodInput,
   type VideoLoginMethodKind,
 } from '@/types/videoLoginMethod';
+import { emptyLoginMethodForm, loginMethodFormToInputs } from '@/lib/videoLoginMethodForm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -20,41 +20,44 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { LoginMethodKindMultiSelect } from './VideoLoginMethodFormFields';
 
 type QuickCreateForm = {
-  loginMethod: VideoLoginMethodKind | '';
+  loginMethods: VideoLoginMethodKind[];
   displayName: string;
   accountName: string;
   email: string;
 };
 
 const emptyQuickCreate = (displayName = ''): QuickCreateForm => ({
-  loginMethod: '',
+  loginMethods: [],
   displayName,
   accountName: '',
   email: '',
 });
 
-type AddLoginMethod = (input: VideoLoginMethodInput) => Promise<
-  { ok: true; item: VideoLoginMethod } | { ok: false; error: string }
+type SaveLoginMethodGroup = (
+  inputs: VideoLoginMethodInput[],
+  options?: { groupId?: string; anchorId?: string },
+) => Promise<
+  { ok: true; items: VideoLoginMethod[]; removedIds: string[] } | { ok: false; error: string }
 >;
 
 export function VchannelLoginMethodPicker({
   value,
   onChange,
   items: itemsProp,
-  addItem: addItemProp,
+  saveGroup: saveGroupProp,
 }: {
   value: string[];
   onChange: (ids: string[]) => void;
   items?: VideoLoginMethod[];
-  addItem?: AddLoginMethod;
+  saveGroup?: SaveLoginMethodGroup;
 }) {
   const hook = useVideoLoginMethods();
   const items = itemsProp ?? hook.items;
-  const addItem = addItemProp ?? hook.addItem;
+  const saveGroup = saveGroupProp ?? hook.saveGroup;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
@@ -83,23 +86,20 @@ export function VchannelLoginMethodPicker({
 
   const handleQuickCreate = async () => {
     if (!quickCreate) return;
-    if (!quickCreate.loginMethod) {
-      toast.error('請選擇登入方式');
-      return;
-    }
-    if (!quickCreate.displayName.trim()) {
-      toast.error('請輸入顯示名稱');
+    const inputs = loginMethodFormToInputs({
+      ...emptyLoginMethodForm(),
+      loginMethods: quickCreate.loginMethods,
+      displayName: quickCreate.displayName,
+      accountName: quickCreate.accountName,
+      email: quickCreate.email,
+    });
+    if (!inputs) {
+      toast.error(quickCreate.loginMethods.length === 0 ? '請選擇登入方式' : '請輸入顯示名稱');
       return;
     }
 
     setCreating(true);
-    const result = await addItem({
-      loginMethod: quickCreate.loginMethod,
-      displayName: quickCreate.displayName,
-      accountName: quickCreate.accountName,
-      email: quickCreate.email,
-      isActive: true,
-    });
+    const result = await saveGroup(inputs);
     setCreating(false);
 
     if (result.ok === false) {
@@ -107,7 +107,8 @@ export function VchannelLoginMethodPicker({
       return;
     }
 
-    onChange(selectedSet.has(result.item.id) ? selectedIds : [...selectedIds, result.item.id]);
+    const createdIds = result.items.map((item) => item.id);
+    onChange([...new Set([...selectedIds, ...createdIds])]);
     setQuickCreate(null);
     setSearch('');
     toast.success('已新增並選取登入方式');
@@ -220,21 +221,11 @@ export function VchannelLoginMethodPicker({
           <div>
             <label className="text-[12px] font-medium text-muted-foreground block mb-1">登入方式顯示名稱 *</label>
             <div className="grid grid-cols-[minmax(9.5rem,0.9fr)_1.1fr] gap-2">
-              <Select
-                value={quickCreate.loginMethod || undefined}
-                onValueChange={(next: VideoLoginMethodKind) =>
-                  setQuickCreate(prev => prev ? { ...prev, loginMethod: next } : prev)
-                }
-              >
-                <SelectTrigger className="h-9 text-[13px] bg-white">
-                  <SelectValue placeholder="登入方式" />
-                </SelectTrigger>
-                <SelectContent className="z-[120]">
-                  {VIDEO_LOGIN_METHOD_OPTIONS.map(option => (
-                    <SelectItem key={option.id} value={option.id}>{option.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <LoginMethodKindMultiSelect
+                value={quickCreate.loginMethods}
+                onChange={(loginMethods) => setQuickCreate(prev => prev ? { ...prev, loginMethods } : prev)}
+                triggerClassName="bg-white"
+              />
               <Input
                 value={quickCreate.displayName}
                 onChange={e => setQuickCreate(prev => prev ? { ...prev, displayName: e.target.value } : prev)}

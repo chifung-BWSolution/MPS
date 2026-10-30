@@ -11,6 +11,7 @@ import {
   parsePrepAssignments,
   parseProductionProgressJson,
   resolveProductionProgress,
+  withoutLegacyLanguagePublishKeys,
 } from '@/lib/videoOutputWorkflowMapper';
 
 /** Nine media platforms managed via the 發佈 modal. */
@@ -39,9 +40,19 @@ export const PLATFORM_PUBLISH_LABELS: Record<PlatformPublishKey, string> = {
   douyin: '抖音',
   wechat_channels: '影音號',
   wechat_official: '公眾號',
-  zh_cn: '簡體中文',
-  zh_tw: '繁體中文',
 };
+
+function normalizePlatformUrlList(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const urls: string[] = [];
+  for (const value of values) {
+    const url = value.trim();
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    urls.push(url);
+  }
+  return urls;
+}
 
 export function isPlatformPublished(
   platformPublish: PlatformPublishMap,
@@ -49,26 +60,38 @@ export function isPlatformPublished(
 ): boolean {
   const entry = platformPublish[key];
   if (entry === true) return true;
-  if (entry && typeof entry === 'object') return !!entry.url?.trim();
-  return false;
+  return getPlatformUrls(platformPublish, key).length > 0;
+}
+
+/** Every non-empty link for a platform. Falls back to the legacy single `url`. */
+export function getPlatformUrls(platformPublish: PlatformPublishMap, key: PlatformPublishKey): string[] {
+  const entry = platformPublish[key];
+  if (!entry || typeof entry !== 'object') return [];
+  if (Array.isArray(entry.urls)) {
+    const urls = normalizePlatformUrlList(entry.urls.filter((url): url is string => typeof url === 'string'));
+    if (urls.length) return urls;
+  }
+  const single = typeof entry.url === 'string' ? entry.url.trim() : '';
+  return single ? [single] : [];
 }
 
 export function getPlatformUrl(platformPublish: PlatformPublishMap, key: PlatformPublishKey): string {
-  const entry = platformPublish[key];
-  if (!entry || typeof entry !== 'object') return '';
-  return entry.url?.trim() ?? '';
+  return getPlatformUrls(platformPublish, key)[0] ?? '';
 }
 
 export function mergePlatformUrls(
   existing: PlatformPublishMap,
-  urls: Partial<Record<PlatformPublishKey, string>>,
+  urls: Partial<Record<PlatformPublishKey, string | string[]>>,
 ): PlatformPublishMap {
-  const merged: PlatformPublishMap = { ...existing };
+  const merged: PlatformPublishMap = withoutLegacyLanguagePublishKeys(existing);
   for (const key of MEDIA_PLATFORM_PUBLISH_KEYS) {
     if (!(key in urls)) continue;
-    const url = urls[key]?.trim();
-    if (url) {
-      merged[key] = { url };
+    const raw = urls[key];
+    const list = normalizePlatformUrlList(Array.isArray(raw) ? raw : [raw ?? '']);
+    if (list.length === 1) {
+      merged[key] = { url: list[0] };
+    } else if (list.length > 1) {
+      merged[key] = { url: list[0], urls: list };
     } else {
       const prev = existing[key];
       // Only clear object entries; legacy boolean flags stay unless replaced with a URL
@@ -80,11 +103,13 @@ export function mergePlatformUrls(
   return merged;
 }
 
-export function urlsFromPlatformPublish(platformPublish: PlatformPublishMap): Partial<Record<PlatformPublishKey, string>> {
-  const result: Partial<Record<PlatformPublishKey, string>> = {};
+export function urlsFromPlatformPublish(
+  platformPublish: PlatformPublishMap,
+): Partial<Record<PlatformPublishKey, string[]>> {
+  const result: Partial<Record<PlatformPublishKey, string[]>> = {};
   for (const key of MEDIA_PLATFORM_PUBLISH_KEYS) {
-    const url = getPlatformUrl(platformPublish, key);
-    if (url) result[key] = url;
+    const urls = getPlatformUrls(platformPublish, key);
+    if (urls.length) result[key] = urls;
   }
   return result;
 }
@@ -107,7 +132,9 @@ export function getPublishedPlatformKeysWithUrl(platformPublish: PlatformPublish
 
 export function formatPlatformPublishCopyText(platformPublish: PlatformPublishMap): string {
   return getPublishedPlatformKeysWithUrl(platformPublish)
-    .map(key => `${PLATFORM_PUBLISH_LABELS[key]}：${getPlatformUrl(platformPublish, key)}`)
+    .flatMap(key =>
+      getPlatformUrls(platformPublish, key).map(url => `${PLATFORM_PUBLISH_LABELS[key]}：${url}`),
+    )
     .join('\n');
 }
 
@@ -289,16 +316,12 @@ type DbVideoOutputRow = {
   production_year: number | null;
   video_code: string;
   title: string;
-  asana_task_id: string | null;
   asana_url: string | null;
   shoot_sz: boolean;
   shoot_hk: boolean;
   raw_footage_done: boolean;
   needs_editing: boolean | null;
   demo_done: boolean;
-  copy_sc?: boolean;
-  copy_tc?: boolean;
-  copy_en?: boolean;
   subtitle_done?: boolean;
   reviewed?: boolean;
   shoot_at: string | null;
@@ -335,22 +358,18 @@ export function mapVideoOutputRow(row: DbVideoOutputRow): VideoOutput {
     productionYear: row.production_year ?? undefined,
     videoCode: row.video_code,
     title: row.title,
-    asanaTaskId: row.asana_task_id ?? undefined,
     asanaUrl: row.asana_url ?? undefined,
     shootSz: row.shoot_sz,
     shootHk: row.shoot_hk,
     rawFootageDone: row.raw_footage_done,
     needsEditing: row.needs_editing,
     demoDone: row.demo_done,
-    copySc: row.copy_sc ?? false,
-    copyTc: row.copy_tc ?? false,
-    copyEn: row.copy_en ?? false,
     subtitleDone: row.subtitle_done ?? false,
     reviewed: row.reviewed ?? false,
     shootAt: row.shoot_at ?? undefined,
     plannedPublishDate: row.planned_publish_date ?? undefined,
     publishedDate: row.published_date ?? undefined,
-    platformPublish: row.platform_publish ?? {},
+    platformPublish: withoutLegacyLanguagePublishKeys(row.platform_publish),
     storagePath: row.storage_path ?? undefined,
     projectCategory: row.project_category,
     notes: row.notes ?? undefined,
@@ -383,22 +402,18 @@ export function videoOutputToDbRow(input: VideoOutputInput) {
     production_year: input.productionYear ?? null,
     video_code: input.videoCode,
     title: input.title,
-    asana_task_id: input.asanaTaskId ?? null,
-    asana_url: input.asanaUrl ?? null,
+    asana_url: input.asanaUrl?.trim() || null,
     shoot_sz: input.shootSz ?? false,
     shoot_hk: input.shootHk ?? false,
     raw_footage_done: input.rawFootageDone ?? false,
     needs_editing: input.needsEditing ?? null,
     demo_done: input.demoDone ?? false,
-    copy_sc: input.copySc ?? false,
-    copy_tc: input.copyTc ?? false,
-    copy_en: input.copyEn ?? false,
     subtitle_done: input.subtitleDone ?? false,
     reviewed: input.reviewed ?? false,
     shoot_at: input.shootAt ?? null,
     planned_publish_date: input.plannedPublishDate ?? null,
     published_date: input.publishedDate ?? null,
-    platform_publish: input.platformPublish ?? {},
+    platform_publish: withoutLegacyLanguagePublishKeys(input.platformPublish),
     storage_path: input.storagePath ?? null,
     project_category: input.projectCategory ?? 'client',
     notes: input.notes ?? null,

@@ -20,6 +20,8 @@ import {
   invoiceMainAmount,
   invoiceMeetsFloor,
   invoiceNetTotal,
+  buildServiceRenewalMessage,
+  serviceRenewalTotal,
   isReceiptPaymentMethod,
   lineAmount,
   nextInvoiceNo,
@@ -66,6 +68,7 @@ type InvoiceDbRow = {
   discount_amount: number | string | null;
   total_amount: number | string | null;
   note: string | null;
+  service_renewal_note: string | null;
   company_id: string | null;
   pdf_branding: unknown;
   created_at: string;
@@ -120,6 +123,10 @@ type ProjectTypeEmbed = {
   code_initial: string | null;
 };
 
+type WebsiteLaunchEmbed = {
+  launch_date: string | null;
+};
+
 type ProjectEmbed = {
   id: string;
   display_name: string;
@@ -127,7 +134,9 @@ type ProjectEmbed = {
   client_id: string | null;
   client_name: string | null;
   project_types: string | null;
+  webandsystem_list_id: string | null;
   quotation_project_types?: ProjectTypeEmbed | ProjectTypeEmbed[] | null;
+  webandsystem_list?: WebsiteLaunchEmbed | WebsiteLaunchEmbed[] | null;
   quotation_client_list?: {
     company_name_zh: string | null;
     company_name_en: string | null;
@@ -142,6 +151,12 @@ type ProjectEmbed = {
 function firstClientEmbed(embed: ProjectEmbed['quotation_client_list']) {
   if (!embed) return null;
   return Array.isArray(embed) ? embed[0] ?? null : embed;
+}
+
+function firstLaunchDate(embed: ProjectEmbed['webandsystem_list']): string {
+  if (!embed) return '';
+  const row = Array.isArray(embed) ? embed[0] : embed;
+  return optionalIsoDate(row?.launch_date) ?? '';
 }
 
 function firstCodeInitial(embed: ProjectEmbed['quotation_project_types']): string {
@@ -232,6 +247,7 @@ function mapInvoice(
     discountAmount: toAmount(row.discount_amount),
     totalAmount: toAmount(row.total_amount),
     note: row.note ?? '',
+    serviceRenewalNote: row.service_renewal_note ?? '',
     companyId: row.company_id,
     pdfBranding: parsePdfBranding(row.pdf_branding),
     lines,
@@ -376,6 +392,7 @@ function invoiceWriteRow(incomeId: string, form: InvoiceForm, lines: InvoiceLine
     discount_amount: form.enableDiscount ? form.discountAmount : null,
     total_amount: totalAmount,
     note: form.note.trim() || null,
+    service_renewal_note: form.serviceRenewalNote.trim() || null,
     company_id: form.companyId,
     pdf_branding: form.pdfBranding,
     updated_at: new Date().toISOString(),
@@ -529,6 +546,15 @@ export type InvoicePrefillContext = {
   sameTypeSum: number;
   dueDate?: string;
   paymentDate?: string;
+  launchDate: string;
+  relatedIncomeCount: number;
+  hasWebsite: boolean;
+};
+
+export type ServiceRenewalSource = {
+  launchDate: string;
+  incomeCount: number;
+  hasWebsite: boolean;
 };
 
 async function loadPrefillContext(incomeId: string): Promise<InvoicePrefillContext> {
@@ -543,10 +569,10 @@ async function loadPrefillContext(incomeId: string): Promise<InvoicePrefillConte
   const income = mapIncome(incomeRow as IncomeDbRow);
   const projectId = (incomeRow as IncomeDbRow).quotation_client_project_id;
 
-  const [{ data: projectRow, error: projectError }, { data: siblingRows }] = await Promise.all([
+  const [{ data: projectRow, error: projectError }, { data: siblingRows }, incomeCountRes] = await Promise.all([
     supabase
       .from(QUOTATION_CLIENT_PROJECT_TABLE)
-      .select('id, display_name, pitching_code, client_id, client_name, project_types, quotation_project_types ( code_initial ), quotation_client_list ( company_name_zh, company_name_en, address )')
+      .select('id, display_name, pitching_code, client_id, client_name, project_types, webandsystem_list_id, quotation_project_types ( code_initial ), quotation_client_list ( company_name_zh, company_name_en, address ), webandsystem_list ( launch_date )')
       .eq('id', projectId)
       .maybeSingle(),
     supabase
@@ -554,8 +580,13 @@ async function loadPrefillContext(incomeId: string): Promise<InvoicePrefillConte
       .select('type, billed_amount')
       .eq('quotation_client_project_id', projectId)
       .eq('type', income.type),
+    supabase
+      .from(INCOMES_TABLE)
+      .select('id', { count: 'exact', head: true })
+      .eq('quotation_client_project_id', projectId),
   ]);
   if (projectError) throw projectError;
+  if (incomeCountRes.error) throw incomeCountRes.error;
 
   const project = projectRow as unknown as ProjectEmbed | null;
   const client = firstClientEmbed(project?.quotation_client_list);
@@ -578,6 +609,9 @@ async function loadPrefillContext(incomeId: string): Promise<InvoicePrefillConte
     sameTypeSum,
     dueDate: optionalIsoDate((incomeRow as IncomeDbRow).due_date),
     paymentDate: optionalIsoDate((incomeRow as IncomeDbRow).payment_date),
+    launchDate: firstLaunchDate(project?.webandsystem_list),
+    relatedIncomeCount: incomeCountRes.count ?? 0,
+    hasWebsite: Boolean(project?.webandsystem_list_id),
   };
 }
 
@@ -607,6 +641,7 @@ export type InvoiceEditorState = {
   income: IncomeDocumentSnippet;
   companies: CompanyBrandingSource[];
   companyRows: Array<{ listId: string; uuid: string }>;
+  renewalSource: ServiceRenewalSource;
 };
 
 export type ReceiptEditorState = {
@@ -633,8 +668,32 @@ export async function loadInvoiceEditor(incomeId: string): Promise<InvoiceEditor
   const companies = companyRows.map(mapCompanyRow);
   const companyIdPairs = companyRows.map((row) => ({ listId: row.id, uuid: row.uuid || row.id }));
 
+  const renewalSource: ServiceRenewalSource = {
+    launchDate: prefill.launchDate,
+    incomeCount: prefill.relatedIncomeCount,
+    hasWebsite: prefill.hasWebsite,
+  };
+
   if (saved) {
-    return { form: saved, lines: saved.lines, saved, income: saved.income, companies, companyRows: companyIdPairs };
+    const monthlyAmount = invoiceNetTotal(
+      saved.mainItemQty,
+      saved.mainItemPrice,
+      saved.lines,
+      saved.enableDiscount,
+      saved.discountAmount,
+    );
+    const generated = buildServiceRenewalMessage({
+      launchDate: renewalSource.launchDate,
+      dueDate: saved.dueDate,
+      monthlyAmount,
+      periodCount: renewalSource.incomeCount,
+      totalAmount: serviceRenewalTotal(monthlyAmount, renewalSource.incomeCount),
+      hasWebsite: renewalSource.hasWebsite,
+    });
+    const form = saved.serviceRenewalNote.trim()
+      ? saved
+      : { ...saved, serviceRenewalNote: generated };
+    return { form, lines: saved.lines, saved, income: saved.income, companies, companyRows: companyIdPairs, renewalSource };
   }
 
   const company = resolveDefaultCompany(
@@ -662,11 +721,19 @@ export async function loadInvoiceEditor(incomeId: string): Promise<InvoiceEditor
     discountDescription: '',
     discountAmount: 0,
     note: DEFAULT_INVOICE_NOTE,
+    serviceRenewalNote: buildServiceRenewalMessage({
+      launchDate: renewalSource.launchDate,
+      dueDate: prefill.dueDate ?? '',
+      monthlyAmount: amount,
+      periodCount: renewalSource.incomeCount,
+      totalAmount: serviceRenewalTotal(amount, renewalSource.incomeCount),
+      hasWebsite: renewalSource.hasWebsite,
+    }),
     companyId: company?.id ?? null,
     pdfBranding: company ? brandingFromCompany(company) : null,
   };
 
-  return { form, lines: [], saved: null, income: prefill.income, companies, companyRows: companyIdPairs };
+  return { form, lines: [], saved: null, income: prefill.income, companies, companyRows: companyIdPairs, renewalSource };
 }
 
 export async function loadReceiptEditor(incomeId: string): Promise<ReceiptEditorState> {

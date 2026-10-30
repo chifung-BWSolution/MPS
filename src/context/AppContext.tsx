@@ -10,6 +10,8 @@ export interface SubMenuItem {
   label: string;
   /** Optional sidebar section heading (Traditional Chinese) */
   section?: string;
+  /** Keep the route, but omit the item from the sidebar. */
+  hidden?: boolean;
   /** Opens another module instead of a page in the current one. */
   linkTo?: { module: string; subModule: string };
 }
@@ -175,6 +177,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'production', label: '影片製作', section: '製作流程' },
       { id: 'review', label: '影片審核', section: '製作流程' },
       { id: 'publish', label: '影片發佈', section: '製作流程' },
+      { id: 'bwa-projects', label: 'BWA 項目', section: '製作流程', hidden: true },
       { id: 'channels', label: '頻道設定', section: '設定' },
       { id: 'accounts', label: '平台帳號', section: '設定' },
       { id: 'login-methods', label: '登入方式', section: '設定' },

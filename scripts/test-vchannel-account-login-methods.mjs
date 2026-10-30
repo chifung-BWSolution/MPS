@@ -16,7 +16,8 @@ import {
 import {
   emptyLoginMethodForm,
   loginMethodFormFromItem,
-  loginMethodFormToInput,
+  loginMethodFormToInputs,
+  planLoginMethodGroupWrite,
 } from '../src/lib/videoLoginMethodForm.ts';
 
 function method(partial) {
@@ -101,8 +102,8 @@ assert.deepEqual(
 );
 
 const form = emptyLoginMethodForm();
-assert.equal(loginMethodFormToInput(form), null);
-assert.equal(loginMethodFormToInput({ ...form, loginMethod: 'google' }), null);
+assert.equal(loginMethodFormToInputs(form), null);
+assert.equal(loginMethodFormToInputs({ ...form, loginMethods: ['google'] }), null);
 assert.equal(stripLoginMethodDisplayPrefix('微信掃碼 CFB M10'), 'CFB M10');
 assert.equal(stripLoginMethodDisplayPrefix('Google 登入 主帳'), '主帳');
 assert.equal(stripLoginMethodDisplayPrefix('CFB M10'), 'CFB M10');
@@ -111,8 +112,8 @@ assert.equal(composeLoginMethodDisplayName('wechat_scan', '微信掃碼 CFB M10'
 assert.equal(composeLoginMethodDisplayName('google', '  主帳  '), 'Google 登入 主帳');
 
 assert.deepEqual(
-  loginMethodFormToInput({ ...form, loginMethod: 'google', displayName: '  主帳  ' }),
-  {
+  loginMethodFormToInputs({ ...form, loginMethods: ['google'], displayName: '  主帳  ' }),
+  [{
     loginMethod: 'google',
     displayName: 'Google 登入 主帳',
     accountName: '',
@@ -122,21 +123,22 @@ assert.deepEqual(
     twoFaMethods: [],
     note: '',
     isActive: true,
-  },
+  }],
 );
 assert.deepEqual(
-  loginMethodFormToInput({ ...form, loginMethod: 'wechat_scan', displayName: '微信掃碼 CFB M10' }),
-  {
-    loginMethod: 'wechat_scan',
-    displayName: '微信掃碼 CFB M10',
-    accountName: '',
-    phoneNumber: '',
-    email: '',
-    password: '',
-    twoFaMethods: [],
-    note: '',
-    isActive: true,
-  },
+  loginMethodFormToInputs({ ...form, loginMethods: ['wechat_scan', 'google'], displayName: 'CFB M04' })
+    .map((input) => ({ loginMethod: input.loginMethod, displayName: input.displayName, password: input.password })),
+  [
+    { loginMethod: 'google', displayName: 'Google 登入 CFB M04', password: '' },
+    { loginMethod: 'wechat_scan', displayName: '微信掃碼 CFB M04', password: '' },
+  ],
+);
+assert.deepEqual(
+  planLoginMethodGroupWrite(
+    [{ id: 'google-row', loginMethod: 'google' }, { id: 'wechat-row', loginMethod: 'wechat_scan' }],
+    ['google', 'email_password'],
+  ),
+  { updateIds: ['google-row'], insertKinds: ['email_password'], removeIds: ['wechat-row'] },
 );
 
 const fromItem = loginMethodFormFromItem({
@@ -144,7 +146,17 @@ const fromItem = loginMethodFormFromItem({
   displayName: 'Google 登入 主帳',
 });
 assert.equal(fromItem.displayName, '主帳');
-assert.equal(fromItem.loginMethod, 'google');
+assert.deepEqual(fromItem.loginMethods, ['google']);
+const grouped = loginMethodFormFromItem(
+  { ...methods[0], id: 'google-row', loginMethod: 'google', displayName: 'Google 登入 主帳', credentialGroupId: 'group-1' },
+  [
+    { ...methods[0], id: 'google-row', loginMethod: 'google', displayName: 'Google 登入 主帳', credentialGroupId: 'group-1' },
+    { ...methods[0], id: 'wechat-row', loginMethod: 'wechat_scan', displayName: '微信掃碼 主帳', credentialGroupId: 'group-1' },
+    { ...methods[0], id: 'other', loginMethod: 'phone', displayName: '電話號碼 其他', credentialGroupId: 'group-2' },
+  ],
+);
+assert.deepEqual(grouped.loginMethods, ['google', 'wechat_scan']);
+assert.equal(grouped.displayName, '主帳');
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const channelsSrc = readFileSync(path.join(root, 'src/components/video/VideoChannelsList.tsx'), 'utf8');
@@ -170,11 +182,14 @@ assert.ok(formFieldsSrc.includes('登入方式顯示名稱'), 'form treats metho
 assert.match(formFieldsSrc, /grid-cols-\[minmax\(9\.5rem,0\.9fr\)_1\.1fr\]/, 'method and name sit on the same row');
 const hookSrc = readFileSync(path.join(root, 'src/hooks/useVideoLoginMethods.ts'), 'utf8');
 assert.ok(hookSrc.includes('composeLoginMethodDisplayName'), 'saves prefix the Chinese login-method label onto display_name');
+assert.ok(hookSrc.includes('credential_group_id'), 'sibling login kinds share a credential group');
+assert.ok(pickerSrc.includes('LoginMethodKindMultiSelect'), 'quick-create can select more than one login kind');
 assert.ok(dialogSrc.includes('平台帳戶'), 'dialog lists related vchannel_accounts');
 assert.ok(dialogSrc.includes('collectRelatedLoginMethods'), 'dialog lists related login methods via join ids');
 assert.ok(dialogSrc.includes('planLoginMethodAccountLinkPatches'), 'create/edit writes join-table links');
-assert.ok(dialogSrc.includes('addItem'), 'dialog can create login methods');
-assert.ok(dialogSrc.includes('updateItem'), 'dialog can update login methods');
+assert.ok(dialogSrc.includes('saveGroup'), 'dialog saves one row per selected login kind');
+assert.ok(dialogSrc.includes('planBulkLoginMethodLinks'), 'creating several kinds links each new row');
+assert.ok(dialogSrc.includes('removedIds'), 'removing a kind drops only that row from the account link');
 assert.ok(dialogSrc.includes('VchannelLoginMethodPicker'), 'dialog can link existing login methods');
 assert.ok(dialogSrc.includes('items={items}'), 'dialog shares login-method records with the picker');
 assert.ok(pickerSrc.includes('items: itemsProp'), 'picker can reuse parent login-method state');

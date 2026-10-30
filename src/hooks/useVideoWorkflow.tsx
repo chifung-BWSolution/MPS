@@ -129,7 +129,6 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
 
   const addVideo = useCallback(async (payload: Omit<VideoWorkflowMock, 'id' | 'stage' | 'createdAt'>) => {
     const prepAssignments: PrepAssignments = {
-      copywriting: payload.copywriting,
       script: payload.script,
       model: payload.model,
       photographer: payload.photographer,
@@ -140,6 +139,7 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
       vchannelId: payload.vchannelId ?? '',
       videoCode: payload.videoCode,
       title: payload.title,
+      asanaUrl: payload.asanaUrl,
       productionYear: payload.productionYear,
       projectCategory: inferProjectCategory(payload.vchannelCode),
       shootAt: payload.shootAt,

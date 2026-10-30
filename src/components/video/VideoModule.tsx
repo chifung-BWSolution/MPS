@@ -12,6 +12,7 @@ import { VideoScheduleModule } from './workflow/VideoScheduleModule';
 import { VideoProductionModule } from './workflow/VideoProductionModule';
 import { VideoReviewModule } from './workflow/VideoReviewModule';
 import { VideoPublishModule } from './workflow/VideoPublishModule';
+import { BwaProjectsModule } from './BwaProjectsModule';
 
 function VideoLibrary() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,13 +61,15 @@ function VideoModuleContent({ subModule }: { subModule?: string }) {
   const getTitle = () => {
     switch (activeTab) {
       case 'schedule':
-        return { title: '拍攝排期', subtitle: '日曆與準備工作清單：文案、腳本、Model、場地、攝影師與到場人員。' };
+        return { title: '拍攝排期', subtitle: '日曆與準備工作清單：腳本、Model、場地、攝影師與到場人員。' };
       case 'production':
         return { title: '影片製作', subtitle: '素材與剪輯執行；Demo 完成後提交審核。' };
       case 'review':
         return { title: '影片審核', subtitle: '審核 Demo 成品，通過或拒絕並填寫理由。' };
       case 'publish':
         return { title: '影片發佈', subtitle: '多平台發佈與發佈日期管理。' };
+      case 'bwa-projects':
+        return { title: 'BWA 項目', subtitle: '從 PMS 讀取 BWA 項目，並寫回 YouTube 連結。' };
       case 'coordination':
       case 'management':
         return { title: '影片統籌', subtitle: '全局影片產出時間軸，查看所有狀態的影片記錄。' };
@@ -95,7 +98,8 @@ function VideoModuleContent({ subModule }: { subModule?: string }) {
     resolvedTab === 'schedule' ||
     resolvedTab === 'channels' ||
     resolvedTab === 'accounts' ||
-    resolvedTab === 'login-methods';
+    resolvedTab === 'login-methods' ||
+    resolvedTab === 'bwa-projects';
 
   return (
     <div className={ownsHeader ? '' : 'space-y-6'}>
@@ -112,6 +116,7 @@ function VideoModuleContent({ subModule }: { subModule?: string }) {
       {resolvedTab === 'production' && <VideoProductionModule />}
       {resolvedTab === 'review' && <VideoReviewModule />}
       {resolvedTab === 'publish' && <VideoPublishModule />}
+      {resolvedTab === 'bwa-projects' && <BwaProjectsModule />}
       {resolvedTab === 'coordination' && <VideoManagementModule />}
       {resolvedTab === 'channels' && <VideoChannelsList />}
       {resolvedTab === 'accounts' && <VideoAccountsList />}

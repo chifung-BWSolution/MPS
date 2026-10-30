@@ -1,20 +1,32 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { ExternalLink, Loader2, Plus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { VideoOutputStatus } from '@/types/videoOutput';
 import type { Vchannel } from '@/types/vchannel';
-import type { ModelAssignment, StaffAssignment, VideoWorkflowDeviceSuffix, VideoWorkflowMock } from '@/types/videoWorkflow';
+import type {
+  ModelAssignment,
+  StaffAssignment,
+  VideoWorkflowDeviceSuffix,
+  VideoWorkflowMock,
+  VideoWorkflowStage,
+} from '@/types/videoWorkflow';
 import {
   formatVideoCode,
   generateNextVideoCode,
   parseDeviceSuffixFromVideoCode,
   parseSeqFromVideoCode,
 } from '@/services/videoCodeService';
+import { localDateString } from '@/services/reportLinkService';
+import {
+  deriveVideoOutputStatus,
+  hasAnyMediaPlatformPublished,
+  VIDEO_OUTPUT_STATUS_COLORS,
+  VIDEO_OUTPUT_STATUS_LABELS,
+} from '@/lib/videoOutputUtils';
 import {
   getPrepMissingItems,
   isPrepComplete,
   validateNewVideoScheduleRequired,
-  VIDEO_WORKFLOW_STAGE_COLORS,
-  VIDEO_WORKFLOW_STAGE_LABELS,
 } from '@/lib/videoWorkflowUtils';
 import { StaffAssignmentField } from '@/components/video/workflow/StaffAssignmentField';
 import { CrudModal } from '@/components/ui/crud-modal';
@@ -24,6 +36,62 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 type TalentOption = { id: string; displayName: string };
 
+const STATUS_OPTIONS: VideoOutputStatus[] = [
+  'pending',
+  'in_production',
+  'pending_review',
+  'pending_publish',
+  'published',
+  'delisted',
+];
+
+function statusToWorkflowStage(status: VideoOutputStatus): VideoWorkflowStage {
+  switch (status) {
+    case 'pending':
+      return 'prep';
+    case 'in_production':
+      return 'production';
+    case 'pending_review':
+      return 'review';
+    case 'pending_publish':
+      return 'publish';
+    case 'published':
+      return 'published';
+    case 'delisted':
+      return 'delisted';
+  }
+}
+
+function deriveScheduleStatus(video: VideoWorkflowMock): VideoOutputStatus {
+  return deriveVideoOutputStatus({
+    workflowStage: video.stage,
+    shootSz: !!video.location?.sz,
+    shootHk: !!video.location?.hk,
+    rawFootageDone: video.rawFootageDone,
+    needsEditing: video.needsEditing,
+    demoDone: video.demoDone,
+    publishedDate: video.publishedDate,
+    platformPublish: video.platformPublish ?? {},
+  });
+}
+
+function statusChangePatch(video: VideoWorkflowMock, status: VideoOutputStatus): Partial<VideoWorkflowMock> {
+  const patch: Partial<VideoWorkflowMock> = {
+    stage: statusToWorkflowStage(status),
+  };
+  if (status === 'published') {
+    if (!video.publishedDate?.trim()) {
+      patch.publishedDate = localDateString();
+    }
+  } else if (status !== 'delisted') {
+    patch.publishedDate = '';
+    if (hasAnyMediaPlatformPublished(video.platformPublish)) {
+      patch.platformPublish = {};
+    }
+  }
+  return patch;
+}
+
 type Draft = {
   vchannelId: string;
   vchannelCode: string;
@@ -32,13 +100,14 @@ type Draft = {
   deviceType: VideoWorkflowDeviceSuffix;
   videoCode: string;
   title: string;
+  asanaUrl: string;
   shootAt: string;
   location: VideoWorkflowMock['location'];
-  copywriting?: StaffAssignment;
   script?: StaffAssignment;
   model?: ModelAssignment;
   photographer?: StaffAssignment;
   onSiteCrew: StaffAssignment[];
+  status: VideoOutputStatus;
 };
 
 function emptyDraft(): Draft {
@@ -50,9 +119,11 @@ function emptyDraft(): Draft {
     deviceType: null,
     videoCode: '',
     title: '',
+    asanaUrl: '',
     shootAt: '',
     location: { sz: false, hk: false, notes: '' },
     onSiteCrew: [],
+    status: 'pending',
   };
 }
 
@@ -67,13 +138,14 @@ function draftFromVideo(video: VideoWorkflowMock): Draft {
     deviceType: video.deviceType ?? parseDeviceSuffixFromVideoCode(video.videoCode),
     videoCode: video.videoCode,
     title: video.title,
+    asanaUrl: video.asanaUrl ?? '',
     shootAt: video.shootAt ?? '',
     location: { ...video.location },
-    copywriting: video.copywriting,
     script: video.script,
     model: video.model,
     photographer: video.photographer,
     onSiteCrew: video.onSiteCrew ? [...video.onSiteCrew] : [],
+    status: deriveScheduleStatus(video),
   };
 }
 
@@ -178,7 +250,6 @@ export function ScheduleEditModal({
     stage: video?.stage ?? 'prep',
     shootAt: draft.shootAt || undefined,
     location: draft.location,
-    copywriting: draft.copywriting,
     script: draft.script,
     model: draft.model,
     photographer: draft.photographer,
@@ -237,21 +308,27 @@ export function ScheduleEditModal({
     });
   };
 
-  const buildPayload = (): Partial<VideoWorkflowMock> => ({
-    vchannelId: draft.vchannelId,
-    vchannelCode: draft.vchannelCode,
-    videoCode: draft.videoCode.trim(),
-    title: draft.title.trim(),
-    deviceType: draft.deviceType,
-    productionYear: draft.productionYear,
-    shootAt: draft.shootAt || undefined,
-    location: draft.location,
-    copywriting: draft.copywriting,
-    script: draft.script,
-    model: draft.model,
-    photographer: draft.photographer,
-    onSiteCrew: draft.onSiteCrew.filter(m => m.userId),
-  });
+  const buildPayload = (): Partial<VideoWorkflowMock> => {
+    const payload: Partial<VideoWorkflowMock> = {
+      vchannelId: draft.vchannelId,
+      vchannelCode: draft.vchannelCode,
+      videoCode: draft.videoCode.trim(),
+      title: draft.title.trim(),
+      asanaUrl: draft.asanaUrl.trim(),
+      deviceType: draft.deviceType,
+      productionYear: draft.productionYear,
+      shootAt: draft.shootAt || undefined,
+      location: draft.location,
+      script: draft.script,
+      model: draft.model,
+      photographer: draft.photographer,
+      onSiteCrew: draft.onSiteCrew.filter(m => m.userId),
+    };
+    if (!isNew && video) {
+      Object.assign(payload, statusChangePatch(video, draft.status));
+    }
+    return payload;
+  };
 
   const handleSave = async () => {
     setFormError(null);
@@ -331,14 +408,6 @@ export function ScheduleEditModal({
           <p className="text-[12px] text-rose-600 bg-rose-50 border border-rose-200 rounded px-3 py-2">{formError}</p>
         )}
 
-        {!isNew && video && (
-          <div className="flex items-center gap-2">
-            <span className={cn('text-[11px] font-medium px-2 py-0.5 rounded', VIDEO_WORKFLOW_STAGE_COLORS[video.stage])}>
-              {VIDEO_WORKFLOW_STAGE_LABELS[video.stage]}
-            </span>
-          </div>
-        )}
-
         <div className="border border-border/60 rounded-md p-3 space-y-3">
           <p className="text-[12px] font-bold text-teal-800">基本資訊</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -412,6 +481,64 @@ export function ScheduleEditModal({
               className="h-9 text-[13px]"
             />
           </div>
+
+          <div>
+            <label className="text-[11px] text-muted-foreground block mb-1">Asana 連結</label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="url"
+                value={draft.asanaUrl}
+                onChange={e => setDraft(d => ({ ...d, asanaUrl: e.target.value }))}
+                placeholder="https://app.asana.com/..."
+                className="h-9 text-[13px]"
+              />
+              {/^https?:\/\//i.test(draft.asanaUrl.trim()) && (
+                <a
+                  href={draft.asanaUrl.trim()}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-md border border-border text-teal-700 hover:bg-teal-50"
+                  title="開啟 Asana"
+                >
+                  <ExternalLink size={14} />
+                </a>
+              )}
+            </div>
+          </div>
+
+          {!isNew && video && (
+            <div className="space-y-2">
+              <label className="text-[11px] text-muted-foreground block mb-1">狀態</label>
+              <Select value={draft.status} onValueChange={value => setDraft(d => ({ ...d, status: value as VideoOutputStatus }))}>
+                <SelectTrigger className="h-9 text-[13px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map(status => (
+                    <SelectItem key={status} value={status}>
+                      <span className={cn('text-[11px] px-1.5 py-0.5 rounded', VIDEO_OUTPUT_STATUS_COLORS[status])}>
+                        {VIDEO_OUTPUT_STATUS_LABELS[status]}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {draft.status !== 'published'
+                && draft.status !== 'delisted'
+                && (
+                  deriveScheduleStatus(video) === 'published'
+                  || deriveScheduleStatus(video) === 'delisted'
+                  || hasAnyMediaPlatformPublished(video.platformPublish)
+                  || !!video.publishedDate?.trim()
+                ) && (
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">
+                  改為流程中狀態時，將清除實際發佈日期
+                  {hasAnyMediaPlatformPublished(video.platformPublish) ? '與平台發佈鏈接' : ''}
+                  ，以便狀態生效。選「已下架」則保留發佈資料。
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="space-y-3">
@@ -445,8 +572,6 @@ export function ScheduleEditModal({
             </div>
           </div>
 
-          <StaffAssignmentField label="文案" value={draft.copywriting} staffOptions={staffOptions}
-            onChange={copywriting => setDraft(d => ({ ...d, copywriting }))} />
           <StaffAssignmentField label="腳本" value={draft.script} staffOptions={staffOptions}
             onChange={script => setDraft(d => ({ ...d, script }))} />
           <ModelAssignmentField value={draft.model} talentOptions={talentOptions}
@@ -495,7 +620,7 @@ export function ScheduleEditModal({
         <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white" onClick={handleSave} disabled={saving || codeLoading}>
           {saving ? <><Loader2 size={14} className="animate-spin mr-1" />保存中…</> : '保存'}
         </Button>
-        {isPrep && onEnterProduction && (
+        {isPrep && onEnterProduction && (isNew || draft.status === 'pending') && (
           <Button size="sm" className="bg-teal-700 hover:bg-teal-800 text-white" disabled={!prepReady || saving || codeLoading}
             onClick={handleEnter}>
             進入製作

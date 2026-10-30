@@ -49,13 +49,13 @@ export type VideoWorkflowMock = {
   vchannelPublicName?: string;
   videoCode: string;
   title: string;
+  asanaUrl?: string;
   deviceType?: VideoWorkflowDeviceSuffix;
   productionYear?: number;
   createdAt?: string;
   stage: VideoWorkflowStage;
   shootAt?: string;
   location: VideoWorkflowLocation;
-  copywriting?: StaffAssignment;
   script?: StaffAssignment;
   model?: ModelAssignment;
   photographer?: StaffAssignment;

@@ -19,12 +19,14 @@ export type PlatformPublishKey =
   | 'xiaohongshu'
   | 'douyin'
   | 'wechat_channels'
-  | 'wechat_official'
-  | 'zh_cn'
-  | 'zh_tw';
+  | 'wechat_official';
 
-/** URL entry; legacy rows may still store `true` (published without URL). */
-export type PlatformPublishEntry = boolean | { url?: string };
+/**
+ * URL entry. `url` is the first link so older readers still see a publish.
+ * `urls` holds every link when the platform has more than one.
+ * Legacy rows may still store `true` (published without a URL).
+ */
+export type PlatformPublishEntry = boolean | { url?: string; urls?: string[] };
 
 export type PlatformPublishMap = Partial<Record<PlatformPublishKey, PlatformPublishEntry>>;
 
@@ -36,16 +38,12 @@ export interface VideoOutput extends VideoOutputWorkflowFields {
   productionYear?: number;
   videoCode: string;
   title: string;
-  asanaTaskId?: string;
   asanaUrl?: string;
   shootSz: boolean;
   shootHk: boolean;
   rawFootageDone: boolean;
   needsEditing?: boolean | null;
   demoDone: boolean;
-  copySc: boolean;
-  copyTc: boolean;
-  copyEn: boolean;
   subtitleDone: boolean;
   reviewed: boolean;
   shootAt?: string;
@@ -64,16 +62,12 @@ export interface VideoOutputInput {
   productionYear?: number;
   videoCode: string;
   title: string;
-  asanaTaskId?: string;
   asanaUrl?: string;
   shootSz?: boolean;
   shootHk?: boolean;
   rawFootageDone?: boolean;
   needsEditing?: boolean | null;
   demoDone?: boolean;
-  copySc?: boolean;
-  copyTc?: boolean;
-  copyEn?: boolean;
   subtitleDone?: boolean;
   reviewed?: boolean;
   shootAt?: string;

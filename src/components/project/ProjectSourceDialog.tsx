@@ -55,6 +55,7 @@ function websiteFormFromProfile(site: WebsiteProfileFull): WebsiteFormData {
     level: site.level,
     status: site.status,
     notes: site.notes || '',
+    launchDate: site.launchDate || '',
     profileType: site.profileType || 'website',
     projectCategory: site.projectCategory === 'client' ? 'client' : 'internal',
     systemType: site.systemType,

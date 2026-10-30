@@ -147,11 +147,11 @@ export function VideoScheduleModule() {
           vchannelCode: payload.vchannelCode,
           videoCode: payload.videoCode,
           title: payload.title.trim(),
+          asanaUrl: payload.asanaUrl,
           deviceType: payload.deviceType ?? null,
           productionYear: payload.productionYear,
           shootAt: payload.shootAt,
           location: payload.location ?? { sz: false, hk: false },
-          copywriting: payload.copywriting,
           script: payload.script,
           model: payload.model,
           photographer: payload.photographer,
@@ -190,7 +190,7 @@ export function VideoScheduleModule() {
         <div className="min-w-0">
           <h1 className="text-[32px] font-bold tracking-tight">拍攝排期</h1>
           <p className="text-[14px] text-muted-foreground mt-1">
-            日曆與準備工作清單：文案、腳本、Model、場地、攝影師與到場人員。
+            日曆與準備工作清單：腳本、Model、場地、攝影師與到場人員。
           </p>
         </div>
         <Button type="button" className="h-9 bg-teal-600 hover:bg-teal-700 text-white text-[12px] gap-1.5 shrink-0" onClick={openNew}>

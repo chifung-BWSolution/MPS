@@ -91,8 +91,6 @@ function parsePlatformPublish(row) {
     douyin: 'S',
     wechat_channels: 'T',
     wechat_official: 'U',
-    zh_cn: 'V',
-    zh_tw: 'W',
   };
   const out = {};
   for (const [key, col] of Object.entries(map)) {

@@ -1,4 +1,4 @@
-import type { VideoOutput } from '@/types/videoOutput';
+import type { PlatformPublishMap, VideoOutput } from '@/types/videoOutput';
 import type { PrepAssignments } from '@/types/videoOutputWorkflow';
 import type {
   ProductionProgress,
@@ -12,9 +12,30 @@ import {
   syncLegacyProductionFields,
 } from '@/lib/videoWorkflowUtils';
 
+function asanaUrlColumn(raw: string | null | undefined): string | null {
+  return raw?.trim() || null;
+}
+
+const LEGACY_LANGUAGE_PUBLISH_KEYS = ['zh_cn', 'zh_tw'] as const;
+
+/** Drop Excel language flags that used to live inside platform_publish. */
+export function withoutLegacyLanguagePublishKeys(
+  platformPublish: PlatformPublishMap | null | undefined,
+): PlatformPublishMap {
+  if (!platformPublish) return {};
+  const next: PlatformPublishMap = { ...platformPublish };
+  const record = next as Record<string, unknown>;
+  for (const key of LEGACY_LANGUAGE_PUBLISH_KEYS) {
+    delete record[key];
+  }
+  return next;
+}
+
 export function parsePrepAssignments(raw: unknown): PrepAssignments {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-  return raw as PrepAssignments;
+  const record = { ...(raw as Record<string, unknown>) };
+  delete record.copywriting;
+  return record as PrepAssignments;
 }
 
 export function parseProductionProgressJson(raw: unknown): ProductionProgress | undefined {
@@ -56,6 +77,7 @@ export function mapVideoOutputToWorkflow(video: VideoOutput): VideoWorkflowMock 
     vchannelPublicName: video.channelPublicName,
     videoCode: video.videoCode,
     title: video.title,
+    asanaUrl: video.asanaUrl,
     productionYear: video.productionYear,
     createdAt: video.createdAt,
     stage: video.workflowStage ?? 'prep',
@@ -65,7 +87,6 @@ export function mapVideoOutputToWorkflow(video: VideoOutput): VideoWorkflowMock 
       hk: video.shootHk,
       notes: video.locationNotes,
     },
-    copywriting: prep.copywriting,
     script: prep.script,
     model: prep.model,
     photographer: prep.photographer,
@@ -90,7 +111,6 @@ export function mapVideoOutputToWorkflow(video: VideoOutput): VideoWorkflowMock 
 
 function mergePrepAssignments(existing: PrepAssignments, patch: VideoWorkflowUpdate): PrepAssignments {
   return {
-    copywriting: patch.copywriting !== undefined ? patch.copywriting : existing.copywriting,
     script: patch.script !== undefined ? patch.script : existing.script,
     model: patch.model !== undefined ? patch.model : existing.model,
     photographer: patch.photographer !== undefined ? patch.photographer : existing.photographer,
@@ -109,11 +129,14 @@ export function workflowPatchToDbUpdate(
   if (patch.stage !== undefined) row.workflow_stage = patch.stage;
   if (patch.title !== undefined) row.title = patch.title;
   if (patch.videoCode !== undefined) row.video_code = patch.videoCode;
+  if (patch.asanaUrl !== undefined) row.asana_url = asanaUrlColumn(patch.asanaUrl);
   if (patch.shootAt !== undefined) row.shoot_at = patch.shootAt || null;
   if (patch.plannedPublishDate !== undefined) row.planned_publish_date = patch.plannedPublishDate || null;
   if (patch.publishedDate !== undefined) row.published_date = patch.publishedDate || null;
   if (patch.storagePath !== undefined) row.storage_path = patch.storagePath || null;
-  if (patch.platformPublish !== undefined) row.platform_publish = patch.platformPublish;
+  if (patch.platformPublish !== undefined) {
+    row.platform_publish = withoutLegacyLanguagePublishKeys(patch.platformPublish);
+  }
   if (patch.reviewRejectReason !== undefined) row.review_reject_reason = patch.reviewRejectReason || null;
   if (patch.submittedForReviewAt !== undefined) row.submitted_for_review_at = patch.submittedForReviewAt || null;
   if (patch.reviewedAt !== undefined) row.reviewed_at = patch.reviewedAt || null;
@@ -131,7 +154,6 @@ export function workflowPatchToDbUpdate(
   }
 
   const hasPrepPatch =
-    patch.copywriting !== undefined ||
     patch.script !== undefined ||
     patch.model !== undefined ||
     patch.photographer !== undefined ||
@@ -184,6 +206,7 @@ export function createVideoDbRow(payload: {
   vchannelId: string;
   videoCode: string;
   title: string;
+  asanaUrl?: string;
   productionYear?: number;
   projectCategory?: VideoOutput['projectCategory'];
   shootAt?: string;
@@ -195,6 +218,7 @@ export function createVideoDbRow(payload: {
     vchannel_id: payload.vchannelId,
     video_code: payload.videoCode,
     title: payload.title,
+    asana_url: asanaUrlColumn(payload.asanaUrl),
     production_year: payload.productionYear ?? new Date().getFullYear(),
     project_category: payload.projectCategory ?? 'client',
     workflow_stage: 'prep' satisfies VideoWorkflowStage,

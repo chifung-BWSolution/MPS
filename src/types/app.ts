@@ -279,6 +279,8 @@ export interface WebsiteProfileFull {
   assignedStaff?: { userId: string; role: string; name: string }[];
   externalLinks?: { label: string; url: string }[];
   notes?: string;
+  /** Date the site bound its domain and went live (YYYY-MM-DD). */
+  launchDate?: string;
   pagesCount: number;
   articlesCount: number;
   videosCount: number;

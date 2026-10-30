@@ -1,6 +1,7 @@
 import { useState, type MouseEvent, type ReactNode } from 'react';
 import { Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MEDIA_PLATFORM_PUBLISH_KEYS, PLATFORM_PUBLISH_LABELS } from '@/lib/videoOutputUtils';
 import { PRODUCTION_TASK_KEYS, PRODUCTION_TASK_LABELS } from '@/lib/videoWorkflowUtils';
 
 // 必須使用完整字面量 class，Tailwind 才能掃描並生成 grid 樣式
@@ -11,7 +12,7 @@ export const WORKFLOW_LIST_GRID_REVIEW =
   'grid grid-cols-[minmax(100px,152px)_minmax(112px,148px)_minmax(120px,1.2fr)_92px_repeat(5,52px)_minmax(118px,0.9fr)_108px_88px_88px] gap-x-3 gap-y-2 items-center min-w-[1150px]';
 
 export const WORKFLOW_LIST_GRID_PUBLISH =
-  'grid grid-cols-[minmax(100px,152px)_minmax(112px,148px)_minmax(120px,1.2fr)_92px_repeat(5,52px)_minmax(118px,0.9fr)_108px_72px] gap-x-3 gap-y-2 items-center min-w-[1020px]';
+  'grid grid-cols-[minmax(96px,140px)_minmax(168px,220px)_minmax(180px,1.8fr)_92px_repeat(9,60px)_108px_132px] gap-x-2 gap-y-2 items-center min-w-[1300px]';
 
 export const WORKFLOW_LIST_DATE_CELL = 'text-muted-foreground shrink-0 whitespace-nowrap tabular-nums';
 
@@ -74,10 +75,18 @@ export function WorkflowVideoListHeader({ variant, className }: HeaderProps) {
       <span>Video Code</span>
       <span>主題</span>
       <span className="shrink-0 whitespace-nowrap">拍攝日</span>
-      {PRODUCTION_TASK_KEYS.map(key => (
-        <span key={key} className="text-center whitespace-nowrap">{PRODUCTION_TASK_LABELS[key]}</span>
-      ))}
-      <span>影片存放位置</span>
+      {variant === 'publish' ? (
+        MEDIA_PLATFORM_PUBLISH_KEYS.map(key => (
+          <span key={key} className="text-center whitespace-nowrap text-[10px]">{PLATFORM_PUBLISH_LABELS[key]}</span>
+        ))
+      ) : (
+        <>
+          {PRODUCTION_TASK_KEYS.map(key => (
+            <span key={key} className="text-center whitespace-nowrap">{PRODUCTION_TASK_LABELS[key]}</span>
+          ))}
+          <span>影片存放位置</span>
+        </>
+      )}
       <span className="shrink-0 whitespace-nowrap">計劃發佈日期</span>
       {variant === 'production' ? (
         <>

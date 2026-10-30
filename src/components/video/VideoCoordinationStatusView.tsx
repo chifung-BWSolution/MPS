@@ -1,32 +1,16 @@
 import { useMemo, useState, type MouseEvent } from 'react';
-import { Check, ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { PlatformPublishKey, VideoOutput, VideoOutputStatus } from '@/types/videoOutput';
+import type { VideoOutput, VideoOutputStatus } from '@/types/videoOutput';
 import {
-  PLATFORM_PUBLISH_LABELS,
   VIDEO_OUTPUT_STATUS_LABELS,
   deriveVideoOutputStatus,
   formatShootLocation,
   getEffectivePublishDate,
-  getPlatformUrl,
   getPublishedPlatformKeys,
-  isHttpUrl,
   sortVideoOutputsByPublishDateDesc,
 } from '@/lib/videoOutputUtils';
-
-const PLATFORM_TAG_COLORS: Record<PlatformPublishKey, string> = {
-  youtube: 'bg-red-50 text-red-700 border-red-200',
-  instagram: 'bg-pink-50 text-pink-700 border-pink-200',
-  facebook: 'bg-blue-50 text-blue-700 border-blue-200',
-  threads: 'bg-slate-100 text-slate-700 border-slate-300',
-  linkedin: 'bg-sky-50 text-sky-700 border-sky-200',
-  xiaohongshu: 'bg-rose-50 text-rose-700 border-rose-200',
-  douyin: 'bg-cyan-50 text-cyan-800 border-cyan-200',
-  wechat_channels: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  wechat_official: 'bg-green-50 text-green-700 border-green-200',
-  zh_cn: 'bg-amber-50 text-amber-800 border-amber-200',
-  zh_tw: 'bg-orange-50 text-orange-700 border-orange-200',
-};
+import { PlatformPublishLinkTag } from '@/components/video/PlatformPublishLinkTag';
 
 const STATUS_COLUMNS: VideoOutputStatus[] = [
   'pending',
@@ -86,7 +70,6 @@ function getMilestoneProgress(video: VideoOutput): { done: number; total: number
     video.rawFootageDone,
     video.needsEditing != null,
     video.demoDone,
-    video.copySc || video.copyTc || video.copyEn,
   ];
   const done = milestones.filter(Boolean).length;
   return { done, total: milestones.length };
@@ -137,13 +120,11 @@ function StoragePathTag({ path }: { path?: string }) {
 function StatusVideoCard({
   video,
   hours,
-  selected,
-  onSelect,
+  onEdit,
 }: {
   video: VideoOutput;
   hours?: number;
-  selected?: boolean;
-  onSelect?: (videoId: string) => void;
+  onEdit: (video: VideoOutput) => void;
 }) {
   const status = deriveVideoOutputStatus(video);
   const { done, total } = getMilestoneProgress(video);
@@ -166,33 +147,8 @@ function StatusVideoCard({
   const showStoragePathTag = status === 'pending_review' || status === 'pending_publish';
 
   return (
-    <div
-      className={cn(
-        'relative bg-white rounded border p-3 pt-4 transition-shadow hover:shadow-md cursor-pointer',
-        selected ? 'border-teal-500 ring-1 ring-teal-500/40 shadow-sm' : 'border-border/50',
-      )}
-      onClick={() => onSelect?.(video.id)}
-      role="button"
-      aria-pressed={selected}
-    >
-      <button
-        type="button"
-        aria-label={selected ? '取消選擇' : '選擇影片'}
-        onClick={e => {
-          e.stopPropagation();
-          onSelect?.(video.id);
-        }}
-        className={cn(
-          'absolute top-1.5 left-1.5 w-4 h-4 rounded border flex items-center justify-center transition-colors',
-          selected
-            ? 'bg-teal-600 border-teal-600 text-white'
-            : 'bg-white border-border hover:border-teal-400',
-        )}
-      >
-        {selected && <Check size={10} strokeWidth={3} />}
-      </button>
-
-      <div className="flex items-start justify-between gap-2 mb-1.5 pl-4">
+    <div className="relative bg-white rounded border border-border/50 p-3 transition-shadow hover:shadow-md">
+      <div className="flex items-start justify-between gap-2 mb-1.5">
         <span className="text-[13px] font-medium line-clamp-2" title={video.title}>
           {video.title}
         </span>
@@ -231,37 +187,14 @@ function StatusVideoCard({
               {status === 'delisted' ? '無平台記錄' : '尚未發佈平台'}
             </span>
           ) : (
-            publishedKeys.map(key => {
-              const url = getPlatformUrl(video.platformPublish, key);
-              const label = PLATFORM_PUBLISH_LABELS[key];
-              const openable = !!url && isHttpUrl(url);
-              const tagClass = cn(
-                'inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-medium transition-colors',
-                PLATFORM_TAG_COLORS[key],
-                openable && 'hover:opacity-80 cursor-pointer',
-              );
-
-              if (openable) {
-                return (
-                  <a
-                    key={key}
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={tagClass}
-                    title={`打開 ${label}`}
-                  >
-                    {label}
-                  </a>
-                );
-              }
-
-              return (
-                <span key={key} className={tagClass} title={url || '尚未填寫連結'}>
-                  {label}
-                </span>
-              );
-            })
+            publishedKeys.map(key => (
+              <PlatformPublishLinkTag
+                key={key}
+                platformKey={key}
+                platformPublish={video.platformPublish}
+                size="sm"
+              />
+            ))
           )}
         </div>
       )}
@@ -283,6 +216,14 @@ function StatusVideoCard({
           {done}/{total}
         </span>
       </div>
+      <button
+        type="button"
+        onClick={() => onEdit(video)}
+        className="mt-2 w-full inline-flex items-center justify-center gap-1 h-7 rounded border border-border/80 text-[11px] font-medium text-teal-700 hover:bg-teal-50 transition-colors"
+      >
+        <Pencil size={12} />
+        編輯
+      </button>
     </div>
   );
 }
@@ -310,11 +251,10 @@ function groupByMonth(videos: VideoOutput[]): MonthGroup[] {
 type Props = {
   videos: VideoOutput[];
   workLogTotals: Map<string, number>;
-  selectedId?: string | null;
-  onSelect?: (videoId: string) => void;
+  onEdit: (video: VideoOutput) => void;
 };
 
-export function VideoCoordinationStatusView({ videos, workLogTotals, selectedId, onSelect }: Props) {
+export function VideoCoordinationStatusView({ videos, workLogTotals, onEdit }: Props) {
   const currentMonthKey = useMemo(() => getCurrentMonthKey(), []);
 
   const videosByStatus = useMemo(() => {
@@ -438,8 +378,7 @@ export function VideoCoordinationStatusView({ videos, workLogTotals, selectedId,
                                 key={video.id}
                                 video={video}
                                 hours={workLogTotals.get(video.id)}
-                                selected={selectedId === video.id}
-                                onSelect={onSelect}
+                                onEdit={onEdit}
                               />
                             ))}
                           </div>

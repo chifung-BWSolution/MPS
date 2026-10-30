@@ -1,11 +1,19 @@
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import {
-  Calendar, ChevronLeft, ChevronRight, Loader2, RefreshCw, Globe, Monitor,
+  AlertTriangle, Briefcase, Calendar, ChevronLeft, ChevronRight, Globe, Loader2,
+  Monitor, Pencil, RefreshCw, Video,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
 import { fetchDepartmentMap } from '@/components/day-report/departmentLookup';
+import {
+  REPORT_PROJECT_KIND_LABELS,
+  REPORT_PROJECT_KIND_OPTIONS,
+  reportProjectKind,
+  type ReportProjectKind,
+  type ReportProjectKindFilter,
+} from '@/lib/reportProjectKind';
 
 const UNASSIGNED_LABEL = '未分組';
 
@@ -14,7 +22,7 @@ const UNASSIGNED_LABEL = '未分組';
 // ============================
 type Mode = 'team' | 'personal';
 type PeriodType = 'day' | 'week' | 'month';
-type ProfileTypeFilter = 'all' | 'system' | 'website';
+type ProfileTypeFilter = ReportProjectKindFilter;
 
 interface ProjectProfileLite {
   id: string;
@@ -43,7 +51,7 @@ interface StaffHourRow {
 interface ProjectHourRow {
   projectId: string;
   name: string;
-  profileType: 'system' | 'website' | 'unknown';
+  kind: ReportProjectKind;
   hours: number;
   percentage: number;
 }
@@ -51,7 +59,7 @@ interface ProjectHourRow {
 interface ProjectStat {
   projectId: string;
   name: string;
-  profileType: 'system' | 'website' | 'unknown';
+  kind: ReportProjectKind;
   domainUrl: string | null;
   totalHours: number;
   staffRows: StaffHourRow[];
@@ -144,25 +152,33 @@ function roundHours(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
-function normalizeProfileType(raw: string | null | undefined): 'system' | 'website' | 'unknown' {
-  const t = (raw || '').toLowerCase();
-  if (t === 'system') return 'system';
-  if (t === 'website') return 'website';
-  return 'unknown';
+const KIND_BADGE_CLASS: Record<ReportProjectKind, string> = {
+  system: 'bg-indigo-50 text-indigo-700',
+  website: 'bg-sky-50 text-sky-700',
+  quotation_client: 'bg-amber-50 text-amber-700',
+  vchannel: 'bg-purple-50 text-purple-700',
+  manual: 'bg-slate-100 text-slate-600',
+  orphan: 'bg-rose-50 text-rose-700',
+};
+
+function KindIcon({ kind }: { kind: ReportProjectKind }) {
+  const props = { size: 10 };
+  if (kind === 'system') return <Monitor {...props} />;
+  if (kind === 'website') return <Globe {...props} />;
+  if (kind === 'quotation_client') return <Briefcase {...props} />;
+  if (kind === 'vchannel') return <Video {...props} />;
+  if (kind === 'manual') return <Pencil {...props} />;
+  return <AlertTriangle {...props} />;
 }
 
-function ProfileTypeBadge({ profileType }: { profileType: 'system' | 'website' | 'unknown' }) {
+function ProfileTypeBadge({ kind }: { kind: ReportProjectKind }) {
   return (
     <span className={cn(
       'inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0',
-      profileType === 'system'
-        ? 'bg-indigo-50 text-indigo-700'
-        : profileType === 'website'
-          ? 'bg-sky-50 text-sky-700'
-          : 'bg-slate-100 text-slate-600',
+      KIND_BADGE_CLASS[kind],
     )}>
-      {profileType === 'system' ? <Monitor size={10} /> : <Globe size={10} />}
-      {profileType === 'system' ? '系統' : profileType === 'website' ? '網站' : '其他'}
+      <KindIcon kind={kind} />
+      {REPORT_PROJECT_KIND_LABELS[kind]}
     </span>
   );
 }
@@ -238,7 +254,7 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
         return {
           id: p.id,
           name: p.name,
-          profile_type: String(meta.profile_type || p.related_type || 'unknown'),
+          profile_type: typeof meta.profile_type === 'string' ? meta.profile_type : '',
           domain_url: meta.domain_url ? String(meta.domain_url) : null,
           related_type: p.related_type,
         };
@@ -295,12 +311,12 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
 
   const resolveProjectMeta = useCallback((projectId: string, relatedName: string | null | undefined) => {
     const profile = profileById.get(projectId);
-    const profileType = profile
-      ? normalizeProfileType(profile.profile_type)
-      : 'unknown';
+    const kind = reportProjectKind(profile
+      ? { relatedType: profile.related_type, profileType: profile.profile_type }
+      : null);
     return {
       name: profile?.name || relatedName || projectId,
-      profileType,
+      kind,
       domainUrl: profile?.domain_url ?? null,
     };
   }, [profileById]);
@@ -313,8 +329,10 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
       if (hours <= 0) return false;
       if (typeFilter === 'all') return true;
       const profile = profileById.get(projectId);
-      const profileType = profile ? normalizeProfileType(profile.profile_type) : 'unknown';
-      return profileType === typeFilter;
+      const kind = reportProjectKind(profile
+        ? { relatedType: profile.related_type, profileType: profile.profile_type }
+        : null);
+      return kind === typeFilter;
     });
   }, [entries, profileById, typeFilter]);
 
@@ -358,7 +376,7 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
       stats.push({
         projectId,
         name: meta.name,
-        profileType: meta.profileType,
+        kind: meta.kind,
         domainUrl: meta.domainUrl,
         totalHours,
         staffRows,
@@ -400,7 +418,7 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
           return {
             projectId,
             name: meta.name,
-            profileType: meta.profileType,
+            kind: meta.kind,
             hours: rounded,
             percentage: totalHours > 0 ? (rounded / totalHours) * 100 : 0,
           };
@@ -469,18 +487,14 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
           </h1>
           <p className="text-[13px] text-muted-foreground mt-0.5">
             {mode === 'team'
-              ? '按系統／網站項目統計人員投入工時與占比 — 支援按天／週／月篩選。'
-              : '按個人統計參與的系統／網站項目工時與占比 — 依部門分組顯示。'}
+              ? '按項目統計人員投入工時與占比 — 可篩選系統、網站、客戶項目、影片頻道、自訂或異常，支援按天／週／月。'
+              : '按個人統計參與項目的工時與占比 — 依部門分組，可篩選系統、網站、客戶項目、影片頻道、自訂或異常。'}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="inline-flex rounded-md border border-[rgba(13,26,45,0.08)] bg-white p-0.5">
-            {([
-              { id: 'all' as const, label: '全部' },
-              { id: 'system' as const, label: '系統' },
-              { id: 'website' as const, label: '網站' },
-            ]).map(({ id, label }) => (
+          <div className="inline-flex flex-wrap rounded-md border border-[rgba(13,26,45,0.08)] bg-white p-0.5">
+            {REPORT_PROJECT_KIND_OPTIONS.map(({ id, label }) => (
               <button
                 key={id}
                 type="button"
@@ -586,7 +600,7 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
         </div>
       ) : empty ? (
         <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm py-16 text-center">
-          <p className="text-[14px] text-muted-foreground">此期間暫無關聯系統／網站的工時記錄</p>
+          <p className="text-[14px] text-muted-foreground">此期間暫無符合篩選的工時記錄</p>
           <p className="text-[12px] text-muted-foreground mt-1">請確認匯報項目已選擇關聯對象</p>
         </div>
       ) : mode === 'team' ? (
@@ -599,7 +613,7 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
               <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 border-b border-[rgba(13,26,45,0.06)] bg-muted/20">
                 <div className="min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <ProfileTypeBadge profileType={project.profileType} />
+                    <ProfileTypeBadge kind={project.kind} />
                     <h3 className="text-[15px] font-bold truncate">{project.name}</h3>
                   </div>
                   {project.domainUrl && (
@@ -676,7 +690,7 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
                             label={row.name}
                             hours={row.hours}
                             percentage={row.percentage}
-                            badge={<ProfileTypeBadge profileType={row.profileType} />}
+                            badge={<ProfileTypeBadge kind={row.kind} />}
                           />
                         ))}
                       </div>

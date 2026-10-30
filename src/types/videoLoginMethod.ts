@@ -21,6 +21,8 @@ export type VideoTwoFaMethod = (typeof VIDEO_TWO_FA_OPTIONS)[number]['id'];
 export type VideoLoginMethod = {
   id: string;
   loginMethod: VideoLoginMethodKind;
+  /** Rows created together share this id so password and contact edits stay in sync. */
+  credentialGroupId?: string;
   displayName: string;
   accountName: string;
   phoneNumber: string;
@@ -50,6 +52,12 @@ const TWO_FA_IDS = new Set<string>(VIDEO_TWO_FA_OPTIONS.map((option) => option.i
 
 export function isVideoLoginMethodKind(value: string): value is VideoLoginMethodKind {
   return LOGIN_METHOD_IDS.has(value);
+}
+
+/** Keep selected kinds unique and in catalog order. */
+export function normalizeLoginMethods(values: readonly string[]): VideoLoginMethodKind[] {
+  const selected = new Set(values.filter(isVideoLoginMethodKind));
+  return VIDEO_LOGIN_METHOD_OPTIONS.map((option) => option.id).filter((id) => selected.has(id));
 }
 
 export function isVideoTwoFaMethod(value: string): value is VideoTwoFaMethod {

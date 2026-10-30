@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Check, Loader2 } from 'lucide-react';
+import { Check, Loader2, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { VideoOutput, VideoOutputInput } from '@/types/videoOutput';
 import type { PlatformPublishKey } from '@/types/videoOutput';
@@ -21,17 +21,24 @@ type Props = {
   onSave: (input: Partial<VideoOutputInput>) => Promise<Error | null>;
 };
 
-function emptyUrlMap(): Record<PlatformPublishKey, string> {
-  return Object.fromEntries(MEDIA_PLATFORM_PUBLISH_KEYS.map(k => [k, ''])) as Record<PlatformPublishKey, string>;
+type PlatformUrlDraft = Record<PlatformPublishKey, string[]>;
+
+function emptyUrlMap(): PlatformUrlDraft {
+  return Object.fromEntries(MEDIA_PLATFORM_PUBLISH_KEYS.map(k => [k, ['']])) as PlatformUrlDraft;
+}
+
+function filledCount(values: string[]): number {
+  return values.filter(value => value.trim()).length;
 }
 
 export function PlatformPublishModal({ video, onClose, onSave }: Props) {
   const [selectedKey, setSelectedKey] = useState<PlatformPublishKey>(MEDIA_PLATFORM_PUBLISH_KEYS[0]);
-  const [urls, setUrls] = useState<Record<PlatformPublishKey, string>>(() => {
+  const [urls, setUrls] = useState<PlatformUrlDraft>(() => {
     const initial = emptyUrlMap();
     const existing = urlsFromPlatformPublish(video.platformPublish);
     for (const key of MEDIA_PLATFORM_PUBLISH_KEYS) {
-      initial[key] = existing[key] ?? '';
+      const list = existing[key];
+      initial[key] = list?.length ? [...list] : [''];
     }
     return initial;
   });
@@ -46,9 +53,31 @@ export function PlatformPublishModal({ video, onClose, onSave }: Props) {
     [video.platformPublish, urls],
   );
 
-  const hasAnyUrl = MEDIA_PLATFORM_PUBLISH_KEYS.some(k => urls[k]?.trim());
+  const hasAnyUrl = MEDIA_PLATFORM_PUBLISH_KEYS.some(k => filledCount(urls[k]) > 0);
   const hasPublished = MEDIA_PLATFORM_PUBLISH_KEYS.some(k => isPlatformPublished(previewPublish, k));
   const canSubmit = hasAnyUrl || hasPublished;
+
+  const selectedUrls = urls[selectedKey];
+  const canAddAnother = filledCount(selectedUrls) > 0 && !!selectedUrls[selectedUrls.length - 1]?.trim();
+
+  const updateUrl = (key: PlatformPublishKey, index: number, value: string) => {
+    setUrls(prev => {
+      const next = [...prev[key]];
+      next[index] = value;
+      return { ...prev, [key]: next };
+    });
+  };
+
+  const addUrl = (key: PlatformPublishKey) => {
+    setUrls(prev => ({ ...prev, [key]: [...prev[key], ''] }));
+  };
+
+  const removeUrl = (key: PlatformPublishKey, index: number) => {
+    setUrls(prev => {
+      const next = prev[key].filter((_, i) => i !== index);
+      return { ...prev, [key]: next.length ? next : [''] };
+    });
+  };
 
   const handleSubmit = async () => {
     setFormError(null);
@@ -105,7 +134,7 @@ export function PlatformPublishModal({ video, onClose, onSave }: Props) {
         <div className="flex border border-border/60 rounded-md overflow-hidden min-h-[280px]">
           <div className="w-[140px] shrink-0 border-r border-border/60 bg-slate-50/80">
             {MEDIA_PLATFORM_PUBLISH_KEYS.map(key => {
-              const hasUrl = !!urls[key]?.trim();
+              const count = filledCount(urls[key]);
               const wasPublished = isPlatformPublished(previewPublish, key);
               return (
                 <button
@@ -123,27 +152,61 @@ export function PlatformPublishModal({ video, onClose, onSave }: Props) {
                     <span className="w-3 shrink-0" />
                   )}
                   <span className="truncate">{PLATFORM_PUBLISH_LABELS[key]}</span>
-                  {hasUrl && selectedKey !== key && (
+                  {count > 1 ? (
+                    <span className="ml-auto text-[10px] font-medium text-teal-700 tabular-nums shrink-0">{count}</span>
+                  ) : count === 1 && selectedKey !== key ? (
                     <span className="ml-auto w-1.5 h-1.5 rounded-full bg-teal-500 shrink-0" />
-                  )}
+                  ) : null}
                 </button>
               );
             })}
           </div>
 
-          <div className="flex-1 p-4 bg-white">
-            <label className="text-[12px] font-medium mb-2 block">
+          <div className="flex-1 p-4 bg-white min-w-0">
+            <label htmlFor={`platform-url-${selectedKey}-0`} className="text-[12px] font-medium mb-2 block">
               {PLATFORM_PUBLISH_LABELS[selectedKey]} 鏈接
             </label>
-            <Input
-              value={urls[selectedKey]}
-              onChange={e => setUrls(prev => ({ ...prev, [selectedKey]: e.target.value }))}
-              placeholder="https://..."
-              className="h-9 text-[13px]"
-              autoFocus
-            />
+            <div className="space-y-2">
+              {selectedUrls.map((value, index) => (
+                <div key={`${selectedKey}-${index}`} className="flex items-center gap-2">
+                  <Input
+                    id={`platform-url-${selectedKey}-${index}`}
+                    value={value}
+                    onChange={e => updateUrl(selectedKey, index, e.target.value)}
+                    placeholder="https://..."
+                    aria-label={`${PLATFORM_PUBLISH_LABELS[selectedKey]} 鏈接 ${index + 1}`}
+                    className="h-9 text-[13px]"
+                    autoFocus={
+                      selectedUrls.length === 1
+                        ? index === 0
+                        : index === selectedUrls.length - 1 && !value
+                    }
+                  />
+                  {selectedUrls.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeUrl(selectedKey, index)}
+                      className="shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-md border border-border/70 text-muted-foreground hover:text-rose-600 hover:bg-rose-50"
+                      aria-label={`移除${PLATFORM_PUBLISH_LABELS[selectedKey]}鏈接 ${index + 1}`}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {canAddAnother && (
+              <button
+                type="button"
+                onClick={() => addUrl(selectedKey)}
+                className="mt-3 inline-flex items-center gap-1 text-[12px] font-medium text-teal-700 hover:text-teal-800"
+              >
+                <Plus size={12} />
+                新增鏈接
+              </button>
+            )}
             <p className="text-[11px] text-muted-foreground mt-2">
-              填寫 URL 即視為該平台已發佈；留空則清除該平台記錄。
+              填寫 URL 即視為該平台已發佈；留空則清除該平台記錄。已有鏈接後可再新增同一平台的其他影片鏈接。
             </p>
           </div>
         </div>

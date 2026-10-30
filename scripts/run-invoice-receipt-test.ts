@@ -12,6 +12,9 @@ import {
   RECEIPT_LINE_ITEMS_TABLE,
   RECEIPTS_TABLE,
   buildMainItemName,
+  buildServiceRenewalMessage,
+  formatServiceRenewalDate,
+  serviceRenewalTotal,
   canViewDocumentMoney,
   companyCodeFromProjectTypeInitial,
   companyListIdForCompanyCode,
@@ -273,6 +276,70 @@ Object.defineProperty(globalThis, 'window', {
 });
 openQuotationProjectDetail('proj-1', 'confirmed');
 assert.equal(loc.hash, '#quotation/projects?id=proj-1&doc=invoice&income=inc-9');
+
+assert.equal(serviceRenewalTotal(500, 12), 6000);
+assert.equal(formatServiceRenewalDate('2026-03-05'), '2026 年 3 月 5 日');
+assert.equal(formatServiceRenewalDate(''), '—');
+assert.equal(
+  buildServiceRenewalMessage({
+    launchDate: '2026-03-15',
+    dueDate: '2027-03-15',
+    monthlyAmount: 500,
+    periodCount: 12,
+    totalAmount: 6000,
+    hasWebsite: true,
+  }),
+  '本網站已於 2026 年 3 月 15 日綁定域名並正式上線啟用。下一年度服務費用將於 2027 年 3 月 15 日前收取，計費標準為：500.00 元/月 × 12 個月，共計 6,000.00 元整。',
+);
+assert.match(
+  buildServiceRenewalMessage({
+    launchDate: '2026-03-15',
+    dueDate: '2027-03-15',
+    monthlyAmount: 500,
+    periodCount: 3,
+    totalAmount: 6000,
+    hasWebsite: false,
+  }),
+  /× 3 個月，共計 6,000\.00 元整。/,
+);
+assert.equal(
+  buildServiceRenewalMessage({
+    launchDate: '',
+    dueDate: '2026-10-31',
+    monthlyAmount: 12900,
+    periodCount: 2,
+    totalAmount: 25800,
+    hasWebsite: true,
+  }),
+  '本網站已綁定域名並正式上線啟用。下一年度服務費用將於 2026 年 10 月 31 日前收取，計費標準為：12,900.00 元/月 × 2 個月，共計 25,800.00 元整。',
+);
+assert.equal(
+  buildServiceRenewalMessage({
+    launchDate: '',
+    dueDate: '2026-10-31',
+    monthlyAmount: 12900,
+    periodCount: 2,
+    totalAmount: 25800,
+    hasWebsite: false,
+  }).startsWith('下一年度服務費用'),
+  true,
+);
+
+const renewalMigration = read('supabase/migrations/20261029031718_add_website_launch_date_and_invoice_service_renewal_note.sql');
+assert.match(renewalMigration, /webandsystem_list/);
+assert.match(renewalMigration, /launch_date date/);
+assert.match(renewalMigration, /service_renewal_note text/);
+
+const invoiceEditor = read('src/components/quotation/InvoiceEditor.tsx');
+assert.match(invoiceEditor, /showRenewalOverride/);
+assert.match(invoiceEditor, /serviceRenewalNote: ''/);
+assert.match(invoiceEditor, /重設為預設/);
+assert.match(invoiceEditor, /總期數/);
+const invoicePdf = read('src/components/quotation/InvoicePDFDocument.tsx');
+assert.match(invoicePdf, /form\.serviceRenewalNote/);
+const websiteModal = read('src/components/website/WebsiteFormModal.tsx');
+assert.match(websiteModal, /launchDate/);
+assert.match(websiteModal, /上線日期/);
 
 assert.ok(DEFAULT_INVOICE_NOTE.includes('2% handling charge'));
 assert.ok(DEFAULT_INVOICE_NOTE.startsWith('感謝您的惠顧'));

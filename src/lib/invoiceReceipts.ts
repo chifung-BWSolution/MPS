@@ -63,8 +63,21 @@ export type InvoiceForm = {
   discountDescription: string;
   discountAmount: number;
   note: string;
+  /** Go-live / next-year fee sentence. Empty when the editor toggle is off for this PDF. */
+  serviceRenewalNote: string;
   companyId: string | null;
   pdfBranding: PdfBranding | null;
+};
+
+export type ServiceRenewalMessageInput = {
+  launchDate: string;
+  dueDate: string;
+  monthlyAmount: number;
+  /** Shown as 「× n 個月」. Defaults to the related income count. */
+  periodCount: number;
+  totalAmount: number;
+  /** Linked quotation project has a webandsystem_list row. */
+  hasWebsite: boolean;
 };
 
 export type ReceiptForm = {
@@ -266,6 +279,40 @@ export function todayIsoDate(now = new Date()): string {
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+export function serviceRenewalTotal(monthlyAmount: number, incomeCount: number): number {
+  const monthly = Number.isFinite(monthlyAmount) ? monthlyAmount : 0;
+  const count = Number.isFinite(incomeCount) ? incomeCount : 0;
+  return fromCents(Math.round(toCents(monthly) * count));
+}
+
+/** YYYY-MM-DD → `2026 年 3 月 15 日`. Invalid or empty dates become an em dash. */
+export function formatServiceRenewalDate(iso: string | null | undefined): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec((iso ?? '').trim().slice(0, 10));
+  if (!match) return '—';
+  return `${Number(match[1])} 年 ${Number(match[2])} 月 ${Number(match[3])} 日`;
+}
+
+export function formatServiceRenewalAmount(amount: number): string {
+  const value = Number.isFinite(amount) ? amount : 0;
+  return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatServiceRenewalCount(count: number): string {
+  if (!Number.isFinite(count)) return '0';
+  const rounded = Math.round(count * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
+export function buildServiceRenewalMessage(input: ServiceRenewalMessageInput): string {
+  const fee = `下一年度服務費用將於 ${formatServiceRenewalDate(input.dueDate)}前收取，計費標準為：${formatServiceRenewalAmount(input.monthlyAmount)} 元/月 × ${formatServiceRenewalCount(input.periodCount)} 個月，共計 ${formatServiceRenewalAmount(input.totalAmount)} 元整。`;
+  const launch = input.launchDate.trim();
+  if (launch) {
+    return `本網站已於 ${formatServiceRenewalDate(launch)}綁定域名並正式上線啟用。${fee}`;
+  }
+  if (input.hasWebsite) return `本網站已綁定域名並正式上線啟用。${fee}`;
+  return fee;
 }
 
 export function buildMainItemName(input: {

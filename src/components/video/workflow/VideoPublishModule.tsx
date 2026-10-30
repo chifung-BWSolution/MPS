@@ -1,9 +1,19 @@
 import { useMemo, useState } from 'react';
+import { Check, Copy, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVideoWorkflow } from '@/hooks/useVideoWorkflow';
 import { useVideoWorkflowListFilter } from '@/hooks/useVideoWorkflowListFilter';
-import type { VideoOutputInput } from '@/types/videoOutput';
+import type { PlatformPublishKey, PlatformPublishMap, VideoOutputInput } from '@/types/videoOutput';
 import type { VideoWorkflowMock } from '@/types/videoWorkflow';
+import {
+  formatPlatformPublishCopyText,
+  getPlatformUrls,
+  getPublishedPlatformKeysWithUrl,
+  isHttpUrl,
+  isPlatformPublished,
+  MEDIA_PLATFORM_PUBLISH_KEYS,
+  PLATFORM_PUBLISH_LABELS,
+} from '@/lib/videoOutputUtils';
 import {
   countWorkflowBinaryStatus,
   filterWorkflowBinaryStatus,
@@ -14,12 +24,10 @@ import {
   VIDEO_WORKFLOW_STAGE_LABELS,
   type WorkflowBinaryStatusFilter,
 } from '@/lib/videoWorkflowUtils';
-import { ProductionProgressMarks } from '@/components/video/workflow/ProductionProgressMarks';
 import { WorkflowListFilters } from '@/components/video/workflow/WorkflowListFilters';
 import { WorkflowStatusSummaryBar } from '@/components/video/workflow/WorkflowStatusSummaryBar';
 import { PlatformPublishModal } from '@/components/video/PlatformPublishModal';
 import {
-  CopyStoragePathButton,
   formatWorkflowPlannedPublishDate,
   WORKFLOW_LIST_DATE_CELL,
   WORKFLOW_LIST_GRID_PUBLISH,
@@ -28,11 +36,119 @@ import {
   WorkflowVideoListHeader,
 } from '@/components/video/workflow/workflowListLayout';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 const PUBLISH_STATUS_ITEMS = [
   { id: 'pending', label: '待發佈', activeClassName: VIDEO_WORKFLOW_STAGE_COLORS.publish },
   { id: 'done', label: '已發佈', activeClassName: VIDEO_WORKFLOW_STAGE_COLORS.published },
 ] as const;
+
+const PLATFORM_MARK_CLASS =
+  'group inline-flex h-6 w-6 items-center justify-center rounded text-teal-600 hover:bg-teal-50';
+
+function PlatformPublishMark({ interactive }: { interactive: boolean }) {
+  return (
+    <span className="relative inline-flex h-3.5 w-3.5 items-center justify-center">
+      <Check
+        size={14}
+        strokeWidth={2.5}
+        className={cn('absolute', interactive && 'group-hover:opacity-0')}
+      />
+      {interactive && (
+        <ExternalLink size={14} className="absolute opacity-0 group-hover:opacity-100" />
+      )}
+    </span>
+  );
+}
+
+function PlatformPublishCell({
+  platformKey,
+  platformPublish,
+}: {
+  platformKey: PlatformPublishKey;
+  platformPublish: PlatformPublishMap;
+}) {
+  const label = PLATFORM_PUBLISH_LABELS[platformKey];
+  const urls = getPlatformUrls(platformPublish, platformKey);
+  const published = isPlatformPublished(platformPublish, platformKey);
+  const openableUrls = urls.filter(isHttpUrl);
+
+  if (!published) {
+    return <span className="flex justify-center text-muted-foreground">—</span>;
+  }
+
+  if (openableUrls.length === 1) {
+    return (
+      <div className="flex justify-center">
+        <a
+          href={openableUrls[0]}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={openableUrls[0]}
+          aria-label={`打開 ${label}`}
+          className={PLATFORM_MARK_CLASS}
+          onClick={e => e.stopPropagation()}
+        >
+          <PlatformPublishMark interactive />
+        </a>
+      </div>
+    );
+  }
+
+  if (openableUrls.length > 1) {
+    return (
+      <div className="flex justify-center">
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              title={`${label}（${openableUrls.length} 條鏈接）`}
+              aria-label={`打開 ${label} 鏈接`}
+              className={PLATFORM_MARK_CLASS}
+              onClick={e => e.stopPropagation()}
+            >
+              <PlatformPublishMark interactive />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-80 p-2" onClick={e => e.stopPropagation()}>
+            <p className="px-2 pt-1 pb-1.5 text-[11px] text-muted-foreground">{label}</p>
+            <ul className="space-y-0.5">
+              {openableUrls.map(url => (
+                <li key={url}>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block px-2 py-1.5 rounded text-[12px] break-all text-teal-700 hover:bg-teal-50"
+                  >
+                    {url}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </PopoverContent>
+        </Popover>
+      </div>
+    );
+  }
+
+  return (
+    <span className="flex justify-center text-teal-600" title={`${label} 已發佈`}>
+      <Check size={14} strokeWidth={2.5} />
+    </span>
+  );
+}
+
+function PlatformPublishCells({ platformPublish }: { platformPublish?: PlatformPublishMap }) {
+  const map = platformPublish ?? {};
+  return (
+    <>
+      {MEDIA_PLATFORM_PUBLISH_KEYS.map(key => (
+        <PlatformPublishCell key={key} platformKey={key} platformPublish={map} />
+      ))}
+    </>
+  );
+}
 
 function PublishListRow({
   video,
@@ -41,7 +157,22 @@ function PublishListRow({
   video: VideoWorkflowMock;
   onPublish: () => void;
 }) {
+  const [copyDone, setCopyDone] = useState(false);
   const pending = isWorkflowPendingPublish(video);
+  const platformPublish = video.platformPublish ?? {};
+  const canCopy = getPublishedPlatformKeysWithUrl(platformPublish).length > 0;
+
+  const handleCopy = async () => {
+    const text = formatPlatformPublishCopyText(platformPublish);
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyDone(true);
+      setTimeout(() => setCopyDone(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
 
   return (
     <div className={cn(WORKFLOW_LIST_GRID_PUBLISH, 'px-3 py-2.5 border-b border-border/50 hover:bg-muted/20 text-[12px]')}>
@@ -61,22 +192,31 @@ function PublishListRow({
       />
       <p className="font-semibold truncate min-w-0" title={video.title}>{video.title}</p>
       <span className={WORKFLOW_LIST_DATE_CELL}>{video.shootAt ?? '—'}</span>
-      <ProductionProgressMarks video={video} />
-      <CopyStoragePathButton path={video.storagePath} />
+      <PlatformPublishCells platformPublish={video.platformPublish} />
       <span className={WORKFLOW_LIST_DATE_CELL}>{formatWorkflowPlannedPublishDate(video.plannedPublishDate)}</span>
-      <Button
-        type="button"
-        size="sm"
-        className={cn(
-          'h-7 text-[11px] px-2',
-          pending
-            ? 'bg-teal-600 hover:bg-teal-700 text-white'
-            : 'bg-white border border-border text-[#0d1a2d] hover:bg-muted/40',
-        )}
-        onClick={onPublish}
-      >
-        {pending ? '發佈' : '編輯'}
-      </Button>
+      <div className="flex items-center justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={handleCopy}
+          disabled={!canCopy}
+          className="flex items-center gap-1 px-2 py-0.5 border border-border/60 text-muted-foreground rounded text-[12px] font-medium hover:bg-muted/60 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+        >
+          <Copy size={12} /> {copyDone ? '已複製' : '複製'}
+        </button>
+        <Button
+          type="button"
+          size="sm"
+          className={cn(
+            'h-7 text-[11px] px-2',
+            pending
+              ? 'bg-teal-600 hover:bg-teal-700 text-white'
+              : 'bg-white border border-border text-[#0d1a2d] hover:bg-muted/40',
+          )}
+          onClick={onPublish}
+        >
+          {pending ? '發佈' : '編輯'}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -84,7 +224,7 @@ function PublishListRow({
 export function VideoPublishModule() {
   const { videos, getVideoOutputById, updateVideo, completePublish } = useVideoWorkflow();
   const [publishTargetId, setPublishTargetId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<WorkflowBinaryStatusFilter>('pending');
+  const [statusFilter, setStatusFilter] = useState<WorkflowBinaryStatusFilter>('all');
 
   const scopeVideos = useMemo(() => getPublishScopeVideos(videos), [videos]);
   const {

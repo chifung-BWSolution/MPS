@@ -14,8 +14,8 @@ export function useVideoOutput() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchVideos = useCallback(async () => {
-    setLoading(true);
+  const fetchVideos = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setLoading(true);
     const { data, error: fetchError } = await supabase
       .from('video_output')
       .select(SELECT_QUERY)
@@ -23,8 +23,10 @@ export function useVideoOutput() {
       .order('video_code');
 
     if (fetchError) {
-      setError(fetchError.message);
-      setVideos([]);
+      if (!options?.silent) {
+        setError(fetchError.message);
+        setVideos([]);
+      }
     } else {
       setError(null);
       setVideos((data ?? []).map(row => mapVideoOutputRow(row as never)));
@@ -61,16 +63,12 @@ export function useVideoOutput() {
       productionYear: input.productionYear ?? existing.productionYear,
       videoCode: input.videoCode ?? existing.videoCode,
       title: input.title ?? existing.title,
-      asanaTaskId: input.asanaTaskId ?? existing.asanaTaskId,
       asanaUrl: input.asanaUrl ?? existing.asanaUrl,
       shootSz: input.shootSz ?? existing.shootSz,
       shootHk: input.shootHk ?? existing.shootHk,
       rawFootageDone: input.rawFootageDone ?? existing.rawFootageDone,
       needsEditing: input.needsEditing !== undefined ? input.needsEditing : existing.needsEditing,
       demoDone: input.demoDone ?? existing.demoDone,
-      copySc: input.copySc ?? existing.copySc,
-      copyTc: input.copyTc ?? existing.copyTc,
-      copyEn: input.copyEn ?? existing.copyEn,
       subtitleDone: input.subtitleDone ?? existing.subtitleDone,
       reviewed: input.reviewed ?? existing.reviewed,
       shootAt: input.shootAt ?? existing.shootAt,

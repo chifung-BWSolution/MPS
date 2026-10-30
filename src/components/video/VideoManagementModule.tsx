@@ -1,17 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Check, Copy, Loader2, Pencil, Plus, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVideoOutput } from '@/hooks/useVideoOutput';
+import { useVideoWorkflow } from '@/hooks/useVideoWorkflow';
 import { useVchannels } from '@/hooks/useVchannels';
+import { supabase } from '@/lib/supabase';
+import { fetchStaffDirectoryOptions } from '@/services/staffDirectoryService';
+import { mapVideoOutputToWorkflow } from '@/lib/videoOutputWorkflowMapper';
+import { normalizeVideoWorkflow, sumProductionProgressHours } from '@/lib/videoWorkflowUtils';
 import type {
-  PlatformPublishKey,
   VideoOutput,
   VideoOutputInput,
   VideoOutputStatus,
   VideoProjectCategory,
 } from '@/types/videoOutput';
 import {
-  PLATFORM_PUBLISH_LABELS,
   VIDEO_OUTPUT_STATUS_COLORS,
   VIDEO_OUTPUT_STATUS_LABELS,
   buildProductionYearOptions,
@@ -20,40 +23,57 @@ import {
   formatPlatformPublishCopyText,
   formatShootLocation,
   getCurrentProductionYear,
-  getPlatformUrl,
   getPublishedPlatformKeys,
   getPublishedPlatformKeysWithUrl,
   isHttpUrl,
   sortVideoOutputsByPublishDateDesc,
 } from '@/lib/videoOutputUtils';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import type { VideoWorkflowMock } from '@/types/videoWorkflow';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PlatformPublishModal } from '@/components/video/PlatformPublishModal';
-import { CoordinationRecordModal } from '@/components/video/CoordinationRecordModal';
-import { sumProductionProgressHours } from '@/lib/videoWorkflowUtils';
+import { PlatformPublishLinkTag } from '@/components/video/PlatformPublishLinkTag';
+import { ScheduleEditModal } from '@/components/video/workflow/ScheduleEditModal';
 import { WorkflowStatusSummaryBar } from '@/components/video/workflow/WorkflowStatusSummaryBar';
 import { CopyStoragePathButton } from '@/components/video/workflow/workflowListLayout';
 import { VideoCoordinationStatusView } from '@/components/video/VideoCoordinationStatusView';
 
 type CoordinationView = 'status' | 'list';
 
-const TABLE_COL_COUNT = 14;
-/** Columns before 拍攝時間: 選擇 / 狀態 / Vchannel / Video Code / 主題 */
-const PLATFORM_ROW_LEAD_COLS = 5;
+const TABLE_COL_COUNT = 13;
+/** Columns before 拍攝時間: 狀態 / Vchannel / Video Code / 主題 */
+const PLATFORM_ROW_LEAD_COLS = 4;
 
-const PLATFORM_TAG_COLORS: Record<PlatformPublishKey, string> = {
-  youtube: 'bg-red-50 text-red-700 border-red-200',
-  instagram: 'bg-pink-50 text-pink-700 border-pink-200',
-  facebook: 'bg-blue-50 text-blue-700 border-blue-200',
-  threads: 'bg-slate-100 text-slate-700 border-slate-300',
-  linkedin: 'bg-sky-50 text-sky-700 border-sky-200',
-  xiaohongshu: 'bg-rose-50 text-rose-700 border-rose-200',
-  douyin: 'bg-cyan-50 text-cyan-800 border-cyan-200',
-  wechat_channels: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  wechat_official: 'bg-green-50 text-green-700 border-green-200',
-  zh_cn: 'bg-amber-50 text-amber-800 border-amber-200',
-  zh_tw: 'bg-orange-50 text-orange-700 border-orange-200',
-};
+type TalentOption = { id: string; displayName: string };
+
+function workflowPayloadToOutputInput(payload: Partial<VideoWorkflowMock>): Partial<VideoOutputInput> {
+  const input: Partial<VideoOutputInput> = {
+    vchannelId: payload.vchannelId,
+    productionYear: payload.productionYear,
+    videoCode: payload.videoCode,
+    title: payload.title,
+    ...(payload.asanaUrl !== undefined ? { asanaUrl: payload.asanaUrl.trim() } : {}),
+    shootAt: payload.shootAt ?? '',
+    shootSz: !!payload.location?.sz,
+    shootHk: !!payload.location?.hk,
+    locationNotes: payload.location?.notes ?? '',
+    prepAssignments: {
+      script: payload.script,
+      model: payload.model,
+      photographer: payload.photographer,
+      onSiteCrew: payload.onSiteCrew,
+    },
+  };
+  if (payload.stage) {
+    input.workflowStage = payload.stage;
+    if (payload.stage === 'publish' || payload.stage === 'published') {
+      input.reviewed = true;
+    }
+  }
+  if (payload.publishedDate !== undefined) input.publishedDate = payload.publishedDate;
+  if (payload.platformPublish !== undefined) input.platformPublish = payload.platformPublish;
+  return input;
+}
 
 const STATUS_SUMMARY_KEYS: VideoOutputStatus[] = [
   'pending',
@@ -85,6 +105,43 @@ function countVideosByStatus(videos: VideoOutput[]): Record<VideoOutputStatus, n
   return counts;
 }
 
+function AsanaMark() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+      <circle cx="12" cy="5" r="2.6" fill="currentColor" />
+      <circle cx="6" cy="16.2" r="2.6" fill="currentColor" />
+      <circle cx="18" cy="16.2" r="2.6" fill="currentColor" />
+    </svg>
+  );
+}
+
+function AsanaLinkButton({ url }: { url?: string }) {
+  const href = url?.trim() ?? '';
+  const openable = isHttpUrl(href);
+  const className = 'inline-flex items-center justify-center h-7 w-7 rounded border border-border/80 text-[#f06a6a] hover:bg-rose-50 transition-colors disabled:opacity-30 disabled:pointer-events-none';
+
+  if (!openable) {
+    return (
+      <button type="button" disabled className={className} title="尚未填寫 Asana 連結" aria-label="尚未填寫 Asana 連結">
+        <AsanaMark />
+      </button>
+    );
+  }
+
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={className}
+      title="開啟 Asana"
+      aria-label="開啟 Asana"
+    >
+      <AsanaMark />
+    </a>
+  );
+}
+
 function CheckCell({ value }: { value?: boolean | null }) {
   if (value === true) {
     return (
@@ -94,27 +151,6 @@ function CheckCell({ value }: { value?: boolean | null }) {
     );
   }
   return <span className="text-muted-foreground">—</span>;
-}
-
-const COPYWRITING_LABELS = [
-  { key: 'sc', label: '簡體', done: (v: { copySc?: boolean }) => v.copySc },
-  { key: 'tc', label: '繁體', done: (v: { copyTc?: boolean }) => v.copyTc },
-  { key: 'en', label: '英文', done: (v: { copyEn?: boolean }) => v.copyEn },
-] as const;
-
-function CopywritingCell({ sc, tc, en }: { sc?: boolean; tc?: boolean; en?: boolean }) {
-  const video = { copySc: sc, copyTc: tc, copyEn: en };
-  const labels = COPYWRITING_LABELS.filter(item => item.done(video)).map(item => item.label);
-
-  if (labels.length === 0) {
-    return <span className="text-muted-foreground">—</span>;
-  }
-
-  return (
-    <span className="text-[12px] text-teal-700 font-medium whitespace-nowrap">
-      {labels.join('|')}
-    </span>
-  );
 }
 
 function StatusCell({ status }: { status: VideoOutputStatus }) {
@@ -162,37 +198,13 @@ function PlatformPublishRow({
         {publishedKeys.length === 0 ? (
           <span className="text-[12px] text-muted-foreground">尚未發佈任何平台</span>
         ) : (
-          publishedKeys.map(key => {
-            const url = getPlatformUrl(platformPublish, key);
-            const label = PLATFORM_PUBLISH_LABELS[key];
-            const openable = !!url && isHttpUrl(url);
-            const tagClass = cn(
-              'inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-medium transition-colors',
-              PLATFORM_TAG_COLORS[key],
-              openable && 'hover:opacity-80 cursor-pointer',
-            );
-
-            if (openable) {
-              return (
-                <a
-                  key={key}
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={tagClass}
-                  title={`打開 ${label}`}
-                >
-                  {label}
-                </a>
-              );
-            }
-
-            return (
-              <span key={key} className={tagClass} title={url || '尚未填寫連結'}>
-                {label}
-              </span>
-            );
-          })
+          publishedKeys.map(key => (
+            <PlatformPublishLinkTag
+              key={key}
+              platformKey={key}
+              platformPublish={platformPublish}
+            />
+          ))
         )}
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
@@ -217,7 +229,8 @@ function PlatformPublishRow({
 }
 
 export function VideoManagementModule() {
-  const { videos, loading, error, updateVideo } = useVideoOutput();
+  const { videos, loading, error, updateVideo, fetchVideos } = useVideoOutput();
+  const { addVideo, updateVideo: updateWorkflowVideo, advanceToProduction, refreshVideos } = useVideoWorkflow();
   const { channels } = useVchannels();
 
   const [view, setView] = useState<CoordinationView>('list');
@@ -227,8 +240,10 @@ export function VideoManagementModule() {
   const [categoryFilter, setCategoryFilter] = useState<'all' | VideoProjectCategory>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | VideoOutputStatus>('all');
   const [publishingVideo, setPublishingVideo] = useState<VideoOutput | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editingVideo, setEditingVideo] = useState<VideoWorkflowMock | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [staffOptions, setStaffOptions] = useState<{ staffId: string; displayName: string }[]>([]);
+  const [talentOptions, setTalentOptions] = useState<TalentOption[]>([]);
   const workLogTotals = useMemo(() => {
     const totals = new Map<string, number>();
     for (const video of videos) {
@@ -268,25 +283,46 @@ export function VideoManagementModule() {
     setStatusFilter(prev => (prev === status ? 'all' : status));
   };
 
-  const handleSelect = useCallback((videoId: string) => {
-    setSelectedId(prev => (prev === videoId ? null : videoId));
-    setEditOpen(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [staffList, talentRes] = await Promise.all([
+          fetchStaffDirectoryOptions(),
+          supabase.from('confirmed_artist').select('id, name_zh, name_en').order('name_zh'),
+        ]);
+        if (cancelled) return;
+        setStaffOptions(staffList);
+        setTalentOptions(
+          (talentRes.data ?? []).map(row => ({
+            id: row.id as string,
+            displayName: (row.name_zh as string) || (row.name_en as string) || (row.id as string),
+          })),
+        );
+      } catch {
+        if (!cancelled) {
+          setStaffOptions([]);
+          setTalentOptions([]);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
-  const selectedVideo = useMemo(
-    () => (selectedId ? videos.find(v => v.id === selectedId) ?? null : null),
-    [videos, selectedId],
-  );
+  const openCreate = () => {
+    setEditingVideo(null);
+    setEditOpen(true);
+  };
 
-  // 篩選變更後若所選影片不在可見列表中，清除選擇
-  useEffect(() => {
-    if (!selectedId) return;
-    const visible = view === 'status' ? contextVideos : filteredVideos;
-    if (!visible.some(v => v.id === selectedId)) {
-      setSelectedId(null);
-      setEditOpen(false);
-    }
-  }, [selectedId, view, contextVideos, filteredVideos]);
+  const openEdit = (video: VideoOutput) => {
+    setEditingVideo(normalizeVideoWorkflow(mapVideoOutputToWorkflow(video)));
+    setEditOpen(true);
+  };
+
+  const closeEdit = () => {
+    setEditOpen(false);
+    setEditingVideo(null);
+  };
 
   const handleSavePublish = async (input: Partial<VideoOutputInput>) => {
     if (!publishingVideo) return new Error('未選擇影片');
@@ -299,10 +335,65 @@ export function VideoManagementModule() {
     setPublishingVideo(null);
   };
 
-  const handleSaveRecord = async (input: Partial<VideoOutputInput>) => {
-    if (!selectedVideo) return new Error('未選擇影片');
-    const err = await updateVideo(selectedVideo.id, input);
-    if (err) return err instanceof Error ? err : new Error('更新失敗');
+  const handleSaveVideo = async (
+    payload: Partial<VideoWorkflowMock>,
+    isNew: boolean,
+  ): Promise<{ error: string | null; id?: string }> => {
+    if (isNew) {
+      if (!payload.vchannelCode || !payload.videoCode || !payload.title?.trim()) {
+        return { error: '請填寫完整基本資訊' };
+      }
+      try {
+        const id = await addVideo({
+          vchannelId: payload.vchannelId,
+          vchannelCode: payload.vchannelCode,
+          videoCode: payload.videoCode,
+          title: payload.title.trim(),
+          asanaUrl: payload.asanaUrl,
+          deviceType: payload.deviceType ?? null,
+          productionYear: payload.productionYear,
+          shootAt: payload.shootAt,
+          location: payload.location ?? { sz: false, hk: false },
+          script: payload.script,
+          model: payload.model,
+          photographer: payload.photographer,
+          onSiteCrew: payload.onSiteCrew,
+        });
+        await fetchVideos({ silent: true });
+        return { error: null, id };
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : '建立影片失敗' };
+      }
+    }
+    if (!editingVideo) return { error: '找不到影片' };
+    const workflowErr = await updateWorkflowVideo(editingVideo.id, payload);
+    if (workflowErr && workflowErr !== '找不到影片') return { error: workflowErr };
+    if (workflowErr === '找不到影片') {
+      const outputErr = await updateVideo(editingVideo.id, workflowPayloadToOutputInput(payload));
+      if (outputErr) return { error: outputErr instanceof Error ? outputErr.message : '更新失敗' };
+      await refreshVideos();
+    }
+    await fetchVideos({ silent: true });
+    return { error: null, id: editingVideo.id };
+  };
+
+  const handleEnterProduction = async (videoId: string): Promise<string | null> => {
+    let err = await advanceToProduction(videoId);
+    if (err === '找不到影片') {
+      const { error: updateError } = await supabase
+        .from('video_output')
+        .update({
+          workflow_stage: 'production',
+          review_reject_reason: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', videoId);
+      if (updateError) return updateError.message;
+      await refreshVideos();
+      err = null;
+    }
+    if (err) return err;
+    await fetchVideos({ silent: true });
     return null;
   };
 
@@ -422,12 +513,11 @@ export function VideoManagementModule() {
           <Button
             type="button"
             size="sm"
-            className="ml-auto h-9 px-3 bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-50"
-            disabled={!selectedVideo}
-            onClick={() => setEditOpen(true)}
+            className="ml-auto h-9 px-3 bg-teal-600 hover:bg-teal-700 text-white"
+            onClick={openCreate}
           >
-            <Pencil size={14} className="mr-1.5" />
-            編輯
+            <Plus size={14} className="mr-1.5" />
+            新建影片
           </Button>
         </div>
       </div>
@@ -455,17 +545,15 @@ export function VideoManagementModule() {
           <VideoCoordinationStatusView
             videos={contextVideos}
             workLogTotals={workLogTotals}
-            selectedId={selectedId}
-            onSelect={handleSelect}
+            onEdit={openEdit}
           />
         )
       ) : (
         <>
           <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-x-auto">
-            <table className="w-full text-[14px] min-w-[1180px]">
+            <table className="w-full text-[14px] min-w-[1300px]">
               <thead className="bg-muted/30">
                 <tr>
-                  <th className="text-center px-2 py-2.5 font-medium text-muted-foreground w-10" />
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">狀態</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">Vchannel</th>
                   <th className="text-left px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap w-[1%]">Video Code</th>
@@ -474,42 +562,22 @@ export function VideoManagementModule() {
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">計劃發佈時間</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">實際發佈時間</th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap">拍攝地址</th>
-                  <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">文案</th>
                   <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">原片拍攝</th>
                   <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">是否剪輯</th>
                   <th className="text-center px-2 py-2.5 font-medium text-muted-foreground whitespace-nowrap">Demo完成</th>
                   <th className="text-right px-4 py-2.5 font-medium text-muted-foreground whitespace-nowrap min-w-[76px]">總工時</th>
+                  <th className="text-right px-3 py-2.5 font-medium text-muted-foreground whitespace-nowrap w-[128px]">操作</th>
                 </tr>
               </thead>
               {filteredVideos.map(video => {
                 const status = deriveVideoOutputStatus(video);
                 const isPublished = status === 'published';
-                const isSelected = selectedId === video.id;
                 const totalHours = workLogTotals.get(video.id);
                 const cellPad = isPublished ? 'pt-2.5 pb-1' : 'py-2.5';
 
                 return (
-                  <tbody
-                    key={video.id}
-                    className={cn(
-                      'border-t border-border/50 group cursor-pointer',
-                      isSelected && 'bg-teal-50/50',
-                    )}
-                    onClick={() => handleSelect(video.id)}
-                  >
-                    <tr className={cn('transition-colors', !isSelected && 'group-hover:bg-muted/10')}>
-                      <td className={cn('px-2 align-middle text-center', cellPad)}>
-                        <span
-                          className={cn(
-                            'inline-flex items-center justify-center w-4 h-4 rounded border',
-                            isSelected
-                              ? 'bg-teal-600 border-teal-600 text-white'
-                              : 'bg-white border-border',
-                          )}
-                        >
-                          {isSelected && <Check size={10} strokeWidth={3} />}
-                        </span>
-                      </td>
+                  <tbody key={video.id} className="border-t border-border/50">
+                    <tr className="transition-colors hover:bg-muted/10">
                       <td className={cn('px-3 align-middle', cellPad)}>
                         <StatusCell status={status} />
                       </td>
@@ -537,9 +605,6 @@ export function VideoManagementModule() {
                         {formatShootLocation(video.shootHk, video.shootSz)}
                       </td>
                       <td className={cn('px-2 align-middle text-center', cellPad)}>
-                        <CopywritingCell sc={video.copySc} tc={video.copyTc} en={video.copyEn} />
-                      </td>
-                      <td className={cn('px-2 align-middle text-center', cellPad)}>
                         <CheckCell value={video.rawFootageDone} />
                       </td>
                       <td className={cn('px-2 align-middle text-center', cellPad)}>
@@ -555,16 +620,28 @@ export function VideoManagementModule() {
                       <td className={cn('px-4 align-middle text-right min-w-[76px]', cellPad)}>
                         <WorkHoursCell hours={totalHours} />
                       </td>
+                      <td rowSpan={isPublished ? 2 : 1} className="px-3 align-middle text-right">
+                        <div className="inline-flex items-center justify-end gap-1.5">
+                          <AsanaLinkButton url={video.asanaUrl} />
+                          <button
+                            type="button"
+                            onClick={() => openEdit(video)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded border border-border/80 text-[12px] font-medium text-teal-700 hover:bg-teal-50 transition-colors"
+                          >
+                            <Pencil size={12} />
+                            編輯
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                     {isPublished && (
-                      <tr className={cn('transition-colors', !isSelected && 'group-hover:bg-muted/10')}>
+                      <tr className="transition-colors hover:bg-muted/10">
                         {Array.from({ length: PLATFORM_ROW_LEAD_COLS }).map((_, i) => (
                           <td key={i} className="px-3 pt-0 pb-2.5" />
                         ))}
                         <td
-                          colSpan={TABLE_COL_COUNT - PLATFORM_ROW_LEAD_COLS}
+                          colSpan={TABLE_COL_COUNT - PLATFORM_ROW_LEAD_COLS - 1}
                           className="px-3 pt-0 pb-2.5"
-                          onClick={e => e.stopPropagation()}
                         >
                           <PlatformPublishRow
                             platformPublish={video.platformPublish}
@@ -593,13 +670,16 @@ export function VideoManagementModule() {
         />
       )}
 
-      {editOpen && selectedVideo && (
-        <CoordinationRecordModal
-          video={selectedVideo}
-          onClose={() => setEditOpen(false)}
-          onSave={handleSaveRecord}
-        />
-      )}
+      <ScheduleEditModal
+        open={editOpen}
+        video={editingVideo}
+        channels={channels}
+        staffOptions={staffOptions}
+        talentOptions={talentOptions}
+        onClose={closeEdit}
+        onSave={handleSaveVideo}
+        onEnterProduction={!editingVideo || editingVideo.stage === 'prep' ? handleEnterProduction : undefined}
+      />
     </div>
   );
 }

@@ -5,6 +5,11 @@ import { WebsiteProfileFull, WebsiteLevel, ProfileType, ProjectCategory } from '
 import { websiteProfiles as staticWebsiteProfiles } from '@/data/websiteData';
 import { canonicalizeDomainUrl } from '@/lib/canonicalDomainUrl';
 
+function toStoredDate(raw: string | null | undefined): string | null {
+  const trimmed = raw?.trim().slice(0, 10) ?? '';
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
+}
+
 function toStoredDomainUrl(raw: string | null | undefined): string | null {
   const canonical = canonicalizeDomainUrl(raw);
   return canonical || null;
@@ -30,6 +35,7 @@ type DbRow = {
   brand_list_id: string | null;
   company_list_id: string | null;
   notes: string | null;
+  launch_date: string | null;
   hosting_provider: string | null;
   system_type: string | null;
 };
@@ -60,6 +66,7 @@ function mapRow(row: DbRow): WebsiteProfileFull {
     profileType: (row.profile_type as ProfileType) ?? 'website',
     projectCategory: (row.project_category === 'client' ? 'client' : 'internal') as ProjectCategory,
     notes: row.notes ?? undefined,
+    launchDate: row.launch_date?.slice(0, 10) || undefined,
     assignedStaff: [],
     externalLinks: [],
   };
@@ -123,6 +130,7 @@ export function useWebsiteProfiles() {
       company_list_id: site.companyId || null,
       brand_list_id: site.brandId || null,
       notes: site.notes ?? null,
+      launch_date: toStoredDate(site.launchDate),
       hosting_provider: site.hostingProvider ?? null,
       system_type: site.systemType ?? null,
     };
@@ -157,6 +165,7 @@ export function useWebsiteProfiles() {
       row.brand_list_id = updates.brandId || null;
     }
     if (updates.notes !== undefined) row.notes = updates.notes;
+    if (updates.launchDate !== undefined) row.launch_date = toStoredDate(updates.launchDate);
     if (updates.hostingProvider !== undefined) row.hosting_provider = updates.hostingProvider ?? null;
     if (updates.systemType !== undefined) row.system_type = updates.systemType ?? null;
     row.updated_at = new Date().toISOString();

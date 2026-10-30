@@ -63,6 +63,7 @@ export function suggestedClientWebsiteFormDefaults(input: {
     level: 3,
     status: 'development',
     notes: '',
+    launchDate: '',
     profileType,
     projectCategory: 'client',
     systemType: profileType === 'system' ? 'client_system' : undefined,
