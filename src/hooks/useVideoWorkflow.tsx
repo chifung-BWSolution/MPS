@@ -141,7 +141,7 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
       title: payload.title,
       asanaUrl: payload.asanaUrl,
       productionYear: payload.productionYear,
-      projectCategory: inferProjectCategory(payload.vchannelCode),
+      projectCategory: payload.projectCategory ?? inferProjectCategory(payload.vchannelCode),
       shootAt: payload.shootAt,
       location: payload.location,
       prepAssignments,
@@ -236,7 +236,6 @@ export function VideoWorkflowProvider({ children }: { children: ReactNode }) {
     if (video.stage !== 'review') return '僅待審核影片可進行管理批核';
     if (!video.adminReviewPassed) return '請先完成行政審查';
     return applyPatch(id, {
-      stage: 'publish',
       reviewedAt: new Date().toISOString(),
       reviewedBy,
       reviewRejectReason: '',

@@ -15,7 +15,6 @@ import { PlatformPublishLinkTag } from '@/components/video/PlatformPublishLinkTa
 const STATUS_COLUMNS: VideoOutputStatus[] = [
   'pending',
   'in_production',
-  'pending_review',
   'pending_publish',
   'published',
   'delisted',
@@ -24,7 +23,6 @@ const STATUS_COLUMNS: VideoOutputStatus[] = [
 const COLUMN_STYLE: Record<VideoOutputStatus, { border: string; bg: string }> = {
   pending: { border: 'border-slate-400', bg: 'bg-slate-50' },
   in_production: { border: 'border-amber-400', bg: 'bg-amber-50' },
-  pending_review: { border: 'border-blue-400', bg: 'bg-blue-50' },
   pending_publish: { border: 'border-purple-400', bg: 'bg-purple-50' },
   published: { border: 'border-teal-400', bg: 'bg-teal-50' },
   delisted: { border: 'border-rose-400', bg: 'bg-rose-50' },
@@ -144,7 +142,7 @@ function StatusVideoCard({
     status === 'published' || status === 'delisted'
       ? getPublishedPlatformKeys(video.platformPublish)
       : [];
-  const showStoragePathTag = status === 'pending_review' || status === 'pending_publish';
+  const showStoragePathTag = status === 'pending_publish';
 
   return (
     <div className="relative bg-white rounded border border-border/50 p-3 transition-shadow hover:shadow-md">

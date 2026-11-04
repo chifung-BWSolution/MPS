@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Clock, Loader2, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
 import { useCategoryLookup } from '@/hooks/useCategoryLookup';
+import { resolveRelatedDayReportIds } from '@/lib/resolveProjectHub';
 import { resolveCategoryLabel } from '@/lib/workCategoryLabel';
 
 type TaskRow = {
@@ -49,7 +50,11 @@ function formatReportDate(iso: string): string {
   return `${y}/${m}/${d}`;
 }
 
-async function resolveRelatedIds(quotationClientProjectId: string): Promise<string[]> {
+async function resolveRelatedIds(quotationClientProjectId: string, websiteListId: string): Promise<string[]> {
+  if (websiteListId) {
+    const related = await resolveRelatedDayReportIds('webandsystem', websiteListId);
+    return related.data;
+  }
   const ids = new Set<string>([quotationClientProjectId]);
   const [{ data: clientHub }, { data: clientProject }] = await Promise.all([
     supabase
@@ -81,7 +86,15 @@ async function resolveRelatedIds(quotationClientProjectId: string): Promise<stri
   return [...ids];
 }
 
-export function PitchingWorkHoursTab({ projectId }: { projectId: string }) {
+export function PitchingWorkHoursTab({
+  projectId = '',
+  websiteId = '',
+}: {
+  /** Quotation client project id (系統／專案 detail). */
+  projectId?: string;
+  /** webandsystem_list id (網站 detail). */
+  websiteId?: string;
+}) {
   const categoryLookup = useCategoryLookup();
   const [groups, setGroups] = useState<StaffGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,7 +102,7 @@ export function PitchingWorkHoursTab({ projectId }: { projectId: string }) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!projectId) {
+    if (!projectId && !websiteId) {
       setGroups([]);
       setError(null);
       setLoading(false);
@@ -101,7 +114,7 @@ export function PitchingWorkHoursTab({ projectId }: { projectId: string }) {
     setError(null);
 
     (async () => {
-      const relatedIds = await resolveRelatedIds(projectId);
+      const relatedIds = await resolveRelatedIds(projectId, websiteId);
       if (cancelled) return;
 
       const { data, error: queryError } = await supabase
@@ -160,7 +173,7 @@ export function PitchingWorkHoursTab({ projectId }: { projectId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, websiteId]);
 
   const totalHours = useMemo(
     () => groups.reduce((sum, group) => sum + group.totalHours, 0),

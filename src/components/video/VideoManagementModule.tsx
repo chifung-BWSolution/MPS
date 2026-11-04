@@ -52,6 +52,7 @@ function workflowPayloadToOutputInput(payload: Partial<VideoWorkflowMock>): Part
     productionYear: payload.productionYear,
     videoCode: payload.videoCode,
     title: payload.title,
+    ...(payload.projectCategory !== undefined ? { projectCategory: payload.projectCategory } : {}),
     ...(payload.asanaUrl !== undefined ? { asanaUrl: payload.asanaUrl.trim() } : {}),
     shootAt: payload.shootAt ?? '',
     shootSz: !!payload.location?.sz,
@@ -66,7 +67,7 @@ function workflowPayloadToOutputInput(payload: Partial<VideoWorkflowMock>): Part
   };
   if (payload.stage) {
     input.workflowStage = payload.stage;
-    if (payload.stage === 'publish' || payload.stage === 'published') {
+    if (payload.stage === 'published') {
       input.reviewed = true;
     }
   }
@@ -78,7 +79,6 @@ function workflowPayloadToOutputInput(payload: Partial<VideoWorkflowMock>): Part
 const STATUS_SUMMARY_KEYS: VideoOutputStatus[] = [
   'pending',
   'in_production',
-  'pending_review',
   'pending_publish',
   'published',
   'delisted',
@@ -94,7 +94,6 @@ function countVideosByStatus(videos: VideoOutput[]): Record<VideoOutputStatus, n
   const counts: Record<VideoOutputStatus, number> = {
     pending: 0,
     in_production: 0,
-    pending_review: 0,
     pending_publish: 0,
     published: 0,
     delisted: 0,
@@ -351,6 +350,7 @@ export function VideoManagementModule() {
           title: payload.title.trim(),
           asanaUrl: payload.asanaUrl,
           deviceType: payload.deviceType ?? null,
+          projectCategory: payload.projectCategory,
           productionYear: payload.productionYear,
           shootAt: payload.shootAt,
           location: payload.location ?? { sz: false, hk: false },

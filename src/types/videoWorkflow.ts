@@ -1,7 +1,7 @@
-import type { PlatformPublishMap } from '@/types/videoOutput';
+import type { PlatformPublishMap, VideoProjectCategory } from '@/types/videoOutput';
 import type { VideoOutputWorkflowFields } from '@/types/videoOutputWorkflow';
 
-export type VideoWorkflowStage = 'prep' | 'production' | 'review' | 'publish' | 'published' | 'delisted';
+export type VideoWorkflowStage = 'prep' | 'production' | 'review' | 'published' | 'delisted';
 
 export type StaffAssignment = {
   userId: string;
@@ -51,6 +51,7 @@ export type VideoWorkflowMock = {
   title: string;
   asanaUrl?: string;
   deviceType?: VideoWorkflowDeviceSuffix;
+  projectCategory?: VideoProjectCategory;
   productionYear?: number;
   createdAt?: string;
   stage: VideoWorkflowStage;

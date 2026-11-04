@@ -149,6 +149,7 @@ export function VideoScheduleModule() {
           title: payload.title.trim(),
           asanaUrl: payload.asanaUrl,
           deviceType: payload.deviceType ?? null,
+          projectCategory: payload.projectCategory,
           productionYear: payload.productionYear,
           shootAt: payload.shootAt,
           location: payload.location ?? { sz: false, hk: false },

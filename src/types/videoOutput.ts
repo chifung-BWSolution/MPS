@@ -5,7 +5,6 @@ export type VideoProjectCategory = 'internal' | 'client';
 export type VideoOutputStatus =
   | 'pending'
   | 'in_production'
-  | 'pending_review'
   | 'pending_publish'
   | 'published'
   | 'delisted';

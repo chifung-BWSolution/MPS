@@ -101,7 +101,7 @@ export const VIDEO_WORKFLOW_MOCK_SEED: VideoWorkflowMock[] = [
     vchannelCode: 'V03',
     videoCode: 'V03-2026-004M',
     title: '待發佈示範片',
-    stage: 'publish',
+    stage: 'review',
     shootAt: '2026-05-20',
     location: { sz: true, hk: false },
     script: { userId: 'staff-02', displayName: '李美玲', scheduledAt: '2026-05-12T14:00' },

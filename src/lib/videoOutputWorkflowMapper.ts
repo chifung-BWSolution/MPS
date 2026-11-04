@@ -79,6 +79,7 @@ export function mapVideoOutputToWorkflow(video: VideoOutput): VideoWorkflowMock 
     title: video.title,
     asanaUrl: video.asanaUrl,
     productionYear: video.productionYear,
+    projectCategory: video.projectCategory,
     createdAt: video.createdAt,
     stage: video.workflowStage ?? 'prep',
     shootAt: video.shootAt,
@@ -145,6 +146,7 @@ export function workflowPatchToDbUpdate(
   if (patch.adminReviewedAt !== undefined) row.admin_reviewed_at = patch.adminReviewedAt || null;
   if (patch.adminReviewedBy !== undefined) row.admin_reviewed_by = patch.adminReviewedBy || null;
   if (patch.productionYear !== undefined) row.production_year = patch.productionYear ?? null;
+  if (patch.projectCategory !== undefined) row.project_category = patch.projectCategory;
   if (patch.vchannelId !== undefined) row.vchannel_id = patch.vchannelId;
 
   if (patch.location) {
@@ -186,7 +188,7 @@ export function workflowPatchToDbUpdate(
     if (patch.demoDone !== undefined) row.demo_done = patch.demoDone;
   }
 
-  if (patch.stage === 'publish' || patch.stage === 'published') {
+  if (patch.stage === 'published') {
     row.reviewed = true;
   }
 

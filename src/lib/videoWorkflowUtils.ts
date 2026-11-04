@@ -152,8 +152,7 @@ export function validateProductionProgress(progress: ProductionProgress): string
 export const VIDEO_WORKFLOW_STAGE_LABELS: Record<VideoWorkflowStage, string> = {
   prep: '準備中',
   production: '製作中',
-  review: '待審核',
-  publish: '待發佈',
+  review: '待發佈',
   published: '已發佈',
   delisted: '已下架',
 };
@@ -161,8 +160,7 @@ export const VIDEO_WORKFLOW_STAGE_LABELS: Record<VideoWorkflowStage, string> = {
 export const VIDEO_WORKFLOW_STAGE_COLORS: Record<VideoWorkflowStage, string> = {
   prep: 'bg-slate-100 text-slate-700',
   production: 'bg-amber-100 text-amber-800',
-  review: 'bg-blue-100 text-blue-800',
-  publish: 'bg-purple-100 text-purple-800',
+  review: 'bg-purple-100 text-purple-800',
   published: 'bg-teal-100 text-teal-800',
   delisted: 'bg-rose-100 text-rose-800',
 };
@@ -299,11 +297,11 @@ export function isWorkflowPendingReview(video: VideoWorkflowMock): boolean {
 }
 
 export function isWorkflowReviewed(video: VideoWorkflowMock): boolean {
-  return video.stage === 'publish' || video.stage === 'published';
+  return video.stage === 'published';
 }
 
 export function isWorkflowPendingPublish(video: VideoWorkflowMock): boolean {
-  return video.stage === 'publish';
+  return video.stage === 'review';
 }
 
 export function isWorkflowPublished(video: VideoWorkflowMock): boolean {

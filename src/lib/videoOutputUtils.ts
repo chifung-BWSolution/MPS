@@ -141,7 +141,6 @@ export function formatPlatformPublishCopyText(platformPublish: PlatformPublishMa
 export const VIDEO_OUTPUT_STATUS_LABELS: Record<VideoOutputStatus, string> = {
   pending: '待製作',
   in_production: '製作中',
-  pending_review: '待審核',
   pending_publish: '待發佈',
   published: '已發佈',
   delisted: '已下架',
@@ -150,7 +149,6 @@ export const VIDEO_OUTPUT_STATUS_LABELS: Record<VideoOutputStatus, string> = {
 export const VIDEO_OUTPUT_STATUS_COLORS: Record<VideoOutputStatus, string> = {
   pending: 'bg-slate-100 text-slate-700',
   in_production: 'bg-amber-100 text-amber-800',
-  pending_review: 'bg-blue-100 text-blue-800',
   pending_publish: 'bg-purple-100 text-purple-800',
   published: 'bg-teal-100 text-teal-800',
   delisted: 'bg-rose-100 text-rose-800',
@@ -193,10 +191,8 @@ export function deriveVideoOutputStatus(row: Pick<
     switch (row.workflowStage) {
       case 'published':
         return 'published';
-      case 'publish':
-        return 'pending_publish';
       case 'review':
-        return 'pending_review';
+        return 'pending_publish';
       case 'production':
         return 'in_production';
       case 'prep':
@@ -204,7 +200,7 @@ export function deriveVideoOutputStatus(row: Pick<
     }
   }
 
-  if (row.demoDone) return 'pending_review';
+  if (row.demoDone) return 'pending_publish';
   const anyProgress =
     row.shootSz || row.shootHk || row.rawFootageDone || row.needsEditing === true || row.demoDone;
   if (anyProgress) return 'in_production';

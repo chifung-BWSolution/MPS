@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
-import { Banknote, Globe, Plus, ExternalLink, Video, TrendingUp, Link2, Calendar, X, Check, LayoutGrid, ArrowLeft, Megaphone, Star, ChevronDown, Pencil, Monitor, Server, MapPin, RefreshCw, BarChart3, Search } from 'lucide-react';
+import { Banknote, Clock, Globe, Plus, ExternalLink, Video, TrendingUp, Link2, Calendar, X, Check, LayoutGrid, ArrowLeft, Megaphone, Star, ChevronDown, Pencil, Monitor, Server, MapPin, RefreshCw, BarChart3, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WebsiteProfileFull, WebsiteLevel, ProfileType, SystemType } from '@/types/app';
 import {
@@ -17,6 +17,7 @@ import { useBrands } from '@/hooks/useBrands';
 import { findWebsiteByCanonicalUrl } from '@/lib/canonicalDomainUrl';
 import { nextClientProjectIdForWebsite, syncWebsiteClientProjectLink } from '@/lib/websiteClientProjectLink';
 import { PitchingExpenseTab } from '@/components/quotation/PitchingExpenseTab';
+import { PitchingWorkHoursTab } from '@/components/quotation/PitchingWorkHoursTab';
 import { QuotationBvCard } from '@/components/quotation/QuotationBvCard';
 import { resolveProjectHubId } from '@/lib/resolveProjectHub';
 import { projects as allProjectsData } from '@/data/mockData';
@@ -367,6 +368,7 @@ function WebsiteDetail({
 
   const tabs = [
     { id: 'overview', label: '概覽', icon: Globe },
+    { id: 'hours', label: '工作時數', icon: Clock },
     { id: 'videos', label: '影片列表', icon: Video },
     { id: 'ads', label: '付費廣告', icon: Megaphone },
     { id: 'seo', label: 'SEO 關鍵字', icon: TrendingUp },
@@ -489,7 +491,10 @@ function WebsiteDetail({
         })}
       </div>
 
+      {activeTab === 'hours' && <PitchingWorkHoursTab websiteId={site.id} />}
+
       {/* Tab Content */}
+      {activeTab !== 'hours' && (
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-[0_2px_6px_rgba(0,20,40,0.05)] p-5">
         {activeTab === 'overview' && (
           <div className="space-y-6">
@@ -599,6 +604,7 @@ function WebsiteDetail({
         {activeTab === 'google-business' && <WebsiteGoogleBusinessTab site={site} />}
         {activeTab === 'calendar' && <WebsiteCalendarTab site={site} />}
       </div>
+      )}
 
       {showEditModal && (
         <WebsiteFormModal

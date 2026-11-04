@@ -39,7 +39,7 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 const PUBLISH_STATUS_ITEMS = [
-  { id: 'pending', label: '待發佈', activeClassName: VIDEO_WORKFLOW_STAGE_COLORS.publish },
+  { id: 'pending', label: '待發佈', activeClassName: VIDEO_WORKFLOW_STAGE_COLORS.review },
   { id: 'done', label: '已發佈', activeClassName: VIDEO_WORKFLOW_STAGE_COLORS.published },
 ] as const;
 
@@ -183,10 +183,10 @@ function PublishListRow({
           <span
             className={cn(
               'text-[10px] px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap',
-              pending ? VIDEO_WORKFLOW_STAGE_COLORS.publish : VIDEO_WORKFLOW_STAGE_COLORS.published,
+              pending ? VIDEO_WORKFLOW_STAGE_COLORS.review : VIDEO_WORKFLOW_STAGE_COLORS.published,
             )}
           >
-            {pending ? VIDEO_WORKFLOW_STAGE_LABELS.publish : VIDEO_WORKFLOW_STAGE_LABELS.published}
+            {pending ? VIDEO_WORKFLOW_STAGE_LABELS.review : VIDEO_WORKFLOW_STAGE_LABELS.published}
           </span>
         }
       />
