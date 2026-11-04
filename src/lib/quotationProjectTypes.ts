@@ -135,3 +135,21 @@ export function projectTypeByIdOrCode(
   if (!value) return undefined;
   return types.find((type) => type.id === value || type.code === value);
 }
+
+const BWT_SYSTEM_WEB_CODES = new Set(['bwt_system', 'bwt_web']);
+
+/** "BWT 系統" / "BWT-系統" and "BWT 網頁" / "BWT-網頁". */
+function isBwtSystemOrWebLabel(display: string | null | undefined): boolean {
+  const label = (display ?? '').replace(/[\s\-－—_]/g, '').toUpperCase();
+  return label === 'BWT系統' || label === 'BWT網頁';
+}
+
+/** True for BWT 系統 (bwt_system) and BWT 網頁 (bwt_web), including catalog UUIDs. */
+export function isBwtSystemOrWebProjectType(
+  ref: string | null | undefined,
+  types: readonly Pick<QuotationProjectType, 'id' | 'code' | 'display' | 'section'>[] = [],
+): boolean {
+  const type = projectTypeByIdOrCode(ref, types);
+  if (type) return BWT_SYSTEM_WEB_CODES.has(type.code) || isBwtSystemOrWebLabel(type.display);
+  return BWT_SYSTEM_WEB_CODES.has(resolveProjectTypeCode(ref));
+}

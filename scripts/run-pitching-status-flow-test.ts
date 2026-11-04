@@ -79,6 +79,28 @@ assert.deepEqual(
   ),
   [],
 );
+assert.deepEqual(
+  missingConfirmedFields(
+    { ...readyBudget, signedDate: '2026-09-01', handoverDate: '2026-10-01' },
+    [{ docTypeId: QUOTATION_LIST_DOC_TYPE_IDS[0] }],
+    { requireContractDates: true },
+  ),
+  ['contract_start_date', 'contract_end_date'],
+);
+assert.deepEqual(
+  missingConfirmedFields(
+    {
+      ...readyBudget,
+      signedDate: '2026-09-01',
+      handoverDate: '2026-10-01',
+      contractStartDate: '2026-09-01',
+      contractEndDate: '2027-08-31',
+    },
+    [{ docTypeId: QUOTATION_LIST_DOC_TYPE_IDS[0] }],
+    { requireContractDates: true },
+  ),
+  [],
+);
 assert.equal(hasQualifyingQuotationDoc([{ docTypeId: QUOTATION_LIST_DOC_TYPE_IDS[1] }]), true);
 assert.equal(hasQualifyingQuotationDoc([{ docTypeId: 'nope' }]), false);
 
@@ -104,6 +126,13 @@ assert.doesNotMatch(project, /updateStatus/);
 const modal = read('src/components/quotation/PitchingStatusConversionModal.tsx');
 assert.match(modal, /簽約日期/);
 assert.match(modal, /交付日期/);
+assert.match(modal, /合約開始日期 \*/);
+assert.match(modal, /合約結束日期 \*/);
+assert.match(modal, /isBwtSystemOrWebProjectType/);
+assert.match(modal, /requireContractDates/);
+const contractStartLabel = modal.indexOf('合約開始日期 *');
+const quotationDocLabel = modal.indexOf('報價單 / 已簽署報價單／合約 *');
+assert.ok(contractStartLabel > 0 && contractStartLabel < quotationDocLabel);
 assert.match(modal, /QUOTATION_LIST_DOC_TYPE_IDS|isQuotationListDocType/);
 assert.match(modal, /QuotationDocFormDialog/);
 assert.match(modal, /estimatedIncome/);

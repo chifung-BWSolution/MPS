@@ -7,6 +7,7 @@ import {
   collapseProjectTypeCodes,
   normalizeProjectTypeCode,
   normalizeProjectTypeCodeInitial,
+  isBwtSystemOrWebProjectType,
   projectTypeIdFromCodes,
   projectTypeUuidFromRef,
   slugifyProjectTypeCode,
@@ -32,6 +33,26 @@ assert.equal(projectTypeIdFromCodes(['bwt_web', 'bwt_system'], [{ id: 'uuid-s', 
 assert.equal(projectTypeUuidFromRef('bwt_system', [{ id: 'uuid-s', code: 'bwt_system' }]), 'uuid-s');
 assert.equal(projectTypeUuidFromRef('uuid-s', [{ id: 'uuid-s', code: 'bwt_system' }]), 'uuid-s');
 assert.equal(projectTypeUuidFromRef('missing', [{ id: 'uuid-s', code: 'bwt_system' }]), null);
+
+const catalog = [
+  { id: 'uuid-s', code: 'bwt_system', display: 'BWT-系統', section: 'system-dev' as const },
+  { id: 'uuid-w', code: 'bwt_web', display: 'BWT 網頁', section: 'system-dev' as const },
+  { id: 'uuid-e', code: 'bwl_event', display: 'BWL 活動報價', section: 'quotation' as const },
+  { id: 'uuid-g', code: 'bwg_gift', display: 'BWG-禮品', section: 'quotation' as const },
+];
+assert.equal(isBwtSystemOrWebProjectType('uuid-s', catalog), true);
+assert.equal(isBwtSystemOrWebProjectType('uuid-w', catalog), true);
+assert.equal(isBwtSystemOrWebProjectType('bwt_system', catalog), true);
+assert.equal(isBwtSystemOrWebProjectType('bwt_web'), true);
+assert.equal(isBwtSystemOrWebProjectType('uuid-e', catalog), false);
+assert.equal(isBwtSystemOrWebProjectType('uuid-g', catalog), false);
+assert.equal(isBwtSystemOrWebProjectType('bwl_event'), false);
+assert.equal(
+  isBwtSystemOrWebProjectType('custom', [
+    { id: 'custom', code: 'custom_web', display: 'BWT 系統', section: 'quotation' },
+  ]),
+  true,
+);
 
 const menu = read('src/context/AppContext.tsx');
 assert.match(menu, /id: 'quotation'/);

@@ -6,6 +6,8 @@ export type ClientProjectStatusField =
   | 'estimated_expenses'
   | 'signed_date'
   | 'handover_date'
+  | 'contract_start_date'
+  | 'contract_end_date'
   | 'quotation_doc';
 
 export type ClientProjectStatusRecord = {
@@ -13,6 +15,8 @@ export type ClientProjectStatusRecord = {
   estimatedExpenses?: PitchingExpenseItem[];
   signedDate?: string;
   handoverDate?: string;
+  contractStartDate?: string;
+  contractEndDate?: string;
 };
 
 export type ClientProjectStatusDoc = {
@@ -71,10 +75,15 @@ export function missingFollowingUpFields(
 export function missingConfirmedFields(
   record: ClientProjectStatusRecord,
   docs?: readonly ClientProjectStatusDoc[],
+  options?: { requireContractDates?: boolean },
 ): ClientProjectStatusField[] {
   const missing = missingFollowingUpFields(record);
   if (!optionalIsoDate(record.signedDate)) missing.push('signed_date');
   if (!optionalIsoDate(record.handoverDate)) missing.push('handover_date');
+  if (options?.requireContractDates) {
+    if (!optionalIsoDate(record.contractStartDate)) missing.push('contract_start_date');
+    if (!optionalIsoDate(record.contractEndDate)) missing.push('contract_end_date');
+  }
   if (!hasQualifyingQuotationDoc(docs)) missing.push('quotation_doc');
   return missing;
 }

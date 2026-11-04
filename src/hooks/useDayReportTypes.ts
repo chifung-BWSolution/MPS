@@ -1,55 +1,44 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, peekCachedQuery } from '@/lib/queryCache';
-import type { WorkCategoryConfig, CategoryRelationType, ProjectModuleGroup } from '@/components/day-report/WorkCategoriesManager';
+import type { WorkCategoryConfig, LinkMode, LinkProjectType } from '@/components/day-report/WorkCategoriesManager';
 import { categoryConfig } from '@/data/dayReportDataV2';
 
-const defaultRelation: Record<string, CategoryRelationType> = {
-  website_design: 'webandsystem',
-  website_dev: 'webandsystem',
-  article_writing: 'webandsystem',
-  video_shooting: 'vchannel',
-  video_editing: 'vchannel',
-  social_media: 'vchannel',
-  edm: 'webandsystem',
-  paid_ads: 'webandsystem',
-  seo: 'webandsystem',
-  graphic_design: 'webandsystem',
-  client_meeting: 'quotation_client',
-  internal_meeting: 'optional',
-  training: 'none',
-};
+const ALL_LINK_TYPES: LinkProjectType[] = ['webandsystem', 'quotation_client', 'vchannel'];
 
-const defaultModules: Record<string, ProjectModuleGroup[]> = {
-  website_design: ['website_system'],
-  website_dev: ['website_system'],
-  article_writing: ['marketing', 'website_system'],
-  video_shooting: ['video_production'],
-  video_editing: ['video_production'],
-  social_media: ['marketing'],
-  edm: ['marketing'],
-  paid_ads: ['marketing'],
-  seo: ['website_system', 'marketing'],
-  graphic_design: ['marketing', 'website_system'],
-  client_meeting: ['website_system', 'marketing', 'video_production'],
-  internal_meeting: [],
-  training: [],
+const defaultRules: Record<string, { mode: LinkMode; types: LinkProjectType[] }> = {
+  website_design: { mode: 'required', types: ['webandsystem'] },
+  website_dev: { mode: 'required', types: ['webandsystem'] },
+  article_writing: { mode: 'required', types: ['webandsystem'] },
+  video_shooting: { mode: 'required', types: ['vchannel'] },
+  video_editing: { mode: 'required', types: ['vchannel'] },
+  social_media: { mode: 'required', types: ['vchannel'] },
+  edm: { mode: 'required', types: ['webandsystem'] },
+  paid_ads: { mode: 'required', types: ['webandsystem'] },
+  seo: { mode: 'required', types: ['webandsystem'] },
+  graphic_design: { mode: 'required', types: ['webandsystem'] },
+  client_meeting: { mode: 'required', types: ['quotation_client'] },
+  internal_meeting: { mode: 'optional', types: [...ALL_LINK_TYPES] },
+  training: { mode: 'none', types: [] },
 };
 
 const staticTypes: WorkCategoryConfig[] = Object.entries(categoryConfig).map(
-  ([id, cfg], index) => ({
-    id,
-    category: id,
-    label: cfg.label,
-    icon: cfg.icon,
-    color: cfg.color,
-    bg: cfg.bg,
-    relationType: defaultRelation[id] ?? 'none',
-    description: cfg.label,
-    isActive: true,
-    sortOrder: index,
-    associatedModules: defaultModules[id] ?? [],
-  })
+  ([id, cfg], index) => {
+    const rule = defaultRules[id] ?? { mode: 'none' as const, types: [] };
+    return {
+      id,
+      category: id,
+      label: cfg.label,
+      icon: cfg.icon,
+      color: cfg.color,
+      bg: cfg.bg,
+      linkMode: rule.mode,
+      linkTypes: rule.types,
+      description: cfg.label,
+      isActive: true,
+      sortOrder: index,
+    };
+  }
 );
 
 type DbRow = {
@@ -58,29 +47,23 @@ type DbRow = {
   icon: string;
   color: string;
   bg: string;
-  relation_type: string;
+  link_mode: string;
+  link_types: string[] | null;
   description: string;
   is_active: boolean;
   sort_order: number;
-  associated_modules: string[];
 };
 
-const validRelationTypes = new Set<CategoryRelationType>([
-  'webandsystem',
-  'quotation_client',
-  'vchannel',
-  'optional',
-  'none',
-]);
-const validModuleGroups = new Set<ProjectModuleGroup>(['website_system', 'marketing', 'video_production', 'talent']);
+const validModes = new Set<LinkMode>(['required', 'optional', 'none']);
+const validLinkTypes = new Set<LinkProjectType>(ALL_LINK_TYPES);
 
 function mapRow(row: DbRow): WorkCategoryConfig {
-  const relationType = validRelationTypes.has(row.relation_type as CategoryRelationType)
-    ? (row.relation_type as CategoryRelationType)
+  const linkMode = validModes.has(row.link_mode as LinkMode)
+    ? (row.link_mode as LinkMode)
     : 'none';
-  const associatedModules = (row.associated_modules || []).filter(
-    (m): m is ProjectModuleGroup => validModuleGroups.has(m as ProjectModuleGroup)
-  );
+  const linkTypes = linkMode === 'none'
+    ? []
+    : (row.link_types || []).filter((t): t is LinkProjectType => validLinkTypes.has(t as LinkProjectType));
 
   return {
     id: row.id,
@@ -89,11 +72,11 @@ function mapRow(row: DbRow): WorkCategoryConfig {
     icon: row.icon,
     color: row.color,
     bg: row.bg,
-    relationType,
+    linkMode,
+    linkTypes,
     description: row.description,
     isActive: row.is_active,
     sortOrder: row.sort_order,
-    associatedModules,
   };
 }
 
@@ -138,11 +121,11 @@ export function useDayReportTypes() {
       icon: item.icon,
       color: item.color,
       bg: item.bg,
-      relation_type: item.relationType,
+      link_mode: item.linkMode,
+      link_types: item.linkMode === 'none' ? [] : item.linkTypes,
       description: item.description,
       is_active: item.isActive,
       sort_order: item.sortOrder,
-      associated_modules: item.associatedModules,
     };
     const { error } = await supabase.from('day_report_type').insert(row);
     if (!error) {
@@ -158,16 +141,18 @@ export function useDayReportTypes() {
     if (updates.icon !== undefined) row.icon = updates.icon;
     if (updates.color !== undefined) row.color = updates.color;
     if (updates.bg !== undefined) row.bg = updates.bg;
-    if (updates.relationType !== undefined) row.relation_type = updates.relationType;
+    if (updates.linkMode !== undefined) row.link_mode = updates.linkMode;
+    if (updates.linkTypes !== undefined || updates.linkMode === 'none') {
+      row.link_types = updates.linkMode === 'none' ? [] : (updates.linkTypes ?? []);
+    }
     if (updates.description !== undefined) row.description = updates.description;
     if (updates.isActive !== undefined) row.is_active = updates.isActive;
     if (updates.sortOrder !== undefined) row.sort_order = updates.sortOrder;
-    if (updates.associatedModules !== undefined) row.associated_modules = updates.associatedModules;
 
     const { error } = await supabase.from('day_report_type').update(row).eq('id', id);
     if (!error) {
       invalidateCachedQuery(QUERY_CACHE_KEYS.dayReportTypes);
-      setTypes(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+      setTypes(prev => prev.map(t => t.id === id ? { ...t, ...updates, ...(updates.linkMode === 'none' ? { linkTypes: [] } : {}) } : t));
     }
     return error;
   }, []);

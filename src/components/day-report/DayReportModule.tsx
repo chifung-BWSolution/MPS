@@ -1127,7 +1127,7 @@ export function DayReportModule({ subModule }: { subModule?: string }) {
       case 'monthly': return { title: '月度報告', subtitle: '本月工時排名、AI 使用統計及類別分佈分析。' };
       case 'analytics': return { title: '項目分析', subtitle: '按項目統計人員投入工時與占比 — 可篩選系統、網站、客戶項目、影片頻道、自訂或異常，支援按天／週／月。' };
       case 'work-report': return { title: '工作報表', subtitle: '按個人統計參與項目的工時與占比 — 依部門分組，可篩選系統、網站、客戶項目、影片頻道、自訂或異常。' };
-      case 'work-categories': return { title: '工作類型管理', subtitle: '管理匯報工作類別的關聯規則 — 網站/系統、客戶項目、影片頻道、可選關聯或無需關聯。' };
+      case 'work-categories': return { title: '工作類型管理', subtitle: '管理匯報工作類別的關聯規則 — 必填、選填或不關聯，並可多選網站或系統、客戶項目、影片頻道。' };
       default: return { title: '提交匯報', subtitle: '支援香港/深圳雙辦公室 · 本週與上週匯報總覽 · 常用項目快速填入 · 週六加班匯報 · 多日假期申報 · AI 追蹤 · 8h驗證。' };
     }
   };

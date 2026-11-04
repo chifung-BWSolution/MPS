@@ -24,11 +24,17 @@ import {
   OutcomeType,
   AITool,
 } from '@/data/dayReportDataV2';
-import { defaultCategoryRelationMap, isRelationRequired, type CategoryRelationType } from '@/components/day-report/WorkCategoriesManager';
+import {
+  defaultCategoryLinkRules,
+  isRelationRequired,
+  linkTypeNames,
+  type LinkMode,
+  type LinkProjectType,
+} from '@/components/day-report/WorkCategoriesManager';
 import { SearchableProjectSelect } from '@/components/day-report/SearchableProjectSelect';
 import { useDayReportTypes } from '@/hooks/useDayReportTypes';
 import { useCategoryLookup } from '@/hooks/useCategoryLookup';
-import { toProjectSelectItem, useProjects, type ProjectRelatedType } from '@/hooks/useProjects';
+import { toProjectSelectItem, useProjects } from '@/hooks/useProjects';
 import type { ProjectSelectItem } from '@/lib/searchableProjectSelect';
 import { usePendingReportItems } from '@/hooks/usePendingReportItems';
 import {
@@ -160,8 +166,8 @@ function createBlankForm(): ReportFormEntry {
   };
 }
 
-function mapDbEntry(row: Record<string, unknown>, relationType: CategoryRelationType): SavedEntry {
-  const dropRelation = relationType === 'none';
+function mapDbEntry(row: Record<string, unknown>, linkMode: LinkMode): SavedEntry {
+  const dropRelation = linkMode === 'none';
   const images = row.outcome_images;
   return {
     id: String(row.id),
@@ -300,21 +306,19 @@ export function SubmitReportPage() {
   const isTodaySelected = selectedDate === todayStr;
   const isFutureSelected = selectedDate > todayStr;
 
-  const resolveRelationType = useCallback((category: string): CategoryRelationType => {
+  const resolveLinkRule = useCallback((category: string): { mode: LinkMode; types: LinkProjectType[] } => {
     const dyn = dynamicTypes.find(t => t.id === category);
-    if (dyn?.relationType) return dyn.relationType;
-    return defaultCategoryRelationMap[category as WorkCategory] ?? 'none';
+    if (dyn) return { mode: dyn.linkMode, types: dyn.linkMode === 'none' ? [] : dyn.linkTypes };
+    return defaultCategoryLinkRules[category as WorkCategory] ?? { mode: 'none', types: [] };
   }, [dynamicTypes]);
 
-  const getRelatedItemsForRelation = useCallback((relationType: CategoryRelationType | undefined): ProjectSelectItem[] => {
-    if (!relationType || relationType === 'none') return [];
-    const mapped = (relationType === 'optional'
-      ? masterProjects
-      : relationType === 'webandsystem' || relationType === 'quotation_client' || relationType === 'vchannel'
-        ? masterProjects.filter(p => p.relatedType === (relationType as ProjectRelatedType))
-        : []
-    ).map(toProjectSelectItem).filter((item): item is ProjectSelectItem => item != null);
-    return mapped;
+  const getRelatedItems = useCallback((rule: { mode: LinkMode; types: LinkProjectType[] }): ProjectSelectItem[] => {
+    if (rule.mode === 'none' || rule.types.length === 0) return [];
+    const allowed = new Set<string>(rule.types);
+    return masterProjects
+      .filter(p => allowed.has(p.relatedType))
+      .map(toProjectSelectItem)
+      .filter((item): item is ProjectSelectItem => item != null);
   }, [masterProjects]);
 
   const applyHoursPreset = useCallback((preset: HoursPreset, officeLoc: OfficeLocation = office) => {
@@ -367,9 +371,9 @@ export function SubmitReportPage() {
     if (error) throw new Error(error.message);
     return (data || []).map((row) => {
       const category = String(row.category || '');
-      return mapDbEntry(row as Record<string, unknown>, resolveRelationType(category));
+      return mapDbEntry(row as Record<string, unknown>, resolveLinkRule(category).mode);
     });
-  }, [resolveRelationType]);
+  }, [resolveLinkRule]);
 
   const upsertLocalDbReport = useCallback((
     header: DayReportHeader,
@@ -458,7 +462,7 @@ export function SubmitReportPage() {
   ): Promise<{ header: DayReportHeader; entries: SavedEntry[] } | null> => {
     const mapEntries = (rows: Record<string, unknown>[] | null | undefined) =>
       (rows || [])
-        .map((entry) => mapDbEntry(entry, resolveRelationType(String(entry.category || ''))))
+        .map((entry) => mapDbEntry(entry, resolveLinkRule(String(entry.category || '')).mode))
         .sort((a, b) => a.sortOrder - b.sortOrder);
 
     const { data, error } = await supabase
@@ -483,7 +487,7 @@ export function SubmitReportPage() {
     if (!data) return null;
     const row = data as DayReportHeader & { day_report_entries?: Record<string, unknown>[] };
     return { header: row, entries: mapEntries(row.day_report_entries) };
-  }, [loadEntries, resolveRelationType]);
+  }, [loadEntries, resolveLinkRule]);
 
   const insertReport = useCallback(async (staffId: string, date: string): Promise<DayReportHeader> => {
     const currentOffice = officeRef.current;
@@ -829,7 +833,7 @@ export function SubmitReportPage() {
 
       const relatedIds = Array.from(new Set(
         entryRows
-          .filter(e => !!e.category && resolveRelationType(e.category) !== 'none')
+          .filter(e => !!e.category && resolveLinkRule(e.category).mode !== 'none')
           .map(e => (e.related_id || '').trim())
           .filter(Boolean),
       ));
@@ -847,10 +851,10 @@ export function SubmitReportPage() {
       entryRows.forEach(entry => {
         const category = (entry.category || '') as WorkCategory;
         if (!category) return;
-        const relationType = resolveRelationType(category);
+        const linkMode = resolveLinkRule(category).mode;
         const hours = Number(entry.hours) || 0;
         const createdAt = entry.created_at || '';
-        if (relationType === 'none') {
+        if (linkMode === 'none') {
           const key = `__none__${category}`;
           if (!itemMap[key]) {
             itemMap[key] = { relatedId: '', relatedName: 'N/A', category, count: 0, lastUsed: createdAt, totalHours: 0 };
@@ -862,7 +866,7 @@ export function SubmitReportPage() {
         }
         const relatedId = (entry.related_id || '').trim();
         if (!relatedId) {
-          if (relationType !== 'optional') return;
+          if (linkMode !== 'optional') return;
           const key = `__optional_empty__${category}`;
           if (!itemMap[key]) {
             itemMap[key] = { relatedId: '', relatedName: '（未選項目）', category, count: 0, lastUsed: createdAt, totalHours: 0 };
@@ -894,7 +898,7 @@ export function SubmitReportPage() {
       console.error('[SubmitReport] Exception loading frequent items:', err);
       setRecentFrequentItems([]);
     }
-  }, [currentStaffId, resolveRelationType]);
+  }, [currentStaffId, resolveLinkRule]);
 
   useEffect(() => {
     if (!currentStaffId || readOnly) {
@@ -929,8 +933,8 @@ export function SubmitReportPage() {
     || !!e.aiToolsV2.videoOther,
   );
 
-  const formRelationType = form.category ? resolveRelationType(form.category) : 'none';
-  const formMissingRelated = isRelationRequired(formRelationType) && !form.relatedId;
+  const formLinkRule = form.category ? resolveLinkRule(form.category) : { mode: 'none' as const, types: [] as LinkProjectType[] };
+  const formMissingRelated = isRelationRequired(formLinkRule.mode) && !form.relatedId;
   const formHasAsana = form.outcomeType === 'url' && /app\.asana\.com/i.test(form.outcomeUrl);
   const canSaveTask = !!form.category && form.hours > 0 && !formMissingRelated && !formHasAsana && !!existingReportId && !isSavingTask && !isLoadingExisting && (!isReportComplete || !!editingEntryId) && (!hoursExceedTarget || !!editingEntryId);
 
@@ -945,8 +949,8 @@ export function SubmitReportPage() {
   };
 
   const buildEntryPayload = (entry: ReportFormEntry, allImages: string[], sortOrder: number) => {
-    const relationType = resolveRelationType(entry.category);
-    const hasRelation = relationType !== 'none';
+    const linkMode = resolveLinkRule(entry.category).mode;
+    const hasRelation = linkMode !== 'none';
     const aiUsed = entry.aiToolsV2.copywriting.length > 0
       || entry.aiToolsV2.image.length > 0
       || entry.aiToolsV2.video.length > 0
@@ -1013,7 +1017,7 @@ export function SubmitReportPage() {
       return;
     }
     if (formMissingRelated) {
-      setFormError('請為必填關聯類型選擇項目。');
+      setFormError('請選擇關聯項目。');
       return;
     }
     if (formHasAsana) {
@@ -1684,7 +1688,7 @@ export function SubmitReportPage() {
                   label: item.category,
                 };
                 const systemLabel = item.relatedName?.trim() ? item.relatedName : 'N/A';
-                const isNoRelation = resolveRelationType(item.category) === 'none' || systemLabel === 'N/A';
+                const isNoRelation = resolveLinkRule(item.category).mode === 'none' || systemLabel === 'N/A';
                 return (
                   <button
                     key={`${item.relatedId || 'none'}__${item.category}`}
@@ -1894,17 +1898,19 @@ export function SubmitReportPage() {
                   value={form.category}
                   onChange={(e) => {
                     const newCategory = e.target.value;
-                    const nextRelation = newCategory
-                      ? (dynamicTypes.find(t => t.id === newCategory)?.relationType
-                        ?? defaultCategoryRelationMap[newCategory as WorkCategory]
-                        ?? 'none')
-                      : 'none';
-                    setForm(prev => ({
-                      ...prev,
-                      category: newCategory,
-                      relatedId: !newCategory || nextRelation === 'none' ? '' : prev.relatedId,
-                      relatedName: !newCategory || nextRelation === 'none' ? '' : prev.relatedName,
-                    }));
+                    const nextRule = newCategory
+                      ? resolveLinkRule(newCategory)
+                      : { mode: 'none' as const, types: [] as LinkProjectType[] };
+                    const allowedIds = new Set(getRelatedItems(nextRule).map(item => item.id));
+                    setForm(prev => {
+                      const keep = nextRule.mode !== 'none' && !!prev.relatedId && allowedIds.has(prev.relatedId);
+                      return {
+                        ...prev,
+                        category: newCategory,
+                        relatedId: keep ? prev.relatedId : '',
+                        relatedName: keep ? prev.relatedName : '',
+                      };
+                    });
                   }}
                   className="w-full px-2.5 py-2 border border-border rounded-md text-[15px] bg-white focus:ring-2 focus:ring-teal-200 focus:border-teal-400 transition-all"
                 >
@@ -1917,28 +1923,24 @@ export function SubmitReportPage() {
               </div>
               <div className="md:col-span-2 lg:col-span-5">
                 {(() => {
-                  const required = isRelationRequired(formRelationType);
-                  const label =
-                    formRelationType === 'none' ? '關聯項目'
-                    : formRelationType === 'optional' ? '關聯項目（選填）'
-                    : formRelationType === 'webandsystem' ? '關聯網站/系統 *'
-                    : formRelationType === 'quotation_client' ? '關聯客戶項目 *'
-                    : formRelationType === 'vchannel' ? '關聯影片頻道 *'
-                    : '關聯項目 *';
-                  const placeholder =
-                    formRelationType === 'optional' ? '可選：搜尋任一類型項目...'
-                    : formRelationType === 'webandsystem' ? '搜尋網站/系統...'
-                    : formRelationType === 'quotation_client' ? '搜尋客戶項目...'
-                    : formRelationType === 'vchannel' ? '搜尋影片頻道...'
-                    : '搜尋項目...';
+                  const required = isRelationRequired(formLinkRule.mode);
+                  const typeNames = linkTypeNames(formLinkRule.types);
+                  const label = formLinkRule.mode === 'none'
+                    ? '關聯項目'
+                    : formLinkRule.mode === 'optional'
+                      ? '關聯項目（選填）'
+                      : '關聯項目 *';
+                  const placeholder = formLinkRule.mode === 'optional'
+                    ? (typeNames ? `可選：搜尋${typeNames}...` : '可選：搜尋項目...')
+                    : (typeNames ? `搜尋${typeNames}...` : '搜尋項目...');
                   return (
                     <>
                       <label className="text-[13px] font-semibold text-muted-foreground block mb-1">{label}</label>
-                      {formRelationType === 'none' ? (
+                      {formLinkRule.mode === 'none' ? (
                         <SearchableProjectSelect items={[]} value="" onChange={() => {}} disabled={true} />
                       ) : (
                         <SearchableProjectSelect
-                          items={getRelatedItemsForRelation(formRelationType)}
+                          items={getRelatedItems(formLinkRule)}
                           value={form.relatedId}
                           onChange={(id, name) => {
                             setForm(prev => ({ ...prev, relatedId: id, relatedName: name }));

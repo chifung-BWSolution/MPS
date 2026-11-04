@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   PITCHING_CURRENCY,
+  optionalIsoDate,
   pitchingStatusConfig,
   type PitchingExpenseItem,
   type PitchingRecord,
@@ -33,8 +34,10 @@ import {
   validateContractDates,
   validateQuotationDocDates,
 } from '@/lib/quotationDocs';
+import { isBwtSystemOrWebProjectType } from '@/lib/quotationProjectTypes';
 import { useQuotationDocs } from '@/hooks/useQuotationDocs';
 import { useQuotationDocTypes } from '@/hooks/useQuotationDocTypes';
+import { useQuotationProjectTypes } from '@/hooks/useQuotationProjectTypes';
 import {
   useQuotationClientProjects,
   type QuotationClientProjectUpdate,
@@ -70,6 +73,9 @@ export function PitchingStatusConversionModal({
   const isConfirmed = target === 'confirmed';
   const { rows: docs, loading: docsLoading, addDoc } = useQuotationDocs(isConfirmed ? record.id : undefined);
   const { types } = useQuotationDocTypes();
+  const { types: projectTypes } = useQuotationProjectTypes();
+  const requireContractDates =
+    isConfirmed && isBwtSystemOrWebProjectType(record.projectTypeId, projectTypes);
   const { updateRecord } = useQuotationClientProjects();
   const listTypes = useMemo(
     () => types.filter((type) => isQuotationListDocType(type.id)),
@@ -89,6 +95,12 @@ export function PitchingStatusConversionModal({
   });
   const [signedDate, setSignedDate] = useState(record.signedDate ?? '');
   const [handoverDate, setHandoverDate] = useState(record.handoverDate ?? '');
+  const [contractStartDate, setContractStartDate] = useState(
+    () => optionalIsoDate(record.contractStartDate) ?? '',
+  );
+  const [contractEndDate, setContractEndDate] = useState(
+    () => optionalIsoDate(record.contractEndDate) ?? '',
+  );
   const [docDialogOpen, setDocDialogOpen] = useState(false);
   const [docDraft, setDocDraft] = useState<QuotationDocFormDraft>(() => ({
     ...emptyQuotationDocFormDraft(),
@@ -105,6 +117,8 @@ export function PitchingStatusConversionModal({
     estimatedExpenses: expenses,
     signedDate,
     handoverDate,
+    contractStartDate,
+    contractEndDate,
   };
 
   const addExpense = () => {
@@ -131,7 +145,9 @@ export function PitchingStatusConversionModal({
       ...emptyQuotationDocFormDraft(),
       projectId: record.id,
       docTypeId: listTypes[0]?.id ?? '',
-      ...contractDatesFromProject(record),
+      ...contractDatesFromProject(
+        requireContractDates ? { contractStartDate, contractEndDate } : record,
+      ),
     });
     setDocDialogOpen(true);
   };
@@ -175,6 +191,8 @@ export function PitchingStatusConversionModal({
       return;
     }
     if (contractPatch) {
+      setContractStartDate(optionalIsoDate(contractPatch.contractStartDate) ?? '');
+      setContractEndDate(optionalIsoDate(contractPatch.contractEndDate) ?? '');
       const { error: projectErr } = await updateRecord(record.id, contractPatch);
       setDocSaving(false);
       if (projectErr) {
@@ -190,7 +208,7 @@ export function PitchingStatusConversionModal({
 
   const handleConfirm = async () => {
     if (isConfirmed) {
-      const missing = missingConfirmedFields(draftRecord, docs);
+      const missing = missingConfirmedFields(draftRecord, docs, { requireContractDates });
       if (missing.includes('estimated_income')) {
         toast.error('請填寫預計收入');
         return;
@@ -207,6 +225,21 @@ export function PitchingStatusConversionModal({
         toast.error('請選擇交付日期');
         return;
       }
+      if (missing.includes('contract_start_date')) {
+        toast.error('請選擇合約開始日期');
+        return;
+      }
+      if (missing.includes('contract_end_date')) {
+        toast.error('請選擇合約結束日期');
+        return;
+      }
+      if (requireContractDates) {
+        const contractError = validateContractDates(contractStartDate, contractEndDate);
+        if (contractError) {
+          toast.error(contractError);
+          return;
+        }
+      }
       if (missing.includes('quotation_doc') || !hasQualifyingQuotationDoc(docs)) {
         toast.error('請上傳至少一份報價單或已簽署報價單／合約');
         return;
@@ -217,6 +250,12 @@ export function PitchingStatusConversionModal({
         estimatedExpenses: expenses,
         signedDate,
         handoverDate,
+        ...(requireContractDates
+          ? {
+              contractStartDate: optionalIsoDate(contractStartDate),
+              contractEndDate: optionalIsoDate(contractEndDate),
+            }
+          : {}),
       });
       if (ok) onClose();
       return;
@@ -268,7 +307,9 @@ export function PitchingStatusConversionModal({
         <div className="space-y-5">
           <p className="text-[13px] text-muted-foreground">
             {isConfirmed
-              ? '確認項目前請補齊預計收支、簽約／交付日期，以及至少一份報價單或已簽署報價單／合約。'
+              ? requireContractDates
+                ? '確認項目前請補齊預計收支、簽約／交付日期、合約開始／結束日期，以及至少一份報價單或已簽署報價單／合約。'
+                : '確認項目前請補齊預計收支、簽約／交付日期，以及至少一份報價單或已簽署報價單／合約。'
               : '跟進中前請補齊預計收入與至少一筆預計支出。'}
           </p>
 
@@ -405,6 +446,30 @@ export function PitchingStatusConversionModal({
                   />
                 </div>
               </div>
+              {requireContractDates && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-[12px]">合約開始日期 *</Label>
+                    <Input
+                      type="date"
+                      value={contractStartDate}
+                      onChange={(e) => setContractStartDate(e.target.value)}
+                      className="mt-1 h-9 text-[13px]"
+                      disabled={saving}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[12px]">合約結束日期 *</Label>
+                    <Input
+                      type="date"
+                      value={contractEndDate}
+                      onChange={(e) => setContractEndDate(e.target.value)}
+                      className="mt-1 h-9 text-[13px]"
+                      disabled={saving}
+                    />
+                  </div>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label className="text-[12px]">報價單 / 已簽署報價單／合約 *</Label>
                 {docsLoading ? (
