@@ -3,6 +3,7 @@ export type ReportProjectKind =
   | 'website'
   | 'quotation_client'
   | 'vchannel'
+  | 'asana_task'
   | 'manual'
   | 'orphan';
 
@@ -14,6 +15,7 @@ export const REPORT_PROJECT_KIND_OPTIONS: { id: ReportProjectKindFilter; label: 
   { id: 'website', label: '網站' },
   { id: 'quotation_client', label: '客戶項目' },
   { id: 'vchannel', label: '影片頻道' },
+  { id: 'asana_task', label: 'Asana 項目' },
   { id: 'manual', label: '自訂' },
   { id: 'orphan', label: '異常' },
 ];
@@ -23,6 +25,7 @@ export const REPORT_PROJECT_KIND_LABELS: Record<ReportProjectKind, string> = {
   website: '網站',
   quotation_client: '客戶項目',
   vchannel: '影片頻道',
+  asana_task: 'Asana 項目',
   manual: '自訂',
   orphan: '異常',
 };
@@ -38,6 +41,7 @@ export function reportProjectKind(
 ): ReportProjectKind {
   if (!profile) return 'orphan';
   const related = (profile.relatedType || '').toLowerCase();
+  if (related === 'asana_task') return 'asana_task';
   const profileType = (profile.profileType || '').toLowerCase();
   if (related === 'quotation_client') return 'quotation_client';
   if (related === 'vchannel') return 'vchannel';

@@ -62,13 +62,13 @@ assert.equal(clientProjectProgressConfig.pending.label, '待開始');
 assert.equal(clientProjectProgressConfig.in_progress.label, '進行中');
 assert.equal(clientProjectProgressConfig.completed.label, '已完成');
 
-assert.equal(PITCHING_EXPIRED_LABEL, '未能成交項目');
+assert.equal(PITCHING_EXPIRED_LABEL, '未中標');
 assert.equal(formatPitchingRemainingDays(null), '—');
 assert.equal(formatPitchingRemainingDays(45), '45 天');
 assert.equal(formatPitchingRemainingDays(1), '1 天');
-assert.equal(formatPitchingRemainingDays(0), '未能成交項目');
-assert.equal(formatPitchingRemainingDays(-1), '未能成交項目');
-assert.equal(formatPitchingRemainingDays(-12), '未能成交項目');
+assert.equal(formatPitchingRemainingDays(0), '未中標');
+assert.equal(formatPitchingRemainingDays(-1), '未中標');
+assert.equal(formatPitchingRemainingDays(-12), '未中標');
 assert.equal(pitchingRemainingDaysTone(null), 'empty');
 assert.equal(pitchingRemainingDaysTone(1), 'green');
 assert.equal(pitchingRemainingDaysTone(7), 'green');

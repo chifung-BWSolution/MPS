@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Search, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { useQuotationSection } from '@/context/QuotationSectionContext';
-import { filterBySectionProjectTypes } from '@/lib/quotationSectionScope';
+import { asanaProjectTypesMatchSection } from '@/lib/quotationSectionScope';
 import { useAsanaSyncedTasks, type AsanaSyncedTask } from '@/hooks/useAsanaSyncedTasks';
 import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
 import { useQuotationClientList } from '@/hooks/useQuotationClientList';
@@ -93,6 +93,7 @@ export function AsanaPendingModule() {
   const [caseClosedFilter, setCaseClosedFilter] = useState<AsanaCaseClosedFilter>('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [projectTypeFilter, setProjectTypeFilter] = useState('all');
+  const [asanaProjectFilter, setAsanaProjectFilter] = useState('all');
   const [importingTask, setImportingTask] = useState<AsanaSyncedTask | null>(null);
   const [savingReasonGid, setSavingReasonGid] = useState<string | null>(null);
 
@@ -114,10 +115,33 @@ export function AsanaPendingModule() {
     [importingTask, clientOptions, staffOptions, systemUser?.staff_id],
   );
 
-  const sectionTasks = useMemo(
-    () => filterBySectionProjectTypes(tasks, allowedCodes),
-    [tasks, allowedCodes],
+  const projectTypesByGid = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const source of syncSources) {
+      if (source.projectGid) map.set(source.projectGid, source.projectTypes);
+    }
+    return map;
+  }, [syncSources]);
+
+  const sectionSources = useMemo(
+    () => syncSources.filter((source) => asanaProjectTypesMatchSection(source.projectTypes, allowedCodes)),
+    [syncSources, allowedCodes],
   );
+
+  const sectionTasks = useMemo(
+    () =>
+      tasks.filter((task) =>
+        asanaProjectTypesMatchSection(projectTypesByGid.get(task.asanaProjectGid), allowedCodes),
+      ),
+    [tasks, projectTypesByGid, allowedCodes],
+  );
+  useEffect(() => {
+    if (asanaProjectFilter === 'all') return;
+    if (!sectionSources.some((source) => source.projectGid === asanaProjectFilter)) {
+      setAsanaProjectFilter('all');
+    }
+  }, [asanaProjectFilter, sectionSources]);
+
   const sectionPendingCount = sectionTasks.filter((task) => !task.imported).length;
   const sectionImportedCount = sectionTasks.filter((task) => task.imported).length;
 
@@ -131,7 +155,9 @@ export function AsanaPendingModule() {
       ) {
         return false;
       }
-      if (!matchesProjectTypeFilter(task.projectTypes, projectTypeFilter)) return false;
+      if (asanaProjectFilter !== 'all' && task.asanaProjectGid !== asanaProjectFilter) return false;
+      const sourceTypes = projectTypesByGid.get(task.asanaProjectGid) ?? [];
+      if (!matchesProjectTypeFilter(sourceTypes, projectTypeFilter)) return false;
       if (!searchQuery.trim()) return true;
       const query = searchQuery.toLowerCase();
       return (
@@ -141,10 +167,18 @@ export function AsanaPendingModule() {
         task.asanaSectionName.toLowerCase().includes(query) ||
         task.assignedPmName.toLowerCase().includes(query) ||
         task.caseClosedReason.toLowerCase().includes(query) ||
-        formatProjectTypes(task.projectTypes).toLowerCase().includes(query)
+        formatProjectTypes(sourceTypes).toLowerCase().includes(query)
       );
     });
-  }, [sectionTasks, importFilter, caseClosedFilter, projectTypeFilter, searchQuery]);
+  }, [
+    sectionTasks,
+    projectTypesByGid,
+    importFilter,
+    caseClosedFilter,
+    asanaProjectFilter,
+    projectTypeFilter,
+    searchQuery,
+  ]);
 
   const handleSync = async () => {
     try {
@@ -214,11 +248,11 @@ export function AsanaPendingModule() {
         <div>
           <h1 className="text-[24px] font-bold tracking-tight">Asana 待匯入</h1>
           <p className="text-[13px] text-muted-foreground mt-0.5 max-w-3xl">
-            {syncSources.length
-              ? `只同步這些 Asana 專案：${syncSources.map((s) => s.projectName).join('、')}。${
-                  syncSources.some((s) => s.syncDateMode === 'all')
-                    ? `${syncSources.filter((s) => s.syncDateMode === 'all').map((s) => s.projectName).join('、')} 同步全部任務；其餘專案依建立日 ${syncSources.find((s) => s.syncYearFrom && s.syncDateMode !== 'all')?.syncYearFrom ?? 2026} 年起篩選。`
-                    : `任務依各專案日期規則篩選（目前為建立日 ${syncSources.find((s) => s.syncYearFrom)?.syncYearFrom ?? 2026} 年起）。`
+            {sectionSources.length
+              ? `只同步這些 Asana 專案：${sectionSources.map((s) => s.projectName).join('、')}。${
+                  sectionSources.some((s) => s.syncDateMode === 'all')
+                    ? `${sectionSources.filter((s) => s.syncDateMode === 'all').map((s) => s.projectName).join('、')} 同步全部任務；其餘專案依建立日 ${sectionSources.find((s) => s.syncYearFrom && s.syncDateMode !== 'all')?.syncYearFrom ?? 2026} 年起篩選。`
+                    : `任務依各專案日期規則篩選（目前為建立日 ${sectionSources.find((s) => s.syncYearFrom)?.syncYearFrom ?? 2026} 年起）。`
                 } 尚未匯入的項目需透過表單建立報價客戶項目。`
               : '只同步已啟用的 Asana 專案，並依各專案的日期規則篩選任務。尚未匯入的項目需透過表單建立報價客戶項目。'}
           </p>
@@ -288,6 +322,18 @@ export function AsanaPendingModule() {
           <option value="pending">未取消</option>
           <option value="closed">已取消跟進</option>
           <option value="all">全部取消狀態</option>
+        </select>
+        <select
+          value={asanaProjectFilter}
+          onChange={(e) => setAsanaProjectFilter(e.target.value)}
+          className="text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500 max-w-[280px]"
+        >
+          <option value="all">全部 Asana 專案</option>
+          {sectionSources.map((source) => (
+            <option key={source.projectGid} value={source.projectGid}>
+              {source.projectName || source.projectGid}
+            </option>
+          ))}
         </select>
         <select
           value={projectTypeFilter}

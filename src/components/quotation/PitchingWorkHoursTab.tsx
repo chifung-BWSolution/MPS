@@ -3,6 +3,15 @@ import { ChevronDown, ChevronRight, Clock, Loader2, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
 import { useCategoryLookup } from '@/hooks/useCategoryLookup';
+import {
+  formatHourSharePercent,
+  groupStaffLabour,
+  LABOUR_RATE_LABEL,
+  labourCost,
+  relatedIdsForClientProject,
+  type LabourProjectHub,
+} from '@/lib/clientProjectLabour';
+import { formatQuotationListMoney } from '@/lib/quotationListMoney';
 import { resolveRelatedDayReportIds } from '@/lib/resolveProjectHub';
 import { resolveCategoryLabel } from '@/lib/workCategoryLabel';
 
@@ -12,12 +21,15 @@ type TaskRow = {
   category: string;
   hours: number;
   reportDate: string;
+  labourCost: number;
 };
 
 type StaffGroup = {
   staffId: string;
   staffName: string;
   totalHours: number;
+  labourCost: number;
+  ratio: number | null;
   tasks: TaskRow[];
 };
 
@@ -55,7 +67,6 @@ async function resolveRelatedIds(quotationClientProjectId: string, websiteListId
     const related = await resolveRelatedDayReportIds('webandsystem', websiteListId);
     return related.data;
   }
-  const ids = new Set<string>([quotationClientProjectId]);
   const [{ data: clientHub }, { data: clientProject }] = await Promise.all([
     supabase
       .from('projects')
@@ -69,21 +80,32 @@ async function resolveRelatedIds(quotationClientProjectId: string, websiteListId
       .eq('id', quotationClientProjectId)
       .maybeSingle(),
   ]);
-  if (clientHub?.id) ids.add(String(clientHub.id));
 
   const websiteId = String(clientProject?.webandsystem_list_id || '').trim();
-  if (!websiteId) return [...ids];
+  let websiteHubId = '';
+  if (websiteId) {
+    const { data: websiteHub } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('related_type', 'webandsystem')
+      .eq('related_id', websiteId)
+      .maybeSingle();
+    websiteHubId = websiteHub?.id ? String(websiteHub.id) : '';
+  }
 
-  // Day reports store either the website id or its projects-hub id.
-  ids.add(websiteId);
-  const { data: websiteHub } = await supabase
-    .from('projects')
-    .select('id')
-    .eq('related_type', 'webandsystem')
-    .eq('related_id', websiteId)
-    .maybeSingle();
-  if (websiteHub?.id) ids.add(String(websiteHub.id));
-  return [...ids];
+  const hubs: LabourProjectHub[] = [
+    clientHub?.id
+      ? { id: String(clientHub.id), relatedType: 'quotation_client', relatedId: quotationClientProjectId }
+      : null,
+    websiteHubId
+      ? { id: websiteHubId, relatedType: 'webandsystem', relatedId: websiteId }
+      : null,
+  ].filter((hub): hub is LabourProjectHub => hub != null);
+
+  return relatedIdsForClientProject(
+    { id: quotationClientProjectId, webandsystemListId: websiteId },
+    hubs,
+  );
 }
 
 export function PitchingWorkHoursTab({
@@ -96,6 +118,7 @@ export function PitchingWorkHoursTab({
   websiteId?: string;
 }) {
   const categoryLookup = useCategoryLookup();
+  const showLabour = Boolean(projectId) && !websiteId;
   const [groups, setGroups] = useState<StaffGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -136,31 +159,24 @@ export function PitchingWorkHoursTab({
       const nameMap = await fetchStaffNameMap(staffIds);
       if (cancelled) return;
 
-      const grouped = new Map<string, StaffGroup>();
-      for (const row of rows) {
-        if (!row.staff_id) continue;
-        const task: TaskRow = {
-          id: row.id,
-          title: (row.title || '').trim(),
-          category: row.category || '',
-          hours: Number(row.hours) || 0,
-          reportDate: reportDateOf(row),
-        };
-        const current = grouped.get(row.staff_id) || {
-          staffId: row.staff_id,
-          staffName: nameMap[row.staff_id] || row.staff_id,
-          totalHours: 0,
-          tasks: [],
-        };
-        current.totalHours += task.hours;
-        current.staffName = nameMap[row.staff_id] || current.staffName;
-        current.tasks.push(task);
-        grouped.set(row.staff_id, current);
-      }
+      const labourGroups = groupStaffLabour(
+        rows.flatMap((row) => {
+          if (!row.staff_id) return [];
+          return [{
+            staffId: row.staff_id,
+            hours: Number(row.hours) || 0,
+            id: row.id,
+            title: (row.title || '').trim(),
+            category: row.category || '',
+            reportDate: reportDateOf(row),
+          }];
+        }),
+      );
 
-      const nextGroups = [...grouped.values()]
+      const nextGroups = labourGroups
         .map((group) => ({
           ...group,
+          staffName: nameMap[group.staffId] || group.staffId,
           tasks: [...group.tasks].sort((a, b) => (b.reportDate || '').localeCompare(a.reportDate || '')),
         }))
         .sort((a, b) => b.totalHours - a.totalHours || a.staffName.localeCompare(b.staffName, 'zh-Hant'));
@@ -183,6 +199,7 @@ export function PitchingWorkHoursTab({
     () => groups.reduce((sum, group) => sum + group.tasks.length, 0),
     [groups],
   );
+  const totalLabourCost = useMemo(() => labourCost(totalHours), [totalHours]);
 
   const toggleStaff = (staffId: string) => {
     setExpandedIds((prev) => {
@@ -222,11 +239,18 @@ export function PitchingWorkHoursTab({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className={`grid grid-cols-1 ${showLabour ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-3`}>
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
           <span className="text-[11px] text-muted-foreground block">總工時</span>
           <span className="text-[20px] font-bold text-teal-600 tabular-nums">{formatHours(totalHours)}h</span>
         </div>
+        {showLabour && (
+          <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
+            <span className="text-[11px] text-muted-foreground block">人工成本</span>
+            <span className="text-[20px] font-bold tabular-nums">{formatQuotationListMoney(totalLabourCost)}</span>
+            <span className="text-[11px] text-muted-foreground">{LABOUR_RATE_LABEL}</span>
+          </div>
+        )}
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card px-4 py-3">
           <span className="text-[11px] text-muted-foreground block">匯報同事</span>
           <span className="text-[20px] font-bold tabular-nums">{groups.length}</span>
@@ -260,9 +284,26 @@ export function PitchingWorkHoursTab({
                   <p className="text-[14px] font-semibold truncate">{group.staffName}</p>
                   <p className="text-[12px] text-muted-foreground">{group.tasks.length} 筆匯報</p>
                 </div>
-                <span className="text-[16px] font-bold text-teal-600 tabular-nums shrink-0">
-                  {formatHours(group.totalHours)}h
-                </span>
+                {showLabour ? (
+                  <div className="shrink-0 flex items-center gap-4 text-right">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">工時</p>
+                      <p className="text-[14px] font-bold text-teal-600 tabular-nums">{formatHours(group.totalHours)}h</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">占比</p>
+                      <p className="text-[14px] font-semibold tabular-nums">{formatHourSharePercent(group.ratio)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">人工成本</p>
+                      <p className="text-[14px] font-bold tabular-nums">{formatQuotationListMoney(group.labourCost)}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-[16px] font-bold text-teal-600 tabular-nums shrink-0">
+                    {formatHours(group.totalHours)}h
+                  </span>
+                )}
               </button>
 
               {expanded && (
@@ -274,6 +315,7 @@ export function PitchingWorkHoursTab({
                         <th className="px-4 py-2 font-medium">類別</th>
                         <th className="px-4 py-2 font-medium">工作內容</th>
                         <th className="px-4 py-2 font-medium text-right">工時</th>
+                        {showLabour && <th className="px-4 py-2 font-medium text-right">人工成本</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -292,6 +334,11 @@ export function PitchingWorkHoursTab({
                           <td className="px-4 py-2 text-[13px] font-semibold text-right tabular-nums">
                             {formatHours(task.hours)}h
                           </td>
+                          {showLabour && (
+                            <td className="px-4 py-2 text-[13px] text-right tabular-nums">
+                              {formatQuotationListMoney(task.labourCost)}
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>

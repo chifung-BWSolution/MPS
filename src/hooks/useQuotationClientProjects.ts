@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, peekCachedQuery } from '@/lib/queryCache';
 import { PITCHING_CURRENCY, optionalIsoDate, type PitchingExpenseItem, type PitchingRecord, type PitchingStatus } from '@/data/pitchingData';
+import { parseMediaPublications } from '@/lib/mediaPublications';
 import { parseProjectSla, type ProjectSla } from '@/lib/projectSla';
 import { parseServicePeriods, type ServicePeriods } from '@/lib/servicePeriods';
 import { resolveProjectTypeUuid } from '@/hooks/useQuotationProjectTypes';
@@ -52,6 +53,7 @@ type DbRow = {
   estimated_income: number | null;
   estimated_expenses: PitchingExpenseItem[] | null;
   sla: ProjectSla | null;
+  media_publications: unknown;
   created_at: string;
   updated_at: string;
   quotation_client_list?: ClientListEmbed;
@@ -139,6 +141,7 @@ function mapRow(row: DbRow): PitchingRecord {
     estimatedIncome: row.estimated_income != null ? Number(row.estimated_income) : undefined,
     estimatedExpenses: parseExpenses(row.estimated_expenses),
     sla: parseProjectSla(row.sla),
+    mediaPublications: parseMediaPublications(row.media_publications),
     followUps: [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -170,6 +173,7 @@ export type QuotationClientProjectUpdate = Partial<
     | 'estimatedIncome'
     | 'estimatedExpenses'
     | 'sla'
+    | 'mediaPublications'
   >
 >;
 
@@ -333,6 +337,7 @@ export function useQuotationClientProjects() {
     if (data.estimatedIncome !== undefined) row.estimated_income = data.estimatedIncome;
     if (data.estimatedExpenses !== undefined) row.estimated_expenses = data.estimatedExpenses;
     if (data.sla !== undefined) row.sla = data.sla;
+    if (data.mediaPublications !== undefined) row.media_publications = parseMediaPublications(data.mediaPublications);
 
     const { data: updated, error: err } = await supabase
       .from(QUOTATION_CLIENT_PROJECT_TABLE)

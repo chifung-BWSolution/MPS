@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  asanaPitchingProjectFilters,
   filterProjectSelectItems,
   kindsInItems,
   projectSelectKindLabel,
@@ -51,12 +52,48 @@ assert.equal(projectSelectKindLabel('quotation_client'), '客戶項目');
 assert.equal(projectSelectKindLabel('website'), '網站');
 assert.equal(projectSelectKindLabel('system'), '系統');
 
+const asanaItems: ProjectSelectItem[] = [
+  { id: 'a1', name: 'BWT task', kind: 'asana_task', asanaProjectGid: 'bwt', asanaProjectName: 'BWT Active' },
+  { id: 'a2', name: 'BWG task', kind: 'asana_task', asanaProjectGid: 'bwg', asanaProjectName: 'BWG Gift' },
+  { id: 'a3', name: 'BWT other', kind: 'asana_task', asanaProjectGid: 'bwt', asanaProjectName: 'BWT Active' },
+  { id: 'a4', name: 'Unmapped task', kind: 'asana_task' },
+];
+assert.deepEqual(
+  asanaPitchingProjectFilters(asanaItems).map((option) => option.name),
+  ['BWG Gift', 'BWT Active'],
+);
+assert.deepEqual(
+  filterProjectSelectItems(asanaItems, '', 'asana_task', 'bwt').map((item) => item.id),
+  ['a1', 'a3'],
+);
+assert.equal(filterProjectSelectItems(asanaItems, '', 'asana_task', 'all').length, 4);
+assert.equal(filterProjectSelectItems([...items, ...asanaItems], '', 'website', 'bwt').length, 1);
+
+const statusItems: ProjectSelectItem[] = [
+  { id: 'open', name: 'Open', kind: 'asana_task', asanaImported: false, asanaCaseClosed: false },
+  { id: 'closed', name: 'Closed', kind: 'asana_task', asanaImported: false, asanaCaseClosed: true },
+  { id: 'done', name: 'Imported', kind: 'asana_task', asanaImported: true, asanaCaseClosed: false },
+];
+assert.deepEqual(
+  filterProjectSelectItems(statusItems, '', 'asana_task').map((item) => item.id),
+  ['open'],
+);
+assert.deepEqual(
+  filterProjectSelectItems(statusItems, '', 'asana_task', 'all', 'all', 'all').map((item) => item.id),
+  ['open', 'closed', 'done'],
+);
+
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
 
 const selectSrc = read('src/components/day-report/SearchableProjectSelect.tsx');
 assert.match(selectSrc, /showTypeFilters/);
 assert.match(selectSrc, /kindFilter/);
+assert.match(selectSrc, /asanaProjectFilter/);
+assert.match(selectSrc, /asanaPitchingProjectFilters/);
+assert.match(selectSrc, /待匯入/);
+assert.match(selectSrc, /未取消/);
+assert.match(selectSrc, /已取消跟進/);
 assert.match(selectSrc, /projectSelectKindLabel/);
 assert.match(selectSrc, /KindBadge/);
 assert.doesNotMatch(selectSrc, /relatedTypeFilter/);

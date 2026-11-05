@@ -6,6 +6,7 @@ import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
 import { useQuotationDocTypes } from '@/hooks/useQuotationDocTypes';
 import { useQuotationDocsList } from '@/hooks/useQuotationDocs';
 import {
+  COMPLETION_PHOTO_DOC_TYPE_ID,
   contractDatesFromProject,
   formatDocDate,
   formatFileSize,
@@ -48,8 +49,12 @@ export function QuotationDocsList() {
   const typeById = useMemo(() => new Map(types.map((type) => [type.id, type])), [types]);
 
   const dialogTypes = useMemo(() => {
-    const active = types.filter((type) => type.isActive);
-    if (draft.docTypeId && !active.some((type) => type.id === draft.docTypeId)) {
+    const active = types.filter((type) => type.isActive && type.id !== COMPLETION_PHOTO_DOC_TYPE_ID);
+    if (
+      draft.docTypeId &&
+      draft.docTypeId !== COMPLETION_PHOTO_DOC_TYPE_ID &&
+      !active.some((type) => type.id === draft.docTypeId)
+    ) {
       const current = typeById.get(draft.docTypeId);
       if (current) return [current, ...active];
     }

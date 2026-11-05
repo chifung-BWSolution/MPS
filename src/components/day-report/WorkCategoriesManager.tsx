@@ -1,14 +1,14 @@
 import { useState } from 'react';
-import { Plus, Edit2, GripVertical, Globe, Building2, FolderOpen, Tag, Check, X, Info, Save, Video } from 'lucide-react';
+import { Plus, Edit2, GripVertical, Globe, Building2, FolderOpen, Tag, Check, X, Info, Save, Video, ListTodo } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { WorkCategory } from '@/data/dayReportDataV2';
 import { useDayReportTypes } from '@/hooks/useDayReportTypes';
 
 export type LinkMode = 'required' | 'optional' | 'none';
-export type LinkProjectType = 'webandsystem' | 'quotation_client' | 'vchannel';
+export type LinkProjectType = 'webandsystem' | 'quotation_client' | 'vchannel' | 'asana_task';
 
-export const LINK_PROJECT_TYPES: LinkProjectType[] = ['webandsystem', 'quotation_client', 'vchannel'];
+export const LINK_PROJECT_TYPES: LinkProjectType[] = ['webandsystem', 'quotation_client', 'vchannel', 'asana_task'];
 
 export function isRelationRequired(mode: LinkMode | undefined | null): boolean {
   return mode === 'required';
@@ -33,17 +33,17 @@ export interface WorkCategoryConfig {
 }
 
 export const defaultCategoryLinkRules: Record<WorkCategory, { mode: LinkMode; types: LinkProjectType[] }> = {
-  website_design: { mode: 'required', types: ['webandsystem'] },
-  website_dev: { mode: 'required', types: ['webandsystem'] },
-  article_writing: { mode: 'required', types: ['webandsystem'] },
-  video_shooting: { mode: 'required', types: ['vchannel'] },
-  video_editing: { mode: 'required', types: ['vchannel'] },
-  social_media: { mode: 'required', types: ['vchannel'] },
-  edm: { mode: 'required', types: ['webandsystem'] },
-  paid_ads: { mode: 'required', types: ['webandsystem'] },
-  seo: { mode: 'required', types: ['webandsystem'] },
-  graphic_design: { mode: 'required', types: ['webandsystem'] },
-  client_meeting: { mode: 'required', types: ['quotation_client'] },
+  website_design: { mode: 'required', types: ['webandsystem', 'asana_task'] },
+  website_dev: { mode: 'required', types: ['webandsystem', 'asana_task'] },
+  article_writing: { mode: 'required', types: ['webandsystem', 'asana_task'] },
+  video_shooting: { mode: 'required', types: ['vchannel', 'asana_task'] },
+  video_editing: { mode: 'required', types: ['vchannel', 'asana_task'] },
+  social_media: { mode: 'required', types: ['vchannel', 'asana_task'] },
+  edm: { mode: 'required', types: ['webandsystem', 'asana_task'] },
+  paid_ads: { mode: 'required', types: ['webandsystem', 'asana_task'] },
+  seo: { mode: 'required', types: ['webandsystem', 'asana_task'] },
+  graphic_design: { mode: 'required', types: ['webandsystem', 'asana_task'] },
+  client_meeting: { mode: 'required', types: ['quotation_client', 'asana_task'] },
   internal_meeting: { mode: 'optional', types: [...LINK_PROJECT_TYPES] },
   training: { mode: 'none', types: [] },
 };
@@ -90,6 +90,12 @@ export const linkProjectTypeConfig: Record<LinkProjectType, { label: string; ico
     icon: Video,
     color: 'text-purple-700',
     bg: 'bg-purple-50',
+  },
+  asana_task: {
+    label: 'Asana 項目',
+    icon: ListTodo,
+    color: 'text-orange-700',
+    bg: 'bg-orange-50',
   },
 };
 
@@ -384,7 +390,7 @@ export function WorkCategoriesManager() {
             <li><strong>不關聯</strong>：不顯示項目選擇（適合培訓、學習等）</li>
           </ul>
           <p className="text-[12px] text-teal-700 mt-2">
-            項目類型可多選：網站或系統、客戶項目、影片頻道。只選一種時，匯報只能關聯該類型。
+            項目類型可多選：網站或系統、客戶項目、影片頻道、Asana 項目。只選一種時，匯報只能關聯該類型。
           </p>
         </div>
       </div>
@@ -624,7 +630,7 @@ export function WorkCategoriesManager() {
             每個項目類型下列出有勾選它的啟用工作類型
           </p>
         </div>
-        <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {LINK_PROJECT_TYPES.map(key => {
             const config = linkProjectTypeConfig[key];
             const Icon = config.icon;
@@ -666,7 +672,7 @@ export function WorkCategoriesManager() {
             關聯方式說明
           </h3>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            項目選項來自同步後的 projects 主表（網站或系統、客戶項目、影片頻道）
+            項目選項來自 projects 主表（網站或系統、客戶項目、影片頻道），以及尚未匯入的 Asana 項目
           </p>
         </div>
         <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-2">

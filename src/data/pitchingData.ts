@@ -2,6 +2,7 @@
  * Pitching Records Data & Types
  */
 
+import type { MediaPublication } from '@/lib/mediaPublications';
 import type { ProjectSla } from '@/lib/projectSla';
 import type { ServicePeriods } from '@/lib/servicePeriods';
 
@@ -61,6 +62,11 @@ export interface PitchingRecord {
   /** quotation_project_types.id */
   projectTypeId?: string;
   asanaLink?: string;
+  /**
+   * 媒體發佈 links for BWL client projects.
+   * Stored as quotation_client_project.media_publications.
+   */
+  mediaPublications?: MediaPublication[];
   /** Optional FK to webandsystem_list.id (client website / system). */
   webandsystemListId?: string;
   webandsystemName?: string;
@@ -203,9 +209,9 @@ export function calcRemainingDays(
 }
 
 /** Label when the 45-day follow-up window has elapsed. */
-export const PITCHING_EXPIRED_LABEL = '未能成交項目';
+export const PITCHING_EXPIRED_LABEL = '未中標';
 
-/** Display remaining days, or 未能成交項目 after the 45-day window. */
+/** Display remaining days, or 未中標 after the 45-day window. */
 export function formatPitchingRemainingDays(days: number | null): string {
   if (days == null) return '—';
   if (days <= 0) return PITCHING_EXPIRED_LABEL;
@@ -225,7 +231,7 @@ export const pitchingRemainingDaysToneClass: Record<PitchingRemainingDaysTone, s
 
 /**
  * 剩餘天數 color: 1-7 green, 8-14 yellow, 15-28 orange, 29-45 red,
- * 未能成交項目 grey. Day 14 stays yellow; orange starts at 15.
+ * 未中標 grey. Day 14 stays yellow; orange starts at 15.
  */
 export function pitchingRemainingDaysTone(days: number | null): PitchingRemainingDaysTone {
   if (days == null) return 'empty';
@@ -294,7 +300,7 @@ export type PitchingListCardCounts = {
 /**
  * /pitching metric cards.
  * `visible` is the current list (search, type, status, and the 未能成交 dropdown).
- * `dealScope` is that list before the 未能成交 dropdown, so 未能成交項目 can apply 顯示未能成交.
+ * `dealScope` is that list before the 未能成交 dropdown, so 未中標 can apply 顯示未能成交.
  */
 export function pitchingListCardCounts(
   visible: ReadonlyArray<Pick<PitchingRecord, 'status'>>,

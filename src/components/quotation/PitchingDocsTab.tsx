@@ -6,9 +6,11 @@ import { useQuotationDocs } from '@/hooks/useQuotationDocs';
 import { useQuotationDocTypes } from '@/hooks/useQuotationDocTypes';
 import { useQuotationClientProjects } from '@/hooks/useQuotationClientProjects';
 import {
+  COMPLETION_PHOTO_DOC_TYPE_ID,
   contractDatesFromProject,
   formatDocDate,
   formatFileSize,
+  isCompletionPhotoDoc,
   isImageDoc,
   quotationDocExpiryStatus,
   signedContractProjectDates,
@@ -30,7 +32,8 @@ function expiryBadge(status: ReturnType<typeof quotationDocExpiryStatus>) {
 }
 
 export function PitchingDocsTab({ projectId }: { projectId: string }) {
-  const { rows, loading, error, addDoc, updateDoc, deleteDoc } = useQuotationDocs(projectId);
+  const { rows: allRows, loading, error, addDoc, updateDoc, deleteDoc } = useQuotationDocs(projectId);
+  const rows = useMemo(() => allRows.filter((row) => !isCompletionPhotoDoc(row.docTypeId)), [allRows]);
   const { records: projects, updateRecord } = useQuotationClientProjects();
   const { types } = useQuotationDocTypes();
   const project = useMemo(() => projects.find((row) => row.id === projectId), [projects, projectId]);
@@ -44,8 +47,12 @@ export function PitchingDocsTab({ projectId }: { projectId: string }) {
   const typeById = useMemo(() => new Map(types.map((type) => [type.id, type])), [types]);
 
   const dialogTypes = useMemo(() => {
-    const active = types.filter((type) => type.isActive);
-    if (draft.docTypeId && !active.some((type) => type.id === draft.docTypeId)) {
+    const active = types.filter((type) => type.isActive && type.id !== COMPLETION_PHOTO_DOC_TYPE_ID);
+    if (
+      draft.docTypeId &&
+      draft.docTypeId !== COMPLETION_PHOTO_DOC_TYPE_ID &&
+      !active.some((type) => type.id === draft.docTypeId)
+    ) {
       const current = typeById.get(draft.docTypeId);
       if (current) return [current, ...active];
     }

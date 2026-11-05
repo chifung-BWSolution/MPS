@@ -130,7 +130,9 @@ assert.ok(
   'Links section still contains Asana',
 );
 
+assert.match(detailSrc, /moduleId === 'system-dev' \? \(/);
 assert.match(detailSrc, /ClientWebsiteSelectField/);
+assert.match(detailSrc, /MediaPublicationsField/);
 assert.match(detailSrc, /showOpenLink/);
 assert.match(detailSrc, /handleWebsiteChange/);
 assert.match(detailSrc, /webandsystemListId: webandsystemListId.trim\(\)/);

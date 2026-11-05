@@ -84,6 +84,40 @@ assert.deepEqual(actuals.q1, { income: 10000.25, expense: 2000, gp: 8000.25 });
 assert.deepEqual(actuals.q2, { income: 5000, expense: 9000, gp: -4000 });
 assert.equal(actuals.q3, undefined);
 assert.deepEqual(projectActualsFor('q3', actuals), { income: 0, expense: 0, gp: 0 });
+
+const withLabour = buildProjectActuals(
+  [
+    { quotation_client_project_id: 'q1', billed_amount: 8000 },
+    { quotation_client_project_id: 'q1', billed_amount: '2000.25' },
+    { quotation_client_project_id: 'q2', billed_amount: 5000 },
+  ],
+  [
+    { id: 'p1', related_id: 'q1' },
+    { id: 'p2', related_id: 'q2' },
+    { id: 'p3', related_id: 'q3' },
+  ],
+  [
+    { related_id: 'p1', billed_amount: 1500 },
+    { related_id: 'p1', billed_amount: 500 },
+    { related_id: 'p2', billed_amount: 9000 },
+  ],
+  [
+    { quotation_client_project_id: 'q1', hours: 2.5 },
+    { quotation_client_project_id: 'q2', hours: 0 },
+  ],
+);
+assert.deepEqual(withLabour.q1, { income: 10000.25, expense: 3250, gp: 6750.25 });
+assert.deepEqual(withLabour.q2, { income: 5000, expense: 9000, gp: -4000 });
+assert.equal(withLabour.q3, undefined);
+
+const labourOnly = buildProjectActuals(
+  [],
+  [{ id: 'p3', related_id: 'q3' }],
+  [],
+  [{ quotation_client_project_id: 'q3', hours: '2.5' }],
+);
+assert.deepEqual(labourOnly.q3, { income: 0, expense: 1250, gp: -1250 });
+assert.equal(labourOnly.q1, undefined);
 assert.deepEqual(projectActualsFor('missing', {}), { income: 0, expense: 0, gp: 0 });
 
 assert.equal(formatQuotationListMoney(249.6), '$249.60');

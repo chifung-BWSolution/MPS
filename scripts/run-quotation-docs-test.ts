@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  COMPLETION_PHOTO_DOC_TYPE_ID,
   QUOTATION_DOC_MAX_SIZE_BYTES,
   QUOTATION_DOC_TYPE_PRESETS,
   QUOTATION_DOC_TYPES_TABLE,
@@ -10,6 +11,8 @@ import {
   QUOTATION_DOCS_TABLE,
   QUOTATION_LIST_DOC_TYPE_IDS,
   SIGNED_QUOTATION_CONTRACT_DOC_TYPE_ID,
+  completionPhotoFileError,
+  isCompletionPhotoDoc,
   isQuotationListDocType,
   isSignedQuotationContractDocType,
   formatQuotationClientProjectOptionLabel,
@@ -97,6 +100,14 @@ assert.equal(isQuotationListDocType('d2b6c029-5850-43b5-80fd-5855b5c80699'), tru
 assert.equal(isQuotationListDocType('other'), false);
 assert.equal(isSignedQuotationContractDocType('577a9f77-008d-45b2-90da-40c467fdc3d5'), true);
 assert.equal(isSignedQuotationContractDocType('d2b6c029-5850-43b5-80fd-5855b5c80699'), false);
+assert.equal(COMPLETION_PHOTO_DOC_TYPE_ID, '932c07f2-abb7-47cf-ad48-e846ce13a6c7');
+assert.equal(isCompletionPhotoDoc(COMPLETION_PHOTO_DOC_TYPE_ID), true);
+assert.equal(isCompletionPhotoDoc('577a9f77-008d-45b2-90da-40c467fdc3d5'), false);
+assert.equal(completionPhotoFileError({ name: 'site.jpg', type: 'image/jpeg', size: 10 }), null);
+assert.match(
+  completionPhotoFileError({ name: 'quote.pdf', type: 'application/pdf', size: 10 }) ?? '',
+  /圖片/,
+);
 assert.equal(validateContractDates('2026-01-10', '2026-01-09'), '合約結束日期不可早於開始日期');
 assert.equal(validateContractDates('2026-01-10', '2026-01-11'), null);
 
@@ -179,6 +190,8 @@ assert.match(tab, /deleteDoc/);
 assert.match(tab, /DeleteConfirmModal/);
 assert.match(tab, /aria-label="篩選文件類型"/);
 assert.match(tab, /QuotationDocFormDialog/);
+assert.match(tab, /COMPLETION_PHOTO_DOC_TYPE_ID/);
+assert.match(tab, /isCompletionPhotoDoc/);
 assert.doesNotMatch(tab, /projectSelect/);
 assert.doesNotMatch(tab, /QUOTATION_DOC_TYPE_PRESETS/);
 assert.doesNotMatch(tab, /自行輸入/);
@@ -187,6 +200,23 @@ const pitching = read('src/components/quotation/PitchingModule.tsx');
 assert.match(pitching, /PitchingDocsTab/);
 assert.match(pitching, /id: 'docs', label: '項目文件'/);
 assert.match(pitching, /<PitchingDocsTab projectId=\{record\.id\} \/>/);
+assert.match(pitching, /CompletionPhotosSection/);
+assert.ok(
+  pitching.indexOf('<PitchingInfoMetricsRow') < pitching.indexOf('<CompletionPhotosSection'),
+);
+assert.match(pitching, /<CompletionPhotosSection projectId=\{record\.id\} \/>/);
+
+const photosSection = read('src/components/quotation/CompletionPhotosSection.tsx');
+assert.match(photosSection, /完工相片/);
+assert.match(photosSection, /COMPLETION_PHOTO_DOC_TYPE_ID/);
+assert.match(photosSection, /type="file"/);
+assert.match(photosSection, /multiple/);
+assert.match(photosSection, /Download/);
+assert.match(photosSection, /Maximize2/);
+assert.match(photosSection, /ExternalLink/);
+assert.match(photosSection, /deleteDoc/);
+assert.doesNotMatch(photosSection, /documentDate/);
+assert.doesNotMatch(photosSection, /expiryDate/);
 assert.doesNotMatch(pitching, /關聯報價單/);
 assert.doesNotMatch(pitching, /生成報價單/);
 assert.doesNotMatch(pitching, /onConvertToQuote/);
@@ -210,6 +240,7 @@ assert.doesNotMatch(list, /deleteDoc/);
 assert.doesNotMatch(list, /DeleteConfirmModal/);
 assert.doesNotMatch(list, /Trash2/);
 assert.match(list, /新增文件/);
+assert.match(list, /COMPLETION_PHOTO_DOC_TYPE_ID/);
 assert.match(list, /請選擇客戶項目/);
 
 const moduleSrc = read('src/components/quotation/QuotationModule.tsx');

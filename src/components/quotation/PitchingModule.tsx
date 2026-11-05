@@ -32,6 +32,7 @@ import { InvoiceEditor } from '@/components/quotation/InvoiceEditor';
 import { ReceiptEditor } from '@/components/quotation/ReceiptEditor';
 import { ClientFormModal } from '@/components/crm/ClientFormModal';
 import { ClientWebsiteSelectField } from '@/components/quotation/ClientWebsiteSelectField';
+import { MediaPublicationsField } from '@/components/quotation/MediaPublicationsField';
 import { CrudModal } from '@/components/ui/crud-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -76,6 +77,7 @@ import { PitchingStatusConversionModal } from '@/components/quotation/PitchingSt
 import { allowedStatusTargets, isAllowedStatusTransition, needsConversionPopup } from '@/lib/clientProjectStatus';
 import { QuotationBvCard } from '@/components/quotation/QuotationBvCard';
 import { PitchingInfoMetricsRow } from '@/components/quotation/PitchingInfoMetricsRow';
+import { CompletionPhotosSection } from '@/components/quotation/CompletionPhotosSection';
 import {
   QuotationClientProjectTableHeaders,
   QuotationListMoneyCells,
@@ -83,6 +85,12 @@ import {
 } from '@/components/quotation/QuotationListSortHeader';
 import { estimatedMoneyFor, QUOTATION_LIST_COLUMN_COUNT } from '@/lib/quotationListMoney';
 import { toExternalHref } from '@/lib/externalUrl';
+import {
+  mediaPublicationsEqual,
+  mediaPublicationsForWrite,
+  parseMediaPublications,
+  type MediaPublication,
+} from '@/lib/mediaPublications';
 import {
   SERVICE_PERIOD_FIELDS,
   parseServicePeriods,
@@ -1053,6 +1061,7 @@ type DetailDraft = {
   description: string;
   projectTypeId: string;
   webandsystemListId: string;
+  mediaPublications: MediaPublication[];
   asanaLink: string;
   status: PitchingStatus;
   estimatedIncome: number | undefined;
@@ -1074,6 +1083,7 @@ function draftFromRecord(record: PitchingRecord, clientOptions: ClientOption[]):
     description: record.description ?? '',
     projectTypeId: record.projectTypeId ?? '',
     webandsystemListId: record.webandsystemListId ?? '',
+    mediaPublications: parseMediaPublications(record.mediaPublications),
     asanaLink: record.asanaLink ?? '',
     status: record.status,
     estimatedIncome: record.estimatedIncome,
@@ -1165,6 +1175,20 @@ export function PitchingDetail({
     );
     if (!ok) {
       setDraft((prev) => ({ ...prev, webandsystemListId: record.webandsystemListId ?? '' }));
+    }
+  };
+
+  const handleMediaPublicationsChange = async (mediaPublications: MediaPublication[]) => {
+    const next = mediaPublicationsForWrite(mediaPublications);
+    const current = mediaPublicationsForWrite(record.mediaPublications ?? []);
+    if (mediaPublicationsEqual(next, current)) return;
+    setDraft((prev) => ({ ...prev, mediaPublications: next }));
+    const ok = await persist({ mediaPublications: next }, '媒體發佈已更新');
+    if (!ok) {
+      setDraft((prev) => ({
+        ...prev,
+        mediaPublications: parseMediaPublications(record.mediaPublications),
+      }));
     }
   };
 
@@ -1315,6 +1339,7 @@ export function PitchingDetail({
             estimatedIncome={record.estimatedIncome}
             estimatedExpenses={record.estimatedExpenses}
           />
+          <CompletionPhotosSection projectId={record.id} />
           <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
             <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6 space-y-5 min-w-0 overflow-hidden">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-w-0">
@@ -1358,18 +1383,26 @@ export function PitchingDetail({
                   </ReadOnlyField>
                   <ReadOnlyField label="負責 PM">{formatMainPmName(record)}</ReadOnlyField>
                   <div>
-                    <ClientWebsiteSelectField
-                      value={draft.webandsystemListId}
-                      onChange={(webandsystemListId) => void handleWebsiteChange(webandsystemListId)}
-                      clientId={draft.clientId}
-                      companyNameZh={clientCompany.companyNameZh}
-                      companyNameEn={clientCompany.companyNameEn}
-                      clientName={draft.clientName}
-                      displayName={draft.displayName}
-                      projectTypes={draft.projectTypeId}
-                      showOpenLink
-                      disabled={saving}
-                    />
+                    {moduleId === 'system-dev' ? (
+                      <ClientWebsiteSelectField
+                        value={draft.webandsystemListId}
+                        onChange={(webandsystemListId) => void handleWebsiteChange(webandsystemListId)}
+                        clientId={draft.clientId}
+                        companyNameZh={clientCompany.companyNameZh}
+                        companyNameEn={clientCompany.companyNameEn}
+                        clientName={draft.clientName}
+                        displayName={draft.displayName}
+                        projectTypes={draft.projectTypeId}
+                        showOpenLink
+                        disabled={saving}
+                      />
+                    ) : (
+                      <MediaPublicationsField
+                        value={draft.mediaPublications}
+                        onCommit={(mediaPublications) => void handleMediaPublicationsChange(mediaPublications)}
+                        disabled={saving}
+                      />
+                    )}
                     {saving && activeTab === 'info' && (
                       <p className="text-[11px] text-muted-foreground mt-1">儲存中…</p>
                     )}

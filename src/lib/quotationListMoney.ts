@@ -1,4 +1,5 @@
 import type { PitchingExpenseItem } from '../data/pitchingData';
+import { labourCost, roundHours, toHours } from './clientProjectLabour';
 import { formatMoneyAmount } from './formatMoney';
 
 export const QUOTATION_LIST_MONEY_COLUMN_COUNT = 3;
@@ -31,6 +32,11 @@ export type ProjectLinkRow = {
 export type ExpenseAmountRow = {
   related_id: string | null;
   billed_amount: number | string | null;
+};
+
+export type LabourHourAmountRow = {
+  quotation_client_project_id: string | null;
+  hours: number | string | null;
 };
 
 export function roundMoney(amount: number): number {
@@ -90,14 +96,28 @@ export function aggregateExpenseByRelatedId(rows: ExpenseAmountRow[]): Map<strin
   return totals;
 }
 
+function aggregateLabourHours(rows: LabourHourAmountRow[]): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const row of rows) {
+    const id = row.quotation_client_project_id?.trim();
+    if (!id) continue;
+    const hours = toHours(row.hours);
+    if (!hours) continue;
+    totals.set(id, roundHours((totals.get(id) ?? 0) + hours));
+  }
+  return totals;
+}
+
 export function buildProjectActuals(
   incomes: IncomeAmountRow[],
   projectLinks: ProjectLinkRow[],
   expenses: ExpenseAmountRow[],
+  labourHours: LabourHourAmountRow[] = [],
 ): Record<string, QuotationProjectActuals> {
   const incomeByProject = aggregateIncomeByProject(incomes);
   const expenseByMaster = aggregateExpenseByRelatedId(expenses);
   const expenseByQuotation = new Map<string, number>();
+  const labourByProject = aggregateLabourHours(labourHours);
 
   for (const link of projectLinks) {
     const quotationId = link.related_id?.trim();
@@ -110,10 +130,15 @@ export function buildProjectActuals(
     );
   }
 
+  const ids = new Set<string>([...incomeByProject.keys(), ...expenseByQuotation.keys()]);
+  for (const [id, hours] of labourByProject) {
+    if (hours > 0) ids.add(id);
+  }
+
   const result: Record<string, QuotationProjectActuals> = {};
-  for (const id of new Set([...incomeByProject.keys(), ...expenseByQuotation.keys()])) {
+  for (const id of ids) {
     const income = incomeByProject.get(id) ?? 0;
-    const expense = expenseByQuotation.get(id) ?? 0;
+    const expense = roundMoney((expenseByQuotation.get(id) ?? 0) + labourCost(labourByProject.get(id) ?? 0));
     result[id] = { income, expense, gp: computeGp(income, expense) };
   }
   return result;

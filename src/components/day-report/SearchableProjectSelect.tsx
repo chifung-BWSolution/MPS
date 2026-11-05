@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Search, X, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { AsanaCaseClosedFilter, AsanaImportFilter } from '@/lib/asanaPendingFilters';
 import {
+  asanaPitchingProjectFilters,
   filterProjectSelectItems,
   kindsInItems,
   projectSelectKindLabel,
@@ -12,6 +14,18 @@ import {
 } from '@/lib/searchableProjectSelect';
 
 export type { ProjectSelectItem };
+
+const ASANA_IMPORT_OPTIONS: { id: AsanaImportFilter; label: string }[] = [
+  { id: 'pending', label: '待匯入' },
+  { id: 'imported', label: '已匯入' },
+  { id: 'all', label: '全部匯入狀態' },
+];
+
+const ASANA_CASE_CLOSED_OPTIONS: { id: AsanaCaseClosedFilter; label: string }[] = [
+  { id: 'pending', label: '未取消' },
+  { id: 'closed', label: '已取消跟進' },
+  { id: 'all', label: '全部取消狀態' },
+];
 
 interface SearchableProjectSelectProps {
   items: ProjectSelectItem[];
@@ -37,11 +51,16 @@ export function SearchableProjectSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [kindFilter, setKindFilter] = useState<ProjectSelectKindFilter>('all');
+  const [asanaProjectFilter, setAsanaProjectFilter] = useState('all');
+  const [asanaImportFilter, setAsanaImportFilter] = useState<AsanaImportFilter>('pending');
+  const [asanaCaseClosedFilter, setAsanaCaseClosedFilter] = useState<AsanaCaseClosedFilter>('pending');
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const typeOptions = useMemo(() => kindsInItems(items), [items]);
   const showTypeFilters = typeOptions.length > 1;
+  const asanaProjectOptions = useMemo(() => asanaPitchingProjectFilters(items), [items]);
+  const showAsanaProjectFilters = kindFilter === 'asana_task' && asanaProjectOptions.length > 0;
 
   useEffect(() => {
     if (kindFilter !== 'all' && !typeOptions.includes(kindFilter)) {
@@ -49,10 +68,23 @@ export function SearchableProjectSelect({
     }
   }, [kindFilter, typeOptions]);
 
+  useEffect(() => {
+    if (kindFilter !== 'asana_task') {
+      setAsanaProjectFilter('all');
+      return;
+    }
+    if (asanaProjectFilter !== 'all' && !asanaProjectOptions.some((option) => option.id === asanaProjectFilter)) {
+      setAsanaProjectFilter('all');
+    }
+  }, [asanaProjectFilter, asanaProjectOptions, kindFilter]);
+
   const closeDropdown = useCallback(() => {
     setIsOpen(false);
     setSearchTerm('');
     setKindFilter('all');
+    setAsanaProjectFilter('all');
+    setAsanaImportFilter('pending');
+    setAsanaCaseClosedFilter('pending');
   }, []);
 
   useEffect(() => {
@@ -72,12 +104,12 @@ export function SearchableProjectSelect({
   }, [isOpen]);
 
   const scopedItems = useMemo(
-    () => filterProjectSelectItems(items, '', kindFilter),
-    [items, kindFilter],
+    () => filterProjectSelectItems(items, '', kindFilter, asanaProjectFilter, asanaImportFilter, asanaCaseClosedFilter),
+    [items, kindFilter, asanaProjectFilter, asanaImportFilter, asanaCaseClosedFilter],
   );
   const filteredItems = useMemo(
-    () => filterProjectSelectItems(items, searchTerm, kindFilter),
-    [items, searchTerm, kindFilter],
+    () => filterProjectSelectItems(items, searchTerm, kindFilter, asanaProjectFilter, asanaImportFilter, asanaCaseClosedFilter),
+    [items, searchTerm, kindFilter, asanaProjectFilter, asanaImportFilter, asanaCaseClosedFilter],
   );
 
   const selectedItem = items.find(item => item.id === value || (!!item.relatedId && item.relatedId === value));
@@ -92,6 +124,9 @@ export function SearchableProjectSelect({
     onChange('', '');
     setSearchTerm('');
     setKindFilter('all');
+    setAsanaProjectFilter('all');
+    setAsanaImportFilter('pending');
+    setAsanaCaseClosedFilter('pending');
   }, [onChange]);
 
   if (disabled) {
@@ -164,7 +199,10 @@ export function SearchableProjectSelect({
                     key={type}
                     type="button"
                     aria-pressed={kindFilter === type}
-                    onClick={() => setKindFilter(type)}
+                    onClick={() => {
+                      setKindFilter(type);
+                      setAsanaProjectFilter('all');
+                    }}
                     className={cn(
                       'px-2 py-0.5 rounded text-[10px] font-medium transition-colors',
                       kindFilter === type
@@ -173,6 +211,69 @@ export function SearchableProjectSelect({
                     )}
                   >
                     {projectSelectKindLabel(type)}
+                  </button>
+                ))}
+              </div>
+            )}
+            {showAsanaProjectFilters && (
+              <div
+                className="mt-1.5 flex flex-wrap gap-1"
+                onMouseDown={(event) => event.preventDefault()}
+              >
+                {[{ id: 'all', name: '全部' }, ...asanaProjectOptions].map((project) => (
+                  <button
+                    key={project.id}
+                    type="button"
+                    aria-pressed={asanaProjectFilter === project.id}
+                    onClick={() => setAsanaProjectFilter(project.id)}
+                    className={cn(
+                      'px-2 py-0.5 rounded text-[10px] font-medium transition-colors',
+                      asanaProjectFilter === project.id
+                        ? 'bg-orange-600 text-white'
+                        : 'bg-orange-50 text-orange-700 hover:bg-orange-100',
+                    )}
+                  >
+                    {project.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            {kindFilter === 'asana_task' && (
+              <div
+                className="mt-1.5 flex flex-wrap gap-1"
+                onMouseDown={(event) => event.preventDefault()}
+              >
+                {ASANA_IMPORT_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    aria-pressed={asanaImportFilter === option.id}
+                    onClick={() => setAsanaImportFilter(option.id)}
+                    className={cn(
+                      'px-2 py-0.5 rounded text-[10px] font-medium transition-colors',
+                      asanaImportFilter === option.id
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80',
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+                <span className="mx-0.5 w-px self-stretch bg-border/80" />
+                {ASANA_CASE_CLOSED_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    aria-pressed={asanaCaseClosedFilter === option.id}
+                    onClick={() => setAsanaCaseClosedFilter(option.id)}
+                    className={cn(
+                      'px-2 py-0.5 rounded text-[10px] font-medium transition-colors',
+                      asanaCaseClosedFilter === option.id
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80',
+                    )}
+                  >
+                    {option.label}
                   </button>
                 ))}
               </div>

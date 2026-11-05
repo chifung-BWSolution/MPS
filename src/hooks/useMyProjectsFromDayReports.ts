@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { resolveStaffUuid } from '@/services/reportLinkService';
 import { relatedTypeLabels, type ProjectRelatedType } from '@/hooks/useProjects';
+import { isAsanaTaskGid } from '@/lib/asanaDayReportLink';
 
 const CHUNK_SIZE = 200;
 const RECENT_DAYS = 30;
@@ -218,6 +219,24 @@ export function useMyProjectsFromDayReports() {
         }
       }
 
+      const missingAsanaGids = relatedIds.filter((id) => !projectById.has(id) && isAsanaTaskGid(id));
+      const asanaTaskGids = new Set<string>();
+      for (const chunk of chunkIds(missingAsanaGids)) {
+        const { data: asanaRows, error: asanaErr } = await supabase
+          .from('asana_synced_tasks')
+          .select('asana_task_gid')
+          .in('asana_task_gid', chunk);
+        if (cancelled) return;
+        if (asanaErr) {
+          console.warn('[useMyProjectsFromDayReports] asana lookup failed:', asanaErr.message);
+          break;
+        }
+        for (const row of (asanaRows || []) as { asana_task_gid?: string | null }[]) {
+          const gid = (row.asana_task_gid || '').trim();
+          if (gid) asanaTaskGids.add(gid);
+        }
+      }
+
       if (cancelled) return;
 
       const rows: MyProjectRow[] = relatedIds.map((id) => {
@@ -233,7 +252,7 @@ export function useMyProjectsFromDayReports() {
           relatedType,
           relatedTypeLabel:
             relatedType === 'unknown'
-              ? '其他'
+              ? (asanaTaskGids.has(id) ? 'Asana 項目' : '其他')
               : relatedTypeLabels[relatedType as ProjectRelatedType],
           clientName: master?.client_name ?? undefined,
           companyListId: master?.company_list_id ?? undefined,

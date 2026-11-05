@@ -120,6 +120,9 @@ assert.doesNotMatch(pending, /PitchingDealFilterSelect/);
 assert.doesNotMatch(pending, /PitchingStatusFilterSelect/);
 assert.doesNotMatch(pending, /dealFilter/);
 assert.match(pending, /value="closed"/);
+assert.match(pending, /全部 Asana 專案/);
+assert.match(pending, /sectionSources\.map/);
+assert.match(pending, /task\.asanaProjectGid !== asanaProjectFilter/);
 assert.match(pending, /colSpan=\{8\}/);
 assert.doesNotMatch(pending, />\s*狀態\s*</);
 

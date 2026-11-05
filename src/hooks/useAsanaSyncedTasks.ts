@@ -53,7 +53,9 @@ function mapStatus(value: string): PitchingStatus {
 }
 
 export type AsanaSyncSource = {
+  projectGid: string;
   projectName: string;
+  projectTypes: string[];
   syncYearFrom: number | null;
   syncDateMode: string | null;
 };
@@ -82,7 +84,7 @@ export function useAsanaSyncedTasks() {
         .or('asana_link.not.is.null,asana_task_gid.not.is.null'),
       supabase
         .from('asana_pitching_projects')
-        .select('project_name, sync_year_from, sync_date_mode')
+        .select('project_gid, project_name, project_types, sync_year_from, sync_date_mode')
         .eq('enabled', true)
         .order('project_name', { ascending: true }),
     ]);
@@ -124,10 +126,14 @@ export function useAsanaSyncedTasks() {
     setTasks(mapped);
     setSyncSources(
       (sourcesRes.data || []).map((row) => ({
+        projectGid: (row.project_gid || '').trim(),
         projectName: (row.project_name || '').trim(),
+        projectTypes: Array.isArray(row.project_types)
+          ? row.project_types.map((type) => String(type).trim()).filter(Boolean)
+          : [],
         syncYearFrom: typeof row.sync_year_from === 'number' ? row.sync_year_from : null,
         syncDateMode: typeof row.sync_date_mode === 'string' ? row.sync_date_mode : null,
-      })).filter((row) => row.projectName),
+      })).filter((row) => row.projectGid),
     );
     const latest = mapped.map((t) => t.syncedAt).filter(Boolean).sort().pop();
     setLastSyncedAt(latest ?? null);

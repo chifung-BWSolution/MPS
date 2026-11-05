@@ -9,6 +9,7 @@ import {
 } from '../src/lib/quotationProjectNavigation';
 import {
   allowedProjectTypesForSection,
+  asanaProjectTypesMatchSection,
   filterBySectionProjectTypes,
   isQuotationSectionModule,
   MARKET_PROJECT_TYPES,
@@ -45,6 +46,17 @@ assert.equal(matchesSectionProjectTypes(['bwt_web'], SYSTEM_DEV_PROJECT_TYPES), 
 assert.equal(matchesSectionProjectTypes(['bwt_system'], SYSTEM_DEV_PROJECT_TYPES), true);
 assert.equal(matchesSectionProjectTypes(['bwl_event'], SYSTEM_DEV_PROJECT_TYPES), false);
 assert.equal(matchesSectionProjectTypes(['bwg_gift'], SYSTEM_DEV_PROJECT_TYPES), false);
+
+assert.equal(asanaProjectTypesMatchSection(['bwt_web', 'bwt_system'], SYSTEM_DEV_PROJECT_TYPES), true);
+assert.equal(asanaProjectTypesMatchSection(['bwt_web', 'bwt_system'], MARKET_PROJECT_TYPES), false);
+assert.equal(asanaProjectTypesMatchSection(['bwl_event'], MARKET_PROJECT_TYPES), true);
+assert.equal(asanaProjectTypesMatchSection(['bwg_gift'], MARKET_PROJECT_TYPES), true);
+assert.equal(asanaProjectTypesMatchSection(['bwl_event'], SYSTEM_DEV_PROJECT_TYPES), false);
+assert.equal(asanaProjectTypesMatchSection(['bwg_gift'], SYSTEM_DEV_PROJECT_TYPES), false);
+assert.equal(asanaProjectTypesMatchSection(['bwl_event', 'bwt_web'], MARKET_PROJECT_TYPES), true);
+assert.equal(asanaProjectTypesMatchSection(['bwl_event', 'bwt_web'], SYSTEM_DEV_PROJECT_TYPES), true);
+assert.equal(asanaProjectTypesMatchSection([], MARKET_PROJECT_TYPES), false);
+assert.equal(asanaProjectTypesMatchSection(null, SYSTEM_DEV_PROJECT_TYPES), false);
 
 const rows = [
   { id: '1', projectTypes: ['bwl_event'] as const },

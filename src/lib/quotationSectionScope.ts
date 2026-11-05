@@ -48,3 +48,17 @@ export function filterBySectionProjectTypes<T extends { projectTypes?: readonly 
     matchesSectionProjectTypes(record.projectTypeId || record.projectTypes, allowed),
   );
 }
+
+/**
+ * Asana 待匯入 uses the Asana project's configured types, not the task name.
+ * A project with no configured type is left off both sections.
+ */
+export function asanaProjectTypesMatchSection(
+  projectTypes: readonly string[] | null | undefined,
+  allowed: readonly string[],
+): boolean {
+  const types = (projectTypes ?? []).map((item) => String(item).trim()).filter(Boolean);
+  if (types.length === 0) return false;
+  const allowedSet = new Set<string>(allowed);
+  return types.some((type) => allowedSet.has(type));
+}

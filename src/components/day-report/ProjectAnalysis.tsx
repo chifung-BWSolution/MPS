@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import {
-  AlertTriangle, Briefcase, Calendar, ChevronLeft, ChevronRight, Globe, Loader2,
+  AlertTriangle, Briefcase, Calendar, ChevronLeft, ChevronRight, Globe, ListTodo, Loader2,
   Monitor, Pencil, RefreshCw, Video,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -157,6 +157,7 @@ const KIND_BADGE_CLASS: Record<ReportProjectKind, string> = {
   website: 'bg-sky-50 text-sky-700',
   quotation_client: 'bg-amber-50 text-amber-700',
   vchannel: 'bg-purple-50 text-purple-700',
+  asana_task: 'bg-orange-50 text-orange-700',
   manual: 'bg-slate-100 text-slate-600',
   orphan: 'bg-rose-50 text-rose-700',
 };
@@ -167,6 +168,7 @@ function KindIcon({ kind }: { kind: ReportProjectKind }) {
   if (kind === 'website') return <Globe {...props} />;
   if (kind === 'quotation_client') return <Briefcase {...props} />;
   if (kind === 'vchannel') return <Video {...props} />;
+  if (kind === 'asana_task') return <ListTodo {...props} />;
   if (kind === 'manual') return <Pencil {...props} />;
   return <AlertTriangle {...props} />;
 }
@@ -224,6 +226,7 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
   const [typeFilter, setTypeFilter] = useState<ProfileTypeFilter>('all');
   const [anchorDate, setAnchorDate] = useState(() => new Date());
   const [profiles, setProfiles] = useState<ProjectProfileLite[]>([]);
+  const [asanaTaskGids, setAsanaTaskGids] = useState<Set<string>>(() => new Set());
   const [entries, setEntries] = useState<EntryRow[]>([]);
   const [staffNameById, setStaffNameById] = useState<Record<string, string>>({});
   const [departmentByStaffId, setDepartmentByStaffId] = useState<Record<string, string>>({});
@@ -237,7 +240,7 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
 
   const fetchData = useCallback(async () => {
     try {
-      const [{ data: projectData }, { data: reportData }] = await Promise.all([
+      const [{ data: projectData }, { data: reportData }, { data: asanaData }] = await Promise.all([
         supabase
           .from('projects')
           .select('id, name, related_type, meta')
@@ -247,6 +250,9 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
           .select('id')
           .gte('report_date', dateRange.start)
           .lte('report_date', dateRange.end),
+        supabase
+          .from('asana_synced_tasks')
+          .select('asana_task_gid'),
       ]);
 
       const mappedProfiles: ProjectProfileLite[] = ((projectData || []) as any[]).map((p) => {
@@ -260,6 +266,11 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
         };
       });
       setProfiles(mappedProfiles);
+      setAsanaTaskGids(new Set(
+        ((asanaData || []) as { asana_task_gid?: string | null }[])
+          .map((row) => (row.asana_task_gid || '').trim())
+          .filter((gid) => /^\d{6,}$/.test(gid)),
+      ));
 
       let entryData: EntryRow[] = [];
       if (reportData && reportData.length > 0) {
@@ -309,17 +320,24 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
     return map;
   }, [profiles]);
 
+  const kindSourceFor = useCallback((projectId: string) => {
+    const profile = profileById.get(projectId);
+    if (profile) {
+      return { relatedType: profile.related_type, profileType: profile.profile_type };
+    }
+    if (asanaTaskGids.has(projectId)) return { relatedType: 'asana_task' };
+    return null;
+  }, [asanaTaskGids, profileById]);
+
   const resolveProjectMeta = useCallback((projectId: string, relatedName: string | null | undefined) => {
     const profile = profileById.get(projectId);
-    const kind = reportProjectKind(profile
-      ? { relatedType: profile.related_type, profileType: profile.profile_type }
-      : null);
+    const kind = reportProjectKind(kindSourceFor(projectId));
     return {
       name: profile?.name || relatedName || projectId,
       kind,
       domainUrl: profile?.domain_url ?? null,
     };
-  }, [profileById]);
+  }, [kindSourceFor, profileById]);
 
   const filteredEntries = useMemo(() => {
     return entries.filter((e) => {
@@ -328,13 +346,10 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
       const hours = Number(e.hours) || 0;
       if (hours <= 0) return false;
       if (typeFilter === 'all') return true;
-      const profile = profileById.get(projectId);
-      const kind = reportProjectKind(profile
-        ? { relatedType: profile.related_type, profileType: profile.profile_type }
-        : null);
+      const kind = reportProjectKind(kindSourceFor(projectId));
       return kind === typeFilter;
     });
-  }, [entries, profileById, typeFilter]);
+  }, [entries, kindSourceFor, typeFilter]);
 
   const projectStats = useMemo((): ProjectStat[] => {
     const projectStaff = new Map<string, Map<string, number>>();
@@ -487,8 +502,8 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
           </h1>
           <p className="text-[13px] text-muted-foreground mt-0.5">
             {mode === 'team'
-              ? '按項目統計人員投入工時與占比 — 可篩選系統、網站、客戶項目、影片頻道、自訂或異常，支援按天／週／月。'
-              : '按個人統計參與項目的工時與占比 — 依部門分組，可篩選系統、網站、客戶項目、影片頻道、自訂或異常。'}
+              ? '按項目統計人員投入工時與占比 — 可篩選系統、網站、客戶項目、影片頻道、Asana 項目、自訂或異常，支援按天／週／月。'
+              : '按個人統計參與項目的工時與占比 — 依部門分組，可篩選系統、網站、客戶項目、影片頻道、Asana 項目、自訂或異常。'}
           </p>
         </div>
 

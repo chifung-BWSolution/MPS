@@ -4,6 +4,7 @@ import {
   FileText, Zap, Bot, Trash2, RefreshCw, MapPin, CalendarDays, Loader2, Upload, Pencil,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { Calendar as DayPickerCalendar } from '@/components/ui/calendar';
@@ -35,6 +36,8 @@ import { SearchableProjectSelect } from '@/components/day-report/SearchableProje
 import { useDayReportTypes } from '@/hooks/useDayReportTypes';
 import { useCategoryLookup } from '@/hooks/useCategoryLookup';
 import { toProjectSelectItem, useProjects } from '@/hooks/useProjects';
+import { usePendingAsanaProjectSelectItems } from '@/hooks/usePendingAsanaProjectSelectItems';
+import { resolveImportedAsanaDayReportTarget } from '@/lib/resolveAsanaDayReportTarget';
 import type { ProjectSelectItem } from '@/lib/searchableProjectSelect';
 import { usePendingReportItems } from '@/hooks/usePendingReportItems';
 import {
@@ -223,6 +226,7 @@ const QUICK_TEMPLATES = [
 
 export function SubmitReportPage() {
   const { projects: masterProjects } = useProjects({ activeOnly: true });
+  const pendingAsanaItems = usePendingAsanaProjectSelectItems();
   const { types: dynamicTypes } = useDayReportTypes();
   const categoryLookup = useCategoryLookup();
   const { systemUser } = useAuth();
@@ -315,11 +319,13 @@ export function SubmitReportPage() {
   const getRelatedItems = useCallback((rule: { mode: LinkMode; types: LinkProjectType[] }): ProjectSelectItem[] => {
     if (rule.mode === 'none' || rule.types.length === 0) return [];
     const allowed = new Set<string>(rule.types);
-    return masterProjects
+    const projects = masterProjects
       .filter(p => allowed.has(p.relatedType))
       .map(toProjectSelectItem)
       .filter((item): item is ProjectSelectItem => item != null);
-  }, [masterProjects]);
+    if (!allowed.has('asana_task')) return projects;
+    return [...projects, ...pendingAsanaItems];
+  }, [masterProjects, pendingAsanaItems]);
 
   const applyHoursPreset = useCallback((preset: HoursPreset, officeLoc: OfficeLocation = office) => {
     setHoursPreset(preset);
@@ -1028,13 +1034,20 @@ export function SubmitReportPage() {
     setIsSavingTask(true);
     setFormError(null);
     try {
+      const resolved = await resolveImportedAsanaDayReportTarget(form.relatedId, form.relatedName);
+      if (resolved.retargeted) {
+        toast.info('此 Asana 項目已成為客戶項目，工時將記入該客戶項目');
+      }
+      const entryForSave = resolved.retargeted
+        ? { ...form, relatedId: resolved.relatedId, relatedName: resolved.relatedName }
+        : form;
       const uploaded = await uploadFormImages(existingReportId);
       const allImages = [...form.outcomeImages, ...uploaded];
       if (editingEntryId) {
         const current = savedEntries.find(e => e.id === editingEntryId);
         const { error } = await supabase
           .from('day_report_entries')
-          .update(buildEntryPayload(form, allImages, current?.sortOrder ?? 0))
+          .update(buildEntryPayload(entryForSave, allImages, current?.sortOrder ?? 0))
           .eq('id', editingEntryId)
           .eq('day_report_id', existingReportId);
         if (error) throw new Error(error.message);
@@ -1045,7 +1058,7 @@ export function SubmitReportPage() {
           .insert({
             day_report_id: existingReportId,
             staff_id: currentStaffId,
-            ...buildEntryPayload(form, allImages, nextOrder),
+            ...buildEntryPayload(entryForSave, allImages, nextOrder),
           });
         if (error) throw new Error(error.message);
       }

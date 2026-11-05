@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils';
 import type { PitchingExpenseItem } from '@/data/pitchingData';
 import { useQuotationExpenses } from '@/hooks/useQuotationExpenses';
 import { useQuotationIncomes } from '@/hooks/useQuotationIncomes';
+import { useClientProjectLabourHours } from '@/hooks/useQuotationProjectActuals';
+import { LABOUR_COST_LABEL } from '@/lib/clientProjectLabour';
 import { summarizeIncomes } from '@/lib/quotationIncomes';
 import {
   buildCostAnalysis,
@@ -149,19 +151,28 @@ export function PitchingCostAnalysisTab({
     loading: expensesLoading,
     error: expensesError,
   } = useQuotationExpenses('quotation_client', projectId);
+  const {
+    cost: labourCostAmount,
+    loading: labourLoading,
+    error: labourError,
+  } = useClientProjectLabourHours(projectId);
 
   const analysis = useMemo(() => {
     const incomeSummary = summarizeIncomes(incomeRows);
+    const actualExpenses = expenseRows.map((row) => ({ name: row.typeLabel, amount: row.billedAmount }));
+    if (labourCostAmount > 0) {
+      actualExpenses.push({ name: LABOUR_COST_LABEL, amount: labourCostAmount });
+    }
     return buildCostAnalysis({
       estimatedIncome,
       estimatedExpenses,
       actualIncome: incomeSummary.billed,
-      actualExpenses: expenseRows.map((row) => ({ name: row.typeLabel, amount: row.billedAmount })),
+      actualExpenses,
       estimatedExpenseCount: estimatedExpenses.length,
       actualExpenseCount: expenseRows.length,
       actualIncomeCount: incomeRows.length,
     });
-  }, [estimatedExpenses, estimatedIncome, expenseRows, incomeRows]);
+  }, [estimatedExpenses, estimatedIncome, expenseRows, incomeRows, labourCostAmount]);
 
   const colorByLabel = useMemo(
     () =>
@@ -181,8 +192,8 @@ export function PitchingCostAnalysisTab({
     [analysis.actualCosts, analysis.actualIncome, colorByLabel],
   );
 
-  const loading = incomesLoading || expensesLoading;
-  const error = incomesError || expensesError;
+  const loading = incomesLoading || expensesLoading || labourLoading;
+  const error = incomesError || expensesError || labourError;
 
   if (loading) {
     return (

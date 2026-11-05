@@ -4,20 +4,20 @@ import { QUERY_CACHE_KEYS, cachedQuery, invalidateCachedQuery, isAbortError, pee
 import type { WorkCategoryConfig, LinkMode, LinkProjectType } from '@/components/day-report/WorkCategoriesManager';
 import { categoryConfig } from '@/data/dayReportDataV2';
 
-const ALL_LINK_TYPES: LinkProjectType[] = ['webandsystem', 'quotation_client', 'vchannel'];
+const ALL_LINK_TYPES: LinkProjectType[] = ['webandsystem', 'quotation_client', 'vchannel', 'asana_task'];
 
 const defaultRules: Record<string, { mode: LinkMode; types: LinkProjectType[] }> = {
-  website_design: { mode: 'required', types: ['webandsystem'] },
-  website_dev: { mode: 'required', types: ['webandsystem'] },
-  article_writing: { mode: 'required', types: ['webandsystem'] },
-  video_shooting: { mode: 'required', types: ['vchannel'] },
-  video_editing: { mode: 'required', types: ['vchannel'] },
-  social_media: { mode: 'required', types: ['vchannel'] },
-  edm: { mode: 'required', types: ['webandsystem'] },
-  paid_ads: { mode: 'required', types: ['webandsystem'] },
-  seo: { mode: 'required', types: ['webandsystem'] },
-  graphic_design: { mode: 'required', types: ['webandsystem'] },
-  client_meeting: { mode: 'required', types: ['quotation_client'] },
+  website_design: { mode: 'required', types: ['webandsystem', 'asana_task'] },
+  website_dev: { mode: 'required', types: ['webandsystem', 'asana_task'] },
+  article_writing: { mode: 'required', types: ['webandsystem', 'asana_task'] },
+  video_shooting: { mode: 'required', types: ['vchannel', 'asana_task'] },
+  video_editing: { mode: 'required', types: ['vchannel', 'asana_task'] },
+  social_media: { mode: 'required', types: ['vchannel', 'asana_task'] },
+  edm: { mode: 'required', types: ['webandsystem', 'asana_task'] },
+  paid_ads: { mode: 'required', types: ['webandsystem', 'asana_task'] },
+  seo: { mode: 'required', types: ['webandsystem', 'asana_task'] },
+  graphic_design: { mode: 'required', types: ['webandsystem', 'asana_task'] },
+  client_meeting: { mode: 'required', types: ['quotation_client', 'asana_task'] },
   internal_meeting: { mode: 'optional', types: [...ALL_LINK_TYPES] },
   training: { mode: 'none', types: [] },
 };

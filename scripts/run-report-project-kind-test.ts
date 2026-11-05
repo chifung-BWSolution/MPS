@@ -22,6 +22,7 @@ assert.equal(
 );
 assert.equal(reportProjectKind({ relatedType: 'vchannel' }), 'vchannel');
 assert.equal(reportProjectKind({ relatedType: 'manual' }), 'manual');
+assert.equal(reportProjectKind({ relatedType: 'asana_task' }), 'asana_task');
 assert.equal(reportProjectKind({ relatedType: 'something_else' }), 'orphan');
 
 console.log('report project kind ok');

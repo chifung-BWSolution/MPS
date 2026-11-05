@@ -56,8 +56,12 @@ supabase secrets set ASANA_STATUS_FIELD_NAME=狀態
 僅同步 `asana_pitching_projects.enabled = true` 的 boards。現行常見設定：
 
 - `1208704092427502` — BWT Active 1 開始緊密跟進中
+- `1208704092427508` — BWT Active 2 真客 Pitching Proposal（建立日 2026 起）
+- `1208704092427578` — BWT Active 2A 重大項目投標 Key Pitching（建立日 2026 起）
 - `1208704092427590` — BWT Active 3 已成交+開工 DONE Deal（`sync_default_status = confirmed`）
 - `1201898424971757` — BWL Active 1 準備報價單（區塊含 Quote Stage）
+- `1210778431910916` — BWL Active 2 真客 緊密互動 Design Pitching（建立日 2026 起）
+- `1211379536259396` — BWL Active 2A Website 高機會投標 Pitching（建立日 2026 起，固定 `bwl_event`）
 
 ~~`1209549009281325`~~ — 舊 seed 錯誤（實為 BWA Video V12，已停用）
 

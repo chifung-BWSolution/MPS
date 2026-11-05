@@ -21,6 +21,7 @@ import { WorkCategoriesManager } from '@/components/day-report/WorkCategoriesMan
 import { SubmitReportPage } from '@/components/day-report/SubmitReportPage';
 import { TeamDashboard } from '@/components/day-report/TeamDashboard';
 import { ProjectAnalysis } from '@/components/day-report/ProjectAnalysis';
+import { PersonalWorkLog } from '@/components/day-report/PersonalWorkLog';
 import { useCategoryLookup } from '@/hooks/useCategoryLookup';
 import {
   isPlaceholderStaff,
@@ -1125,9 +1126,10 @@ export function DayReportModule({ subModule }: { subModule?: string }) {
       case 'calendar': return { title: '工作日曆', subtitle: '以日曆視圖查看歷史工作記錄，13種工作類型顏色標記。' };
       case 'team-view': return { title: '匯報統計', subtitle: '工作檢查查看填寫情況 · 工時分析統計類別工時與占比。' };
       case 'monthly': return { title: '月度報告', subtitle: '本月工時排名、AI 使用統計及類別分佈分析。' };
-      case 'analytics': return { title: '項目分析', subtitle: '按項目統計人員投入工時與占比 — 可篩選系統、網站、客戶項目、影片頻道、自訂或異常，支援按天／週／月。' };
-      case 'work-report': return { title: '工作報表', subtitle: '按個人統計參與項目的工時與占比 — 依部門分組，可篩選系統、網站、客戶項目、影片頻道、自訂或異常。' };
-      case 'work-categories': return { title: '工作類型管理', subtitle: '管理匯報工作類別的關聯規則 — 必填、選填或不關聯，並可多選網站或系統、客戶項目、影片頻道。' };
+      case 'analytics': return { title: '項目分析', subtitle: '按項目統計人員投入工時與占比 — 可篩選系統、網站、客戶項目、影片頻道、Asana 項目、自訂或異常，支援按天／週／月。' };
+      case 'work-report': return { title: '工作報表', subtitle: '按個人統計參與項目的工時與占比 — 依部門分組，可篩選系統、網站、客戶項目、影片頻道、Asana 項目、自訂或異常。' };
+      case 'personal-work-log': return { title: '個人工作記錄', subtitle: '按人員列出每筆匯報的日期、項目、工作內容與工時，並顯示每人合計工時。可篩選系統、網站、客戶項目、影片頻道、Asana 項目、自訂或異常。' };
+      case 'work-categories': return { title: '工作類型管理', subtitle: '管理匯報工作類別的關聯規則 — 必填、選填或不關聯，並可多選網站或系統、客戶項目、影片頻道、Asana 項目。' };
       default: return { title: '提交匯報', subtitle: '支援香港/深圳雙辦公室 · 本週與上週匯報總覽 · 常用項目快速填入 · 週六加班匯報 · 多日假期申報 · AI 追蹤 · 8h驗證。' };
     }
   };
@@ -1143,13 +1145,14 @@ export function DayReportModule({ subModule }: { subModule?: string }) {
       case 'team-view': return <TeamDashboard />;
       case 'analytics': return <ProjectAnalysis mode="team" />;
       case 'work-report': return <ProjectAnalysis mode="personal" />;
+      case 'personal-work-log': return <PersonalWorkLog />;
       case 'work-categories': return <WorkCategoriesManager />;
       default: return <SubmitReportPage />;
     }
   };
 
-  // team-view / analytics / work-report 自行渲染 sticky 標題列，避免重複
-  if (subModule === 'team-view' || subModule === 'analytics' || subModule === 'work-report') {
+  // team-view / analytics / work-report / personal-work-log 自行渲染 sticky 標題列，避免重複
+  if (subModule === 'team-view' || subModule === 'analytics' || subModule === 'work-report' || subModule === 'personal-work-log') {
     return renderContent();
   }
 

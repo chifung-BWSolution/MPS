@@ -10,6 +10,9 @@ export const QUOTATION_DOC_TYPE_PRESETS = ['報價單', '項目合約', '參考�
 /** 已簽署報價單/合約 — shows contract start/end date pickers on the docs dialog. */
 export const SIGNED_QUOTATION_CONTRACT_DOC_TYPE_ID = '577a9f77-008d-45b2-90da-40c467fdc3d5';
 
+/** 完工相片 on the client project basic-info tab. Dates are not collected. */
+export const COMPLETION_PHOTO_DOC_TYPE_ID = '932c07f2-abb7-47cf-ad48-e846ce13a6c7';
+
 /** Doc types shown on /#quotation/list (報價單 / 已簽署報價單/合約). */
 export const QUOTATION_LIST_DOC_TYPE_IDS = [
   SIGNED_QUOTATION_CONTRACT_DOC_TYPE_ID,
@@ -279,4 +282,14 @@ export function signedContractProjectDates(draft: {
 export function isImageDoc(mimeType: string | undefined, fileName: string): boolean {
   if (mimeType?.startsWith('image/')) return true;
   return ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'].includes(fileExtension(fileName));
+}
+
+export function isCompletionPhotoDoc(docTypeId: string | null | undefined): boolean {
+  return docTypeId === COMPLETION_PHOTO_DOC_TYPE_ID;
+}
+
+/** Images only. Completion photos do not use document or expiry dates. */
+export function completionPhotoFileError(file: Pick<File, 'name' | 'type' | 'size'>): string | null {
+  if (!isImageDoc(file.type, file.name)) return '請上傳圖片（JPG、PNG、WebP、GIF）';
+  return isAllowedQuotationDocFile(file);
 }

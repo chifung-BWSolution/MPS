@@ -408,6 +408,8 @@ export function ProjectSourceDialog({
     );
   }
 
+  if (kind === 'asana_task') return null;
+
   if (kind === 'quotation_client') {
     if (mode === 'edit' && !editingRecord) {
       return (
