@@ -35,6 +35,7 @@ assert.match(app, /label: '會計財務'/);
 const financeMenu = app.match(/id: 'finance',[\s\S]*?subMenus: \[([\s\S]*?)\],\s*\},/);
 assert.ok(financeMenu);
 assert.match(financeMenu[1], /^\s*\{\s*id: 'bv-allocation',\s*label: 'BV 分配' \}/);
+assert.match(financeMenu[1], /id: 'annual-fees',\s*label: '年度收費'\s*\},?\s*$/);
 
 const finance = read('src/components/finance/FinanceModule.tsx');
 assert.match(finance, /BvAllocationPage/);
@@ -42,6 +43,7 @@ assert.match(finance, /case 'bv-allocation'/);
 
 const page = read('src/components/finance/BvAllocationPage.tsx');
 assert.match(page, /useFinanceBvAllocation/);
+assert.match(page, /FinanceProjectTypeFilter/);
 assert.match(page, /BV 分配/);
 assert.match(page, /quotation_bv/);
 assert.match(page, /Ratio = 100%/);
@@ -247,6 +249,13 @@ assert.deepEqual(filterBvAllocations(groups, { staffId: 's-ada' }).map((row) => 
   'p-complete',
   'p-under',
 ]);
+assert.deepEqual(
+  filterBvAllocations(
+    groups.map((group, index) => ({ ...group, projectTypeKey: index === 0 ? 'bwl_event' : 'bwt_web' })),
+    { projectType: 'bwl_event' },
+  ).map((row) => row.projectId),
+  [groups[0].projectId],
+);
 
 const stats = summarizeBvAllocations(groups);
 assert.equal(stats.total, 4);

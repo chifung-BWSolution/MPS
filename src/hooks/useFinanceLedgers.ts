@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { formatCreditCardOptionLabel } from '@/lib/creditCards';
+import {
+  financeProjectTypeFromRef,
+  financeProjectTypeKeyFromType,
+  indexFinanceProjectTypes,
+  pickFinanceProjectType,
+  resolveFinanceProjectTypeKey,
+  type FinanceProjectTypeKey,
+} from '@/lib/financeProjectType';
 import { EXPENSES_TABLE } from '@/lib/quotationExpenses';
 import { INCOMES_TABLE, optionalIsoDate } from '@/lib/quotationIncomes';
 import { PROJECTS_TABLE } from '@/lib/projectsHub';
+import { QUOTATION_PROJECT_TYPES_TABLE } from '@/lib/quotationProjectTypes';
 import { QUOTATION_CLIENT_PROJECT_TABLE } from '@/lib/resolveProjectHub';
 import { parseSystemCurrency } from '@/lib/currency';
 import { isAbortError } from '@/lib/queryCache';
@@ -63,12 +72,30 @@ type QcpDbRow = {
   display_name: string | null;
   client_name: string | null;
   status: string | null;
+  project_types: string | null;
+};
+
+type WebsiteDbRow = {
+  id: string;
+  website_name: string | null;
+  profile_type: string | null;
+};
+
+type ProjectTypeDbRow = {
+  id: string;
+  code: string;
+  display: string;
+};
+
+type WebsiteProjectTypeRow = {
+  webandsystem_list_id: string | null;
+  project_types: string | null;
 };
 
 type LookupMaps = {
   projects: Map<string, ProjectDbRow>;
-  qcps: Map<string, { displayName: string; clientName: string; status?: string }>;
-  websites: Map<string, string>;
+  qcps: Map<string, { displayName: string; clientName: string; status?: string; projectTypeKey?: FinanceProjectTypeKey }>;
+  websites: Map<string, { name: string; projectTypeKey?: FinanceProjectTypeKey }>;
   types: Map<string, string>;
   suppliers: Map<string, string>;
   cards: Map<string, { label: string; lastFour: string; bank: string }>;
@@ -136,15 +163,15 @@ async function loadLookups(incomes: IncomeDbRow[], expenses: ExpenseDbRow[]): Pr
   const supplierIds = uniqueIds(expenses.map((row) => row.supplier_id));
   const cardIds = uniqueIds(expenses.map((row) => row.credit_card_id));
 
-  const [qcps, websites, types, suppliers, cards] = await Promise.all([
+  const [qcps, websites, types, suppliers, cards, projectTypes, websiteProjectTypes] = await Promise.all([
     fetchInChunks<QcpDbRow>(qcpIds, (chunk) =>
       supabase
         .from(QUOTATION_CLIENT_PROJECT_TABLE)
-        .select('id, display_name, client_name, status')
+        .select('id, display_name, client_name, status, project_types')
         .in('id', chunk),
     ),
-    fetchInChunks<{ id: string; website_name: string | null }>(websiteIds, (chunk) =>
-      supabase.from('webandsystem_list').select('id, website_name').in('id', chunk),
+    fetchInChunks<WebsiteDbRow>(websiteIds, (chunk) =>
+      supabase.from('webandsystem_list').select('id, website_name, profile_type').in('id', chunk),
     ),
     fetchInChunks<{ id: string; display_name: string | null }>(typeIds, (chunk) =>
       supabase.from('supplier_types').select('id, display_name').in('id', chunk),
@@ -155,7 +182,34 @@ async function loadLookups(incomes: IncomeDbRow[], expenses: ExpenseDbRow[]): Pr
     fetchInChunks<{ id: string; label: string | null; last_four: string; bank: string | null }>(cardIds, (chunk) =>
       supabase.from('credit_cards').select('id, label, last_four, bank').in('id', chunk),
     ),
+    supabase
+      .from(QUOTATION_PROJECT_TYPES_TABLE)
+      .select('id, code, display')
+      .then(({ data, error }) => {
+        if (error) throw new Error(error.message);
+        return (data as ProjectTypeDbRow[] | null) ?? [];
+      }),
+    fetchInChunks<WebsiteProjectTypeRow>(websiteIds, (chunk) =>
+      supabase
+        .from(QUOTATION_CLIENT_PROJECT_TABLE)
+        .select('webandsystem_list_id, project_types')
+        .in('webandsystem_list_id', chunk),
+    ),
   ]);
+
+  const projectTypeByRef = indexFinanceProjectTypes(projectTypes);
+  const linkedTypesByWebsite = new Map<string, Array<{ code: string; display: string }>>();
+  for (const row of websiteProjectTypes) {
+    const websiteId = optionalText(row.webandsystem_list_id);
+    const rawType = optionalText(row.project_types);
+    const projectType =
+      financeProjectTypeFromRef(rawType, projectTypeByRef) ??
+      (rawType ? { code: rawType, display: '' } : undefined);
+    if (!websiteId || !projectType) continue;
+    const list = linkedTypesByWebsite.get(websiteId) ?? [];
+    list.push(projectType);
+    linkedTypesByWebsite.set(websiteId, list);
+  }
 
   return {
     projects: new Map(projects.map((row) => [String(row.id), row])),
@@ -166,11 +220,27 @@ async function loadLookups(incomes: IncomeDbRow[], expenses: ExpenseDbRow[]): Pr
           displayName: optionalText(row.display_name) ?? '',
           clientName: optionalText(row.client_name) ?? '',
           status: optionalText(row.status),
+          projectTypeKey: financeProjectTypeKeyFromType(
+            financeProjectTypeFromRef(row.project_types, projectTypeByRef),
+          ),
         },
       ]),
     ),
     websites: new Map(
-      websites.map((row) => [String(row.id), optionalText(row.website_name) ?? '']),
+      websites.map((row) => {
+        const picked = pickFinanceProjectType(linkedTypesByWebsite.get(String(row.id)) ?? []);
+        return [
+          String(row.id),
+          {
+            name: optionalText(row.website_name) ?? '',
+            projectTypeKey: resolveFinanceProjectTypeKey({
+              projectType: picked.projectType,
+              profileType: row.profile_type,
+              allowProfileFallback: picked.allowProfileFallback,
+            }),
+          },
+        ];
+      }),
     ),
     types: new Map(types.map((row) => [String(row.id), optionalText(row.display_name) ?? ''])),
     suppliers: new Map(suppliers.map((row) => [String(row.id), optionalText(row.display_name) ?? ''])),
@@ -191,12 +261,15 @@ function resolveExpenseProject(row: ExpenseDbRow, lookups: LookupMaps) {
       clientName: qcp?.clientName.trim() || undefined,
       quotationClientProjectId: row.related_id,
       projectStatus: qcp?.status,
+      projectTypeKey: qcp?.projectTypeKey,
     };
   }
   if (row.related_type === 'webandsystem') {
+    const website = lookups.websites.get(row.related_id);
     return {
-      projectName: lookups.websites.get(row.related_id)?.trim() || '未指定項目',
+      projectName: website?.name.trim() || '未指定項目',
       websiteId: row.related_id,
+      projectTypeKey: website?.projectTypeKey,
     };
   }
 
@@ -209,12 +282,15 @@ function resolveExpenseProject(row: ExpenseDbRow, lookups: LookupMaps) {
       clientName: qcp?.clientName.trim() || undefined,
       quotationClientProjectId: project.related_id,
       projectStatus: qcp?.status,
+      projectTypeKey: qcp?.projectTypeKey,
     };
   }
   if (project.related_type === 'webandsystem' && project.related_id) {
+    const website = lookups.websites.get(project.related_id);
     return {
-      projectName: lookups.websites.get(project.related_id)?.trim() || optionalText(project.name) || '未指定項目',
+      projectName: website?.name.trim() || optionalText(project.name) || '未指定項目',
       websiteId: project.related_id,
+      projectTypeKey: website?.projectTypeKey,
     };
   }
   return { projectName: optionalText(project.name) || '未指定項目' };
@@ -229,6 +305,7 @@ function mapIncome(row: IncomeDbRow, lookups: LookupMaps): FinanceIncomeRow {
     clientName: qcp?.clientName.trim() || '—',
     quotationClientProjectId: row.quotation_client_project_id,
     projectStatus: qcp?.status,
+    projectTypeKey: qcp?.projectTypeKey,
     typeLabel: optionalText(row.type) || '未分類',
     installmentNumber: row.installment_number ?? undefined,
     currency: parseSystemCurrency(row.currency),
@@ -256,6 +333,7 @@ function mapExpense(row: ExpenseDbRow, lookups: LookupMaps): FinanceExpenseRow {
     quotationClientProjectId: project.quotationClientProjectId,
     websiteId: project.websiteId,
     projectStatus: project.projectStatus,
+    projectTypeKey: project.projectTypeKey,
     typeLabel: (row.supplier_types_id && lookups.types.get(row.supplier_types_id)?.trim()) || '未分類',
     supplierLabel: (row.supplier_id && lookups.suppliers.get(row.supplier_id)?.trim()) || '未指定供應商',
     installmentNumber: row.installment_number ?? undefined,

@@ -18,6 +18,7 @@ import {
 } from '@/lib/quotationIncomes';
 import { DEFAULT_CURRENCY, parseSystemCurrency } from '@/lib/currency';
 import { INVOICES_TABLE, RECEIPTS_TABLE } from '@/lib/invoiceReceipts';
+import { projectIncomesKey, publishProjectData, subscribeProjectData } from '@/lib/projectDataBus';
 
 type DbRow = {
   id: string;
@@ -214,13 +215,14 @@ export function useQuotationIncomes(projectId: string | undefined) {
   const [loading, setLoading] = useState(Boolean(projectId));
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options?: { silent?: boolean }) => {
     if (!projectId) {
       setRows([]);
+      setError(null);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!options?.silent) setLoading(true);
     const { data, error: err } = await supabase
       .from(INCOMES_TABLE)
       .select('*')
@@ -229,7 +231,7 @@ export function useQuotationIncomes(projectId: string | undefined) {
 
     if (err) {
       setError(err.message);
-      setRows([]);
+      if (!options?.silent) setRows([]);
     } else {
       setError(null);
       setRows(((data as DbRow[] | null) ?? []).map(mapRow).sort(compareIncomes));
@@ -240,6 +242,13 @@ export function useQuotationIncomes(projectId: string | undefined) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    return subscribeProjectData(projectIncomesKey(projectId), () => {
+      void refresh({ silent: true });
+    });
+  }, [projectId, refresh]);
 
   const addIncome = useCallback(
     async (input: QuotationIncomeWriteInput) => {
@@ -259,6 +268,7 @@ export function useQuotationIncomes(projectId: string | undefined) {
       }
       const mapped = mapRow(data as DbRow);
       setRows((prev) => [...prev, mapped].sort(compareIncomes));
+      publishProjectData(projectIncomesKey(projectId));
       return { data: mapped, error: null };
     },
     [projectId],
@@ -296,6 +306,7 @@ export function useQuotationIncomes(projectId: string | undefined) {
 
     const mapped = mapRow(data as DbRow);
     setRows((prev) => prev.map((row) => (row.id === id ? mapped : row)).sort(compareIncomes));
+    publishProjectData(projectIncomesKey(projectId));
     return { data: mapped, error: null };
   }, [projectId, rows]);
 
@@ -309,8 +320,9 @@ export function useQuotationIncomes(projectId: string | undefined) {
       await removeStorageObject(current?.paymentRecordStoragePath);
     }
     setRows((prev) => prev.filter((row) => row.id !== id));
+    if (projectId) publishProjectData(projectIncomesKey(projectId));
     return { error: null };
-  }, [rows]);
+  }, [projectId, rows]);
 
   const saveBulkIncomes = useCallback(async (
     items: Array<{ id?: string; input: QuotationIncomeWriteInput }>,
@@ -361,6 +373,7 @@ export function useQuotationIncomes(projectId: string | undefined) {
       ...prev.filter((row) => !deleted.has(row.id)).map((row) => byId.get(row.id) ?? row),
       ...created,
     ].sort(compareIncomes));
+    publishProjectData(projectIncomesKey(projectId));
 
     return { data: [...updated, ...created], error: null };
   }, [projectId, rows]);
@@ -442,6 +455,7 @@ export function useQuotationIncomes(projectId: string | undefined) {
         if (updated.length > 0) {
           applyUpdated(updated);
           await releaseUnusedRecords(updated.map((row) => row.id));
+          publishProjectData(projectIncomesKey(projectId));
         }
         return {
           data: updated.length > 0 ? updated : null,
@@ -455,6 +469,7 @@ export function useQuotationIncomes(projectId: string | undefined) {
 
     applyUpdated(updated);
     await releaseUnusedRecords(updated.map((row) => row.id));
+    publishProjectData(projectIncomesKey(projectId));
     return { data: updated, error: null };
   }, [projectId, rows]);
 

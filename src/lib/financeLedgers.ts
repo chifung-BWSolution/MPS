@@ -1,3 +1,4 @@
+import { matchesFinanceProjectTypeFilter } from '@/lib/financeProjectType';
 import { compareQuotationListValues, type QuotationListSortDir } from '@/lib/quotationListSort';
 import {
   EXPENSE_PAYMENT_STATUS_LABELS,
@@ -26,6 +27,7 @@ export type FinanceIncomeRow = {
   clientName: string;
   quotationClientProjectId?: string;
   projectStatus?: string;
+  projectTypeKey?: string;
   typeLabel: string;
   installmentNumber?: number;
   currency: SystemCurrency;
@@ -49,6 +51,7 @@ export type FinanceExpenseRow = {
   quotationClientProjectId?: string;
   websiteId?: string;
   projectStatus?: string;
+  projectTypeKey?: string;
   typeLabel: string;
   supplierLabel: string;
   installmentNumber?: number;
@@ -80,6 +83,7 @@ export type FinanceBadDebtRow = {
   quotationClientProjectId?: string;
   websiteId?: string;
   projectStatus?: string;
+  projectTypeKey?: string;
 };
 
 export const DUE_SOON_WINDOWS = ['overdue', '7', '30', 'all'] as const;
@@ -164,6 +168,27 @@ export function isOverdueDueDate(dueDate: string | undefined, asOf = todayIso())
   return days != null && days < 0;
 }
 
+export const LEDGER_DUE_FILTERS = ['all', 'overdue', 'not_overdue'] as const;
+export type LedgerDueFilter = (typeof LEDGER_DUE_FILTERS)[number];
+export const DEFAULT_LEDGER_DUE_FILTER: LedgerDueFilter = 'all';
+
+export const LEDGER_DUE_FILTER_LABELS: Record<LedgerDueFilter, string> = {
+  all: '全部日期',
+  overdue: '已逾期',
+  not_overdue: '未逾期',
+};
+
+export function matchesLedgerDueFilter(
+  dueDate: string | undefined,
+  filter: LedgerDueFilter | undefined,
+  asOf = todayIso(),
+): boolean {
+  const mode = filter ?? DEFAULT_LEDGER_DUE_FILTER;
+  if (mode === 'all') return true;
+  const overdue = isOverdueDueDate(dueDate, asOf);
+  return mode === 'overdue' ? overdue : !overdue;
+}
+
 export function matchesDueSoonWindow(
   dueDate: string | undefined,
   outstanding: number,
@@ -226,11 +251,12 @@ function includesQuery(values: Array<string | number | undefined | null>, query:
 
 export function filterDueSoonExpenses(
   rows: FinanceExpenseRow[],
-  opts: { search?: string; window?: DueSoonWindow; asOf?: string } = {},
+  opts: { search?: string; window?: DueSoonWindow; asOf?: string; projectType?: string } = {},
 ): FinanceExpenseRow[] {
   const window = opts.window ?? DEFAULT_DUE_SOON_WINDOW;
   const asOf = opts.asOf ?? todayIso();
   return rows.filter((row) => {
+    if (!matchesFinanceProjectTypeFilter(row.projectTypeKey, opts.projectType)) return false;
     if (!matchesDueSoonWindow(row.dueDate, row.outstanding, window, asOf)) return false;
     return includesQuery(
       [
@@ -249,13 +275,14 @@ export function filterDueSoonExpenses(
 
 export function filterReceivables(
   rows: FinanceIncomeRow[],
-  opts: { search?: string; status?: string; overdue?: boolean; asOf?: string } = {},
+  opts: { search?: string; status?: string; dueFilter?: LedgerDueFilter; asOf?: string; projectType?: string } = {},
 ): FinanceIncomeRow[] {
   const asOf = opts.asOf ?? todayIso();
   return rows.filter((row) => {
+    if (!matchesFinanceProjectTypeFilter(row.projectTypeKey, opts.projectType)) return false;
     if (!isOutstandingAmount(row.outstanding)) return false;
     if (opts.status && opts.status !== 'all' && row.paymentStatus !== opts.status) return false;
-    if (opts.overdue && !isOverdueDueDate(row.dueDate, asOf)) return false;
+    if (!matchesLedgerDueFilter(row.dueDate, opts.dueFilter, asOf)) return false;
     return includesQuery(
       [
         row.projectName,
@@ -272,13 +299,14 @@ export function filterReceivables(
 
 export function filterPayables(
   rows: FinanceExpenseRow[],
-  opts: { search?: string; status?: string; overdue?: boolean; asOf?: string } = {},
+  opts: { search?: string; status?: string; dueFilter?: LedgerDueFilter; asOf?: string; projectType?: string } = {},
 ): FinanceExpenseRow[] {
   const asOf = opts.asOf ?? todayIso();
   return rows.filter((row) => {
+    if (!matchesFinanceProjectTypeFilter(row.projectTypeKey, opts.projectType)) return false;
     if (!isOutstandingAmount(row.outstanding)) return false;
     if (opts.status && opts.status !== 'all' && row.paymentStatus !== opts.status) return false;
-    if (opts.overdue && !isOverdueDueDate(row.dueDate, asOf)) return false;
+    if (!matchesLedgerDueFilter(row.dueDate, opts.dueFilter, asOf)) return false;
     return includesQuery(
       [
         row.projectName,
@@ -314,6 +342,7 @@ export function toBadDebtRows(
         remarks: row.remarks,
         quotationClientProjectId: row.quotationClientProjectId,
         projectStatus: row.projectStatus,
+        projectTypeKey: row.projectTypeKey,
       })),
     ...expenses
       .filter((row) => isOutstandingAmount(row.badDebt))
@@ -331,15 +360,17 @@ export function toBadDebtRows(
         quotationClientProjectId: row.quotationClientProjectId,
         websiteId: row.websiteId,
         projectStatus: row.projectStatus,
+        projectTypeKey: row.projectTypeKey,
       })),
   ];
 }
 
 export function filterBadDebts(
   rows: FinanceBadDebtRow[],
-  opts: { search?: string; kind?: BadDebtKindFilter } = {},
+  opts: { search?: string; kind?: BadDebtKindFilter; projectType?: string } = {},
 ): FinanceBadDebtRow[] {
   return rows.filter((row) => {
+    if (!matchesFinanceProjectTypeFilter(row.projectTypeKey, opts.projectType)) return false;
     if (opts.kind && opts.kind !== 'all' && row.kind !== opts.kind) return false;
     return includesQuery(
       [

@@ -1,0 +1,24 @@
+---
+description: Update 系統通知 whenever an email, WhatsApp, or system notification is created or changed
+alwaysApply: true
+---
+
+# 系統通知 documentation
+
+Whenever you create, change, or remove a notification — email, WhatsApp, or an in-app system notification — update `#settings/system-notifications` in the same change so the page stays the current record.
+
+## Where to edit
+
+- Catalog: `src/lib/systemNotifications.ts` (`buildSystemNotificationCatalog`)
+- Page: `#settings/system-notifications` (`src/components/settings/SystemNotificationsSettings.tsx` only if the layout needs a new field)
+- Checks: `scripts/run-system-notifications-test.ts`
+
+## Each entry must match the live send
+
+- Name, subject, purpose, and what triggers the send
+- Kind: `scheduled` or `manual`
+- Frequency for scheduled sends, in Hong Kong time, including the cron expression. Manual sends say there is no fixed schedule.
+- To, Cc, and Bcc. Write 無 when a field is unused. Dynamic recipients get a short summary plus who is included.
+- HTML preview rendered from the real template (sample data is fine). Do not invent a second template for the page.
+
+The 電郵連接 connection-test message is not a notification. Leave it off this page.

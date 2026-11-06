@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { applyLocationHash, appHrefClickProps } from '@/lib/appNavigation';
+import { FINANCE_PROJECT_TYPE_OPTIONS } from '@/lib/financeProjectType';
 import { financeRowHref } from '@/lib/financeLedgers';
 import { openQuotationProjectDetail } from '@/lib/quotationProjectNavigation';
 import { buildWebsiteDetailHash } from '@/lib/websiteNavigation';
@@ -113,6 +114,25 @@ export function FinanceFilterSelect({
     >
       {children}
     </select>
+  );
+}
+
+export function FinanceProjectTypeFilter({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <FinanceFilterSelect value={value} onChange={onChange} ariaLabel="項目類型">
+      <option value="all">全部項目類型</option>
+      {FINANCE_PROJECT_TYPE_OPTIONS.map((option) => (
+        <option key={option.key} value={option.key}>
+          {option.label}
+        </option>
+      ))}
+    </FinanceFilterSelect>
   );
 }
 

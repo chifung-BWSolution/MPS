@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import {
-  AlertTriangle, Briefcase, Calendar, ChevronLeft, ChevronRight, Globe, ListTodo, Loader2,
+  AlertTriangle, Briefcase, Globe, ListTodo, Loader2,
   Monitor, Pencil, RefreshCw, Video,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
 import { fetchDepartmentMap } from '@/components/day-report/departmentLookup';
+import { useStaffDirectoryFilter } from '@/components/day-report/StaffDirectoryFilterSelects';
+import { DayReportFilterBar } from '@/components/day-report/DayReportFilterBar';
 import {
   REPORT_PROJECT_KIND_LABELS,
   REPORT_PROJECT_KIND_OPTIONS,
@@ -225,6 +227,7 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
   const [periodType, setPeriodType] = useState<PeriodType>('week');
   const [typeFilter, setTypeFilter] = useState<ProfileTypeFilter>('all');
   const [anchorDate, setAnchorDate] = useState(() => new Date());
+  const [nameQuery, setNameQuery] = useState('');
   const [profiles, setProfiles] = useState<ProjectProfileLite[]>([]);
   const [asanaTaskGids, setAsanaTaskGids] = useState<Set<string>>(() => new Set());
   const [entries, setEntries] = useState<EntryRow[]>([]);
@@ -232,6 +235,7 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
   const [departmentByStaffId, setDepartmentByStaffId] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const staffFilter = useStaffDirectoryFilter();
 
   const dateRange = useMemo(
     () => getDateRange(periodType, anchorDate),
@@ -340,7 +344,14 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
   }, [kindSourceFor, profileById]);
 
   const filteredEntries = useMemo(() => {
+    const q = nameQuery.trim().toLowerCase();
     return entries.filter((e) => {
+      if (!staffFilter.includes(e.staff_id)) return false;
+      if (q) {
+        const name = (staffNameById[e.staff_id] || '').toLowerCase();
+        const dept = (departmentByStaffId[e.staff_id] || '').toLowerCase();
+        if (!name.includes(q) && !dept.includes(q)) return false;
+      }
       const projectId = e.related_id;
       if (!projectId) return false;
       const hours = Number(e.hours) || 0;
@@ -349,7 +360,7 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
       const kind = reportProjectKind(kindSourceFor(projectId));
       return kind === typeFilter;
     });
-  }, [entries, kindSourceFor, typeFilter]);
+  }, [departmentByStaffId, entries, kindSourceFor, nameQuery, staffFilter.includes, staffNameById, typeFilter]);
 
   const projectStats = useMemo((): ProjectStat[] => {
     const projectStaff = new Map<string, Map<string, number>>();
@@ -492,6 +503,7 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
   }, [mode, projectStats, personalStats]);
 
   const empty = mode === 'team' ? projectStats.length === 0 : personalStats.length === 0;
+  const showLoading = loading || !staffFilter.ready;
 
   return (
     <div>
@@ -502,8 +514,8 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
           </h1>
           <p className="text-[13px] text-muted-foreground mt-0.5">
             {mode === 'team'
-              ? '按項目統計人員投入工時與占比 — 可篩選系統、網站、客戶項目、影片頻道、Asana 項目、自訂或異常，支援按天／週／月。'
-              : '按個人統計參與項目的工時與占比 — 依部門分組，可篩選系統、網站、客戶項目、影片頻道、Asana 項目、自訂或異常。'}
+              ? '按項目統計人員投入工時與占比 — 可按在職狀態、BU、團隊、職位，以及項目類型篩選，支援按天／週／月。'
+              : '按個人統計參與項目的工時與占比 — 依部門分組，可按在職狀態、BU、團隊、職位，以及項目類型篩選。'}
           </p>
         </div>
 
@@ -537,62 +549,31 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 bg-white rounded-lg border border-[rgba(13,26,45,0.08)] px-3 py-2.5 shadow-sm">
-          <div className="inline-flex rounded-md border border-[rgba(13,26,45,0.08)] p-0.5">
-            {([
-              { id: 'day' as const, label: '按天' },
-              { id: 'week' as const, label: '按週' },
-              { id: 'month' as const, label: '按月' },
-            ]).map(({ id, label }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setPeriodType(id)}
-                className={cn(
-                  'px-3 py-1 rounded text-[12px] font-medium transition-colors',
-                  periodType === id
-                    ? 'bg-teal-600 text-white'
-                    : 'text-muted-foreground hover:text-[#0d1a2d]',
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className="inline-flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setAnchorDate((d) => shiftAnchor(periodType, d, -1))}
-              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
-              aria-label="上一週期"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <span className="inline-flex items-center gap-1.5 text-[13px] font-medium min-w-[160px] justify-center">
-              <Calendar size={14} className="text-teal-600" />
-              {formatPeriodLabel(periodType, anchorDate)}
-            </span>
-            <button
-              type="button"
-              onClick={() => setAnchorDate((d) => shiftAnchor(periodType, d, 1))}
-              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
-              aria-label="下一週期"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setAnchorDate(new Date())}
-            className="text-[12px] text-teal-700 hover:underline ml-auto"
-          >
-            今天
-          </button>
-        </div>
+        <DayReportFilterBar<PeriodType>
+          periods={[
+            { id: 'day', label: '按天' },
+            { id: 'week', label: '按週' },
+            { id: 'month', label: '按月' },
+          ]}
+          period={periodType}
+          onPeriodChange={(next) => setPeriodType(next)}
+          label={formatPeriodLabel(periodType, anchorDate)}
+          onPrev={() => setAnchorDate((d) => shiftAnchor(periodType, d, -1))}
+          onNext={() => setAnchorDate((d) => shiftAnchor(periodType, d, 1))}
+          onToday={() => setAnchorDate(new Date())}
+          search={nameQuery}
+          onSearchChange={setNameQuery}
+          staffFilter={staffFilter}
+        />
       </div>
 
+      {showLoading ? (
+        <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
+          <Loader2 size={18} className="animate-spin" />
+          <span className="text-[13px]">載入項目工時…</span>
+        </div>
+      ) : (
+      <>
       <div className="grid grid-cols-3 gap-3 mb-5">
         <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm px-4 py-3">
           <p className="text-[11px] text-muted-foreground">{summary.primaryLabel}</p>
@@ -608,12 +589,7 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
-          <Loader2 size={18} className="animate-spin" />
-          <span className="text-[13px]">載入項目工時…</span>
-        </div>
-      ) : empty ? (
+      {empty ? (
         <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm py-16 text-center">
           <p className="text-[14px] text-muted-foreground">此期間暫無符合篩選的工時記錄</p>
           <p className="text-[12px] text-muted-foreground mt-1">請確認匯報項目已選擇關聯對象</p>
@@ -716,6 +692,8 @@ export function ProjectAnalysis({ mode = 'team' }: { mode?: Mode }) {
             );
           })}
         </div>
+      )}
+      </>
       )}
     </div>
   );

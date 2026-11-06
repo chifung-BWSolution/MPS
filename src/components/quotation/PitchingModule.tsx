@@ -76,6 +76,7 @@ import { PitchingSlaTab } from '@/components/quotation/PitchingSlaTab';
 import { PitchingStatusConversionModal } from '@/components/quotation/PitchingStatusConversionModal';
 import { allowedStatusTargets, isAllowedStatusTransition, needsConversionPopup } from '@/lib/clientProjectStatus';
 import { QuotationBvCard } from '@/components/quotation/QuotationBvCard';
+import { ClientProjectSidePanel } from '@/components/quotation/ClientProjectSidePanel';
 import { PitchingInfoMetricsRow } from '@/components/quotation/PitchingInfoMetricsRow';
 import { CompletionPhotosSection } from '@/components/quotation/CompletionPhotosSection';
 import {
@@ -1331,6 +1332,8 @@ export function PitchingDetail({
         ))}
       </div>
 
+      <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
+      <div className="min-w-0 flex-1 space-y-6">
       {activeTab === 'info' && (
         <div className="space-y-6">
           <PitchingInfoMetricsRow
@@ -1503,6 +1506,18 @@ export function PitchingDetail({
           onPersist={handleBudgetPersist}
         />
       )}
+      </div>
+      <ClientProjectSidePanel
+        projectId={record.id}
+        inquiryDate={draft.inquiryDate}
+        signedDate={draft.signedDate}
+        handoverDate={draft.handoverDate}
+        contractStartDate={draft.contractStartDate}
+        contractEndDate={draft.contractEndDate}
+        servicePeriods={draft.servicePeriods}
+        mediaPublications={draft.mediaPublications}
+      />
+      </div>
 
       {pendingStatus && (
         <PitchingStatusConversionModal

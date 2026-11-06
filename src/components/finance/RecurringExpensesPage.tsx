@@ -10,6 +10,7 @@ import {
   formatExpenseMoney,
   type RecurringExpenseStatus,
 } from '@/lib/quotationExpenses';
+import { FinanceProjectTypeFilter } from '@/components/finance/FinanceListChrome';
 import {
   DEFAULT_RECURRING_EXPENSE_SORT_DIR,
   DEFAULT_RECURRING_EXPENSE_SORT_KEY,
@@ -154,6 +155,7 @@ function RecurringExpenseList({ records }: { records: RecurringExpenseListRow[] 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [frequencyFilter, setFrequencyFilter] = useState<string>('all');
+  const [projectType, setProjectType] = useState('all');
   const [sortKey, setSortKey] = useState<RecurringExpenseSortKey>(DEFAULT_RECURRING_EXPENSE_SORT_KEY);
   const [sortDir, setSortDir] = useState<RecurringExpenseSortDir>(DEFAULT_RECURRING_EXPENSE_SORT_DIR);
 
@@ -163,8 +165,9 @@ function RecurringExpenseList({ records }: { records: RecurringExpenseListRow[] 
         search: searchQuery,
         status: statusFilter,
         frequency: frequencyFilter,
+        projectType,
       }),
-    [records, searchQuery, statusFilter, frequencyFilter],
+    [records, searchQuery, statusFilter, frequencyFilter, projectType],
   );
   const sorted = useMemo(
     () => sortRecurringExpenseRows(filtered, sortKey, sortDir),
@@ -210,6 +213,7 @@ function RecurringExpenseList({ records }: { records: RecurringExpenseListRow[] 
             className="w-full pl-9 pr-4 py-2 text-[13px] border border-border rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
           />
         </div>
+        <FinanceProjectTypeFilter value={projectType} onChange={setProjectType} />
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}

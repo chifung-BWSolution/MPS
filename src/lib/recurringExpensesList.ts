@@ -1,3 +1,4 @@
+import { matchesFinanceProjectTypeFilter } from '@/lib/financeProjectType';
 import { compareQuotationListValues, type QuotationListSortDir } from '@/lib/quotationListSort';
 import {
   RECURRING_EXPENSE_FREQUENCIES,
@@ -13,6 +14,7 @@ export type RecurringExpenseListRow = {
   relatedType: string;
   relatedId: string;
   projectName: string;
+  projectTypeKey?: string;
   supplierTypesId: string;
   supplierId: string;
   typeLabel: string;
@@ -142,9 +144,10 @@ export function matchesRecurringExpenseSearch(row: RecurringExpenseListRow, quer
 
 export function filterRecurringExpenses(
   rows: RecurringExpenseListRow[],
-  opts: { search?: string; status?: string; frequency?: string } = {},
+  opts: { search?: string; status?: string; frequency?: string; projectType?: string } = {},
 ): RecurringExpenseListRow[] {
   return rows.filter((row) => {
+    if (!matchesFinanceProjectTypeFilter(row.projectTypeKey, opts.projectType)) return false;
     if (opts.status && opts.status !== 'all' && row.status !== opts.status) return false;
     if (opts.frequency && opts.frequency !== 'all' && row.frequency !== opts.frequency) return false;
     return matchesRecurringExpenseSearch(row, opts.search ?? '');

@@ -13,6 +13,7 @@ export const QUERY_CACHE_KEYS = {
   brands: 'lookup:brand_list',
   staffNames: 'lookup:staffs:names',
   staffOptions: 'lookup:staffs:active-options',
+  staffDirectory: 'lookup:staffs:directory-filter',
   systemOptions: 'lookup:system_options:platform',
   dayReportTypes: 'lookup:day_report_type',
   supplierTypes: 'lookup:supplier_types',

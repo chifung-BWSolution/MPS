@@ -3,6 +3,11 @@ import { isAbortError } from '@/lib/queryCache';
 import { optionalIsoDate } from '@/lib/quotationIncomes';
 import { PROJECTS_TABLE, isProjectHubRelatedType } from '@/lib/projectsHub';
 import { QUOTATION_CLIENT_PROJECT_TABLE } from '@/lib/resolveProjectHub';
+import {
+  financeProjectTypeLabel,
+  pickFinanceProjectType,
+  resolveFinanceProjectTypeKey,
+} from '@/lib/financeProjectType';
 import { QUOTATION_PROJECT_TYPES_TABLE, projectTypeByIdOrCode } from '@/lib/quotationProjectTypes';
 import { computeGp, sumEstimatedExpenses, toMoneyAmount } from '@/lib/quotationListMoney';
 import { BV_SOURCE_RELATED_TYPES, QUOTATION_BV_TABLE } from '@/lib/quotationBv';
@@ -57,6 +62,12 @@ type QcpDbRow = {
 type WebsiteDbRow = {
   id: string;
   website_name: string | null;
+  profile_type: string | null;
+};
+
+type WebsiteProjectTypeRow = {
+  webandsystem_list_id: string | null;
+  project_types: string | null;
 };
 
 type ProjectTypeDbRow = {
@@ -194,7 +205,7 @@ export function useFinanceBvAllocation() {
           .map((row) => row.related_id),
       );
 
-      const [qcps, websites] = await Promise.all([
+      const [qcps, websites, websiteProjectTypes] = await Promise.all([
         fetchInChunks<QcpDbRow>(qcpIds, (chunk) =>
           supabase
             .from(QUOTATION_CLIENT_PROJECT_TABLE)
@@ -204,7 +215,13 @@ export function useFinanceBvAllocation() {
             .in('id', chunk),
         ),
         fetchInChunks<WebsiteDbRow>(websiteIds, (chunk) =>
-          supabase.from('webandsystem_list').select('id, website_name').in('id', chunk),
+          supabase.from('webandsystem_list').select('id, website_name, profile_type').in('id', chunk),
+        ),
+        fetchInChunks<WebsiteProjectTypeRow>(websiteIds, (chunk) =>
+          supabase
+            .from(QUOTATION_CLIENT_PROJECT_TABLE)
+            .select('webandsystem_list_id, project_types')
+            .in('webandsystem_list_id', chunk),
         ),
       ]);
 
@@ -216,6 +233,21 @@ export function useFinanceBvAllocation() {
         display: row.display,
         section: 'quotation' as const,
       }));
+      const linkedTypesByWebsite = new Map<string, Array<{ code: string; display: string }>>();
+      for (const row of websiteProjectTypes) {
+        const websiteId = optionalText(row.webandsystem_list_id);
+        const rawType = optionalText(row.project_types);
+        const linkedType = projectTypeByIdOrCode(rawType, typeCatalog);
+        const projectType = linkedType
+          ? { code: linkedType.code, display: linkedType.display }
+          : rawType
+            ? { code: rawType, display: '' }
+            : undefined;
+        if (!websiteId || !projectType) continue;
+        const list = linkedTypesByWebsite.get(websiteId) ?? [];
+        list.push(projectType);
+        linkedTypesByWebsite.set(websiteId, list);
+      }
 
       const projectInfo = new Map<string, BvAllocationProjectInfo>();
       for (const project of projects) {
@@ -226,7 +258,16 @@ export function useFinanceBvAllocation() {
         const estimatedIncome =
           qcp?.estimated_income == null ? undefined : toMoneyAmount(qcp.estimated_income);
         const estimatedExpense = qcp ? sumEstimatedExpenses(parseEstimatedExpenses(qcp.estimated_expenses)) : 0;
-        const projectType = qcp ? projectTypeByIdOrCode(qcp.project_types, typeCatalog) : undefined;
+        const directType = qcp ? projectTypeByIdOrCode(qcp.project_types, typeCatalog) : undefined;
+        const picked = directType
+          ? { projectType: directType, allowProfileFallback: false }
+          : pickFinanceProjectType(relatedId ? linkedTypesByWebsite.get(relatedId) ?? [] : []);
+        const projectType = picked.projectType;
+        const projectTypeKey = resolveFinanceProjectTypeKey({
+          projectType,
+          profileType: website?.profile_type,
+          allowProfileFallback: picked.allowProfileFallback,
+        });
 
         projectInfo.set(String(project.id), {
           projectId: String(project.id),
@@ -243,7 +284,11 @@ export function useFinanceBvAllocation() {
           websiteId:
             relatedType === 'webandsystem' ? relatedId : optionalText(qcp?.webandsystem_list_id),
           projectStatus: optionalText(qcp?.status),
-          projectTypeLabel: projectType?.display || (relatedType === 'webandsystem' ? '網站系統' : undefined),
+          projectTypeKey,
+          projectTypeLabel:
+            projectType?.display ||
+            financeProjectTypeLabel(projectTypeKey) ||
+            (relatedType === 'webandsystem' ? '網站系統' : undefined),
           mainPmId: optionalText(qcp?.main_pm_id),
           mainPmName: optionalText(firstJoin(qcp?.main_pm)?.display_name),
           signedDate: optionalIsoDate(qcp?.signed_date),

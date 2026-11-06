@@ -67,6 +67,8 @@ interface Otc2StaffSync {
 interface CompanyListRow {
   uuid: string;
   company_code: string | null;
+  /** OTC2 staff_sync.company when it is not company_code. */
+  otc_staff_company: string | null;
 }
 
 interface BrandListRow {
@@ -139,15 +141,21 @@ function normalizeBrandIds(value: Otc2StaffSync["brand_ids"]): string[] {
   return raw.split(",").map((id) => id.trim()).filter(Boolean);
 }
 
+function companyKey(value: string | null | undefined): string {
+  return (value || "").trim().toLowerCase();
+}
+
 function resolveCompanyListId(
   company: string | null | undefined,
   companies: CompanyListRow[],
 ): string | null {
-  const needle = (company || "").trim().toLowerCase();
+  const needle = companyKey(company);
   if (!needle) return null;
-  const match = companies.find(
-    (row) => (row.company_code || "").trim().toLowerCase() === needle,
-  );
+  const match = companies.find((row) => {
+    if (companyKey(row.company_code) === needle) return true;
+    const alias = companyKey(row.otc_staff_company);
+    return alias.length > 0 && alias === needle;
+  });
   return match?.uuid ?? null;
 }
 
@@ -237,7 +245,7 @@ async function loadCompanyList(
   while (true) {
     const { data, error } = await supabaseAdmin
       .from("company_list")
-      .select("uuid, company_code")
+      .select("uuid, company_code, otc_staff_company")
       .range(from, from + pageSize - 1);
 
     if (error) {

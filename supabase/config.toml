@@ -51,6 +51,9 @@ verify_jwt = true
 [functions.receivables-alert]
 verify_jwt = true
 
+[functions.annual-fees-reminder]
+verify_jwt = true
+
 [functions.otc-leave-day-report]
 verify_jwt = true
 

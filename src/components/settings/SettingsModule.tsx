@@ -5,6 +5,7 @@ import { CompanyManagementSettings } from './CompanyManagementSettings';
 import { BrandManagementSettings } from './BrandManagementSettings';
 import { CreditCardsSettings } from './CreditCardsSettings';
 import { EmailConnectionSettings } from './EmailConnectionSettings';
+import { SystemNotificationsSettings } from './SystemNotificationsSettings';
 import { LoginLogsSettings } from './LoginLogsSettings';
 import { TermsConditionsSettings } from './TermsConditionsSettings';
 import { StaffDirectory } from './StaffDirectory';
@@ -43,6 +44,7 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
       case 'profile': return { title: '個人設定', subtitle: '查看個人資料。資料由 OTC2 同步，無法在此修改。' };
       case 'users': return { title: '用戶管理', subtitle: '從員工列表選擇員工加入系統，支援 Google 電郵登入。' };
       case 'email-connection': return { title: '電郵連接', subtitle: '以 Resend 寄出所有系統電郵。請把 re_xxxxxxxxx 換成正式 API key。' };
+      case 'system-notifications': return { title: '系統通知', subtitle: '記錄已設定的系統電郵，並可預覽正式 HTML 範本。' };
       case 'companies': return { title: '公司管理', subtitle: '管理多間公司資料及銀行帳戶。' };
       case 'brands': return { title: '品牌管理', subtitle: '管理品牌，每個品牌歸屬於一間公司。' };
       case 'roles': return { title: '角色權限', subtitle: '各身份標籤目前的存取範圍。標籤在員工列表或用戶管理設定。' };
@@ -79,6 +81,8 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
         <StaffDirectory />
       ) : activeTab === 'users' ? (
         <UserManagement />
+      ) : activeTab === 'system-notifications' ? (
+        <SystemNotificationsSettings />
       ) : (
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6">
           {activeTab === 'profile' && <ProfileSection />}

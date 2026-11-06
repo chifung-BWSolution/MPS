@@ -288,6 +288,15 @@ export function isCompletionPhotoDoc(docTypeId: string | null | undefined): bool
   return docTypeId === COMPLETION_PHOTO_DOC_TYPE_ID;
 }
 
+/** 完工相片 in upload order, oldest first — the order used by the preview window. */
+export function completionPhotosFromDocs<T extends { docTypeId: string; createdAt: string }>(
+  rows: readonly T[],
+): T[] {
+  return rows
+    .filter((row) => isCompletionPhotoDoc(row.docTypeId))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
 /** Images only. Completion photos do not use document or expiry dates. */
 export function completionPhotoFileError(file: Pick<File, 'name' | 'type' | 'size'>): string | null {
   if (!isImageDoc(file.type, file.name)) return '請上傳圖片（JPG、PNG、WebP、GIF）';

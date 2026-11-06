@@ -7,7 +7,7 @@ import { useQuotationDocs } from '@/hooks/useQuotationDocs';
 import {
   COMPLETION_PHOTO_DOC_TYPE_ID,
   completionPhotoFileError,
-  isCompletionPhotoDoc,
+  completionPhotosFromDocs,
   type QuotationDoc,
 } from '@/lib/quotationDocs';
 import { cn } from '@/lib/utils';
@@ -58,6 +58,108 @@ function PhotoActionButton({
   );
 }
 
+export function CompletionPhotoPreview({
+  photos,
+  index,
+  onIndexChange,
+}: {
+  photos: readonly QuotationDoc[];
+  index: number | null;
+  onIndexChange: (index: number | null) => void;
+}) {
+  const preview = index != null ? photos[index] : undefined;
+
+  useEffect(() => {
+    if (index != null && index >= photos.length) onIndexChange(null);
+  }, [photos.length, index, onIndexChange]);
+
+  useEffect(() => {
+    if (index == null || photos.length === 0) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onIndexChange(null);
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        onIndexChange((index - 1 + photos.length) % photos.length);
+      }
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        onIndexChange((index + 1) % photos.length);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [photos.length, index, onIndexChange]);
+
+  if (!preview || index == null) return null;
+
+  const handleDownload = () => {
+    void downloadPhoto(preview.fileUrl, preview.fileName).catch((err) => {
+      toast.error(err instanceof Error ? err.message : '下載失敗');
+    });
+  };
+
+  return (
+    <FixedOverlay
+      className="flex items-center justify-center bg-black/80 p-4"
+      onClick={() => onIndexChange(null)}
+    >
+      <div
+        className="relative flex max-h-[92vh] w-full max-w-5xl flex-col"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between gap-3 text-white">
+          <p className="min-w-0 truncate text-[13px]">{preview.fileName}</p>
+          <div className="flex items-center gap-2 shrink-0">
+            <PhotoActionButton label={`下載 ${preview.fileName}`} onClick={handleDownload}>
+              <Download size={14} />
+            </PhotoActionButton>
+            <PhotoActionButton
+              label={`在新分頁開啟 ${preview.fileName}`}
+              onClick={() => window.open(preview.fileUrl, '_blank', 'noopener,noreferrer')}
+            >
+              <ExternalLink size={14} />
+            </PhotoActionButton>
+            <button
+              type="button"
+              aria-label="關閉預覽"
+              onClick={() => onIndexChange(null)}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-slate-800"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+        <img
+          src={preview.fileUrl}
+          alt={preview.fileName}
+          className="max-h-[calc(92vh-64px)] w-full object-contain"
+        />
+        {photos.length > 1 && (
+          <div className="mt-3 flex items-center justify-center gap-3 text-[12px] text-white/80">
+            <button
+              type="button"
+              className="rounded-md px-2 py-1 hover:bg-white/10"
+              onClick={() => onIndexChange((index - 1 + photos.length) % photos.length)}
+            >
+              上一張
+            </button>
+            <span>
+              {index + 1} / {photos.length}
+            </span>
+            <button
+              type="button"
+              className="rounded-md px-2 py-1 hover:bg-white/10"
+              onClick={() => onIndexChange((index + 1) % photos.length)}
+            >
+              下一張
+            </button>
+          </div>
+        )}
+      </div>
+    </FixedOverlay>
+  );
+}
+
 export function CompletionPhotosSection({ projectId }: { projectId: string }) {
   const { rows, loading, error, addDoc, deleteDoc } = useQuotationDocs(projectId);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -67,36 +169,7 @@ export function CompletionPhotosSection({ projectId }: { projectId: string }) {
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [deleting, setDeleting] = useState<QuotationDoc | null>(null);
 
-  const photos = useMemo(
-    () =>
-      rows
-        .filter((row) => isCompletionPhotoDoc(row.docTypeId))
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
-    [rows],
-  );
-
-  const preview = previewIndex != null ? photos[previewIndex] : undefined;
-
-  useEffect(() => {
-    if (previewIndex != null && previewIndex >= photos.length) setPreviewIndex(null);
-  }, [photos.length, previewIndex]);
-
-  useEffect(() => {
-    if (previewIndex == null) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setPreviewIndex(null);
-      if (event.key === 'ArrowLeft') {
-        event.preventDefault();
-        setPreviewIndex((index) => (index == null ? 0 : (index - 1 + photos.length) % photos.length));
-      }
-      if (event.key === 'ArrowRight') {
-        event.preventDefault();
-        setPreviewIndex((index) => (index == null ? 0 : (index + 1) % photos.length));
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [photos.length, previewIndex]);
+  const photos = useMemo(() => completionPhotosFromDocs(rows), [rows]);
 
   const openPicker = () => {
     if (uploading) return;
@@ -321,63 +394,11 @@ export function CompletionPhotosSection({ projectId }: { projectId: string }) {
         </div>
       )}
 
-      {preview && previewIndex != null && (
-        <FixedOverlay
-          className="flex items-center justify-center bg-black/80 p-4"
-          onClick={() => setPreviewIndex(null)}
-        >
-          <div
-            className="relative flex max-h-[92vh] w-full max-w-5xl flex-col"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between gap-3 text-white">
-              <p className="min-w-0 truncate text-[13px]">{preview.fileName}</p>
-              <div className="flex items-center gap-2 shrink-0">
-                <PhotoActionButton label={`下載 ${preview.fileName}`} onClick={() => void handleDownload(preview)}>
-                  <Download size={14} />
-                </PhotoActionButton>
-                <PhotoActionButton label={`在新分頁開啟 ${preview.fileName}`} onClick={() => openInNewTab(preview)}>
-                  <ExternalLink size={14} />
-                </PhotoActionButton>
-                <button
-                  type="button"
-                  aria-label="關閉預覽"
-                  onClick={() => setPreviewIndex(null)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-slate-800"
-                >
-                  <X size={15} />
-                </button>
-              </div>
-            </div>
-            <img
-              src={preview.fileUrl}
-              alt={preview.fileName}
-              className="max-h-[calc(92vh-64px)] w-full object-contain"
-            />
-            {photos.length > 1 && (
-              <div className="mt-3 flex items-center justify-center gap-3 text-[12px] text-white/80">
-                <button
-                  type="button"
-                  className="rounded-md px-2 py-1 hover:bg-white/10"
-                  onClick={() => setPreviewIndex((index) => (index == null ? 0 : (index - 1 + photos.length) % photos.length))}
-                >
-                  上一張
-                </button>
-                <span>
-                  {previewIndex + 1} / {photos.length}
-                </span>
-                <button
-                  type="button"
-                  className="rounded-md px-2 py-1 hover:bg-white/10"
-                  onClick={() => setPreviewIndex((index) => (index == null ? 0 : (index + 1) % photos.length))}
-                >
-                  下一張
-                </button>
-              </div>
-            )}
-          </div>
-        </FixedOverlay>
-      )}
+      <CompletionPhotoPreview
+        photos={photos}
+        index={previewIndex}
+        onIndexChange={setPreviewIndex}
+      />
 
       <DeleteConfirmModal
         isOpen={Boolean(deleting)}

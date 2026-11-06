@@ -21,6 +21,7 @@ import {
   FinanceFilterSelect,
   FinancePageFrame,
   FinanceProjectLink,
+  FinanceProjectTypeFilter,
   FinanceSearchInput,
   FinanceSortableTh,
   FinanceStatCard,
@@ -59,12 +60,13 @@ function BadDebtHeaders({
 function BadDebtList({ records }: { records: FinanceBadDebtRow[] }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [kindFilter, setKindFilter] = useState<BadDebtKindFilter>('all');
+  const [projectType, setProjectType] = useState('all');
   const [sortKey, setSortKey] = useState<BadDebtSortKey>(DEFAULT_BAD_DEBT_SORT_KEY);
   const [sortDir, setSortDir] = useState<FinanceLedgerSortDir>(DEFAULT_BAD_DEBT_SORT_DIR);
 
   const filtered = useMemo(
-    () => filterBadDebts(records, { search: searchQuery, kind: kindFilter }),
-    [records, searchQuery, kindFilter],
+    () => filterBadDebts(records, { search: searchQuery, kind: kindFilter, projectType }),
+    [records, searchQuery, kindFilter, projectType],
   );
   const sorted = useMemo(() => sortBadDebts(filtered, sortKey, sortDir), [filtered, sortKey, sortDir]);
   const stats = useMemo(() => summarizeBadDebts(records), [records]);
@@ -84,6 +86,7 @@ function BadDebtList({ records }: { records: FinanceBadDebtRow[] }) {
           onChange={setSearchQuery}
           placeholder="搜尋項目、對象、類型、備註..."
         />
+        <FinanceProjectTypeFilter value={projectType} onChange={setProjectType} />
         <FinanceFilterSelect
           value={kindFilter}
           onChange={(value) => setKindFilter(value as BadDebtKindFilter)}

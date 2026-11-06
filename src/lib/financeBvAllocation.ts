@@ -1,4 +1,5 @@
 import { pitchingStatusConfig, type PitchingStatus } from '@/data/pitchingData';
+import { matchesFinanceProjectTypeFilter } from '@/lib/financeProjectType';
 import { compareQuotationListValues, type QuotationListSortDir } from '@/lib/quotationListSort';
 import { nextLedgerSort } from '@/lib/financeLedgers';
 import {
@@ -53,6 +54,7 @@ export type BvAllocationGroup = {
   quotationClientProjectId?: string;
   websiteId?: string;
   projectStatus?: string;
+  projectTypeKey?: string;
   projectTypeLabel?: string;
   mainPmId?: string;
   mainPmName?: string;
@@ -191,6 +193,7 @@ function buildGroup(
     quotationClientProjectId: info?.quotationClientProjectId,
     websiteId: info?.websiteId,
     projectStatus: info?.projectStatus,
+    projectTypeKey: info?.projectTypeKey,
     projectTypeLabel: info?.projectTypeLabel,
     mainPmId: info?.mainPmId,
     mainPmName: info?.mainPmName,
@@ -246,13 +249,14 @@ export function groupBvAllocations(
 
 export function filterBvAllocations(
   groups: BvAllocationGroup[],
-  opts: { search?: string; ratioStatus?: BvRatioFilter; staffId?: string } = {},
+  opts: { search?: string; ratioStatus?: BvRatioFilter; staffId?: string; projectType?: string } = {},
 ): BvAllocationGroup[] {
   const query = opts.search?.trim().toLowerCase() ?? '';
   const ratioStatus = opts.ratioStatus ?? DEFAULT_BV_RATIO_FILTER;
   const staffId = opts.staffId?.trim() ?? '';
 
   return groups.filter((group) => {
+    if (!matchesFinanceProjectTypeFilter(group.projectTypeKey, opts.projectType)) return false;
     if (ratioStatus !== 'all' && group.ratioStatus !== ratioStatus) return false;
     if (staffId && !group.staff.some((row) => row.staffId === staffId)) return false;
     if (!query) return true;

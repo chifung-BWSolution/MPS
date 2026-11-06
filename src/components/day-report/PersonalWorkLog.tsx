@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  AlertTriangle, Briefcase, Calendar, ChevronLeft, ChevronRight, Globe, ListTodo, Loader2,
+  AlertTriangle, Briefcase, Globe, ListTodo, Loader2,
   Monitor, Pencil, RefreshCw, Video,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
 import { fetchDepartmentMap } from '@/components/day-report/departmentLookup';
+import { useStaffDirectoryFilter } from '@/components/day-report/StaffDirectoryFilterSelects';
+import { DayReportFilterBar } from '@/components/day-report/DayReportFilterBar';
 import { useCategoryLookup } from '@/hooks/useCategoryLookup';
 import { resolveCategoryLabel } from '@/lib/workCategoryLabel';
 import {
@@ -179,6 +181,7 @@ export function PersonalWorkLog() {
   const [periodType, setPeriodType] = useState<PeriodType>('week');
   const [typeFilter, setTypeFilter] = useState<ProfileTypeFilter>('all');
   const [anchorDate, setAnchorDate] = useState(() => new Date());
+  const [nameQuery, setNameQuery] = useState('');
   const [profiles, setProfiles] = useState<ProjectProfileLite[]>([]);
   const [asanaTaskGids, setAsanaTaskGids] = useState<Set<string>>(() => new Set());
   const [entries, setEntries] = useState<EntryRow[]>([]);
@@ -187,6 +190,7 @@ export function PersonalWorkLog() {
   const [departmentByStaffId, setDepartmentByStaffId] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const staffFilter = useStaffDirectoryFilter();
 
   const dateRange = useMemo(
     () => getDateRange(periodType, anchorDate),
@@ -302,7 +306,14 @@ export function PersonalWorkLog() {
   const personLogs = useMemo((): PersonLog[] => {
     const byStaff = new Map<string, LogEntry[]>();
 
+    const q = nameQuery.trim().toLowerCase();
     entries.forEach((e) => {
+      if (!staffFilter.includes(e.staff_id)) return;
+      if (q) {
+        const name = (staffNameById[e.staff_id] || '').toLowerCase();
+        const dept = (departmentByStaffId[e.staff_id] || '').toLowerCase();
+        if (!name.includes(q) && !dept.includes(q)) return;
+      }
       const projectId = e.related_id;
       if (!projectId) return;
       const hours = Number(e.hours) || 0;
@@ -344,7 +355,7 @@ export function PersonalWorkLog() {
     });
 
     return logs.sort((a, b) => b.totalHours - a.totalHours || a.name.localeCompare(b.name, 'zh-Hant'));
-  }, [departmentByStaffId, entries, reportDateById, resolveProjectMeta, staffNameById, typeFilter]);
+  }, [departmentByStaffId, entries, nameQuery, reportDateById, resolveProjectMeta, staffFilter.includes, staffNameById, typeFilter]);
 
   const summary = useMemo(() => {
     const totalHours = roundHours(personLogs.reduce((s, p) => s + p.totalHours, 0));
@@ -364,7 +375,7 @@ export function PersonalWorkLog() {
         <div className="text-center">
           <h1 className="text-[24px] font-bold tracking-tight">個人工作記錄</h1>
           <p className="text-[13px] text-muted-foreground mt-0.5">
-            按人員列出每筆匯報的日期、項目、工作內容與工時，並顯示每人合計工時。可篩選系統、網站、客戶項目、影片頻道、Asana 項目、自訂或異常。
+            按人員列出每筆匯報的日期、項目、工作內容與工時，並顯示每人合計工時。可篩選在職狀態、BU、團隊、職位，以及系統、網站、客戶項目、影片頻道、Asana 項目、自訂或異常。
           </p>
         </div>
 
@@ -398,62 +409,31 @@ export function PersonalWorkLog() {
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 bg-white rounded-lg border border-[rgba(13,26,45,0.08)] px-3 py-2.5 shadow-sm">
-          <div className="inline-flex rounded-md border border-[rgba(13,26,45,0.08)] p-0.5">
-            {([
-              { id: 'day' as const, label: '按天' },
-              { id: 'week' as const, label: '按週' },
-              { id: 'month' as const, label: '按月' },
-            ]).map(({ id, label }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setPeriodType(id)}
-                className={cn(
-                  'px-3 py-1 rounded text-[12px] font-medium transition-colors',
-                  periodType === id
-                    ? 'bg-teal-600 text-white'
-                    : 'text-muted-foreground hover:text-[#0d1a2d]',
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className="inline-flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setAnchorDate((d) => shiftAnchor(periodType, d, -1))}
-              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
-              aria-label="上一週期"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <span className="inline-flex items-center gap-1.5 text-[13px] font-medium min-w-[160px] justify-center">
-              <Calendar size={14} className="text-teal-600" />
-              {formatPeriodLabel(periodType, anchorDate)}
-            </span>
-            <button
-              type="button"
-              onClick={() => setAnchorDate((d) => shiftAnchor(periodType, d, 1))}
-              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
-              aria-label="下一週期"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setAnchorDate(new Date())}
-            className="text-[12px] text-teal-700 hover:underline ml-auto"
-          >
-            今天
-          </button>
-        </div>
+        <DayReportFilterBar<PeriodType>
+          periods={[
+            { id: 'day', label: '按天' },
+            { id: 'week', label: '按週' },
+            { id: 'month', label: '按月' },
+          ]}
+          period={periodType}
+          onPeriodChange={(next) => setPeriodType(next)}
+          label={formatPeriodLabel(periodType, anchorDate)}
+          onPrev={() => setAnchorDate((d) => shiftAnchor(periodType, d, -1))}
+          onNext={() => setAnchorDate((d) => shiftAnchor(periodType, d, 1))}
+          onToday={() => setAnchorDate(new Date())}
+          search={nameQuery}
+          onSearchChange={setNameQuery}
+          staffFilter={staffFilter}
+        />
       </div>
 
+      {loading || !staffFilter.ready ? (
+        <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
+          <Loader2 size={18} className="animate-spin" />
+          <span className="text-[13px]">載入工作記錄…</span>
+        </div>
+      ) : (
+      <>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm px-4 py-3">
           <p className="text-[11px] text-muted-foreground">投入人員</p>
@@ -473,12 +453,7 @@ export function PersonalWorkLog() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
-          <Loader2 size={18} className="animate-spin" />
-          <span className="text-[13px]">載入工作記錄…</span>
-        </div>
-      ) : personLogs.length === 0 ? (
+      {personLogs.length === 0 ? (
         <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] shadow-sm py-16 text-center">
           <p className="text-[14px] text-muted-foreground">此期間暫無符合篩選的工時記錄</p>
           <p className="text-[12px] text-muted-foreground mt-1">請確認匯報項目已選擇關聯對象</p>
@@ -567,6 +542,8 @@ export function PersonalWorkLog() {
             </section>
           ))}
         </div>
+      )}
+      </>
       )}
     </div>
   );

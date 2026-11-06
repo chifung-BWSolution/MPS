@@ -27,6 +27,7 @@ import {
   FinanceFilterSelect,
   FinancePageFrame,
   FinanceProjectLink,
+  FinanceProjectTypeFilter,
   FinanceSearchInput,
   FinanceSortableTh,
   FinanceStatCard,
@@ -61,13 +62,14 @@ function DueSoonHeaders({
 function DueSoonList({ records }: { records: FinanceExpenseRow[] }) {
   const asOf = formatLocalIsoDate(new Date());
   const [searchQuery, setSearchQuery] = useState('');
+  const [projectType, setProjectType] = useState('all');
   const [window, setWindow] = useState<DueSoonWindow>(DEFAULT_DUE_SOON_WINDOW);
   const [sortKey, setSortKey] = useState<DueSoonSortKey>(DEFAULT_DUE_SOON_SORT_KEY);
   const [sortDir, setSortDir] = useState<FinanceLedgerSortDir>(DEFAULT_LEDGER_SORT_DIR);
 
   const filtered = useMemo(
-    () => filterDueSoonExpenses(records, { search: searchQuery, window, asOf }),
-    [records, searchQuery, window, asOf],
+    () => filterDueSoonExpenses(records, { search: searchQuery, window, projectType, asOf }),
+    [records, searchQuery, window, projectType, asOf],
   );
   const sorted = useMemo(
     () => sortDueSoonExpenses(filtered, sortKey, sortDir, asOf),
@@ -90,6 +92,7 @@ function DueSoonList({ records }: { records: FinanceExpenseRow[] }) {
           onChange={setSearchQuery}
           placeholder="搜尋項目、供應商、備註..."
         />
+        <FinanceProjectTypeFilter value={projectType} onChange={setProjectType} />
         <FinanceFilterSelect
           value={window}
           onChange={(value) => setWindow(value as DueSoonWindow)}

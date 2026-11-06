@@ -1,7 +1,7 @@
 import {
   DEFAULT_CURRENCY,
   type SystemCurrency,
-} from './currency';
+} from './currency.ts';
 
 export const INCOMES_TABLE = 'incomes';
 export const INCOME_PAYMENT_RECORDS_BUCKET = 'income-payment-records';

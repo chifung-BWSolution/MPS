@@ -31,6 +31,7 @@ import {
   FinanceFilterSelect,
   FinancePageFrame,
   FinanceProjectLink,
+  FinanceProjectTypeFilter,
   FinanceSearchInput,
   FinanceSortableTh,
   financeHeaderClass,
@@ -215,6 +216,7 @@ function BvAllocationList({
   const [searchQuery, setSearchQuery] = useState('');
   const [ratioFilter, setRatioFilter] = useState<BvRatioFilter>(DEFAULT_BV_RATIO_FILTER);
   const [staffFilter, setStaffFilter] = useState('all');
+  const [projectType, setProjectType] = useState('all');
   const [sortKey, setSortKey] = useState<BvAllocationSortKey>(DEFAULT_BV_ALLOCATION_SORT_KEY);
   const [sortDir, setSortDir] = useState<BvAllocationSortDir>(DEFAULT_BV_ALLOCATION_SORT_DIR);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -228,8 +230,9 @@ function BvAllocationList({
         search: searchQuery,
         ratioStatus: ratioFilter,
         staffId: staffFilter === 'all' ? undefined : staffFilter,
+        projectType,
       }),
-    [groups, searchQuery, ratioFilter, staffFilter],
+    [groups, searchQuery, ratioFilter, staffFilter, projectType],
   );
   const sorted = useMemo(() => sortBvAllocations(filtered, sortKey, sortDir), [filtered, sortKey, sortDir]);
 
@@ -275,6 +278,7 @@ function BvAllocationList({
           onChange={setSearchQuery}
           placeholder="搜尋項目名稱、編號或人員..."
         />
+        <FinanceProjectTypeFilter value={projectType} onChange={setProjectType} />
         <FinanceFilterSelect
           value={staffFilter}
           onChange={setStaffFilter}

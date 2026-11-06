@@ -13,6 +13,7 @@ import {
   type QuotationDocInput,
   type QuotationListDoc,
 } from '@/lib/quotationDocs';
+import { projectDocsKey, publishProjectData, subscribeProjectData } from '@/lib/projectDataBus';
 
 type DocTypeEmbed = {
   id: string;
@@ -247,13 +248,14 @@ export function useQuotationDocs(projectId: string | undefined) {
   const [loading, setLoading] = useState(Boolean(projectId));
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options?: { silent?: boolean }) => {
     if (!projectId) {
       setRows([]);
+      setError(null);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!options?.silent) setLoading(true);
     const { data, error: err } = await supabase
       .from(QUOTATION_DOCS_TABLE)
       .select(DOC_SELECT)
@@ -262,7 +264,7 @@ export function useQuotationDocs(projectId: string | undefined) {
 
     if (err) {
       setError(err.message);
-      setRows([]);
+      if (!options?.silent) setRows([]);
     } else {
       setError(null);
       setRows(((data as DbRow[] | null) ?? []).map(mapRow));
@@ -273,6 +275,13 @@ export function useQuotationDocs(projectId: string | undefined) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    return subscribeProjectData(projectDocsKey(projectId), () => {
+      void refresh({ silent: true });
+    });
+  }, [projectId, refresh]);
 
   const addDoc = useCallback(
     async (input: AddDocInput) => {
@@ -288,6 +297,7 @@ export function useQuotationDocs(projectId: string | undefined) {
       }
       const mapped = mapRow(result.data);
       setRows((prev) => [mapped, ...prev]);
+      publishProjectData(projectDocsKey(projectId));
       return { data: mapped, error: null };
     },
     [projectId, systemUser?.display_name, systemUser?.staff_id],
@@ -303,6 +313,7 @@ export function useQuotationDocs(projectId: string | undefined) {
       }
       const mapped = mapRow(result.data);
       setRows((prev) => prev.map((row) => (row.id === id ? mapped : row)));
+      publishProjectData(projectDocsKey(projectId));
       return { error: null };
     },
     [projectId, rows],
@@ -313,8 +324,9 @@ export function useQuotationDocs(projectId: string | undefined) {
     const result = await persistDeleteDoc(id, current);
     if (result.error) return result;
     setRows((prev) => prev.filter((row) => row.id !== id));
+    if (projectId) publishProjectData(projectDocsKey(projectId));
     return { error: null };
-  }, [rows]);
+  }, [projectId, rows]);
 
   return { rows, loading, error, refresh, addDoc, updateDoc, deleteDoc };
 }

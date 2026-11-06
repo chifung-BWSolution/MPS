@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { isProjectHubRelatedType } from '@/lib/projectsHub';
 import { resolveProjectHubId } from '@/lib/resolveProjectHub';
+import { projectSchedulesKey, publishProjectData, subscribeProjectData } from '@/lib/projectDataBus';
 import {
   SCHEDULES_TABLE,
   optionalIsoDate,
@@ -52,7 +53,7 @@ export function useSchedules(
   const [loading, setLoading] = useState(Boolean(relatedType && relatedId));
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options?: { silent?: boolean }) => {
     if (!isProjectHubRelatedType(relatedType) || !relatedId?.trim()) {
       setRows([]);
       setProjectId(undefined);
@@ -61,12 +62,12 @@ export function useSchedules(
       return;
     }
 
-    setLoading(true);
+    if (!options?.silent) setLoading(true);
     const resolved = await resolveProjectHubId(relatedType, relatedId);
     if (resolved.error || !resolved.data) {
       setError(resolved.error?.message ?? '找不到對應的 projects 紀錄');
       setProjectId(undefined);
-      setRows([]);
+      if (!options?.silent) setRows([]);
       setLoading(false);
       return;
     }
@@ -81,7 +82,7 @@ export function useSchedules(
 
     if (err) {
       setError(err.message);
-      setRows([]);
+      if (!options?.silent) setRows([]);
     } else {
       setError(null);
       setRows((data as DbRow[] | null)?.map(mapRow) ?? []);
@@ -92,6 +93,13 @@ export function useSchedules(
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!relatedType || !relatedId?.trim()) return;
+    return subscribeProjectData(projectSchedulesKey(relatedType, relatedId), () => {
+      void refresh({ silent: true });
+    });
+  }, [relatedType, relatedId, refresh]);
 
   const addSchedule = useCallback(
     async (input: ScheduleInput): Promise<{ error: { message: string } | null }> => {
@@ -107,9 +115,10 @@ export function useSchedules(
 
       if (err || !data) return { error: err ?? { message: '新增失敗' } };
       setRows((prev) => sortSchedules([...prev, mapRow(data as DbRow)]));
+      if (relatedType && relatedId) publishProjectData(projectSchedulesKey(relatedType, relatedId));
       return { error: null };
     },
-    [projectId],
+    [projectId, relatedType, relatedId],
   );
 
   const updateSchedule = useCallback(
@@ -131,17 +140,19 @@ export function useSchedules(
       if (err || !data) return { error: err ?? { message: '更新失敗' } };
       const next = mapRow(data as DbRow);
       setRows((prev) => sortSchedules(prev.map((row) => (row.id === id ? next : row))));
+      if (relatedType && relatedId) publishProjectData(projectSchedulesKey(relatedType, relatedId));
       return { error: null };
     },
-    [projectId],
+    [projectId, relatedType, relatedId],
   );
 
   const deleteSchedule = useCallback(async (id: string): Promise<{ error: { message: string } | null }> => {
     const { error: err } = await supabase.from(SCHEDULES_TABLE).delete().eq('id', id);
     if (err) return { error: err };
     setRows((prev) => prev.filter((row) => row.id !== id));
+    if (relatedType && relatedId) publishProjectData(projectSchedulesKey(relatedType, relatedId));
     return { error: null };
-  }, []);
+  }, [relatedType, relatedId]);
 
   return {
     rows,

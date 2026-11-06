@@ -3,6 +3,13 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  financeProjectTypeKeyFromProfileType,
+  financeProjectTypeKeyFromType,
+  matchesFinanceProjectTypeFilter,
+  pickFinanceProjectType,
+  resolveFinanceProjectTypeKey,
+} from '../src/lib/financeProjectType.ts';
+import {
   DEFAULT_BAD_DEBT_SORT_DIR,
   DEFAULT_BAD_DEBT_SORT_KEY,
   DEFAULT_DUE_SOON_SORT_KEY,
@@ -39,6 +46,7 @@ assert.match(app, /id: 'receivables',\s*label: '應收未收'/);
 assert.match(app, /id: 'payables',\s*label: '應付未付'/);
 assert.match(app, /id: 'bad-debts',\s*label: '壞帳列表'/);
 assert.match(app, /id: 'recurring',\s*label: '自動續訂管理'/);
+assert.match(app, /id: 'annual-fees',\s*label: '年度收費'/);
 
 const financeMenu = app.match(/id: 'finance',[\s\S]*?subMenus: \[([\s\S]*?)\],\s*\},/);
 assert.ok(financeMenu);
@@ -49,6 +57,7 @@ assert.match(financeMenu[1], /receivables/);
 assert.match(financeMenu[1], /payables/);
 assert.match(financeMenu[1], /bad-debts/);
 assert.match(financeMenu[1], /recurring/);
+assert.match(financeMenu[1], /id: 'recurring'[\s\S]*id: 'annual-fees',\s*label: '年度收費'\s*\},?\s*$/);
 assert.doesNotMatch(financeMenu[1], /invoices/);
 assert.doesNotMatch(financeMenu[1], /payments/);
 assert.doesNotMatch(financeMenu[1], /by-company/);
@@ -60,11 +69,13 @@ assert.match(finance, /ReceivablesPage/);
 assert.match(finance, /PayablesPage/);
 assert.match(finance, /BadDebtsPage/);
 assert.match(finance, /RecurringExpensesPage/);
+assert.match(finance, /AnnualFeesPage/);
 assert.match(finance, /case 'bv-allocation'/);
 assert.match(finance, /case 'receivables'/);
 assert.match(finance, /case 'payables'/);
 assert.match(finance, /case 'bad-debts'/);
 assert.match(finance, /case 'recurring'/);
+assert.match(finance, /case 'annual-fees'/);
 assert.doesNotMatch(finance, /InvoiceList/);
 assert.doesNotMatch(finance, /PaymentTracker/);
 
@@ -72,21 +83,29 @@ const dueSoonPage = read('src/components/finance/DueSoonExpensesPage.tsx');
 assert.match(dueSoonPage, /useFinanceExpenses/);
 assert.match(dueSoonPage, /即將到期支出/);
 assert.match(dueSoonPage, /expenses 表/);
+assert.match(dueSoonPage, /FinanceProjectTypeFilter/);
 
 const receivablesPage = read('src/components/finance/ReceivablesPage.tsx');
 assert.match(receivablesPage, /useFinanceIncomes/);
 assert.match(receivablesPage, /應收未收/);
 assert.match(receivablesPage, /incomes 表/);
+assert.match(receivablesPage, /LEDGER_DUE_FILTER_LABELS/);
+assert.match(receivablesPage, /FinanceProjectTypeFilter/);
+assert.doesNotMatch(receivablesPage, /只看已逾期/);
 
 const payablesPage = read('src/components/finance/PayablesPage.tsx');
 assert.match(payablesPage, /useFinanceExpenses/);
 assert.match(payablesPage, /應付未付/);
 assert.match(payablesPage, /expenses 表/);
+assert.match(payablesPage, /LEDGER_DUE_FILTER_LABELS/);
+assert.match(payablesPage, /FinanceProjectTypeFilter/);
+assert.doesNotMatch(payablesPage, /只看已逾期/);
 
 const badDebtsPage = read('src/components/finance/BadDebtsPage.tsx');
 assert.match(badDebtsPage, /useFinanceLedgers/);
 assert.match(badDebtsPage, /壞帳列表/);
 assert.match(badDebtsPage, /incomes 與 expenses 表/);
+assert.match(badDebtsPage, /FinanceProjectTypeFilter/);
 
 const hook = read('src/hooks/useFinanceLedgers.ts');
 assert.match(hook, /INCOMES_TABLE/);
@@ -97,6 +116,8 @@ assert.match(hook, /quotation_client_project/);
 assert.match(hook, /webandsystem_list/);
 assert.match(hook, /outstanding/);
 assert.match(hook, /bad_debt/);
+assert.match(hook, /project_types/);
+assert.match(hook, /profile_type/);
 
 assert.equal(DEFAULT_DUE_SOON_WINDOW, '30');
 assert.equal(DEFAULT_DUE_SOON_SORT_KEY, 'dueDate');
@@ -206,12 +227,38 @@ assert.equal(dueStats.outstandingTotal, 220);
 
 assert.deepEqual(filterReceivables(incomes).map((row) => row.id), ['i-open', 'i-future']);
 assert.deepEqual(
-  filterReceivables(incomes, { overdue: true, asOf: '2026-09-17' }).map((row) => row.id),
+  filterReceivables(incomes, { dueFilter: 'overdue', asOf: '2026-09-17' }).map((row) => row.id),
   ['i-open'],
+);
+assert.deepEqual(
+  filterReceivables(incomes, { dueFilter: 'not_overdue', asOf: '2026-09-17' }).map((row) => row.id),
+  ['i-future'],
+);
+assert.deepEqual(
+  filterReceivables(incomes, { dueFilter: 'all', asOf: '2026-09-17' }).map((row) => row.id),
+  ['i-open', 'i-future'],
 );
 assert.deepEqual(
   filterReceivables(incomes, { search: 'retainer' }).map((row) => row.id),
   ['i-future'],
+);
+assert.deepEqual(
+  filterReceivables(
+    [
+      income({ id: 'i-gift', projectTypeKey: 'bwg_gift' }),
+      income({ id: 'i-event', projectTypeKey: 'bwl_event' }),
+      income({ id: 'i-none' }),
+    ],
+    { projectType: 'bwg_gift' },
+  ).map((row) => row.id),
+  ['i-gift'],
+);
+assert.deepEqual(
+  filterPayables(
+    [expense({ id: 'e-web', projectTypeKey: 'bwt_web' }), expense({ id: 'e-sys', projectTypeKey: 'bwt_system' })],
+    { projectType: 'bwt_web' },
+  ).map((row) => row.id),
+  ['e-web'],
 );
 assert.deepEqual(sortReceivables(filterReceivables(incomes), 'outstanding', 'desc').map((row) => row.id), [
   'i-open',
@@ -229,6 +276,14 @@ assert.deepEqual(filterPayables(expenses).map((row) => row.id), [
   'e-later',
   'e-bad',
 ]);
+assert.deepEqual(
+  filterPayables(expenses, { dueFilter: 'overdue', asOf: '2026-09-17' }).map((row) => row.id),
+  ['e-overdue', 'e-bad'],
+);
+assert.deepEqual(
+  filterPayables(expenses, { dueFilter: 'not_overdue', asOf: '2026-09-17' }).map((row) => row.id),
+  ['e-soon', 'e-later'],
+);
 const payStats = summarizePayables(expenses, '2026-09-17');
 assert.equal(payStats.count, 4);
 assert.equal(payStats.outstanding, 310);
@@ -243,5 +298,38 @@ assert.equal(badStats.count, 2);
 assert.equal(badStats.income, 800);
 assert.equal(badStats.expense, 180);
 assert.equal(badStats.total, 980);
+
+assert.equal(financeProjectTypeKeyFromType({ code: 'bwg_gift', display: 'BWG-禮品' }), 'bwg_gift');
+assert.equal(financeProjectTypeKeyFromType({ code: 'bwl_event', display: 'BWL 活動報價' }), 'bwl_event');
+assert.equal(financeProjectTypeKeyFromType({ display: 'BWL 品牌' }), 'bwl_brand');
+assert.equal(financeProjectTypeKeyFromType({ code: 'bwl_branding', display: '品牌' }), 'bwl_brand');
+assert.equal(financeProjectTypeKeyFromType({ code: 'bwt_system', display: 'BWT-系統' }), 'bwt_system');
+assert.equal(financeProjectTypeKeyFromType({ code: 'bwt_web', display: 'BWT-網頁' }), 'bwt_web');
+assert.equal(financeProjectTypeKeyFromProfileType('website'), 'bwt_web');
+assert.equal(financeProjectTypeKeyFromProfileType('system'), 'bwt_system');
+assert.equal(
+  resolveFinanceProjectTypeKey({ projectType: { code: 'bwt_system' }, profileType: 'website' }),
+  'bwt_system',
+);
+assert.equal(resolveFinanceProjectTypeKey({ profileType: 'website', allowProfileFallback: false }), undefined);
+assert.equal(pickFinanceProjectType([{ code: 'bwt_web' }, { code: 'bwt_system' }]).allowProfileFallback, false);
+assert.equal(pickFinanceProjectType([{ code: 'bwt_web' }, { code: 'bwt_system' }]).projectType, undefined);
+assert.equal(matchesFinanceProjectTypeFilter('bwg_gift', 'all'), true);
+assert.equal(matchesFinanceProjectTypeFilter(undefined, 'bwl_event'), false);
+assert.match(read('src/lib/financeProjectType.ts'), /BWG 禮品/);
+assert.match(read('src/lib/financeProjectType.ts'), /BWL 品牌/);
+assert.match(read('src/lib/financeProjectType.ts'), /BWL 活動/);
+assert.match(read('src/lib/financeProjectType.ts'), /BWT 系統/);
+assert.match(read('src/lib/financeProjectType.ts'), /BWT 網頁/);
+assert.match(read('src/components/finance/FinanceListChrome.tsx'), /全部項目類型/);
+
+const badFiltered = filterBadDebts(
+  [
+    { ...badRows[0], projectTypeKey: 'bwg_gift' },
+    { ...badRows[1], projectTypeKey: 'bwt_web' },
+  ],
+  { projectType: 'bwt_web' },
+);
+assert.deepEqual(badFiltered.map((row) => row.id), ['e-bad']);
 
 console.log('finance ledgers: ok');

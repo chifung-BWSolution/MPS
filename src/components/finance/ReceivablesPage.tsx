@@ -8,12 +8,15 @@ import {
   formatFinanceMoney,
   formatRemainingDays,
   incomeStatusLabel,
+  LEDGER_DUE_FILTERS,
+  LEDGER_DUE_FILTER_LABELS,
   nextLedgerSort,
   remainingDaysClass,
   sortReceivables,
   summarizeReceivables,
   type FinanceIncomeRow,
   type FinanceLedgerSortDir,
+  type LedgerDueFilter,
   type ReceivableSortKey,
 } from '@/lib/financeLedgers';
 import {
@@ -27,6 +30,7 @@ import {
   FinanceFilterSelect,
   FinancePageFrame,
   FinanceProjectLink,
+  FinanceProjectTypeFilter,
   FinanceSearchInput,
   FinanceSortableTh,
   FinanceStatCard,
@@ -63,7 +67,8 @@ function ReceivableList({ records }: { records: FinanceIncomeRow[] }) {
   const asOf = formatLocalIsoDate(new Date());
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [overdueOnly, setOverdueOnly] = useState(false);
+  const [dueFilter, setDueFilter] = useState<LedgerDueFilter>('all');
+  const [projectType, setProjectType] = useState('all');
   const [sortKey, setSortKey] = useState<ReceivableSortKey>(DEFAULT_RECEIVABLE_SORT_KEY);
   const [sortDir, setSortDir] = useState<FinanceLedgerSortDir>(DEFAULT_LEDGER_SORT_DIR);
 
@@ -72,10 +77,11 @@ function ReceivableList({ records }: { records: FinanceIncomeRow[] }) {
       filterReceivables(records, {
         search: searchQuery,
         status: statusFilter,
-        overdue: overdueOnly,
+        dueFilter,
+        projectType,
         asOf,
       }),
-    [records, searchQuery, statusFilter, overdueOnly, asOf],
+    [records, searchQuery, statusFilter, dueFilter, projectType, asOf],
   );
   const sorted = useMemo(() => sortReceivables(filtered, sortKey, sortDir), [filtered, sortKey, sortDir]);
   const stats = useMemo(() => summarizeReceivables(records, asOf), [records, asOf]);
@@ -95,6 +101,7 @@ function ReceivableList({ records }: { records: FinanceIncomeRow[] }) {
           onChange={setSearchQuery}
           placeholder="搜尋項目、客戶、類型、備註..."
         />
+        <FinanceProjectTypeFilter value={projectType} onChange={setProjectType} />
         <FinanceFilterSelect value={statusFilter} onChange={setStatusFilter} ariaLabel="收款狀態">
           <option value="all">全部狀態</option>
           {INCOME_PAYMENT_STATUSES.map((status) => (
@@ -103,15 +110,17 @@ function ReceivableList({ records }: { records: FinanceIncomeRow[] }) {
             </option>
           ))}
         </FinanceFilterSelect>
-        <label className="inline-flex items-center gap-2 text-[13px] text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={overdueOnly}
-            onChange={(e) => setOverdueOnly(e.target.checked)}
-            className="rounded border-border"
-          />
-          只看已逾期（{stats.overdue}）
-        </label>
+        <FinanceFilterSelect
+          value={dueFilter}
+          onChange={(value) => setDueFilter(value as LedgerDueFilter)}
+          ariaLabel="到期日"
+        >
+          {LEDGER_DUE_FILTERS.map((filter) => (
+            <option key={filter} value={filter}>
+              {LEDGER_DUE_FILTER_LABELS[filter]}
+            </option>
+          ))}
+        </FinanceFilterSelect>
       </div>
 
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-hidden">

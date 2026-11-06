@@ -1,3 +1,4 @@
+import { AnnualFeesPage } from '@/components/finance/AnnualFeesPage';
 import { BadDebtsPage } from '@/components/finance/BadDebtsPage';
 import { BvAllocationPage } from '@/components/finance/BvAllocationPage';
 import { DueSoonExpensesPage } from '@/components/finance/DueSoonExpensesPage';
@@ -17,6 +18,8 @@ export function FinanceModule({ subModule }: { subModule?: string }) {
       return <BadDebtsPage />;
     case 'recurring':
       return <RecurringExpensesPage />;
+    case 'annual-fees':
+      return <AnnualFeesPage />;
     case 'bv-allocation':
     default:
       return <BvAllocationPage />;

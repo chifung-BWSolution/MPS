@@ -1,36 +1,23 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Users, Calendar, ChevronLeft, ChevronRight, Loader2, RefreshCw, User,
+  Users, Loader2, RefreshCw, User,
   Link as LinkIcon, Bot, Sparkles, FileText, X, ClipboardCheck, BarChart3,
 } from 'lucide-react';
-import type { DateRange } from 'react-day-picker';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { useCompanies } from '@/hooks/useCompanies';
-import { useBrands } from '@/hooks/useBrands';
 import { categoryConfig } from '@/data/dayReportDataV2';
 import { useDayReportTypes } from '@/hooks/useDayReportTypes';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
 import { fetchUserStaffIds, filterStaffInUsers } from '@/components/day-report/userStaffLookup';
 import { isValidDepartment } from '@/components/day-report/departmentLookup';
 import { isPlaceholderStaff, resolveStaffUuid } from '@/services/reportLinkService';
-import { Calendar as DayPickerCalendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { SearchableProjectSelect } from '@/components/day-report/SearchableProjectSelect';
+import { DayReportFilterBar } from '@/components/day-report/DayReportFilterBar';
 import { WorkInspection } from '@/components/day-report/WorkInspection';
 import { DayReportSubmitLink } from '@/components/day-report/DayReportSubmitLink';
 import { getDayReportCompletionStatus, sumEntryHours } from '@/lib/dayReportCompletion';
-import { StaffOrgFilterSelects } from '@/components/day-report/StaffOrgFilterSelects';
-import {
-  STAFF_ORG_ALL,
-  distinctTeamNames,
-  matchesBrandFilter,
-  matchesCompanyFilter,
-  matchesStaffOrgFilter,
-  nextBrandAfterCompanyChange,
-  nextTeamAfterScopeChange,
-} from '@/components/day-report/staffOrgFilter';
+import { useStaffDirectoryFilter } from '@/components/day-report/StaffDirectoryFilterSelects';
 
 // ============================
 // Types
@@ -45,6 +32,7 @@ interface StaffMember {
   team_name: string | null;
   company_list_id: string | null;
   brand_list_id: string | null;
+  termination_date: string | null;
   profile_pic_url: string | null;
   department: string | null;
 }
@@ -171,25 +159,12 @@ function formatRangeLabel(start: string, end: string): string {
   return `${s.getFullYear()}/${s.getMonth() + 1}/${s.getDate()} – ${e.getFullYear()}/${e.getMonth() + 1}/${e.getDate()}`;
 }
 
-function formatPeriodLabel(periodType: PeriodType, anchor: Date, rangeStart: string, rangeEnd: string): string {
-  if (periodType === 'week') return formatRangeLabel(rangeStart, rangeEnd);
-  return `${anchor.getFullYear()}年${anchor.getMonth() + 1}月`;
-}
-
-function enumerateDates(start: string, end: string): string[] {
-  const dates: string[] = [];
-  let cursor = parseDateStr(start);
-  const endDate = parseDateStr(end);
-  while (cursor <= endDate) {
-    dates.push(toDateStr(cursor));
-    cursor = addDays(cursor, 1);
+function formatPeriodLabel(periodType: PeriodType, anchor: Date): string {
+  if (periodType === 'week') {
+    const { start, end } = getWeekRange(anchor);
+    return formatRangeLabel(start, end);
   }
-  return dates;
-}
-
-function daySpan(start: string, end: string): number {
-  const ms = parseDateStr(end).getTime() - parseDateStr(start).getTime();
-  return Math.max(1, Math.round(ms / (24 * 60 * 60 * 1000)) + 1);
+  return `${anchor.getFullYear()}年${anchor.getMonth() + 1}月`;
 }
 
 function roundHours(n: number): number {
@@ -304,8 +279,6 @@ function CategoryHoursList({
 export function TeamDashboard() {
   const { systemUser } = useAuth();
   const { types: dynamicTypes } = useDayReportTypes();
-  const { companies } = useCompanies();
-  const { brands } = useBrands();
 
   const categories = useMemo((): CategoryMeta[] => {
     if (dynamicTypes.length > 0) {
@@ -334,15 +307,9 @@ export function TeamDashboard() {
 
   const [viewTab, setViewTab] = useState<ViewTab>('inspection');
   const [mode, setMode] = useState<Mode>('team');
-  const [periodType, setPeriodType] = useState<PeriodType>('week');
+  const [periodType, setPeriodType] = useState<PeriodType>('month');
   const [anchorDate, setAnchorDate] = useState(() => new Date());
-  const initialWeek = useMemo(() => getWeekRange(new Date()), []);
-  const [rangeStart, setRangeStart] = useState(initialWeek.start);
-  const [rangeEnd, setRangeEnd] = useState(initialWeek.end);
-  const [rangePickerOpen, setRangePickerOpen] = useState(false);
-  const [selectedCompanyId, setSelectedCompanyId] = useState(STAFF_ORG_ALL);
-  const [selectedBrandId, setSelectedBrandId] = useState(STAFF_ORG_ALL);
-  const [selectedTeam, setSelectedTeam] = useState(STAFF_ORG_ALL);
+  const [nameQuery, setNameQuery] = useState('');
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [detailStaffId, setDetailStaffId] = useState<string | null>(null);
   const [detailDateFilter, setDetailDateFilter] = useState<string | null>(null);
@@ -356,54 +323,22 @@ export function TeamDashboard() {
   const [refreshing, setRefreshing] = useState(false);
 
   const dateRange = useMemo(() => {
-    if (periodType === 'week') return { start: rangeStart, end: rangeEnd };
+    if (periodType === 'week') {
+      const { start, end } = getWeekRange(anchorDate);
+      return { start, end };
+    }
     return getMonthRange(anchorDate);
-  }, [periodType, rangeStart, rangeEnd, anchorDate]);
+  }, [periodType, anchorDate]);
 
   const weekDates = useMemo(
-    () => (periodType === 'week' ? enumerateDates(rangeStart, rangeEnd) : []),
-    [periodType, rangeStart, rangeEnd],
+    () => (periodType === 'week' ? getWeekRange(anchorDate).dates : []),
+    [periodType, anchorDate],
   );
 
   const monthWeekRows = useMemo(
     () => (periodType === 'month' ? getMonthWeekRows(anchorDate) : []),
     [periodType, anchorDate],
   );
-
-  const rangePickerValue = useMemo((): DateRange | undefined => ({
-    from: parseDateStr(rangeStart),
-    to: parseDateStr(rangeEnd),
-  }), [rangeStart, rangeEnd]);
-
-  const handlePeriodTypeChange = (next: PeriodType) => {
-    if (next === periodType) return;
-    setPeriodType(next);
-    if (next === 'week') {
-      const base = periodType === 'month' ? anchorDate : new Date();
-      const week = getWeekRange(base);
-      setRangeStart(week.start);
-      setRangeEnd(week.end);
-    } else {
-      setAnchorDate(parseDateStr(rangeStart));
-    }
-  };
-
-  const handleRangeSelect = (range: DateRange | undefined) => {
-    if (!range?.from) return;
-    const start = toDateStr(range.from);
-    const end = toDateStr(range.to || range.from);
-    // Cap at 62 days to keep queries manageable
-    if (daySpan(start, end) > 62) {
-      const cappedEnd = toDateStr(addDays(parseDateStr(start), 61));
-      setRangeStart(start);
-      setRangeEnd(cappedEnd);
-      setRangePickerOpen(false);
-      return;
-    }
-    setRangeStart(start);
-    setRangeEnd(end);
-    if (range.to) setRangePickerOpen(false);
-  };
 
   useEffect(() => {
     const detect = async () => {
@@ -425,6 +360,7 @@ export function TeamDashboard() {
         team_name: teamName,
         company_list_id: s.company_list_id ?? null,
         brand_list_id: s.brand_list_id ?? null,
+        termination_date: s.termination_date ?? null,
         department: isValidDepartment(teamName) ? teamName : null,
       };
     }).filter((s) => {
@@ -450,14 +386,13 @@ export function TeamDashboard() {
     if (!selfStaffUuid) return;
 
     try {
-      const STAFF_SELECT = 'id, display_name, position, user_role, status, base_location, team_name, profile_pic_url, company_list_id, brand_list_id';
+      const STAFF_SELECT = 'id, display_name, position, user_role, status, termination_date, base_location, team_name, profile_pic_url, company_list_id, brand_list_id';
 
       const userStaffIds = await fetchUserStaffIds();
 
       const { data: rawPicker } = await supabase
         .from('staffs')
         .select(STAFF_SELECT)
-        .eq('status', 'active')
         .neq('position', 'Director');
       const cleanedPicker = filterStaffInUsers(cleanStaffRows(rawPicker || []), userStaffIds);
       setPickerStaff(cleanedPicker);
@@ -485,7 +420,6 @@ export function TeamDashboard() {
       const { data: rawStaff } = await supabase
         .from('staffs')
         .select(STAFF_SELECT)
-        .eq('status', 'active')
         .neq('position', 'Director')
         .in('id', allowedStaffIds);
       const staffData = filterStaffInUsers(cleanStaffRows(rawStaff || []), userStaffIds);
@@ -568,14 +502,20 @@ export function TeamDashboard() {
   };
 
   const shiftPeriod = (dir: -1 | 1) => {
-    if (periodType === 'week') {
-      const span = daySpan(rangeStart, rangeEnd);
-      setRangeStart(toDateStr(addDays(parseDateStr(rangeStart), dir * span)));
-      setRangeEnd(toDateStr(addDays(parseDateStr(rangeEnd), dir * span)));
-      return;
-    }
-    setAnchorDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + dir, 1));
+    setAnchorDate((prev) => {
+      if (periodType === 'week') return addDays(startOfWeekMonday(prev), dir * 7);
+      return new Date(prev.getFullYear(), prev.getMonth() + dir, 1);
+    });
   };
+
+  const matchesName = useCallback((member: StaffMember) => {
+    const q = nameQuery.trim().toLowerCase();
+    if (!q) return true;
+    const name = (staffNameById[member.id] || member.display_name || '').toLowerCase();
+    const dept = (member.department || '').toLowerCase();
+    const team = (member.team_name || '').toLowerCase();
+    return name.includes(q) || dept.includes(q) || team.includes(q);
+  }, [nameQuery, staffNameById]);
 
   const openStaffDetail = (staffId: string, dateFilter: string | null = null) => {
     // Same card again keeps sidebar open but refreshes selection context
@@ -632,8 +572,24 @@ export function TeamDashboard() {
       || staffId;
   }, [staffNameById, staff, pickerStaff]);
 
+  const staffFilter = useStaffDirectoryFilter({
+    roster: pickerStaff,
+    ready: !loading,
+  });
+
+  const visiblePicker = useMemo(
+    () => pickerStaff.filter((s) => staffFilter.matches(s) && matchesName(s)),
+    [pickerStaff, staffFilter.matches, matchesName],
+  );
+
+  useEffect(() => {
+    if (loading || mode !== 'personal') return;
+    if (visiblePicker.some((s) => s.id === selectedStaffId)) return;
+    setSelectedStaffId(visiblePicker[0]?.id ?? null);
+  }, [loading, mode, visiblePicker, selectedStaffId]);
+
   const pickerStaffItems = useMemo(
-    () => pickerStaff
+    () => visiblePicker
       .slice()
       .sort((a, b) => getStaffName(a.id).localeCompare(getStaffName(b.id), 'zh-Hant'))
       .map((s) => ({
@@ -642,7 +598,7 @@ export function TeamDashboard() {
           ? `${getStaffName(s.id)} · ${s.department}`
           : getStaffName(s.id),
       })),
-    [pickerStaff, getStaffName],
+    [visiblePicker, getStaffName],
   );
 
   // Hours by staff → category
@@ -664,44 +620,10 @@ export function TeamDashboard() {
     return map;
   }, [staff, entries, categories]);
 
-  const orgFilter = useMemo(() => ({
-    companyId: selectedCompanyId,
-    brandId: selectedBrandId,
-    teamName: selectedTeam,
-  }), [selectedCompanyId, selectedBrandId, selectedTeam]);
-
   const filteredStaff = useMemo(
-    () => staff.filter((s) => matchesStaffOrgFilter(s, orgFilter)),
-    [staff, orgFilter],
+    () => staff.filter((s) => staffFilter.matches(s) && matchesName(s)),
+    [staff, staffFilter.matches, matchesName],
   );
-
-  const teamOptions = useMemo(() => {
-    const scoped = staff.filter((s) => (
-      matchesCompanyFilter(s.company_list_id, selectedCompanyId)
-      && matchesBrandFilter(s.brand_list_id, selectedBrandId)
-    ));
-    return distinctTeamNames(scoped);
-  }, [staff, selectedCompanyId, selectedBrandId]);
-
-  const handleCompanyChange = (id: string) => {
-    const nextBrand = nextBrandAfterCompanyChange(selectedBrandId, brands, id);
-    setSelectedCompanyId(id);
-    setSelectedBrandId(nextBrand);
-    const scoped = staff.filter((s) => (
-      matchesCompanyFilter(s.company_list_id, id)
-      && matchesBrandFilter(s.brand_list_id, nextBrand)
-    ));
-    setSelectedTeam((prev) => nextTeamAfterScopeChange(prev, distinctTeamNames(scoped)));
-  };
-
-  const handleBrandChange = (id: string) => {
-    setSelectedBrandId(id);
-    const scoped = staff.filter((s) => (
-      matchesCompanyFilter(s.company_list_id, selectedCompanyId)
-      && matchesBrandFilter(s.brand_list_id, id)
-    ));
-    setSelectedTeam((prev) => nextTeamAfterScopeChange(prev, distinctTeamNames(scoped)));
-  };
 
   const teamGroups = useMemo(() => {
     const groups = new Map<string, StaffMember[]>();
@@ -851,8 +773,8 @@ export function TeamDashboard() {
           <h1 className="text-[24px] font-bold tracking-tight">匯報統計</h1>
           <p className="text-[13px] text-muted-foreground mt-0.5">
             {viewTab === 'inspection'
-              ? '按團隊查看每人匯報填寫情況 — 支援周報／月報、人名、公司、品牌與團隊篩選。'
-              : '按週／月統計工作類別工時與占比 — 週統計可自選日期範圍 · 點擊日期查看當日匯報。'}
+              ? '按團隊查看每人匯報填寫情況 — 支援周報／月報、人名，以及在職狀態、BU、團隊與職位篩選。'
+              : '按週／月統計工作類別工時與占比 — 可按在職狀態、BU、團隊與職位篩選 · 點擊日期查看當日匯報。'}
           </p>
         </div>
 
@@ -910,163 +832,69 @@ export function TeamDashboard() {
             ))}
           </div>
 
-          <button
-            type="button"
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-teal-700 hover:bg-teal-50 transition-colors"
-          >
-            <RefreshCw size={13} className={cn(refreshing && 'animate-spin')} />
-            重新整理
-          </button>
-        </div>
-        )}
-
-        {viewTab === 'analysis' && (
-        <div className="flex flex-wrap items-center gap-3 bg-white rounded-lg border border-[rgba(13,26,45,0.08)] px-3 py-2.5 shadow-sm">
-          <div className="inline-flex rounded-md border border-[rgba(13,26,45,0.08)] p-0.5">
-            {([
-              { id: 'week' as const, label: '本週' },
-              { id: 'month' as const, label: '本月' },
-            ]).map(({ id, label }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => handlePeriodTypeChange(id)}
-                className={cn(
-                  'px-3 py-1 rounded text-[12px] font-medium transition-colors',
-                  periodType === id
-                    ? 'bg-teal-600 text-white'
-                    : 'text-muted-foreground hover:text-[#0d1a2d]',
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className="inline-flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => shiftPeriod(-1)}
-              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
-              aria-label="上一週期"
-            >
-              <ChevronLeft size={16} />
-            </button>
-
-            {periodType === 'week' ? (
-              <Popover open={rangePickerOpen} onOpenChange={setRangePickerOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1.5 text-[13px] font-medium min-w-[160px] justify-center px-2 py-1 rounded-md hover:bg-teal-50 hover:text-teal-800 transition-colors"
-                    title="選擇日期範圍"
-                  >
-                    <Calendar size={14} className="text-teal-600" />
-                    {formatPeriodLabel(periodType, anchorDate, rangeStart, rangeEnd)}
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <div className="px-3 pt-3 pb-1">
-                    <p className="text-[12px] font-medium text-[#0d1a2d]">選擇統計日期範圍</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">最長 62 天 · 點擊起訖日期</p>
-                  </div>
-                  <DayPickerCalendar
-                    mode="range"
-                    numberOfMonths={2}
-                    selected={rangePickerValue}
-                    onSelect={handleRangeSelect}
-                    defaultMonth={parseDateStr(rangeStart)}
+          <div className="flex flex-wrap items-center gap-2">
+            {mode === 'personal' && (
+              visiblePicker.length > 1 ? (
+                <div className="w-[240px]">
+                  <SearchableProjectSelect
+                    items={pickerStaffItems}
+                    value={selectedStaffId || ''}
+                    onChange={(id) => {
+                      if (!id) return;
+                      setSelectedStaffId(id);
+                      closeStaffDetail();
+                    }}
+                    placeholder="搜尋並選擇人員..."
+                    searchPlaceholder="輸入人名篩選..."
+                    emptyText="找不到匹配的人員"
+                    className="py-1.5 text-[12px]"
                   />
-                  <div className="flex items-center justify-between gap-2 px-3 pb-3">
-                    <button
-                      type="button"
-                      className="text-[12px] text-teal-700 hover:underline"
-                      onClick={() => {
-                        const week = getWeekRange(new Date());
-                        setRangeStart(week.start);
-                        setRangeEnd(week.end);
-                        setRangePickerOpen(false);
-                      }}
-                    >
-                      重設為本週
-                    </button>
-                    <button
-                      type="button"
-                      className="text-[12px] text-muted-foreground hover:text-[#0d1a2d]"
-                      onClick={() => setRangePickerOpen(false)}
-                    >
-                      關閉
-                    </button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 text-[13px] font-medium min-w-[140px] justify-center">
-                <Calendar size={14} className="text-teal-600" />
-                {formatPeriodLabel(periodType, anchorDate, rangeStart, rangeEnd)}
-              </span>
+                </div>
+              ) : (
+                <span className="text-[12px] text-muted-foreground">
+                  {visiblePicker.length === 1
+                    ? getStaffName(selectedStaffId || '')
+                    : '此篩選條件下暫無人員'}
+                </span>
+              )
             )}
-
             <button
               type="button"
-              onClick={() => shiftPeriod(1)}
-              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground"
-              aria-label="下一週期"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-teal-700 hover:bg-teal-50 transition-colors"
             >
-              <ChevronRight size={16} />
+              <RefreshCw size={13} className={cn(refreshing && 'animate-spin')} />
+              重新整理
             </button>
           </div>
-
-          {mode === 'team' && (
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              <StaffOrgFilterSelects
-                companies={companies}
-                brands={brands}
-                teamOptions={teamOptions}
-                companyId={selectedCompanyId}
-                brandId={selectedBrandId}
-                teamName={selectedTeam}
-                onCompanyChange={handleCompanyChange}
-                onBrandChange={handleBrandChange}
-                onTeamChange={setSelectedTeam}
-              />
-              <span className="text-[12px] text-muted-foreground tabular-nums">
-                {filteredStaff.length}人
-              </span>
-            </div>
-          )}
-
-          {mode === 'personal' && (
-            pickerStaff.length > 1 ? (
-              <div className="ml-auto w-[240px]">
-                <SearchableProjectSelect
-                  items={pickerStaffItems}
-                  value={selectedStaffId || ''}
-                  onChange={(id) => {
-                    if (!id) return;
-                    setSelectedStaffId(id);
-                    closeStaffDetail();
-                  }}
-                  placeholder="搜尋並選擇人員..."
-                  searchPlaceholder="輸入人名篩選..."
-                  emptyText="找不到匹配的人員"
-                  className="py-1.5 text-[12px]"
-                />
-              </div>
-            ) : (
-              <span className="ml-auto text-[12px] text-muted-foreground">
-                {getStaffName(selectedStaffId || systemUser?.staff_id || '')}
-              </span>
-            )
-          )}
         </div>
         )}
+
+        <DayReportFilterBar<PeriodType>
+          periods={[
+            { id: 'week', label: '週報' },
+            { id: 'month', label: '月報' },
+          ]}
+          period={periodType}
+          onPeriodChange={(next) => setPeriodType(next)}
+          label={formatPeriodLabel(periodType, anchorDate)}
+          onPrev={() => shiftPeriod(-1)}
+          onNext={() => shiftPeriod(1)}
+          onToday={() => setAnchorDate(new Date())}
+          search={nameQuery}
+          onSearchChange={setNameQuery}
+          staffFilter={staffFilter}
+        />
       </div>
 
       {viewTab === 'inspection' ? (
-        <WorkInspection />
+        <WorkInspection
+          matchesStaff={staffFilter.matches}
+          periodType={periodType}
+          anchorDate={anchorDate}
+          nameQuery={nameQuery}
+        />
       ) : showInitialLoading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="animate-spin text-teal-600" size={24} />
@@ -1079,7 +907,7 @@ export function TeamDashboard() {
               <div className="space-y-6">
                 {teamGroups.length === 0 ? (
                   <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] p-10 text-center text-[13px] text-muted-foreground">
-                    此週期暫無團隊成員資料
+                    此篩選條件下暫無人員
                   </div>
                 ) : (
                   teamGroups.map(([dept, members]) => (
@@ -1146,6 +974,10 @@ export function TeamDashboard() {
                   ))
                 )}
               </div>
+            ) : !selectedStaffId ? (
+              <div className="bg-white rounded-lg border border-[rgba(13,26,45,0.08)] p-10 text-center text-[13px] text-muted-foreground">
+                此篩選條件下暫無人員
+              </div>
             ) : (
               <div className="space-y-3">
                 <div className="text-[13px] text-muted-foreground">
@@ -1203,7 +1035,7 @@ export function TeamDashboard() {
                   <p className="text-[11px] text-muted-foreground mt-0.5">
                     {detailDateFilter
                       ? formatDayLabel(detailDateFilter)
-                      : formatPeriodLabel(periodType, anchorDate, dateRange.start, dateRange.end)}
+                      : formatPeriodLabel(periodType, anchorDate)}
                     {' · '}
                     <span className="font-semibold text-teal-700">{detailTotalHours}h</span>
                     {' · 點擊日期查看當日匯報'}

@@ -20,6 +20,7 @@ const app = read('src/context/AppContext.tsx');
 assert.match(app, /id: 'finance'/);
 assert.match(app, /label: '會計財務'/);
 assert.match(app, /id: 'recurring',\s*label: '自動續訂管理'/);
+assert.match(app, /id: 'annual-fees',\s*label: '年度收費'/);
 assert.match(app, /sub === 'invoices' \|\| sub === 'payments' \|\| sub === 'credit-cards' \|\| sub === 'by-company'/);
 assert.match(app, /subModule: 'recurring'/);
 assert.doesNotMatch(app, /id: 'invoices', label: '發票列表'/);
@@ -28,6 +29,7 @@ assert.doesNotMatch(app, /id: 'by-company', label: '按公司查看'/);
 const financeMenu = app.match(/id: 'finance',[\s\S]*?subMenus: \[([\s\S]*?)\],\s*\},/);
 assert.ok(financeMenu);
 assert.match(financeMenu[1], /id: 'recurring'/);
+assert.match(financeMenu[1], /id: 'recurring'[\s\S]*id: 'annual-fees',\s*label: '年度收費'\s*\},?\s*$/);
 assert.doesNotMatch(financeMenu[1], /credit-cards/);
 assert.doesNotMatch(financeMenu[1], /invoices/);
 assert.doesNotMatch(financeMenu[1], /payments/);
@@ -45,6 +47,7 @@ assert.doesNotMatch(finance, /initialCreditCards/);
 
 const page = read('src/components/finance/RecurringExpensesPage.tsx');
 assert.match(page, /useRecurringExpenses/);
+assert.match(page, /FinanceProjectTypeFilter/);
 assert.match(page, /DEFAULT_RECURRING_EXPENSE_SORT_KEY/);
 assert.match(page, /DEFAULT_RECURRING_EXPENSE_SORT_DIR/);
 assert.match(page, /下次扣款日/);
@@ -155,6 +158,16 @@ assert.deepEqual(
 
 const filtered = filterRecurringExpenses(rows, { search: 'ads', status: 'active' });
 assert.deepEqual(filtered.map((item) => item.id), ['soon']);
+assert.deepEqual(
+  filterRecurringExpenses(
+    [
+      { ...rows[0], projectTypeKey: 'bwl_brand' },
+      { ...rows[1], projectTypeKey: 'bwg_gift' },
+    ],
+    { projectType: 'bwl_brand' },
+  ).map((item) => item.id),
+  [rows[0].id],
+);
 
 const stats = summarizeRecurringExpenses(rows, '2026-09-01');
 assert.equal(stats.total, 3);

@@ -8,12 +8,15 @@ import {
   filterPayables,
   formatFinanceMoney,
   formatRemainingDays,
+  LEDGER_DUE_FILTERS,
+  LEDGER_DUE_FILTER_LABELS,
   nextLedgerSort,
   remainingDaysClass,
   sortPayables,
   summarizePayables,
   type FinanceExpenseRow,
   type FinanceLedgerSortDir,
+  type LedgerDueFilter,
   type PayableSortKey,
 } from '@/lib/financeLedgers';
 import {
@@ -27,6 +30,7 @@ import {
   FinanceFilterSelect,
   FinancePageFrame,
   FinanceProjectLink,
+  FinanceProjectTypeFilter,
   FinanceSearchInput,
   FinanceSortableTh,
   FinanceStatCard,
@@ -62,7 +66,8 @@ function PayableList({ records }: { records: FinanceExpenseRow[] }) {
   const asOf = formatLocalIsoDate(new Date());
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [overdueOnly, setOverdueOnly] = useState(false);
+  const [dueFilter, setDueFilter] = useState<LedgerDueFilter>('all');
+  const [projectType, setProjectType] = useState('all');
   const [sortKey, setSortKey] = useState<PayableSortKey>(DEFAULT_PAYABLE_SORT_KEY);
   const [sortDir, setSortDir] = useState<FinanceLedgerSortDir>(DEFAULT_LEDGER_SORT_DIR);
 
@@ -71,10 +76,11 @@ function PayableList({ records }: { records: FinanceExpenseRow[] }) {
       filterPayables(records, {
         search: searchQuery,
         status: statusFilter,
-        overdue: overdueOnly,
+        dueFilter,
+        projectType,
         asOf,
       }),
-    [records, searchQuery, statusFilter, overdueOnly, asOf],
+    [records, searchQuery, statusFilter, dueFilter, projectType, asOf],
   );
   const sorted = useMemo(
     () => sortPayables(filtered, sortKey, sortDir, asOf),
@@ -97,6 +103,7 @@ function PayableList({ records }: { records: FinanceExpenseRow[] }) {
           onChange={setSearchQuery}
           placeholder="搜尋項目、供應商、備註..."
         />
+        <FinanceProjectTypeFilter value={projectType} onChange={setProjectType} />
         <FinanceFilterSelect value={statusFilter} onChange={setStatusFilter} ariaLabel="付款狀態">
           <option value="all">全部狀態</option>
           {EXPENSE_PAYMENT_STATUSES.map((status) => (
@@ -105,15 +112,17 @@ function PayableList({ records }: { records: FinanceExpenseRow[] }) {
             </option>
           ))}
         </FinanceFilterSelect>
-        <label className="inline-flex items-center gap-2 text-[13px] text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={overdueOnly}
-            onChange={(e) => setOverdueOnly(e.target.checked)}
-            className="rounded border-border"
-          />
-          只看已逾期（{stats.overdue}）
-        </label>
+        <FinanceFilterSelect
+          value={dueFilter}
+          onChange={(value) => setDueFilter(value as LedgerDueFilter)}
+          ariaLabel="到期日"
+        >
+          {LEDGER_DUE_FILTERS.map((filter) => (
+            <option key={filter} value={filter}>
+              {LEDGER_DUE_FILTER_LABELS[filter]}
+            </option>
+          ))}
+        </FinanceFilterSelect>
       </div>
 
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-hidden">

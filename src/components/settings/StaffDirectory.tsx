@@ -1,12 +1,12 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
-import { Search, RefreshCw, Users, Phone, Mail, Building2, Briefcase, UserCheck, UserX, Tag, ChevronDown, Shield, Ban, CheckSquare, Square, MinusSquare, CloudDownload, CheckCircle2, AlertCircle, Loader2, ArrowUpDown, Database, Save, Chrome, Edit } from 'lucide-react';
+import { Search, RefreshCw, Users, Phone, Building2, Briefcase, UserCheck, UserX, Tag, ChevronDown, Shield, Ban, CheckSquare, Square, MinusSquare, CloudDownload, CheckCircle2, AlertCircle, Loader2, ArrowUpDown, Database, Save, Chrome, Edit } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { invokeProvisionStaffAuth } from '@/lib/provisionStaffAuthApi';
 
 const STAFF_SELECT =
-  'id, display_name, full_name, chinese_name, position, user_role, status, work_email, private_email, work_phone, private_phone, profile_pic_url, base_location, team_name, company_list_id, brand_list_id, entry_date, termination_date';
+  'id, display_name, full_name, chinese_name, position, user_role, status, work_email, private_email, work_phone, private_phone, profile_pic_url, base_location, team_name, company_list_id, brand_list_id, entry_date, termination_date, company:company_list!staffs_company_list_id_fkey ( company_code, company_name_zh, company_name_en )';
 
 /** Local staffs row — identity is staffs.id (uuid). Never key UI by otc_staff_sync_id or otc_staff_id. */
 interface StaffRow {
@@ -25,9 +25,21 @@ interface StaffRow {
   base_location: string | null;
   team_name: string | null;
   company_list_id: string | null;
+  company: {
+    company_code: string | null;
+    company_name_zh: string | null;
+    company_name_en: string | null;
+  } | null;
   brand_list_id: string | null;
   entry_date: string | null;
   termination_date: string | null;
+}
+
+/** BU label from company_list via staffs.company_list_id. Prefer the company code. */
+function staffBuLabel(staff: StaffRow): string {
+  const code = (staff.company?.company_code || '').trim();
+  if (code) return code;
+  return (staff.company?.company_name_zh || staff.company?.company_name_en || '').trim();
 }
 
 /** Use profile_pic_url as-is when it is already an absolute http(s) URL. */
@@ -106,7 +118,9 @@ export function StaffDirectory() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('active');
+  const [filterBu, setFilterBu] = useState('all');
   const [filterTeam, setFilterTeam] = useState('all');
+  const [filterPosition, setFilterPosition] = useState('all');
   const [filterClassification, setFilterClassification] = useState<'all' | 'system_user' | 'other_staff' | 'disabled'>('all');
 
   // Staff user configs — persisted in Supabase user_info table
@@ -316,8 +330,23 @@ export function StaffDirectory() {
     }
   };
 
+  const buOptions = Array.from(
+    staffList.reduce((map, staff) => {
+      const id = (staff.company_list_id || '').trim();
+      if (!id || map.has(id)) return map;
+      map.set(id, staffBuLabel(staff) || id);
+      return map;
+    }, new Map<string, string>()),
+  )
+    .map(([id, label]) => ({ id, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'zh-Hant'));
+
   const teams = Array.from(
     new Set(staffList.map((s) => s.team_name).filter(Boolean))
+  ) as string[];
+
+  const positions = Array.from(
+    new Set(staffList.map((s) => s.position).filter(Boolean))
   ) as string[];
 
   const isTerminated = (staff: StaffRow): boolean => !isActiveStaff(staff);
@@ -443,13 +472,19 @@ export function StaffDirectory() {
       (filterStatus === 'active' && isActiveStaff(staff)) ||
       (filterStatus === 'inactive' && !isActiveStaff(staff));
 
+    const matchBu =
+      filterBu === 'all' || staff.company_list_id === filterBu;
+
     const matchTeam =
       filterTeam === 'all' || staff.team_name === filterTeam;
+
+    const matchPosition =
+      filterPosition === 'all' || staff.position === filterPosition;
 
     const matchClassification =
       filterClassification === 'all' || getStaffClassification(staff.id) === filterClassification;
 
-    return matchSearch && matchStatus && matchTeam && matchClassification;
+    return matchSearch && matchStatus && matchBu && matchTeam && matchPosition && matchClassification;
   });
 
   const systemUsers = filteredStaff.filter(s => getStaffClassification(s.id) === 'system_user');
@@ -468,23 +503,27 @@ export function StaffDirectory() {
   type StatFilterKey = 'all' | 'active' | 'system_user' | 'disabled';
 
   const activeStatFilter = useMemo((): StatFilterKey | null => {
-    if (filterTeam !== 'all') return null;
+    if (filterBu !== 'all' || filterTeam !== 'all' || filterPosition !== 'all') return null;
     if (filterClassification === 'system_user') return 'system_user';
     if (filterClassification === 'disabled') return 'disabled';
     if (filterClassification === 'other_staff') return null;
     if (filterStatus === 'all') return 'all';
     if (filterStatus === 'active') return 'active';
     return null;
-  }, [filterStatus, filterClassification, filterTeam]);
+  }, [filterStatus, filterClassification, filterBu, filterTeam, filterPosition]);
 
   const handleStatFilterClick = useCallback((key: StatFilterKey) => {
     if (activeStatFilter === key) {
       setFilterStatus('active');
       setFilterClassification('all');
+      setFilterBu('all');
       setFilterTeam('all');
+      setFilterPosition('all');
       return;
     }
+    setFilterBu('all');
     setFilterTeam('all');
+    setFilterPosition('all');
     switch (key) {
       case 'all':
         setFilterStatus('all');
@@ -654,6 +693,20 @@ export function StaffDirectory() {
           <option value="active">在職</option>
           <option value="inactive">離職</option>
         </select>
+        {buOptions.length > 0 && (
+          <select
+            value={filterBu}
+            onChange={(e) => setFilterBu(e.target.value)}
+            className="px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
+          >
+            <option value="all">所有 BU</option>
+            {buOptions.map((bu) => (
+              <option key={bu.id} value={bu.id}>
+                {bu.label}
+              </option>
+            ))}
+          </select>
+        )}
         {teams.length > 0 && (
           <select
             value={filterTeam}
@@ -664,6 +717,20 @@ export function StaffDirectory() {
             {teams.map((team) => (
               <option key={team} value={team}>
                 {team}
+              </option>
+            ))}
+          </select>
+        )}
+        {positions.length > 0 && (
+          <select
+            value={filterPosition}
+            onChange={(e) => setFilterPosition(e.target.value)}
+            className="px-3 py-2 border border-border rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-600 bg-white"
+          >
+            <option value="all">所有職位</option>
+            {positions.map((position) => (
+              <option key={position} value={position}>
+                {position}
               </option>
             ))}
           </select>
@@ -904,7 +971,7 @@ export function StaffDirectory() {
                 onGoogleEmailChange={handleGoogleEmailChange}
                 showGoogleEmailColumn={true}
                 emptyMessage={
-                  filterClassification === 'system_user' && (searchTerm || filterTeam !== 'all')
+                  filterClassification === 'system_user' && (searchTerm || filterBu !== 'all' || filterTeam !== 'all' || filterPosition !== 'all')
                     ? '沒有符合篩選條件的系統使用者'
                     : '尚未設定任何系統使用者，請從下方「其他職員」中選擇員工並設為使用者'
                 }
@@ -940,7 +1007,7 @@ export function StaffDirectory() {
                 onToggleSelect={handleToggleSelect}
                 onSelectAll={handleSelectAll}
                 emptyMessage={
-                  searchTerm || filterStatus !== 'all' || filterTeam !== 'all'
+                  searchTerm || filterStatus !== 'all' || filterBu !== 'all' || filterTeam !== 'all' || filterPosition !== 'all'
                     ? '沒有符合篩選條件的其他職員'
                     : '目前沒有其他職員資料'
                 }
@@ -972,7 +1039,7 @@ export function StaffDirectory() {
                 showRoleColumn={false}
                 showActionColumn={true}
                 emptyMessage={
-                  searchTerm || filterTeam !== 'all'
+                  searchTerm || filterBu !== 'all' || filterTeam !== 'all' || filterPosition !== 'all'
                     ? '沒有符合篩選條件的離職員工'
                     : '目前沒有離職員工'
                 }
@@ -1188,7 +1255,7 @@ function StaffTable({
     });
   }, [staff, joiningDateSort]);
 
-  const colSpan = (showBulkSelect ? 1 : 0) + 5 + (showGoogleEmailColumn ? 1 : 0) + (showRoleColumn ? 1 : 0) + (showActionColumn ? 1 : 0) + 1;
+  const colSpan = (showBulkSelect ? 1 : 0) + 6 + (showGoogleEmailColumn ? 1 : 0) + (showRoleColumn ? 1 : 0) + (showActionColumn ? 1 : 0) + 1;
   const allIds = staff.map(s => s.id);
   const allSelected = staff.length > 0 && allIds.every(id => selectedStaffIds?.has(id));
   const someSelected = staff.length > 0 && allIds.some(id => selectedStaffIds?.has(id)) && !allSelected;
@@ -1217,20 +1284,16 @@ function StaffTable({
                 </th>
               )}
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">員工</th>
+              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground whitespace-nowrap">BU</th>
+              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">團隊</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">職位</th>
-              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">電郵</th>
               {showGoogleEmailColumn && (
-                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Chrome size={12} className="text-blue-500" />
-                    Google 登入電郵
-                  </span>
-                </th>
+                <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">登入電郵</th>
               )}
-              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">
+              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground whitespace-nowrap">
                 <button
                   onClick={toggleJoiningDateSort}
-                  className="flex items-center gap-1 hover:text-teal-600 transition-colors"
+                  className="flex items-center gap-1 whitespace-nowrap hover:text-teal-600 transition-colors"
                   title="按入職日期排序"
                 >
                   入職日期
@@ -1249,7 +1312,7 @@ function StaffTable({
               {showActionColumn && (
                 <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">分類操作</th>
               )}
-              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">狀態</th>
+              <th className="text-left px-4 py-2.5 font-medium text-muted-foreground whitespace-nowrap">狀態</th>
             </tr>
           </thead>
           <tbody>
@@ -1312,16 +1375,14 @@ function StaffTable({
                         </div>
                       </div>
                     </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className="text-[13px] whitespace-nowrap">{staffBuLabel(staffMember) || '—'}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-[13px]">{staffMember.team_name || '—'}</span>
+                    </td>
                     <td className="px-4 py-3">
                       <span className="text-[13px]">{staffMember.position || '—'}</span>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {staffMember.work_email ? (
-                        <span className="flex items-center gap-1">
-                          <Mail size={11} />
-                          <span className="truncate max-w-[160px]">{staffMember.work_email}</span>
-                        </span>
-                      ) : '—'}
                     </td>
                     {showGoogleEmailColumn && (
                       <td className="px-4 py-3">
@@ -1332,7 +1393,7 @@ function StaffTable({
                         />
                       </td>
                     )}
-                    <td className="px-4 py-3 text-muted-foreground text-[13px]">
+                    <td className="px-4 py-3 text-muted-foreground text-[13px] whitespace-nowrap">
                       {staffMember.entry_date
                         ? new Date(staffMember.entry_date).toLocaleDateString('zh-HK', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-')
                         : '—'}
@@ -1387,10 +1448,10 @@ function StaffTable({
                         )}
                       </td>
                     )}
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <span
                         className={cn(
-                          'inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium',
+                          'inline-flex whitespace-nowrap px-2 py-0.5 rounded-full text-[11px] font-medium',
                           active
                             ? 'bg-teal-50 text-teal-700'
                             : 'bg-rose-50 text-rose-600'
@@ -1448,10 +1509,12 @@ function InlineGoogleEmailEditor({
     }
   };
 
+  const showGoogleIcon = (editing ? value : currentValue).trim().toLowerCase().endsWith('@gmail.com');
+
   if (editing) {
     return (
       <div className="flex items-center gap-1">
-        <Chrome size={12} className="text-blue-500 shrink-0" />
+        {showGoogleIcon && <Chrome size={12} className="text-blue-500 shrink-0" />}
         <input
           type="email"
           value={value}
@@ -1472,7 +1535,7 @@ function InlineGoogleEmailEditor({
       onClick={() => setEditing(true)}
       title="點擊編輯登入電郵"
     >
-      <Chrome size={12} className="text-blue-500" />
+      {showGoogleIcon && <Chrome size={12} className="text-blue-500" />}
       <span className="text-[12px] text-muted-foreground group-hover:text-blue-700">
         {currentValue || <span className="italic text-gray-400">點擊設定</span>}
       </span>

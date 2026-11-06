@@ -1,26 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Check, ChevronLeft, ChevronRight, Loader2, RefreshCw, Search,
+  Check, Loader2, RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { useCompanies } from '@/hooks/useCompanies';
-import { useBrands } from '@/hooks/useBrands';
 import { fetchStaffNameMap } from '@/components/day-report/staffNameLookup';
 import { fetchUserStaffIds, filterStaffInUsers } from '@/components/day-report/userStaffLookup';
 import { isValidDepartment } from '@/components/day-report/departmentLookup';
 import { isPlaceholderStaff } from '@/services/reportLinkService';
-import { StaffOrgFilterSelects } from '@/components/day-report/StaffOrgFilterSelects';
-import {
-  STAFF_ORG_ALL,
-  distinctTeamNames,
-  matchesBrandFilter,
-  matchesCompanyFilter,
-  matchesStaffOrgFilter,
-  nextBrandAfterCompanyChange,
-  nextTeamAfterScopeChange,
-} from '@/components/day-report/staffOrgFilter';
+import type { StaffFilterFields } from '@/components/day-report/staffDirectoryFilter';
 import { getDayReportCompletionStatus } from '@/lib/dayReportCompletion';
 import { DayReportSubmitLink } from '@/components/day-report/DayReportSubmitLink';
 
@@ -39,6 +28,8 @@ interface StaffMember {
   brand_list_id: string | null;
   department: string | null;
   position: string | null;
+  status: string | null;
+  termination_date: string | null;
 }
 
 interface DayReportLite {
@@ -113,16 +104,6 @@ function getMonthWeekRows(anchor: Date): (string | null)[][] {
 function isWeekend(dateStr: string): boolean {
   const day = parseDateStr(dateStr).getDay();
   return day === 0 || day === 6;
-}
-
-function formatPeriodLabel(periodType: PeriodType, anchor: Date): string {
-  if (periodType === 'week') {
-    const { start, end } = getWeekRange(anchor);
-    const s = parseDateStr(start);
-    const e = parseDateStr(end);
-    return `${s.getFullYear()}/${s.getMonth() + 1}/${s.getDate()} – ${e.getMonth() + 1}/${e.getDate()}`;
-  }
-  return `${anchor.getFullYear()}/${anchor.getMonth() + 1}`;
 }
 
 function resolveDayStatus(
@@ -202,17 +183,18 @@ function StatusCell({
 // ============================
 // Component
 // ============================
-export function WorkInspection() {
+export function WorkInspection({
+  matchesStaff,
+  periodType,
+  anchorDate,
+  nameQuery,
+}: {
+  matchesStaff: (staff: StaffFilterFields) => boolean;
+  periodType: PeriodType;
+  anchorDate: Date;
+  nameQuery: string;
+}) {
   const { systemUser } = useAuth();
-  const { companies } = useCompanies();
-  const { brands } = useBrands();
-
-  const [periodType, setPeriodType] = useState<PeriodType>('month');
-  const [anchorDate, setAnchorDate] = useState(() => new Date());
-  const [nameQuery, setNameQuery] = useState('');
-  const [selectedCompanyId, setSelectedCompanyId] = useState(STAFF_ORG_ALL);
-  const [selectedBrandId, setSelectedBrandId] = useState(STAFF_ORG_ALL);
-  const [selectedTeam, setSelectedTeam] = useState(STAFF_ORG_ALL);
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [reports, setReports] = useState<DayReportLite[]>([]);
   const [entryHoursByReport, setEntryHoursByReport] = useState<Record<string, number>>({});
@@ -246,8 +228,7 @@ export function WorkInspection() {
     try {
       const { data: rawStaff } = await supabase
         .from('staffs')
-        .select('id, display_name, base_location, team_name, position, status, company_list_id, brand_list_id')
-        .eq('status', 'active')
+        .select('id, display_name, base_location, team_name, position, status, termination_date, company_list_id, brand_list_id')
         .neq('position', 'Director');
 
       let staffData: StaffMember[] = (rawStaff || []).map((s) => {
@@ -260,6 +241,8 @@ export function WorkInspection() {
           company_list_id: s.company_list_id,
           brand_list_id: s.brand_list_id,
           position: s.position,
+          status: s.status,
+          termination_date: s.termination_date,
           department: isValidDepartment(teamName) ? teamName : null,
         };
       });
@@ -352,13 +335,6 @@ export function WorkInspection() {
     fetchData();
   };
 
-  const shiftPeriod = (dir: -1 | 1) => {
-    setAnchorDate((prev) => {
-      if (periodType === 'week') return addDays(startOfWeekMonday(prev), dir * 7);
-      return new Date(prev.getFullYear(), prev.getMonth() + dir, 1);
-    });
-  };
-
   const getStaffName = useCallback((staffId: string) => {
     return staffNameById[staffId]
       || staff.find((s) => s.id === staffId)?.display_name
@@ -379,28 +355,6 @@ export function WorkInspection() {
     members.reduce((n, m) => n + (staffWithCompleteReports.has(m.id) ? 1 : 0), 0)
   ), [staffWithCompleteReports]);
 
-  const teamOptions = useMemo(() => {
-    const scoped = staff.filter((s) => (
-      matchesCompanyFilter(s.company_list_id, selectedCompanyId)
-      && matchesBrandFilter(s.brand_list_id, selectedBrandId)
-    ));
-    const groups = new Map<string, StaffMember[]>();
-    scoped.forEach((s) => {
-      const t = (s.team_name || '').trim();
-      if (!t) return;
-      if (!groups.has(t)) groups.set(t, []);
-      groups.get(t)!.push(s);
-    });
-    const ranked = Array.from(groups.entries())
-      .sort(([a, aMembers], [b, bMembers]) => {
-        const diff = countReportedMembers(bMembers) - countReportedMembers(aMembers);
-        if (diff !== 0) return diff;
-        return a.localeCompare(b, 'zh-Hant');
-      })
-      .map(([name]) => name);
-    return ranked.length > 0 ? ranked : distinctTeamNames(scoped);
-  }, [staff, selectedCompanyId, selectedBrandId, countReportedMembers]);
-
   const reportByStaffDate = useMemo(() => {
     const map = new Map<string, DayReportLite>();
     reports.forEach((r) => {
@@ -412,11 +366,7 @@ export function WorkInspection() {
   const filteredStaff = useMemo(() => {
     const q = nameQuery.trim().toLowerCase();
     return staff
-      .filter((s) => matchesStaffOrgFilter(s, {
-        companyId: selectedCompanyId,
-        brandId: selectedBrandId,
-        teamName: selectedTeam,
-      }))
+      .filter((s) => matchesStaff(s))
       .filter((s) => {
         if (!q) return true;
         const name = getStaffName(s.id).toLowerCase();
@@ -425,30 +375,7 @@ export function WorkInspection() {
         return name.includes(q) || dept.includes(q) || team.includes(q);
       })
       .sort((a, b) => getStaffName(a.id).localeCompare(getStaffName(b.id), 'zh-Hant'));
-  }, [staff, selectedCompanyId, selectedBrandId, selectedTeam, nameQuery, getStaffName]);
-
-  const handleCompanyChange = (id: string) => {
-    setSelectedCompanyId(id);
-    setSelectedBrandId((prev) => nextBrandAfterCompanyChange(prev, brands, id));
-    setSelectedTeam((prev) => {
-      const scoped = staff.filter((s) => (
-        matchesCompanyFilter(s.company_list_id, id)
-        && matchesBrandFilter(s.brand_list_id, nextBrandAfterCompanyChange(selectedBrandId, brands, id))
-      ));
-      return nextTeamAfterScopeChange(prev, distinctTeamNames(scoped));
-    });
-  };
-
-  const handleBrandChange = (id: string) => {
-    setSelectedBrandId(id);
-    setSelectedTeam((prev) => {
-      const scoped = staff.filter((s) => (
-        matchesCompanyFilter(s.company_list_id, selectedCompanyId)
-        && matchesBrandFilter(s.brand_list_id, id)
-      ));
-      return nextTeamAfterScopeChange(prev, distinctTeamNames(scoped));
-    });
-  };
+  }, [staff, matchesStaff, nameQuery, getStaffName]);
 
   const staffDayCounts = useCallback((member: StaffMember) => {
     const dates = periodType === 'week'
@@ -572,92 +499,6 @@ export function WorkInspection() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3 bg-white rounded-lg border border-[rgba(13,26,45,0.08)] px-3 py-2.5 shadow-sm">
-        <div className="inline-flex rounded-md border border-[rgba(13,26,45,0.08)] p-0.5">
-          {([
-            { id: 'week' as const, label: '周報' },
-            { id: 'month' as const, label: '月報' },
-          ]).map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setPeriodType(id)}
-              className={cn(
-                'px-3 py-1 rounded text-[12px] font-medium transition-colors',
-                periodType === id
-                  ? 'bg-teal-600 text-white'
-                  : 'text-muted-foreground hover:text-[#0d1a2d]',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="inline-flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => shiftPeriod(-1)}
-            className="px-2 py-1 rounded-md text-[12px] text-muted-foreground hover:bg-muted"
-          >
-            <span className="inline-flex items-center gap-0.5">
-              <ChevronLeft size={14} />
-              {periodType === 'week' ? '上一週' : '上一月'}
-            </span>
-          </button>
-          <span className="text-[13px] font-medium min-w-[100px] text-center tabular-nums">
-            {formatPeriodLabel(periodType, anchorDate)}
-          </span>
-          <button
-            type="button"
-            onClick={() => shiftPeriod(1)}
-            className="px-2 py-1 rounded-md text-[12px] text-muted-foreground hover:bg-muted"
-          >
-            <span className="inline-flex items-center gap-0.5">
-              {periodType === 'week' ? '下一週' : '下一月'}
-              <ChevronRight size={14} />
-            </span>
-          </button>
-        </div>
-
-        <div className="relative ml-auto sm:ml-0">
-          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            value={nameQuery}
-            onChange={(e) => setNameQuery(e.target.value)}
-            placeholder="搜尋人名..."
-            className="pl-8 pr-3 py-1.5 border border-border rounded-md text-[12px] bg-white w-[160px] focus:border-teal-300 focus:ring-1 focus:ring-teal-200 outline-none"
-          />
-        </div>
-
-        <StaffOrgFilterSelects
-          companies={companies}
-          brands={brands}
-          teamOptions={teamOptions}
-          companyId={selectedCompanyId}
-          brandId={selectedBrandId}
-          teamName={selectedTeam}
-          onCompanyChange={handleCompanyChange}
-          onBrandChange={handleBrandChange}
-          onTeamChange={setSelectedTeam}
-        />
-
-        <span className="text-[12px] text-muted-foreground tabular-nums">
-          {filteredStaff.length}人
-        </span>
-
-        <button
-          type="button"
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] text-muted-foreground hover:text-teal-700 hover:bg-teal-50 transition-colors"
-        >
-          <RefreshCw size={13} className={cn(refreshing && 'animate-spin')} />
-          刷新
-        </button>
-      </div>
-
       <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground px-1">
         <span className="inline-flex items-center gap-1.5">
           <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center">
@@ -682,6 +523,16 @@ export function WorkInspection() {
           未填報
         </span>
         <span className="text-muted-foreground">· 點擊日期查看當日匯報</span>
+        <span className="tabular-nums">{filteredStaff.length}人</span>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] text-muted-foreground hover:text-teal-700 hover:bg-teal-50 transition-colors"
+        >
+          <RefreshCw size={13} className={cn(refreshing && 'animate-spin')} />
+          刷新
+        </button>
       </div>
 
       {loading ? (

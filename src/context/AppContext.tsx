@@ -237,6 +237,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'payables', label: '應付未付' },
       { id: 'bad-debts', label: '壞帳列表' },
       { id: 'recurring', label: '自動續訂管理' },
+      { id: 'annual-fees', label: '年度收費' },
     ],
   },
   {
@@ -254,6 +255,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'terms-conditions', label: '條款及細則管理' },
       { id: 'users', label: '用戶管理' },
       { id: 'email-connection', label: '電郵連接' },
+      { id: 'system-notifications', label: '系統通知' },
       { id: 'login-logs', label: '登入紀錄' },
     ],
   },
