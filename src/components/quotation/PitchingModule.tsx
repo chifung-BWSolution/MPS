@@ -322,6 +322,16 @@ function AsanaLogoIcon({ size = 13 }: { size?: number }) {
   );
 }
 
+function clientProjectAsanaHref(record: {
+  asanaLink?: string | null;
+  asanaTaskGid?: string | null;
+}): string {
+  const asanaRaw = record.asanaLink?.trim() || '';
+  if (asanaRaw) return toExternalHref(asanaRaw);
+  const gid = record.asanaTaskGid?.trim() || '';
+  return gid ? `https://app.asana.com/0/0/${gid}` : '';
+}
+
 const listActionIconClass =
   'p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors inline-flex';
 const listActionIconDisabledClass = 'p-1.5 rounded-md text-muted-foreground/30 inline-flex';
@@ -333,12 +343,7 @@ export function ProjectListActionCell({
   record: PitchingRecord;
   onEdit: (record: PitchingRecord) => void;
 }) {
-  const asanaRaw = record.asanaLink?.trim() || '';
-  const asanaHref = asanaRaw
-    ? toExternalHref(asanaRaw)
-    : record.asanaTaskGid
-      ? `https://app.asana.com/0/0/${record.asanaTaskGid}`
-      : '';
+  const asanaHref = clientProjectAsanaHref(record);
 
   return (
     <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
@@ -1259,6 +1264,10 @@ export function PitchingDetail({
     );
   }
 
+  const asanaHref = clientProjectAsanaHref({
+    asanaLink: draft.asanaLink || record.asanaLink,
+    asanaTaskGid: record.asanaTaskGid,
+  });
   const showSlaTab = draft.status === 'confirmed';
   const tabs = (
     [
@@ -1299,6 +1308,26 @@ export function PitchingDetail({
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {asanaHref ? (
+            <a
+              href={asanaHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center px-2.5 py-2 border border-border rounded-md text-[#F06A6A] hover:bg-rose-50 transition-colors active:scale-[0.97]"
+              aria-label="開啟 Asana"
+              title="開啟 Asana"
+            >
+              <AsanaLogoIcon size={14} />
+            </a>
+          ) : (
+            <span
+              className="inline-flex items-center justify-center px-2.5 py-2 border border-border rounded-md text-muted-foreground/30"
+              aria-disabled="true"
+              title="尚未設定 Asana 連結"
+            >
+              <AsanaLogoIcon size={14} />
+            </span>
+          )}
           <button
             type="button"
             onClick={onEdit}
