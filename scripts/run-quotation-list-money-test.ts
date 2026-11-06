@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import {
   buildProjectActuals,
   CLIENT_PROJECT_INFO_METRIC_LABELS,
+  actualProjectCardMoney,
   clientProjectInfoMetrics,
   computeGp,
   estimatedMoneyFor,
@@ -80,10 +81,10 @@ const actuals = buildProjectActuals(
   ],
 );
 
-assert.deepEqual(actuals.q1, { income: 10000.25, expense: 2000, gp: 8000.25 });
-assert.deepEqual(actuals.q2, { income: 5000, expense: 9000, gp: -4000 });
+assert.deepEqual(actuals.q1, { income: 10000.25, expense: 2000, gp: 8000.25, labourCost: 0 });
+assert.deepEqual(actuals.q2, { income: 5000, expense: 9000, gp: -4000, labourCost: 0 });
 assert.equal(actuals.q3, undefined);
-assert.deepEqual(projectActualsFor('q3', actuals), { income: 0, expense: 0, gp: 0 });
+assert.deepEqual(projectActualsFor('q3', actuals), { income: 0, expense: 0, gp: 0, labourCost: 0 });
 
 const withLabour = buildProjectActuals(
   [
@@ -106,9 +107,16 @@ const withLabour = buildProjectActuals(
     { quotation_client_project_id: 'q2', hours: 0 },
   ],
 );
-assert.deepEqual(withLabour.q1, { income: 10000.25, expense: 3250, gp: 6750.25 });
-assert.deepEqual(withLabour.q2, { income: 5000, expense: 9000, gp: -4000 });
+assert.deepEqual(withLabour.q1, { income: 10000.25, expense: 3250, gp: 6750.25, labourCost: 1250 });
+assert.deepEqual(withLabour.q2, { income: 5000, expense: 9000, gp: -4000, labourCost: 0 });
 assert.equal(withLabour.q3, undefined);
+assert.deepEqual(actualProjectCardMoney(withLabour.q1), {
+  income: 10000.25,
+  expense: 2000,
+  gp: 8000.25,
+  labourCost: 1250,
+  projectReturn: 6750.25,
+});
 
 const labourOnly = buildProjectActuals(
   [],
@@ -116,9 +124,16 @@ const labourOnly = buildProjectActuals(
   [],
   [{ quotation_client_project_id: 'q3', hours: '2.5' }],
 );
-assert.deepEqual(labourOnly.q3, { income: 0, expense: 1250, gp: -1250 });
+assert.deepEqual(labourOnly.q3, { income: 0, expense: 1250, gp: -1250, labourCost: 1250 });
 assert.equal(labourOnly.q1, undefined);
-assert.deepEqual(projectActualsFor('missing', {}), { income: 0, expense: 0, gp: 0 });
+assert.deepEqual(actualProjectCardMoney(labourOnly.q3), {
+  income: 0,
+  expense: 0,
+  gp: 0,
+  labourCost: 1250,
+  projectReturn: -1250,
+});
+assert.deepEqual(projectActualsFor('missing', {}), { income: 0, expense: 0, gp: 0, labourCost: 0 });
 
 assert.equal(formatQuotationListMoney(249.6), '$249.60');
 assert.equal(formatQuotationListMoney(1234.5), '$1,234.50');
@@ -144,20 +159,25 @@ const estimated = estimatedMoneyFor({
 const confirmedMetrics = clientProjectInfoMetrics({
   status: 'confirmed',
   estimated,
-  actuals: { income: 10000, expense: 2000, gp: 8000 },
+  actuals: { income: 10000, expense: 3250, gp: 6750, labourCost: 1250 },
 });
 assert.equal(confirmedMetrics.mode, 'actual');
 assert.equal(confirmedMetrics.income, 10000);
 assert.equal(confirmedMetrics.expense, 2000);
 assert.equal(confirmedMetrics.gp, 8000);
-assert.equal(confirmedMetrics.ratio, 80);
+assert.equal(confirmedMetrics.labourCost, 1250);
+assert.equal(confirmedMetrics.projectReturn, 6750);
 assert.equal(confirmedMetrics.labels.income, CLIENT_PROJECT_INFO_METRIC_LABELS.actual.income);
-assert.equal(confirmedMetrics.labels.ratio, CLIENT_PROJECT_INFO_METRIC_LABELS.actual.ratio);
+assert.equal(confirmedMetrics.labels.gp, CLIENT_PROJECT_INFO_METRIC_LABELS.actual.gp);
+assert.equal(confirmedMetrics.labels.labour, CLIENT_PROJECT_INFO_METRIC_LABELS.actual.labour);
+assert.equal(confirmedMetrics.labels.projectReturn, '項目收益');
+assert.match(metricsSrc, /labels\.projectReturn/);
+assert.match(metricsSrc, /lg:grid-cols-5/);
 
 const pitchingMetrics = clientProjectInfoMetrics({
   status: 'following_up',
   estimated,
-  actuals: { income: 10000, expense: 2000, gp: 8000 },
+  actuals: { income: 10000, expense: 2000, gp: 8000, labourCost: 0 },
 });
 assert.equal(pitchingMetrics.mode, 'estimated');
 assert.equal(pitchingMetrics.income, 20000);

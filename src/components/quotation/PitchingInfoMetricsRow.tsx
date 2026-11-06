@@ -55,10 +55,13 @@ export function PitchingInfoMetricsRow({
     [actuals, estimatedExpenses, estimatedIncome, projectId, showActuals, status],
   );
 
+  const moneyValue = (amount: number | null) =>
+    amount == null ? '—' : formatQuotationListMoney(amount);
+
   if (showActuals && loading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {[0, 1, 2, 3].map((i) => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {[0, 1, 2, 3, 4].map((i) => (
           <div
             key={i}
             className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-5 h-[96px] animate-pulse"
@@ -68,8 +71,30 @@ export function PitchingInfoMetricsRow({
     );
   }
 
-  const moneyValue = (amount: number | null) =>
-    amount == null ? '—' : formatQuotationListMoney(amount);
+  if (metrics.mode === 'actual') {
+    return (
+      <div className="space-y-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <MetricCard label={metrics.labels.income} value={moneyValue(metrics.income)} />
+          <MetricCard label={metrics.labels.expense} value={moneyValue(metrics.expense)} />
+          <MetricCard
+            label={metrics.labels.gp}
+            value={moneyValue(metrics.gp)}
+            valueClassName={quotationListGpClass(metrics.gp)}
+          />
+          <MetricCard label={metrics.labels.labour} value={moneyValue(metrics.labourCost)} />
+          <MetricCard
+            label={metrics.labels.projectReturn}
+            value={moneyValue(metrics.projectReturn)}
+            valueClassName={quotationListGpClass(metrics.projectReturn)}
+          />
+        </div>
+        {error && (
+          <p className="text-[12px] text-rose-600">無法載入實際收支：{error}</p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">
@@ -87,9 +112,6 @@ export function PitchingInfoMetricsRow({
           valueClassName={quotationListGpClass(metrics.ratio)}
         />
       </div>
-      {showActuals && error && (
-        <p className="text-[12px] text-rose-600">無法載入實際收支：{error}</p>
-      )}
     </div>
   );
 }

@@ -15,8 +15,12 @@ export type QuotationListMoney = {
 
 export type QuotationProjectActuals = {
   income: number;
+  /** Supplier expense plus day-report labour. List columns still use this total. */
   expense: number;
+  /** Income minus expense, with labour already inside expense. List GP still uses this. */
   gp: number;
+  /** Day-report labour at the internal hourly rate. Not part of supplier expense. */
+  labourCost: number;
 };
 
 export type IncomeAmountRow = {
@@ -138,8 +142,9 @@ export function buildProjectActuals(
   const result: Record<string, QuotationProjectActuals> = {};
   for (const id of ids) {
     const income = incomeByProject.get(id) ?? 0;
-    const expense = roundMoney((expenseByQuotation.get(id) ?? 0) + labourCost(labourByProject.get(id) ?? 0));
-    result[id] = { income, expense, gp: computeGp(income, expense) };
+    const labour = labourCost(labourByProject.get(id) ?? 0);
+    const expense = roundMoney((expenseByQuotation.get(id) ?? 0) + labour);
+    result[id] = { income, expense, gp: computeGp(income, expense), labourCost: labour };
   }
   return result;
 }
@@ -148,7 +153,31 @@ export function projectActualsFor(
   quotationClientProjectId: string,
   actuals: Record<string, QuotationProjectActuals>,
 ): QuotationProjectActuals {
-  return actuals[quotationClientProjectId] ?? { income: 0, expense: 0, gp: 0 };
+  return actuals[quotationClientProjectId] ?? { income: 0, expense: 0, gp: 0, labourCost: 0 };
+}
+
+/** Confirmed-project cards: GP excludes labour; 項目收益 is GP after labour. */
+export function actualProjectCardMoney(actuals: {
+  income: number;
+  expense: number;
+  labourCost?: number;
+}): {
+  income: number;
+  expense: number;
+  gp: number;
+  labourCost: number;
+  projectReturn: number;
+} {
+  const labour = roundMoney(actuals.labourCost ?? 0);
+  const expense = roundMoney(actuals.expense - labour);
+  const gp = computeGp(actuals.income, expense);
+  return {
+    income: actuals.income,
+    expense,
+    gp,
+    labourCost: labour,
+    projectReturn: computeGp(gp, labour),
+  };
 }
 
 export function formatQuotationListMoney(amount: number): string {
@@ -160,14 +189,13 @@ export function quotationListGpClass(amount: number | null): string {
   return amount > 0 ? 'text-emerald-600' : 'text-rose-600';
 }
 
-export type ClientProjectInfoMetricMode = 'actual' | 'estimated';
-
 export const CLIENT_PROJECT_INFO_METRIC_LABELS = {
   actual: {
     income: '收入 Income',
     expense: '支出 Expense',
     gp: '毛利 Gross Profit',
-    ratio: '毛利率 Profit Ratio',
+    labour: '人工成本 Labour Cost',
+    projectReturn: '項目收益',
   },
   estimated: {
     income: '預計收入 Est. Income',
@@ -194,26 +222,35 @@ export function formatProfitRatioPercent(ratio: number | null): string {
   return `${ratio.toFixed(1)}%`;
 }
 
+export type ClientProjectInfoMetrics =
+  | {
+      mode: 'actual';
+      income: number;
+      expense: number;
+      gp: number;
+      labourCost: number;
+      projectReturn: number;
+      labels: (typeof CLIENT_PROJECT_INFO_METRIC_LABELS)['actual'];
+    }
+  | {
+      mode: 'estimated';
+      income: number | null;
+      expense: number | null;
+      gp: number | null;
+      ratio: number | null;
+      labels: (typeof CLIENT_PROJECT_INFO_METRIC_LABELS)['estimated'];
+    };
+
 export function clientProjectInfoMetrics(input: {
   status: string;
   estimated: QuotationListMoney;
   actuals: QuotationProjectActuals | null;
-}): {
-  mode: ClientProjectInfoMetricMode;
-  income: number | null;
-  expense: number | null;
-  gp: number | null;
-  ratio: number | null;
-  labels: (typeof CLIENT_PROJECT_INFO_METRIC_LABELS)[ClientProjectInfoMetricMode];
-} {
+}): ClientProjectInfoMetrics {
   if (isActualClientProjectMetricsStatus(input.status)) {
-    const money = input.actuals ?? { income: 0, expense: 0, gp: 0 };
+    const money = actualProjectCardMoney(input.actuals ?? { income: 0, expense: 0, gp: 0, labourCost: 0 });
     return {
       mode: 'actual',
-      income: money.income,
-      expense: money.expense,
-      gp: money.gp,
-      ratio: profitRatioPercent(money.income, money.gp),
+      ...money,
       labels: CLIENT_PROJECT_INFO_METRIC_LABELS.actual,
     };
   }
