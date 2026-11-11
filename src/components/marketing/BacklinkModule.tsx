@@ -456,7 +456,7 @@ export function BacklinkModule() {
             emptyText="找不到符合的供應商"
           />
           {webPageSuppliers.length === 0 && (
-            <p className="text-[11px] text-amber-600 mt-1">請先至「供應商 → 網頁供應商」新增名單</p>
+            <p className="text-[11px] text-amber-600 mt-1">請先至「供應商 → 供應商管理」新增名單</p>
           )}
         </div>
         <div className="grid grid-cols-2 gap-4">

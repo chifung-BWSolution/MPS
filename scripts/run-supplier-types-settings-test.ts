@@ -8,11 +8,13 @@ const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
 
 const menu = read('src/context/AppContext.tsx');
 assert.match(menu, /id: 'supplier'/);
-assert.match(menu, /id: 'web-suppliers'/);
+assert.match(menu, /id: 'suppliers', label: '供應商管理'/);
+assert.match(menu, /sub === 'web-suppliers'\) return 'suppliers'/);
 assert.match(menu, /id: 'supplier-types'/);
 assert.match(menu, /label: '供應商類型', section: '設置'/);
 
 const module = read('src/components/supplier/SupplierModule.tsx');
+assert.match(module, /title: '供應商管理'/);
 assert.match(module, /SupplierTypesSettings/);
 assert.match(module, /active === 'supplier-types'/);
 assert.doesNotMatch(module, /此供應商子頁面已移除/);

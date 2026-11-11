@@ -18,6 +18,8 @@ export type QuotationListSortKey =
   | 'income'
   | 'expense'
   | 'gp'
+  | 'labourCost'
+  | 'projectReturn'
   | 'status';
 
 export type QuotationListSortDir = 'asc' | 'desc';
@@ -29,6 +31,8 @@ export type QuotationListSortable = Pick<
   income?: number | null;
   expense?: number | null;
   gp?: number | null;
+  labourCost?: number | null;
+  projectReturn?: number | null;
 };
 
 export const QUOTATION_LIST_SORT_KEYS: QuotationListSortKey[] = [
@@ -41,6 +45,8 @@ export const QUOTATION_LIST_SORT_KEYS: QuotationListSortKey[] = [
   'income',
   'expense',
   'gp',
+  'labourCost',
+  'projectReturn',
   'status',
 ];
 
@@ -50,6 +56,8 @@ const DESC_SORT_KEYS: ReadonlySet<QuotationListSortKey> = new Set([
   'income',
   'expense',
   'gp',
+  'labourCost',
+  'projectReturn',
 ]);
 
 export function getQuotationListSortValue(
@@ -82,6 +90,10 @@ export function getQuotationListSortValue(
       return record.expense ?? null;
     case 'gp':
       return record.gp ?? null;
+    case 'labourCost':
+      return record.labourCost ?? null;
+    case 'projectReturn':
+      return record.projectReturn ?? null;
     case 'status': {
       const index = PITCHING_STATUS_OPTIONS.indexOf(record.status);
       return index < 0 ? null : index;

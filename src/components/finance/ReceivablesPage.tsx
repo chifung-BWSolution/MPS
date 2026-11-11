@@ -1,5 +1,10 @@
 import { useMemo, useState } from 'react';
+import { Pencil } from 'lucide-react';
+import { toast } from 'sonner';
+import { CrudModal } from '@/components/ui/crud-modal';
+import { IncomeEditDialog, type IncomeEditSaveInput } from '@/components/quotation/IncomeEditDialog';
 import { useFinanceIncomes } from '@/hooks/useFinanceLedgers';
+import { useQuotationIncomes } from '@/hooks/useQuotationIncomes';
 import {
   DEFAULT_LEDGER_SORT_DIR,
   DEFAULT_RECEIVABLE_SORT_KEY,
@@ -59,11 +64,68 @@ function ReceivableHeaders({
       <FinanceSortableTh label="未收" sortKey="outstanding" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
       <FinanceSortableTh label="狀態" sortKey="paymentStatus" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
       <FinanceSortableTh label="備註" sortKey="remarks" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+      <th className={financeHeaderClass}>操作</th>
     </tr>
   );
 }
 
-function ReceivableList({ records }: { records: FinanceIncomeRow[] }) {
+function ReceivableIncomeEditor({
+  projectId,
+  incomeId,
+  onClose,
+  onSaved,
+}: {
+  projectId: string;
+  incomeId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { rows, loading, error, updateIncome } = useQuotationIncomes(projectId);
+  const income = rows.find((row) => row.id === incomeId) ?? null;
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async (payload: IncomeEditSaveInput) => {
+    setSaving(true);
+    const result = await updateIncome(incomeId, payload);
+    setSaving(false);
+    if (result.error) {
+      toast.error(`更新失敗：${result.error.message}`);
+      return;
+    }
+    toast.success('已更新收入');
+    onSaved();
+    onClose();
+  };
+
+  if (!income) {
+    return (
+      <CrudModal isOpen onClose={onClose} title="編輯收入" size="lg">
+        <p className="py-6 text-center text-[13px] text-muted-foreground">
+          {loading ? '載入收入中…' : error || '找不到這筆收入'}
+        </p>
+      </CrudModal>
+    );
+  }
+
+  return (
+    <IncomeEditDialog
+      open
+      income={income}
+      siblingRows={rows}
+      saving={saving}
+      onClose={onClose}
+      onSave={(payload) => void handleSave(payload)}
+    />
+  );
+}
+
+function ReceivableList({
+  records,
+  onEdit,
+}: {
+  records: FinanceIncomeRow[];
+  onEdit: (record: FinanceIncomeRow) => void;
+}) {
   const asOf = formatLocalIsoDate(new Date());
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -171,12 +233,22 @@ function ReceivableList({ records }: { records: FinanceIncomeRow[] }) {
                     <td className="px-4 py-3 text-[13px] text-muted-foreground max-w-[220px] truncate">
                       {record.remarks || '—'}
                     </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => onEdit(record)}
+                        className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                        aria-label={`編輯 ${record.projectName} ${record.typeLabel}`}
+                      >
+                        <Pencil size={13} />
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={11} className={cn(financeHeaderClass, 'py-8 text-center font-normal normal-case tracking-normal')}>
+                  <td colSpan={12} className={cn(financeHeaderClass, 'py-8 text-center font-normal normal-case tracking-normal')}>
                     沒有找到符合條件的應收未收紀錄
                   </td>
                 </tr>
@@ -190,17 +262,39 @@ function ReceivableList({ records }: { records: FinanceIncomeRow[] }) {
 }
 
 export function ReceivablesPage() {
-  const { incomes, loading, error, lastSyncedAt } = useFinanceIncomes();
+  const { incomes, loading, error, lastSyncedAt, refresh } = useFinanceIncomes();
+  const [editing, setEditing] = useState<{ projectId: string; incomeId: string } | null>(null);
 
   return (
-    <FinancePageFrame
-      title="應收未收"
-      description="列出 incomes 表中未收金額大於 0 的紀錄（應收 − 實收 − 壞帳）。"
-      lastSyncedAt={lastSyncedAt}
-      error={error}
-      loading={loading}
-    >
-      <ReceivableList records={incomes} />
-    </FinancePageFrame>
+    <>
+      <FinancePageFrame
+        title="應收未收"
+        description="列出 incomes 表中未收金額大於 0 的紀錄（應收 − 實收 − 壞帳）。"
+        lastSyncedAt={lastSyncedAt}
+        error={error}
+        loading={loading}
+      >
+        <ReceivableList
+          records={incomes}
+          onEdit={(record) => {
+            const projectId = record.quotationClientProjectId?.trim();
+            if (!projectId) {
+              toast.error('找不到對應項目，無法編輯這筆收入');
+              return;
+            }
+            setEditing({ projectId, incomeId: record.id });
+          }}
+        />
+      </FinancePageFrame>
+      {editing && (
+        <ReceivableIncomeEditor
+          key={editing.incomeId}
+          projectId={editing.projectId}
+          incomeId={editing.incomeId}
+          onClose={() => setEditing(null)}
+          onSaved={() => void refresh()}
+        />
+      )}
+    </>
   );
 }

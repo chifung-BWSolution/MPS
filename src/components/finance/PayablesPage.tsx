@@ -1,5 +1,13 @@
 import { useMemo, useState } from 'react';
+import { Pencil } from 'lucide-react';
+import { toast } from 'sonner';
+import { CrudModal } from '@/components/ui/crud-modal';
+import { ExpenseEditDialog, type ExpenseEditSaveInput } from '@/components/quotation/ExpenseEditDialog';
+import { useCreditCards } from '@/hooks/useCreditCards';
 import { useFinanceExpenses } from '@/hooks/useFinanceLedgers';
+import { useQuotationExpenses } from '@/hooks/useQuotationExpenses';
+import { useSupplierTypes } from '@/hooks/useSupplierTypes';
+import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
 import {
   DEFAULT_LEDGER_SORT_DIR,
   DEFAULT_PAYABLE_SORT_KEY,
@@ -23,6 +31,8 @@ import {
   EXPENSE_PAYMENT_STATUS_LABELS,
   EXPENSE_PAYMENT_STATUSES,
   formatExpenseDate,
+  isExpenseSourceRelatedType,
+  type ExpenseSourceRelatedType,
 } from '@/lib/quotationExpenses';
 import { formatLocalIsoDate } from '@/lib/quotationIncomes';
 import { cn } from '@/lib/utils';
@@ -58,11 +68,92 @@ function PayableHeaders({
       <FinanceSortableTh label="未付" sortKey="outstanding" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
       <FinanceSortableTh label="狀態" sortKey="paymentStatus" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
       <FinanceSortableTh label="備註" sortKey="remarks" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+      <th className={financeHeaderClass}>操作</th>
     </tr>
   );
 }
 
-function PayableList({ records }: { records: FinanceExpenseRow[] }) {
+function PayableExpenseEditor({
+  sourceRelatedType,
+  sourceRelatedId,
+  expenseId,
+  onClose,
+  onSaved,
+}: {
+  sourceRelatedType: ExpenseSourceRelatedType;
+  sourceRelatedId: string;
+  expenseId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { rows, loading, error, updateExpense, setRecurringExpenseStatus } = useQuotationExpenses(
+    sourceRelatedType,
+    sourceRelatedId,
+  );
+  const { types: supplierTypes } = useSupplierTypes();
+  const { suppliers } = useWebPageSuppliers();
+  const { cards } = useCreditCards();
+  const expense = rows.find((row) => row.id === expenseId) ?? null;
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async (payload: ExpenseEditSaveInput) => {
+    setSaving(true);
+    const result = await updateExpense(expenseId, payload);
+    setSaving(false);
+    if (result.error) {
+      toast.error(`更新失敗：${result.error.message}`);
+      return;
+    }
+    toast.success(payload.frequency ? '已更新並建立週期支出' : '已更新支出');
+    onSaved();
+    onClose();
+  };
+
+  const handleRecurringStatus = async (status: 'active' | 'paused') => {
+    if (!expense?.recurringExpenseId) return;
+    setSaving(true);
+    const result = await setRecurringExpenseStatus(expense.recurringExpenseId, status);
+    setSaving(false);
+    if (result.error) {
+      toast.error(result.error.message);
+      return;
+    }
+    toast.success(status === 'paused' ? '已暫停週期' : '已恢復週期');
+  };
+
+  if (!expense) {
+    return (
+      <CrudModal isOpen onClose={onClose} title="編輯支出" size="lg">
+        <p className="py-6 text-center text-[13px] text-muted-foreground">
+          {loading ? '載入支出中…' : error || '找不到這筆支出'}
+        </p>
+      </CrudModal>
+    );
+  }
+
+  return (
+    <ExpenseEditDialog
+      open
+      expense={expense}
+      siblingRows={rows}
+      supplierTypes={supplierTypes}
+      suppliers={suppliers}
+      cards={cards}
+      saving={saving}
+      onClose={onClose}
+      onSave={(payload) => void handleSave(payload)}
+      onRecurringStatus={(status) => void handleRecurringStatus(status)}
+    />
+  );
+}
+
+function PayableList({
+  records,
+  onEdit,
+}: {
+  records: FinanceExpenseRow[];
+  onEdit: (record: FinanceExpenseRow) => void;
+}) {
   const asOf = formatLocalIsoDate(new Date());
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -173,12 +264,22 @@ function PayableList({ records }: { records: FinanceExpenseRow[] }) {
                     <td className="px-4 py-3 text-[13px] text-muted-foreground max-w-[220px] truncate">
                       {record.remarks || '—'}
                     </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => onEdit(record)}
+                        className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                        aria-label={`編輯 ${record.projectName} ${record.typeLabel}`}
+                      >
+                        <Pencil size={13} />
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={10} className={cn(financeHeaderClass, 'py-8 text-center font-normal normal-case tracking-normal')}>
+                  <td colSpan={11} className={cn(financeHeaderClass, 'py-8 text-center font-normal normal-case tracking-normal')}>
                     沒有找到符合條件的應付未付紀錄
                   </td>
                 </tr>
@@ -192,17 +293,48 @@ function PayableList({ records }: { records: FinanceExpenseRow[] }) {
 }
 
 export function PayablesPage() {
-  const { expenses, loading, error, lastSyncedAt } = useFinanceExpenses();
+  const { expenses, loading, error, lastSyncedAt, refresh } = useFinanceExpenses();
+  const [editing, setEditing] = useState<{
+    sourceRelatedType: ExpenseSourceRelatedType;
+    sourceRelatedId: string;
+    expenseId: string;
+  } | null>(null);
 
   return (
-    <FinancePageFrame
-      title="應付未付"
-      description="列出 expenses 表中未付金額大於 0 的紀錄（應付 − 實付 − 壞帳）。"
-      lastSyncedAt={lastSyncedAt}
-      error={error}
-      loading={loading}
-    >
-      <PayableList records={expenses} />
-    </FinancePageFrame>
+    <>
+      <FinancePageFrame
+        title="應付未付"
+        description="列出 expenses 表中未付金額大於 0 的紀錄（應付 − 實付 − 壞帳）。"
+        lastSyncedAt={lastSyncedAt}
+        error={error}
+        loading={loading}
+      >
+        <PayableList
+          records={expenses}
+          onEdit={(record) => {
+            const sourceRelatedId = record.sourceRelatedId?.trim();
+            if (!isExpenseSourceRelatedType(record.sourceRelatedType) || !sourceRelatedId) {
+              toast.error('找不到對應項目，無法編輯這筆支出');
+              return;
+            }
+            setEditing({
+              sourceRelatedType: record.sourceRelatedType,
+              sourceRelatedId,
+              expenseId: record.id,
+            });
+          }}
+        />
+      </FinancePageFrame>
+      {editing && (
+        <PayableExpenseEditor
+          key={editing.expenseId}
+          sourceRelatedType={editing.sourceRelatedType}
+          sourceRelatedId={editing.sourceRelatedId}
+          expenseId={editing.expenseId}
+          onClose={() => setEditing(null)}
+          onSaved={() => void refresh()}
+        />
+      )}
+    </>
   );
 }

@@ -17,6 +17,7 @@ import {
   formatCostPercent,
   formatSignedMoney,
   formatSignedPercent,
+  PROJECT_RETURN_SLICE_LABEL,
   sliceSharePercent,
   type CostCompareRow,
   type CostDoughnutSlice,
@@ -160,9 +161,6 @@ export function PitchingCostAnalysisTab({
   const analysis = useMemo(() => {
     const incomeSummary = summarizeIncomes(incomeRows);
     const actualExpenses = expenseRows.map((row) => ({ name: row.typeLabel, amount: row.billedAmount }));
-    if (labourCostAmount > 0) {
-      actualExpenses.push({ name: LABOUR_COST_LABEL, amount: labourCostAmount });
-    }
     return buildCostAnalysis({
       estimatedIncome,
       estimatedExpenses,
@@ -171,6 +169,7 @@ export function PitchingCostAnalysisTab({
       estimatedExpenseCount: estimatedExpenses.length,
       actualExpenseCount: expenseRows.length,
       actualIncomeCount: incomeRows.length,
+      labourCost: labourCostAmount,
     });
   }, [estimatedExpenses, estimatedIncome, expenseRows, incomeRows, labourCostAmount]);
 
@@ -187,9 +186,22 @@ export function PitchingCostAnalysisTab({
     () => buildIncomeDoughnut(analysis.estimatedIncome, analysis.estimatedCosts, colorByLabel),
     [analysis.estimatedCosts, analysis.estimatedIncome, colorByLabel],
   );
+  const actualDonutCosts = useMemo(
+    () =>
+      labourCostAmount > 0
+        ? [...analysis.actualCosts, { name: LABOUR_COST_LABEL, amount: labourCostAmount }]
+        : analysis.actualCosts,
+    [analysis.actualCosts, labourCostAmount],
+  );
   const actualDonut = useMemo(
-    () => buildIncomeDoughnut(analysis.actualIncome, analysis.actualCosts, colorByLabel),
-    [analysis.actualCosts, analysis.actualIncome, colorByLabel],
+    () =>
+      buildIncomeDoughnut(
+        analysis.actualIncome,
+        actualDonutCosts,
+        colorByLabel,
+        PROJECT_RETURN_SLICE_LABEL,
+      ),
+    [actualDonutCosts, analysis.actualIncome, colorByLabel],
   );
 
   const loading = incomesLoading || expensesLoading || labourLoading;
@@ -216,7 +228,7 @@ export function PitchingCostAnalysisTab({
             <h3 className="text-[15px] font-semibold">成本結構</h3>
           </div>
           <p className="text-[12px] text-muted-foreground mt-1">
-            項目成本分析與對比 · 預計 = 預計收入支出 · 實際 = 收入 / 支出
+            項目成本分析與對比 · 預計 = 預計收入支出 · 實際總支出不含人工 · 項目收益 = 毛利 − 人工成本
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -240,14 +252,14 @@ export function PitchingCostAnalysisTab({
                   className={cn(
                     'border-b border-border/50',
                     row.kind === 'expense-total' && 'bg-rose-50/70',
-                    row.kind === 'profit' && 'bg-emerald-50/70',
+                    (row.kind === 'profit' || row.kind === 'project-return') && 'bg-emerald-50/70',
                   )}
                 >
                   <td
                     className={cn(
                       'px-5 py-2.5',
-                      (row.kind === 'expense-total' || row.kind === 'profit') && 'font-medium',
-                      row.kind === 'cost' && 'text-muted-foreground pl-8',
+                      (row.kind === 'expense-total' || row.kind === 'profit' || row.kind === 'project-return') && 'font-medium',
+                      (row.kind === 'cost' || row.kind === 'labour') && 'text-muted-foreground pl-8',
                     )}
                   >
                     {row.label}

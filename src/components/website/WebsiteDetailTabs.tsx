@@ -1422,7 +1422,7 @@ export function WebsiteBacklinkTab({ site }: { site: WebsiteProfileFull }) {
             </SelectContent>
           </Select>
           {webPageSuppliers.length === 0 && (
-            <p className="text-[11px] text-amber-600 mt-1">請先至「供應商 → 網頁供應商」新增名單</p>
+            <p className="text-[11px] text-amber-600 mt-1">請先至「供應商 → 供應商管理」新增名單</p>
           )}
         </div>
         <div>

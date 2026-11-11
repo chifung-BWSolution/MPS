@@ -91,6 +91,9 @@ assert.match(receivablesPage, /應收未收/);
 assert.match(receivablesPage, /incomes 表/);
 assert.match(receivablesPage, /LEDGER_DUE_FILTER_LABELS/);
 assert.match(receivablesPage, /FinanceProjectTypeFilter/);
+assert.match(receivablesPage, /操作/);
+assert.match(receivablesPage, /IncomeEditDialog/);
+assert.match(receivablesPage, /Pencil/);
 assert.doesNotMatch(receivablesPage, /只看已逾期/);
 
 const payablesPage = read('src/components/finance/PayablesPage.tsx');
@@ -99,6 +102,9 @@ assert.match(payablesPage, /應付未付/);
 assert.match(payablesPage, /expenses 表/);
 assert.match(payablesPage, /LEDGER_DUE_FILTER_LABELS/);
 assert.match(payablesPage, /FinanceProjectTypeFilter/);
+assert.match(payablesPage, /操作/);
+assert.match(payablesPage, /ExpenseEditDialog/);
+assert.match(payablesPage, /Pencil/);
 assert.doesNotMatch(payablesPage, /只看已逾期/);
 
 const badDebtsPage = read('src/components/finance/BadDebtsPage.tsx');

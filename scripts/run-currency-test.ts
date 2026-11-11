@@ -66,8 +66,8 @@ assert.match(picker, /aria-label="貨幣"/);
 assert.match(picker, /export function StoredHkdHint/);
 
 for (const file of [
-  'src/components/quotation/PitchingIncomeTab.tsx',
-  'src/components/quotation/PitchingExpenseTab.tsx',
+  'src/components/quotation/IncomeEditDialog.tsx',
+  'src/components/quotation/ExpenseEditDialog.tsx',
   'src/components/quotation/PitchingBulkIncomeDialog.tsx',
   'src/components/quotation/PitchingBulkExpenseDialog.tsx',
   'src/components/quotation/PitchingBudgetTab.tsx',

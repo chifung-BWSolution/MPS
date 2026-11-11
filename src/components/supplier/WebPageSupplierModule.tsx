@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { Search, Plus, Edit } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { formatMoney } from '@/lib/currency';
 import { useWebPageSuppliers } from '@/hooks/useWebPageSuppliers';
+import { useSupplierExpenseStats } from '@/hooks/useSupplierExpenseStats';
 import { useSupplierTypes } from '@/hooks/useSupplierTypes';
 import type { WebPageSupplier } from '@/types/marketingOps';
 import { CrudModal } from '@/components/ui/crud-modal';
@@ -34,6 +36,7 @@ export function WebPageSupplierModule() {
     updateSupplier,
   } = useWebPageSuppliers();
   const { types: supplierTypes } = useSupplierTypes();
+  const { bySupplierId, ready: expenseStatsReady } = useSupplierExpenseStats();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -258,6 +261,8 @@ export function WebPageSupplierModule() {
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">電話</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">電郵</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">登入方式</th>
+              <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">項目數</th>
+              <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">合作金額</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">狀態</th>
               <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">操作</th>
             </tr>
@@ -265,6 +270,9 @@ export function WebPageSupplierModule() {
           <tbody>
             {filtered.map((supplier) => {
               const type = supplier.supplierTypesId ? typeMap.get(supplier.supplierTypesId) : undefined;
+              const expenseStats = expenseStatsReady ? bySupplierId.get(supplier.id) : undefined;
+              const projectCount = expenseStats?.projectCount ?? 0;
+              const cooperationAmount = expenseStats?.cooperationAmount ?? 0;
               return (
                 <tr key={supplier.id} className="border-t border-border/50 hover:bg-muted/10 transition-colors duration-200">
                   <td className="px-4 py-3 text-muted-foreground">{type?.displayName || '—'}</td>
@@ -293,6 +301,12 @@ export function WebPageSupplierModule() {
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">
+                    {expenseStatsReady ? projectCount : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">
+                    {expenseStatsReady ? formatMoney(cooperationAmount) : '—'}
                   </td>
                   <td className="px-4 py-3">
                     <span className={cn('text-[12px]', supplier.isActive ? 'text-teal-700' : 'text-amber-700')}>

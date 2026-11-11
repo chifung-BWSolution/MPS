@@ -1,4 +1,5 @@
 import type { PitchingExpenseItem } from '../data/pitchingData';
+import { LABOUR_COST_LABEL } from './clientProjectLabour';
 import {
   computeGp,
   formatQuotationListMoney,
@@ -24,6 +25,8 @@ export const COST_SLICE_COLORS = [
 
 export const PROFIT_SLICE_COLOR = '#22c55e';
 export const PROFIT_SLICE_LABEL = '毛利 Gross Profit';
+export const PROJECT_RETURN_SLICE_LABEL = '項目收益';
+export const LABOUR_SLICE_COLOR = '#64748b';
 
 export type CostAmountItem = {
   name: string;
@@ -31,7 +34,7 @@ export type CostAmountItem = {
 };
 
 export type CostComparePolarity = 'higher-better' | 'lower-better';
-export type CostRowKind = 'revenue' | 'cost' | 'expense-total' | 'profit' | 'margin';
+export type CostRowKind = 'revenue' | 'cost' | 'expense-total' | 'profit' | 'margin' | 'labour' | 'project-return';
 export type CostRowFormat = 'money' | 'percent';
 
 export type CostCompareRow = {
@@ -136,6 +139,8 @@ export function buildCostAnalysis(input: {
   estimatedExpenseCount?: number;
   actualExpenseCount?: number;
   actualIncomeCount?: number;
+  /** Day-report labour. Kept out of Total Expense. Omit to leave the labour rows off. */
+  labourCost?: number | null;
 }): CostAnalysis {
   const estimatedIncome = input.estimatedIncome == null ? null : toMoneyAmount(input.estimatedIncome);
   const actualIncome = input.actualIncome == null ? null : toMoneyAmount(input.actualIncome);
@@ -152,6 +157,8 @@ export function buildCostAnalysis(input: {
   const actualGp = actualIncome == null ? null : computeGp(actualIncome, actualExpense);
   const estimatedMargin = profitRatioPercent(estimatedIncome, estimatedGp);
   const actualMargin = profitRatioPercent(actualIncome, actualGp);
+  const labour = input.labourCost == null ? null : roundMoney(toMoneyAmount(input.labourCost));
+  const actualProjectReturn = actualGp == null || labour == null ? null : computeGp(actualGp, labour);
 
   const costKeys: string[] = [];
   const labelByKey = new Map<string, string>();
@@ -209,6 +216,28 @@ export function buildCostAnalysis(input: {
       'profit',
       'money',
     ),
+    ...(labour == null
+      ? []
+      : [
+          compareRow(
+            'labour',
+            `(-) ${LABOUR_COST_LABEL}`,
+            null,
+            labour,
+            'lower-better',
+            'labour',
+            'money',
+          ),
+          compareRow(
+            'project-return',
+            `= ${PROJECT_RETURN_SLICE_LABEL}`,
+            null,
+            actualProjectReturn,
+            'higher-better',
+            'project-return',
+            'money',
+          ),
+        ]),
     compareRow(
       'margin',
       'Gross Margin % 毛利率',
@@ -252,6 +281,7 @@ export function buildIncomeDoughnut(
   income: number | null,
   costs: CostAmountItem[],
   colorByLabel?: Map<string, string>,
+  remainderLabel = PROFIT_SLICE_LABEL,
 ): { slices: CostDoughnutSlice[]; overspend: number; income: number } {
   const incomeValue = income ?? 0;
   if (incomeValue <= 0) {
@@ -266,13 +296,16 @@ export function buildIncomeDoughnut(
     name: item.name,
     value: roundMoney(item.amount * scale),
     kind: 'cost',
-    color: colorByLabel?.get(costLabelKey(item.name)) ?? COST_SLICE_COLORS[0],
+    color:
+      costLabelKey(item.name) === costLabelKey(LABOUR_COST_LABEL)
+        ? LABOUR_SLICE_COLOR
+        : colorByLabel?.get(costLabelKey(item.name)) ?? COST_SLICE_COLORS[0],
   }));
   const used = roundMoney(slices.reduce((sum, item) => sum + item.value, 0));
   const profit = roundMoney(incomeValue - used);
   if (profit > 0) {
     slices.push({
-      name: PROFIT_SLICE_LABEL,
+      name: remainderLabel,
       value: profit,
       kind: 'profit',
       color: PROFIT_SLICE_COLOR,

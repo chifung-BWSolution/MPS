@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { LABOUR_COST_LABEL } from '../src/lib/clientProjectLabour.ts';
 import {
   UNCATEGORIZED_COST_LABEL,
+  LABOUR_SLICE_COLOR,
   PROFIT_SLICE_LABEL,
+  PROJECT_RETURN_SLICE_LABEL,
   amountDelta,
   buildCostAnalysis,
   buildIncomeDoughnut,
@@ -97,6 +100,33 @@ const margin = analysis.rows.find((row) => row.key === 'margin');
 assert.equal(margin?.estimated, 70);
 assert.equal(margin?.actual, 55.56);
 assert.equal(margin?.format, 'percent');
+assert.equal(analysis.rows.some((row) => row.key === 'labour'), false);
+
+const withLabour = buildCostAnalysis({
+  estimatedIncome: 20000,
+  estimatedExpenses: [
+    { name: '設計', amount: 5000 },
+    { name: 'Hosting', amount: 1000 },
+  ],
+  actualIncome: 18000,
+  actualExpenses: [
+    { name: '設計', amount: 6000 },
+    { name: '外包', amount: 2000 },
+  ],
+  labourCost: 1250,
+});
+assert.equal(withLabour.actualExpense, 8000);
+assert.equal(withLabour.actualCosts.some((item) => item.name === LABOUR_COST_LABEL), false);
+assert.equal(withLabour.rows.find((row) => row.key === 'expense')?.actual, 8000);
+assert.equal(withLabour.rows.find((row) => row.key === 'profit')?.actual, 10000);
+assert.equal(withLabour.rows.find((row) => row.key === 'labour')?.estimated, null);
+assert.equal(withLabour.rows.find((row) => row.key === 'labour')?.actual, 1250);
+assert.equal(withLabour.rows.find((row) => row.key === 'project-return')?.estimated, null);
+assert.equal(withLabour.rows.find((row) => row.key === 'project-return')?.actual, 8750);
+assert.deepEqual(
+  withLabour.rows.map((row) => row.key).slice(-4),
+  ['profit', 'labour', 'project-return', 'margin'],
+);
 
 const colors = costSliceColorMap(['設計', 'Hosting', '外包']);
 const estimatedDonut = buildIncomeDoughnut(20000, analysis.estimatedCosts, colors);
@@ -108,6 +138,25 @@ assert.equal(
 assert.ok(estimatedDonut.slices.some((slice) => slice.name === PROFIT_SLICE_LABEL));
 assert.equal(estimatedDonut.overspend, 0);
 assert.equal(sliceSharePercent(5000, 20000), 25);
+
+const actualDonut = buildIncomeDoughnut(
+  18000,
+  [
+    { name: '設計', amount: 6000 },
+    { name: '外包', amount: 2000 },
+    { name: LABOUR_COST_LABEL, amount: 1250 },
+  ],
+  colors,
+  PROJECT_RETURN_SLICE_LABEL,
+);
+const returnSlice = actualDonut.slices.find((slice) => slice.kind === 'profit');
+assert.equal(returnSlice?.name, PROJECT_RETURN_SLICE_LABEL);
+assert.equal(returnSlice?.value, 8750);
+const labourSlice = actualDonut.slices.find((slice) => slice.name === LABOUR_COST_LABEL);
+assert.equal(labourSlice?.kind, 'cost');
+assert.equal(labourSlice?.value, 1250);
+assert.equal(labourSlice?.color, LABOUR_SLICE_COLOR);
+assert.equal(actualDonut.slices.reduce((sum, slice) => sum + slice.value, 0), 18000);
 
 const overspendDonut = buildIncomeDoughnut(1000, [{ name: '設計', amount: 1500 }]);
 assert.equal(overspendDonut.overspend, 500);
@@ -129,6 +178,9 @@ const tab = read('src/components/quotation/PitchingCostAnalysisTab.tsx');
 assert.match(tab, /export function PitchingCostAnalysisTab/);
 assert.match(tab, /useQuotationIncomes/);
 assert.match(tab, /useQuotationExpenses/);
+assert.match(tab, /labourCost: labourCostAmount/);
+assert.match(tab, /PROJECT_RETURN_SLICE_LABEL/);
+assert.doesNotMatch(tab, /actualExpenses\.push/);
 assert.match(tab, /成本結構/);
 assert.match(tab, /Estimated 預計/);
 assert.match(tab, /Actual 實際/);

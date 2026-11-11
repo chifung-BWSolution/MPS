@@ -262,6 +262,8 @@ function resolveExpenseProject(row: ExpenseDbRow, lookups: LookupMaps) {
       quotationClientProjectId: row.related_id,
       projectStatus: qcp?.status,
       projectTypeKey: qcp?.projectTypeKey,
+      sourceRelatedType: 'quotation_client' as const,
+      sourceRelatedId: row.related_id,
     };
   }
   if (row.related_type === 'webandsystem') {
@@ -270,11 +272,13 @@ function resolveExpenseProject(row: ExpenseDbRow, lookups: LookupMaps) {
       projectName: website?.name.trim() || '未指定項目',
       websiteId: row.related_id,
       projectTypeKey: website?.projectTypeKey,
+      sourceRelatedType: 'webandsystem' as const,
+      sourceRelatedId: row.related_id,
     };
   }
 
   const project = lookups.projects.get(row.related_id);
-  if (!project) return { projectName: '未指定項目' };
+  if (!project) return { projectName: '未指定項目', sourceRelatedType: undefined, sourceRelatedId: undefined };
   if (project.related_type === 'quotation_client' && project.related_id) {
     const qcp = lookups.qcps.get(project.related_id);
     return {
@@ -283,6 +287,8 @@ function resolveExpenseProject(row: ExpenseDbRow, lookups: LookupMaps) {
       quotationClientProjectId: project.related_id,
       projectStatus: qcp?.status,
       projectTypeKey: qcp?.projectTypeKey,
+      sourceRelatedType: 'quotation_client' as const,
+      sourceRelatedId: project.related_id,
     };
   }
   if (project.related_type === 'webandsystem' && project.related_id) {
@@ -291,9 +297,15 @@ function resolveExpenseProject(row: ExpenseDbRow, lookups: LookupMaps) {
       projectName: website?.name.trim() || optionalText(project.name) || '未指定項目',
       websiteId: project.related_id,
       projectTypeKey: website?.projectTypeKey,
+      sourceRelatedType: 'webandsystem' as const,
+      sourceRelatedId: project.related_id,
     };
   }
-  return { projectName: optionalText(project.name) || '未指定項目' };
+  return {
+    projectName: optionalText(project.name) || '未指定項目',
+    sourceRelatedType: undefined,
+    sourceRelatedId: undefined,
+  };
 }
 
 function mapIncome(row: IncomeDbRow, lookups: LookupMaps): FinanceIncomeRow {
@@ -349,6 +361,8 @@ function mapExpense(row: ExpenseDbRow, lookups: LookupMaps): FinanceExpenseRow {
     creditCardLabel: card ? formatCreditCardOptionLabel(card) : undefined,
     remarks: optionalText(row.remarks),
     createdAt: row.created_at,
+    sourceRelatedType: project.sourceRelatedType,
+    sourceRelatedId: project.sourceRelatedId,
   };
 }
 

@@ -618,7 +618,10 @@ assert.match(hook, /CREATE_RECURRING_EXPENSE_RPC/);
 assert.match(hook, /frequency && !recurringId/);
 assert.doesNotMatch(hook, /!editing && isRecurringExpenseFrequency/);
 
-const tab = read('src/components/quotation/PitchingExpenseTab.tsx');
+const tab = [
+  read('src/components/quotation/PitchingExpenseTab.tsx'),
+  read('src/components/quotation/ExpenseEditDialog.tsx'),
+].join('\n');
 assert.match(tab, /useQuotationExpenses/);
 assert.match(tab, /relatedType/);
 assert.match(tab, /relatedId/);

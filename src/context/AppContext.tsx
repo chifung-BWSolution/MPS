@@ -26,6 +26,8 @@ export function resolveSubModule(module: string, sub?: string): string {
   if (module === 'marketing' && (sub === 'google-ads-sync' || sub === 'facebook-ads-sync')) {
     return 'ads-data-sync';
   }
+  // Legacy alias: 網頁供應商 → 供應商管理
+  if (module === 'supplier' && sub === 'web-suppliers') return 'suppliers';
   return menuItem?.subMenus.some(s => s.id === sub && !s.linkTo) ? sub : defaultSub;
 }
 
@@ -210,7 +212,7 @@ export const mainMenuItems: MainMenuItem[] = [
     id: 'supplier',
     label: '供應商',
     subMenus: [
-      { id: 'web-suppliers', label: '網頁供應商' },
+      { id: 'suppliers', label: '供應商管理' },
       { id: 'supplier-types', label: '供應商類型', section: '設置' },
     ],
   },

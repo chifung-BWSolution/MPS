@@ -18,13 +18,16 @@ const headerClass =
 
 export type QuotationListMoneyColumns = 'estimated' | 'actual';
 
-export const QUOTATION_LIST_MONEY_LABELS: Record<
-  QuotationListMoneyColumns,
-  { income: string; expense: string; gp: string }
-> = {
+export const QUOTATION_LIST_MONEY_LABELS = {
   estimated: { income: '預計收入', expense: '預計支出', gp: '預計 GP' },
-  actual: { income: '總收入', expense: '總支出', gp: '實際 GP' },
-};
+  actual: {
+    income: '總收入',
+    expense: '總支出',
+    gp: '實際 GP',
+    labour: '人工成本',
+    projectReturn: '項目收益',
+  },
+} as const;
 
 export function useQuotationListSort<T extends QuotationListSortable>(
   records: T[],
@@ -99,10 +102,16 @@ export function QuotationListMoneyCells({
   income,
   expense,
   gp,
+  labourCost,
+  projectReturn,
+  moneyColumns = 'estimated',
 }: {
   income: number | null;
   expense: number | null;
   gp: number | null;
+  labourCost?: number | null;
+  projectReturn?: number | null;
+  moneyColumns?: QuotationListMoneyColumns;
 }) {
   return (
     <>
@@ -115,6 +124,16 @@ export function QuotationListMoneyCells({
       <td className="px-4 py-3 text-[13px] text-right whitespace-nowrap">
         <MoneyValue value={gp} tone="gp" />
       </td>
+      {moneyColumns === 'actual' && (
+        <>
+          <td className="px-4 py-3 text-[13px] text-right whitespace-nowrap">
+            <MoneyValue value={labourCost ?? null} />
+          </td>
+          <td className="px-4 py-3 text-[13px] text-right whitespace-nowrap">
+            <MoneyValue value={projectReturn ?? null} tone="gp" />
+          </td>
+        </>
+      )}
     </>
   );
 }
@@ -217,6 +236,26 @@ export function QuotationClientProjectTableHeaders({
         onSort={onSort}
         align="right"
       />
+      {moneyColumns === 'actual' && (
+        <>
+          <QuotationListSortableTh
+            label={QUOTATION_LIST_MONEY_LABELS.actual.labour}
+            sortKey="labourCost"
+            activeKey={sortKey}
+            sortDir={sortDir}
+            onSort={onSort}
+            align="right"
+          />
+          <QuotationListSortableTh
+            label={QUOTATION_LIST_MONEY_LABELS.actual.projectReturn}
+            sortKey="projectReturn"
+            activeKey={sortKey}
+            sortDir={sortDir}
+            onSort={onSort}
+            align="right"
+          />
+        </>
+      )}
       <QuotationListSortableTh
         label="狀態"
         sortKey="status"

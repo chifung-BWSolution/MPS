@@ -41,7 +41,7 @@ import {
   useQuotationListSort,
 } from '@/components/quotation/QuotationListSortHeader';
 import { useQuotationProjectActuals } from '@/hooks/useQuotationProjectActuals';
-import { projectActualsFor, QUOTATION_LIST_COLUMN_COUNT } from '@/lib/quotationListMoney';
+import { projectActualsFor, QUOTATION_PROJECT_LIST_COLUMN_COUNT } from '@/lib/quotationListMoney';
 
 function ProjectList({
   records,
@@ -64,7 +64,7 @@ function ProjectList({
     () =>
       records.map((record) => {
         if (actualsLoading || actualsError) {
-          return { ...record, income: null, expense: null, gp: null };
+          return { ...record, income: null, expense: null, gp: null, labourCost: null, projectReturn: null };
         }
         return { ...record, ...projectActualsFor(record.id, actuals) };
       }),
@@ -200,6 +200,9 @@ function ProjectList({
                       income={record.income}
                       expense={record.expense}
                       gp={record.gp}
+                      labourCost={record.labourCost}
+                      projectReturn={record.projectReturn}
+                      moneyColumns="actual"
                     />
                     <td className="px-4 py-3 whitespace-nowrap">
                       <PitchingStatusBadge status={record.status} />
@@ -209,7 +212,7 @@ function ProjectList({
                 ))}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={QUOTATION_LIST_COLUMN_COUNT} className="px-4 py-8 text-center text-[13px] text-muted-foreground">
+                  <td colSpan={QUOTATION_PROJECT_LIST_COLUMN_COUNT} className="px-4 py-8 text-center text-[13px] text-muted-foreground">
                     沒有找到符合條件的 Project 紀錄
                   </td>
                 </tr>

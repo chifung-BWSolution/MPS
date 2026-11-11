@@ -3,9 +3,12 @@ import { labourCost, roundHours, toHours } from './clientProjectLabour';
 import { formatMoneyAmount } from './formatMoney';
 
 export const QUOTATION_LIST_MONEY_COLUMN_COUNT = 3;
+export const QUOTATION_PROJECT_LIST_MONEY_COLUMN_COUNT = 5;
 export const QUOTATION_LIST_BASE_COLUMN_COUNT = 8;
 export const QUOTATION_LIST_COLUMN_COUNT =
   QUOTATION_LIST_BASE_COLUMN_COUNT + QUOTATION_LIST_MONEY_COLUMN_COUNT;
+export const QUOTATION_PROJECT_LIST_COLUMN_COUNT =
+  QUOTATION_LIST_BASE_COLUMN_COUNT + QUOTATION_PROJECT_LIST_MONEY_COLUMN_COUNT;
 
 export type QuotationListMoney = {
   income: number | null;
@@ -15,12 +18,14 @@ export type QuotationListMoney = {
 
 export type QuotationProjectActuals = {
   income: number;
-  /** Supplier expense plus day-report labour. List columns still use this total. */
+  /** Supplier expense only. Day-report labour is labourCost. */
   expense: number;
-  /** Income minus expense, with labour already inside expense. List GP still uses this. */
+  /** Income minus supplier expense. */
   gp: number;
-  /** Day-report labour at the internal hourly rate. Not part of supplier expense. */
+  /** Day-report labour at the internal hourly rate. */
   labourCost: number;
+  /** Gross profit after labour. */
+  projectReturn: number;
 };
 
 export type IncomeAmountRow = {
@@ -141,10 +146,12 @@ export function buildProjectActuals(
 
   const result: Record<string, QuotationProjectActuals> = {};
   for (const id of ids) {
-    const income = incomeByProject.get(id) ?? 0;
-    const labour = labourCost(labourByProject.get(id) ?? 0);
-    const expense = roundMoney((expenseByQuotation.get(id) ?? 0) + labour);
-    result[id] = { income, expense, gp: computeGp(income, expense), labourCost: labour };
+    const card = actualProjectCardMoney({
+      income: incomeByProject.get(id) ?? 0,
+      expense: expenseByQuotation.get(id) ?? 0,
+      labourCost: labourCost(labourByProject.get(id) ?? 0),
+    });
+    result[id] = card;
   }
   return result;
 }
@@ -153,23 +160,21 @@ export function projectActualsFor(
   quotationClientProjectId: string,
   actuals: Record<string, QuotationProjectActuals>,
 ): QuotationProjectActuals {
-  return actuals[quotationClientProjectId] ?? { income: 0, expense: 0, gp: 0, labourCost: 0 };
+  return actuals[quotationClientProjectId] ?? emptyProjectActuals();
 }
 
-/** Confirmed-project cards: GP excludes labour; 項目收益 is GP after labour. */
+export function emptyProjectActuals(): QuotationProjectActuals {
+  return { income: 0, expense: 0, gp: 0, labourCost: 0, projectReturn: 0 };
+}
+
+/** Supplier expense stays out of labour. GP is income minus expense; 項目收益 is GP after labour. */
 export function actualProjectCardMoney(actuals: {
   income: number;
   expense: number;
   labourCost?: number;
-}): {
-  income: number;
-  expense: number;
-  gp: number;
-  labourCost: number;
-  projectReturn: number;
-} {
+}): QuotationProjectActuals {
   const labour = roundMoney(actuals.labourCost ?? 0);
-  const expense = roundMoney(actuals.expense - labour);
+  const expense = roundMoney(actuals.expense);
   const gp = computeGp(actuals.income, expense);
   return {
     income: actuals.income,
@@ -247,7 +252,7 @@ export function clientProjectInfoMetrics(input: {
   actuals: QuotationProjectActuals | null;
 }): ClientProjectInfoMetrics {
   if (isActualClientProjectMetricsStatus(input.status)) {
-    const money = actualProjectCardMoney(input.actuals ?? { income: 0, expense: 0, gp: 0, labourCost: 0 });
+    const money = actualProjectCardMoney(input.actuals ?? emptyProjectActuals());
     return {
       mode: 'actual',
       ...money,

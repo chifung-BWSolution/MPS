@@ -5,6 +5,7 @@ import {
   formatExpenseMoney,
   optionalIsoDate,
   type ExpensePaymentStatus,
+  type ExpenseSourceRelatedType,
 } from '@/lib/quotationExpenses';
 import {
   formatIncomeMoney,
@@ -67,6 +68,8 @@ export type FinanceExpenseRow = {
   creditCardLabel?: string;
   remarks?: string;
   createdAt: string;
+  sourceRelatedType?: ExpenseSourceRelatedType;
+  sourceRelatedId?: string;
 };
 
 export type FinanceBadDebtRow = {

@@ -2,7 +2,7 @@ import { WebPageSupplierModule } from './WebPageSupplierModule';
 import { SupplierTypesSettings } from './SupplierTypesSettings';
 
 export function SupplierModule({ subModule }: { subModule?: string }) {
-  const active = subModule || 'web-suppliers';
+  const active = subModule || 'suppliers';
 
   const getTitle = () => {
     switch (active) {
@@ -13,7 +13,7 @@ export function SupplierModule({ subModule }: { subModule?: string }) {
         };
       default:
         return {
-          title: '網頁供應商',
+          title: '供應商管理',
           subtitle: '管理可購買反向連結的網站／供應商名單。',
         };
     }
