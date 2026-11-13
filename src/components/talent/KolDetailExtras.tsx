@@ -20,7 +20,6 @@ import {
   type RatingDraft,
 } from '@/components/talent/kolRating';
 import type { KolCooperationRow } from '@/components/talent/kolCooperation';
-import { kolOwnerIdColumn, type KolTableName } from '@/components/talent/kolWorkflow';
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -166,13 +165,11 @@ export function KolTagsSection({
 
 export function KolRatingSection({
   kolId,
-  kolTable = 'kol_profile',
   ratingAvg,
   ratingCount,
   onRated,
 }: {
   kolId: string;
-  kolTable?: KolTableName;
   ratingAvg: number | null | undefined;
   ratingCount: number | null | undefined;
   onRated: () => void;
@@ -187,15 +184,13 @@ export function KolRatingSection({
   const [draft, setDraft] = useState<RatingDraft>(emptyRatingDraft());
   const [notes, setNotes] = useState('');
 
-  const ownerColumn = kolOwnerIdColumn(kolTable);
-
   const loadRatings = useCallback(async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('kol_rating')
         .select('*')
-        .eq(ownerColumn, kolId)
+        .eq('kol_profile_id', kolId)
         .order('created_at', { ascending: false })
         .limit(20);
       if (error) throw error;
@@ -206,7 +201,7 @@ export function KolRatingSection({
     } finally {
       setLoading(false);
     }
-  }, [kolId, ownerColumn]);
+  }, [kolId]);
 
   useEffect(() => {
     void loadRatings();
@@ -217,14 +212,14 @@ export function KolRatingSection({
     try {
       const overall = computeOverallScore(draft);
       const { error } = await supabase.from('kol_rating').insert({
-        [ownerColumn]: kolId,
+        kol_profile_id: kolId,
         rated_by: ratedBy,
         ...draft,
         overall_score: overall,
         notes: notes.trim() || null,
       });
       if (error) throw error;
-      await refreshKolRatingCache(kolId, kolTable);
+      await refreshKolRatingCache(kolId);
       toast.success(`已提交評分（平均 ${overall.toFixed(1)}）`);
       setDraft(emptyRatingDraft());
       setNotes('');
@@ -303,16 +298,13 @@ export function KolRatingSection({
 
 export function KolCooperationHistory({
   kolId,
-  kolTable = 'kol_profile',
   refreshKey = 0,
   kolProfile,
 }: {
   kolId: string;
-  kolTable?: KolTableName;
   refreshKey?: number;
   kolProfile?: { instagram_account?: string | null };
 }) {
-  const ownerColumn = kolOwnerIdColumn(kolTable);
   const [rows, setRows] = useState<KolCooperationRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -322,7 +314,7 @@ export function KolCooperationHistory({
       const { data, error } = await supabase
         .from('kol_cooperation')
         .select('*')
-        .eq(ownerColumn, kolId)
+        .eq('kol_profile_id', kolId)
         .order('cooperated_at', { ascending: false });
       if (error) throw error;
       setRows((data as KolCooperationRow[]) || []);
@@ -332,7 +324,7 @@ export function KolCooperationHistory({
     } finally {
       setLoading(false);
     }
-  }, [kolId, ownerColumn]);
+  }, [kolId]);
 
   useEffect(() => {
     void load();
@@ -385,12 +377,10 @@ export function KolCooperationHistory({
 
 export function KolDetailExtras({
   detail,
-  kolTable = 'kol_profile',
   onProfileRefresh,
   onTagsSave,
 }: {
   detail: KolProfile;
-  kolTable?: KolTableName;
   onProfileRefresh: () => void;
   onTagsSave: (tags: string[]) => Promise<void>;
 }) {
@@ -406,7 +396,6 @@ export function KolDetailExtras({
       {showRating && (
         <KolRatingSection
           kolId={detail.id}
-          kolTable={kolTable}
           ratingAvg={detail.rating_avg}
           ratingCount={detail.rating_count}
           onRated={onProfileRefresh}

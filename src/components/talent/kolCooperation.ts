@@ -1,9 +1,7 @@
 import { instagramProfileUrl } from '@/lib/instagram';
 import {
-  kolOwnerIdColumn,
   resolvePrimaryCategoryFromThemes,
   resolveSourceSystemFromApply,
-  type KolTableName,
 } from '@/components/talent/kolWorkflow';
 
 export function formatSupabaseError(error: unknown, fallback = '操作失敗'): string {
@@ -95,7 +93,6 @@ export interface KolCooperationPerson {
 export interface KolCooperationRow {
   id: string;
   kol_profile_id: string | null;
-  kol_new_beauty_id?: string | null;
   project_name: string | null;
   project_type: string | null;
   fee: string | null;
@@ -106,29 +103,14 @@ export interface KolCooperationRow {
   created_by: string | null;
   created_at: string;
   kol_profile?: KolCooperationPerson | null;
-  kol_new_beauty?: KolCooperationPerson | null;
 }
 
-export function cooperationOwnerTable(row: {
-  kol_profile_id?: string | null;
-  kol_new_beauty_id?: string | null;
-}): KolTableName {
-  return row.kol_new_beauty_id && !row.kol_profile_id ? 'kol_new_beauty' : 'kol_profile';
-}
-
-export function cooperationOwnerId(row: {
-  kol_profile_id?: string | null;
-  kol_new_beauty_id?: string | null;
-}): string {
-  if (row.kol_new_beauty_id && !row.kol_profile_id) return row.kol_new_beauty_id;
-  return row.kol_profile_id || row.kol_new_beauty_id || '';
+export function cooperationOwnerId(row: { kol_profile_id?: string | null }): string {
+  return row.kol_profile_id || '';
 }
 
 export function cooperationPerson(row: KolCooperationRow): KolCooperationPerson | null {
-  if (row.kol_new_beauty_id && !row.kol_profile_id) {
-    return row.kol_new_beauty || row.kol_profile || null;
-  }
-  return row.kol_profile || row.kol_new_beauty || null;
+  return row.kol_profile || null;
 }
 
 export interface KolCooperationFormValues {
@@ -162,12 +144,11 @@ function toCooperatedAt(value: string): string {
 
 export async function markKolAsCooperated(
   kolProfileId: string,
-  cooperatedAt: string,
-  table: KolTableName = 'kol_profile'
+  cooperatedAt: string
 ): Promise<void> {
   const { supabase } = await import('@/lib/supabase');
   const { data: profile, error: readErr } = await supabase
-    .from(table)
+    .from('kol_profile')
     .select('lifecycle_status')
     .eq('id', kolProfileId)
     .single();
@@ -179,7 +160,7 @@ export async function markKolAsCooperated(
     : `${cooperatedAt}T12:00:00.000Z`;
 
   const { error } = await supabase
-    .from(table)
+    .from('kol_profile')
     .update({
       lifecycle_status: 'cooperated',
       cooperated_at: at,
@@ -191,15 +172,13 @@ export async function markKolAsCooperated(
 
 export async function saveCooperationRecord(
   values: KolCooperationFormValues,
-  createdBy: string,
-  table: KolTableName = 'kol_profile'
+  createdBy: string
 ): Promise<void> {
   const { supabase } = await import('@/lib/supabase');
   const cooperatedAt = toCooperatedAt(values.cooperated_at);
-  const ownerColumn = kolOwnerIdColumn(table);
 
   const { error } = await supabase.from('kol_cooperation').insert({
-    [ownerColumn]: values.kol_profile_id,
+    kol_profile_id: values.kol_profile_id,
     project_name: values.project_name.trim(),
     cooperation_content: values.cooperation_content.trim(),
     evaluation: values.cooperation_content.trim(),
@@ -208,22 +187,20 @@ export async function saveCooperationRecord(
     created_by: createdBy,
   });
   if (error) throw error;
-  await markKolAsCooperated(values.kol_profile_id, cooperatedAt, table);
+  await markKolAsCooperated(values.kol_profile_id, cooperatedAt);
 }
 
 export async function updateCooperationRecord(
   id: string,
-  values: KolCooperationFormValues,
-  table: KolTableName = 'kol_profile'
+  values: KolCooperationFormValues
 ): Promise<void> {
   const { supabase } = await import('@/lib/supabase');
   const cooperatedAt = toCooperatedAt(values.cooperated_at);
-  const ownerColumn = kolOwnerIdColumn(table);
 
   const { error } = await supabase
     .from('kol_cooperation')
     .update({
-      [ownerColumn]: values.kol_profile_id,
+      kol_profile_id: values.kol_profile_id,
       project_name: values.project_name.trim(),
       cooperation_content: values.cooperation_content.trim(),
       evaluation: values.cooperation_content.trim(),
@@ -232,7 +209,7 @@ export async function updateCooperationRecord(
     })
     .eq('id', id);
   if (error) throw error;
-  await markKolAsCooperated(values.kol_profile_id, cooperatedAt, table);
+  await markKolAsCooperated(values.kol_profile_id, cooperatedAt);
 }
 
 export async function deleteCooperationRecord(id: string): Promise<void> {
@@ -241,7 +218,7 @@ export async function deleteCooperationRecord(id: string): Promise<void> {
   if (error) throw error;
 }
 
-/** Fields copied from a KOL application into kol_profile / kol_new_beauty. */
+/** Fields copied from a KOL application into kol_profile. */
 export interface KolApplyPromotionInput {
   id: string;
   name: string | null;
@@ -284,34 +261,24 @@ export interface KolApplyPromotionInput {
   applied_at: string;
   source: string | null;
   kol_profile_id: string | null;
-  kol_new_beauty_id: string | null;
-}
-
-function linkedKolOwner(row: {
-  kol_profile_id?: string | null;
-  kol_new_beauty_id?: string | null;
-}): { id: string; table: KolTableName } | null {
-  if (row.kol_new_beauty_id) return { id: row.kol_new_beauty_id, table: 'kol_new_beauty' };
-  if (row.kol_profile_id) return { id: row.kol_profile_id, table: 'kol_profile' };
-  return null;
 }
 
 /**
- * Attach an application to kol_profile or kol_new_beauty.
+ * Attach an application to kol_profile.
+ * Beauty-themed applications are tagged source_system = beauty18.
  * Already-linked rows are returned as-is unless updateExisting rewrites the profile (批核).
  */
 export async function promoteKolApply(
   row: KolApplyPromotionInput,
   options?: { updateExisting?: boolean }
-): Promise<{ id: string; table: KolTableName }> {
-  const existing = linkedKolOwner(row);
-  if (existing && !options?.updateExisting) return existing;
-
+): Promise<{ id: string; sourceSystem: 'beauty18' | 'emailmeform' }> {
   const { supabase } = await import('@/lib/supabase');
   const primaryCategory = resolvePrimaryCategoryFromThemes(row);
   const sourceSystem = resolveSourceSystemFromApply(row);
-  const isNewBeauty = sourceSystem === 'beauty18';
-  const table: KolTableName = isNewBeauty ? 'kol_new_beauty' : 'kol_profile';
+
+  if (row.kol_profile_id && !options?.updateExisting) {
+    return { id: row.kol_profile_id, sourceSystem };
+  }
 
   const profilePayload = {
     name: row.name,
@@ -360,21 +327,22 @@ export async function promoteKolApply(
     primary_category: primaryCategory,
     source_system: sourceSystem,
     lifecycle_status: 'unprocessed' as const,
-    ...(isNewBeauty ? { kol_apply_id: row.id } : {}),
   };
 
-  const existingId = isNewBeauty ? row.kol_new_beauty_id : row.kol_profile_id;
-  let ownerId = existingId;
+  let ownerId = row.kol_profile_id;
   if (!ownerId) {
     const { data, error: insErr } = await supabase
-      .from(table)
+      .from('kol_profile')
       .insert(profilePayload)
       .select('id')
       .single();
     if (insErr) throw insErr;
     ownerId = data.id as string;
   } else {
-    const { error: updProfileErr } = await supabase.from(table).update(profilePayload).eq('id', ownerId);
+    const { error: updProfileErr } = await supabase
+      .from('kol_profile')
+      .update(profilePayload)
+      .eq('id', ownerId);
     if (updProfileErr) throw updProfileErr;
   }
 
@@ -382,22 +350,20 @@ export async function promoteKolApply(
     .from('kol_apply')
     .update({
       audit_status: 'added_to_db',
-      ...(isNewBeauty
-        ? { kol_new_beauty_id: ownerId, kol_profile_id: null }
-        : { kol_profile_id: ownerId }),
+      kol_profile_id: ownerId,
       reviewed_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
     .eq('id', row.id);
   if (updErr) throw updErr;
 
-  return { id: ownerId, table };
+  return { id: ownerId, sourceSystem };
 }
 
-/** Resolve an application to a KOL owner, creating the profile when it is not linked yet. */
+/** Resolve an application to a KOL profile, creating it when it is not linked yet. */
 export async function ensureKolOwnerFromApply(
   applyId: string
-): Promise<{ id: string; table: KolTableName }> {
+): Promise<{ id: string; sourceSystem: 'beauty18' | 'emailmeform' }> {
   const { supabase } = await import('@/lib/supabase');
   const { data, error } = await supabase.from('kol_apply').select('*').eq('id', applyId).single();
   if (error) throw error;

@@ -4,6 +4,7 @@ import { useAuth } from '@/context/AuthContext';
 import { resolveStaffUuid } from '@/services/reportLinkService';
 import { relatedTypeLabels, type ProjectRelatedType } from '@/hooks/useProjects';
 import { isAsanaTaskGid } from '@/lib/asanaDayReportLink';
+import { isProjectHubId } from '@/lib/frequentReportItems';
 
 const CHUNK_SIZE = 200;
 const RECENT_DAYS = 30;
@@ -200,7 +201,8 @@ export function useMyProjectsFromDayReports() {
       }
 
       const projectById = new Map<string, ProjectDbRow>();
-      for (const chunk of chunkIds(relatedIds)) {
+      const projectLookupIds = relatedIds.filter((id) => isProjectHubId(id));
+      for (const chunk of chunkIds(projectLookupIds)) {
         const { data: projectRows, error: projectErr } = await supabase
           .from('projects')
           .select(

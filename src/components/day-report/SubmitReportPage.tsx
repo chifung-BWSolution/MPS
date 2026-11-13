@@ -38,6 +38,11 @@ import { useCategoryLookup } from '@/hooks/useCategoryLookup';
 import { toProjectSelectItem, useProjects } from '@/hooks/useProjects';
 import { usePendingAsanaProjectSelectItems } from '@/hooks/usePendingAsanaProjectSelectItems';
 import { resolveImportedAsanaDayReportTarget } from '@/lib/resolveAsanaDayReportTarget';
+import {
+  buildFrequentReportItems,
+  partitionReportRelatedIds,
+  type FrequentReportItem,
+} from '@/lib/frequentReportItems';
 import type { ProjectSelectItem } from '@/lib/searchableProjectSelect';
 import { usePendingReportItems } from '@/hooks/usePendingReportItems';
 import {
@@ -779,15 +784,7 @@ export function SubmitReportPage() {
     }
   };
 
-  type FrequentItem = {
-    relatedId: string;
-    relatedName: string;
-    category: WorkCategory;
-    count: number;
-    lastUsed: string;
-    totalHours: number;
-  };
-  const [recentFrequentItems, setRecentFrequentItems] = useState<FrequentItem[]>([]);
+  const [recentFrequentItems, setRecentFrequentItems] = useState<FrequentReportItem[]>([]);
 
   const loadRecentFrequentItems = useCallback(async () => {
     if (!currentStaffId) {
@@ -811,6 +808,7 @@ export function SubmitReportPage() {
 
       type EntryRow = {
         related_id: string | null;
+        related_name: string | null;
         category: string;
         hours: number | null;
         created_at: string | null;
@@ -823,83 +821,70 @@ export function SubmitReportPage() {
           const chunk = reportIds.slice(i, i + 200);
           const { data, error } = await supabase
             .from('day_report_entries')
-            .select('related_id, category, hours, created_at')
+            .select('related_id, related_name, category, hours, created_at')
             .in('day_report_id', chunk);
           if (!error && data) entryRows = entryRows.concat(data as EntryRow[]);
         }
       } else if (reportErr) {
         const { data } = await supabase
           .from('day_report_entries')
-          .select('related_id, category, hours, created_at')
+          .select('related_id, related_name, category, hours, created_at')
           .eq('staff_id', currentStaffId)
           .order('created_at', { ascending: false })
           .limit(300);
         entryRows = (data || []) as EntryRow[];
       }
 
-      const relatedIds = Array.from(new Set(
-        entryRows
-          .filter(e => !!e.category && resolveLinkRule(e.category).mode !== 'none')
-          .map(e => (e.related_id || '').trim())
-          .filter(Boolean),
-      ));
-      const projectNameById = new Map<string, string>();
-      for (let i = 0; i < relatedIds.length; i += 200) {
-        const chunk = relatedIds.slice(i, i + 200);
-        const { data: projectRows } = await supabase.from('projects').select('id, name').in('id', chunk);
+      const relatedIds = entryRows
+        .filter(e => !!e.category && resolveLinkRule(e.category).mode !== 'none')
+        .map(e => (e.related_id || '').trim())
+        .filter(Boolean);
+      const { projectIds, asanaTaskGids } = partitionReportRelatedIds(relatedIds);
+      const nameById = new Map<string, string>();
+      for (let i = 0; i < projectIds.length; i += 200) {
+        const chunk = projectIds.slice(i, i + 200);
+        const { data: projectRows, error } = await supabase
+          .from('projects')
+          .select('id, name')
+          .in('id', chunk);
+        if (error) {
+          console.warn('[SubmitReport] project name lookup failed:', error.message);
+          break;
+        }
         (projectRows || []).forEach(row => {
           const name = ((row.name as string) || '').trim();
-          if (row.id && name) projectNameById.set(row.id as string, name);
+          if (row.id && name) nameById.set(row.id as string, name);
+        });
+      }
+      for (let i = 0; i < asanaTaskGids.length; i += 200) {
+        const chunk = asanaTaskGids.slice(i, i + 200);
+        const { data: asanaRows, error } = await supabase
+          .from('asana_synced_tasks')
+          .select('asana_task_gid, display_name')
+          .in('asana_task_gid', chunk);
+        if (error) {
+          console.warn('[SubmitReport] asana name lookup failed:', error.message);
+          break;
+        }
+        (asanaRows || []).forEach((row) => {
+          const record = row as { asana_task_gid?: string | null; display_name?: string | null };
+          const gid = String(record.asana_task_gid || '').trim();
+          const name = String(record.display_name || '').trim();
+          if (gid && name) nameById.set(gid, name);
         });
       }
 
-      const itemMap: Record<string, FrequentItem> = {};
-      entryRows.forEach(entry => {
-        const category = (entry.category || '') as WorkCategory;
-        if (!category) return;
-        const linkMode = resolveLinkRule(category).mode;
-        const hours = Number(entry.hours) || 0;
-        const createdAt = entry.created_at || '';
-        if (linkMode === 'none') {
-          const key = `__none__${category}`;
-          if (!itemMap[key]) {
-            itemMap[key] = { relatedId: '', relatedName: 'N/A', category, count: 0, lastUsed: createdAt, totalHours: 0 };
-          }
-          itemMap[key].count += 1;
-          itemMap[key].totalHours += hours;
-          if (createdAt && createdAt > itemMap[key].lastUsed) itemMap[key].lastUsed = createdAt;
-          return;
-        }
-        const relatedId = (entry.related_id || '').trim();
-        if (!relatedId) {
-          if (linkMode !== 'optional') return;
-          const key = `__optional_empty__${category}`;
-          if (!itemMap[key]) {
-            itemMap[key] = { relatedId: '', relatedName: '（未選項目）', category, count: 0, lastUsed: createdAt, totalHours: 0 };
-          }
-          itemMap[key].count += 1;
-          itemMap[key].totalHours += hours;
-          if (createdAt && createdAt > itemMap[key].lastUsed) itemMap[key].lastUsed = createdAt;
-          return;
-        }
-        const relatedName = projectNameById.get(relatedId) || '';
-        if (!relatedName) return;
-        const key = `${relatedId}__${category}`;
-        if (!itemMap[key]) {
-          itemMap[key] = { relatedId, relatedName, category, count: 0, lastUsed: createdAt, totalHours: 0 };
-        }
-        itemMap[key].count += 1;
-        itemMap[key].totalHours += hours;
-        itemMap[key].relatedName = relatedName;
-        if (createdAt && createdAt > itemMap[key].lastUsed) itemMap[key].lastUsed = createdAt;
-      });
-
-      setRecentFrequentItems(
-        Object.values(itemMap)
-          .map(item => ({ ...item, totalHours: Math.round(item.totalHours * 10) / 10 }))
-          .sort((a, b) => b.count !== a.count ? b.count - a.count : (b.lastUsed || '').localeCompare(a.lastUsed || ''))
-          .slice(0, 8),
-      );
+      setRecentFrequentItems(buildFrequentReportItems(
+        entryRows.map(entry => ({
+          relatedId: entry.related_id,
+          relatedName: entry.related_name,
+          category: entry.category,
+          hours: entry.hours,
+          createdAt: entry.created_at,
+        })),
+        nameById,
+        (category) => resolveLinkRule(category).mode,
+      ));
     } catch (err) {
       console.error('[SubmitReport] Exception loading frequent items:', err);
       setRecentFrequentItems([]);

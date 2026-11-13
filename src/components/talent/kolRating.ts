@@ -50,16 +50,12 @@ export function computeOverallScore(draft: RatingDraft): number {
   return Math.round((sum / values.length) * 100) / 100;
 }
 
-export async function refreshKolRatingCache(
-  kolProfileId: string,
-  table: 'kol_profile' | 'kol_new_beauty' = 'kol_profile'
-): Promise<void> {
+export async function refreshKolRatingCache(kolProfileId: string): Promise<void> {
   const { supabase } = await import('@/lib/supabase');
-  const ownerColumn = table === 'kol_new_beauty' ? 'kol_new_beauty_id' : 'kol_profile_id';
   const { data, error } = await supabase
     .from('kol_rating')
     .select('overall_score, created_at')
-    .eq(ownerColumn, kolProfileId)
+    .eq('kol_profile_id', kolProfileId)
     .order('created_at', { ascending: false });
   if (error) throw error;
   const rows = data || [];
@@ -71,7 +67,7 @@ export async function refreshKolRatingCache(
           (rows.reduce((s, r) => s + Number(r.overall_score), 0) / count) * 100
         ) / 100;
   const { error: updErr } = await supabase
-    .from(table)
+    .from('kol_profile')
     .update({
       rating_avg: avg,
       rating_count: count,

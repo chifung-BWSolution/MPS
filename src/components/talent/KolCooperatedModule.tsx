@@ -18,7 +18,6 @@ import {
 } from '@/components/talent/KolCooperationForm';
 import {
   cooperationOwnerId,
-  cooperationOwnerTable,
   cooperationPerson,
   cooperationRowToForm,
   deleteCooperationRecord,
@@ -48,7 +47,7 @@ export function KolCooperatedModule() {
       const { data, error } = await supabase
         .from('kol_cooperation')
         .select(
-          '*, kol_profile(name, instagram_account, phone), kol_new_beauty(name, instagram_account, phone)'
+          '*, kol_profile(name, instagram_account, phone)'
         )
         .order('cooperated_at', { ascending: false });
       if (error) throw error;
@@ -223,7 +222,6 @@ export function KolCooperatedModule() {
                 key={editingRow?.id || 'new'}
                 createdBy={createdBy}
                 fixedKol={editingFixedKol}
-                kolTable={editingRow ? cooperationOwnerTable(editingRow) : 'kol_profile'}
                 recordId={editingRow?.id}
                 initialValues={editingRow ? cooperationRowToForm(editingRow) : undefined}
                 submitLabel={editingRow ? '儲存變更' : '儲存合作記錄'}

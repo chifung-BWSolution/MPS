@@ -88,7 +88,6 @@ export interface KolApply {
   reviewed_at: string | null;
   reviewed_by: string | null;
   kol_profile_id: string | null;
-  kol_new_beauty_id: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -613,7 +612,7 @@ export function KolApplyModule() {
     try {
       const owner = await promoteKolApply(row, { updateExisting: true });
       toast.success(
-        owner.table === 'kol_new_beauty' ? '已批准並加入新美容KOL' : '已批准並加入KOL 資料庫'
+        owner.sourceSystem === 'beauty18' ? '已批准並加入新美容KOL' : '已批准並加入KOL 資料庫'
       );
       closeDetail();
       await load();

@@ -893,6 +893,7 @@ async function fetchModelExperienceKols(): Promise<KolProfile[]> {
     const { data, error } = await supabase
       .from('kol_profile')
       .select('*')
+      .neq('source_system', 'beauty18')
       .order('created_at', { ascending: false })
       .range(from, from + pageSize - 1);
     if (error) throw error;
