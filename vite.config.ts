@@ -72,7 +72,9 @@ export default defineConfig(async () => {
     strictPort: true,
     // @ts-ignore
     allowedHosts: process.env.TEMPO === "true" ? true : undefined,
-    host: process.env.TEMPO === "true" ? '0.0.0.0' : undefined,
+    // Bind IPv4 loopback by default — Cursor preview often hits 127.0.0.1,
+    // while Vite's default localhost can be IPv6-only ([::1]) on Windows.
+    host: process.env.TEMPO === "true" ? '0.0.0.0' : '127.0.0.1',
   }
   };
 });

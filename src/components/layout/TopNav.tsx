@@ -3,7 +3,7 @@ import { useAuth } from '@/context/AuthContext';
 import { canAccessSettings } from '@/lib/permissions';
 import { Search, Bell, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppLink } from '@/components/AppLink';
 import {
   LayoutDashboard,
@@ -48,13 +48,45 @@ export function TopNav() {
   const { systemUser, userInfo, signOut } = useAuth();
   const [searchFocused, setSearchFocused] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const onWheel = (event: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth) return;
+      const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      if (delta === 0) return;
+      const max = el.scrollWidth - el.clientWidth;
+      const next = Math.min(max, Math.max(0, el.scrollLeft + delta));
+      if (next === el.scrollLeft) return;
+      el.scrollLeft = next;
+      event.preventDefault();
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const active = el.querySelector<HTMLElement>('[data-nav-active="true"]');
+    if (!active) return;
+    const navRect = el.getBoundingClientRect();
+    const itemRect = active.getBoundingClientRect();
+    if (itemRect.left < navRect.left) {
+      el.scrollLeft -= navRect.left - itemRect.left;
+    } else if (itemRect.right > navRect.right) {
+      el.scrollLeft += itemRect.right - navRect.right;
+    }
+  }, [currentModule]);
 
   const visibleMenuItems = mainMenuItems.filter(
     m => m.id !== 'settings' || canAccessSettings(systemUser?.role)
   );
 
   return (
-    <header className="fixed top-[var(--app-banner-h)] left-0 right-0 h-[48px] bg-[#0d1a2d] text-white z-40 flex items-center">
+    <header className="fixed top-[var(--app-banner-h)] left-0 right-0 h-[48px] bg-[#0d1a2d] text-white z-40 flex items-center overflow-hidden">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-5 h-full border-r border-white/10 shrink-0">
         <div className="w-7 h-7 rounded-md bg-teal-600 flex items-center justify-center">
@@ -66,7 +98,10 @@ export function TopNav() {
       </div>
 
       {/* Main Navigation */}
-      <nav className="flex-1 flex items-center h-full px-1 overflow-x-auto scrollbar-hide">
+      <nav
+        ref={navRef}
+        className="flex-1 min-w-0 flex items-center h-full px-1 overflow-x-auto overscroll-x-contain"
+      >
         {visibleMenuItems.map((menuItem) => {
           const Icon = moduleIcons[menuItem.id] || LayoutDashboard;
           const isActive = currentModule === menuItem.id;
@@ -75,6 +110,7 @@ export function TopNav() {
             <AppLink
               key={menuItem.id}
               module={menuItem.id}
+              data-nav-active={isActive ? 'true' : undefined}
               className={cn(
                 'h-full px-3 text-[14px] font-medium whitespace-nowrap transition-all duration-200 relative flex items-center gap-1.5 shrink-0 no-underline',
                 isActive

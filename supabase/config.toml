@@ -45,6 +45,12 @@ verify_jwt = false
 [functions.gsc-oauth]
 verify_jwt = false
 
+[functions.gmail-fcc-oauth]
+verify_jwt = false
+
+[functions.sync-fcc-asana-mail]
+verify_jwt = false
+
 [functions.send-email]
 verify_jwt = true
 
