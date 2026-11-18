@@ -70,16 +70,31 @@ async function verifyState(state: string): Promise<boolean> {
   return sig === (await hmacSign(payload));
 }
 
+function htmlEntities(text: string): string {
+  return Array.from(text).map((char) => {
+    const code = char.codePointAt(0) || 0;
+    if (char === "&") return "&amp;";
+    if (char === "<") return "&lt;";
+    if (char === ">") return "&gt;";
+    return code > 127 ? `&#${code};` : char;
+  }).join("");
+}
+
 function callbackPage(ok: boolean, message: string) {
-  const payload = JSON.stringify({ type: "mps-gmail-fcc-oauth", ok, message });
-  const title = ok ? "FC 查詢 Gmail 授權完成" : "FC 查詢 Gmail 授權失敗";
+  const payload = JSON.stringify({ type: "mps-gmail-fcc-oauth", ok, message })
+    .replace(/[\u007f-\uffff]/g, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  const title = htmlEntities(ok ? "FC 查詢 Gmail 授權完成" : "FC 查詢 Gmail 授權失敗");
+  const english = ok
+    ? "Gmail connected. You can close this window and return to MPS."
+    : "Gmail connection failed. Close this window and try again from MPS.";
   return `<!doctype html>
 <html lang="zh-Hant">
 <head><meta charset="utf-8"><title>${title}</title></head>
 <body style="font-family:sans-serif;padding:32px;line-height:1.5">
   <h2>${title}</h2>
-  <p>${message.replace(/</g, "&lt;")}</p>
-  <p>可關閉此視窗，回到 MPS。</p>
+  <p>${htmlEntities(message)}</p>
+  <p>${htmlEntities("可關閉此視窗，回到 MPS。")}</p>
+  <p>${english}</p>
   <script>
     try { window.opener && window.opener.postMessage(${payload}, "*"); } catch (e) {}
     setTimeout(function () { window.close(); }, 1200);

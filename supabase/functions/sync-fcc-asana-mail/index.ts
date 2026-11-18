@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/google-gsc.ts";
-import { hktDate, parseFccInquiry, resolveFccGmailOAuthClient, type FccMailRule } from "../_shared/fcc-asana-mail.ts";
+import { hktDate, inquiryAlreadyInAsana, normalizeFccBody, parseFccInquiry, resolveFccGmailOAuthClient, type FccMailRule } from "../_shared/fcc-asana-mail.ts";
 
 const PROVIDER = "gmail_fcc";
 const ASANA_API = "https://app.asana.com/api/1.0";
@@ -20,6 +20,7 @@ type MailRuleRow = {
   workspace_gid: string;
   assignee_gid: string;
   collaborator_gids: string[] | null;
+  not_before: string | null;
   lunch_project_gid: string;
   lunch_title_prefix: string;
   catering_project_gid: string;
@@ -81,15 +82,25 @@ function decodeB64Url(data: string): string {
 
 type GmailPart = { mimeType?: string; body?: { data?: string }; parts?: GmailPart[] };
 
-function plainText(part: GmailPart | undefined): string {
-  if (!part) return "";
-  if (part.mimeType === "text/plain" && part.body?.data) return decodeB64Url(part.body.data);
-  for (const child of part.parts || []) {
-    const text = plainText(child);
-    if (text) return text;
-  }
-  if (part.body?.data) return decodeB64Url(part.body.data);
-  return "";
+function partText(part: GmailPart | undefined): string {
+  if (!part?.body?.data) return "";
+  return decodeB64Url(part.body.data);
+}
+
+function mailBody(part: GmailPart | undefined): string {
+  const plain: string[] = [];
+  const html: string[] = [];
+  const walk = (node: GmailPart | undefined) => {
+    if (!node) return;
+    const text = partText(node);
+    if (node.mimeType === "text/plain" && text) plain.push(text);
+    else if (node.mimeType === "text/html" && text) html.push(text);
+    for (const child of node.parts || []) walk(child);
+  };
+  walk(part);
+  const plainText = plain.join("\n").trim();
+  if (plainText && !/<[a-z][^>]*>/i.test(plainText)) return plainText;
+  return html.join("\n") || plainText;
 }
 
 async function gmailGet<T>(token: string, path: string): Promise<T> {
@@ -110,8 +121,8 @@ async function createTask(input: {
   assignee: string;
   followers: string[];
 }): Promise<string> {
-  const token = Deno.env.get("ASANA_ACCESS_TOKEN")?.trim();
-  if (!token) throw new Error("Missing ASANA_ACCESS_TOKEN");
+  const token = Deno.env.get("ASANA_FCC_ACCESS_TOKEN")?.trim();
+  if (!token) throw new Error("未設定 ASANA_FCC_ACCESS_TOKEN，不會用而家的 Asana 帳號開 task");
   const data: Record<string, unknown> = {
     workspace: input.workspace,
     projects: [input.project],
@@ -136,6 +147,128 @@ async function createTask(input: {
   return payload.data.gid;
 }
 
+type AsanaPerson = { gid: string; name: string; email: string };
+
+async function asanaGet(path: string, token = Deno.env.get("ASANA_ACCESS_TOKEN")?.trim() || ""): Promise<{ data?: Array<Record<string, unknown>>; next_page?: { offset?: string } | null; errors?: Array<{ message?: string }> }> {
+  if (!token) throw new Error("缺少 ASANA_ACCESS_TOKEN");
+  const res = await fetch(`${ASANA_API}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const payload = await res.json() as {
+    data?: Array<Record<string, unknown>> | Record<string, unknown>;
+    next_page?: { offset?: string } | null;
+    errors?: Array<{ message?: string }>;
+  };
+  if (!res.ok) throw new Error(payload.errors?.[0]?.message || "讀取 Asana 成員失敗");
+  const data = Array.isArray(payload.data) ? payload.data : payload.data ? [payload.data] : [];
+  return { data, next_page: payload.next_page };
+}
+
+async function listWorkspacePeople(workspaceGid: string): Promise<AsanaPerson[]> {
+  const people: AsanaPerson[] = [];
+  let offset = "";
+  for (let page = 0; page < 20; page += 1) {
+    const qs = new URLSearchParams({ opt_fields: "gid,name,email", limit: "100" });
+    if (offset) qs.set("offset", offset);
+    const payload = await asanaGet(`/workspaces/${workspaceGid}/users?${qs}`);
+    for (const user of payload.data || []) {
+      const gid = String(user.gid || "").trim();
+      if (!gid) continue;
+      people.push({
+        gid,
+        name: String(user.name || "").trim(),
+        email: String(user.email || "").trim(),
+      });
+    }
+    offset = payload.next_page?.offset || "";
+    if (!offset) break;
+  }
+  people.sort((a, b) => (a.email || a.name).localeCompare(b.email || b.name, "en"));
+  return people;
+}
+
+function projectReadToken(): string {
+  return Deno.env.get("ASANA_FCC_ACCESS_TOKEN")?.trim() || Deno.env.get("ASANA_ACCESS_TOKEN")?.trim() || "";
+}
+
+async function listWorkspaceProjects(workspaceGid: string): Promise<Array<{ gid: string; name: string }>> {
+  const token = projectReadToken();
+  if (!token) throw new Error("缺少 Asana token，未能讀取專案名稱");
+  const projects: Array<{ gid: string; name: string }> = [];
+  let offset = "";
+  for (let page = 0; page < 30; page += 1) {
+    const qs = new URLSearchParams({ opt_fields: "gid,name,archived", limit: "100", archived: "false" });
+    if (offset) qs.set("offset", offset);
+    const payload = await asanaGet(`/workspaces/${workspaceGid}/projects?${qs}`, token);
+    for (const project of payload.data || []) {
+      if (project.archived === true) continue;
+      const gid = String(project.gid || "").trim();
+      const name = String(project.name || "").trim();
+      if (!gid || !name) continue;
+      projects.push({ gid, name });
+    }
+    offset = payload.next_page?.offset || "";
+    if (!offset) break;
+  }
+  projects.sort((a, b) => a.name.localeCompare(b.name));
+  return projects;
+}
+
+async function fccCreator(): Promise<{ name: string; email: string } | null> {
+  const token = Deno.env.get("ASANA_FCC_ACCESS_TOKEN")?.trim();
+  if (!token) return null;
+  const res = await fetch(`${ASANA_API}/users/me?opt_fields=name,email`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const payload = await res.json() as { data?: { name?: string; email?: string } };
+  if (!res.ok) return null;
+  return {
+    name: String(payload.data?.name || "").trim(),
+    email: String(payload.data?.email || "").trim(),
+  };
+}
+
+function asanaReadToken(): string {
+  return Deno.env.get("ASANA_ACCESS_TOKEN")?.trim() || Deno.env.get("ASANA_FCC_ACCESS_TOKEN")?.trim() || "";
+}
+
+async function findExistingTask(workspace: string, project: string, phone: string, title: string): Promise<string | null> {
+  const token = asanaReadToken();
+  if (!token) throw new Error("缺少 ASANA_ACCESS_TOKEN，未能先檢查 Asana 是否已有 task");
+  const digits = phone.replace(/\D/g, "");
+  const qs = new URLSearchParams({
+    text: digits || title,
+    "projects.any": project,
+    opt_fields: "name,gid",
+    limit: "50",
+  });
+  const res = await fetch(`${ASANA_API}/workspaces/${workspace}/tasks/search?${qs}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+  });
+  const payload = await res.json() as { data?: Array<{ gid?: string; name?: string }>; errors?: Array<{ message?: string }> };
+  if (!res.ok) throw new Error(payload.errors?.[0]?.message || "檢查 Asana 現有 task 失敗");
+  const hit = (payload.data || []).find((task) => inquiryAlreadyInAsana(String(task.name || ""), phone, title));
+  return hit?.gid ? String(hit.gid) : null;
+}
+
+async function openedInHistory(
+  supabase: ReturnType<typeof admin>,
+  phone: string,
+  title: string,
+  messageId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("asana_mail_jobs")
+    .select("gmail_message_id, subject, task_name, status")
+    .eq("rule_code", "fcc")
+    .in("status", ["created", "skipped", "processing"]);
+  if (error) throw new Error(error.message);
+  return (data || []).some((job) => {
+    if (String(job.gmail_message_id || "") === messageId) return false;
+    return inquiryAlreadyInAsana(`${job.task_name || ""} ${job.subject || ""}`, phone, title);
+  });
+}
+
 function toRule(row: MailRuleRow): FccMailRule {
   return {
     lunchProjectGid: row.lunch_project_gid,
@@ -150,6 +283,7 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { error: "Method not allowed" });
   const denied = await requireCaller(req);
   if (denied) return denied;
+  const body = await req.json().catch(() => ({})) as { action?: string };
 
   const supabase = admin();
   const { data: rule, error: ruleErr } = await supabase
@@ -160,7 +294,25 @@ Deno.serve(async (req) => {
   if (ruleErr) return json(500, { error: ruleErr.message });
   if (!rule) return json(404, { error: "尚未設定 FCC 規則" });
   const row = rule as MailRuleRow;
+  if (body.action === "users") {
+    try {
+      const [users, projectResult, creator] = await Promise.all([
+        listWorkspacePeople(row.workspace_gid),
+        listWorkspaceProjects(row.workspace_gid).then((projects) => ({ projects, projectError: "" })).catch((err: unknown) => ({
+          projects: [] as Array<{ gid: string; name: string }>,
+          projectError: err instanceof Error ? err.message : String(err),
+        })),
+        fccCreator(),
+      ]);
+      return json(200, { users, projects: projectResult.projects, projectError: projectResult.projectError, creator });
+    } catch (err) {
+      return json(500, { error: err instanceof Error ? err.message : String(err) });
+    }
+  }
   if (!row.enabled) return json(200, { success: true, skipped: "disabled", created: 0 });
+  if (!Deno.env.get("ASANA_FCC_ACCESS_TOKEN")?.trim()) {
+    return json(200, { success: false, error: "未設定 ASANA_FCC_ACCESS_TOKEN，不會用而家的 Asana 帳號開 task" });
+  }
 
   const { data: tokenRow } = await supabase
     .from("google_oauth_tokens")
@@ -185,13 +337,14 @@ Deno.serve(async (req) => {
     let skipped = 0;
     const errors: string[] = [];
     for (const item of listed.messages || []) {
-      const { data: existing } = await supabase
+      const { data: existing, error: existingErr } = await supabase
         .from("asana_mail_jobs")
-        .select("status")
+        .select("status, asana_task_gid")
         .eq("rule_code", "fcc")
         .eq("gmail_message_id", item.id)
         .maybeSingle();
-      if (existing && existing.status !== "error") {
+      if (existingErr) return json(500, { error: existingErr.message });
+      if (existing?.asana_task_gid || (existing && existing.status !== "error")) {
         skipped += 1;
         continue;
       }
@@ -201,8 +354,23 @@ Deno.serve(async (req) => {
         payload?: GmailPart & { headers?: Array<{ name: string; value: string }> };
       }>(token, `/messages/${item.id}?format=full`);
       const subject = message.payload?.headers?.find((header) => header.name.toLowerCase() === "subject")?.value || "";
-      const received = hktDate(Number(message.internalDate || Date.now()));
-      const parsed = parseFccInquiry(plainText(message.payload), toRule(row));
+      const emailText = normalizeFccBody(mailBody(message.payload)).slice(0, 8000);
+      const receivedMs = Number(message.internalDate || Date.now());
+      const received = hktDate(receivedMs);
+      if (row.not_before && receivedMs < new Date(row.not_before).getTime()) {
+        await supabase.from("asana_mail_jobs").upsert({
+          rule_code: "fcc",
+          gmail_message_id: item.id,
+          subject,
+          received_on: received,
+          status: "skipped",
+          notes: emailText,
+          error: "早過開始時間，不補開舊郵件",
+        }, { onConflict: "rule_code,gmail_message_id" });
+        skipped += 1;
+        continue;
+      }
+      const parsed = parseFccInquiry(mailBody(message.payload), toRule(row), subject);
       if (!parsed.ok) {
         await supabase.from("asana_mail_jobs").upsert({
           rule_code: "fcc",
@@ -210,8 +378,70 @@ Deno.serve(async (req) => {
           subject,
           received_on: received,
           status: "skipped",
+          notes: emailText,
           error: parsed.reason,
         }, { onConflict: "rule_code,gmail_message_id" });
+        skipped += 1;
+        continue;
+      }
+      let existingTaskGid: string | null = null;
+      let alreadyOpened = false;
+      try {
+        alreadyOpened = await openedInHistory(supabase, parsed.mail.phone, parsed.mail.title, item.id);
+        existingTaskGid = alreadyOpened ? null : await findExistingTask(
+          row.workspace_gid,
+          parsed.mail.projectGid,
+          parsed.mail.phone,
+          parsed.mail.title,
+        );
+      } catch (err) {
+        const messageText = err instanceof Error ? err.message : String(err);
+        await supabase.from("asana_mail_jobs").upsert({
+          rule_code: "fcc",
+          gmail_message_id: item.id,
+          subject,
+          received_on: received,
+          status: "error",
+          route: parsed.mail.route,
+          task_name: parsed.mail.title,
+          notes: parsed.mail.notes,
+          error: messageText,
+        }, { onConflict: "rule_code,gmail_message_id" });
+        errors.push(`${item.id}: ${messageText}`);
+        continue;
+      }
+      if (alreadyOpened || existingTaskGid) {
+        await supabase.from("asana_mail_jobs").upsert({
+          rule_code: "fcc",
+          gmail_message_id: item.id,
+          subject,
+          received_on: received,
+          status: "skipped",
+          route: parsed.mail.route,
+          asana_task_gid: existingTaskGid,
+          asana_project_gid: parsed.mail.projectGid,
+          task_name: parsed.mail.title,
+          notes: parsed.mail.notes,
+          error: "同一查詢已開過，不重開",
+        }, { onConflict: "rule_code,gmail_message_id" });
+        skipped += 1;
+        continue;
+      }
+      const claim = {
+        rule_code: "fcc",
+        gmail_message_id: item.id,
+        subject,
+        received_on: received,
+        status: "processing",
+        route: parsed.mail.route,
+        task_name: parsed.mail.title,
+        notes: parsed.mail.notes,
+        error: null,
+      };
+      const { error: claimErr } = existing
+        ? await supabase.from("asana_mail_jobs").update(claim).eq("rule_code", "fcc").eq("gmail_message_id", item.id).eq("status", "error")
+        : await supabase.from("asana_mail_jobs").insert(claim);
+      if (claimErr) {
         skipped += 1;
         continue;
       }
@@ -235,6 +465,7 @@ Deno.serve(async (req) => {
           asana_task_gid: taskGid,
           asana_project_gid: parsed.mail.projectGid,
           task_name: parsed.mail.title,
+          notes: parsed.mail.notes,
           error: null,
         }, { onConflict: "rule_code,gmail_message_id" });
         created += 1;
@@ -249,6 +480,7 @@ Deno.serve(async (req) => {
           status: "error",
           route: parsed.mail.route,
           task_name: parsed.mail.title,
+          notes: parsed.mail.notes,
           error: messageText,
         }, { onConflict: "rule_code,gmail_message_id" });
       }

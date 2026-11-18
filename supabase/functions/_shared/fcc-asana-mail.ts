@@ -57,6 +57,34 @@ export function extractFccReferrer(body: string): string {
   return (urls[urls.length - 1] || "").replace(/[),.;]+$/, "");
 }
 
+export function htmlToText(html: string): string {
+  return String(html || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<\/h[1-6]>/gi, "\n")
+    .replace(/<\/tr>/gi, "\n")
+    .replace(/<\/t[dh]>\s*<t[dh][^>]*>/gi, ": ")
+    .replace(/<a\b[^>]*href=["']([^"']+)["'][^>]*>[\s\S]*?<\/a>/gi, "$1")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#(\d+);/g, (_, digits) => String.fromCodePoint(Number(digits)))
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+export function normalizeFccBody(body: string): string {
+  const source = String(body || "");
+  if (/<[a-z!/][^>]*>/i.test(source)) return htmlToText(source);
+  return source;
+}
+
 export function organizeFccNotes(body: string): string {
   const cut = body.search(/了解條款及政策/);
   const main = cut >= 0 ? body.slice(0, cut) : body;
@@ -92,20 +120,43 @@ export function hktDate(input: Date | number | string): string {
   }).format(date);
 }
 
+export function inquiryAlreadyInAsana(taskName: string, phone: string, title: string): boolean {
+  const name = String(taskName || "").trim();
+  if (title && name === title.trim()) return true;
+  const digits = String(phone || "").replace(/\D/g, "");
+  const local = digits.length === 11 && digits.startsWith("852") ? digits.slice(3) : digits;
+  return local.length >= 8 && name.replace(/\D/g, "").includes(local);
+}
+
+export function parseFccSubject(subject: string): { name: string; phone: string; company: string } {
+  const match = String(subject || "").match(/[:：]\s*(.+?)\s+-\s*(\d[\d\s]*\d)\s*(.*)$/);
+  if (!match) return { name: "", phone: "", company: "" };
+  return {
+    name: match[1].trim(),
+    phone: formatFccPhone(match[2]),
+    company: match[3].split("/")[0].trim(),
+  };
+}
+
 export function parseFccInquiry(
   body: string,
   rule: FccMailRule,
+  subject = "",
 ): { ok: true; mail: FccParsedMail } | { ok: false; reason: string } {
-  const source = String(body || "");
+  const source = normalizeFccBody(body);
   const catering = CATERING_PATTERNS.some((pattern) => pattern.test(source));
   const lunch = LUNCH_PATTERNS.some((pattern) => pattern.test(source));
   if (!catering && !lunch) {
     return { ok: false, reason: "郵件沒有飯盒或到會選項，不開 task" };
   }
   const route = catering ? "catering" : "lunch";
-  const name = readField(source, ["姓名", "客人姓名", "名稱"]);
-  const phone = formatFccPhone(readField(source, ["聯絡電話", "電話", "手機", "Phone"]));
-  const company = readField(source, ["公司名稱", "公司", "Company"]);
+  const fromSubject = parseFccSubject(subject);
+  const name = readField(source, ["姓名", "客人姓名", "名稱"]) || fromSubject.name;
+  const phone = formatFccPhone(readField(source, ["聯絡電話", "電話", "手機", "Phone"])) || fromSubject.phone;
+  const company = readField(source, ["公司名稱", "公司", "Company"]) || fromSubject.company;
+  if (!name && !phone) {
+    return { ok: false, reason: "郵件讀唔到姓名同電話，不開 task" };
+  }
   const prefix = route === "catering" ? rule.cateringTitlePrefix : rule.lunchTitlePrefix;
   const title = `${prefix} - ${[name, phone, company].filter(Boolean).join(" ")}`.trim();
   return {
