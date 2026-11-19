@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Mail, RefreshCw, Save, X, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Mail, RefreshCw, Save, X, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 
@@ -52,6 +52,59 @@ const inputClass =
 function personLabel(person: AsanaPerson): string {
   if (person.email && person.name) return `${person.email}（${person.name}）`;
   return person.email || person.name || person.gid;
+}
+
+type TaskStory = {
+  gid: string;
+  at: string;
+  by: string;
+  subtype: string;
+  label: string;
+  text: string;
+};
+
+type TaskActivity = {
+  completed: boolean;
+  assignee: string;
+  projects: Array<{ name: string; section: string }>;
+  stories: TaskStory[];
+  error?: string;
+};
+
+function jobStatusLabel(status: string): string {
+  if (status === 'created') return '已開 task';
+  if (status === 'skipped') return '略過';
+  if (status === 'error') return '失敗';
+  if (status === 'processing') return '處理中';
+  return status;
+}
+
+function jobStatusClass(status: string): string {
+  if (status === 'created') return 'bg-teal-100 text-teal-900';
+  if (status === 'error') return 'bg-amber-100 text-amber-950';
+  if (status === 'processing') return 'bg-sky-100 text-sky-950';
+  return 'bg-slate-100 text-slate-700';
+}
+
+function jobAccent(status: string): string {
+  if (status === 'created') return 'border-l-teal-500';
+  if (status === 'error') return 'border-l-amber-500';
+  if (status === 'processing') return 'border-l-sky-500';
+  return 'border-l-slate-300';
+}
+
+function storyTone(subtype: string): { card: string; badge: string } {
+  if (subtype === 'comment_added') return { card: 'border-teal-200 bg-teal-50', badge: 'bg-teal-200 text-teal-950' };
+  if (subtype === 'added_to_project' || subtype === 'removed_from_project' || subtype === 'section_changed') {
+    return { card: 'border-violet-200 bg-violet-50', badge: 'bg-violet-200 text-violet-950' };
+  }
+  if (subtype === 'marked_complete' || subtype === 'marked_incomplete') {
+    return { card: 'border-emerald-200 bg-emerald-50', badge: 'bg-emerald-200 text-emerald-950' };
+  }
+  if (subtype === 'assigned' || subtype === 'unassigned' || subtype === 'follower_added' || subtype === 'follower_removed') {
+    return { card: 'border-sky-200 bg-sky-50', badge: 'bg-sky-200 text-sky-950' };
+  }
+  return { card: 'border-slate-200 bg-slate-50', badge: 'bg-slate-200 text-slate-800' };
 }
 
 function formatHkt(iso: string): string {
@@ -154,6 +207,9 @@ export function FccAsanaMailSettings() {
   const [creator, setCreator] = useState<{ name: string; email: string } | null>(null);
   const [peopleError, setPeopleError] = useState('');
   const [jobs, setJobs] = useState<MailJob[]>([]);
+  const [openJobId, setOpenJobId] = useState<string | null>(null);
+  const [activity, setActivity] = useState<Record<string, TaskActivity>>({});
+  const [activityLoading, setActivityLoading] = useState<string | null>(null);
   const [gmail, setGmail] = useState<GmailStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -233,6 +289,22 @@ export function FccAsanaMailSettings() {
       if (!popup) window.location.assign(started.authorization_url);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const openJob = async (job: MailJob) => {
+    const next = openJobId === job.id ? null : job.id;
+    setOpenJobId(next);
+    if (!next || !job.asana_task_gid || activity[job.asana_task_gid]) return;
+    const taskGid = job.asana_task_gid;
+    setActivityLoading(taskGid);
+    try {
+      const result = await callFunction<TaskActivity>('sync-fcc-asana-mail', { action: 'activity', taskGid });
+      setActivity((current) => ({ ...current, [taskGid]: result }));
+    } catch (e) {
+      setActivity((current) => ({ ...current, [taskGid]: { completed: false, assignee: '', projects: [], stories: [], error: e instanceof Error ? e.message : String(e) } }));
+    } finally {
+      setActivityLoading((current) => current === taskGid ? null : current);
     }
   };
 
@@ -413,32 +485,112 @@ export function FccAsanaMailSettings() {
       </div>
 
       <div className="bg-white border border-border/50 rounded-md overflow-hidden">
-        <div className="px-4 py-3 text-[13px] font-medium border-b border-border/50">最近處理</div>
+        <div className="px-4 py-3 border-b border-border/50">
+          <p className="text-[13px] font-medium">最近處理</p>
+          <p className="text-[12px] text-muted-foreground">點一行先展開。藍底是郵件，綠底是 Asana。</p>
+          <div className="mt-2 flex flex-wrap gap-1.5 text-[12px]">
+            <span className="rounded px-1.5 py-0.5 bg-teal-100 text-teal-900">已開 task</span>
+            <span className="rounded px-1.5 py-0.5 bg-slate-100 text-slate-700">略過</span>
+            <span className="rounded px-1.5 py-0.5 bg-amber-100 text-amber-950">失敗</span>
+            <span className="rounded px-1.5 py-0.5 bg-teal-200 text-teal-950">留言</span>
+            <span className="rounded px-1.5 py-0.5 bg-violet-200 text-violet-950">轉專案</span>
+            <span className="rounded px-1.5 py-0.5 bg-emerald-200 text-emerald-950">完成</span>
+          </div>
+        </div>
         {jobs.length === 0 && (
           <p className="px-4 py-6 text-center text-[13px] text-muted-foreground">未有處理紀錄</p>
         )}
         <div className="divide-y divide-border/40">
-          {jobs.map((job) => (
-            <article key={job.id} className="px-4 py-3 space-y-1.5">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
-                <time dateTime={job.created_at}>{formatHkt(job.created_at)}</time>
-                <span>{job.status}</span>
-                {job.asana_task_gid && (
-                  <a
-                    href={`https://app.asana.com/0/0/${job.asana_task_gid}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-teal-700 hover:underline"
+          {jobs.map((job) => {
+            const open = openJobId === job.id;
+            const title = job.task_name || job.subject || '—';
+            const taskActivity = job.asana_task_gid ? activity[job.asana_task_gid] : undefined;
+            const loadingActivity = job.asana_task_gid !== null && activityLoading === job.asana_task_gid;
+            return (
+              <article key={job.id} className={`border-l-4 ${jobAccent(job.status)}`}>
+                <div className="flex items-stretch">
+                  <button
+                    type="button"
+                    className="flex min-h-11 flex-1 cursor-pointer items-center gap-2 px-3 py-2 text-left hover:bg-muted/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-teal-600"
+                    aria-expanded={open}
+                    aria-label={`${open ? '收起' : '展開'} ${title}`}
+                    onClick={() => void openJob(job)}
                   >
-                    Asana task
-                  </a>
+                    <ChevronRight size={16} className={`shrink-0 text-muted-foreground motion-safe:transition-transform motion-safe:duration-150 ${open ? 'rotate-90' : ''}`} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
+                        <time dateTime={job.created_at}>{formatHkt(job.created_at)}</time>
+                        <span className={`rounded px-1.5 py-0.5 ${jobStatusClass(job.status)}`}>{jobStatusLabel(job.status)}</span>
+                      </span>
+                      <span className="block truncate text-[13px] font-medium text-foreground">{title}</span>
+                    </span>
+                  </button>
+                  {job.asana_task_gid && (
+                    <a
+                      href={`https://app.asana.com/0/0/${job.asana_task_gid}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-h-11 shrink-0 items-center px-3 text-[12px] text-teal-700 hover:underline"
+                    >
+                      開啟
+                    </a>
+                  )}
+                </div>
+                {open && (
+                  <div className="space-y-3 px-4 pb-4 pl-9">
+                    {job.error && <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-950">{job.error}</p>}
+                    <div className="rounded-md border border-sky-200 bg-sky-50 p-3">
+                      <p className="text-[12px] font-medium text-sky-950">郵件</p>
+                      <pre className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md bg-white px-3 py-2 font-sans text-[13px] leading-6 text-foreground">{job.notes || '未有儲存郵件內容'}</pre>
+                    </div>
+                    {job.asana_task_gid && (
+                      <div className="rounded-md border border-teal-200 bg-teal-50/70 p-3">
+                        <p className="text-[12px] font-medium text-teal-950">Asana 之後</p>
+                        {loadingActivity && <p className="mt-2 text-[13px] text-teal-900">讀取紀錄…</p>}
+                        {taskActivity?.error && <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-950">{taskActivity.error}</p>}
+                        {taskActivity && !taskActivity.error && (
+                          <div className="mt-2 space-y-2">
+                            <div className="flex flex-wrap gap-1.5">
+                              <span className={`rounded px-1.5 py-0.5 text-[12px] ${taskActivity.completed ? 'bg-emerald-200 text-emerald-950' : 'bg-white text-slate-700'}`}>
+                                {taskActivity.completed ? '已完成' : '未完成'}
+                              </span>
+                              {taskActivity.assignee && (
+                                <span className="rounded bg-sky-200 px-1.5 py-0.5 text-[12px] text-sky-950">負責人 {taskActivity.assignee}</span>
+                              )}
+                              {taskActivity.projects.map((project) => (
+                                <span key={`${project.name}-${project.section}`} className="rounded bg-violet-200 px-1.5 py-0.5 text-[12px] text-violet-950">
+                                  {project.section ? `${project.name} / ${project.section}` : project.name}
+                                </span>
+                              ))}
+                            </div>
+                            {taskActivity.stories.length === 0 ? (
+                              <p className="text-[13px] text-teal-900">開 task 之後未有留言或狀態更新。</p>
+                            ) : (
+                              <ol className="max-h-80 space-y-2 overflow-y-auto">
+                                {taskActivity.stories.map((story) => {
+                                  const tone = storyTone(story.subtype);
+                                  return (
+                                    <li key={story.gid || `${story.at}-${story.text}`} className={`rounded-md border px-3 py-2 ${tone.card}`}>
+                                      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px]">
+                                        <span className={`rounded px-1.5 py-0.5 ${tone.badge}`}>{story.label}</span>
+                                        {story.at && <time dateTime={story.at} className="text-slate-700">{formatHkt(story.at)}</time>}
+                                        {story.by && <span className="text-slate-700">{story.by}</span>}
+                                      </p>
+                                      <p className="mt-1 whitespace-pre-wrap text-[13px] leading-6 text-slate-950">{story.text}</p>
+                                    </li>
+                                  );
+                                })}
+                              </ol>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
-              </div>
-              <p className="text-[13px] font-medium">{job.task_name || job.subject || '—'}</p>
-              <pre className="whitespace-pre-wrap font-sans text-[12px] text-muted-foreground">{job.notes || '未有儲存郵件內容'}</pre>
-              {job.error && <p className="text-[12px] text-amber-700">{job.error}</p>}
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       </div>
     </div>

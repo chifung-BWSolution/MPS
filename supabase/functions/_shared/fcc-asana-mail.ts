@@ -40,7 +40,7 @@ function readField(body: string, labels: string[]): string {
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i].trim();
     for (const label of labels) {
-      const match = line.match(new RegExp(`^${label}\\s*[:：]\\s*(.*)$`));
+      const match = line.match(new RegExp(`^${label}\\s*\\**\\s*[:：]\\s*(.*)$`));
       if (!match) continue;
       if (match[1].trim()) return match[1].trim();
       const next = lines.slice(i + 1).map((item) => item.trim()).find(Boolean);
@@ -85,29 +85,41 @@ export function normalizeFccBody(body: string): string {
   return source;
 }
 
+function cleanFccLabel(label: string): string {
+  const cleaned = label
+    .replace(/\*+/g, "")
+    .replace(/[（(]\s*可選多於一項\s*[）)]/g, "")
+    .replace(/[（(]\s*方便出報價\s*[）)]/g, "")
+    .replace(/[（(][^）)]*可免地面交收運費[^）)]*[）)]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (/^referrer(?:\s*url)?$/i.test(cleaned) || cleaned === "來源" || cleaned === "來源網址") return "Referrer URL";
+  return cleaned;
+}
+
 export function organizeFccNotes(body: string): string {
   const cut = body.search(/了解條款及政策/);
   const main = cut >= 0 ? body.slice(0, cut) : body;
   const lines = main.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const out: string[] = [];
-  for (let i = 0; i < lines.length; i += 1) {
-    if (/[:：]/.test(lines[i])) {
-      out.push(lines[i].replace(/\s*[:：]\s*/, ": "));
+  const fields: Array<{ label: string; value: string }> = [];
+  let pending = "";
+  for (const line of lines) {
+    const colon = line.match(/^(.*?)[:：]\s*(.*)$/);
+    if (!colon || !colon[1].trim()) {
+      pending = pending ? `${pending} ${line}` : line;
       continue;
     }
-    const next = lines[i + 1];
-    if (next && !/[:：]/.test(next)) {
-      out.push(`${lines[i]}: ${next}`);
-      i += 1;
-    } else {
-      out.push(lines[i]);
-    }
+    const label = cleanFccLabel(pending ? `${pending} ${colon[1]}` : colon[1]);
+    const value = colon[2].replace(/^(?:[:：]\s*)+/, "").replace(/\s+/g, " ").trim();
+    pending = "";
+    if (!label || !value) continue;
+    fields.push({ label, value });
   }
   const referrer = extractFccReferrer(body);
-  if (referrer && !out.some((line) => line.includes(referrer))) {
-    out.push(`Referrer: ${referrer}`);
+  if (referrer && !fields.some((field) => field.value.includes(referrer))) {
+    fields.push({ label: "Referrer URL", value: referrer });
   }
-  return out.join("\n").trim();
+  return fields.map((field) => `${field.label}: ${field.value}`).join("\n").trim();
 }
 
 export function hktDate(input: Date | number | string): string {
@@ -120,12 +132,15 @@ export function hktDate(input: Date | number | string): string {
   }).format(date);
 }
 
-export function inquiryAlreadyInAsana(taskName: string, phone: string, title: string): boolean {
-  const name = String(taskName || "").trim();
-  if (title && name === title.trim()) return true;
-  const digits = String(phone || "").replace(/\D/g, "");
-  const local = digits.length === 11 && digits.startsWith("852") ? digits.slice(3) : digits;
-  return local.length >= 8 && name.replace(/\D/g, "").includes(local);
+export function sameInquiryContent(value: string): string {
+  return String(value || "").replace(/\r\n/g, "\n").trim();
+}
+
+export function inquiryAlreadyOpened(taskName: string, taskNotes: string, title: string, notes: string): boolean {
+  const expectedTitle = String(title || "").trim();
+  const expectedNotes = sameInquiryContent(notes);
+  if (!expectedTitle || !expectedNotes) return false;
+  return String(taskName || "").trim() === expectedTitle && sameInquiryContent(taskNotes) === expectedNotes;
 }
 
 export function parseFccSubject(subject: string): { name: string; phone: string; company: string } {
@@ -153,7 +168,7 @@ export function parseFccInquiry(
   const fromSubject = parseFccSubject(subject);
   const name = readField(source, ["姓名", "客人姓名", "名稱"]) || fromSubject.name;
   const phone = formatFccPhone(readField(source, ["聯絡電話", "電話", "手機", "Phone"])) || fromSubject.phone;
-  const company = readField(source, ["公司名稱", "公司", "Company"]) || fromSubject.company;
+  const company = readField(source, ["公司/機構名稱", "公司名稱", "公司", "Company"]) || fromSubject.company;
   if (!name && !phone) {
     return { ok: false, reason: "郵件讀唔到姓名同電話，不開 task" };
   }

@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/google-gsc.ts";
-import { hktDate, inquiryAlreadyInAsana, normalizeFccBody, parseFccInquiry, resolveFccGmailOAuthClient, type FccMailRule } from "../_shared/fcc-asana-mail.ts";
+import { hktDate, inquiryAlreadyOpened, normalizeFccBody, parseFccInquiry, resolveFccGmailOAuthClient, type FccMailRule } from "../_shared/fcc-asana-mail.ts";
 
 const PROVIDER = "gmail_fcc";
 const ASANA_API = "https://app.asana.com/api/1.0";
@@ -38,10 +38,33 @@ function bearer(req: Request): string {
   return (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
 }
 
+function jwtPayload(token: string): { role?: string; iss?: string; ref?: string } | null {
+  const part = token.split(".")[1];
+  if (!part) return null;
+  try {
+    const pad = part.length % 4 === 0 ? "" : "=".repeat(4 - (part.length % 4));
+    return JSON.parse(atob(part.replace(/-/g, "+").replace(/_/g, "/") + pad));
+  } catch {
+    return null;
+  }
+}
+
+async function isServiceRoleJwt(token: string): Promise<boolean> {
+  const payload = jwtPayload(token);
+  if (payload?.role !== "service_role") return false;
+  const ref = String(payload.ref || "");
+  if (ref && SUPABASE_URL && !SUPABASE_URL.includes(ref)) return false;
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/asana_mail_rules?select=code&limit=1`, {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+  });
+  return res.ok;
+}
+
 async function requireCaller(req: Request): Promise<Response | null> {
   const token = bearer(req);
   if (!token) return json(401, { error: "Missing authorization" });
   if (SUPABASE_SERVICE_ROLE_KEY && token === SUPABASE_SERVICE_ROLE_KEY) return null;
+  if (await isServiceRoleJwt(token)) return null;
   const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${token}` } },
   });
@@ -232,40 +255,118 @@ function asanaReadToken(): string {
   return Deno.env.get("ASANA_ACCESS_TOKEN")?.trim() || Deno.env.get("ASANA_FCC_ACCESS_TOKEN")?.trim() || "";
 }
 
-async function findExistingTask(workspace: string, project: string, phone: string, title: string): Promise<string | null> {
+const STORY_LABEL: Record<string, string> = {
+  comment_added: "留言",
+  added_to_project: "加入專案",
+  removed_from_project: "移出專案",
+  section_changed: "轉欄",
+  assigned: "負責人",
+  unassigned: "負責人",
+  due_date_changed: "到期日",
+  marked_complete: "完成",
+  marked_incomplete: "重開",
+  name_changed: "標題",
+  notes_changed: "內容",
+  follower_added: "協作者",
+  follower_removed: "協作者",
+  attachment_added: "附件",
+  enum_custom_field_changed: "欄位",
+  text_custom_field_changed: "欄位",
+  number_custom_field_changed: "欄位",
+  date_custom_field_changed: "欄位",
+  multi_enum_custom_field_changed: "欄位",
+};
+
+async function taskActivity(taskGid: string) {
+  const token = projectReadToken();
+  if (!token) throw new Error("缺少 Asana token，未能讀取 task 紀錄");
+  const taskPayload = await asanaGet(
+    `/tasks/${taskGid}?opt_fields=completed,assignee.name,memberships.project.name,memberships.section.name`,
+    token,
+  );
+  const task = taskPayload.data?.[0] || {};
+  const memberships = Array.isArray(task.memberships) ? task.memberships : [];
+  const projects = memberships.map((item) => {
+    const row = item as { project?: { name?: string }; section?: { name?: string } };
+    return {
+      name: String(row.project?.name || "").trim(),
+      section: String(row.section?.name || "").trim(),
+    };
+  }).filter((item) => item.name);
+  const assignee = task.assignee && typeof task.assignee === "object"
+    ? String((task.assignee as { name?: string }).name || "").trim()
+    : "";
+  const stories: Array<{ gid: string; at: string; by: string; subtype: string; label: string; text: string }> = [];
+  let offset = "";
+  for (let page = 0; page < 5; page += 1) {
+    const qs = new URLSearchParams({
+      opt_fields: "gid,created_at,created_by.name,text,resource_subtype",
+      limit: "100",
+    });
+    if (offset) qs.set("offset", offset);
+    const payload = await asanaGet(`/tasks/${taskGid}/stories?${qs}`, token);
+    for (const story of payload.data || []) {
+      const subtype = String(story.resource_subtype || "");
+      if (subtype === "liked") continue;
+      const text = String(story.text || "").trim();
+      if (!text) continue;
+      const createdBy = story.created_by && typeof story.created_by === "object"
+        ? String((story.created_by as { name?: string }).name || "").trim()
+        : "";
+      stories.push({
+        gid: String(story.gid || ""),
+        at: String(story.created_at || ""),
+        by: createdBy,
+        subtype,
+        label: STORY_LABEL[subtype] || "更新",
+        text,
+      });
+    }
+    offset = payload.next_page?.offset || "";
+    if (!offset) break;
+  }
+  return {
+    completed: task.completed === true,
+    assignee,
+    projects,
+    stories,
+  };
+}
+
+async function findExistingTask(workspace: string, project: string, phone: string, title: string, notes: string): Promise<string | null> {
   const token = asanaReadToken();
   if (!token) throw new Error("缺少 ASANA_ACCESS_TOKEN，未能先檢查 Asana 是否已有 task");
   const digits = phone.replace(/\D/g, "");
   const qs = new URLSearchParams({
     text: digits || title,
     "projects.any": project,
-    opt_fields: "name,gid",
+    opt_fields: "name,gid,notes",
     limit: "50",
   });
   const res = await fetch(`${ASANA_API}/workspaces/${workspace}/tasks/search?${qs}`, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
   });
-  const payload = await res.json() as { data?: Array<{ gid?: string; name?: string }>; errors?: Array<{ message?: string }> };
+  const payload = await res.json() as { data?: Array<{ gid?: string; name?: string; notes?: string }>; errors?: Array<{ message?: string }> };
   if (!res.ok) throw new Error(payload.errors?.[0]?.message || "檢查 Asana 現有 task 失敗");
-  const hit = (payload.data || []).find((task) => inquiryAlreadyInAsana(String(task.name || ""), phone, title));
+  const hit = (payload.data || []).find((task) => inquiryAlreadyOpened(String(task.name || ""), String(task.notes || ""), title, notes));
   return hit?.gid ? String(hit.gid) : null;
 }
 
 async function openedInHistory(
   supabase: ReturnType<typeof admin>,
-  phone: string,
   title: string,
+  notes: string,
   messageId: string,
 ): Promise<boolean> {
   const { data, error } = await supabase
     .from("asana_mail_jobs")
-    .select("gmail_message_id, subject, task_name, status")
+    .select("gmail_message_id, task_name, notes, status")
     .eq("rule_code", "fcc")
     .in("status", ["created", "skipped", "processing"]);
   if (error) throw new Error(error.message);
   return (data || []).some((job) => {
     if (String(job.gmail_message_id || "") === messageId) return false;
-    return inquiryAlreadyInAsana(`${job.task_name || ""} ${job.subject || ""}`, phone, title);
+    return inquiryAlreadyOpened(String(job.task_name || ""), String(job.notes || ""), title, notes);
   });
 }
 
@@ -283,7 +384,7 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { error: "Method not allowed" });
   const denied = await requireCaller(req);
   if (denied) return denied;
-  const body = await req.json().catch(() => ({})) as { action?: string };
+  const body = await req.json().catch(() => ({})) as { action?: string; taskGid?: string };
 
   const supabase = admin();
   const { data: rule, error: ruleErr } = await supabase
@@ -305,6 +406,15 @@ Deno.serve(async (req) => {
         fccCreator(),
       ]);
       return json(200, { users, projects: projectResult.projects, projectError: projectResult.projectError, creator });
+    } catch (err) {
+      return json(500, { error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  if (body.action === "activity") {
+    const taskGid = String(body.taskGid || "").trim();
+    if (!/^\d+$/.test(taskGid)) return json(400, { error: "缺少 Asana task" });
+    try {
+      return json(200, await taskActivity(taskGid));
     } catch (err) {
       return json(500, { error: err instanceof Error ? err.message : String(err) });
     }
@@ -387,12 +497,13 @@ Deno.serve(async (req) => {
       let existingTaskGid: string | null = null;
       let alreadyOpened = false;
       try {
-        alreadyOpened = await openedInHistory(supabase, parsed.mail.phone, parsed.mail.title, item.id);
+        alreadyOpened = await openedInHistory(supabase, parsed.mail.title, parsed.mail.notes, item.id);
         existingTaskGid = alreadyOpened ? null : await findExistingTask(
           row.workspace_gid,
           parsed.mail.projectGid,
           parsed.mail.phone,
           parsed.mail.title,
+          parsed.mail.notes,
         );
       } catch (err) {
         const messageText = err instanceof Error ? err.message : String(err);
