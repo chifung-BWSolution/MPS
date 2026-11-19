@@ -51,6 +51,9 @@ verify_jwt = false
 [functions.sync-fcc-asana-mail]
 verify_jwt = false
 
+[functions.fcc-asana-digest]
+verify_jwt = false
+
 [functions.send-email]
 verify_jwt = true
 

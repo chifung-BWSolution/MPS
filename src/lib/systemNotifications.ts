@@ -19,6 +19,7 @@ import {
   RECEIVABLES_ALERT_DUE_WITHIN_DAYS,
   buildReceivablesAlertEmail,
 } from './receivablesAlert.ts';
+import { buildFccAsanaDigestEmail, describeFccDigestSchedule, fccAsanaTaskUrl } from './fccAsanaDigest.ts';
 import { CANONICAL_SITE_URL } from './siteUrl.ts';
 import type { AdsClickTrendMetric } from '../types/adsCostTrend.ts';
 
@@ -54,6 +55,7 @@ export type SystemNotificationDoc = {
 export function buildSystemNotificationCatalog(): SystemNotificationDoc[] {
   const annualPreview = buildAnnualFeePreview();
   const receivablesPreview = buildReceivablesPreview();
+  const fccDigestPreview = buildFccDigestPreview();
   const adsPreview = buildAdsPreview();
 
   return [
@@ -92,6 +94,29 @@ export function buildSystemNotificationCatalog(): SystemNotificationDoc[] {
       bcc: [],
       previewHtml: receivablesPreview.html,
       previewSubject: receivablesPreview.subject,
+    },
+    {
+      id: 'fcc-asana-digest',
+      name: 'FC 查詢 Asana 日報',
+      kind: 'scheduled',
+      subject: 'FC 查詢 Asana {日期} — 今日新開 {個數} 個 task',
+      purpose: '把當日新開的 FC 查詢 Asana task 整理成一封電郵，列出每個 task 的 Asana 連結和而家的狀態，方便老闆查看今日開了幾多個。',
+      trigger: '排程 fcc-asana-digest 於本頁儲存的香港時間寄出。已啟用而且有至少一個收件人時才寄出。當日沒有新 task 仍會寄出，並寫明新開 0 個。同一日不會寄第二次。',
+      frequency: describeFccDigestSchedule({
+        enabled: false,
+        sendTime: '18:00',
+        cadence: 'daily',
+        weekday: 1,
+      }),
+      to: {
+        addresses: [],
+        summary: '本頁設定儲存的收件人',
+        note: '沒有固定名單。收件人、幾點寄、每日／星期一至五／每週哪一日，都在這張卡的設定儲存。Cc、Bcc 不用。未啟用或沒有有效電郵就不會寄。',
+      },
+      cc: [],
+      bcc: [],
+      previewHtml: fccDigestPreview.html,
+      previewSubject: fccDigestPreview.subject,
     },
     {
       id: 'ads-email-alert',
@@ -266,6 +291,29 @@ function metricCell(
 ): AdsEmailAlertMetricCell {
   const percent = percentChange(current, previous);
   return { metric, current, previous, percent, tone: alertMetricTone(metric, percent) };
+}
+
+function buildFccDigestPreview(): { html: string; subject: string } {
+  const email = buildFccAsanaDigestEmail({
+    date: '2026-11-19',
+    tasks: [
+      {
+        title: 'FC Lunch Box - 範例客人 9123 4567 範例公司',
+        url: fccAsanaTaskUrl('1000000000000001'),
+        completed: false,
+        assignee: '範例同事',
+        projects: ['FCC Active 1 飯盒報價 Lunch Box Follow Up'],
+      },
+      {
+        title: 'FC Catering - 另一客人 6123 4567 到會公司',
+        url: fccAsanaTaskUrl('1000000000000002'),
+        completed: true,
+        assignee: '範例同事',
+        projects: ['FCC Active 1 到會報價 Catering Follow Up'],
+      },
+    ],
+  });
+  return { html: email.html, subject: email.subject };
 }
 
 function buildAdsPreview(): { html: string; subject: string } {

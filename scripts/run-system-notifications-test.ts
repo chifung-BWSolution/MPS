@@ -15,9 +15,10 @@ const byId = new Map(docs.map((doc) => [doc.id, doc]));
 assert.deepEqual(docs.map((doc) => doc.id), [
   'annual-fees-reminder',
   'receivables-alert',
+  'fcc-asana-digest',
   'ads-email-alert',
 ]);
-assert.equal(docs.filter((doc) => doc.kind === 'scheduled').length, 2);
+assert.equal(docs.filter((doc) => doc.kind === 'scheduled').length, 3);
 assert.equal(docs.filter((doc) => doc.kind === 'manual').length, 1);
 
 const annual = byId.get('annual-fees-reminder');
@@ -46,6 +47,23 @@ assert.match(receivables.frequency, /0 1 \* \* 1/);
 assert.match(receivables.previewSubject, /應收未收日報 2026\/11\/09/);
 assert.match(receivables.previewHtml, /應收未收日報/);
 assert.match(receivables.previewHtml, /範例客戶項目/);
+
+const fccDigest = byId.get('fcc-asana-digest');
+assert.ok(fccDigest);
+assert.equal(fccDigest.kind, 'scheduled');
+assert.equal(fccDigest.subject, 'FC 查詢 Asana {日期} — 今日新開 {個數} 個 task');
+assert.match(fccDigest.frequency, /每日 18:00/);
+assert.match(fccDigest.frequency, /未啟用/);
+assert.match(fccDigest.frequency, /0 10 \* \* \*/);
+assert.equal(fccDigest.to.summary, '本頁設定儲存的收件人');
+assert.deepEqual(fccDigest.to.addresses, []);
+assert.deepEqual(fccDigest.cc, []);
+assert.deepEqual(fccDigest.bcc, []);
+assert.match(fccDigest.previewSubject, /FC 查詢 Asana 2026-11-19 — 今日新開 2 個 task/);
+assert.match(fccDigest.previewHtml, /lang="zh-Hant"/);
+assert.match(fccDigest.previewHtml, /範例客人/);
+assert.match(fccDigest.previewHtml, /已完成/);
+assert.match(fccDigest.previewHtml, /app\.asana\.com/);
 
 const ads = byId.get('ads-email-alert');
 assert.ok(ads);

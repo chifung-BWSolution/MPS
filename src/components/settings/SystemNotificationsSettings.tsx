@@ -1,4 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { FccAsanaDigestSettings, type FccDigestForm } from './FccAsanaDigestSettings';
+import { describeFccDigestSchedule } from '@/lib/fccAsanaDigest';
 import { buildSystemNotificationCatalog, type SystemNotificationDoc } from '@/lib/systemNotifications';
 
 function addressText(addresses: readonly string[]): string {
@@ -14,7 +16,19 @@ function MetaBlock({ label, children }: { label: string; children: string }) {
   );
 }
 
-function NotificationCard({ doc }: { doc: SystemNotificationDoc }) {
+function NotificationCard({
+  doc,
+  frequency,
+  to,
+  extra,
+  previewNote,
+}: {
+  doc: SystemNotificationDoc;
+  frequency?: string;
+  to?: string;
+  extra?: ReactNode;
+  previewNote?: string;
+}) {
   return (
     <article className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6 space-y-5">
       <div className="flex flex-wrap items-center gap-2">
@@ -26,20 +40,21 @@ function NotificationCard({ doc }: { doc: SystemNotificationDoc }) {
 
       <div className="grid gap-4 md:grid-cols-2">
         <MetaBlock label="電郵標題">{doc.subject}</MetaBlock>
-        <MetaBlock label="頻率">{doc.frequency}</MetaBlock>
+        <MetaBlock label="頻率">{frequency || doc.frequency}</MetaBlock>
         <MetaBlock label="用途">{doc.purpose}</MetaBlock>
         <MetaBlock label="觸發條件">{doc.trigger}</MetaBlock>
-        <MetaBlock label="To">{doc.to.addresses.length > 0 ? doc.to.addresses.join('\n') : doc.to.summary}</MetaBlock>
+        <MetaBlock label="To">{to || (doc.to.addresses.length > 0 ? doc.to.addresses.join('\n') : doc.to.summary)}</MetaBlock>
         <MetaBlock label="Cc">{addressText(doc.cc)}</MetaBlock>
         <MetaBlock label="Bcc">{addressText(doc.bcc)}</MetaBlock>
       </div>
       <p className="text-[13px] leading-6 text-muted-foreground">{doc.to.note}</p>
+      {extra}
 
       <div className="space-y-2">
         <div>
           <h3 className="text-[14px] font-bold">範本預覽</h3>
           <p className="text-[12px] text-muted-foreground mt-1">
-            預覽主旨：{doc.previewSubject}。以下用固定範例資料套用正式 HTML 範本，正式郵件會代入當日的項目與金額。
+            預覽主旨：{doc.previewSubject}。{previewNote || '以下用固定範例資料套用正式 HTML 範本，正式郵件會代入當日的項目與金額。'}
           </p>
         </div>
         <iframe
@@ -55,16 +70,24 @@ function NotificationCard({ doc }: { doc: SystemNotificationDoc }) {
 
 export function SystemNotificationsSettings() {
   const docs = useMemo(() => buildSystemNotificationCatalog(), []);
+  const [digest, setDigest] = useState<FccDigestForm | null>(null);
   const scheduled = docs.filter((doc) => doc.kind === 'scheduled').length;
   const manual = docs.length - scheduled;
 
   return (
     <div className="space-y-4">
       <p className="text-[13px] text-muted-foreground">
-        目前有 {scheduled} 個排程電郵，以及 {manual} 個由同事手動發送的電郵通知。
+        目前有 {scheduled} 個排程電郵，以及 {manual} 個由同事手動發送的電郵通知。FC 查詢 Asana 日報的收件人、時間同頻率可以在下面儲存。
       </p>
       {docs.map((doc) => (
-        <NotificationCard key={doc.id} doc={doc} />
+        <NotificationCard
+          key={doc.id}
+          doc={doc}
+          frequency={doc.id === 'fcc-asana-digest' && digest ? describeFccDigestSchedule(digest) : undefined}
+          to={doc.id === 'fcc-asana-digest' && digest ? (digest.recipients.join('\n') || '未設定收件人') : undefined}
+          extra={doc.id === 'fcc-asana-digest' ? <FccAsanaDigestSettings onChange={setDigest} /> : undefined}
+          previewNote={doc.id === 'fcc-asana-digest' ? '以下用固定範例 task 套用正式 HTML 範本，正式郵件會代入當日新開的 task、Asana 連結同而家狀態。' : undefined}
+        />
       ))}
     </div>
   );
