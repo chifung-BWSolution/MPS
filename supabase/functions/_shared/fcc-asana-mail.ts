@@ -42,8 +42,9 @@ function readField(body: string, labels: string[]): string {
     for (const label of labels) {
       const match = line.match(new RegExp(`^${label}\\s*\\**\\s*[:：]\\s*(.*)$`));
       if (!match) continue;
-      if (match[1].trim()) return match[1].trim();
-      const next = lines.slice(i + 1).map((item) => item.trim()).find(Boolean);
+      const value = match[1].replace(/^(?:[:：]\s*)+/, "").trim();
+      if (value) return value;
+      const next = lines.slice(i + 1).map((item) => item.trim().replace(/^(?:[:：]\s*)+/, "")).find(Boolean);
       return next || "";
     }
   }
@@ -173,7 +174,8 @@ export function parseFccInquiry(
     return { ok: false, reason: "郵件讀唔到姓名同電話，不開 task" };
   }
   const prefix = route === "catering" ? rule.cateringTitlePrefix : rule.lunchTitlePrefix;
-  const title = `${prefix} - ${[name, phone, company].filter(Boolean).join(" ")}`.trim();
+  const parts = [name, phone, company].map((part) => part.replace(/[:：]/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
+  const title = `${prefix} - ${parts.join(" ")}`.trim();
   return {
     ok: true,
     mail: {

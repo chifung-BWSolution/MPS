@@ -124,6 +124,16 @@ assert.equal(organizeFccNotes([
   'Referrer URL: https://facebook.com/',
 ].join('\n'));
 
+const colonTitle = parseFccInquiry(
+  ['姓名*: : Tam', '聯絡電話*: : 92070847', '公司/機構名稱: : 中石化分公司', '經濟飯盒 (正餐)'].join('\n'),
+  rule,
+);
+assert.equal(colonTitle.ok, true);
+if (colonTitle.ok) {
+  assert.equal(colonTitle.mail.title, 'FC Lunch Box - Tam 9207 0847 中石化分公司');
+  assert.equal(colonTitle.mail.title.includes(':'), false);
+}
+
 const none = parseFccInquiry('只是一封普通郵件', rule);
 assert.equal(none.ok, false);
 
