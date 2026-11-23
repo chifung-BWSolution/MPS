@@ -83,7 +83,7 @@ supabase secrets set ASANA_STATUS_FIELD_NAME=狀態
 - **同步 Asana** → 此頁自動（2 分鐘冷卻）或手動呼叫 `/functions/v1/sync-asana-pitching`，只寫入暫存表
 - **匯入** → 開啟 Pitching 表單（Asana 預設值）→ `insert quotation_client_project`
 - **Pitching / Project** → 只顯示已建立的 `quotation_client_project`，不再觸發 Asana 同步
-- **跟進記錄** → 呼叫 `/functions/v1/asana-task-stories`；下載附件再呼叫 `/functions/v1/asana-attachment-download`
+- **Asana 記錄** → 呼叫 `/functions/v1/asana-task-stories`；下載附件再呼叫 `/functions/v1/asana-attachment-download`
 - **新增 Pitching** → 手動寫入（可填 Asana 連結，不會自動建立 Asana Task）
 
 `backfill_main_pm` 仍是一次性修補現有 QCP 的 `main_pm_id`，不是匯入流程的一部分。
