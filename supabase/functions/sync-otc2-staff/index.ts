@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { provisionAllStaffAuth, summarizeProvisionResults } from "../_shared/provisionStaffAuth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -405,14 +406,24 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    let authProvisioned = 0;
+    // Every allowlisted colleague gets an Auth login from staffs.private_phone.
+    // A single failure must not skip the remaining accounts.
+    let authCreated = 0;
+    let authUpdated = 0;
+    let authSkipped = 0;
+    let authFailed = 0;
+    let authProvisionError: string | null = null;
     try {
-      const { provisionAllStaffAuth } = await import("../_shared/provisionStaffAuth.ts");
       const provisionResults = await provisionAllStaffAuth(supabaseAdmin);
-      authProvisioned = provisionResults.filter((r) => r.action === "created" || r.action === "updated").length;
-      console.log("[sync-otc2-staff] Auth provision:", provisionResults.length, "whitelist,", authProvisioned, "updated");
+      const summary = summarizeProvisionResults(provisionResults);
+      authCreated = summary.created;
+      authUpdated = summary.updated;
+      authSkipped = summary.skipped;
+      authFailed = summary.failed;
+      console.log("[sync-otc2-staff] Auth provision:", summary);
     } catch (provisionErr) {
-      console.warn("[sync-otc2-staff] Auth provision failed:", provisionErr);
+      authProvisionError = provisionErr instanceof Error ? provisionErr.message : String(provisionErr);
+      console.error("[sync-otc2-staff] Auth provision failed:", authProvisionError);
     }
 
     const activeCount = syncable.filter((s) => isActiveStatus(s.status)).length;
@@ -434,7 +445,11 @@ Deno.serve(async (req: Request) => {
           inactive: inactiveCount,
           teams: teams.size,
           skipped_no_id: otc2Staff.length - syncable.length,
-          auth_provisioned: authProvisioned,
+          auth_created: authCreated,
+          auth_updated: authUpdated,
+          auth_skipped: authSkipped,
+          auth_failed: authFailed,
+          auth_provision_error: authProvisionError,
         },
         synced_at: new Date().toISOString(),
       }),

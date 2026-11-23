@@ -6,7 +6,7 @@ export type ProvisionStaffAuthResult = {
   staff_id: string;
   email: string | null;
   auth_user_id: string | null;
-  action: 'created' | 'updated' | 'disabled' | 'skipped';
+  action: 'created' | 'updated' | 'disabled' | 'skipped' | 'failed';
   reason?: string;
 };
 

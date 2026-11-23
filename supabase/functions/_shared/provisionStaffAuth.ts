@@ -5,8 +5,16 @@ export type ProvisionResult = {
   staff_id: string;
   email: string | null;
   auth_user_id: string | null;
-  action: "created" | "updated" | "disabled" | "skipped";
+  action: "created" | "updated" | "disabled" | "skipped" | "failed";
   reason?: string;
+};
+
+export type ProvisionSummary = {
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  disabled: number;
 };
 
 type UsersRow = {
@@ -188,13 +196,49 @@ export async function disableStaffAuth(
   };
 }
 
+export function summarizeProvisionResults(results: ProvisionResult[]): ProvisionSummary {
+  const summary: ProvisionSummary = { created: 0, updated: 0, skipped: 0, failed: 0, disabled: 0 };
+  for (const row of results) {
+    if (row.action === "created") summary.created += 1;
+    else if (row.action === "updated") summary.updated += 1;
+    else if (row.action === "failed") summary.failed += 1;
+    else if (row.action === "disabled") summary.disabled += 1;
+    else summary.skipped += 1;
+  }
+  return summary;
+}
+
+/** Create or refresh Auth for every allowlisted user. One failure does not skip the rest. */
 export async function provisionAllStaffAuth(admin: SupabaseClient): Promise<ProvisionResult[]> {
-  const { data, error } = await admin.from("users").select("id, staff_id, email, auth_user_id");
-  if (error) throw new Error(error.message);
-  const rows = (data || []) as UsersRow[];
+  const rows: UsersRow[] = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await admin
+      .from("users")
+      .select("id, staff_id, email, auth_user_id")
+      .order("id")
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    const batch = (data || []) as UsersRow[];
+    rows.push(...batch);
+    if (batch.length < pageSize) break;
+  }
+
   const results: ProvisionResult[] = [];
   for (const row of rows) {
-    results.push(await provisionOneStaffAuth(admin, { usersId: row.id }));
+    try {
+      results.push(await provisionOneStaffAuth(admin, { usersId: row.id }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[provision-staff-auth] failed", row.email || row.staff_id, message);
+      results.push({
+        staff_id: row.staff_id,
+        email: row.email,
+        auth_user_id: row.auth_user_id,
+        action: "failed",
+        reason: message,
+      });
+    }
   }
   return results;
 }

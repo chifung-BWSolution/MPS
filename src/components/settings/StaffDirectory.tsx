@@ -286,7 +286,19 @@ export function StaffDirectory() {
     environment?: string;
     api_url?: string;
     full_refresh?: boolean;
-    stats?: { total: number; created: number; updated: number; active: number; inactive: number; teams: number };
+    stats?: {
+      total: number;
+      created: number;
+      updated: number;
+      active: number;
+      inactive: number;
+      teams: number;
+      auth_created?: number;
+      auth_updated?: number;
+      auth_skipped?: number;
+      auth_failed?: number;
+      auth_provision_error?: string | null;
+    };
     synced_at?: string;
   } | null>(null);
 
@@ -833,6 +845,19 @@ export function StaffDirectory() {
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-100 text-purple-700 text-[11px] font-medium">
                   團隊 {syncResult.stats.teams} 個
                 </span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-sky-100 text-sky-800 text-[11px] font-medium">
+                  登入帳號 新建 {syncResult.stats.auth_created ?? 0} · 更新 {syncResult.stats.auth_updated ?? 0}
+                </span>
+                {(syncResult.stats.auth_failed ?? 0) > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-100 text-rose-700 text-[11px] font-medium">
+                    登入帳號失敗 {syncResult.stats.auth_failed}
+                  </span>
+                )}
+                {syncResult.stats.auth_provision_error && (
+                  <span className="text-[11px] text-rose-700">
+                    登入帳號未建立：{syncResult.stats.auth_provision_error}
+                  </span>
+                )}
                 {syncResult.synced_at && (
                   <span className="text-[10px] text-muted-foreground ml-auto">
                     同步時間: {new Date(syncResult.synced_at).toLocaleString('zh-HK')}

@@ -48,7 +48,19 @@ export function TopNav() {
   const { systemUser, userInfo, signOut } = useAuth();
   const [searchFocused, setSearchFocused] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const navRef = useRef<HTMLElement>(null);
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setUserMenuOpen(false);
+    setSigningOut(true);
+    try {
+      await signOut();
+    } finally {
+      setSigningOut(false);
+    }
+  };
 
   useEffect(() => {
     const el = navRef.current;
@@ -153,6 +165,17 @@ export function TopNav() {
           <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-teal-500 rounded-full" />
         </button>
 
+        <button
+          type="button"
+          onClick={() => void handleSignOut()}
+          disabled={signingOut}
+          title={signingOut ? '登出中…' : '登出'}
+          aria-label={signingOut ? '登出中' : '登出'}
+          className="p-1.5 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200 disabled:opacity-50"
+        >
+          <LogOut size={16} />
+        </button>
+
         {/* User Avatar & Menu */}
         {systemUser && (
           <div className="relative">
@@ -192,14 +215,13 @@ export function TopNav() {
                   )}
                 </div>
                 <button
-                  onClick={async () => {
-                    setUserMenuOpen(false);
-                    await signOut();
-                  }}
-                  className="w-full text-left px-3 py-2 text-[12px] text-rose-600 hover:bg-rose-50 transition-colors flex items-center gap-2"
+                  type="button"
+                  onClick={() => void handleSignOut()}
+                  disabled={signingOut}
+                  className="w-full text-left px-3 py-2 text-[12px] text-rose-600 hover:bg-rose-50 transition-colors flex items-center gap-2 disabled:opacity-50"
                 >
                   <LogOut size={12} />
-                  登出
+                  {signingOut ? '登出中…' : '登出'}
                 </button>
               </div>
             )}
