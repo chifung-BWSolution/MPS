@@ -401,7 +401,7 @@ export function BwAsanaMailSettings() {
           </div>
           <div className="rounded-md border border-amber-200 bg-white p-4">
             <p className="text-[14px] font-semibold text-slate-900">開出來的 task</p>
-            <p className="mt-1 text-[14px] leading-6 text-slate-700">標題用下面的格式。內容一行一個欄位。到期日是當日。</p>
+            <p className="mt-1 text-[14px] leading-6 text-slate-700">標題只取主旨冒號前面的字，後面是姓名、電話、地址，中間用空格，不會把冒號抄進去。例如：[九龍]牆身工程查詢 - Ivy 9309 3186 九龍。內容一行一個欄位。到期日是當日。</p>
           </div>
         </div>
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -420,6 +420,7 @@ export function BwAsanaMailSettings() {
               value={settings.title_format}
               onChange={(e) => setSettings({ ...settings, title_format: e.target.value })}
             />
+            <span className="mt-1 block font-normal leading-6 text-slate-600">郵件主旨的冒號不會進入 task 標題，同 FC 一樣只留空格。</span>
           </label>
         </div>
         <details className="mt-4 rounded-md border border-amber-200 bg-white p-4">
