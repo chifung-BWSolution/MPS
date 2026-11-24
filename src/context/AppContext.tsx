@@ -258,6 +258,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'users', label: '用戶管理' },
       { id: 'email-connection', label: '電郵連接' },
       { id: 'fcc-asana-mail', label: 'FC 查詢開 Asana' },
+      { id: 'bw-asana-mail', label: 'BW 查詢開 Asana' },
       { id: 'system-notifications', label: '系統通知' },
       { id: 'login-logs', label: '登入紀錄' },
     ],

@@ -1,12 +1,18 @@
+export type FccRoute = "lunch" | "catering" | "fcp" | "consulting";
+
 export type FccMailRule = {
   lunchProjectGid: string;
   cateringProjectGid: string;
+  fcpProjectGid: string;
+  consultingProjectGid: string;
   lunchTitlePrefix: string;
   cateringTitlePrefix: string;
+  fcpTitlePrefix: string;
+  consultingTitlePrefix: string;
 };
 
 export type FccParsedMail = {
-  route: "lunch" | "catering";
+  route: FccRoute;
   projectGid: string;
   title: string;
   notes: string;
@@ -40,7 +46,7 @@ function readField(body: string, labels: string[]): string {
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i].trim();
     for (const label of labels) {
-      const match = line.match(new RegExp(`^${label}\\s*\\**\\s*[:：]\\s*(.*)$`));
+      const match = line.match(new RegExp(`^${label}\\s*(?:[（(][^）)]*[）)])?\\s*\\**\\s*[:：]\\s*(.*)$`));
       if (!match) continue;
       const value = match[1].replace(/^(?:[:：]\s*)+/, "").trim();
       if (value) return value;
@@ -144,6 +150,11 @@ export function inquiryAlreadyOpened(taskName: string, taskNotes: string, title:
   return String(taskName || "").trim() === expectedTitle && sameInquiryContent(taskNotes) === expectedNotes;
 }
 
+export function isEmailMeFormSender(fromHeader: string): boolean {
+  const addresses = String(fromHeader || "").match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+  return addresses.some((address) => address.toLowerCase().endsWith("@emailmeform.com"));
+}
+
 export function parseFccSubject(subject: string): { name: string; phone: string; company: string } {
   const match = String(subject || "").match(/[:：]\s*(.+?)\s+-\s*(\d[\d\s]*\d)\s*(.*)$/);
   if (!match) return { name: "", phone: "", company: "" };
@@ -154,38 +165,72 @@ export function parseFccSubject(subject: string): { name: string; phone: string;
   };
 }
 
+function subjectFamily(subject: string): "fcp" | "consulting" | null {
+  const compact = String(subject || "").replace(/\s+/g, "");
+  if (compact.startsWith("FCP活動策劃") || compact.startsWith("FCP活動")) return "fcp";
+  if (/開店預約見面|開店說明會|餐廳開店/.test(String(subject || ""))) return "consulting";
+  return null;
+}
+
 export function parseFccInquiry(
   body: string,
   rule: FccMailRule,
   subject = "",
 ): { ok: true; mail: FccParsedMail } | { ok: false; reason: string } {
   const source = normalizeFccBody(body);
+  const family = subjectFamily(subject);
   const catering = CATERING_PATTERNS.some((pattern) => pattern.test(source));
   const lunch = LUNCH_PATTERNS.some((pattern) => pattern.test(source));
-  if (!catering && !lunch) {
+  const route: FccRoute | null = family === "fcp"
+    ? "fcp"
+    : family === "consulting"
+    ? "consulting"
+    : catering
+    ? "catering"
+    : lunch
+    ? "lunch"
+    : null;
+  if (!route) {
     return { ok: false, reason: "郵件沒有飯盒或到會選項，不開 task" };
   }
-  const route = catering ? "catering" : "lunch";
+  const projectGid = route === "fcp"
+    ? rule.fcpProjectGid
+    : route === "consulting"
+    ? rule.consultingProjectGid
+    : route === "catering"
+    ? rule.cateringProjectGid
+    : rule.lunchProjectGid;
+  if (!String(projectGid || "").trim()) {
+    return { ok: false, reason: "未設定專案，不開 task" };
+  }
   const fromSubject = parseFccSubject(subject);
   const name = readField(source, ["姓名", "客人姓名", "名稱"]) || fromSubject.name;
-  const phone = formatFccPhone(readField(source, ["聯絡電話", "電話", "手機", "Phone"])) || fromSubject.phone;
+  const phone = formatFccPhone(readField(source, ["聯絡電話", "手提電話", "電話", "手機", "Phone"])) || fromSubject.phone;
   const company = readField(source, ["公司/機構名稱", "公司名稱", "公司", "Company"]) || fromSubject.company;
+  const activity = readField(source, ["活動性質", "投資地區"]);
   if (!name && !phone) {
     return { ok: false, reason: "郵件讀唔到姓名同電話，不開 task" };
   }
-  const prefix = route === "catering" ? rule.cateringTitlePrefix : rule.lunchTitlePrefix;
-  const parts = [name, phone, company].map((part) => part.replace(/[:：]/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
+  const prefix = route === "fcp"
+    ? rule.fcpTitlePrefix
+    : route === "consulting"
+    ? rule.consultingTitlePrefix
+    : route === "catering"
+    ? rule.cateringTitlePrefix
+    : rule.lunchTitlePrefix;
+  const tail = company || ((route === "fcp" || route === "consulting") ? activity : "");
+  const parts = [name, phone, tail].map((part) => part.replace(/[:：]/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
   const title = `${prefix} - ${parts.join(" ")}`.trim();
   return {
     ok: true,
     mail: {
       route,
-      projectGid: route === "catering" ? rule.cateringProjectGid : rule.lunchProjectGid,
+      projectGid,
       title,
       notes: organizeFccNotes(source),
       name,
       phone,
-      company,
+      company: tail,
     },
   };
 }

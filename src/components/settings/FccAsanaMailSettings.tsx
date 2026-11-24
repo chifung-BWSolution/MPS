@@ -14,6 +14,11 @@ type MailRule = {
   lunch_title_prefix: string;
   catering_project_gid: string;
   catering_title_prefix: string;
+  fcp_project_gid: string;
+  fcp_title_prefix: string;
+  consulting_project_gid: string;
+  consulting_title_prefix: string;
+  consulting_assignee_gid: string;
 };
 
 type MailJob = {
@@ -48,6 +53,16 @@ type AsanaProject = {
 
 const inputClass =
   'w-full text-[13px] border border-border rounded-md px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-teal-500';
+
+const JOB_PAGE_SIZE = 10;
+
+const JOB_STATUS_FILTERS = [
+  { id: 'all', label: '全部' },
+  { id: 'created', label: '已開 task' },
+  { id: 'skipped', label: '略過' },
+  { id: 'error', label: '失敗' },
+  { id: 'processing', label: '處理中' },
+] as const;
 
 function personLabel(person: AsanaPerson): string {
   if (person.email && person.name) return `${person.email}（${person.name}）`;
@@ -207,6 +222,12 @@ export function FccAsanaMailSettings() {
   const [creator, setCreator] = useState<{ name: string; email: string } | null>(null);
   const [peopleError, setPeopleError] = useState('');
   const [jobs, setJobs] = useState<MailJob[]>([]);
+  const [jobStatus, setJobStatus] = useState<'all' | 'created' | 'skipped' | 'error' | 'processing'>('all');
+  const [jobQuery, setJobQuery] = useState('');
+  const [jobDraft, setJobDraft] = useState('');
+  const [jobPage, setJobPage] = useState(0);
+  const [jobTotal, setJobTotal] = useState(0);
+  const [jobsLoading, setJobsLoading] = useState(true);
   const [openJobId, setOpenJobId] = useState<string | null>(null);
   const [activity, setActivity] = useState<Record<string, TaskActivity>>({});
   const [activityLoading, setActivityLoading] = useState<string | null>(null);
@@ -215,17 +236,53 @@ export function FccAsanaMailSettings() {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
+  const loadJobs = async (
+    status: 'all' | 'created' | 'skipped' | 'error' | 'processing',
+    query: string,
+    page: number,
+  ) => {
+    setJobsLoading(true);
+    const needle = query.replace(/[%_,]/g, ' ').trim();
+    const from = page * JOB_PAGE_SIZE;
+    let request = supabase
+      .from('asana_mail_jobs')
+      .select('id, subject, received_on, status, task_name, notes, asana_task_gid, error, created_at', { count: 'exact' })
+      .eq('rule_code', 'fcc')
+      .order('created_at', { ascending: false });
+    if (status !== 'all') request = request.eq('status', status);
+    if (needle) {
+      request = request.or(`subject.ilike.%${needle}%,task_name.ilike.%${needle}%,notes.ilike.%${needle}%,error.ilike.%${needle}%`);
+    }
+    const { data, error, count } = await request.range(from, from + JOB_PAGE_SIZE - 1);
+    if (error) toast.error(error.message);
+    const total = count || 0;
+    const lastPage = Math.max(0, Math.ceil(total / JOB_PAGE_SIZE) - 1);
+    if (page > lastPage) {
+      setJobPage(lastPage);
+      setJobsLoading(false);
+      await loadJobs(status, query, lastPage);
+      return;
+    }
+    setJobs((data || []) as MailJob[]);
+    setJobTotal(total);
+    setJobsLoading(false);
+  };
+
   const load = async () => {
     setLoading(true);
-    const [{ data, error }, jobRes, status, directory] = await Promise.all([
+    const [{ data, error }, status, directory] = await Promise.all([
       supabase.from('asana_mail_rules').select('*').eq('code', 'fcc').maybeSingle(),
-      supabase.from('asana_mail_jobs').select('id, subject, received_on, status, task_name, notes, asana_task_gid, error, created_at').eq('rule_code', 'fcc').order('created_at', { ascending: false }).limit(12),
       callFunction<GmailStatus>('gmail-fcc-oauth', { action: 'status' }).catch((e: Error) => ({ error: e.message })),
       callFunction<{ users?: AsanaPerson[]; projects?: AsanaProject[]; projectError?: string; creator?: { name: string; email: string } | null }>('sync-fcc-asana-mail', { action: 'users' }).catch((e: Error) => ({ error: e.message })),
     ]);
     if (error) toast.error(error.message);
     if (data) {
       const next = data as MailRule;
+      next.fcp_project_gid = next.fcp_project_gid || '';
+      next.fcp_title_prefix = next.fcp_title_prefix || 'FCP';
+      next.consulting_project_gid = next.consulting_project_gid || '';
+      next.consulting_title_prefix = next.consulting_title_prefix || 'FC Consulting Marketing';
+      next.consulting_assignee_gid = next.consulting_assignee_gid || '';
       setRule(next);
       setCollaborators((next.collaborator_gids || []).map((gid) => gid.trim()).filter(Boolean));
     }
@@ -242,10 +299,13 @@ export function FccAsanaMailSettings() {
       setProjectError('projectError' in directory ? directory.projectError || '' : '');
       setCreator('creator' in directory ? directory.creator || null : null);
     }
-    setJobs((jobRes.data || []) as MailJob[]);
     setGmail(status);
     setLoading(false);
   };
+
+  useEffect(() => {
+    void loadJobs(jobStatus, jobQuery, jobPage);
+  }, [jobStatus, jobQuery, jobPage]);
 
   useEffect(() => {
     void load();
@@ -271,6 +331,11 @@ export function FccAsanaMailSettings() {
       lunch_title_prefix: rule.lunch_title_prefix.trim(),
       catering_project_gid: rule.catering_project_gid.trim(),
       catering_title_prefix: rule.catering_title_prefix.trim(),
+      fcp_project_gid: rule.fcp_project_gid.trim(),
+      fcp_title_prefix: rule.fcp_title_prefix.trim(),
+      consulting_project_gid: rule.consulting_project_gid.trim(),
+      consulting_title_prefix: rule.consulting_title_prefix.trim(),
+      consulting_assignee_gid: rule.consulting_assignee_gid.trim(),
       updated_at: new Date().toISOString(),
     }).eq('code', 'fcc');
     setSaving(false);
@@ -315,6 +380,7 @@ export function FccAsanaMailSettings() {
       if (result.error) toast.error(result.error);
       else toast.success(`已處理。新開 ${result.created ?? 0} 個 task，略過 ${result.skipped ?? 0} 封。`);
       await load();
+      await loadJobs(jobStatus, jobQuery, jobPage);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -333,7 +399,7 @@ export function FccAsanaMailSettings() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="text-[13px] text-muted-foreground max-w-3xl">
-          讀 {rule.gmail_address} 的「{rule.gmail_label_name}」。有正餐或小食到會就開 Catering，只有飯盒或下午茶就開 Lunch Box。到期日是郵件當日（香港時間）。
+          讀 {rule.gmail_address} 的「{rule.gmail_label_name}」，以及同一信箱主旨是 FCP活動策劃、到會商戶合作查詢、開店預約見面或開店說明會的郵件。只有 EmailMeForm 寄出的信（寄件人是 @emailmeform.com）先會開 task。同事回覆或客人回覆同一封信，即使主旨一樣，都不會再開。正餐或小食到會開 Catering，只有飯盒或下午茶開 Lunch Box。FCP 活動策劃用下面的 FCP 專案。開店預約同開店說明會用 Consulting，負責人可以同到會不同。BWL 活動策劃、禮品查詢同療程預約唔會開。到期日是郵件當日（香港時間）。
           {creator?.email
             ? ` 開 task 的 Asana 帳號是 ${creator.email}。`
             : ' 開 task 的 Asana 帳號未設定，暫停期間不會再開。'}
@@ -472,6 +538,62 @@ export function FccAsanaMailSettings() {
             Catering 標題
             <input className={`${inputClass} mt-1`} value={rule.catering_title_prefix} onChange={(e) => setRule({ ...rule, catering_title_prefix: e.target.value })} />
           </label>
+          <div className="block text-[12px] text-muted-foreground">
+            FCP 專案
+            <div className="mt-1 space-y-1">
+              <p className="text-[13px] text-foreground min-h-5">
+                {projects.find((project) => project.gid === rule.fcp_project_gid)?.name || (rule.fcp_project_gid ? '未能對上專案名稱' : '未選擇')}
+              </p>
+              <NameSearch
+                items={projects}
+                labelOf={(project) => project.name}
+                exclude={rule.fcp_project_gid ? [rule.fcp_project_gid] : []}
+                placeholder="搜尋專案名稱"
+                emptyText={projectError || '找不到這個專案'}
+                onPick={(project) => setRule({ ...rule, fcp_project_gid: project.gid })}
+              />
+            </div>
+          </div>
+          <label className="block text-[12px] text-muted-foreground">
+            FCP 標題
+            <input className={`${inputClass} mt-1`} value={rule.fcp_title_prefix} onChange={(e) => setRule({ ...rule, fcp_title_prefix: e.target.value })} />
+          </label>
+          <div className="block text-[12px] text-muted-foreground">
+            Consulting 專案
+            <div className="mt-1 space-y-1">
+              <p className="text-[13px] text-foreground min-h-5">
+                {projects.find((project) => project.gid === rule.consulting_project_gid)?.name || (rule.consulting_project_gid ? '未能對上專案名稱' : '未選擇')}
+              </p>
+              <NameSearch
+                items={projects}
+                labelOf={(project) => project.name}
+                exclude={rule.consulting_project_gid ? [rule.consulting_project_gid] : []}
+                placeholder="搜尋專案名稱"
+                emptyText={projectError || '找不到這個專案'}
+                onPick={(project) => setRule({ ...rule, consulting_project_gid: project.gid })}
+              />
+            </div>
+          </div>
+          <label className="block text-[12px] text-muted-foreground">
+            Consulting 標題
+            <input className={`${inputClass} mt-1`} value={rule.consulting_title_prefix} onChange={(e) => setRule({ ...rule, consulting_title_prefix: e.target.value })} />
+          </label>
+          <div className="block text-[12px] text-muted-foreground sm:col-span-2">
+            Consulting 負責人
+            <div className="mt-1 space-y-1">
+              <p className="text-[13px] text-foreground min-h-5">
+                {people.find((person) => person.gid === rule.consulting_assignee_gid) ? personLabel(people.find((person) => person.gid === rule.consulting_assignee_gid)!) : (rule.consulting_assignee_gid ? '未能對上 Gmail' : '未選擇')}
+              </p>
+              <NameSearch
+                items={people}
+                labelOf={personLabel}
+                exclude={rule.consulting_assignee_gid ? [rule.consulting_assignee_gid] : []}
+                placeholder="搜尋負責人"
+                emptyText={peopleError || '找不到這個人'}
+                onPick={(person) => setRule({ ...rule, consulting_assignee_gid: person.gid })}
+              />
+            </div>
+          </div>
         </div>
         <button
           type="button"
@@ -488,6 +610,58 @@ export function FccAsanaMailSettings() {
         <div className="px-4 py-3 border-b border-border/50">
           <p className="text-[13px] font-medium">最近處理</p>
           <p className="text-[12px] text-muted-foreground">點一行先展開。藍底是郵件，綠底是 Asana。</p>
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            {JOB_STATUS_FILTERS.map((filter) => (
+              <button
+                key={filter.id}
+                type="button"
+                className={`rounded-md px-2.5 py-1 text-[12px] ${jobStatus === filter.id ? 'bg-teal-700 text-white' : 'border border-border text-foreground hover:bg-muted/40'}`}
+                onClick={() => {
+                  setJobStatus(filter.id);
+                  setJobPage(0);
+                }}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+          <form
+            className="mt-2 flex flex-wrap gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setJobPage(0);
+              setJobQuery(jobDraft.trim());
+            }}
+          >
+            <input
+              className={`${inputClass} min-w-0 flex-1`}
+              value={jobDraft}
+              placeholder="搜尋主旨、task 標題或郵件內容"
+              onChange={(event) => setJobDraft(event.target.value)}
+            />
+            <button type="submit" className="h-9 rounded-md border border-border px-3 text-[13px] hover:bg-muted/40">搜尋</button>
+          </form>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[12px] text-muted-foreground">
+            <p>{jobsLoading ? '載入中…' : (jobTotal === 0 ? '0 筆' : `第 ${jobPage * JOB_PAGE_SIZE + 1}–${Math.min(jobTotal, (jobPage + 1) * JOB_PAGE_SIZE)} 筆，共 ${jobTotal} 筆`)}</p>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                className="h-8 rounded-md border border-border px-2.5 text-foreground hover:bg-muted/40 disabled:opacity-40"
+                disabled={jobPage === 0 || jobsLoading}
+                onClick={() => setJobPage((page) => Math.max(0, page - 1))}
+              >
+                上一頁
+              </button>
+              <button
+                type="button"
+                className="h-8 rounded-md border border-border px-2.5 text-foreground hover:bg-muted/40 disabled:opacity-40"
+                disabled={jobsLoading || (jobPage + 1) * JOB_PAGE_SIZE >= jobTotal}
+                onClick={() => setJobPage((page) => page + 1)}
+              >
+                下一頁
+              </button>
+            </div>
+          </div>
           <div className="mt-2 flex flex-wrap gap-1.5 text-[12px]">
             <span className="rounded px-1.5 py-0.5 bg-teal-100 text-teal-900">已開 task</span>
             <span className="rounded px-1.5 py-0.5 bg-slate-100 text-slate-700">略過</span>
@@ -497,8 +671,8 @@ export function FccAsanaMailSettings() {
             <span className="rounded px-1.5 py-0.5 bg-emerald-200 text-emerald-950">完成</span>
           </div>
         </div>
-        {jobs.length === 0 && (
-          <p className="px-4 py-6 text-center text-[13px] text-muted-foreground">未有處理紀錄</p>
+        {jobs.length === 0 && !jobsLoading && (
+          <p className="px-4 py-6 text-center text-[13px] text-muted-foreground">{jobQuery || jobStatus !== 'all' ? '沒有符合的紀錄' : '未有處理紀錄'}</p>
         )}
         <div className="divide-y divide-border/40">
           {jobs.map((job) => {

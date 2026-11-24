@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
-import { formatFccPhone, inquiryAlreadyOpened, organizeFccNotes, parseFccInquiry } from '../supabase/functions/_shared/fcc-asana-mail.ts';
+import { formatFccPhone, inquiryAlreadyOpened, isEmailMeFormSender, organizeFccNotes, parseFccInquiry } from '../supabase/functions/_shared/fcc-asana-mail.ts';
 
 const rule = {
   lunchProjectGid: 'lunch',
   cateringProjectGid: 'catering',
+  fcpProjectGid: 'fcp',
+  consultingProjectGid: 'consulting',
   lunchTitlePrefix: 'FC Lunch Box',
   cateringTitlePrefix: 'FC Catering',
+  fcpTitlePrefix: 'FCP',
+  consultingTitlePrefix: 'FC Consulting Marketing',
 };
 
 const lunch = parseFccInquiry(
@@ -137,6 +141,37 @@ if (colonTitle.ok) {
 const none = parseFccInquiry('只是一封普通郵件', rule);
 assert.equal(none.ok, false);
 
+const fcp = parseFccInquiry(
+  ['姓名: Carol Lai', '稱謂: 小姐', '聯絡電話: 63323139', '活動性質: NGO機構', '到會形式: 正餐 到會 (大盤), 小食 到會 (大盤)'].join('\n'),
+  rule,
+  'FCP活動策劃:Carol Lai 小姐 63323139 NGO機構',
+);
+assert.equal(fcp.ok, true);
+if (fcp.ok) {
+  assert.equal(fcp.mail.route, 'fcp');
+  assert.equal(fcp.mail.projectGid, 'fcp');
+  assert.equal(fcp.mail.title, 'FCP - Carol Lai 6332 3139 NGO機構');
+}
+
+const consult = parseFccInquiry(
+  ['姓名: Lau', '手提電話 (Whatsapp/SMS): 60439559', '開店模式及地區: 香港單店'].join('\n'),
+  rule,
+  '餐廳開店說明會[歡迎預約單對單會面] - Lau',
+);
+assert.equal(consult.ok, true);
+if (consult.ok) {
+  assert.equal(consult.mail.route, 'consulting');
+  assert.equal(consult.mail.projectGid, 'consulting');
+  assert.equal(consult.mail.title, 'FC Consulting Marketing - Lau 6043 9559');
+}
+
+const bwl = parseFccInquiry(
+  ['姓名: 林', '聯絡電話: 65830795', '到會形式: 紙包飲品 / 汽水'].join('\n'),
+  rule,
+  'BWL活動策劃: 林小姐 學校活動',
+);
+assert.equal(bwl.ok, false);
+
 assert.equal(formatFccPhone('+852 9123-4567'), '9123 4567');
 const sameNotes = '姓名: Connie Chong\n聯絡電話: 2710 8070\n公司名稱: 循道衛理';
 assert.equal(inquiryAlreadyOpened('FC Lunch Box - Connie Chong 2710 8070 循道衛理', sameNotes, 'FC Lunch Box - Connie Chong 2710 8070 循道衛理', sameNotes), true);
@@ -144,4 +179,8 @@ assert.equal(inquiryAlreadyOpened('FC Lunch Box - Connie Chong 2710 8070 循道�
 assert.equal(inquiryAlreadyOpened('FC Lunch Box - Connie Chong 2710 8070 循道衛理', sameNotes, 'FC Lunch Box - 另一個標題', sameNotes), false);
 assert.equal(inquiryAlreadyOpened('FC Lunch Box - Selena Shum 9170 3598 香港童軍總會發展部', sameNotes, 'FC Lunch Box - Selena Shum 9170 3598 香港童軍總會九龍第61 旅', sameNotes), false);
 assert.equal(inquiryAlreadyOpened('FC Lunch Box - Connie Chong 2710 8070 循道衛理', '', 'FC Lunch Box - Connie Chong 2710 8070 循道衛理', ''), false);
+assert.equal(isEmailMeFormSender('Ivy <burst@emailmeform.com>'), true);
+assert.equal(isEmailMeFormSender('EmailMeForm <no-reply@emailmeform.com>'), true);
+assert.equal(isEmailMeFormSender('Food Channels Catering <sales@foodchannels-catering.com>'), false);
+assert.equal(isEmailMeFormSender('同事 <colleague@chifung.net>'), false);
 console.log('fcc asana mail tests passed');

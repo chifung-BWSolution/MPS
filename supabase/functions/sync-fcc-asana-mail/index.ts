@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/google-gsc.ts";
-import { hktDate, inquiryAlreadyOpened, normalizeFccBody, parseFccInquiry, resolveFccGmailOAuthClient, type FccMailRule } from "../_shared/fcc-asana-mail.ts";
+import { hktDate, inquiryAlreadyOpened, isEmailMeFormSender, normalizeFccBody, parseFccInquiry, resolveFccGmailOAuthClient, type FccMailRule } from "../_shared/fcc-asana-mail.ts";
 
 const PROVIDER = "gmail_fcc";
 const ASANA_API = "https://app.asana.com/api/1.0";
@@ -25,6 +25,11 @@ type MailRuleRow = {
   lunch_title_prefix: string;
   catering_project_gid: string;
   catering_title_prefix: string;
+  fcp_project_gid?: string | null;
+  fcp_title_prefix?: string | null;
+  consulting_project_gid?: string | null;
+  consulting_title_prefix?: string | null;
+  consulting_assignee_gid?: string | null;
 };
 
 function json(status: number, body: unknown): Response {
@@ -374,8 +379,12 @@ function toRule(row: MailRuleRow): FccMailRule {
   return {
     lunchProjectGid: row.lunch_project_gid,
     cateringProjectGid: row.catering_project_gid,
+    fcpProjectGid: row.fcp_project_gid || row.catering_project_gid,
+    consultingProjectGid: row.consulting_project_gid || "",
     lunchTitlePrefix: row.lunch_title_prefix || "FC Lunch Box",
     cateringTitlePrefix: row.catering_title_prefix || "FC Catering",
+    fcpTitlePrefix: row.fcp_title_prefix || "FCP",
+    consultingTitlePrefix: row.consulting_title_prefix || "FC Consulting Marketing",
   };
 }
 
@@ -439,10 +448,23 @@ Deno.serve(async (req) => {
     if (mailbox && mailbox !== row.gmail_address.toLowerCase()) {
       return json(200, { success: false, error: `授權信箱是 ${mailbox}，規則要求 ${row.gmail_address}` });
     }
-    const listed = await gmailGet<{ messages?: Array<{ id: string }> }>(
+    const ids = new Set<string>();
+    const collect = (messages?: Array<{ id: string }>) => {
+      for (const message of messages || []) if (message.id) ids.add(message.id);
+    };
+    const labeled = await gmailGet<{ messages?: Array<{ id: string }> }>(
       token,
-      `/messages?labelIds=${encodeURIComponent(row.gmail_label_id)}&maxResults=15`,
+      `/messages?labelIds=${encodeURIComponent(row.gmail_label_id)}&q=${encodeURIComponent("from:emailmeform.com")}&maxResults=15`,
     );
+    collect(labeled.messages);
+    for (const query of ["subject:FCP活動策劃", "subject:到會商戶合作查詢", "subject:開店預約見面", "subject:開店說明會"]) {
+      const found = await gmailGet<{ messages?: Array<{ id: string }> }>(
+        token,
+        `/messages?q=${encodeURIComponent(`from:emailmeform.com ${query}`)}&maxResults=15`,
+      );
+      collect(found.messages);
+    }
+    const listed = { messages: [...ids].map((id) => ({ id })) };
     let created = 0;
     let skipped = 0;
     const errors: string[] = [];
@@ -463,10 +485,25 @@ Deno.serve(async (req) => {
         internalDate?: string;
         payload?: GmailPart & { headers?: Array<{ name: string; value: string }> };
       }>(token, `/messages/${item.id}?format=full`);
-      const subject = message.payload?.headers?.find((header) => header.name.toLowerCase() === "subject")?.value || "";
+      const headers = message.payload?.headers || [];
+      const subject = headers.find((header) => header.name.toLowerCase() === "subject")?.value || "";
+      const fromHeader = headers.find((header) => header.name.toLowerCase() === "from")?.value || "";
       const emailText = normalizeFccBody(mailBody(message.payload)).slice(0, 8000);
       const receivedMs = Number(message.internalDate || Date.now());
       const received = hktDate(receivedMs);
+      if (!isEmailMeFormSender(fromHeader)) {
+        await supabase.from("asana_mail_jobs").upsert({
+          rule_code: "fcc",
+          gmail_message_id: item.id,
+          subject,
+          received_on: received,
+          status: "skipped",
+          notes: emailText,
+          error: "不是 EmailMeForm 寄出，不開 task",
+        }, { onConflict: "rule_code,gmail_message_id" });
+        skipped += 1;
+        continue;
+      }
       if (row.not_before && receivedMs < new Date(row.not_before).getTime()) {
         await supabase.from("asana_mail_jobs").upsert({
           rule_code: "fcc",
@@ -563,7 +600,9 @@ Deno.serve(async (req) => {
           name: parsed.mail.title,
           notes: parsed.mail.notes,
           dueOn: received,
-          assignee: row.assignee_gid.trim(),
+          assignee: parsed.mail.route === "consulting" && String(row.consulting_assignee_gid || "").trim()
+            ? String(row.consulting_assignee_gid).trim()
+            : row.assignee_gid.trim(),
           followers: (row.collaborator_gids || []).map((gid) => gid.trim()).filter(Boolean),
         });
         await supabase.from("asana_mail_jobs").upsert({

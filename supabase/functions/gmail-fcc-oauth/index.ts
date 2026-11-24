@@ -4,8 +4,19 @@ import { corsHeaders } from "../_shared/google-gsc.ts";
 import { resolveFccGmailOAuthClient } from "../_shared/fcc-asana-mail.ts";
 
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
-const LOGIN_HINT = "foodchannels.plan@gmail.com";
-const PROVIDER = "gmail_fcc";
+const MAILBOX = {
+  fcc: { provider: "gmail_fcc", login: "foodchannels.plan@gmail.com" },
+  bw: { provider: "gmail_bw", login: "brandingworks.services@gmail.com" },
+} as const;
+type Mailbox = keyof typeof MAILBOX;
+
+function asMailbox(value: unknown): Mailbox {
+  return value === "bw" ? "bw" : "fcc";
+}
+
+function mailboxFromState(state: string): Mailbox {
+  return asMailbox(String(state || "").split(".")[0]);
+}
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY =
@@ -55,8 +66,8 @@ async function hmacSign(value: string): Promise<string> {
   return btoa(String.fromCharCode(...new Uint8Array(sig)));
 }
 
-async function createState(): Promise<string> {
-  const payload = `${crypto.randomUUID()}.${Date.now() + 15 * 60 * 1000}`;
+async function createState(mailbox: Mailbox): Promise<string> {
+  const payload = `${mailbox}.${crypto.randomUUID()}.${Date.now() + 15 * 60 * 1000}`;
   return `${payload}.${await hmacSign(payload)}`;
 }
 
@@ -80,10 +91,16 @@ function htmlEntities(text: string): string {
   }).join("");
 }
 
-function callbackPage(ok: boolean, message: string) {
-  const payload = JSON.stringify({ type: "mps-gmail-fcc-oauth", ok, message })
+function callbackPage(ok: boolean, message: string, mailbox: Mailbox = "fcc") {
+  const payload = JSON.stringify({
+    type: mailbox === "bw" ? "mps-gmail-bw-oauth" : "mps-gmail-fcc-oauth",
+    ok,
+    message,
+  })
     .replace(/[\u007f-\uffff]/g, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
-  const title = htmlEntities(ok ? "FC 查詢 Gmail 授權完成" : "FC 查詢 Gmail 授權失敗");
+  const title = htmlEntities(ok
+    ? (mailbox === "bw" ? "BW 查詢 Gmail 授權完成" : "FC 查詢 Gmail 授權完成")
+    : (mailbox === "bw" ? "BW 查詢 Gmail 授權失敗" : "FC 查詢 Gmail 授權失敗"));
   const english = ok
     ? "Gmail connected. You can close this window and return to MPS."
     : "Gmail connection failed. Close this window and try again from MPS.";
@@ -107,7 +124,7 @@ function admin() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 }
 
-async function authorizationUrl(): Promise<string> {
+async function authorizationUrl(mailbox: Mailbox): Promise<string> {
   const { clientId } = resolveFccGmailOAuthClient();
   const uri = redirectUri();
   if (!clientId || !uri) throw new Error("缺少 Google OAuth client 或 SUPABASE_URL");
@@ -119,19 +136,21 @@ async function authorizationUrl(): Promise<string> {
     access_type: "offline",
     prompt: "consent",
     include_granted_scopes: "true",
-    login_hint: LOGIN_HINT,
-    state: await createState(),
+    login_hint: MAILBOX[mailbox].login,
+    state: await createState(mailbox),
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
 
 async function handleCallback(reqUrl: URL): Promise<Response> {
-  const error = reqUrl.searchParams.get("error");
-  if (error) return htmlResponse(callbackPage(false, `Google 拒絕授權：${error}`), 400);
-  const code = reqUrl.searchParams.get("code") || "";
   const state = reqUrl.searchParams.get("state") || "";
+  const mailbox = mailboxFromState(state);
+  const login = MAILBOX[mailbox].login;
+  const error = reqUrl.searchParams.get("error");
+  if (error) return htmlResponse(callbackPage(false, `Google 拒絕授權：${error}`, mailbox), 400);
+  const code = reqUrl.searchParams.get("code") || "";
   if (!code || !(await verifyState(state))) {
-    return htmlResponse(callbackPage(false, "授權 state 無效或已過期，請回 MPS 再按一次。"), 400);
+    return htmlResponse(callbackPage(false, "授權 state 無效或已過期，請回 MPS 再按一次。", mailbox), 400);
   }
   const { clientId, clientSecret } = resolveFccGmailOAuthClient();
   const uri = redirectUri();
@@ -156,6 +175,7 @@ async function handleCallback(reqUrl: URL): Promise<Response> {
       callbackPage(
         false,
         `換 token 失敗：${payload.error_description || payload.error || tokenRes.status}。請把 ${uri} 加到 Google OAuth client 的 Authorized redirect URIs。`,
+        mailbox,
       ),
       400,
     );
@@ -163,20 +183,23 @@ async function handleCallback(reqUrl: URL): Promise<Response> {
   const refresh = String(payload.refresh_token || "").trim();
   if (!refresh) {
     return htmlResponse(
-      callbackPage(false, "Google 沒有回傳 refresh token。請到 Google 帳戶權限撤銷此 App 後再授權一次。"),
+      callbackPage(false, "Google 沒有回傳 refresh token。請到 Google 帳戶權限撤銷此 App 後再授權一次。", mailbox),
       400,
     );
   }
   const nowIso = new Date().toISOString();
   const { error: saveErr } = await admin().from("google_oauth_tokens").upsert({
-    provider: PROVIDER,
+    provider: MAILBOX[mailbox].provider,
     refresh_token: refresh,
     last_used_at: nowIso,
     last_rotated_at: nowIso,
     updated_at: nowIso,
   }, { onConflict: "provider" });
-  if (saveErr) return htmlResponse(callbackPage(false, saveErr.message), 500);
-  return htmlResponse(callbackPage(true, `已連接。請用 ${LOGIN_HINT} 授權，並只讀「FC查詢」標籤。`));
+  if (saveErr) return htmlResponse(callbackPage(false, saveErr.message, mailbox), 500);
+  const done = mailbox === "bw"
+    ? `已連接 ${login}。而家只係授權讀信，未會開 Asana task。`
+    : `已連接。請用 ${login} 授權，並只讀「FC查詢」標籤。`;
+  return htmlResponse(callbackPage(true, done, mailbox));
 }
 
 Deno.serve(async (req) => {
@@ -184,39 +207,43 @@ Deno.serve(async (req) => {
   const reqUrl = new URL(req.url);
   if (req.method === "GET") {
     if (reqUrl.searchParams.get("action") === "start") {
+      const mailbox = asMailbox(reqUrl.searchParams.get("mailbox"));
       try {
-        return Response.redirect(await authorizationUrl(), 302);
+        return Response.redirect(await authorizationUrl(mailbox), 302);
       } catch (err) {
-        return htmlResponse(callbackPage(false, err instanceof Error ? err.message : String(err)), 500);
+        return htmlResponse(callbackPage(false, err instanceof Error ? err.message : String(err), mailbox), 500);
       }
     }
     return handleCallback(reqUrl);
   }
   if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
   let action = "status";
+  let mailbox: Mailbox = "fcc";
   try {
-    action = String(((await req.json()) as { action?: string }).action || "status");
+    const body = (await req.json()) as { action?: string; mailbox?: string };
+    action = String(body.action || "status");
+    mailbox = asMailbox(body.mailbox);
   } catch {
     action = "status";
   }
   try {
     if (action === "start") {
       return jsonResponse({
-        authorization_url: await authorizationUrl(),
+        authorization_url: await authorizationUrl(mailbox),
         redirect_uri: redirectUri(),
-        login_hint: LOGIN_HINT,
+        login_hint: MAILBOX[mailbox].login,
       });
     }
     if (action === "status") {
       const { data } = await admin()
         .from("google_oauth_tokens")
         .select("updated_at")
-        .eq("provider", PROVIDER)
+        .eq("provider", MAILBOX[mailbox].provider)
         .maybeSingle();
       return jsonResponse({
         connected: Boolean(data),
         updated_at: data?.updated_at || null,
-        login_hint: LOGIN_HINT,
+        login_hint: MAILBOX[mailbox].login,
         redirect_uri: redirectUri(),
       });
     }
