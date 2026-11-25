@@ -4,7 +4,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Code2,
-  FileCode2,
   Grid3X3,
   Loader2,
   Sparkles,
@@ -37,6 +36,8 @@ import {
   analyzeReaddyFileMap,
   assembleReaddyPageCode,
 } from '@/lib/readdyProjectAnalyzer';
+import { extractReaddyCode } from '@/lib/readdyConversionMail';
+import { loadSavedPageProgress, savePageProgress } from '@/lib/readdyFramerProgress';
 import type {
   ExecutionStageState,
   FramerIrPayload,
@@ -59,49 +60,6 @@ import { LayersPanel } from './LayersPanel';
 import { GridCanvasPreview } from './GridCanvasPreview';
 import { ExecutionProgressModal } from './ExecutionProgressModal';
 import { FaithfulHomeFrame } from './site/ReaddySitePreview';
-
-const STORAGE_PREFIX = 'mps-readdy-framer-progress:';
-
-type SavedPageProgress = {
-  migrationStatus: ReaddyPageMigrationStatus;
-  jobId?: string | null;
-  sectionCount?: number;
-  framerPageNodeId?: string | null;
-  lastSyncedAt?: string | null;
-};
-
-function loadSavedProgress(projectKey: string): Record<string, SavedPageProgress> {
-  try {
-    const raw = localStorage.getItem(`${STORAGE_PREFIX}${projectKey}`);
-    if (!raw) return {};
-    return JSON.parse(raw) as Record<string, SavedPageProgress>;
-  } catch {
-    return {};
-  }
-}
-
-function saveProgressToStorage(
-  projectKey: string,
-  pages: ReaddyDiscoveredPage[],
-): void {
-  try {
-    const map: Record<string, SavedPageProgress> = {};
-    for (const p of pages) {
-      if (p.migrationStatus !== 'pending' || p.jobId) {
-        map[p.id] = {
-          migrationStatus: p.migrationStatus,
-          jobId: p.jobId,
-          sectionCount: p.sectionCount,
-          framerPageNodeId: p.framerPageNodeId,
-          lastSyncedAt: p.lastSyncedAt,
-        };
-      }
-    }
-    localStorage.setItem(`${STORAGE_PREFIX}${projectKey}`, JSON.stringify(map));
-  } catch {
-    // ignore quota errors
-  }
-}
 
 function pickLandingPage(pages: ReaddyDiscoveredPage[]): ReaddyDiscoveredPage | undefined {
   return pages.find((page) => page.path === '/') || pages.find((page) => page.pageKind === 'home') || pages[0];
@@ -414,7 +372,7 @@ export function ReaddyFramerWorkbench() {
 
   const hydrateAnalysisWithProgress = useCallback(
     (rawAnalysis: ReaddyProjectAnalysis, jobs: FramerSyncJob[]): ReaddyProjectAnalysis => {
-      const saved = loadSavedProgress(rawAnalysis.projectKey);
+      const saved = loadSavedPageProgress(rawAnalysis.projectKey);
       const jobByPath = new Map<string, FramerSyncJob>();
       for (const j of jobs) {
         const p = j.page_path || j.ir_payload?.pageMeta?.path;
@@ -469,7 +427,7 @@ export function ReaddyFramerWorkbench() {
         const nextPages = prev.pages.map((p) =>
           p.id === pageId ? { ...p, ...patch } : p,
         );
-        saveProgressToStorage(prev.projectKey, nextPages);
+        savePageProgress(prev.projectKey, nextPages);
         return { ...prev, pages: nextPages };
       });
     },
@@ -1187,20 +1145,29 @@ export function ReaddyFramerWorkbench() {
 
                 <button
                   type="button"
-                  onClick={() => setShowGridSettings((v) => !v)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11.5px] font-medium text-[#101B2D]"
+                  onClick={() => setToolDrawer((current) => (current === 'grid' ? null : 'grid'))}
+                  aria-expanded={toolDrawer === 'grid'}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[11.5px] font-medium transition-colors ${
+                    toolDrawer === 'grid'
+                      ? 'border-[#0BB59B] bg-teal-50 text-[#08967F]'
+                      : 'border-slate-200 bg-white text-[#101B2D] hover:bg-slate-50'
+                  }`}
                 >
                   <Grid3X3 size={13} className="text-[#0BB59B]" />
                   <span>{gridConfig.columns}Col</span>
-                  {showGridSettings ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => setShowCodeDrawer((v) => !v)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11.5px] font-medium text-[#101B2D]"
+                  onClick={() => setToolDrawer((current) => (current === 'code' ? null : 'code'))}
+                  aria-expanded={toolDrawer === 'code'}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[11.5px] font-medium transition-colors ${
+                    toolDrawer === 'code'
+                      ? 'border-[#0BB59B] bg-teal-50 text-[#08967F]'
+                      : 'border-slate-200 bg-white text-[#101B2D] hover:bg-slate-50'
+                  }`}
                 >
-                  <Code2 size={13} className="text-slate-500" />
+                  <Code2 size={13} className={toolDrawer === 'code' ? 'text-[#0BB59B]' : 'text-slate-500'} />
                   <span>組裝源碼</span>
                 </button>
 
@@ -1231,52 +1198,13 @@ export function ReaddyFramerWorkbench() {
               </div>
             </div>
 
-            {/* Collapsible Grid Settings */}
-            {showGridSettings && (
-              <div className="shrink-0">
-                <GridAnchorPanel
-                  gridConfig={gridConfig}
-                  onChangeGridConfig={setGridConfig}
-                  gridConfirmed={gridConfirmed}
-                  onToggleConfirmed={() => {
-                    setGridConfirmed((v) => !v);
-                    setHighlightConfirmWarning(false);
-                  }}
-                  highlightConfirmWarning={highlightConfirmWarning}
-                />
-              </div>
-            )}
-
-            {/* Collapsible Assembled Source Code Inspector */}
-            {showCodeDrawer && (
-              <div className="rounded-lg border border-slate-200 overflow-hidden bg-white shrink-0">
-                <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between text-[11px]">
-                  <div className="flex items-center gap-1.5 font-mono text-[#101B2D] font-medium truncate">
-                    <FileCode2 size={12} className="text-[#0BB59B] shrink-0" />
-                    <span className="truncate">
-                      {activePage ? `${activePage.path} (${includedFiles.length} files)` : 'Assembled Source'}
-                    </span>
-                  </div>
-                  <span className="text-slate-400 font-mono text-[10px]">
-                    {rawCode.length.toLocaleString()} chars · 可微調後重新解析
-                  </span>
-                </div>
-                <textarea
-                  value={rawCode}
-                  onChange={(e) => setRawCode(e.target.value)}
-                  rows={8}
-                  spellCheck={false}
-                  className="w-full p-3 text-[11.5px] leading-relaxed font-mono text-[#101B2D] bg-white outline-none resize-y"
-                />
-              </div>
-            )}
-
             {/* Equal-Height Split: Layers & Grid Canvas Preview */}
+            <div className="relative min-h-0 flex-1">
             <div
               className={
                 expandedCanvas
-                  ? 'grid grid-cols-1 gap-4 flex-1 min-h-0'
-                  : 'grid grid-cols-1 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:grid-rows-1 gap-4 flex-1 min-h-0'
+                  ? 'grid h-full grid-cols-1 gap-4'
+                  : 'grid h-full grid-cols-1 gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:grid-rows-1'
               }
             >
               {!expandedCanvas && (
@@ -1310,6 +1238,66 @@ export function ReaddyFramerWorkbench() {
                   ) : undefined
                 }
               />
+            </div>
+
+            <button
+              type="button"
+              aria-label="關閉側欄"
+              onClick={() => setToolDrawer(null)}
+              className={`absolute inset-0 z-20 bg-[#101B2D]/15 transition-opacity ${
+                toolDrawer ? 'opacity-100' : 'pointer-events-none opacity-0'
+              }`}
+            />
+            <aside
+              aria-hidden={toolDrawer === null}
+              className={`absolute inset-y-0 right-0 z-30 flex w-[min(640px,100%)] flex-col border-l border-slate-200 bg-white shadow-[-16px_0_40px_rgba(16,27,45,0.12)] transition-transform duration-300 ease-out ${
+                toolDrawer ? 'translate-x-0' : 'pointer-events-none translate-x-full'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+                <div className="min-w-0">
+                  <div className="text-[13px] font-bold text-[#101B2D]">
+                    {toolDrawer === 'code' ? '組裝源碼' : '格點設定'}
+                  </div>
+                  <div className="truncate text-[11px] text-slate-400">
+                    {toolDrawer === 'code'
+                      ? activePage
+                        ? `${activePage.path} · ${includedFiles.length} files · ${rawCode.length.toLocaleString()} chars`
+                        : '可微調後重新解析'
+                      : `Desktop ${gridConfig.desktop_width} · Max ${gridConfig.container_max_width} · Gap ${gridConfig.gutter}px`}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setToolDrawer(null)}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-[#101B2D]"
+                  aria-label="關閉"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                {toolDrawer === 'code' ? (
+                  <textarea
+                    value={rawCode}
+                    onChange={(e) => setRawCode(e.target.value)}
+                    spellCheck={false}
+                    className="h-full min-h-[420px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50/60 p-3 font-mono text-[11.5px] leading-relaxed text-[#101B2D] outline-none focus:border-[#0BB59B]"
+                  />
+                ) : (
+                  <GridAnchorPanel
+                    gridConfig={gridConfig}
+                    onChangeGridConfig={setGridConfig}
+                    gridConfirmed={gridConfirmed}
+                    onToggleConfirmed={() => {
+                      setGridConfirmed((v) => !v);
+                      setHighlightConfirmWarning(false);
+                    }}
+                    highlightConfirmWarning={highlightConfirmWarning}
+                  />
+                )}
+              </div>
+            </aside>
             </div>
           </section>
         </div>
