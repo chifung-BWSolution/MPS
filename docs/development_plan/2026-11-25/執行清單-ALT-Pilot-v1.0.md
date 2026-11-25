@@ -117,7 +117,7 @@
 | ☐ | M5-05 | 盲測 | 30 張 | 未執行 |
 | ☐ | M5-06 | 回歸 | 工具中心其他子項、Prompt 資料庫 | 只做 build 級驗證 |
 | ☐ | M5-07 | 成本核對 | `alt_llm_usage` | 未執行 |
-| ☐ | M5-08 | 文件與 PR | PRD／清單／Tools-Center | PRD／清單完成；PR 未開 |
+| ☑ | M5-08 | 文件與 commit | PRD／清單／Tools-Center | 文件完成；commit `f352efc` 已 push `main`（未開 PR） |
 
 ---
 
@@ -133,7 +133,8 @@
 | 權限 | 8 policy；4 表 RLS；3 trigger；anon REST 401／42501；authenticated DELETE=false |
 | Edge Function | `alt-pilot` 已部署；anon 呼叫 401；OPTIONS 200 |
 | Secrets | `XAI_API_KEY` 已存在；**沒有** `GEMINI_API_KEY`，所以目前只有 Grok 主 provider |
-| 前端 | production 現有 bundle 已含 ALT Pilot 舊版 UI（有「已停用」提示），但**不含最新開關 UI**；本次未 `git push`／未部署前端。目前靠 DB `enabled=false` 停用。 |
+| 前端 | commit `f352efc` 已 push `origin/main`；Vercel production 已部署 `assets/index-gRtKYIg1.js`，bundle 已驗證含「ALT Pilot 目前已停用」與 `alt_settings.enabled`，且不含 `/alt-pilot-demo`。 |
+| Git | `main` 已 push；工作區仍有其他 agent 未提交的 content／crosspost 改動，未包含在此 commit。 |
 | 已知 blocker | `db push` 被 remote migration drift 阻擋（`20261125015219`、`20261125092550`）；未用 `migration repair`，避免改壞 production history |
 
 ---

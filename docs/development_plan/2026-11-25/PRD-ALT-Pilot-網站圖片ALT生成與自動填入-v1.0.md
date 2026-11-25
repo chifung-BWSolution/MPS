@@ -4,7 +4,7 @@
 |---|---|
 | 版本 | v1.1 |
 | 日期 | 2026-11-25 |
-| 狀態 | **Production DB＋Edge Function 已部署；`enabled=false`；production 前端仍是舊版 ALT UI（最新開關 UI 未部署）** |
+| 狀態 | **Production DB＋Edge Function＋前端已部署；`enabled=false`；開關 UI 已上線** |
 | 類型 | 工具中心新插件（新子模組） |
 | 落點 | `#tools-center/alt-pilot` |
 | 名稱 | **ALT Pilot**（副標：用整頁文案與圖片畫面生成 ALT，半自動填入 Framer） |
