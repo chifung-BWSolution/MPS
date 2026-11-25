@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, type ReactNode } from 'react';
+import { useState, useMemo, useEffect, useRef, type ReactNode } from 'react';
 import { Search, Plus, FileText, MessageSquare, ArrowLeft, Link2, Save, X, DollarSign, User, Pencil, Clock, FolderOpen, Wallet, Banknote, PieChart, CalendarDays, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -1134,6 +1134,7 @@ export function PitchingDetail({
   const [saving, setSaving] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<PitchingStatus | null>(null);
   const [docEditor, setDocEditor] = useState(() => readInvoiceReceiptDoc());
+  const tabListRef = useRef<HTMLDivElement>(null);
   const { moduleId } = useQuotationSection();
   const showServicePeriods = moduleId === 'system-dev';
   const clientCompany = companyNamesForClient(draft.clientId, clientOptions);
@@ -1157,6 +1158,37 @@ export function PitchingDetail({
       setActiveTab('info');
     }
   }, [draft.status, activeTab]);
+
+  useEffect(() => {
+    const el = tabListRef.current;
+    if (!el) return;
+    const onWheel = (event: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth) return;
+      const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      if (delta === 0) return;
+      const max = el.scrollWidth - el.clientWidth;
+      const next = Math.min(max, Math.max(0, el.scrollLeft + delta));
+      if (next === el.scrollLeft) return;
+      el.scrollLeft = next;
+      event.preventDefault();
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  useEffect(() => {
+    const el = tabListRef.current;
+    if (!el) return;
+    const active = el.querySelector<HTMLElement>('[data-tab-active="true"]');
+    if (!active) return;
+    const navRect = el.getBoundingClientRect();
+    const itemRect = active.getBoundingClientRect();
+    if (itemRect.left < navRect.left) {
+      el.scrollLeft -= navRect.left - itemRect.left;
+    } else if (itemRect.right > navRect.right) {
+      el.scrollLeft += itemRect.right - navRect.right;
+    }
+  }, [activeTab]);
 
   const remaining = calcRemainingDays(draft.inquiryDate, draft.status);
 
@@ -1273,7 +1305,7 @@ export function PitchingDetail({
     [
       { id: 'info', label: '基本資訊', icon: FileText },
       { id: 'schedule', label: '項目排程', icon: CalendarDays },
-      { id: 'followups', label: '跟進記錄', icon: MessageSquare },
+      { id: 'followups', label: 'Asana 記錄', icon: MessageSquare },
       { id: 'hours', label: '工作時數', icon: Clock },
       { id: 'docs', label: '項目文件', icon: FolderOpen },
       { id: 'sla', label: 'SLA', icon: ShieldCheck },
@@ -1345,17 +1377,26 @@ export function PitchingDetail({
         </div>
       </div>
 
-      <div className="flex gap-1 border-b border-border">
+      <div
+        ref={tabListRef}
+        role="tablist"
+        aria-label="項目分頁"
+        className="flex min-w-0 gap-1 overflow-x-auto overscroll-x-contain border-b border-border"
+      >
         {tabs.map((tab) => (
           <button
             key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            data-tab-active={activeTab === tab.id ? 'true' : undefined}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              'flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors',
+              'inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-teal-600',
               activeTab === tab.id ? 'border-teal-600 text-teal-600' : 'border-transparent text-muted-foreground hover:text-foreground',
             )}
           >
-            <tab.icon size={14} />
+            <tab.icon size={14} className="shrink-0" />
             {tab.label}
           </button>
         ))}

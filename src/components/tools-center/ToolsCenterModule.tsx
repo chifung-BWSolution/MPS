@@ -2,8 +2,13 @@ import { ToolsModule } from '@/components/tools/ToolsModule';
 import { TrainingModule } from '@/components/training/TrainingModule';
 import { AiCaptionTool } from './AiCaptionTool';
 import { PromptLibrary } from './PromptLibrary';
+import { ReaddyFramerWorkbench } from './readdy-framer/ReaddyFramerWorkbench';
 
 export function ToolsCenterModule({ subModule }: { subModule?: string }) {
+  if (subModule === 'readdy-framer') {
+    return <ReaddyFramerWorkbench />;
+  }
+
   const getTitle = () => {
     switch (subModule) {
       case 'ai-keyword': return { title: 'AI 關鍵字生成器', subtitle: '一鍵生成 SEO 關鍵字並自動分級。' };

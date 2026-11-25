@@ -51,6 +51,9 @@ verify_jwt = false
 [functions.sync-fcc-asana-mail]
 verify_jwt = false
 
+[functions.sync-bw-asana-mail]
+verify_jwt = false
+
 [functions.fcc-asana-digest]
 verify_jwt = false
 
@@ -70,4 +73,16 @@ verify_jwt = true
 # HS256 secret and rejects a normal logged-in session before this function runs.
 # The function validates the session itself with auth.getUser().
 [functions.bwa-projects]
+verify_jwt = false
+
+[functions.framer-oauth]
+verify_jwt = false
+
+[functions.readdy-github-fetch]
+verify_jwt = false
+
+[functions.readdy-parse-ir]
+verify_jwt = false
+
+[functions.framer-mcp-sync]
 verify_jwt = false

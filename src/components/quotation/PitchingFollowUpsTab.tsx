@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Download, ExternalLink, FileText, Image as ImageIcon, Loader2, MessageSquare, Paperclip, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Download, ExternalLink, FileText, Image as ImageIcon, Loader2, MessageSquare, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
@@ -21,18 +21,14 @@ function formatCommentTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return date.toLocaleString('zh-HK', {
+    timeZone: 'Asia/Hong_Kong',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    hour12: false,
   });
-}
-
-function authorInitial(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return 'A';
-  return trimmed.slice(0, 1).toUpperCase();
 }
 
 function AsanaAttachmentImage({ attachment }: { attachment: AsanaAttachment }) {
@@ -61,8 +57,9 @@ function AsanaAttachmentImage({ attachment }: { attachment: AsanaAttachment }) {
 
   if (failed) {
     return (
-      <div className="h-28 rounded-md bg-white border border-[rgba(13,26,45,0.08)] flex items-center justify-center text-muted-foreground">
-        <ImageIcon size={20} />
+      <div className="flex h-36 items-center justify-center rounded-md border border-dashed border-sky-300 bg-sky-50 text-sky-800">
+        <ImageIcon size={22} aria-hidden />
+        <span className="sr-only">未能載入圖片預覽</span>
       </div>
     );
   }
@@ -71,7 +68,7 @@ function AsanaAttachmentImage({ attachment }: { attachment: AsanaAttachment }) {
     <img
       src={src}
       alt={attachment.name}
-      className="h-28 w-full object-cover rounded-md bg-white border border-[rgba(13,26,45,0.08)]"
+      className="max-h-64 w-full rounded-md border border-sky-200 bg-white object-contain"
       onError={() => {
         if (src && src === (attachment.downloadUrl || attachment.viewUrl || '')) {
           void refreshPreview();
@@ -83,13 +80,7 @@ function AsanaAttachmentImage({ attachment }: { attachment: AsanaAttachment }) {
   );
 }
 
-function AsanaAttachmentCard({
-  attachment,
-  compact = false,
-}: {
-  attachment: AsanaAttachment;
-  compact?: boolean;
-}) {
+function AsanaAttachmentCard({ attachment }: { attachment: AsanaAttachment }) {
   const [downloading, setDownloading] = useState(false);
   const sizeLabel = formatAttachmentSize(attachment.size);
   const canPreview = isImageAttachment(attachment);
@@ -113,30 +104,38 @@ function AsanaAttachmentCard({
   return (
     <div
       className={cn(
-        'rounded-md border border-[rgba(13,26,45,0.08)] bg-white overflow-hidden',
-        compact ? 'min-w-[180px] max-w-[240px]' : '',
+        'overflow-hidden rounded-md border bg-white',
+        canPreview ? 'border-sky-200' : 'border-slate-200',
       )}
     >
       {canPreview && (
-        <AsanaAttachmentImage attachment={attachment} />
+        <div className="bg-sky-50/80 p-2">
+          <AsanaAttachmentImage attachment={attachment} />
+        </div>
       )}
-      <div className="flex items-center gap-2 px-2.5 py-2">
-        <div className="w-7 h-7 rounded-md bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
-          {canPreview ? <ImageIcon size={14} /> : <FileText size={14} />}
+      <div className={cn('flex items-center gap-2 px-2.5 py-2', canPreview ? 'bg-white' : 'bg-slate-50')}>
+        <div
+          className={cn(
+            'flex h-9 w-9 shrink-0 items-center justify-center rounded-md',
+            canPreview ? 'bg-sky-200 text-sky-950' : 'bg-slate-200 text-slate-800',
+          )}
+        >
+          {canPreview ? <ImageIcon size={16} aria-hidden /> : <FileText size={16} aria-hidden />}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[12px] font-medium truncate" title={attachment.name}>
+          <p className="truncate text-[13px] font-medium text-slate-950" title={attachment.name}>
             {attachment.name}
           </p>
-          {sizeLabel && <p className="text-[11px] text-muted-foreground">{sizeLabel}</p>}
+          <p className="text-[12px] text-slate-600">{canPreview ? '圖片' : '檔案'}{sizeLabel ? ` · ${sizeLabel}` : ''}</p>
         </div>
         <button
           type="button"
           onClick={() => void handleDownload()}
           disabled={downloading}
-          className="flex items-center gap-1 px-2 py-1 rounded-md border border-border text-[11px] text-teal-700 hover:bg-teal-50 disabled:opacity-50 shrink-0"
+          aria-label={`下載 ${attachment.name}`}
+          className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-sky-300 bg-white px-3 text-[12px] font-medium text-sky-950 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {downloading ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+          {downloading ? <Loader2 size={14} className="motion-safe:animate-spin" aria-hidden /> : <Download size={14} aria-hidden />}
           下載
         </button>
       </div>
@@ -144,19 +143,82 @@ function AsanaAttachmentCard({
   );
 }
 
-function AsanaAttachmentList({
-  attachments,
-  compact = false,
-}: {
-  attachments: AsanaAttachment[];
-  compact?: boolean;
-}) {
+function AsanaAttachmentList({ attachments }: { attachments: AsanaAttachment[] }) {
   if (attachments.length === 0) return null;
   return (
-    <div className={cn('grid gap-2', compact ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3')}>
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
       {attachments.map((attachment) => (
-        <AsanaAttachmentCard key={attachment.gid} attachment={attachment} compact={compact} />
+        <AsanaAttachmentCard key={attachment.gid} attachment={attachment} />
       ))}
+    </div>
+  );
+}
+
+function splitCommentText(text: string): Array<{ kind: 'text' | 'link'; value: string }> {
+  const re = /https?:\/\/[^\s<>"']+/gi;
+  const parts: Array<{ kind: 'text' | 'link'; value: string }> = [];
+  let last = 0;
+  for (const match of text.matchAll(re)) {
+    const start = match.index ?? 0;
+    if (start > last) parts.push({ kind: 'text', value: text.slice(last, start) });
+    let url = match[0];
+    let trail = '';
+    while (url && /[.,);:\]]$/.test(url)) {
+      trail = url.slice(-1) + trail;
+      url = url.slice(0, -1);
+    }
+    if (url) parts.push({ kind: 'link', value: url });
+    if (trail) parts.push({ kind: 'text', value: trail });
+    last = start + match[0].length;
+  }
+  if (last < text.length) parts.push({ kind: 'text', value: text.slice(last) });
+  return parts;
+}
+
+function CommentBody({ text }: { text: string }) {
+  const parts = splitCommentText(text);
+  return (
+    <p className="whitespace-pre-wrap text-[13px] leading-6 text-slate-950">
+      {parts.map((part, index) =>
+        part.kind === 'link' ? (
+          <a
+            key={`${part.kind}-${index}`}
+            href={part.value}
+            target="_blank"
+            rel="noreferrer"
+            className="break-all font-medium text-teal-800 underline decoration-teal-400 underline-offset-2 hover:text-teal-950"
+          >
+            {part.value}
+          </a>
+        ) : (
+          <span key={`${part.kind}-${index}`}>{part.value}</span>
+        ),
+      )}
+    </p>
+  );
+}
+
+function RecordBadge({
+  children,
+  tone,
+}: {
+  children: ReactNode;
+  tone: 'comment' | 'file' | 'task';
+}) {
+  const className =
+    tone === 'comment'
+      ? 'bg-teal-200 text-teal-950'
+      : tone === 'file'
+        ? 'bg-sky-200 text-sky-950'
+        : 'bg-violet-200 text-violet-950';
+  return <span className={cn('rounded px-1.5 py-0.5 text-[12px] font-medium', className)}>{children}</span>;
+}
+
+function EmptyNote({ children }: { children: ReactNode }) {
+  return (
+    <div className="px-5 py-10 text-center">
+      <MessageSquare size={22} className="mx-auto mb-2 text-slate-400" aria-hidden />
+      <p className="text-[13px] leading-6 text-slate-700">{children}</p>
     </div>
   );
 }
@@ -224,109 +286,108 @@ export function PitchingFollowUpsTab({
 
   if ((missingLink && !loading && !hasContent) || (missingLinkError && !loading && !hasContent)) {
     return (
-      <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-8 text-center">
-        <MessageSquare size={24} className="mx-auto text-muted-foreground/50 mb-2" />
-        <p className="text-[13px] text-muted-foreground">尚未設定 Asana 連結</p>
-        <p className="text-[12px] text-muted-foreground/80 mt-1">請先在基本資訊填寫 Asana 連結，即可載入任務留言。</p>
+      <div className="rounded-md border border-slate-200 bg-white p-8 text-center shadow-card">
+        <MessageSquare size={22} className="mx-auto mb-2 text-slate-400" aria-hidden />
+        <p className="text-[13px] font-medium text-slate-950">尚未設定 Asana 連結</p>
+        <p className="mt-1 text-[13px] leading-6 text-slate-600">請先在基本資訊填寫 Asana 連結，即可載入任務留言。</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card">
-      <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border">
+    <div className="overflow-hidden rounded-md border border-[rgba(13,26,45,0.08)] bg-white shadow-card">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0">
-          <p className="text-[13px] font-medium truncate">
+          <p className="truncate text-[14px] font-semibold text-slate-950">
             {taskName || 'Asana 任務留言'}
           </p>
-          <p className="text-[12px] text-muted-foreground">
-            {loading
-              ? '載入中…'
-              : `${comments.length} 則留言 · ${totalAttachmentCount} 個附件`}
-          </p>
+          {loading && !hasContent ? (
+            <p className="mt-1 text-[12px] text-slate-600">載入中…</p>
+          ) : (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              <RecordBadge tone="comment">{comments.length} 則留言</RecordBadge>
+              <RecordBadge tone="file">{totalAttachmentCount} 個附件</RecordBadge>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex shrink-0 items-center gap-2">
           {permalink && (
             <a
               href={permalink}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-1 text-[12px] text-teal-700 hover:text-teal-800"
+              className="inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-[12px] font-medium text-teal-800 hover:bg-teal-50 hover:text-teal-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
             >
-              <ExternalLink size={12} /> 開啟 Asana
+              <ExternalLink size={14} aria-hidden /> 開啟 Asana
             </a>
           )}
           <button
             type="button"
             onClick={() => void load()}
             disabled={loading}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-border text-[12px] text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-50"
+            className="inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-md border border-border px-3 text-[12px] font-medium text-slate-700 hover:bg-muted/50 hover:text-slate-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <RefreshCw size={12} className={cn(loading && 'animate-spin')} />
+            <RefreshCw size={14} className={cn(loading && 'motion-safe:animate-spin')} aria-hidden />
             重新整理
           </button>
         </div>
       </div>
 
       {loading && !hasContent ? (
-        <div className="p-10 text-center text-[13px] text-muted-foreground">
-          <Loader2 size={20} className="mx-auto mb-2 animate-spin text-teal-600" />
+        <div className="px-5 py-10 text-center text-[13px] text-slate-600">
+          <Loader2 size={20} className="mx-auto mb-2 motion-safe:animate-spin text-teal-700" aria-hidden />
           正在載入 Asana 留言…
         </div>
       ) : error ? (
-        <div className="p-8 text-center">
-          <MessageSquare size={24} className="mx-auto text-muted-foreground/50 mb-2" />
-          <p className="text-[13px] text-amber-800">{error}</p>
+        <div className="px-5 py-8 text-center">
+          <p className="text-[13px] leading-6 text-amber-950">{error}</p>
         </div>
       ) : !hasContent ? (
-        <div className="p-8 text-center">
-          <MessageSquare size={24} className="mx-auto text-muted-foreground/50 mb-2" />
-          <p className="text-[13px] text-muted-foreground">此 Asana 任務尚無留言或附件</p>
-        </div>
+        <EmptyNote>此 Asana 任務尚無留言或附件</EmptyNote>
       ) : (
-        <div className="p-5 space-y-5">
+        <div className="space-y-4 bg-[#f5f8fc] p-4">
           {attachments.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
-                <Paperclip size={13} />
-                任務附件（{attachments.length}）
+            <section className="rounded-md border border-violet-200 bg-violet-50 p-3">
+              <p className="flex flex-wrap items-center gap-2 text-[12px] text-violet-950">
+                <RecordBadge tone="task">任務附件</RecordBadge>
+                <span>{attachments.length} 個</span>
+              </p>
+              <div className="mt-2">
+                <AsanaAttachmentList attachments={attachments} />
               </div>
-              <AsanaAttachmentList attachments={attachments} />
-            </div>
+            </section>
           )}
 
           {comments.length > 0 ? (
-            <div className="space-y-4">
+            <ol className="space-y-3">
               {comments.map((comment) => (
-                <div key={comment.id} className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-teal-50 text-teal-700 text-[12px] font-semibold flex items-center justify-center shrink-0">
-                    {authorInitial(comment.authorName)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="text-[13px] font-medium">{comment.authorName}</span>
-                      <span className="text-[11px] text-muted-foreground">{formatCommentTime(comment.createdAt)}</span>
+                <li key={comment.id} className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2.5">
+                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-slate-700">
+                    <RecordBadge tone="comment">留言</RecordBadge>
+                    <time dateTime={comment.createdAt}>{formatCommentTime(comment.createdAt)}</time>
+                    <span className="font-medium text-slate-900">{comment.authorName}</span>
+                  </p>
+                  {comment.text && (
+                    <div className="mt-2 rounded-md bg-white px-3 py-2">
+                      <CommentBody text={comment.text} />
                     </div>
-                    {comment.text && (
-                      <div className="mt-1 rounded-md bg-[#f5f8fc] border border-[rgba(13,26,45,0.06)] px-3 py-2 text-[13px] leading-relaxed whitespace-pre-wrap">
-                        {comment.text}
-                      </div>
-                    )}
-                    {comment.attachments?.length > 0 && (
-                      <div className="mt-2 space-y-1.5">
-                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                          <Paperclip size={11} />
-                          留言附件
-                        </div>
-                        <AsanaAttachmentList attachments={comment.attachments} compact />
-                      </div>
-                    )}
-                  </div>
-                </div>
+                  )}
+                  {comment.attachments?.length > 0 && (
+                    <div className="mt-2 space-y-2">
+                      <p className="flex flex-wrap items-center gap-2 text-[12px] text-sky-950">
+                        <RecordBadge tone="file">留言附件</RecordBadge>
+                        <span>{comment.attachments.length} 個</span>
+                      </p>
+                      <AsanaAttachmentList attachments={comment.attachments} />
+                    </div>
+                  )}
+                </li>
               ))}
-            </div>
+            </ol>
           ) : (
-            <p className="text-[13px] text-muted-foreground">此 Asana 任務尚無留言</p>
+            <p className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-[13px] text-teal-950">
+              此 Asana 任務尚無留言
+            </p>
           )}
         </div>
       )}

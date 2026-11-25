@@ -162,7 +162,8 @@ const detail = readFileSync(
   'utf8',
 );
 assert.match(detail, /PitchingFollowUpsTab/);
-assert.doesNotMatch(detail, /暫無跟進記錄/);
+assert.match(detail, /Asana 記錄/);
+assert.doesNotMatch(detail, /跟進記錄/);
 
 const edge = readFileSync(
   new URL('../supabase/functions/asana-task-stories/index.ts', import.meta.url),

@@ -20,6 +20,10 @@ import {
   buildReceivablesAlertEmail,
 } from './receivablesAlert.ts';
 import { buildFccAsanaDigestEmail, describeFccDigestSchedule, fccAsanaTaskUrl } from './fccAsanaDigest.ts';
+import {
+  READDY_CONVERSION_RESULT_TO,
+  buildReaddyConversionResultEmail,
+} from './readdyConversionMail.ts';
 import { CANONICAL_SITE_URL } from './siteUrl.ts';
 import type { AdsClickTrendMetric } from '../types/adsCostTrend.ts';
 
@@ -57,6 +61,7 @@ export function buildSystemNotificationCatalog(): SystemNotificationDoc[] {
   const receivablesPreview = buildReceivablesPreview();
   const fccDigestPreview = buildFccDigestPreview();
   const adsPreview = buildAdsPreview();
+  const readdyPreview = buildReaddyConversionPreview();
 
   return [
     {
@@ -135,6 +140,24 @@ export function buildSystemNotificationCatalog(): SystemNotificationDoc[] {
       bcc: [],
       previewHtml: adsPreview.html,
       previewSubject: adsPreview.subject,
+    },
+    {
+      id: 'readdy-framer-conversion',
+      name: 'Readdy → Framer 轉換結果',
+      kind: 'manual',
+      subject: '【MPS】{網站名稱}(Readdy-{編號})轉換結果 {日期}',
+      purpose: '一鍵轉換在後台跑完後，把每個頁面的成功或失敗結果寄出，方便同事不用守在工作台前也能知道有沒有寫進 Framer。',
+      trigger: '同事在 Readdy → Framer 轉換工作台按「一鍵轉換」後，後台任務結束時寄出。全部頁面成功寄成功結果；有頁面失敗、任務中止或中途出錯寄失敗結果。',
+      frequency: '無固定排程。由同事手動開始轉換，任務結束時寄出。',
+      to: {
+        addresses: [READDY_CONVERSION_RESULT_TO],
+        summary: '固定收件人',
+        note: '成功與失敗都寄到這個地址。沒有 Cc、Bcc。',
+      },
+      cc: [],
+      bcc: [],
+      previewHtml: readdyPreview.html,
+      previewSubject: readdyPreview.subject,
     },
   ];
 }
@@ -344,4 +367,20 @@ function buildAdsPreview(): { html: string; subject: string } {
     subject: buildAlertEmailSubject(flagged, period),
     html: wrapAlertEmailHtml(buildAlertEmailHtml({ flagged, period, asOf: SAMPLE_AS_OF })),
   };
+}
+
+function buildReaddyConversionPreview(): { html: string; subject: string } {
+  const email = buildReaddyConversionResultEmail({
+    siteName: '範例現場音樂',
+    readdyCode: '16106125',
+    date: SAMPLE_AS_OF,
+    framerProjectUrl: 'https://framer.com/projects/example',
+    kind: 'success',
+    unstarted: 0,
+    pages: [
+      { path: '/', title: '首頁', status: 'migrated', sectionCount: 6 },
+      { path: '/services', title: '服務', status: 'migrated', sectionCount: 4 },
+    ],
+  });
+  return { html: email.html, subject: email.subject };
 }

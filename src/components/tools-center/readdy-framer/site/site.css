@@ -1,0 +1,150 @@
+.readdy-site {
+  container-type: inline-size;
+  container-name: readdy;
+  display: flow-root;
+  width: 100%;
+  height: auto;
+  --rd-background-50: 0.97 0.01 80;
+  --rd-background-100: 0.95 0.02 80;
+  --rd-background-200: 0.92 0.03 80;
+  --rd-background-300: 0.88 0.04 80;
+  --rd-background-400: 0.82 0.05 80;
+  --rd-background-500: 0.75 0.06 80;
+  --rd-background-600: 0.68 0.07 80;
+  --rd-background-700: 0.6 0.08 80;
+  --rd-background-800: 0.52 0.09 80;
+  --rd-background-900: 0.45 0.1 80;
+  --rd-background-950: 0.38 0.11 80;
+
+  --rd-foreground-50: 0.95 0.01 30;
+  --rd-foreground-100: 0.9 0.02 30;
+  --rd-foreground-200: 0.8 0.03 30;
+  --rd-foreground-300: 0.7 0.04 30;
+  --rd-foreground-400: 0.6 0.05 30;
+  --rd-foreground-500: 0.5 0.06 30;
+  --rd-foreground-600: 0.4 0.07 30;
+  --rd-foreground-700: 0.3 0.08 30;
+  --rd-foreground-800: 0.22 0.09 30;
+  --rd-foreground-900: 0.18 0.1 30;
+  --rd-foreground-950: 0.15 0.11 30;
+
+  --rd-primary-50: 0.95 0.05 75;
+  --rd-primary-100: 0.9 0.08 75;
+  --rd-primary-200: 0.85 0.12 75;
+  --rd-primary-300: 0.78 0.15 75;
+  --rd-primary-400: 0.7 0.17 75;
+  --rd-primary-500: 0.62 0.18 75;
+  --rd-primary-600: 0.55 0.19 75;
+  --rd-primary-700: 0.48 0.18 75;
+  --rd-primary-800: 0.4 0.17 75;
+  --rd-primary-900: 0.33 0.16 75;
+  --rd-primary-950: 0.28 0.15 75;
+
+  --rd-accent-50: 0.95 0.04 50;
+  --rd-accent-100: 0.88 0.08 50;
+  --rd-accent-200: 0.8 0.12 50;
+  --rd-accent-300: 0.72 0.15 50;
+  --rd-accent-400: 0.64 0.17 50;
+  --rd-accent-500: 0.56 0.18 50;
+  --rd-accent-600: 0.48 0.17 50;
+  --rd-accent-700: 0.4 0.16 50;
+  --rd-accent-800: 0.32 0.15 50;
+  --rd-accent-900: 0.26 0.14 50;
+  --rd-accent-950: 0.2 0.13 50;
+
+  --rd-secondary-50: 0.94 0.02 70;
+  --rd-secondary-100: 0.88 0.03 70;
+  --rd-secondary-200: 0.8 0.04 70;
+  --rd-secondary-300: 0.72 0.05 70;
+  --rd-secondary-400: 0.64 0.06 70;
+  --rd-secondary-500: 0.56 0.07 70;
+  --rd-secondary-600: 0.48 0.08 70;
+  --rd-secondary-700: 0.4 0.09 70;
+  --rd-secondary-800: 0.32 0.1 70;
+  --rd-secondary-900: 0.26 0.11 70;
+  --rd-secondary-950: 0.2 0.12 70;
+
+  font-family: "Noto Sans HK", sans-serif;
+  background-color: oklch(var(--rd-background-50));
+  color: oklch(var(--rd-foreground-950));
+}
+
+.readdy-nav-desktop,
+.readdy-brand-sub {
+  display: none;
+}
+
+@container readdy (min-width: 1280px) {
+  .readdy-nav-desktop {
+    display: flex !important;
+  }
+  .readdy-nav-mobile {
+    display: none !important;
+  }
+  .readdy-brand-sub {
+    display: block !important;
+  }
+}
+
+.readdy-site :is(h1, h2, h3, h4, h5, h6) {
+  font-family: "Noto Serif HK", serif;
+}
+
+.readdy-site .animate-fade-in {
+  animation: readdy-fade-in 0.8s ease-out forwards;
+}
+
+.readdy-site .animate-fade-in-up {
+  animation: readdy-fade-in-up 0.8s ease-out forwards;
+}
+
+.readdy-site .animate-fade-in-delay-1 {
+  animation: readdy-fade-in-up 0.8s ease-out 0.15s forwards;
+  opacity: 0;
+}
+
+.readdy-site .animate-fade-in-delay-2 {
+  animation: readdy-fade-in-up 0.8s ease-out 0.3s forwards;
+  opacity: 0;
+}
+
+.readdy-site .animate-fade-in-delay-3 {
+  animation: readdy-fade-in-up 0.8s ease-out 0.45s forwards;
+  opacity: 0;
+}
+
+.readdy-site .animate-pulse-slow {
+  animation: readdy-pulse-slow 3s ease-in-out infinite;
+}
+
+@keyframes readdy-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes readdy-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes readdy-pulse-slow {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.05);
+  }
+}

@@ -17,9 +17,10 @@ assert.deepEqual(docs.map((doc) => doc.id), [
   'receivables-alert',
   'fcc-asana-digest',
   'ads-email-alert',
+  'readdy-framer-conversion',
 ]);
 assert.equal(docs.filter((doc) => doc.kind === 'scheduled').length, 3);
-assert.equal(docs.filter((doc) => doc.kind === 'manual').length, 1);
+assert.equal(docs.filter((doc) => doc.kind === 'manual').length, 2);
 
 const annual = byId.get('annual-fees-reminder');
 assert.ok(annual);
@@ -74,6 +75,20 @@ assert.match(ads.previewSubject, /廣告成效預警/);
 assert.match(ads.previewHtml, /範例品牌/);
 assert.deepEqual(ads.cc, []);
 assert.deepEqual(ads.bcc, []);
+
+const readdy = byId.get('readdy-framer-conversion');
+assert.ok(readdy);
+assert.equal(readdy.kind, 'manual');
+assert.equal(readdy.subject, '【MPS】{網站名稱}(Readdy-{編號})轉換結果 {日期}');
+assert.match(readdy.frequency, /無固定排程/);
+assert.deepEqual([...readdy.to.addresses], ['cfb.marketing@chifung.net']);
+assert.deepEqual(readdy.cc, []);
+assert.deepEqual(readdy.bcc, []);
+assert.equal(readdy.previewSubject, '【MPS】範例現場音樂(Readdy-16106125)轉換結果 2026-11-09');
+assert.match(readdy.previewHtml, /lang="zh-Hant"/);
+assert.match(readdy.previewHtml, /轉換成功/);
+assert.match(readdy.previewHtml, /範例現場音樂/);
+assert.match(readdy.previewHtml, /\/services/);
 
 const menu = read('src/context/AppContext.tsx');
 assert.match(menu, /電郵連接[\s\S]*系統通知[\s\S]*登入紀錄/);

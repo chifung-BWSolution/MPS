@@ -1,6 +1,14 @@
 # Agent instructions
 
-Cloud-only git handoff (commit and push on `main`, no `cursor/*` branches or PRs) lives in `.cursor/rules/git-push-main.mdc` and applies **only to Cloud Agents**. Local IDE agents must not follow that policy.
+## Do not push unless asked
+
+Do **not** run `git push`, or any other command that publishes commits to the remote, unless the user explicitly asks in this chat.
+
+This overrides any standing instruction to push after finishing work, including “commit and push when the change is ready.” A finished local commit stays local.
+
+## Cloud Agents
+
+Cloud-only git handoff (commit and push on `main`, no `cursor/*` branches or PRs) lives in `.cursor/rules/git-push-main.mdc` and applies **only to Cloud Agents**. Local IDE agents must not follow that policy, and must not push on their own.
 
 ## Cursor Cloud — no browser / GUI testing
 

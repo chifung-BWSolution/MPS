@@ -1,4 +1,12 @@
 /** @type {import('tailwindcss').Config} */
+
+function rdScale(name) {
+  const steps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
+  return Object.fromEntries(
+    steps.map((step) => [String(step), `oklch(var(--rd-${name}-${step}) / <alpha-value>)`]),
+  );
+}
+
 module.exports = {
   darkMode: ["class"],
   content: [
@@ -19,20 +27,30 @@ module.exports = {
   	extend: {
   		fontFamily: {
   			sans: ["'Space Grotesk'", 'sans-serif'],
+  			heading: ['"Noto Serif HK"', 'serif'],
+  			body: ['"Noto Sans HK"', 'sans-serif'],
   		},
   		colors: {
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',
-  			background: 'hsl(var(--background))',
-  			foreground: 'hsl(var(--foreground))',
+  			background: {
+  				DEFAULT: 'hsl(var(--background))',
+  				...rdScale('background'),
+  			},
+  			foreground: {
+  				DEFAULT: 'hsl(var(--foreground))',
+  				...rdScale('foreground'),
+  			},
   			primary: {
   				DEFAULT: 'hsl(var(--primary))',
-  				foreground: 'hsl(var(--primary-foreground))'
+  				foreground: 'hsl(var(--primary-foreground))',
+  				...rdScale('primary'),
   			},
   			secondary: {
   				DEFAULT: 'hsl(var(--secondary))',
-  				foreground: 'hsl(var(--secondary-foreground))'
+  				foreground: 'hsl(var(--secondary-foreground))',
+  				...rdScale('secondary'),
   			},
   			destructive: {
   				DEFAULT: 'hsl(var(--destructive))',
@@ -44,7 +62,8 @@ module.exports = {
   			},
   			accent: {
   				DEFAULT: 'hsl(var(--accent))',
-  				foreground: 'hsl(var(--accent-foreground))'
+  				foreground: 'hsl(var(--accent-foreground))',
+  				...rdScale('accent'),
   			},
   			popover: {
   				DEFAULT: 'hsl(var(--popover))',
