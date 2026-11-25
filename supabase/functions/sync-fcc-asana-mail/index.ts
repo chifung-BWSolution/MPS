@@ -170,7 +170,8 @@ async function createTask(input: {
   });
   const payload = await res.json() as { data?: { gid?: string }; errors?: Array<{ message?: string }> };
   if (!res.ok || !payload.data?.gid) {
-    throw new Error(payload.errors?.[0]?.message || "建立 Asana task 失敗");
+    const raw = payload.errors?.[0]?.message || "";
+    throw new Error(await accessDenied(raw) || raw || "建立 Asana task 失敗");
   }
   return payload.data.gid;
 }
@@ -257,7 +258,14 @@ async function fccCreator(): Promise<{ name: string; email: string } | null> {
 }
 
 function asanaReadToken(): string {
-  return Deno.env.get("ASANA_ACCESS_TOKEN")?.trim() || Deno.env.get("ASANA_FCC_ACCESS_TOKEN")?.trim() || "";
+  return Deno.env.get("ASANA_FCC_ACCESS_TOKEN")?.trim() || Deno.env.get("ASANA_ACCESS_TOKEN")?.trim() || "";
+}
+
+async function accessDenied(raw: string): Promise<string | null> {
+  if (!/do not have access/i.test(raw)) return null;
+  const creator = await fccCreator();
+  const who = creator?.email || "開 task 的 Asana 帳號";
+  return `${who} 未有權限進入這個專案，所以未有開 task。請專案管理員在 Asana 分享視窗邀請這個帳號。`;
 }
 
 const STORY_LABEL: Record<string, string> = {
@@ -340,7 +348,7 @@ async function taskActivity(taskGid: string) {
 
 async function findExistingTask(workspace: string, project: string, phone: string, title: string, notes: string): Promise<string | null> {
   const token = asanaReadToken();
-  if (!token) throw new Error("缺少 ASANA_ACCESS_TOKEN，未能先檢查 Asana 是否已有 task");
+  if (!token) throw new Error("缺少開 task 的 Asana 帳號，未能先檢查是否已有 task");
   const digits = phone.replace(/\D/g, "");
   const qs = new URLSearchParams({
     text: digits || title,
@@ -352,7 +360,10 @@ async function findExistingTask(workspace: string, project: string, phone: strin
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
   });
   const payload = await res.json() as { data?: Array<{ gid?: string; name?: string; notes?: string }>; errors?: Array<{ message?: string }> };
-  if (!res.ok) throw new Error(payload.errors?.[0]?.message || "檢查 Asana 現有 task 失敗");
+  if (!res.ok) {
+    const raw = payload.errors?.[0]?.message || "";
+    throw new Error(await accessDenied(raw) || raw || "檢查 Asana 現有 task 失敗");
+  }
   const hit = (payload.data || []).find((task) => inquiryAlreadyOpened(String(task.name || ""), String(task.notes || ""), title, notes));
   return hit?.gid ? String(hit.gid) : null;
 }
