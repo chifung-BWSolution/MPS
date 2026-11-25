@@ -74,3 +74,15 @@ verify_jwt = true
 # The function validates the session itself with auth.getUser().
 [functions.bwa-projects]
 verify_jwt = false
+
+[functions.framer-oauth]
+verify_jwt = false
+
+[functions.readdy-github-fetch]
+verify_jwt = false
+
+[functions.readdy-parse-ir]
+verify_jwt = false
+
+[functions.framer-mcp-sync]
+verify_jwt = false

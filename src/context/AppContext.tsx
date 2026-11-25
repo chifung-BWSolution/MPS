@@ -220,6 +220,7 @@ export const mainMenuItems: MainMenuItem[] = [
     id: 'tools-center',
     label: '工具中心',
     subMenus: [
+      { id: 'readdy-framer', label: 'Readdy → Framer 轉換' },
       { id: 'ai-keyword', label: 'AI 關鍵字生成器' },
       { id: 'ai-title', label: 'AI SEO標題生成器' },
       { id: 'ai-caption', label: 'AI 圖片說明生成' },

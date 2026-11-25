@@ -117,4 +117,18 @@
   .fixed.inset-0 {
     margin: 0 !important;
   }
+
+  .animate-rf-shimmer {
+    background-size: 200% 100%;
+    animation: rf-shimmer 1.6s linear infinite;
+  }
+}
+
+@keyframes rf-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }

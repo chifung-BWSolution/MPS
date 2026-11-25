@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { TalentInvitePublicPage } from "./components/talent/TalentInvitePublicPage";
 import { TalentSubmissionViewPage } from "./components/talent/TalentSubmissionViewPage";
 import { VolunteerApplyPublicPage } from "./components/marketing/VolunteerApplyPublicPage";
+import { FramerOAuthCallbackPage } from "./components/tools-center/readdy-framer/FramerOAuthCallbackPage";
 import { VersionUpdateBar } from "./components/layout/VersionUpdateBar";
 
 function AuthGuard({ children }: { children: ReactNode }) {
@@ -51,6 +52,8 @@ function App() {
             <Route path="/talent/invite/:token" element={<TalentInvitePublicPage />} />
             {/* Public volunteer recruitment form — shared campaign link, no auth */}
             <Route path="/volunteer/apply/:slug" element={<VolunteerApplyPublicPage />} />
+            {/* Framer MCP OAuth popup callback — renders in app origin so Supabase text/plain override is bypassed */}
+            <Route path="/framer-oauth-callback" element={<FramerOAuthCallbackPage />} />
             {/* Auth-required read-only view of a submitted form */}
             <Route
               path="/talent/submissions/:id"

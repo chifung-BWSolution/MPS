@@ -65,7 +65,7 @@ type IrPayload = {
   };
   designTokens: {
     colors: Record<string, string>;
-    typography: { fontFamily: string; h1Size: number; h2Size: number; bodySize: number };
+    typography: { fontFamily: string; bodyFont?: string; h1Size: number; h2Size: number; bodySize: number };
   };
   sections: IrSection[];
 };
@@ -322,9 +322,21 @@ function normalizeFramerPadding(raw: string | undefined, fallback: string): stri
 }
 
 function usableFont(name: string | undefined): string | undefined {
-  const font = String(name || "").trim();
-  if (!font || font.includes(",") || /^(sans-serif|serif|monospace|system-ui)$/i.test(font)) return undefined;
+  const font = String(name || "").split(",")[0]?.replace(/['"]/g, "").trim() || "";
+  if (!font || /^(sans-serif|serif|monospace|system-ui)$/i.test(font)) return undefined;
   return font;
+}
+
+function isLightHex(color: string | undefined): boolean {
+  const hex = String(color || "").trim();
+  if (!hex.startsWith("#")) return false;
+  const raw = hex.slice(1);
+  const full = raw.length === 3 ? raw.split("").map((c) => c + c).join("") : raw.slice(0, 6);
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return false;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 >= 0.62;
 }
 
 function htmlTagForSection(kind: string): "header" | "nav" | "footer" | "section" {
@@ -362,6 +374,7 @@ function buildSectionOps(
   section: IrSection,
   grid: IrPayload["gridConfig"],
   fontName: string | undefined,
+  bodyFontName?: string,
 ): { ops: FramerWriteOp[]; backgroundImage: string | null } {
   const stamp = Date.now().toString(36);
   const root = `sec${stamp}`;
@@ -370,7 +383,11 @@ function buildSectionOps(
   const el = section.elements || {};
   const gap = `${section.gap || grid.gutter || 16}px`;
   const horizontal = section.direction === "horizontal";
-  const textFont = fontName ? { fontName } : {};
+  const headingFont = fontName || bodyFontName;
+  const textFont = bodyFontName ? { fontName: bodyFontName } : headingFont ? { fontName: headingFont } : {};
+  const headingFontAttr = headingFont ? { fontName: headingFont } : {};
+  const lightSurface = isLightHex(section.background) || section.background === "transparent";
+  const cardFill = lightSurface ? "#FBF7F1" : "rgba(255, 255, 255, 0.063)";
 
   ops.push({
     op: "frame",
@@ -463,6 +480,7 @@ function buildSectionOps(
       textColor: section.textColor,
       fontSize: size,
       fontWeight: 700,
+      ...headingFontAttr,
     });
   }
   if (el.subheading) {
@@ -601,7 +619,7 @@ function buildSectionOps(
           stackDirection: "vertical",
           gap: "10px",
           padding: "24px 24px 24px 24px",
-          fill: "rgba(255, 255, 255, 0.063)",
+          fill: cardFill,
           radius: "12px",
           width: "1fr",
           height: "auto",
@@ -628,6 +646,7 @@ function buildSectionOps(
           textColor: section.textColor,
           fontSize: "18px",
           fontWeight: 600,
+          ...headingFontAttr,
         });
       }
       if (card.description) {
@@ -662,7 +681,7 @@ function buildSectionOps(
 
   return {
     ops,
-    backgroundImage: section.sectionKind === "hero" ? el.backgroundImage || null : null,
+    backgroundImage: el.backgroundImage || null,
   };
 }
 
@@ -1052,7 +1071,12 @@ Deno.serve(async (req: Request) => {
     let toolCalled = "exec";
 
     if (useExec) {
-      const built = buildSectionOps(section, grid, usableFont(irPayload.designTokens?.typography?.fontFamily));
+      const built = buildSectionOps(
+        section,
+        grid,
+        usableFont(irPayload.designTokens?.typography?.fontFamily),
+        usableFont(irPayload.designTokens?.typography?.bodyFont),
+      );
       try {
         const payload = await runFramerProgram({
           stamp: Date.now().toString(36),
