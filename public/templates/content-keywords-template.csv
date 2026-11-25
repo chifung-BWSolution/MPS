@@ -1,0 +1,6 @@
+site,phrase,intent,priority,target_url,notes,cluster,pipeline_status
+,室內設計公司推薦,commercial,1000,,人工 pin：首頁主打詞,室內設計,backlog
+,香港辦公室裝修,commercial,,,從 GSC 機會詞手動加入,,backlog
+,寫字樓設計案例,informational,,https://example.com/portfolio,,設計案例,backlog
+,餐廳裝修工程,transactional,500,,,餐飲空間,
+,open office design,informational,,,英文站用詞,,

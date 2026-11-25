@@ -51,6 +51,7 @@ function getRoleLabel(role: string) {
     case 'copywriter': return '文案';
     case 'video_editor': return '影片剪輯';
     case 'marketing': return '市場推廣';
+    case 'chief_editor': return '總編輯';
     case 'staff': return '員工';
     default: return role;
   }

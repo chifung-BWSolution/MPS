@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Search, Plus, Tag, Globe, Lock, Copy, Trash2, Edit2, Check } from 'lucide-react';
+import { Search, Plus, Tag, Globe, Lock, Copy, Trash2, Edit2, Check, Sparkles, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useApp } from '@/context/AppContext';
 import { NullableBadge } from '@/components/ui/nullable-badge';
 
 interface Prompt {
@@ -70,6 +71,7 @@ const mockPrompts: Prompt[] = [
 ];
 
 export function PromptLibrary() {
+  const { navigateTo } = useApp();
   const [prompts, setPrompts] = useState<Prompt[]>(mockPrompts);
   const [selectedCategory, setSelectedCategory] = useState('全部');
   const [searchQuery, setSearchQuery] = useState('');
@@ -129,6 +131,28 @@ export function PromptLibrary() {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[#0D9488]/20 bg-[#f0fdfa] p-4">
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-[#0D9488] shadow-sm">
+            <Sparkles size={17} />
+          </span>
+          <div>
+            <h3 className="text-[14px] font-semibold text-[#0d1a2d]">網站圖片 ALT 生成（ALT Pilot）</h3>
+            <p className="mt-0.5 text-[12px] text-muted-foreground">
+              用整頁文案與圖片畫面生成 ALT，支援 Framer 對照表、逐張審批與 CSV 匯出。
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigateTo('tools-center', 'alt-pilot')}
+          className="flex items-center gap-1.5 rounded-md bg-[#0D9488] px-3 py-2 text-[12px] font-medium text-white transition-colors hover:bg-[#0b8076]"
+        >
+          開啟 ALT Pilot
+          <ArrowRight size={13} />
+        </button>
+      </div>
+
       {/* Search + Add */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1">

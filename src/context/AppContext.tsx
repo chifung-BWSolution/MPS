@@ -221,10 +221,15 @@ export const mainMenuItems: MainMenuItem[] = [
     id: 'tools-center',
     label: '工具中心',
     subMenus: [
+      { id: 'social-automation', label: '社媒自動化營運' },
       { id: 'readdy-framer', label: 'Readdy → Framer 轉換' },
+      { id: 'seo-radar', label: 'SEO 雷達' },
+      { id: 'crosspost', label: 'AI跨平台一稿多發' },
       { id: 'ai-keyword', label: 'AI 關鍵字生成器' },
       { id: 'ai-title', label: 'AI SEO標題生成器' },
       { id: 'ai-caption', label: 'AI 圖片說明生成' },
+      { id: 'alt-pilot', label: 'ALT Pilot' },
+      { id: 'tone-rewrite', label: '語氣校對改寫器' },
       { id: 'prompt-library', label: 'Prompt 資料庫' },
       { id: 'templates', label: '模板庫' },
       { id: 'training-modules', label: '培訓模組' },
@@ -367,7 +372,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!systemUser) return fallbackUser;
     
     // Ensure role is a valid UserRole, default to 'management' if not mappable
-    const validRoles: UserRole[] = ['management', 'project_manager', 'designer', 'accountant', 'copywriter', 'video_editor', 'marketing', 'staff'];
+    const validRoles: UserRole[] = ['management', 'project_manager', 'designer', 'accountant', 'copywriter', 'video_editor', 'marketing', 'staff', 'chief_editor'];
     const mappedRole: UserRole = validRoles.includes(systemUser.role as UserRole)
       ? (systemUser.role as UserRole)
       : 'management';

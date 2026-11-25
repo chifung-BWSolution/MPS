@@ -305,6 +305,19 @@ function mapRoleToInternal(roleTag: string | null | undefined, classification?: 
   
   const raw = (roleTag || classification || '').toLowerCase().trim();
 
+  // Chief editor（總編輯）— 必須先於 generic "admin" / "editor" 判斷，
+  // 否則 role_tag 寫成「Chief Editor (Administrator)」會被歸類為 management。
+  if (
+    raw === 'chief_editor' ||
+    raw.includes('chief editor') ||
+    raw.includes('editor-in-chief') ||
+    raw.includes('editor in chief') ||
+    raw.includes('總編輯') ||
+    raw.includes('总编辑')
+  ) {
+    return 'chief_editor';
+  }
+
   // System developer (must run before the generic "system" / "admin" checks)
   if (raw === 'system_dev' || raw.includes('系統開發')) {
     return 'system_dev';
@@ -353,6 +366,7 @@ function mapRoleTagDisplay(roleTag: string | null | undefined, classification?: 
   const internalRole = mapRoleToInternal(roleTag, classification);
   const roleTagMap: Record<string, string> = {
     'management': 'Administrator',
+    'chief_editor': '總編輯',
     'system_dev': '系統開發',
     'project_manager': 'Project Manager',
     'designer': 'Designer',

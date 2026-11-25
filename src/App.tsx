@@ -9,7 +9,10 @@ import { TalentInvitePublicPage } from "./components/talent/TalentInvitePublicPa
 import { TalentSubmissionViewPage } from "./components/talent/TalentSubmissionViewPage";
 import { VolunteerApplyPublicPage } from "./components/marketing/VolunteerApplyPublicPage";
 import { FramerOAuthCallbackPage } from "./components/tools-center/readdy-framer/FramerOAuthCallbackPage";
+import { AltPilotDemoPage } from "./components/tools-center/alt-pilot/AltPilotDemoPage";
 import { VersionUpdateBar } from "./components/layout/VersionUpdateBar";
+
+const SHOW_ALT_PILOT_DEMO = import.meta.env.VITE_ALT_PILOT_DEMO === "1";
 
 function AuthGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated, isAuthorized, loading, authError } = useAuth();
@@ -54,6 +57,21 @@ function App() {
             <Route path="/volunteer/apply/:slug" element={<VolunteerApplyPublicPage />} />
             {/* Framer MCP OAuth popup callback — renders in app origin so Supabase text/plain override is bypassed */}
             <Route path="/framer-oauth-callback" element={<FramerOAuthCallbackPage />} />
+            {/* Local-only ALT Pilot preview; only present when VITE_ALT_PILOT_DEMO=1 at build time */}
+            {SHOW_ALT_PILOT_DEMO ? (
+              <Route
+                path="/alt-pilot-demo"
+                element={
+                  <div className="min-h-screen bg-[#f5f8fc] p-6">
+                    <AltPilotDemoPage
+                      onExit={() => {
+                        window.location.href = "/";
+                      }}
+                    />
+                  </div>
+                }
+              />
+            ) : null}
             {/* Auth-required read-only view of a submitted form */}
             <Route
               path="/talent/submissions/:id"

@@ -86,3 +86,34 @@ verify_jwt = false
 
 [functions.framer-mcp-sync]
 verify_jwt = false
+
+# Content automation (B100 -> MPS tools center)
+# content-sites / content-keywords / content-publish / content-digest are called
+# from the SPA: user access tokens are ES256 while the gateway still checks the
+# retired HS256 secret, so the functions validate the session themselves.
+[functions.content-sites]
+verify_jwt = false
+
+[functions.content-keywords]
+verify_jwt = false
+
+[functions.content-publish]
+verify_jwt = false
+
+[functions.content-digest]
+verify_jwt = false
+
+# Social desk: called from the SPA (user JWT is ES256, gateway checks HS256).
+[functions.content-social]
+verify_jwt = false
+
+# content-worker is cron/service-role only; the service_role JWT is HS256 and
+# passes the gateway check, and the function additionally checks the role.
+[functions.content-worker]
+verify_jwt = true
+
+# SEO Radar (tools center): validates the JWT itself via requireActor().
+# It must stay verify_jwt = false so ES256 user sessions and service-role cron
+# calls both reach the function.
+[functions.seo-radar]
+verify_jwt = false

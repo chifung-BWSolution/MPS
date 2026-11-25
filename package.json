@@ -12,7 +12,14 @@
     "types:supabase": "npx supabase gen types typescript --project-id kwcevjcmdjadhrygjyfp > src/types/supabase.ts",
     "db:push": "supabase db push --linked --yes",
     "db:link": "supabase link --project-ref kwcevjcmdjadhrygjyfp --yes",
-    "email:test": "node scripts/send-test-email.mjs"
+    "email:test": "node scripts/send-test-email.mjs",
+    "content:selftest": "node scripts/content-selftest.mjs",
+    "content:sql-audit": "node scripts/content-sql-audit.mjs",
+    "content:remote-audit": "node scripts/content-remote-audit.mjs",
+    "content:deploy:apply": "node scripts/content-apply-migrations.mjs",
+    "content:deploy:verify": "node scripts/content-deploy-verify.mjs",
+    "content:run-sql": "node scripts/content-run-sql.mjs",
+    "radar:test": "node scripts/run-seo-radar-test.ts"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
