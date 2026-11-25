@@ -8,7 +8,9 @@ import type {
   FramerIrPageMeta,
   FramerIrPayload,
   FramerOAuthStatus,
+  FramerProjectSummary,
   FramerSyncJob,
+  FramerWorkspaceSummary,
   GitHubFileFetchResult,
   GitHubInspectResult,
   GitHubRepoMeta,
@@ -218,6 +220,25 @@ export async function parseReaddyToIr(params: {
   logs: WorkbenchLogEntry[];
 }> {
   return invokeEdgeJson('readdy-parse-ir', params);
+}
+
+export async function listFramerCatalog(): Promise<{
+  workspaces: FramerWorkspaceSummary[];
+  projects: FramerProjectSummary[];
+  truncated: boolean;
+}> {
+  return invokeEdgeJson('framer-mcp-sync', { action: 'list_framer_catalog' });
+}
+
+export async function createFramerProject(params: {
+  title: string;
+  workspace_id: string;
+}): Promise<FramerProjectSummary> {
+  const result = await invokeEdgeJson<{ ok: boolean; project: FramerProjectSummary }>(
+    'framer-mcp-sync',
+    { action: 'create_framer_project', ...params },
+  );
+  return result.project;
 }
 
 export async function syncFramerStep(params: {

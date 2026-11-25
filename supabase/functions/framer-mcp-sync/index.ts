@@ -239,6 +239,111 @@ function extractMcpText(result: unknown): string {
   return "";
 }
 
+type FramerWorkspacePayload = {
+  id: string;
+  name: string;
+  role: string | null;
+  plan: string | null;
+  canCreate: boolean;
+};
+
+type FramerProjectPayload = {
+  id: string;
+  title: string;
+  url: string;
+  workspaceId: string | null;
+  workspaceName: string | null;
+  lastOpenedAt: string | null;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function unwrapToolRecord(result: unknown): Record<string, unknown> {
+  assertMcpOk(result);
+  const record = asRecord(result);
+  if (!record) return {};
+  const structured = asRecord(record.structuredContent);
+  if (structured) return structured;
+  const text = extractMcpText(result).trim();
+  if (text.startsWith("{")) {
+    try {
+      const parsed = asRecord(JSON.parse(text));
+      if (parsed) return parsed;
+    } catch {
+      // 文字結果不是 JSON
+    }
+  }
+  return record;
+}
+
+function normalizeFramerWorkspaces(raw: Record<string, unknown>): FramerWorkspacePayload[] {
+  const list = Array.isArray(raw.workspaces) ? raw.workspaces : [];
+  const workspaces: FramerWorkspacePayload[] = [];
+  for (const item of list) {
+    const row = asRecord(item);
+    if (!row) continue;
+    const id = String(row.id || "").trim();
+    const name = String(row.name || "").trim();
+    if (!id || !name) continue;
+    const permissions = Array.isArray(row.permissions) ? row.permissions.map((entry) => String(entry)) : [];
+    workspaces.push({
+      id,
+      name,
+      role: row.role ? String(row.role) : null,
+      plan: row.plan ? String(row.plan) : null,
+      canCreate: permissions.includes("create_project"),
+    });
+  }
+  return workspaces;
+}
+
+function normalizeFramerProjects(raw: Record<string, unknown>): {
+  projects: FramerProjectPayload[];
+  nextCursor: string;
+} {
+  const list = Array.isArray(raw.projects) ? raw.projects : [];
+  const projects: FramerProjectPayload[] = [];
+  for (const item of list) {
+    const row = asRecord(item);
+    if (!row) continue;
+    const id = String(row.id || "").trim();
+    if (!id) continue;
+    const workspace = asRecord(row.workspace);
+    projects.push({
+      id,
+      title: String(row.title || id).trim() || id,
+      url: String(row.url || `https://framer.com/projects/${id}`).trim(),
+      workspaceId: workspace ? String(workspace.id || "").trim() || null : null,
+      workspaceName: workspace ? String(workspace.name || "").trim() || null : null,
+      lastOpenedAt: row.lastOpenedAt ? String(row.lastOpenedAt) : null,
+    });
+  }
+  const nextCursor = typeof raw.nextCursor === "string" ? raw.nextCursor.trim() : "";
+  return { projects, nextCursor };
+}
+
+function normalizeCreatedProject(
+  raw: Record<string, unknown>,
+  fallbackTitle: string,
+  workspaceId: string,
+): FramerProjectPayload {
+  const nested = asRecord(raw.project) || raw;
+  const id = String(nested.id || nested.projectId || "").trim();
+  if (!id) throw new Error("Framer 沒有回傳新專案編號。");
+  const workspace = asRecord(nested.workspace);
+  return {
+    id,
+    title: String(nested.title || fallbackTitle).trim() || fallbackTitle,
+    url: String(nested.url || `https://framer.com/projects/${id}`).trim(),
+    workspaceId: (workspace ? String(workspace.id || "").trim() : "") || workspaceId,
+    workspaceName: workspace ? String(workspace.name || "").trim() || null : null,
+    lastOpenedAt: null,
+  };
+}
+
 function extractSessionHandle(result: unknown): string | null {
   const queue: unknown[] = [result];
   const seen = new Set<unknown>();
@@ -827,6 +932,8 @@ Deno.serve(async (req: Request) => {
       doc_paths?: string[];
       open_project_id?: string;
       list_projects?: boolean;
+      title?: string;
+      workspace_id?: string;
       job_id?: string;
       step_index?: number;
       framer_project_url?: string;
@@ -878,6 +985,63 @@ Deno.serve(async (req: Request) => {
         session_handle: sessionHandle,
         doc_results: docResults,
       });
+    }
+
+    if (body.action === "list_framer_catalog" || body.action === "create_framer_project") {
+      const supabase = supabaseAdmin();
+      const { accessToken } = await getValidFramerAccessToken(supabase);
+      const mcp = new FramerMcpClient(accessToken);
+      await mcp.initialize();
+
+      if (body.action === "list_framer_catalog") {
+        const workspaces = normalizeFramerWorkspaces(
+          unwrapToolRecord(await mcp.callTool("list_workspaces", {})),
+        );
+        const projects: FramerProjectPayload[] = [];
+        const seen = new Set<string>();
+        let cursor = "";
+        let truncated = false;
+        for (let page = 0; page < 8; page++) {
+          const args: Record<string, unknown> = { limit: 100 };
+          if (cursor) args.cursor = cursor;
+          let pageRaw: Record<string, unknown>;
+          try {
+            pageRaw = unwrapToolRecord(await mcp.callTool("list_projects", args));
+          } catch (error) {
+            if (projects.length === 0) throw error;
+            truncated = true;
+            break;
+          }
+          const batch = normalizeFramerProjects(pageRaw);
+          for (const project of batch.projects) {
+            if (seen.has(project.id)) continue;
+            seen.add(project.id);
+            projects.push(project);
+          }
+          if (!batch.nextCursor || batch.nextCursor === cursor || batch.projects.length === 0) {
+            cursor = "";
+            break;
+          }
+          cursor = batch.nextCursor;
+          if (page === 7) truncated = true;
+        }
+        await upsertFramerConnection(supabase, { last_used_at: new Date().toISOString() });
+        return jsonResponse({ ok: true, workspaces, projects, truncated });
+      }
+
+      const title = String(body.title || "").trim();
+      const workspaceId = String(body.workspace_id || "").trim();
+      if (!title) return jsonResponse({ error: "請輸入 Framer 專案名稱。" }, 400);
+      if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(workspaceId)) {
+        return jsonResponse({ error: "請選擇要放入的分類。" }, 400);
+      }
+      const created = normalizeCreatedProject(
+        unwrapToolRecord(await mcp.callTool("create_project", { title, workspaceId })),
+        title,
+        workspaceId,
+      );
+      await upsertFramerConnection(supabase, { last_used_at: new Date().toISOString() });
+      return jsonResponse({ ok: true, project: created });
     }
 
     const jobId = String(body.job_id || "").trim();

@@ -19,10 +19,12 @@ import {
 import {
   FRAMER_OAUTH_MESSAGE,
   analyzeGitHubProject,
+  createFramerProject,
   disconnectFramerOAuth,
   fetchGitHubPageBundle,
   getFramerOAuthStatus,
   isValidFramerProjectUrl,
+  listFramerCatalog,
   listGitHubBranches,
   listGitHubRepos,
   listRecentFramerJobs,
@@ -43,7 +45,9 @@ import type {
   ExecutionStageState,
   FramerIrPayload,
   FramerOAuthStatus,
+  FramerProjectSummary,
   FramerSyncJob,
+  FramerWorkspaceSummary,
   GitHubRepoMeta,
   GitHubRepoSummary,
   GridConfig,
@@ -84,6 +88,11 @@ export function ReaddyFramerWorkbench() {
 
   // Step 01 Source Config
   const [framerProjectUrl, setFramerProjectUrl] = useState(DEFAULT_FRAMER_PROJECT_URL);
+  const [framerProjects, setFramerProjects] = useState<FramerProjectSummary[]>([]);
+  const [framerWorkspaces, setFramerWorkspaces] = useState<FramerWorkspaceSummary[]>([]);
+  const [framerCatalogLoading, setFramerCatalogLoading] = useState(false);
+  const [framerCatalogError, setFramerCatalogError] = useState<string | null>(null);
+  const [framerCatalogTruncated, setFramerCatalogTruncated] = useState(false);
   const [sourceType, setSourceType] = useState<SourceType>('github');
   const [githubRepoUrl, setGithubRepoUrl] = useState('');
   const [githubRepos, setGithubRepos] = useState<GitHubRepoSummary[]>([]);
@@ -157,6 +166,42 @@ export function ReaddyFramerWorkbench() {
     }
   }, []);
 
+  const refreshFramerCatalog = useCallback(async () => {
+    setFramerCatalogLoading(true);
+    setFramerCatalogError(null);
+    try {
+      const catalog = await listFramerCatalog();
+      setFramerProjects(catalog.projects);
+      setFramerWorkspaces(catalog.workspaces);
+      setFramerCatalogTruncated(Boolean(catalog.truncated));
+    } catch (error) {
+      setFramerCatalogError(error instanceof Error ? error.message : '無法讀取 Framer 專案');
+    } finally {
+      setFramerCatalogLoading(false);
+    }
+  }, []);
+
+  const handleCreateFramerProject = useCallback(async (input: { title: string; workspaceId: string }) => {
+    try {
+      const created = await createFramerProject({
+        title: input.title,
+        workspace_id: input.workspaceId,
+      });
+      const workspace = framerWorkspaces.find((item) => item.id === input.workspaceId);
+      const project: FramerProjectSummary = {
+        ...created,
+        workspaceId: created.workspaceId || input.workspaceId,
+        workspaceName: created.workspaceName || workspace?.name || null,
+      };
+      setFramerProjects((prev) => [project, ...prev.filter((item) => item.id !== project.id)]);
+      setFramerProjectUrl(project.url);
+      toast.success(`已建立 Framer 專案「${project.title}」`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '建立 Framer 專案失敗');
+      throw error;
+    }
+  }, [framerWorkspaces]);
+
   const refreshHistory = useCallback(async () => {
     try {
       const jobs = await listRecentFramerJobs(25);
@@ -209,6 +254,11 @@ export function ReaddyFramerWorkbench() {
     void refreshOAuthStatus();
     void refreshHistory();
   }, [refreshOAuthStatus, refreshHistory]);
+
+  useEffect(() => {
+    if (!oauthStatus?.connected) return;
+    void refreshFramerCatalog();
+  }, [oauthStatus?.connected, refreshFramerCatalog]);
 
   // Listen for Framer OAuth popup completion
   useEffect(() => {
@@ -1083,6 +1133,13 @@ export function ReaddyFramerWorkbench() {
               <SourceConfigPanel
                 framerProjectUrl={framerProjectUrl}
                 onFramerProjectUrlChange={setFramerProjectUrl}
+                framerProjects={framerProjects}
+                framerWorkspaces={framerWorkspaces}
+                framerCatalogLoading={framerCatalogLoading}
+                framerCatalogError={framerCatalogError}
+                framerCatalogTruncated={framerCatalogTruncated}
+                onRefreshFramerCatalog={() => void refreshFramerCatalog()}
+                onCreateFramerProject={handleCreateFramerProject}
                 oauthStatus={oauthStatus}
                 oauthConnecting={oauthConnecting}
                 onConnectFramer={() => void handleConnectFramer()}

@@ -260,6 +260,23 @@ export interface FramerSyncJob {
   updated_at?: string;
 }
 
+export interface FramerWorkspaceSummary {
+  id: string;
+  name: string;
+  role: string | null;
+  plan: string | null;
+  canCreate: boolean;
+}
+
+export interface FramerProjectSummary {
+  id: string;
+  title: string;
+  url: string;
+  workspaceId: string | null;
+  workspaceName: string | null;
+  lastOpenedAt: string | null;
+}
+
 export interface FramerOAuthStatus {
   connected: boolean;
   token_preview: string;

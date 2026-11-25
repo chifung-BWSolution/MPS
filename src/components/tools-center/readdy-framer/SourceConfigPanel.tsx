@@ -6,7 +6,6 @@ import {
   ChevronsUpDown,
   Code2,
   FolderGit2,
-  KeyRound,
   Link2,
   Loader2,
   Lock,
@@ -25,10 +24,12 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
-import { isValidFramerProjectUrl } from '@/lib/readdyFramerApi';
 import { CollapsePane } from './CollapsePane';
+import { findFramerProject, framerWorkspaceLabels, FramerProjectField } from './FramerProjectField';
 import type {
   FramerOAuthStatus,
+  FramerProjectSummary,
+  FramerWorkspaceSummary,
   GitHubRepoSummary,
   ReaddyProjectAnalysis,
   SourceType,
@@ -49,6 +50,13 @@ function formatFramerProjectLabel(url: string): string {
 interface SourceConfigPanelProps {
   framerProjectUrl: string;
   onFramerProjectUrlChange: (val: string) => void;
+  framerProjects: FramerProjectSummary[];
+  framerWorkspaces: FramerWorkspaceSummary[];
+  framerCatalogLoading: boolean;
+  framerCatalogError: string | null;
+  framerCatalogTruncated: boolean;
+  onRefreshFramerCatalog: () => void;
+  onCreateFramerProject: (input: { title: string; workspaceId: string }) => Promise<void>;
   oauthStatus: FramerOAuthStatus | null;
   oauthConnecting: boolean;
   onConnectFramer: () => void;
@@ -87,6 +95,13 @@ interface SourceConfigPanelProps {
 export function SourceConfigPanel({
   framerProjectUrl,
   onFramerProjectUrlChange,
+  framerProjects,
+  framerWorkspaces,
+  framerCatalogLoading,
+  framerCatalogError,
+  framerCatalogTruncated,
+  onRefreshFramerCatalog,
+  onCreateFramerProject,
   oauthStatus,
   oauthConnecting,
   onConnectFramer,
@@ -120,8 +135,14 @@ export function SourceConfigPanel({
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const urlValid = isValidFramerProjectUrl(framerProjectUrl);
   const mcpConnected = Boolean(oauthStatus?.connected);
+  const selectedFramerProject = findFramerProject(framerProjectUrl, framerProjects);
+  const workspaceLabels = framerWorkspaceLabels(framerWorkspaces);
+  const selectedCategory = selectedFramerProject
+    ? (selectedFramerProject.workspaceId && workspaceLabels.get(selectedFramerProject.workspaceId)) ||
+      selectedFramerProject.workspaceName ||
+      ''
+    : '';
 
   const branchOptions = githubBranches.length > 0 ? githubBranches : [githubBranch || 'main'];
   const selectedRepo = githubRepos.find((r) => r.html_url === githubRepoUrl) || null;
@@ -241,7 +262,14 @@ export function SourceConfigPanel({
           <div className="flex items-center justify-between gap-2 text-[11px]">
             <div className="flex items-center gap-1.5 min-w-0 text-slate-500">
               <Link2 size={11} className="text-slate-400 shrink-0" />
-              <span className="truncate font-mono">{formatFramerProjectLabel(framerProjectUrl)}</span>
+              <span className="truncate font-mono">
+                {selectedFramerProject?.title || formatFramerProjectLabel(framerProjectUrl)}
+              </span>
+              {selectedCategory && (
+                <span className="px-1.5 py-0.5 rounded bg-slate-200/70 text-slate-600 text-[10px] shrink-0 truncate max-w-[96px]">
+                  {selectedCategory}
+                </span>
+              )}
               <span
                 className={cn(
                   'w-1.5 h-1.5 rounded-full shrink-0',
@@ -257,52 +285,20 @@ export function SourceConfigPanel({
         <CollapsePane open={!collapsed} className="col-start-1 row-start-1 self-start">
         <div className="space-y-3.5">
 
-      {/* Framer Project URL */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <label className="text-[12px] font-medium text-slate-600">
-            Framer Project URL
-          </label>
-          {mcpConnected ? (
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#08967F]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#0BB59B]" />
-              已連線
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={onConnectFramer}
-              disabled={oauthConnecting}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 hover:text-amber-700"
-            >
-              <KeyRound size={11} />
-              {oauthConnecting ? '開啟授權中…' : '未授權，點此連線 Framer'}
-            </button>
-          )}
-        </div>
-        <div
-          className={cn(
-            'flex items-center gap-2 px-3 py-2 rounded-lg border bg-slate-50/70 transition-colors',
-            urlValid
-              ? 'border-slate-200 focus-within:border-[#0BB59B]'
-              : 'border-amber-300 focus-within:border-amber-500',
-          )}
-        >
-          <Link2 size={14} className="text-slate-400 shrink-0" />
-          <input
-            type="url"
-            value={framerProjectUrl}
-            onChange={(e) => onFramerProjectUrlChange(e.target.value)}
-            placeholder="https://framer.com/projects/Your-Project--xxxx"
-            className="w-full bg-transparent text-[12px] font-mono text-[#101B2D] outline-none placeholder:text-slate-400"
-          />
-        </div>
-        {!urlValid && framerProjectUrl.trim().length > 0 && (
-          <p className="text-[11px] text-amber-600">
-            請輸入完整 Framer 專案連結（格式如 https://framer.com/projects/...）
-          </p>
-        )}
-      </div>
+      <FramerProjectField
+          framerProjectUrl={framerProjectUrl}
+          onFramerProjectUrlChange={onFramerProjectUrlChange}
+          mcpConnected={mcpConnected}
+          oauthConnecting={oauthConnecting}
+          onConnectFramer={onConnectFramer}
+          projects={framerProjects}
+          workspaces={framerWorkspaces}
+          loading={framerCatalogLoading}
+          error={framerCatalogError}
+          truncated={framerCatalogTruncated}
+          onRefresh={onRefreshFramerCatalog}
+          onCreate={onCreateFramerProject}
+        />
 
       {/* 3-Mode Source Tabs */}
       <div className="grid grid-cols-3 gap-1 p-1 rounded-lg bg-slate-100 border border-slate-200/70">
