@@ -1,6 +1,9 @@
 .readdy-site {
   container-type: inline-size;
   container-name: readdy;
+  display: flow-root;
+  width: 100%;
+  height: auto;
   --rd-background-50: 0.97 0.01 80;
   --rd-background-100: 0.95 0.02 80;
   --rd-background-200: 0.92 0.03 80;

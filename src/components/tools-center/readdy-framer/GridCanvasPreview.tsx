@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Grid3X3, LayoutTemplate, Maximize2, Minimize2, Music2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FramerIrDesignTokens, FramerIrSection, GridConfig } from '@/types/readdyFramer';
@@ -541,9 +541,9 @@ export function GridCanvasPreview({
   );
 
   const viewportRef = useRef<HTMLDivElement>(null);
-  const stageRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const [viewportWidth, setViewportWidth] = useState(560);
-  const [stageHeight, setStageHeight] = useState(520);
+  const [contentHeight, setContentHeight] = useState(1600);
 
   useEffect(() => {
     const vp = viewportRef.current;
@@ -556,19 +556,29 @@ export function GridCanvasPreview({
     return () => ro.disconnect();
   }, []);
 
-  useEffect(() => {
-    const st = stageRef.current;
-    if (!st) return;
-    const ro = new ResizeObserver((entries) => {
-      const h = entries[0]?.contentRect?.height;
-      if (h && h > 0) setStageHeight(h);
-    });
-    ro.observe(st);
-    return () => ro.disconnect();
-  }, [sections.length, pagePreview]);
-
   const scale = Math.min(1, Math.max(0.18, viewportWidth / desktopWidth));
-  const scaledHeight = Math.max(460, Math.ceil(stageHeight * scale));
+
+  useLayoutEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    const measure = () => {
+      const next = Math.ceil(el.scrollHeight);
+      if (next > 0) setContentHeight((prev) => (prev === next ? prev : next));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    const images = Array.from(el.querySelectorAll('img'));
+    for (const img of images) {
+      if (!img.complete) img.addEventListener('load', measure);
+    }
+    return () => {
+      ro.disconnect();
+      for (const img of images) img.removeEventListener('load', measure);
+    };
+  }, [sections.length, Boolean(pagePreview), desktopWidth]);
+
+  const scaledHeight = Math.max(460, Math.ceil(contentHeight * scale));
   const zoomPct = Math.round(scale * 100);
 
   const firstNav = sections[0]?.sectionKind === 'navbar' ? sections[0] : null;
@@ -631,7 +641,7 @@ export function GridCanvasPreview({
           </div>
 
           {/* Scrollable Scaled Stage */}
-          <div ref={viewportRef} className="relative flex-1 overflow-y-auto overflow-x-hidden max-h-[700px] bg-slate-100/60">
+          <div ref={viewportRef} className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-slate-100/60">
             {!pagePreview && sections.length === 0 ? (
               <div className="relative z-10 min-h-[460px] flex flex-col items-center justify-center p-8 text-center bg-white">
                 <div className="w-11 h-11 rounded-full bg-slate-100 border border-slate-200/80 flex items-center justify-center mb-3">
@@ -647,14 +657,17 @@ export function GridCanvasPreview({
             ) : (
               <div className="relative w-full" style={{ height: `${scaledHeight}px` }}>
                 <div
-                  ref={stageRef}
                   style={{
                     width: `${desktopWidth}px`,
                     transform: `scale(${scale})`,
                     transformOrigin: 'top left',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
                   }}
-                  className="relative bg-white"
+                  className="bg-white"
                 >
+                  <div ref={contentRef} className="relative">
                   {/* 12-Col Reference Guide Overlay inside 1440px coordinate space */}
                   {showGridOverlay && (
                     <div className="pointer-events-none absolute inset-0 z-20 flex justify-center">
@@ -725,6 +738,7 @@ export function GridCanvasPreview({
                       );
                     })
                     )}
+                  </div>
                   </div>
                 </div>
               </div>
