@@ -155,6 +155,8 @@ export function FramerProjectField({
             <RefreshCw size={11} className={cn(loading && 'animate-spin text-[#0BB59B]')} />
           </button>
         </div>
+        <div className="flex items-stretch gap-2">
+        <div className="min-w-0 flex-1">
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
             <button
@@ -226,6 +228,17 @@ export function FramerProjectField({
             </Command>
           </PopoverContent>
         </Popover>
+        </div>
+        <button
+          type="button"
+          onClick={() => setCreateOpen((value) => !value)}
+          disabled={!mcpConnected}
+          className="shrink-0 inline-flex items-center justify-center gap-1 px-3 rounded-lg border border-[#0BB59B]/40 bg-[#E7F6F2] text-[12px] font-semibold text-[#067864] hover:bg-[#d8f3ec] disabled:opacity-50 whitespace-nowrap"
+        >
+          <Plus size={13} />
+          新建 Framer 專案
+        </button>
+        </div>
         {!urlValid && (
           <p className="text-[11px] text-amber-600">請選擇 Framer 專案，或貼上完整專案連結。</p>
         )}
@@ -265,16 +278,6 @@ export function FramerProjectField({
           </div>
         )}
       </div>
-
-      <button
-        type="button"
-        onClick={() => setCreateOpen((value) => !value)}
-        disabled={!mcpConnected}
-        className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border border-[#0BB59B]/40 bg-[#E7F6F2] text-[12px] font-semibold text-[#067864] hover:bg-[#d8f3ec] disabled:opacity-50"
-      >
-        <Plus size={13} />
-        新建 Framer 專案
-      </button>
 
       {createOpen && (
         <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-2.5 space-y-2">
