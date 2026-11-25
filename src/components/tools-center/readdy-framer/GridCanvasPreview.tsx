@@ -642,10 +642,10 @@ export function GridCanvasPreview({
           </div>
 
           {/* Scrollable Scaled Stage */}
-          <div ref={viewportRef} className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-slate-100/60">
+          <div ref={viewportRef} className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-white">
             <SiteScrollProvider scrollerRef={viewportRef}>
             {!pagePreview && sections.length === 0 ? (
-              <div className="relative z-10 min-h-[460px] flex flex-col items-center justify-center p-8 text-center bg-white">
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-8 text-center bg-white">
                 <div className="w-11 h-11 rounded-full bg-slate-100 border border-slate-200/80 flex items-center justify-center mb-3">
                   <LayoutTemplate size={18} className="text-slate-400" />
                 </div>
