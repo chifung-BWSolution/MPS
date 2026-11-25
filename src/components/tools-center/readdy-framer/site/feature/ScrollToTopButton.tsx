@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSiteScroll } from '../scrollRoot';
+import { frameWindowOf, useSiteScroll } from '../scrollRoot';
 
 const VISIBLE_OFFSET = 600;
 
@@ -8,19 +8,25 @@ export default function ScrollToTopButton() {
   const scrollerRef = useSiteScroll();
 
   useEffect(() => {
-    const scroller = scrollerRef?.current;
+    const scroller = scrollerRef?.current ?? null;
+    const frameView = frameWindowOf(scroller);
     const handleScroll = () => {
-      const top = scroller ? scroller.scrollTop : window.scrollY;
+      const top = frameView ? frameView.scrollY : scroller ? scroller.scrollTop : window.scrollY;
       setVisible(top > VISIBLE_OFFSET);
     };
     handleScroll();
-    const target: HTMLElement | Window = scroller ?? window;
+    const target: HTMLElement | Window = frameView ?? scroller ?? window;
     target.addEventListener('scroll', handleScroll, { passive: true });
     return () => target.removeEventListener('scroll', handleScroll);
   }, [scrollerRef]);
 
   const handleClick = () => {
-    const scroller = scrollerRef?.current;
+    const scroller = scrollerRef?.current ?? null;
+    const frameView = frameWindowOf(scroller);
+    if (frameView) {
+      frameView.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     if (scroller) {
       scroller.scrollTo({ top: 0, behavior: 'smooth' });
       return;

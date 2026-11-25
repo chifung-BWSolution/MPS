@@ -2,7 +2,16 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { Grid3X3, LayoutTemplate, Maximize2, Minimize2, Music2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FramerIrDesignTokens, FramerIrSection, GridConfig } from '@/types/readdyFramer';
+import { DevicePreviewFrame } from './DevicePreviewFrame';
 import { SiteScrollProvider } from './site/scrollRoot';
+
+type CanvasDevice = 'mobile' | 'tablet' | 'desktop';
+
+const DEVICE_OPTIONS: { id: CanvasDevice; label: string; width: number | null }[] = [
+  { id: 'mobile', label: '手機', width: 390 },
+  { id: 'tablet', label: 'iPad', width: 834 },
+  { id: 'desktop', label: '桌面', width: null },
+];
 
 interface GridCanvasPreviewProps {
   gridConfig: GridConfig;
@@ -543,21 +552,32 @@ export function GridCanvasPreview({
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const [viewportWidth, setViewportWidth] = useState(560);
+  const frameScrollerRef = useRef<HTMLElement | null>(null);
+  const [device, setDevice] = useState<CanvasDevice>('desktop');
+  const [viewportSize, setViewportSize] = useState({ width: 560, height: 640 });
   const [contentHeight, setContentHeight] = useState(1600);
+
+  const frameWidth =
+    DEVICE_OPTIONS.find((item) => item.id === device)?.width ?? desktopWidth;
 
   useEffect(() => {
     const vp = viewportRef.current;
     if (!vp) return;
     const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect?.width;
-      if (w && w > 0) setViewportWidth(w);
+      const rect = entries[0]?.contentRect;
+      if (!rect || rect.width <= 0) return;
+      setViewportSize({ width: rect.width, height: Math.max(rect.height, 1) });
     });
     ro.observe(vp);
     return () => ro.disconnect();
   }, []);
 
-  const scale = Math.min(1, Math.max(0.18, viewportWidth / desktopWidth));
+  useEffect(() => {
+    frameScrollerRef.current?.ownerDocument?.defaultView?.scrollTo(0, 0);
+  }, [device]);
+
+  const scale = Math.min(1, Math.max(0.18, viewportSize.width / frameWidth));
+  const frameHeight = Math.max(480, Math.round(viewportSize.height / scale));
 
   useLayoutEffect(() => {
     const el = contentRef.current;
@@ -577,7 +597,7 @@ export function GridCanvasPreview({
       ro.disconnect();
       for (const img of images) img.removeEventListener('load', measure);
     };
-  }, [sections.length, Boolean(pagePreview), desktopWidth]);
+  }, [sections.length, Boolean(pagePreview), frameWidth]);
 
   const scaledHeight = Math.max(460, Math.ceil(contentHeight * scale));
   const zoomPct = Math.round(scale * 100);
@@ -592,10 +612,10 @@ export function GridCanvasPreview({
   );
 
   return (
-    <div className="flex flex-col h-full min-h-[580px] rounded-xl border border-slate-200/90 bg-slate-50/40 overflow-hidden">
+    <div className="flex h-full min-h-[580px] xl:min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-slate-50/40">
       {/* Top Toolbar */}
       <div className="px-4 py-2 bg-white border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-2 shrink-0">
-        <span className="text-[12px] font-bold text-[#101B2D]">Canvas · 等比桌面預覽</span>
+        <span className="text-[12px] font-bold text-[#101B2D]">Canvas · 等比預覽</span>
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-mono text-slate-400 tabular-nums">
             {gridConfig.container_max_width}px · {gridConfig.columns} Col · {zoomPct}%
@@ -628,21 +648,79 @@ export function GridCanvasPreview({
       </div>
 
       {/* Inner Viewport Frame */}
-      <div className="flex-1 p-3 flex flex-col">
-        <div className="flex-1 rounded-xl border border-slate-200 bg-white overflow-hidden flex flex-col shadow-inner">
-          {/* Desktop Ruler Bar */}
-          <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between text-[11px] shrink-0">
-            <div className="flex items-center gap-1.5 font-mono font-semibold text-[#101B2D]">
-              <span className="w-2 h-2 rounded-full bg-[#0BB59B]" />
-              <span>Desktop {desktopWidth}px</span>
+      <div className="flex min-h-0 flex-1 flex-col p-3">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-inner">
+          {/* Device ruler */}
+          <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between gap-2 text-[11px] shrink-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="w-2 h-2 shrink-0 rounded-full bg-[#0BB59B]" />
+              <div className="flex items-center gap-0.5 rounded-md border border-slate-200 bg-white p-0.5">
+                {DEVICE_OPTIONS.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setDevice(item.id)}
+                    title={`${item.label} ${item.width ?? desktopWidth}px`}
+                    className={cn(
+                      'rounded px-2 py-0.5 font-mono text-[10.5px] font-semibold',
+                      device === item.id
+                        ? 'bg-[#101B2D] text-white'
+                        : 'text-slate-500 hover:bg-slate-100',
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <span className="font-mono font-semibold text-[#101B2D]">{frameWidth}px</span>
             </div>
-            <span className="text-slate-400 font-mono text-[10.5px]">
+            <span className="shrink-0 text-slate-400 font-mono text-[10.5px]">
               Scale {zoomPct}% · Auto Stack
             </span>
           </div>
 
           {/* Scrollable Scaled Stage */}
-          <div ref={viewportRef} className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-white">
+          <div
+            ref={viewportRef}
+            className={cn(
+              'relative min-h-0 flex-1',
+              pagePreview ? 'overflow-hidden bg-[#eef1f4]' : 'overflow-y-auto overflow-x-hidden bg-white',
+            )}
+          >
+            {pagePreview ? (
+              <div className="absolute inset-0 flex justify-center overflow-hidden">
+                <div
+                  className="relative shrink-0"
+                  style={{
+                    width: `${frameWidth}px`,
+                    height: `${frameHeight}px`,
+                    transform: `scale(${scale})`,
+                    transformOrigin: 'top center',
+                  }}
+                >
+                  <DevicePreviewFrame scrollerRef={frameScrollerRef}>{pagePreview}</DevicePreviewFrame>
+                  {showGridOverlay && (
+                    <div className="pointer-events-none absolute inset-0 z-20 flex justify-center">
+                      <div
+                        className="h-full grid"
+                        style={{
+                          width: `${containerRatioPct}%`,
+                          gridTemplateColumns: `repeat(${Math.max(1, gridConfig.columns)}, minmax(0, 1fr))`,
+                          gap: `${Math.max(8, gridConfig.gutter)}px`,
+                        }}
+                      >
+                        {Array.from({ length: Math.max(1, gridConfig.columns) }).map((_, colIdx) => (
+                          <div
+                            key={colIdx}
+                            className="h-full bg-[#0BB59B]/[0.05] border-x border-[#0BB59B]/20"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
             <SiteScrollProvider scrollerRef={viewportRef}>
             {!pagePreview && sections.length === 0 ? (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-8 text-center bg-white">
@@ -660,7 +738,7 @@ export function GridCanvasPreview({
               <div className="relative w-full" style={{ height: `${scaledHeight}px` }}>
                 <div
                   style={{
-                    width: `${desktopWidth}px`,
+                    width: `${frameWidth}px`,
                     transform: `scale(${scale})`,
                     transformOrigin: 'top left',
                     position: 'absolute',
@@ -746,6 +824,7 @@ export function GridCanvasPreview({
               </div>
             )}
             </SiteScrollProvider>
+            )}
           </div>
         </div>
       </div>

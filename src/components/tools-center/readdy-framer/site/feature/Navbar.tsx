@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from '../routerShim';
-import { useSiteScroll } from '../scrollRoot';
+import { frameWindowOf, useSiteScroll } from '../scrollRoot';
 import { getLangFromPath, toLangPath, toSafeLangPath, type Lang } from '../lang';
 
 type NavChild = { zh: { label: string; path: string }; en: { label: string; path: string } };
@@ -230,8 +230,14 @@ export default function Navbar() {
 
   useEffect(() => {
     const scroller = scrollerRef?.current ?? null;
+    const frameView = frameWindowOf(scroller);
     const onScroll = () => {
       const header = headerRef.current;
+      if (frameView) {
+        setScrolled(frameView.scrollY > 40);
+        if (header) header.style.transform = '';
+        return;
+      }
       const top = scroller ? scroller.scrollTop : window.scrollY;
       if (!scroller || !header) {
         setScrolled(top > 40);
@@ -249,10 +255,10 @@ export default function Navbar() {
       header.style.transform = pageTop > 0.5 ? `translate3d(0, ${Math.round(pageTop * 100) / 100}px, 0)` : '';
     };
     onScroll();
-    const target: HTMLElement | Window = scroller ?? window;
+    const target: HTMLElement | Window = frameView ?? scroller ?? window;
     target.addEventListener('scroll', onScroll, { passive: true });
-    const resizeObserver = scroller ? new ResizeObserver(onScroll) : null;
-    if (scroller) resizeObserver?.observe(scroller);
+    const resizeObserver = !frameView && scroller ? new ResizeObserver(onScroll) : null;
+    if (scroller && resizeObserver) resizeObserver.observe(scroller);
     return () => {
       target.removeEventListener('scroll', onScroll);
       resizeObserver?.disconnect();
