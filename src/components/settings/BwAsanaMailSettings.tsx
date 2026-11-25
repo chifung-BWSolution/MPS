@@ -1,15 +1,26 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { AlertCircle, CheckCircle2, Mail, Plus, Save, Search, X, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Mail, Plus, RefreshCw, Save, Search, X, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 
 type Settings = {
   code: string;
+  enabled: boolean;
   match_mode: 'phrase' | 'words';
   min_match_words: number;
   skip_subjects: string[];
   title_format: string;
   collaborator_gids: string[];
+  not_before: string | null;
+};
+
+type MailJob = {
+  id: string;
+  subject: string | null;
+  status: string;
+  task_name: string | null;
+  error: string | null;
+  created_at: string;
 };
 
 type Route = {
@@ -175,6 +186,9 @@ export function BwAsanaMailSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [savedEnabled, setSavedEnabled] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [jobs, setJobs] = useState<MailJob[]>([]);
   const [routeFilter, setRouteFilter] = useState<RouteFilter>('all');
   const [projectFilter, setProjectFilter] = useState('');
   const [routeQuery, setRouteQuery] = useState('');
@@ -193,12 +207,23 @@ export function BwAsanaMailSettings() {
       const row = settingsRes.data as Settings;
       setSettings({
         ...row,
+        enabled: row.enabled === true,
         match_mode: row.match_mode === 'words' ? 'words' : 'phrase',
         skip_subjects: row.skip_subjects || [],
         collaborator_gids: row.collaborator_gids || [],
         min_match_words: Number(row.min_match_words || 3),
+        not_before: row.not_before || null,
       });
+      setSavedEnabled(row.enabled === true);
     }
+    const jobsRes = await supabase
+      .from('asana_mail_jobs')
+      .select('id, subject, status, task_name, error, created_at')
+      .eq('rule_code', 'bw')
+      .order('created_at', { ascending: false })
+      .limit(8);
+    if (jobsRes.error) toast.error(jobsRes.error.message);
+    setJobs((jobsRes.data || []) as MailJob[]);
     setRoutes((routesRes.data || []) as Route[]);
     if (directory.error) {
       setDirectoryError(directory.error);
@@ -217,7 +242,7 @@ export function BwAsanaMailSettings() {
     void load();
     const onMessage = (event: MessageEvent) => {
       if (event.data?.type !== 'mps-gmail-bw-oauth') return;
-      if (event.data.ok) toast.success('BW Gmail 已連接。未會自動開 task。');
+      if (event.data.ok) toast.success('BW Gmail 已連接');
       else toast.error(String(event.data.message || 'Gmail 授權失敗'));
       void callFunction<GmailStatus>('gmail-fcc-oauth', { action: 'status', mailbox: 'bw' })
         .then(setGmail)
@@ -246,7 +271,8 @@ export function BwAsanaMailSettings() {
       skip_subjects,
       title_format: settings.title_format.trim(),
       collaborator_gids: settings.collaborator_gids.map((gid) => gid.trim()).filter(Boolean),
-      enabled: false,
+      enabled: settings.enabled,
+      ...(settings.enabled && !savedEnabled ? { not_before: new Date().toISOString() } : {}),
       updated_at: new Date().toISOString(),
     }).eq('code', 'bw');
     if (settingsError) {
@@ -293,7 +319,7 @@ export function BwAsanaMailSettings() {
         return;
       }
     }
-    toast.success('已儲存。自動開 task 仍然關閉。');
+    toast.success(settings.enabled ? '已儲存。之後收到的新郵件會自動開 task。' : '已儲存。自動開 task 已關閉。');
     await load();
   };
 
@@ -307,6 +333,24 @@ export function BwAsanaMailSettings() {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
       setConnecting(false);
+    }
+  };
+
+  const syncNow = async () => {
+    if (!savedEnabled) {
+      toast.error('請先打開自動開 task，再按儲存');
+      return;
+    }
+    setSyncing(true);
+    try {
+      const result = await callFunction<{ created?: number; skipped?: number; error?: string }>('sync-bw-asana-mail', {});
+      if (result.error) toast.error(result.error);
+      else toast.success(`已檢查。新開 ${result.created ?? 0} 個 task，略過 ${result.skipped ?? 0} 封。`);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -351,7 +395,7 @@ export function BwAsanaMailSettings() {
       <Section
         step="1"
         title="授權電郵"
-        hint="用下面這個信箱登入。授權只係俾系統讀收件箱，儲存規則都唔會開始開 task。"
+        hint="用下面這個信箱登入。打開自動開 task 並儲存之後，每 5 分鐘檢查新郵件。只開儲存那一刻之後收到的 EmailMeForm，不會補開舊信。"
         tone="sky"
       >
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-sky-200 bg-white p-4">
@@ -365,7 +409,9 @@ export function BwAsanaMailSettings() {
                 {gmail?.connected ? '已授權' : '未授權'}
               </p>
               <p className="text-[14px] text-slate-700">{loginHint}</p>
-              <p className="text-[13px] text-slate-600">只讀郵件。自動開 task 仍然關閉。</p>
+              <p className="text-[13px] text-slate-600">
+                {savedEnabled ? '自動開 task 已啟用。只處理啟用之後的新郵件。' : '自動開 task 未啟用。打開下面的開關並儲存先會開始。'}
+              </p>
             </div>
           </div>
           <button
@@ -378,6 +424,42 @@ export function BwAsanaMailSettings() {
           </button>
         </div>
         {gmail?.error && <p className="mt-3 text-[14px] text-red-800">暫時未能查看授權狀態：{gmail.error}</p>}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-sky-200 bg-white p-4">
+          <label className="flex min-h-11 items-center gap-3 text-[15px] font-medium text-slate-900">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={settings.enabled}
+              onChange={(e) => setSettings({ ...settings, enabled: e.target.checked })}
+            />
+            啟用自動開 task
+          </label>
+          <button
+            type="button"
+            onClick={() => void syncNow()}
+            disabled={syncing || !savedEnabled}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-sky-300 bg-white px-3 text-[14px] text-sky-950 hover:bg-sky-100 disabled:opacity-50"
+          >
+            <RefreshCw size={16} className={syncing ? 'animate-spin' : undefined} />
+            {syncing ? '檢查中…' : '立即檢查郵件'}
+          </button>
+        </div>
+        <p className="mt-2 text-[14px] leading-6 text-slate-700">
+          未填負責人電郵或專案的查詢不會開。同事回覆和客人回覆都不會再開。
+          {settings.enabled && !savedEnabled ? ' 這個開關要儲存之後先生效。' : ''}
+        </p>
+        {jobs.length > 0 && (
+          <ul className="mt-3 space-y-2">
+            {jobs.map((job) => (
+              <li key={job.id} className="rounded-md border border-sky-200 bg-white px-3 py-2 text-[14px] text-slate-800">
+                <span className="font-medium">{job.status === 'created' ? '已開 task' : job.status === 'error' ? '失敗' : '略過'}</span>
+                <span className="mx-2 text-slate-400">·</span>
+                {job.task_name || job.subject || '沒有主旨'}
+                {job.error && job.status !== 'created' ? <span className="mt-1 block text-[13px] text-slate-600">{job.error}</span> : null}
+              </li>
+            ))}
+          </ul>
+        )}
       </Section>
 
       <Section
@@ -671,7 +753,7 @@ export function BwAsanaMailSettings() {
       </Section>
 
       <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-300 bg-white/95 p-3 shadow-md">
-        <p className="text-[14px] text-slate-700">已填好 {readyCount} 行，未填完 {blankCount} 行。儲存不會開始開 task。</p>
+        <p className="text-[14px] text-slate-700">已填好 {readyCount} 行，未填完 {blankCount} 行。{settings.enabled ? '儲存後，新郵件會自動開 task。' : '未啟用自動開 task。'}</p>
         <button
           type="button"
           onClick={() => void save()}
