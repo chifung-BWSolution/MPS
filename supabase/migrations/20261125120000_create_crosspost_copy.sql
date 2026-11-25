@@ -115,3 +115,6 @@ GRANT ALL ON public.crosspost_sets TO service_role;
 GRANT ALL ON public.crosspost_variants TO service_role;
 REVOKE ALL ON public.crosspost_sets FROM anon;
 REVOKE ALL ON public.crosspost_variants FROM anon;
+
+-- 讓 PostgREST 立即看到新表（避免 schema cache 未更新）
+NOTIFY pgrst, 'reload schema';

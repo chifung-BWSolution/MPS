@@ -1,10 +1,17 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { History as HistoryIcon, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { useCrosspostSets } from '@/hooks/useCrosspostSets';
 import { normalizeBrief, validateBrief, type CopyBrief } from '@/lib/crosspost';
-import { generateCrosspost, saveCrosspostSet, type SavedCopySet } from '@/lib/crosspostApi';
+import {
+  CrosspostError,
+  checkCrosspostService,
+  generateCrosspost,
+  saveCrosspostSet,
+  type CrosspostServiceStatus,
+  type SavedCopySet,
+} from '@/lib/crosspostApi';
 import { cn } from '@/lib/utils';
 import { CrosspostComposer } from './CrosspostComposer';
 import { CrosspostHistoryView } from './CrosspostHistoryView';
@@ -80,8 +87,18 @@ export function CrosspostModule() {
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [serviceStatus, setServiceStatus] = useState<CrosspostServiceStatus>('unknown');
   const generatingRef = useRef(false);
   const savingTokenRef = useRef<string | null>(null);
+
+  const checkService = useCallback(async () => {
+    const status = await checkCrosspostService();
+    setServiceStatus(status);
+  }, []);
+
+  useEffect(() => {
+    void checkService();
+  }, [checkService]);
 
   const handleGenerate = useCallback(async () => {
     if (generatingRef.current) return;
@@ -115,6 +132,7 @@ export function CrosspostModule() {
       setGeneratedBrief(snapshot);
       setResult(next);
       setMode('compose');
+      setServiceStatus('ready');
 
       setSaving(true);
       savingTokenRef.current = token;
@@ -150,11 +168,17 @@ export function CrosspostModule() {
       const message = error instanceof Error ? error.message : '生成失敗';
       setFormError(message);
       toast.error(message);
+      if (
+        error instanceof CrosspostError &&
+        (error.code === 'network_or_cors' || error.code === 'not_deployed')
+      ) {
+        void checkService();
+      }
     } finally {
       generatingRef.current = false;
       setGenerating(false);
     }
-  }, [brief, refreshHistory, user.id, user.name]);
+  }, [brief, checkService, refreshHistory, user.id, user.name]);
 
   const handleRetrySave = useCallback(async () => {
     if (!result || !generatedBrief || savingTokenRef.current || generatingRef.current) return;
@@ -290,6 +314,23 @@ export function CrosspostModule() {
           </p>
         )}
       </div>
+
+      {serviceStatus === 'missing' && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+          <span className="min-w-0 break-words">
+            生成服務尚未部署（crosspost-writer）：目前只有本地程式碼，按「生成」會出現連線錯誤。部署後即可真正出稿。
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              void checkService();
+            }}
+            className="shrink-0 rounded border border-amber-300 bg-white px-2 py-1 text-[11px] font-medium text-amber-800 hover:bg-amber-100"
+          >
+            重新檢查
+          </button>
+        </div>
+      )}
 
       {mode === 'compose' ? (
         <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">

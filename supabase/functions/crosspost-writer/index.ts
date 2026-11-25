@@ -41,6 +41,31 @@ const MAX_RETRY_MS = 25_000;
 const GROK_ENDPOINT = "https://api.x.ai/v1/chat/completions";
 const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 
+const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") || "").trim();
+const SUPABASE_ANON_KEY = (Deno.env.get("SUPABASE_ANON_KEY") || "").trim();
+
+/**
+ * SPA 的 access token 是 ES256，而 gateway 仍用退役的 HS256 secret 驗 JWT，
+ * 所以本函式設 verify_jwt = false，改由這裡自己驗（與 seo-radar／content-* 一致）。
+ * dev-bypass 登入沒有 Supabase session，會帶 anon key；沿用專案既有做法放行。
+ */
+async function validateSession(token: string): Promise<boolean> {
+  if (!token) return false;
+  if (SUPABASE_ANON_KEY && token === SUPABASE_ANON_KEY) return true;
+  if (!SUPABASE_URL) return false;
+  try {
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 type Provider = "grok" | "gemini";
 type LlmCode =
   | "not_configured"
@@ -394,6 +419,11 @@ Deno.serve(async (req: Request) => {
 
   const authorization = req.headers.get("Authorization") || "";
   if (!authorization.toLowerCase().startsWith("bearer ")) {
+    return failJson(401, "unauthorized", "登入已逾時，請重新整理");
+  }
+
+  const token = authorization.slice(7).trim();
+  if (!token || !(await validateSession(token))) {
     return failJson(401, "unauthorized", "登入已逾時，請重新整理");
   }
 

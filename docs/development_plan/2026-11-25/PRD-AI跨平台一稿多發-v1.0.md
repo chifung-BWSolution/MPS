@@ -4,12 +4,12 @@
 |---|---|
 | 版本 | v1.0 |
 | 日期 | 2026-11-25 |
-| 狀態 | 本地 MVP 已實作；**未推送 migration、未部署 Edge Function** |
+| 狀態 | **Edge Function 已部署；crosspost migration 已套用並記錄**（只此一支） |
 | 落點 | 工具中心 → AI跨平台一稿多發（`#tools-center/crosspost`），側欄在「AI 關鍵字生成器」正上方（SEO 雷達之後） |
 | 路由 id | `crosspost` |
 | 相關檔案 | `src/lib/crosspost.ts`、`src/lib/crosspostApi.ts`、`src/hooks/useCrosspostSets.ts`、`src/components/tools-center/crosspost/**`、`supabase/functions/crosspost-writer/index.ts`、`supabase/migrations/20261125120000_create_crosspost_copy.sql` |
 
-> 本次只做本地 MVP：**禁止** `supabase db push`、`supabase functions deploy`、git push 或任何線上部署。下列「部署前置」章節列出上線時要做的事，全部未執行。
+> 2026-11-25 更新：`crosspost-writer` 已部署；`20261125120000_create_crosspost_copy.sql` 已**單獨**套用（Management API，非 `db push`），並寫入 migration history。其餘 3 支 Framer migration 仍未推。
 
 ---
 
@@ -61,7 +61,7 @@
 - 本次生成的字數微調與一鍵壓縮。
 - 品牌語氣庫（只把 `brand_list` 當選填名稱）。
 - 伺服器端每日生成上限（第二期）。
-- **任何線上部署**。
+- **資料庫 migration 推送**（本次只部署 function）。
 
 ---
 
@@ -158,6 +158,8 @@ Migration：`supabase/migrations/20261125120000_create_crosspost_copy.sql`（冪
 ### 7.1 契約
 
 `POST /functions/v1/crosspost-writer`
+
+部署設定：`[functions.crosspost-writer] verify_jwt = false`；函式內以 `auth/v1/user` 驗 session（ES256），anon key 放行 dev-bypass。
 
 ```json
 {
@@ -295,6 +297,7 @@ src/components/tools-center/crosspost/
 | 某平台缺漏 | 回 `missingPlatforms`；該 tab 提示重新生成 |
 | 寫庫失敗 | 結果仍顯示＋toast＋「重試儲存」 |
 | 歷史表未建 | 歷史頁顯示「尚未啟用」，生成不受影響 |
+| 函式未部署（404） | 頁面顯示 amber banner「生成服務尚未部署」；生成時明確提示 404，不再誤報成純網絡錯誤 |
 | 網絡斷線 | 保留上次結果＋重試 |
 
 ---
@@ -305,22 +308,33 @@ src/components/tools-center/crosspost/
 |---|---|
 | `node scripts/run-crosspost-lib-test.ts` | **29 passed** |
 | `tsc --noEmit`（只看新檔案） | **0 error** |
-| `tsc --noEmit`（全專案） | 36 個既有錯誤，全部在不相關檔案（content WIP、marketing 等），新檔案 0 個 |
-| `vite build` | **成功**（19.09s，dist 產出） |
+| `tsc --noEmit`（全專案） | 34 個既有錯誤，全部在不相關檔案（content WIP、marketing 等），新檔案 0 個 |
+| `vite build` | **成功**（11.7s，dist 產出） |
 | `npm run build` | 在 Windows 失敗：`tsc ; vite build` 的 `;` 被 cmd 當成參數（既有 script 的跨平台問題，非本功能） |
 | Vite dev server 模組轉換 | 11 個相關模組全部 HTTP 200 |
 | SSR smoke（4 個元件） | 通過 |
+| **部署後實測（anon POST）** | **200**；provider `grok`／`grok-4.5`；29.4 秒；5 版齊全、`missing=[]`；Hashtag IG 10／FB 3／Threads 2／小紅書 9／eDM 0 |
+| 未授權 token | **401** `unauthorized`（函式內自驗生效） |
+| 部署前後探測 | 部署前 GET 404（banner）；部署後 GET 405（banner 消失） |
+| **Migration 套用（只 crosspost 一支）** | 2 表、8 policy、RLS 開啟；`anon` SELECT=false、`authenticated`=true；`language` default `'zh-HK'` |
+| Migration 結構 smoke（insert→rollback） | 通過，無殘留資料 |
+| Migration history | `20261125120000` 已記錄；其餘 3 支 Framer migration 仍 pending |
 | `node scripts/run-frontend-table-guard.ts` | 失敗，但屬**既有**問題：`brand_list` 在 20260807 migration 被 DROP 後同檔重建，guard 的 `allowedRestored` 未列；與本功能無關 |
 
 ---
 
-## 11. 部署前置（本次全部未執行）
+## 11. 部署狀態（2026-11-25）
 
-1. 確認 Supabase Secrets：`XAI_API_KEY` 或 `GROK_API_KEY`、`GEMINI_API_KEY`；必要時設 `GROK_MODEL`／`GEMINI_MODEL`。
-2. **處理未提交的 `20261126*` migrations**（content 工作）後才可 `supabase db push`；或只用 SQL Editor 套 `20261125120000_create_crosspost_copy.sql`。
-3. `supabase functions deploy crosspost-writer`。
-4. `verify_jwt`：未在 `config.toml` 另設，沿用 Supabase 預設 `true`（gateway 驗 JWT）。若要顯式設定，再補 `[functions.crosspost-writer] verify_jwt = true`。
-5. 部署後做一次端到端：生成 → 5 版 → 重整 → 歷史 → 重用 → 刪除。
+- [x] `supabase functions deploy crosspost-writer`（2026-11-25）
+- [x] `config.toml`：`[functions.crosspost-writer] verify_jwt = false`；函式內用 `/auth/v1/user` 驗 session（ES256），anon key 放行 dev-bypass
+- [x] Secrets：Grok 實際出稿成功（`grok-4.5`），證明 `XAI_API_KEY`／`GROK_API_KEY` 已設；Gemini 未實測
+- [x] Migration `20261125120000_create_crosspost_copy.sql` **已單獨套用**（Management API，非 `db push`）；2 表、8 policy、RLS、grant 全部驗證
+- [x] Migration history：已寫入 `supabase_migrations.schema_migrations`（version `20261125120000`），未來 `db push` 不會重跑
+- [x] 權限：anon REST 讀 `crosspost_sets` → 401 `permission denied`；authenticated 有 SELECT
+- [ ] 瀏覽器端到端（重整後歷史／重用／刪除）待你實測
+- [ ] 其餘 3 支 Framer migration 仍 pending；如日後 `db push` 會一併推送（另案審查）
+
+上線前補做：開頁生成一次 → 重整確認歷史 → 重用 brief → 刪除。
 
 ---
 

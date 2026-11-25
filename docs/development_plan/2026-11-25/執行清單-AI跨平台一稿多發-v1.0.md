@@ -1,7 +1,7 @@
 # 執行清單｜AI跨平台一稿多發（工具中心插件 v1.0）
 
 - 日期：2026-11-25
-- 範圍：**本地 MVP**（禁止 `db push`／function deploy／git push／任何線上部署）
+- 範圍：**本地 MVP ＋ `crosspost-writer` 已部署 ＋ crosspost migration 已套用**（其他 3 支 Framer migration 未推；未用 `db push`）
 - 配套：`PRD-AI跨平台一稿多發-v1.0.md`（同目錄）
 
 狀態圖例：`[x]` 完成｜`[ ]` 未做／待部署｜`[~]` 有結果但屬既有問題
@@ -13,8 +13,9 @@
 - [x] `docs/development_plan/2026-11-25/PRD-AI跨平台一稿多發-v1.0.md`
 - [x] `docs/development_plan/2026-11-25/執行清單-AI跨平台一稿多發-v1.0.md`（本檔）
 - [x] 遷移檔名 `20261125120000` 不與未提交的 `20261126*` 衝突（檔名層面）
-- [ ] 確認 Supabase Secrets 有 `XAI_API_KEY`／`GROK_API_KEY`、`GEMINI_API_KEY`（需登入後台，本地無法核對；本次不執行）
-- [ ] 確認 xAI 方案與額度（同上）
+- [x] Grok：實際出稿成功（`grok-4.5`），證明 `XAI_API_KEY`／`GROK_API_KEY` 已設
+- [ ] Gemini key：未實測（Grok 正常時不會走到後備）
+- [ ] 確認 xAI 方案與額度（仍未核對）
 
 ---
 
@@ -28,29 +29,34 @@
 
 ---
 
-## M2｜資料庫（檔案完成，未推送）
+## M2｜資料庫（已套用，只 crosspost 一支）
 
 - [x] `supabase/migrations/20261125120000_create_crosspost_copy.sql`
-  - 兩張新表、3 個索引、RLS、8 條 policy、grant／revoke、註解
+  - 兩張新表、3 個顯式索引（另 3 個 PK/UNIQUE）、RLS、8 條 policy、grant／revoke、註解
   - 只 `CREATE TABLE IF NOT EXISTS`＋`DROP POLICY IF EXISTS`；無 `ALTER`／`DROP` 既有表、無 DML、無 cron
 - [x] `scripts/rollback-crosspost-copy.sql`（手動回滾，**不放 migrations**）
 - [x] SQL 自審（靜態）：無 `DROP TABLE`／`TRUNCATE`／`DELETE FROM`／`cron.schedule`；`DROP POLICY` 只限兩張新表
 - [x] 外鍵型別核對：`brand_list.id`、`users.id` 均為 uuid
-- [ ] **推送 migration（禁止，本次不執行）**
-- [ ] 推送後驗證：authenticated CRUD、anon 被拒、cascade 刪除、FK SET NULL（需線上 DB）
-- [ ] `db push --dry-run` 範圍 gate（需 linked project；本次不執行）
+- [x] **套用 migration**：以 Management API 在單一 transaction 執行（`begin … commit`），**不是 `db push`**
+- [x] 套用後驗證：2 表、8 policy、6 索引、RLS 開啟、`anon` SELECT=false、`authenticated`=true、`language` default `'zh-HK'`
+- [x] 結構 smoke：insert set＋variants → rollback，無殘留資料
+- [x] migration history 已記錄 `20261125120000`（未來 `db push` 不會重跑）
+- [ ] 其他 3 支 Framer migration 仍 pending（另案審查）
+- [ ] cascade 刪除／FK SET NULL 實測（可選，需真資料）
 
 ---
 
-## M3｜Edge Function（檔案完成，未部署）
+## M3｜Edge Function（已部署）
 
 - [x] `supabase/functions/crosspost-writer/index.ts`
   - Grok → Gemini；總預算 110 秒、單次 50 秒；429／逾時／JSON 壞的處理；缺版時同供應商重試 1 次
   - 回應固定 `{ ok, data }`／`{ ok:false, code, error }`
   - log 只記 provider／model／latency／字數
-- [x] `verify_jwt`：沿用 Supabase 預設 `true`；**未改 `supabase/config.toml`**（該檔同時被其他並行工作修改，且 gateway 預設已驗 JWT）
-- [ ] `supabase functions deploy crosspost-writer`（禁止，本次不執行）
-- [ ] 線上驗證 Grok／Gemini／雙失敗（需部署後）
+- [x] `verify_jwt`：`config.toml` 加 `[functions.crosspost-writer] verify_jwt = false`；函式內用 `/auth/v1/user` 驗 session（ES256），anon key 放行 dev-bypass
+- [x] `supabase functions deploy crosspost-writer`（2026-11-25 成功）
+- [x] 實測 Grok：POST 回 200、5 版齊全、`grok-4.5`、29.4 秒
+- [x] 實測未授權 token：401 `unauthorized`
+- [ ] 實測 Gemini 後備／雙失敗（需暫時改錯 Grok key）
 
 ---
 
@@ -95,9 +101,11 @@
 - [x] 歷史：載入、搜尋、開啟、重用 brief、刪除確認
 - [x] 組件可 SSR 渲染（無 undefined／無 hook 崩潰）
 - [x] 下載 `.md`／複製全部（程式路徑與內容格式）
-- [ ] anon 讀寫被拒（需線上 DB）
-- [ ] 生成後重整仍可見（需線上 DB）
-- [ ] Grok／Gemini／雙失敗實測（需部署）
+- [x] 未部署探測：部署前 GET 404 → 顯示 banner；部署後 GET 405 → 「重新檢查」後 banner 消失
+- [x] anon 被拒：REST `GET /rest/v1/crosspost_sets` → 401 `permission denied`
+- [ ] 生成後重整仍可見（待你瀏覽器實測）
+- [x] Grok 實測（部署後 POST 200、5 版）
+- [ ] Gemini 後備／雙失敗實測
 
 ---
 

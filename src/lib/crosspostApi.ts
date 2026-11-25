@@ -71,6 +71,25 @@ function asLanguage(value: unknown): CopyLanguage {
 // 生成（Edge Function）
 // ============================================================
 
+export type CrosspostServiceStatus = 'ready' | 'missing' | 'unknown';
+
+/**
+ * 探測生成服務是否存在：
+ *   - 404 → 函式未部署
+ *   - 401／405／200 → 函式已部署（GET 會被 gateway 或函式擋掉，屬正常）
+ * 用簡單 GET（不帶自訂 header），避免 preflight 把「未部署」誤判成網絡錯誤。
+ */
+export async function checkCrosspostService(): Promise<CrosspostServiceStatus> {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  if (!supabaseUrl) return 'unknown';
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/crosspost-writer`, { method: 'GET' });
+    return response.status === 404 ? 'missing' : 'ready';
+  } catch {
+    return 'unknown';
+  }
+}
+
 export async function generateCrosspost(brief: CopyBrief): Promise<CrosspostGeneration> {
   const normalized = normalizeBrief(brief);
   const validationError = validateBrief(normalized);
@@ -105,12 +124,25 @@ export async function generateCrosspost(brief: CopyBrief): Promise<CrosspostGene
     });
   } catch (error) {
     const aborted = error instanceof Error && error.name === 'AbortError';
+    if (aborted) {
+      throw new CrosspostError('timeout', '生成逾時，請重試');
+    }
+    const networkLike = error instanceof TypeError;
     throw new CrosspostError(
-      aborted ? 'timeout' : 'network',
-      aborted ? '生成逾時，請重試' : '網絡連線失敗，請檢查網絡後重試',
+      networkLike ? 'network_or_cors' : 'network',
+      networkLike
+        ? '無法連線到生成服務：crosspost-writer 可能尚未部署，或請求被瀏覽器阻擋'
+        : '網絡連線失敗，請檢查網絡後重試',
     );
   } finally {
     clearTimeout(timer);
+  }
+
+  if (response.status === 404) {
+    throw new CrosspostError(
+      'not_deployed',
+      '生成服務未部署（404）：請先部署 crosspost-writer',
+    );
   }
 
   const payload = (await response.json().catch(() => ({}))) as {
@@ -232,9 +264,12 @@ export async function saveCrosspostSet(input: SaveCrosspostInput): Promise<Saved
     .single();
 
   if (insertError || !inserted) {
+    const missingTable = isMissingTableError(insertError);
     throw new CrosspostError(
-      String((insertError as { code?: string } | null)?.code || 'save_failed'),
-      errorMessage(insertError, '未能寫入生成紀錄'),
+      missingTable ? 'table_missing' : String((insertError as { code?: string } | null)?.code || 'save_failed'),
+      missingTable
+        ? '歷史資料表尚未建立；本次結果仍可複製或下載'
+        : errorMessage(insertError, '未能寫入生成紀錄'),
     );
   }
 
@@ -255,9 +290,12 @@ export async function saveCrosspostSet(input: SaveCrosspostInput): Promise<Saved
   if (variantError) {
     // 補償：不留下半組資料
     await supabase.from('crosspost_sets').delete().eq('id', setId);
+    const missingTable = isMissingTableError(variantError);
     throw new CrosspostError(
-      String((variantError as { code?: string } | null)?.code || 'save_failed'),
-      errorMessage(variantError, '未能寫入各平台版本'),
+      missingTable ? 'table_missing' : String((variantError as { code?: string } | null)?.code || 'save_failed'),
+      missingTable
+        ? '歷史資料表尚未建立；本次結果仍可複製或下載'
+        : errorMessage(variantError, '未能寫入各平台版本'),
     );
   }
 
