@@ -1,4 +1,6 @@
 import { AppProvider, useApp } from '@/context/AppContext';
+import { ReaddyConversionJobProvider } from '@/context/ReaddyConversionJobContext';
+import { ReaddyConversionJobNotice } from '@/components/tools-center/readdy-framer/ReaddyConversionJobNotice';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { DashboardModule } from '@/components/dashboard/DashboardModule';
 import { DayReportModule } from '@/components/day-report/DayReportModule';
@@ -60,9 +62,12 @@ function ModuleRouter() {
 function Home() {
   return (
     <AppProvider>
-      <AppLayout>
-        <ModuleRouter />
-      </AppLayout>
+      <ReaddyConversionJobProvider>
+        <AppLayout>
+          <ModuleRouter />
+        </AppLayout>
+        <ReaddyConversionJobNotice />
+      </ReaddyConversionJobProvider>
     </AppProvider>
   );
 }

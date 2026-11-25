@@ -38,6 +38,7 @@ import {
 } from '@/lib/readdyProjectAnalyzer';
 import { extractReaddyCode } from '@/lib/readdyConversionMail';
 import { loadSavedPageProgress, savePageProgress } from '@/lib/readdyFramerProgress';
+import { useReaddyConversionJob } from '@/context/ReaddyConversionJobContext';
 import type {
   ExecutionStageState,
   FramerIrPayload,
@@ -102,6 +103,7 @@ export function ReaddyFramerWorkbench() {
 
   // Project Analysis & Page Inventory (Step 02)
   const [analysis, setAnalysis] = useState<ReaddyProjectAnalysis | null>(null);
+  const [sourceLabel, setSourceLabel] = useState('');
   const [projectFileMap, setProjectFileMap] = useState<Record<string, string>>({});
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [loadingPageId, setLoadingPageId] = useState<string | null>(null);
@@ -434,6 +436,18 @@ export function ReaddyFramerWorkbench() {
     [],
   );
 
+  const conversionJob = useReaddyConversionJob();
+  const seenPatchToken = useRef(0);
+
+  useEffect(() => {
+    const patch = conversionJob.pagePatch;
+    if (!patch || patch.token === seenPatchToken.current) return;
+    if (!analysis || patch.projectKey !== analysis.projectKey) return;
+    seenPatchToken.current = patch.token;
+    updatePageState(patch.pageId, patch.page);
+    void refreshHistory();
+  }, [analysis, conversionJob.pagePatch, refreshHistory, updatePageState]);
+
   const selectAndAssemblePage = useCallback(
     async (
       page: ReaddyDiscoveredPage,
@@ -504,6 +518,7 @@ export function ReaddyFramerWorkbench() {
       setAnalysis(hydrated);
       setProjectFileMap(result.fileMap);
       setGithubRepoMeta(null);
+      setSourceLabel(file.name);
 
       const firstPage = pickLandingPage(hydrated.pages);
       if (firstPage) {
@@ -542,6 +557,7 @@ export function ReaddyFramerWorkbench() {
       setAnalysis(hydrated);
       setProjectFileMap({});
       setGithubAllPaths(res.all_paths || []);
+      setSourceLabel(hydrated.githubMeta?.full_name || githubRepoUrl);
       if (hydrated.githubMeta?.branches?.length) {
         setGithubBranches(hydrated.githubMeta.branches);
       }
@@ -585,6 +601,7 @@ export function ReaddyFramerWorkbench() {
     setAnalysis(hydrated);
     setProjectFileMap(fileMap);
     setGithubRepoMeta(null);
+    setSourceLabel('paste');
     if (hydrated.pages[0]) {
       await selectAndAssemblePage(hydrated.pages[0], hydrated, fileMap, []);
     }
@@ -644,7 +661,7 @@ export function ReaddyFramerWorkbench() {
   const handleParseCurrentPage = async () => {
     if (!gridConfirmed) {
       setHighlightConfirmWarning(true);
-      setShowGridSettings(true);
+      setToolDrawer('grid');
       toast.error('請先勾選「已確認格點」，鎖定 12 列網格基準後再解析。');
       return;
     }
@@ -976,6 +993,58 @@ export function ReaddyFramerWorkbench() {
     toast.success(`已載入歷史任務${matchedPath ? ` (${matchedPath})` : ''}`);
   };
 
+  const handleStartBackgroundConversion = () => {
+    if (conversionJob.phase === 'running') {
+      toast.message('已有轉換在後台進行');
+      return;
+    }
+    if (!gridConfirmed) {
+      setHighlightConfirmWarning(true);
+      setToolDrawer('grid');
+      toast.error('請先勾選「已確認格點」，鎖定 12 列網格基準後再轉換。');
+      return;
+    }
+    if (!isValidFramerProjectUrl(framerProjectUrl)) {
+      toast.error('請輸入有效的目標 Framer Project URL。');
+      return;
+    }
+    if (!oauthStatus?.connected) {
+      toast.error('請先授權團隊共用的 Framer MCP 帳號（右上角 mcp.framer.com）。');
+      void handleConnectFramer();
+      return;
+    }
+    if (!analysis || analysis.pages.length === 0) {
+      toast.error('請先分析 Readdy 專案，再一鍵轉換。');
+      return;
+    }
+    const pages = analysis.pages.filter(
+      (page) => page.migrationStatus !== 'skipped' && page.migrationStatus !== 'migrated',
+    );
+    if (pages.length === 0) {
+      toast.message('沒有待轉換的頁面。已跳過或已搬完的頁面不會重跑。');
+      return;
+    }
+    conversionJob.start({
+      projectKey: analysis.projectKey,
+      siteName: analysis.projectName,
+      readdyCode: extractReaddyCode([
+        sourceLabel,
+        analysis.githubMeta?.repo,
+        analysis.githubMeta?.full_name,
+        githubRepoUrl,
+        analysis.projectName,
+      ]),
+      framerProjectUrl: framerProjectUrl.trim(),
+      sourceType: analysis.sourceType,
+      gridConfig,
+      analysis,
+      fileMap: projectFileMap,
+      githubRepoUrl,
+      githubAllPaths,
+      pages,
+    });
+  };
+
   const sections = irPayload?.sections || [];
   const globalProgressPct = useMemo(() => {
     const sum = stages.reduce((acc, s) => acc + s.progress, 0);
@@ -996,6 +1065,8 @@ export function ReaddyFramerWorkbench() {
         onDisconnectFramer={() => void handleDisconnectFramer()}
         onSelectJob={handleSelectHistoryJob}
         onRefreshStatus={() => void refreshOAuthStatus()}
+        conversionRunning={conversionJob.phase === 'running'}
+        onStartConversion={handleStartBackgroundConversion}
       />
 
       {/* Main Split Grid */}
@@ -1199,7 +1270,7 @@ export function ReaddyFramerWorkbench() {
             </div>
 
             {/* Equal-Height Split: Layers & Grid Canvas Preview */}
-            <div className="relative min-h-0 flex-1">
+            <div className="relative min-h-0 flex-1 overflow-hidden">
             <div
               className={
                 expandedCanvas
@@ -1240,64 +1311,61 @@ export function ReaddyFramerWorkbench() {
               />
             </div>
 
-            <button
-              type="button"
-              aria-label="關閉側欄"
-              onClick={() => setToolDrawer(null)}
-              className={`absolute inset-0 z-20 bg-[#101B2D]/15 transition-opacity ${
-                toolDrawer ? 'opacity-100' : 'pointer-events-none opacity-0'
-              }`}
-            />
-            <aside
-              aria-hidden={toolDrawer === null}
-              className={`absolute inset-y-0 right-0 z-30 flex w-[min(640px,100%)] flex-col border-l border-slate-200 bg-white shadow-[-16px_0_40px_rgba(16,27,45,0.12)] transition-transform duration-300 ease-out ${
-                toolDrawer ? 'translate-x-0' : 'pointer-events-none translate-x-full'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-                <div className="min-w-0">
-                  <div className="text-[13px] font-bold text-[#101B2D]">
-                    {toolDrawer === 'code' ? '組裝源碼' : '格點設定'}
-                  </div>
-                  <div className="truncate text-[11px] text-slate-400">
-                    {toolDrawer === 'code'
-                      ? activePage
-                        ? `${activePage.path} · ${includedFiles.length} files · ${rawCode.length.toLocaleString()} chars`
-                        : '可微調後重新解析'
-                      : `Desktop ${gridConfig.desktop_width} · Max ${gridConfig.container_max_width} · Gap ${gridConfig.gutter}px`}
-                  </div>
-                </div>
+            {toolDrawer && (
+              <>
                 <button
                   type="button"
+                  aria-label="關閉側欄"
                   onClick={() => setToolDrawer(null)}
-                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-[#101B2D]"
-                  aria-label="關閉"
-                >
-                  <X size={15} />
-                </button>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                {toolDrawer === 'code' ? (
-                  <textarea
-                    value={rawCode}
-                    onChange={(e) => setRawCode(e.target.value)}
-                    spellCheck={false}
-                    className="h-full min-h-[420px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50/60 p-3 font-mono text-[11.5px] leading-relaxed text-[#101B2D] outline-none focus:border-[#0BB59B]"
-                  />
-                ) : (
-                  <GridAnchorPanel
-                    gridConfig={gridConfig}
-                    onChangeGridConfig={setGridConfig}
-                    gridConfirmed={gridConfirmed}
-                    onToggleConfirmed={() => {
-                      setGridConfirmed((v) => !v);
-                      setHighlightConfirmWarning(false);
-                    }}
-                    highlightConfirmWarning={highlightConfirmWarning}
-                  />
-                )}
-              </div>
-            </aside>
+                  className="absolute inset-0 z-20 bg-[#101B2D]/15"
+                />
+                <aside className="absolute inset-y-0 right-0 z-30 flex w-[min(640px,100%)] flex-col border-l border-slate-200 bg-white shadow-[-16px_0_40px_rgba(16,27,45,0.12)]">
+                  <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-bold text-[#101B2D]">
+                        {toolDrawer === 'code' ? '組裝源碼' : '格點設定'}
+                      </div>
+                      <div className="truncate text-[11px] text-slate-400">
+                        {toolDrawer === 'code'
+                          ? activePage
+                            ? `${activePage.path} · ${includedFiles.length} files · ${rawCode.length.toLocaleString()} chars`
+                            : '可微調後重新解析'
+                          : `Desktop ${gridConfig.desktop_width} · Max ${gridConfig.container_max_width} · Gap ${gridConfig.gutter}px`}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setToolDrawer(null)}
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-[#101B2D]"
+                      aria-label="關閉"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                    {toolDrawer === 'code' ? (
+                      <textarea
+                        value={rawCode}
+                        onChange={(e) => setRawCode(e.target.value)}
+                        spellCheck={false}
+                        className="h-full min-h-[420px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50/60 p-3 font-mono text-[11.5px] leading-relaxed text-[#101B2D] outline-none focus:border-[#0BB59B]"
+                      />
+                    ) : (
+                      <GridAnchorPanel
+                        gridConfig={gridConfig}
+                        onChangeGridConfig={setGridConfig}
+                        gridConfirmed={gridConfirmed}
+                        onToggleConfirmed={() => {
+                          setGridConfirmed((v) => !v);
+                          setHighlightConfirmWarning(false);
+                        }}
+                        highlightConfirmWarning={highlightConfirmWarning}
+                      />
+                    )}
+                  </div>
+                </aside>
+              </>
+            )}
             </div>
           </section>
         </div>

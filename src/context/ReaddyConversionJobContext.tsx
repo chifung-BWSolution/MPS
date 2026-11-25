@@ -60,15 +60,24 @@ function popupNotice(ok: boolean, title: string, body: string) {
   }
 }
 
-const idleView = {
-  phase: 'idle' as const,
+const idleView: {
+  phase: 'idle' | 'running' | 'success' | 'failed';
+  siteName: string;
+  readdyCode: string;
+  projectKey: string;
+  currentLabel: string;
+  done: number;
+  total: number;
+  pagePatch: ReaddyConversionPagePatch | null;
+} = {
+  phase: 'idle',
   siteName: '',
   readdyCode: '',
   projectKey: '',
   currentLabel: '',
   done: 0,
   total: 0,
-  pagePatch: null as ReaddyConversionPagePatch | null,
+  pagePatch: null,
 };
 
 export function ReaddyConversionJobProvider({ children }: { children: ReactNode }) {
