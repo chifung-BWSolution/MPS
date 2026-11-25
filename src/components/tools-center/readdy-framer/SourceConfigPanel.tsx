@@ -424,39 +424,27 @@ export function SourceConfigPanel({
       {/* Mode 2: GitHub Repository Analyzer */}
       {sourceType === 'github' && (
         <div className="rounded-lg border border-slate-200/90 bg-slate-50/70 p-3.5 space-y-3">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-3">
             <span className="text-[11px] font-medium text-slate-600">
               Readdy 同步的 GitHub 倉庫
             </span>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={onRefreshGitHubRepos}
-                disabled={githubReposLoading || !oauthStatus?.github_configured}
-                title="重新載入含 Readdy 的倉庫列表"
-                aria-label="重新載入含 Readdy 的倉庫列表"
-                className="p-1 rounded border border-slate-200 bg-white text-slate-500 hover:text-[#101B2D] hover:bg-slate-50 disabled:opacity-45 transition-colors"
-              >
-                <RefreshCw size={11} className={cn(githubReposLoading && 'animate-spin text-[#0BB59B]')} />
-              </button>
-              <button
-                type="button"
-                onClick={() => setTokenPanelOpen((v) => !v)}
-                className={cn(
-                  'inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded border transition-colors',
-                  oauthStatus?.github_configured
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                    : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100',
-                )}
-              >
-                <Lock size={10} />
-                <span>
-                  {oauthStatus?.github_configured
-                    ? `Token (${oauthStatus.github_token_preview})`
-                    : 'Private Token'}
-                </span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setTokenPanelOpen((v) => !v)}
+              className={cn(
+                'inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded border transition-colors shrink-0',
+                oauthStatus?.github_configured
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                  : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100',
+              )}
+            >
+              <Lock size={10} />
+              <span>
+                {oauthStatus?.github_configured
+                  ? `Token (${oauthStatus.github_token_preview})`
+                  : 'Private Token'}
+              </span>
+            </button>
           </div>
 
           <CollapsePane open={tokenPanelOpen} className="!-mt-3">
@@ -494,7 +482,18 @@ export function SourceConfigPanel({
             </div>
           </CollapsePane>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onRefreshGitHubRepos}
+              disabled={githubReposLoading || !oauthStatus?.github_configured}
+              title="重新載入含 Readdy 的倉庫列表"
+              aria-label="重新載入含 Readdy 的倉庫列表"
+              className="shrink-0 p-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-[#101B2D] hover:bg-slate-50 disabled:opacity-45 transition-colors"
+            >
+              <RefreshCw size={13} className={cn(githubReposLoading && 'animate-spin text-[#0BB59B]')} />
+            </button>
+            <div className="grid min-w-0 flex-1 grid-cols-1 sm:grid-cols-3 gap-2">
             {oauthStatus?.github_configured ? (
               <Popover open={repoPopoverOpen} onOpenChange={setRepoPopoverOpen}>
                 <PopoverTrigger asChild>
@@ -604,6 +603,7 @@ export function SourceConfigPanel({
                 </option>
               ))}
             </select>
+            </div>
           </div>
 
           {githubReposError ? (
