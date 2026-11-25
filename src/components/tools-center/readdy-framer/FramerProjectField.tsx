@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Check, ChevronsUpDown, FolderKanban, KeyRound, Link2, Loader2, Plus, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -85,25 +85,26 @@ export function FramerProjectField({
   onCreate,
 }: FramerProjectFieldProps) {
   const [open, setOpen] = useState(false);
-  const [categoryId, setCategoryId] = useState('all');
   const [createOpen, setCreateOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState('');
-  const [createCategoryId, setCreateCategoryId] = useState('');
+  const [createWorkspaceId, setCreateWorkspaceId] = useState('');
   const [creating, setCreating] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
 
   const labels = useMemo(() => framerWorkspaceLabels(workspaces), [workspaces]);
   const creatable = workspaces.filter((workspace) => workspace.canCreate);
   const selected = findFramerProject(framerProjectUrl, projects);
-  const visible = categoryId === 'all' ? projects : projects.filter((project) => project.workspaceId === categoryId);
-  const urlValid = isValidFramerProjectUrl(framerProjectUrl);
-  const targetCategoryId = categoryId !== 'all' ? categoryId : createCategoryId;
-  const targetWorkspace = workspaces.find((workspace) => workspace.id === targetCategoryId) || null;
+  const trimmedUrl = framerProjectUrl.trim();
+  const urlValid = !trimmedUrl || isValidFramerProjectUrl(trimmedUrl);
+  const targetWorkspace =
+    creatable.find((workspace) => workspace.id === createWorkspaceId) ||
+    (creatable.length === 1 ? creatable[0] : null);
 
-  const categoryName = (project: FramerProjectSummary): string => {
-    if (project.workspaceId && labels.get(project.workspaceId)) return labels.get(project.workspaceId)!;
-    return project.workspaceName || '未分類';
-  };
+  useEffect(() => {
+    if (createWorkspaceId) return;
+    const first = workspaces.find((workspace) => workspace.canCreate);
+    if (first) setCreateWorkspaceId(first.id);
+  }, [createWorkspaceId, workspaces]);
 
   const handleCreate = async () => {
     const title = createTitle.trim();
@@ -111,7 +112,6 @@ export function FramerProjectField({
     setCreating(true);
     try {
       await onCreate({ title, workspaceId: targetWorkspace.id });
-      setCategoryId(targetWorkspace.id);
       setCreateTitle('');
       setCreateOpen(false);
     } catch {
@@ -125,42 +125,25 @@ export function FramerProjectField({
     <div className="space-y-2">
       <div className="space-y-1">
         <div className="flex items-center justify-between gap-2">
-          <label className="text-[12px] font-medium text-slate-600">分類</label>
-          {mcpConnected ? (
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#08967F]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#0BB59B]" />
-              已連線
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={onConnectFramer}
-              disabled={oauthConnecting}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 hover:text-amber-700"
-            >
-              <KeyRound size={11} />
-              {oauthConnecting ? '開啟授權中…' : '未授權，點此連線 Framer'}
-            </button>
-          )}
-        </div>
-        <select
-          value={categoryId}
-          onChange={(event) => setCategoryId(event.target.value)}
-          disabled={!mcpConnected || (loading && workspaces.length === 0)}
-          className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-[12px] text-[#101B2D] outline-none focus:border-[#0BB59B] disabled:opacity-60"
-        >
-          <option value="all">全部專案</option>
-          {workspaces.map((workspace) => (
-            <option key={workspace.id} value={workspace.id}>
-              {labels.get(workspace.id) || workspace.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="space-y-1">
-        <div className="flex items-center justify-between gap-2">
-          <label className="text-[12px] font-medium text-slate-600">Framer 專案</label>
+          <div className="flex items-center gap-2 min-w-0">
+            <label className="text-[12px] font-medium text-slate-600">Framer 專案</label>
+            {mcpConnected ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#08967F]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#0BB59B]" />
+                已連線
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={onConnectFramer}
+                disabled={oauthConnecting}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 hover:text-amber-700"
+              >
+                <KeyRound size={11} />
+                {oauthConnecting ? '開啟授權中…' : '未授權，點此連線 Framer'}
+              </button>
+            )}
+          </div>
           <button
             type="button"
             onClick={onRefresh}
@@ -211,15 +194,15 @@ export function FramerProjectField({
               <CommandInput placeholder="搜尋 Framer 專案…" className="h-8 text-[12px]" />
               <CommandList className="max-h-60">
                 <CommandEmpty className="py-4 px-3 text-center text-[11.5px] text-slate-500">
-                  這個分類裡找不到符合的專案
+                  找不到符合的 Framer 專案
                 </CommandEmpty>
-                <CommandGroup heading={categoryId === 'all' ? `全部專案（${visible.length}）` : `${labels.get(categoryId) || '分類'}（${visible.length}）`}>
-                  {visible.map((project) => {
+                <CommandGroup heading={`Framer 專案（${projects.length}）`}>
+                  {projects.map((project) => {
                     const isSelected = selected?.id === project.id;
                     return (
                       <CommandItem
                         key={project.id}
-                        value={`${project.title} ${project.url} ${categoryName(project)}`}
+                        value={`${project.title} ${project.url} ${project.workspaceName || ''}`}
                         onSelect={() => {
                           onFramerProjectUrlChange(project.url);
                           setOpen(false);
@@ -234,7 +217,6 @@ export function FramerProjectField({
                         />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-[12px] font-semibold !text-[#101B2D]">{project.title}</div>
-                          <div className="truncate text-[10.5px] !text-slate-500">{categoryName(project)}</div>
                         </div>
                       </CommandItem>
                     );
@@ -244,10 +226,7 @@ export function FramerProjectField({
             </Command>
           </PopoverContent>
         </Popover>
-        {selected ? (
-          <p className="text-[11px] text-slate-500 truncate">分類：{categoryName(selected)}</p>
-        ) : null}
-        {!urlValid && framerProjectUrl.trim().length > 0 && (
+        {!urlValid && (
           <p className="text-[11px] text-amber-600">請選擇 Framer 專案，或貼上完整專案連結。</p>
         )}
         <button
@@ -289,45 +268,39 @@ export function FramerProjectField({
 
       <button
         type="button"
-        onClick={() => {
-          setCreateOpen((value) => !value);
-          if (!createCategoryId && creatable[0]) setCreateCategoryId(creatable[0].id);
-        }}
+        onClick={() => setCreateOpen((value) => !value)}
         disabled={!mcpConnected}
-        className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#08967F] hover:text-[#067864] disabled:opacity-50"
+        className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border border-[#0BB59B]/40 bg-[#E7F6F2] text-[12px] font-semibold text-[#067864] hover:bg-[#d8f3ec] disabled:opacity-50"
       >
-        <Plus size={12} />
+        <Plus size={13} />
         新建 Framer 專案
       </button>
 
       {createOpen && (
         <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-2.5 space-y-2">
+          <p className="text-[11px] text-slate-500">在已連線的 Framer 帳號建立，完成後會自動選用。</p>
           <input
             value={createTitle}
             onChange={(event) => setCreateTitle(event.target.value)}
             placeholder="新專案名稱，例如 bwdesign.com 2026"
             className="w-full px-2.5 py-1.5 rounded border border-slate-200 bg-white text-[12px] text-[#101B2D] outline-none focus:border-[#0BB59B]"
           />
-          {categoryId === 'all' ? (
+          {creatable.length > 1 && (
             <select
-              value={createCategoryId}
-              onChange={(event) => setCreateCategoryId(event.target.value)}
+              value={createWorkspaceId}
+              onChange={(event) => setCreateWorkspaceId(event.target.value)}
+              aria-label="Framer 工作區"
               className="w-full px-2.5 py-1.5 rounded border border-slate-200 bg-white text-[12px] text-[#101B2D] outline-none focus:border-[#0BB59B]"
             >
-              <option value="">選擇要放入的分類…</option>
               {creatable.map((workspace) => (
                 <option key={workspace.id} value={workspace.id}>
                   {labels.get(workspace.id) || workspace.name}
                 </option>
               ))}
             </select>
-          ) : (
-            <p className="text-[11px] text-slate-500">
-              將建立在 {labels.get(categoryId) || '所選分類'}
-            </p>
           )}
-          {targetWorkspace && !targetWorkspace.canCreate && (
-            <p className="text-[11px] text-amber-700">這個分類沒有建立專案的權限。</p>
+          {mcpConnected && !loading && creatable.length === 0 && (
+            <p className="text-[11px] text-amber-700">這個 Framer 帳號沒有建立專案的權限。</p>
           )}
           <button
             type="button"

@@ -1033,7 +1033,7 @@ Deno.serve(async (req: Request) => {
       const workspaceId = String(body.workspace_id || "").trim();
       if (!title) return jsonResponse({ error: "請輸入 Framer 專案名稱。" }, 400);
       if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(workspaceId)) {
-        return jsonResponse({ error: "請選擇要放入的分類。" }, 400);
+        return jsonResponse({ error: "請選擇 Framer 工作區。" }, 400);
       }
       const created = normalizeCreatedProject(
         unwrapToolRecord(await mcp.callTool("create_project", { title, workspaceId })),

@@ -25,7 +25,7 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { CollapsePane } from './CollapsePane';
-import { findFramerProject, framerWorkspaceLabels, FramerProjectField } from './FramerProjectField';
+import { findFramerProject, FramerProjectField } from './FramerProjectField';
 import type {
   FramerOAuthStatus,
   FramerProjectSummary,
@@ -137,12 +137,6 @@ export function SourceConfigPanel({
 
   const mcpConnected = Boolean(oauthStatus?.connected);
   const selectedFramerProject = findFramerProject(framerProjectUrl, framerProjects);
-  const workspaceLabels = framerWorkspaceLabels(framerWorkspaces);
-  const selectedCategory = selectedFramerProject
-    ? (selectedFramerProject.workspaceId && workspaceLabels.get(selectedFramerProject.workspaceId)) ||
-      selectedFramerProject.workspaceName ||
-      ''
-    : '';
 
   const branchOptions = githubBranches.length > 0 ? githubBranches : [githubBranch || 'main'];
   const selectedRepo = githubRepos.find((r) => r.html_url === githubRepoUrl) || null;
@@ -265,11 +259,6 @@ export function SourceConfigPanel({
               <span className="truncate font-mono">
                 {selectedFramerProject?.title || formatFramerProjectLabel(framerProjectUrl)}
               </span>
-              {selectedCategory && (
-                <span className="px-1.5 py-0.5 rounded bg-slate-200/70 text-slate-600 text-[10px] shrink-0 truncate max-w-[96px]">
-                  {selectedCategory}
-                </span>
-              )}
               <span
                 className={cn(
                   'w-1.5 h-1.5 rounded-full shrink-0',

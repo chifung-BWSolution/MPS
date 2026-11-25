@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  DEFAULT_FRAMER_PROJECT_URL,
   DEFAULT_GITHUB_BRANCH,
   DEFAULT_GRID_CONFIG,
   SAMPLE_READDY_TSX,
@@ -87,7 +86,7 @@ export function ReaddyFramerWorkbench() {
   const oauthPopupRef = useRef<Window | null>(null);
 
   // Step 01 Source Config
-  const [framerProjectUrl, setFramerProjectUrl] = useState(DEFAULT_FRAMER_PROJECT_URL);
+  const [framerProjectUrl, setFramerProjectUrl] = useState('');
   const [framerProjects, setFramerProjects] = useState<FramerProjectSummary[]>([]);
   const [framerWorkspaces, setFramerWorkspaces] = useState<FramerWorkspaceSummary[]>([]);
   const [framerCatalogLoading, setFramerCatalogLoading] = useState(false);

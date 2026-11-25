@@ -1,8 +1,5 @@
 import type { GridConfig } from '@/types/readdyFramer';
 
-export const DEFAULT_FRAMER_PROJECT_URL =
-  'https://framer.com/projects/Readdy-Landing-Sync--9xK2mP';
-
 export const DEFAULT_GITHUB_REPO =
   'https://github.com/nova-studio/readdy-saas-landing';
 
