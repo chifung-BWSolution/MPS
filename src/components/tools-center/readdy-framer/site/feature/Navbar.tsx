@@ -218,6 +218,7 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const headerRef = useRef<HTMLElement>(null);
   const scrollerRef = useSiteScroll();
   const location = useLocation();
   const lang: Lang = getLangFromPath(location.pathname);
@@ -228,15 +229,35 @@ export default function Navbar() {
   const navTo = (zhPath: string) => toLangPath(zhPath, lang);
 
   useEffect(() => {
-    const scroller = scrollerRef?.current;
+    const scroller = scrollerRef?.current ?? null;
     const onScroll = () => {
+      const header = headerRef.current;
       const top = scroller ? scroller.scrollTop : window.scrollY;
-      setScrolled(top > 40);
+      if (!scroller || !header) {
+        setScrolled(top > 40);
+        if (header) header.style.transform = '';
+        return;
+      }
+      // The preview scales the page with CSS transform, which traps `position: fixed`
+      // inside the scaled page. Counter-translate by the canvas scroll distance so the
+      // bar stays on the visible top edge, in the page's own coordinate space.
+      const offsetHeight = header.offsetHeight;
+      const visualHeight = header.getBoundingClientRect().height;
+      const scale = offsetHeight > 0 && visualHeight > 0 ? visualHeight / offsetHeight : 1;
+      const pageTop = top / scale;
+      setScrolled(pageTop > 40);
+      header.style.transform = pageTop > 0.5 ? `translate3d(0, ${Math.round(pageTop * 100) / 100}px, 0)` : '';
     };
     onScroll();
     const target: HTMLElement | Window = scroller ?? window;
     target.addEventListener('scroll', onScroll, { passive: true });
-    return () => target.removeEventListener('scroll', onScroll);
+    const resizeObserver = scroller ? new ResizeObserver(onScroll) : null;
+    if (scroller) resizeObserver?.observe(scroller);
+    return () => {
+      target.removeEventListener('scroll', onScroll);
+      resizeObserver?.disconnect();
+      if (headerRef.current) headerRef.current.style.transform = '';
+    };
   }, [scrollerRef]);
 
   useEffect(() => {
@@ -264,7 +285,10 @@ export default function Navbar() {
   const isChildActive = (child: NavChild) => location.pathname === navTo(child.zh.path);
 
   return (
-    <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${navBg}`}>
+    <header
+      ref={headerRef}
+      className={`fixed top-0 left-0 right-0 z-50 transition-[background-color,border-color,box-shadow] duration-300 ${navBg}`}
+    >
       <nav className="w-full px-4 md:px-6">
         <div className="flex items-center justify-between h-16 lg:h-20">
           {/* Logo */}
