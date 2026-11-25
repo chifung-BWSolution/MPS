@@ -199,6 +199,88 @@ function mapImageUrl(rawUrl: string | undefined, assetUrlMap: Record<string, str
   return trimmed;
 }
 
+function isFaqHint(text: string): boolean {
+  return /(?:^|[^a-zA-Z])(?:faq|Faq|FAQ)(?=[A-Z0-9_\s-]|section|Section|$)|[a-z]Faq(?=[A-Z0-9_\s-]|$)|accordion|Accordion|常見問題|常见问题/.test(
+    text,
+  );
+}
+
+function extractJsxElementTexts(code: string, tagNames: string[]): string[] {
+  const out: string[] = [];
+  const openRe = new RegExp(`<(${tagNames.join("|")})(?=[\\s/>])`, "g");
+  let m: RegExpExecArray | null;
+  while ((m = openRe.exec(code)) !== null) {
+    const tag = m[1];
+    let i = m.index + m[0].length;
+    let braceDepth = 0;
+    let inSingle = false;
+    let inDouble = false;
+    let inBacktick = false;
+    let escaped = false;
+    let openEnd = -1;
+    let selfClosing = false;
+
+    for (; i < code.length; i++) {
+      const ch = code[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (!inDouble && !inBacktick && ch === "'") {
+        inSingle = !inSingle;
+        continue;
+      }
+      if (!inSingle && !inBacktick && ch === '"') {
+        inDouble = !inDouble;
+        continue;
+      }
+      if (!inSingle && !inDouble && ch === "`") {
+        inBacktick = !inBacktick;
+        continue;
+      }
+      if (inSingle || inDouble || inBacktick) continue;
+      if (ch === "{") {
+        braceDepth++;
+      } else if (ch === "}") {
+        if (braceDepth > 0) braceDepth--;
+      } else if (ch === ">" && braceDepth === 0) {
+        selfClosing = code[i - 1] === "/";
+        openEnd = i;
+        break;
+      }
+    }
+
+    if (openEnd < 0) break;
+    if (selfClosing) {
+      openRe.lastIndex = openEnd + 1;
+      continue;
+    }
+
+    const rest = code.slice(openEnd + 1);
+    const closeRe = new RegExp(`</${tag}\\s*>`, tag === "Link" ? "" : "i");
+    const closeMatch = closeRe.exec(rest);
+    if (!closeMatch) {
+      openRe.lastIndex = openEnd + 1;
+      continue;
+    }
+
+    const inner = rest.slice(0, closeMatch.index);
+    const cleaned = cleanText(inner);
+    if (
+      cleaned &&
+      !/\b(?:className|onClick|onChange|onSubmit)=|\bset[A-Z]\w*\(/.test(cleaned)
+    ) {
+      out.push(cleaned);
+    }
+    openRe.lastIndex = openEnd + 1 + closeMatch.index + closeMatch[0].length;
+  }
+  return out;
+}
+
 function detectSectionKind(
   hint: string,
   tag: string,
@@ -208,6 +290,7 @@ function detectSectionKind(
   const lower = `${hint} ${tag}`.toLowerCase();
   if (tag === "header" || tag === "nav" || /nav|header|topbar/.test(lower)) return "navbar";
   if (tag === "footer" || /footer/.test(lower)) return "footer";
+  if (isFaqHint(hint) || isFaqHint(tag)) return "content";
   if (/hero|banner|intro/.test(lower) || (idx === 1 && !/logo|feature/.test(lower))) return "hero";
   if (/logo|brand|trust|partner/.test(lower)) return "logos";
   if (/feature|grid|card|service|capabilit|benefit/.test(lower)) return "features";
@@ -228,18 +311,39 @@ function defaultSectionTitle(kind: IrSection["sectionKind"], hint: string, idx: 
   }
 }
 
-function detectInteractivePlaceholders(chunk: string): string[] {
+function detectInteractivePlaceholders(chunk: string, hint = ""): string[] {
   const placeholders: string[] = [];
-  if (/\buseState\b|\bonSubmit\b|<form\b/i.test(chunk)) {
-    placeholders.push("Form / Stateful Interaction → Framer Component Variant");
+  if (/<form\b|\bonSubmit\b|<textarea\b/i.test(chunk)) {
+    placeholders.push("表單互動（已保留版面結構，送出邏輯需於 Framer 綁定）");
   }
   if (/recharts|ResponsiveContainer|<svg\b[^>]*chart/i.test(chunk)) {
-    placeholders.push("Chart Visualization → Framer Embed / Code Override");
+    placeholders.push("圖表元件（建議於 Framer 使用 Embed 或 Code Override）");
   }
   if (/AnimatePresence|motion\./i.test(chunk)) {
-    placeholders.push("Motion Transition → Framer Appear / Scroll Effect");
+    placeholders.push("動態過場（可於 Framer 補設 Appear / Scroll 效果）");
   }
+  void hint;
   return placeholders;
+}
+
+function filterInteractivePlaceholders(
+  list: string[],
+  sectionName: string,
+  chunkHasForm: boolean,
+): string[] {
+  const isFaq = isFaqHint(sectionName);
+  return Array.from(
+    new Set(
+      list
+        .map((item) => String(item || "").trim())
+        .filter(Boolean)
+        .filter((item) => {
+          if (!chunkHasForm && /Form \/ Stateful Interaction/i.test(item)) return false;
+          if (isFaq && /accordion|open\/close|手風琴|展開/i.test(item)) return false;
+          return true;
+        }),
+    ),
+  );
 }
 
 function extractBalancedBlock(text: string, openIdx: number): string {
@@ -412,6 +516,7 @@ function deterministicParseCode(
   const sections: IrSection[] = chunks.slice(0, 16).map((chunk, idx) => {
     const kind = detectSectionKind(chunk.hint, chunk.tag, idx, chunks.length);
     const name = defaultSectionTitle(kind, chunk.hint, idx);
+    const isFaq = isFaqHint(chunk.hint);
 
     const gridColsMatch =
       chunk.code.match(/lg:grid-cols-(\d+)/) ||
@@ -424,16 +529,18 @@ function deterministicParseCode(
     const h2s = extractAllMatches(chunk.code, /<h2[^>]*>([\s\S]*?)<\/h2>/);
     const h3s = extractAllMatches(chunk.code, /<h3[^>]*>([\s\S]*?)<\/h3>/);
     const ps = extractAllMatches(chunk.code, /<p[^>]*>([\s\S]*?)<\/p>/);
-    const btns = extractAllMatches(chunk.code, /<(?:button|a|Link)[^>]*>([\s\S]*?)<\/(?:button|a|Link)>/);
+    const btns = extractJsxElementTexts(chunk.code, ["button", "a", "Link"]);
     const spans = extractAllMatches(chunk.code, /<span[^>]*>([\s\S]*?)<\/span>/);
     const propHeadingMatch = chunk.code.match(/\bheading=["']([^"']+)["']/);
     const propSubheadingMatch = chunk.code.match(/\bsubheading=["']([^"']+)["']/);
     const parsedCols = gridColsMatch
       ? Number(gridColsMatch[1])
-      : kind === "features" || dataCards.length >= 3 || h3s.length >= 3
+      : !isFaq && (kind === "features" || dataCards.length >= 3 || h3s.length >= 3)
         ? 3
         : 1;
-    const isGrid = kind === "features" || parsedCols > 1 || dataCards.length >= 2 || h3s.length >= 2;
+    const isGrid =
+      !isFaq &&
+      (kind === "features" || parsedCols > 1 || dataCards.length >= 2 || h3s.length >= 2);
     const isHorizontal = kind === "navbar" || kind === "logos";
 
     const imgMatch =
@@ -475,9 +582,9 @@ function deterministicParseCode(
     if (kind === "navbar") {
       const navInnerMatch = chunk.code.match(/<nav\b[^>]*>([\s\S]*?)<\/nav>/i);
       const navLinks = navInnerMatch
-        ? extractAllMatches(navInnerMatch[1], /<a[^>]*>([\s\S]*?)<\/a>/).slice(0, 16)
+        ? extractJsxElementTexts(navInnerMatch[1], ["a"]).slice(0, 16)
         : btns.filter((b) => b.length <= 24).slice(0, 14);
-      const ctaBtns = extractAllMatches(chunk.code, /<button[^>]*>([\s\S]*?)<\/button>/);
+      const ctaBtns = extractJsxElementTexts(chunk.code, ["button"]);
       const brandSubMatch = chunk.code.match(/<small[^>]*>([\s\S]*?)<\/small>/i);
 
       elements.heading = spans[0] || pageMeta?.title || "Brand";
@@ -518,7 +625,7 @@ function deterministicParseCode(
       elements.subheading = ps[0] || spans[0] || "Trusted Partners";
       const logoItems = [...spans, ...btns].filter((s) => s.length >= 2 && s.length <= 24).slice(0, 6);
       elements.logos = logoItems.length >= 2 ? logoItems : ["Partner 1", "Partner 2", "Partner 3"];
-    } else if (kind === "features" || dataCards.length >= 2) {
+    } else if (kind === "features" || (!isFaq && dataCards.length >= 2)) {
       elements.heading = h2s[0] || h1s[0] || propHeadingMatch?.[1] || chunk.hint || "Features";
       elements.subheading = ps[0] || propSubheadingMatch?.[1] || undefined;
       if (dataStats.length > 0) {
@@ -562,6 +669,7 @@ function deterministicParseCode(
       elements.subheading = ps[0] || propSubheadingMatch?.[1] || undefined;
       if (ps.length > 1) elements.paragraphs = ps.slice(0, 3);
       if (dataStats.length > 0) elements.stats = dataStats;
+      if (dataCards.length > 0) elements.cards = dataCards;
       if (btns[0]) elements.buttons = btns.slice(0, 2).map((label, bi) => ({ label, variant: bi === 0 ? "primary" : "secondary" }));
       if (imageUrl) {
         if (hasFullBleedBgImg) {
@@ -600,7 +708,7 @@ function deterministicParseCode(
       textColor,
       accentColor,
       elements,
-      interactivePlaceholders: detectInteractivePlaceholders(chunk.code),
+      interactivePlaceholders: detectInteractivePlaceholders(chunk.code, chunk.hint),
       framerNodeSpec: {
         component: isGrid ? "Framer.Grid" : "Framer.Stack",
         width: `${grid.desktop_width}px`,
@@ -734,7 +842,7 @@ ${assetList.length > 0 ? `已上傳至 Supabase Storage 的圖片路徑映射：
 3. Hero 若為全幅背景圖疊加文字（如 absolute inset-0 + <img>），圖片 URL 必須放在 elements.backgroundImage（不可放在 imageUrl），且保留多段引言於 elements.paragraphs。
 4. Services / Features / ScenarioGallery 等卡片若源碼含 image URL 與 tagline/problem，必須完整提取到 cards[].imageUrl 與 cards[].tagline，columns 設為對應欄數（如 3）。
 5. 嚴格使用上方提供的 Design Tokens 主色（accentColor: "${cssTokens?.primaryHex || "#B37900"}"）與背景色（"${cssTokens?.backgroundHex || "#FFFFFF"}"），絕不可套用無關的藍綠色，也不可簡化或改寫原始文案。
-6. 所有複雜狀態機（表單、輪播、手風琴等）填入 interactivePlaceholders 陣列說明。
+6. FAQ / 手風琴問答區塊直接將所有問答提取到 elements.cards（title 為問題、description 為回答），不需要放入 interactivePlaceholders；僅在真正包含 <form>、圖表或複雜第三方嵌入元件時才於 interactivePlaceholders 以簡短繁體中文備註。
 
 源碼如下：
 ${rawCode.slice(0, 42000)}`;
@@ -821,13 +929,16 @@ function normalizeIrPayload(
         typeof matchedLlm.name === "string" && matchedLlm.name.trim().length >= 2
           ? matchedLlm.name.trim()
           : fbSec.name;
-      const placeholders = Array.from(
-        new Set([
+      const chunkHasForm = fbSec.interactivePlaceholders.some((p) => p.includes("表單互動"));
+      const placeholders = filterInteractivePlaceholders(
+        [
           ...fbSec.interactivePlaceholders,
           ...(Array.isArray(matchedLlm.interactivePlaceholders)
             ? matchedLlm.interactivePlaceholders.map(String)
             : []),
-        ]),
+        ],
+        enrichedName || fbSec.name,
+        chunkHasForm,
       );
 
       return {
@@ -850,6 +961,9 @@ function normalizeIrPayload(
     (s) => Array.isArray(s.elements?.cards) && s.elements.cards.length > 0,
   );
 
+  const hasFormInFallback = fallback.sections.some((fs) =>
+    fs.interactivePlaceholders.some((p) => p.includes("表單互動")),
+  );
   const validKinds = new Set(["navbar", "hero", "logos", "features", "content", "cta", "footer"]);
   const sections: IrSection[] = candidate.sections.map((rawSec, idx) => {
     const sec = rawSec as Partial<IrSection>;
@@ -917,6 +1031,22 @@ function normalizeIrPayload(
       }
     }
 
+    const fallbackSame =
+      fallback.sections.find((item) => item.name === String(sec.name || "")) ||
+      fallback.sections[idx];
+    if (fallbackSame) {
+      const fbCards = fallbackSame.elements.cards || [];
+      const llmCards = Array.isArray(elements.cards) ? elements.cards : [];
+      if (fbCards.length > llmCards.length) {
+        elements.cards = fbCards;
+      }
+      const fbParas = fallbackSame.elements.paragraphs || [];
+      const llmParas = Array.isArray(elements.paragraphs) ? elements.paragraphs : [];
+      if (fbParas.length > llmParas.length) {
+        elements.paragraphs = fbParas;
+      }
+    }
+
     // Backfill card imageUrl / tagline from AST-parsed cards when LLM omits them
     if (Array.isArray(elements.cards) && elements.cards.length > 0 && fallbackCardSections.length > 0) {
       const allFbCards = fallbackCardSections.flatMap((fs) => fs.elements.cards || []);
@@ -952,9 +1082,11 @@ function normalizeIrPayload(
       textColor: String(sec.textColor || fallback.designTokens.colors.textPrimary || "#FFFFFF"),
       accentColor: accent,
       elements,
-      interactivePlaceholders: Array.isArray(sec.interactivePlaceholders)
-        ? sec.interactivePlaceholders.map(String)
-        : [],
+      interactivePlaceholders: filterInteractivePlaceholders(
+        Array.isArray(sec.interactivePlaceholders) ? sec.interactivePlaceholders.map(String) : [],
+        String(sec.name || ""),
+        hasFormInFallback,
+      ),
       framerNodeSpec: sec.framerNodeSpec && typeof sec.framerNodeSpec === "object"
         ? sec.framerNodeSpec
         : {

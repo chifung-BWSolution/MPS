@@ -76,6 +76,50 @@ export function getFramerOAuthRedirectUri(): string {
   return base ? `${base}/functions/v1/framer-oauth` : "";
 }
 
+export const FRAMER_ACCOUNT_SESSION_KEY = "__account__";
+/** Matches the observed Framer account cap of 9 active sessions. */
+export const FRAMER_SYNC_SLOT_COUNT = 9;
+
+export function normalizeFramerSessionSlot(slot: unknown): number {
+  const n = Number(slot ?? 0);
+  if (!Number.isInteger(n) || n < 0) return 0;
+  return Math.min(n, FRAMER_SYNC_SLOT_COUNT - 1);
+}
+
+export function framerAccountSessionKey(slot = 0): string {
+  const n = normalizeFramerSessionSlot(slot);
+  return n === 0 ? FRAMER_ACCOUNT_SESSION_KEY : `${FRAMER_ACCOUNT_SESSION_KEY}#${n}`;
+}
+
+export function framerProjectSessionKey(projectId: string, slot = 0): string {
+  const key = String(projectId || "").trim();
+  const n = normalizeFramerSessionSlot(slot);
+  return n === 0 ? key : `${key}#${n}`;
+}
+
+function isFramerAccountSessionKey(key: string): boolean {
+  return key === FRAMER_ACCOUNT_SESSION_KEY || key.startsWith(`${FRAMER_ACCOUNT_SESSION_KEY}#`);
+}
+/** Keep a project handle or the shared MCP transport until Framer has had time to drop it. */
+export const FRAMER_SESSION_REUSE_TTL_MS = 12 * 60 * 60 * 1000;
+export const FRAMER_SESSION_IDLE_TTL_MS = FRAMER_SESSION_REUSE_TTL_MS;
+export const FRAMER_SESSION_PRUNE_TTL_MS = FRAMER_SESSION_REUSE_TTL_MS;
+/** Framer keeps an unused MCP session counted for 360s after its last call. */
+export const FRAMER_SESSION_LIMIT_COOLDOWN_MS = 360_000;
+
+export type FramerActiveMcpSession = {
+  project_id: string;
+  project_url: string;
+  mcp_session_id: string | null;
+  project_session: string;
+  opened_at: string;
+  last_used_at: string;
+  reopen_after?: string | null;
+  blocked_until?: string | null;
+};
+
+export type FramerActiveMcpSessionsMap = Record<string, FramerActiveMcpSession>;
+
 export type FramerConnectionRow = {
   id: string;
   client_id: string | null;
@@ -90,10 +134,307 @@ export type FramerConnectionRow = {
   pending_expires_at: string | null;
   github_token: string | null;
   github_token_preview: string | null;
+  active_mcp_sessions?: FramerActiveMcpSessionsMap | null;
   connected_at: string | null;
   last_used_at: string | null;
   updated_at: string | null;
 };
+
+export function isFramerSessionLimitError(message: string): boolean {
+  return /active session limit|do not retry now|too many active sessions|同時開啟工作階段上限|等待至少\s*360\s*秒/i.test(
+    String(message || ""),
+  );
+}
+
+export function isFramerTransportStaleError(message: string): boolean {
+  const msg = String(message || "");
+  if (isFramerSessionLimitError(msg)) return false;
+  if (/mcp-session-id|server not initialized|must initialize|no valid session|session not found/i.test(msg)) {
+    return true;
+  }
+  return /Framer MCP\b/i.test(msg) && /HTTP\s*404/i.test(msg);
+}
+
+export function isFramerProjectSessionStaleError(message: string): boolean {
+  const msg = String(message || "");
+  if (isFramerSessionLimitError(msg) || isFramerTransportStaleError(msg)) return false;
+  return /invalid session handle|unknown session|expired session|no longer valid|session handle/i.test(msg);
+}
+
+export function isFramerStaleSessionError(message: string): boolean {
+  return isFramerTransportStaleError(message) || isFramerProjectSessionStaleError(message);
+}
+
+export function formatFramerSessionLimitError(rawDetail: string): string {
+  const detail = String(rawDetail || "").trim();
+  if (detail.startsWith("Framer MCP 帳號已達同時開啟工作階段上限")) return detail;
+  return `Framer MCP 帳號已達同時開啟工作階段上限，請勿立即重試。請等待至少 360 秒，讓閒置工作階段釋放後再執行一次。（${detail}）`;
+}
+
+function normalizeSessionsMap(raw: unknown): FramerActiveMcpSessionsMap {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const result: FramerActiveMcpSessionsMap = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const row = value as Record<string, unknown>;
+    const projectSession = typeof row.project_session === "string" ? row.project_session.trim() : "";
+    const lastUsedAt = typeof row.last_used_at === "string" ? row.last_used_at.trim() : "";
+    const reopenAfter = typeof row.reopen_after === "string" ? row.reopen_after.trim() : "";
+    const blockedUntil = typeof row.blocked_until === "string" ? row.blocked_until.trim() : "";
+    const mcpSessionId = typeof row.mcp_session_id === "string" && row.mcp_session_id.trim()
+      ? row.mcp_session_id.trim()
+      : "";
+    if (!projectSession && !reopenAfter && !blockedUntil && !mcpSessionId) continue;
+    const stamp = lastUsedAt || reopenAfter || blockedUntil;
+    if (!stamp) continue;
+    result[key] = {
+      project_id: typeof row.project_id === "string" && row.project_id.trim() ? row.project_id.trim() : key,
+      project_url: typeof row.project_url === "string" ? row.project_url.trim() : "",
+      mcp_session_id: mcpSessionId || null,
+      project_session: projectSession,
+      opened_at: typeof row.opened_at === "string" && row.opened_at.trim() ? row.opened_at.trim() : stamp,
+      last_used_at: stamp,
+      reopen_after: reopenAfter || null,
+      blocked_until: blockedUntil || null,
+    };
+  }
+  return result;
+}
+
+export function readCachedFramerSession(
+  row: FramerConnectionRow | null,
+  projectId: string,
+  nowMs = Date.now(),
+): FramerActiveMcpSession | null {
+  const key = String(projectId || "").trim();
+  if (!key || !row) return null;
+  const map = normalizeSessionsMap(row.active_mcp_sessions);
+  const entry = map[key];
+  if (!entry?.project_session) return null;
+  if (!isFramerAccountSessionKey(key) && entry.project_session === "transport") return null;
+  const lastUsedMs = Date.parse(entry.last_used_at);
+  if (!Number.isFinite(lastUsedMs) || nowMs - lastUsedMs >= FRAMER_SESSION_REUSE_TTL_MS) {
+    return null;
+  }
+  return entry;
+}
+
+function futureTimestamp(value: string | null | undefined, nowMs: number): number | null {
+  if (!value) return null;
+  const ts = Date.parse(value);
+  if (!Number.isFinite(ts) || ts <= nowMs) return null;
+  return ts;
+}
+
+export function getFramerSessionOpenBlock(
+  row: FramerConnectionRow | null,
+  projectId: string,
+  nowMs = Date.now(),
+  slot = 0,
+): { blocked: boolean; retryAfterSeconds: number } {
+  const map = normalizeSessionsMap(row?.active_mcp_sessions);
+  const projectKey = framerProjectSessionKey(String(projectId || ""), slot);
+  const untils = [
+    futureTimestamp(map[FRAMER_ACCOUNT_SESSION_KEY]?.blocked_until, nowMs),
+    futureTimestamp(map[framerAccountSessionKey(slot)]?.blocked_until, nowMs),
+    futureTimestamp(map[projectKey]?.reopen_after, nowMs),
+  ].filter((ts): ts is number => ts !== null);
+  if (untils.length === 0) return { blocked: false, retryAfterSeconds: 0 };
+  const until = Math.max(...untils);
+  return { blocked: true, retryAfterSeconds: Math.max(1, Math.ceil((until - nowMs) / 1000)) };
+}
+
+export async function saveCachedFramerSession(
+  supabase: SupabaseClient,
+  projectId: string,
+  entry: FramerActiveMcpSession,
+): Promise<void> {
+  const key = String(projectId || "").trim();
+  if (!key) return;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const latest = await loadFramerConnection(supabase);
+    const map = normalizeSessionsMap(latest?.active_mcp_sessions);
+    const nowMs = Date.now();
+    const next: FramerActiveMcpSessionsMap = {};
+    for (const [k, existing] of Object.entries(map)) {
+      const lastUsedMs = Date.parse(existing.last_used_at);
+      const recent = Number.isFinite(lastUsedMs) && nowMs - lastUsedMs < FRAMER_SESSION_PRUNE_TTL_MS;
+      const waiting = futureTimestamp(existing.reopen_after, nowMs) !== null ||
+        futureTimestamp(existing.blocked_until, nowMs) !== null;
+      if (recent || waiting || (isFramerAccountSessionKey(k) && existing.mcp_session_id)) {
+        next[k] = existing;
+      }
+    }
+    next[key] = entry;
+    const stamp = latest?.updated_at ?? null;
+    if (!stamp) {
+      await upsertFramerConnection(supabase, {
+        active_mcp_sessions: next,
+        last_used_at: entry.last_used_at,
+      });
+      return;
+    }
+    const { data, error } = await supabase
+      .from("framer_oauth_connections")
+      .update({
+        active_mcp_sessions: next,
+        last_used_at: entry.last_used_at,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", FRAMER_OAUTH_ROW_ID)
+      .eq("updated_at", stamp)
+      .select("id");
+    if (error) throw new Error(`儲存 framer_oauth_connections 失敗: ${error.message}`);
+    if (Array.isArray(data) && data.length > 0) return;
+  }
+  throw new Error("儲存 Framer 工作階段失敗，請再試一次。");
+}
+
+export async function clearCachedFramerSession(
+  supabase: SupabaseClient,
+  projectId: string,
+): Promise<void> {
+  const key = String(projectId || "").trim();
+  if (!key) return;
+  const latest = await loadFramerConnection(supabase);
+  const map = normalizeSessionsMap(latest?.active_mcp_sessions);
+  if (!(key in map)) return;
+  const next: FramerActiveMcpSessionsMap = { ...map };
+  delete next[key];
+  await upsertFramerConnection(supabase, {
+    active_mcp_sessions: next,
+  });
+}
+
+export async function markFramerSessionLimit(
+  supabase: SupabaseClient,
+  nowMs = Date.now(),
+): Promise<void> {
+  const latest = await loadFramerConnection(supabase);
+  const existing = normalizeSessionsMap(latest?.active_mcp_sessions)[FRAMER_ACCOUNT_SESSION_KEY];
+  const nowIso = new Date(nowMs).toISOString();
+  await saveCachedFramerSession(supabase, FRAMER_ACCOUNT_SESSION_KEY, {
+    project_id: FRAMER_ACCOUNT_SESSION_KEY,
+    project_url: "",
+    mcp_session_id: existing?.mcp_session_id ?? null,
+    project_session: existing?.project_session || "transport",
+    opened_at: existing?.opened_at || nowIso,
+    last_used_at: nowIso,
+    reopen_after: existing?.reopen_after ?? null,
+    blocked_until: new Date(nowMs + FRAMER_SESSION_LIMIT_COOLDOWN_MS).toISOString(),
+  });
+}
+
+export async function blockFramerProjectReopen(
+  supabase: SupabaseClient,
+  projectId: string,
+  projectUrl: string,
+  nowMs = Date.now(),
+  slot = 0,
+): Promise<void> {
+  const projectKey = framerProjectSessionKey(projectId, slot);
+  if (!projectKey) return;
+  const key = projectKey;
+  const nowIso = new Date(nowMs).toISOString();
+  await saveCachedFramerSession(supabase, key, {
+    project_id: String(projectId || "").trim() || key,
+    project_url: projectUrl,
+    mcp_session_id: null,
+    project_session: "",
+    opened_at: nowIso,
+    last_used_at: nowIso,
+    reopen_after: new Date(nowMs + FRAMER_SESSION_LIMIT_COOLDOWN_MS).toISOString(),
+    blocked_until: null,
+  });
+}
+
+async function rememberSharedFramerTransport(
+  supabase: SupabaseClient,
+  sessionId: string | null,
+  slot = 0,
+): Promise<void> {
+  const accountKey = framerAccountSessionKey(slot);
+  const nowMs = Date.now();
+  const latest = await loadFramerConnection(supabase);
+  const existing = normalizeSessionsMap(latest?.active_mcp_sessions)[accountKey];
+  const nowIso = new Date(nowMs).toISOString();
+  const blockedUntil = futureTimestamp(existing?.blocked_until, nowMs) ? existing?.blocked_until ?? null : null;
+  await saveCachedFramerSession(supabase, accountKey, {
+    project_id: accountKey,
+    project_url: "",
+    mcp_session_id: sessionId,
+    project_session: "transport",
+    opened_at: existing?.opened_at || nowIso,
+    last_used_at: nowIso,
+    reopen_after: null,
+    blocked_until: blockedUntil,
+  });
+}
+
+export async function connectSharedFramerMcp(
+  supabase: SupabaseClient,
+  accessToken: string,
+  row: FramerConnectionRow | null,
+  slot = 0,
+): Promise<FramerMcpClient> {
+  const accountKey = framerAccountSessionKey(slot);
+  const cached = readCachedFramerSession(row, accountKey);
+  if (cached?.mcp_session_id) {
+    return new FramerMcpClient(accessToken, cached.mcp_session_id);
+  }
+  const gate = getFramerSessionOpenBlock(row, accountKey, Date.now(), slot);
+  if (gate.blocked) {
+    throw new Error(formatFramerSessionLimitError(`retry after ${gate.retryAfterSeconds}s`));
+  }
+  const client = new FramerMcpClient(accessToken);
+  try {
+    await client.initialize();
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (isFramerSessionLimitError(msg)) {
+      await markFramerSessionLimit(supabase);
+      throw new Error(formatFramerSessionLimitError(msg));
+    }
+    throw error;
+  }
+  await rememberSharedFramerTransport(supabase, client.getSessionId(), slot);
+  return client;
+}
+
+export async function replaceSharedFramerTransport(
+  supabase: SupabaseClient,
+  accessToken: string,
+  slot = 0,
+): Promise<FramerMcpClient> {
+  const latest = await loadFramerConnection(supabase);
+  const gate = getFramerSessionOpenBlock(latest, framerAccountSessionKey(slot), Date.now(), slot);
+  if (gate.blocked) {
+    throw new Error(formatFramerSessionLimitError(`retry after ${gate.retryAfterSeconds}s`));
+  }
+  await rememberSharedFramerTransport(supabase, null, slot);
+  const client = new FramerMcpClient(accessToken);
+  try {
+    await client.initialize();
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (isFramerSessionLimitError(msg)) {
+      await markFramerSessionLimit(supabase);
+      throw new Error(formatFramerSessionLimitError(msg));
+    }
+    throw error;
+  }
+  await rememberSharedFramerTransport(supabase, client.getSessionId(), slot);
+  return client;
+}
+
+export async function touchSharedFramerTransport(
+  supabase: SupabaseClient,
+  sessionId: string | null,
+  slot = 0,
+): Promise<void> {
+  if (!sessionId) return;
+  await rememberSharedFramerTransport(supabase, sessionId, slot);
+}
 
 export async function loadFramerConnection(
   supabase: SupabaseClient,
@@ -203,8 +544,30 @@ export class FramerMcpClient {
   private sessionId: string | null = null;
   private nextId = 1;
 
-  constructor(accessToken: string) {
+  constructor(accessToken: string, initialSessionId?: string | null) {
     this.accessToken = accessToken;
+    this.sessionId = initialSessionId?.trim() || null;
+  }
+
+  getSessionId(): string | null {
+    return this.sessionId;
+  }
+
+  async close(): Promise<void> {
+    const sessionId = this.sessionId;
+    this.sessionId = null;
+    if (!sessionId) return;
+    try {
+      await fetch(FRAMER_MCP_ENDPOINT, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          "Mcp-Session-Id": sessionId,
+        },
+      });
+    } catch {
+      // Best-effort MCP transport close; ignore network or unsupported DELETE errors.
+    }
   }
 
   private async postJsonRpc(

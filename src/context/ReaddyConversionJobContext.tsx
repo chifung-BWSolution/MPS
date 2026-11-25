@@ -15,6 +15,7 @@ import {
   type ReaddyConversionMailInput,
 } from '@/lib/readdyConversionMail';
 import {
+  FRAMER_PAGE_SYNC_CONCURRENCY,
   runReaddyConversion,
   type ReaddyConversionProgress,
   type ReaddyConversionRunInput,
@@ -88,34 +89,42 @@ export function ReaddyConversionJobProvider({ children }: { children: ReactNode 
   const cancelRef = useRef(false);
   const tokenRef = useRef(0);
 
-  const applyProgress = useCallback((projectKey: string, progress: ReaddyConversionProgress) => {
-    const status = progress.patch?.migrationStatus;
-    if (status) {
-      patchSavedPageProgress(projectKey, progress.pageId, {
-        migrationStatus: status,
-        jobId: progress.patch?.jobId,
-        sectionCount: progress.patch?.sectionCount,
-        framerPageNodeId: progress.patch?.framerPageNodeId,
-        lastSyncedAt: progress.patch?.lastSyncedAt,
-      });
-    }
-    const finished = status === 'migrated' || status === 'failed';
-    tokenRef.current += status ? 1 : 0;
-    const token = tokenRef.current;
-    setView((prev) => ({
-      ...prev,
-      currentLabel: progress.message,
-      done: finished ? progress.index + 1 : prev.done,
-      pagePatch: status
-        ? {
-            token,
-            projectKey,
-            pageId: progress.pageId,
-            page: progress.patch ?? {},
-          }
-        : prev.pagePatch,
-    }));
-  }, []);
+  const applyProgress = useCallback(
+    (projectKey: string, framerProjectUrl: string, progress: ReaddyConversionProgress) => {
+      const status = progress.patch?.migrationStatus;
+      if (status) {
+        patchSavedPageProgress(
+          projectKey,
+          progress.pageId,
+          {
+            migrationStatus: status,
+            jobId: progress.patch?.jobId,
+            sectionCount: progress.patch?.sectionCount,
+            framerPageNodeId: progress.patch?.framerPageNodeId,
+            lastSyncedAt: progress.patch?.lastSyncedAt,
+          },
+          framerProjectUrl,
+        );
+      }
+      const finished = status === 'migrated' || status === 'failed';
+      tokenRef.current += status ? 1 : 0;
+      const token = tokenRef.current;
+      setView((prev) => ({
+        ...prev,
+        currentLabel: progress.message,
+        done: finished ? prev.done + 1 : prev.done,
+        pagePatch: status
+          ? {
+              token,
+              projectKey,
+              pageId: progress.pageId,
+              page: progress.patch ?? {},
+            }
+          : prev.pagePatch,
+      }));
+    },
+    [],
+  );
 
   const finish = useCallback(async (input: ReaddyConversionRunInput, result: ReaddyConversionRunResult) => {
     const mailInput: ReaddyConversionMailInput = {
@@ -179,7 +188,7 @@ export function ReaddyConversionJobProvider({ children }: { children: ReactNode 
       total: input.pages.length,
       pagePatch: null,
     });
-    toast.message(`已轉入後台，共 ${input.pages.length} 個頁面。完成後會彈出通知，並寄結果郵件。`);
+    toast.message(`已轉入後台，共 ${input.pages.length} 個頁面，每次同時轉換 ${FRAMER_PAGE_SYNC_CONCURRENCY} 頁。完成後會彈出通知，並寄結果郵件。`);
     if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
       void Notification.requestPermission().catch(() => undefined);
     }
@@ -188,7 +197,7 @@ export function ReaddyConversionJobProvider({ children }: { children: ReactNode 
       try {
         const result = await runReaddyConversion(
           input,
-          (progress) => applyProgress(input.projectKey, progress),
+          (progress) => applyProgress(input.projectKey, input.framerProjectUrl, progress),
           () => cancelRef.current,
         );
         await finish(input, result);
@@ -210,7 +219,7 @@ export function ReaddyConversionJobProvider({ children }: { children: ReactNode 
   const cancel = useCallback(() => {
     if (!runningRef.current) return;
     cancelRef.current = true;
-    setView((prev) => ({ ...prev, currentLabel: '正在中止，目前這頁寫完後會停下來' }));
+    setView((prev) => ({ ...prev, currentLabel: '正在中止，進行中的頁面寫完後會停下來' }));
   }, []);
 
   const dismiss = useCallback(() => {

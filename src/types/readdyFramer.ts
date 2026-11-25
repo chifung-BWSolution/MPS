@@ -260,6 +260,23 @@ export interface FramerSyncJob {
   updated_at?: string;
 }
 
+/** One imported website: the uploaded source, not a single page analysis. */
+export interface FramerSiteSnapshot {
+  id: string;
+  project_key: string;
+  project_name: string;
+  source_type: SourceType;
+  source_label: string | null;
+  framer_project_url: string | null;
+  github_repo_url: string | null;
+  github_branch: string | null;
+  github_all_paths: string[];
+  storage_bundle_path: string | null;
+  analysis: ReaddyProjectAnalysis;
+  page_count: number;
+  created_at: string;
+}
+
 export interface FramerWorkspaceSummary {
   id: string;
   name: string;

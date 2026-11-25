@@ -23,28 +23,39 @@ import {
   fetchGitHubPageBundle,
   getFramerOAuthStatus,
   isValidFramerProjectUrl,
+  isFramerSiteRecorded,
   listFramerCatalog,
+  listFramerSiteSnapshots,
   listGitHubBranches,
   listGitHubRepos,
   listRecentFramerJobs,
+  loadUploadedReaddyFileMap,
+  markFramerSiteRecorded,
   parseReaddyToIr,
   processUploadedReaddyFile,
+  saveFramerSiteSnapshot,
   saveTeamGitHubToken,
   startFramerOAuth,
   syncFramerStep,
+  type FramerMcpSessionHint,
 } from '@/lib/readdyFramerApi';
 import {
   analyzeReaddyFileMap,
   assembleReaddyPageCode,
 } from '@/lib/readdyProjectAnalyzer';
 import { extractReaddyCode } from '@/lib/readdyConversionMail';
-import { loadSavedPageProgress, savePageProgress } from '@/lib/readdyFramerProgress';
+import {
+  loadSavedPageProgress,
+  normalizeFramerProjectKey,
+  savePageProgress,
+} from '@/lib/readdyFramerProgress';
 import { useReaddyConversionJob } from '@/context/ReaddyConversionJobContext';
 import type {
   ExecutionStageState,
   FramerIrPayload,
   FramerOAuthStatus,
   FramerProjectSummary,
+  FramerSiteSnapshot,
   FramerSyncJob,
   FramerWorkspaceSummary,
   GitHubRepoMeta,
@@ -57,16 +68,24 @@ import type {
   WorkbenchLogEntry,
 } from '@/types/readdyFramer';
 import { WorkbenchHeader } from './WorkbenchHeader';
+import { PageAnalysisHistoryMenu } from './PageAnalysisHistoryMenu';
 import { SourceConfigPanel } from './SourceConfigPanel';
 import { PageInventoryPanel } from './PageInventoryPanel';
 import { GridAnchorPanel } from './GridAnchorPanel';
 import { LayersPanel } from './LayersPanel';
 import { GridCanvasPreview } from './GridCanvasPreview';
 import { ExecutionProgressModal } from './ExecutionProgressModal';
-import { FaithfulHomeFrame } from './site/ReaddySitePreview';
+import { faithfulPagePreview } from './site/ReaddySitePreview';
+import { captureDesktopSceneGraph, matchSceneToSection } from '@/lib/readdySceneGraph';
 
 function pickLandingPage(pages: ReaddyDiscoveredPage[]): ReaddyDiscoveredPage | undefined {
   return pages.find((page) => page.path === '/') || pages.find((page) => page.pageKind === 'home') || pages[0];
+}
+
+function isSameFramerProject(a?: string | null, b?: string | null): boolean {
+  const ka = normalizeFramerProjectKey(a);
+  const kb = normalizeFramerProjectKey(b);
+  return ka !== 'unassigned' && kb !== 'unassigned' && ka === kb;
 }
 
 function createInitialStages(): ExecutionStageState[] {
@@ -83,6 +102,8 @@ export function ReaddyFramerWorkbench() {
   const [oauthStatus, setOauthStatus] = useState<FramerOAuthStatus | null>(null);
   const [oauthConnecting, setOauthConnecting] = useState(false);
   const [recentJobs, setRecentJobs] = useState<FramerSyncJob[]>([]);
+  const [siteSnapshots, setSiteSnapshots] = useState<FramerSiteSnapshot[]>([]);
+  const [activeSiteId, setActiveSiteId] = useState<string | null>(null);
   const oauthPopupRef = useRef<Window | null>(null);
 
   // Step 01 Source Config
@@ -130,9 +151,27 @@ export function ReaddyFramerWorkbench() {
   const [irPayload, setIrPayload] = useState<FramerIrPayload | null>(null);
   const [parsing, setParsing] = useState(false);
   const [pageRailNarrow, setPageRailNarrow] = useState(false);
+  const [step1CollapseNonce, setStep1CollapseNonce] = useState(0);
   const [railWidePx, setRailWidePx] = useState<number | null>(null);
+  const [railCompact, setRailCompact] = useState(false);
   const splitRef = useRef<HTMLDivElement>(null);
+  const pageRailRef = useRef<HTMLDivElement>(null);
   const pageRailNarrowRef = useRef(false);
+
+  useLayoutEffect(() => {
+    const el = pageRailRef.current;
+    if (!el) return;
+    const apply = (width: number) => {
+      const next = width < 440;
+      setRailCompact((prev) => (prev === next ? prev : next));
+    };
+    apply(el.getBoundingClientRect().width);
+    const observer = new ResizeObserver((entries) => {
+      apply(entries[0]?.contentRect.width ?? 0);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const progressOpenTimerRef = useRef<number | null>(null);
   const [syncingAll, setSyncingAll] = useState(false);
   const [showGridOverlay, setShowGridOverlay] = useState(true);
@@ -142,6 +181,7 @@ export function ReaddyFramerWorkbench() {
 
   // Progress Modal state
   const [progressModalOpen, setProgressModalOpen] = useState(false);
+  const [progressFocus, setProgressFocus] = useState<'parse' | 'sync'>('parse');
   const [stages, setStages] = useState<ExecutionStageState[]>(createInitialStages);
   const [logs, setLogs] = useState<WorkbenchLogEntry[]>([]);
 
@@ -203,12 +243,46 @@ export function ReaddyFramerWorkbench() {
 
   const refreshHistory = useCallback(async () => {
     try {
-      const jobs = await listRecentFramerJobs(25);
+      const jobs = await listRecentFramerJobs(100);
       setRecentJobs(jobs);
     } catch {
       // ignore if migration not pushed yet
     }
   }, []);
+
+  const refreshSites = useCallback(async () => {
+    const rows = await listFramerSiteSnapshots(20);
+    setSiteSnapshots(rows);
+  }, []);
+
+  const rememberSite = useCallback(
+    async (input: {
+      analysis: ReaddyProjectAnalysis;
+      sourceLabel: string;
+      framerProjectUrl: string;
+      githubRepoUrl: string;
+      githubBranch: string;
+      githubAllPaths: string[];
+      storageBundlePath: string | null;
+    }) => {
+      markFramerSiteRecorded(input.analysis.projectKey);
+      const saved = await saveFramerSiteSnapshot({
+        project_key: input.analysis.projectKey,
+        project_name: input.analysis.projectName,
+        source_type: input.analysis.sourceType,
+        source_label: input.sourceLabel || null,
+        framer_project_url: input.framerProjectUrl.trim() || null,
+        github_repo_url: input.githubRepoUrl.trim() || null,
+        github_branch: input.githubBranch.trim() || input.analysis.githubMeta?.branch || null,
+        github_all_paths: input.githubAllPaths,
+        storage_bundle_path: input.storageBundlePath,
+        analysis: input.analysis,
+      });
+      setSiteSnapshots((prev) => [saved, ...prev.filter((row) => row.id !== saved.id)].slice(0, 20));
+      setActiveSiteId(saved.id);
+    },
+    [],
+  );
 
   const measureRailWidth = useCallback(() => {
     const el = splitRef.current;
@@ -252,7 +326,38 @@ export function ReaddyFramerWorkbench() {
   useEffect(() => {
     void refreshOAuthStatus();
     void refreshHistory();
-  }, [refreshOAuthStatus, refreshHistory]);
+    void refreshSites();
+  }, [refreshOAuthStatus, refreshHistory, refreshSites]);
+
+  const autoSavedSiteKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!analysis) return;
+    if (
+      autoSavedSiteKeyRef.current === analysis.projectKey ||
+      isFramerSiteRecorded(analysis.projectKey)
+    ) {
+      return;
+    }
+    autoSavedSiteKeyRef.current = analysis.projectKey;
+    markFramerSiteRecorded(analysis.projectKey);
+    void rememberSite({
+      analysis,
+      sourceLabel: sourceLabel || analysis.githubMeta?.full_name || analysis.projectName,
+      framerProjectUrl,
+      githubRepoUrl,
+      githubBranch: analysis.githubMeta?.branch || githubBranch,
+      githubAllPaths,
+      storageBundlePath: analysis.storageBundlePath ?? null,
+    });
+  }, [
+    analysis,
+    sourceLabel,
+    framerProjectUrl,
+    githubRepoUrl,
+    githubBranch,
+    githubAllPaths,
+    rememberSite,
+  ]);
 
   useEffect(() => {
     if (!oauthStatus?.connected) return;
@@ -421,11 +526,22 @@ export function ReaddyFramerWorkbench() {
     }
   };
 
+  const framerProjectUrlRef = useRef(framerProjectUrl);
+  framerProjectUrlRef.current = framerProjectUrl;
+  const activeMcpSessionRef = useRef<FramerMcpSessionHint | null>(null);
+  const lastHydrationKeyRef = useRef('');
+  const lastFramerKeyRef = useRef('');
+
   const hydrateAnalysisWithProgress = useCallback(
-    (rawAnalysis: ReaddyProjectAnalysis, jobs: FramerSyncJob[]): ReaddyProjectAnalysis => {
-      const saved = loadSavedPageProgress(rawAnalysis.projectKey);
+    (
+      rawAnalysis: ReaddyProjectAnalysis,
+      jobs: FramerSyncJob[],
+      targetFramerUrl: string,
+    ): ReaddyProjectAnalysis => {
+      const saved = loadSavedPageProgress(rawAnalysis.projectKey, targetFramerUrl);
       const jobByPath = new Map<string, FramerSyncJob>();
       for (const j of jobs) {
+        if (!isSameFramerProject(j.framer_project_url, targetFramerUrl)) continue;
         const p = j.page_path || j.ir_payload?.pageMeta?.path;
         if (p && !jobByPath.has(p)) {
           jobByPath.set(p, j);
@@ -436,9 +552,19 @@ export function ReaddyFramerWorkbench() {
         const local = saved[p.id];
         const remote = jobByPath.get(p.path);
         if (local) {
+          let migrationStatus = local.migrationStatus;
+          if (remote?.status === 'completed') {
+            migrationStatus = 'migrated';
+          } else if (
+            local.migrationStatus === 'failed' &&
+            remote?.status === 'parsed' &&
+            remote.id !== local.jobId
+          ) {
+            migrationStatus = 'parsed';
+          }
           return {
             ...p,
-            migrationStatus: local.migrationStatus,
+            migrationStatus,
             jobId: local.jobId ?? remote?.id ?? null,
             sectionCount: local.sectionCount ?? remote?.ir_payload?.sections?.length,
             framerPageNodeId: local.framerPageNodeId ?? remote?.ir_payload?.pageMeta?.framerPageNodeId,
@@ -463,13 +589,47 @@ export function ReaddyFramerWorkbench() {
             lastSyncedAt: remote.updated_at ?? remote.created_at,
           };
         }
-        return p;
+        return {
+          ...p,
+          migrationStatus: 'pending' as ReaddyPageMigrationStatus,
+          jobId: null,
+          sectionCount: undefined,
+          framerPageNodeId: null,
+          lastSyncedAt: null,
+        };
       });
 
       return { ...rawAnalysis, pages };
     },
     [],
   );
+
+  const recentJobsSignature = useMemo(
+    () => recentJobs.slice(0, 25).map((j) => `${j.id}:${j.status}`).join('|'),
+    [recentJobs],
+  );
+
+  useEffect(() => {
+    const framerKey = normalizeFramerProjectKey(framerProjectUrl);
+    const prevFramerKey = lastFramerKeyRef.current;
+    if (prevFramerKey !== framerKey) {
+      lastFramerKeyRef.current = framerKey;
+      activeMcpSessionRef.current = null;
+      if (prevFramerKey && activeJobId) {
+        const activeJob = recentJobs.find((j) => j.id === activeJobId);
+        if (!activeJob || !isSameFramerProject(activeJob.framer_project_url, framerProjectUrl)) {
+          setActiveJobId(null);
+          setIrPayload(null);
+          setSelectedSectionId(null);
+        }
+      }
+    }
+    if (!analysis) return;
+    const hydrationKey = `${analysis.projectKey}::${framerKey}::${recentJobsSignature}`;
+    if (lastHydrationKeyRef.current === hydrationKey) return;
+    lastHydrationKeyRef.current = hydrationKey;
+    setAnalysis((prev) => (prev ? hydrateAnalysisWithProgress(prev, recentJobs, framerProjectUrl) : prev));
+  }, [activeJobId, analysis, framerProjectUrl, hydrateAnalysisWithProgress, recentJobs, recentJobsSignature]);
 
   const updatePageState = useCallback(
     (pageId: string, patch: Partial<ReaddyDiscoveredPage>) => {
@@ -478,7 +638,7 @@ export function ReaddyFramerWorkbench() {
         const nextPages = prev.pages.map((p) =>
           p.id === pageId ? { ...p, ...patch } : p,
         );
-        savePageProgress(prev.projectKey, nextPages);
+        savePageProgress(prev.projectKey, nextPages, framerProjectUrlRef.current);
         return { ...prev, pages: nextPages };
       });
     },
@@ -514,6 +674,7 @@ export function ReaddyFramerWorkbench() {
       const existingJob = restoreCachedJob
         ? recentJobs.find(
             (j) =>
+              isSameFramerProject(j.framer_project_url, framerProjectUrlRef.current) &&
               (j.id === page.jobId ||
                 j.page_path === page.path ||
                 j.ir_payload?.pageMeta?.path === page.path) &&
@@ -525,7 +686,7 @@ export function ReaddyFramerWorkbench() {
         setLoadingPageId(page.id);
         try {
           const res = await fetchGitHubPageBundle({
-            repo_url: githubRepoUrl,
+            repo_url: githubRepoUrlRef.current,
             branch: projAnalysis.githubMeta.branch,
             page,
             shared_files: projAnalysis.sharedFiles,
@@ -556,15 +717,25 @@ export function ReaddyFramerWorkbench() {
         setSelectedSectionId(existingJob.ir_payload.sections[0]?.id || null);
       }
     },
-    [githubRepoUrl, pushLog, recentJobs],
+    [pushLog, recentJobs],
   );
 
   const handleUploadFile = async (file: File) => {
     setUploadLoading(true);
     try {
       const result = await processUploadedReaddyFile(file);
-      const hydrated = hydrateAnalysisWithProgress(result.analysis, recentJobs);
+      const hydrated = hydrateAnalysisWithProgress(result.analysis, recentJobs, framerProjectUrl);
+      markFramerSiteRecorded(hydrated.projectKey);
       setAnalysis(hydrated);
+      void rememberSite({
+        analysis: hydrated,
+        sourceLabel: file.name,
+        framerProjectUrl,
+        githubRepoUrl: '',
+        githubBranch: '',
+        githubAllPaths: [],
+        storageBundlePath: hydrated.storageBundlePath ?? null,
+      });
       setProjectFileMap(result.fileMap);
       setGithubRepoMeta(null);
       setSourceLabel(file.name);
@@ -602,8 +773,18 @@ export function ReaddyFramerWorkbench() {
         repo_url: githubRepoUrl,
         branch: githubBranch,
       });
-      const hydrated = hydrateAnalysisWithProgress(res.analysis, recentJobs);
+      const hydrated = hydrateAnalysisWithProgress(res.analysis, recentJobs, framerProjectUrl);
+      markFramerSiteRecorded(hydrated.projectKey);
       setAnalysis(hydrated);
+      void rememberSite({
+        analysis: hydrated,
+        sourceLabel: hydrated.githubMeta?.full_name || githubRepoUrl,
+        framerProjectUrl,
+        githubRepoUrl,
+        githubBranch: hydrated.githubMeta?.branch || githubBranch,
+        githubAllPaths: res.all_paths || [],
+        storageBundlePath: null,
+      });
       setProjectFileMap({});
       setGithubAllPaths(res.all_paths || []);
       setSourceLabel(hydrated.githubMeta?.full_name || githubRepoUrl);
@@ -646,8 +827,18 @@ export function ReaddyFramerWorkbench() {
       sourceType: 'paste',
       projectName: 'Pasted Landing Page',
     });
-    const hydrated = hydrateAnalysisWithProgress(rawAnalysis, recentJobs);
+    const hydrated = hydrateAnalysisWithProgress(rawAnalysis, recentJobs, framerProjectUrl);
+    markFramerSiteRecorded(hydrated.projectKey);
     setAnalysis(hydrated);
+    void rememberSite({
+      analysis: hydrated,
+      sourceLabel: '貼上代碼',
+      framerProjectUrl,
+      githubRepoUrl: '',
+      githubBranch: '',
+      githubAllPaths: [],
+      storageBundlePath: null,
+    });
     setProjectFileMap(fileMap);
     setGithubRepoMeta(null);
     setSourceLabel('paste');
@@ -728,6 +919,7 @@ export function ReaddyFramerWorkbench() {
     setParsing(true);
     if (progressOpenTimerRef.current) window.clearTimeout(progressOpenTimerRef.current);
     progressOpenTimerRef.current = window.setTimeout(() => {
+      setProgressFocus('parse');
       setProgressModalOpen(true);
       progressOpenTimerRef.current = null;
     }, 420);
@@ -858,6 +1050,7 @@ export function ReaddyFramerWorkbench() {
     }
 
     const sectionIdx = stepIndex - 1;
+    setProgressFocus('sync');
     setProgressModalOpen(true);
     updateSectionStatus(sectionIdx, 'syncing');
     setStages((prev) =>
@@ -873,13 +1066,18 @@ export function ReaddyFramerWorkbench() {
     );
 
     try {
+      const scenes = captureDesktopSceneGraph();
+      const scene = matchSceneToSection(irPayload.sections[sectionIdx], scenes || []);
       const res = await syncFramerStep({
         job_id: activeJobId,
         step_index: stepIndex,
         framer_project_url: framerProjectUrl.trim(),
         page_path: activePage?.path || irPayload.pageMeta?.path,
         page_title: activePage?.title || irPayload.pageMeta?.title,
+        mcp_session: activeMcpSessionRef.current,
+        scene,
       });
+      activeMcpSessionRef.current = res.mcp_session ?? activeMcpSessionRef.current;
       updateSectionStatus(sectionIdx, 'synced');
       if (res.logs?.length) appendLogs(res.logs);
       const syncedCount = irPayload.sections.filter(
@@ -927,6 +1125,7 @@ export function ReaddyFramerWorkbench() {
     }
 
     setSyncingAll(true);
+    setProgressFocus('sync');
     setProgressModalOpen(true);
     const total = irPayload.sections.length;
     const pagePath = activePage?.path || irPayload.pageMeta?.path || '/';
@@ -944,13 +1143,19 @@ export function ReaddyFramerWorkbench() {
             : s,
         ),
       );
+      const scenes = captureDesktopSceneGraph();
+      if (!scenes?.length) {
+        toast.message('畫面上沒有預覽，這次仍用扁平版型寫入。');
+      }
       const step0Res = await syncFramerStep({
         job_id: activeJobId,
         step_index: 0,
         framer_project_url: framerProjectUrl.trim(),
         page_path: pagePath,
         page_title: pageTitle,
+        mcp_session: activeMcpSessionRef.current,
       });
+      activeMcpSessionRef.current = step0Res.mcp_session ?? activeMcpSessionRef.current;
       if (step0Res.logs?.length) appendLogs(step0Res.logs);
 
       for (let i = 0; i < total; i++) {
@@ -976,7 +1181,10 @@ export function ReaddyFramerWorkbench() {
           framer_project_url: framerProjectUrl.trim(),
           page_path: pagePath,
           page_title: pageTitle,
+          mcp_session: activeMcpSessionRef.current,
+          scene: matchSceneToSection(sec, scenes || []),
         });
+        activeMcpSessionRef.current = res.mcp_session ?? activeMcpSessionRef.current;
         updateSectionStatus(i, 'synced');
         if (res.logs?.length) appendLogs(res.logs);
       }
@@ -1039,7 +1247,72 @@ export function ReaddyFramerWorkbench() {
       { key: 'tokens', code: '03', label: 'Token 樣式映射', progress: job.ir_payload ? 100 : 0, status: job.ir_payload ? 'done' : 'idle', detail: '已載入歷史樣式' },
       { key: 'mcp', code: '04', label: 'MCP 畫布寫入', progress: mcpPct, status: mcpPct === 100 ? 'done' : 'idle', detail: `已同步 ${syncedCount}/${sections.length}` },
     ]);
-    toast.success(`已載入歷史任務${matchedPath ? ` (${matchedPath})` : ''}`);
+    toast.success(`已載入這次頁面分析${matchedPath ? ` (${matchedPath})` : ''}`);
+  };
+
+  const handleSelectSite = async (snapshot: FramerSiteSnapshot) => {
+    narrowPageRail();
+    setStep1CollapseNonce((n) => n + 1);
+    markFramerSiteRecorded(snapshot.analysis.projectKey);
+    const targetFramer = snapshot.framer_project_url || framerProjectUrlRef.current;
+    if (snapshot.framer_project_url) {
+      framerProjectUrlRef.current = snapshot.framer_project_url;
+      setFramerProjectUrl(snapshot.framer_project_url);
+    }
+    const hydrated = hydrateAnalysisWithProgress(snapshot.analysis, recentJobs, targetFramer);
+    setAnalysis(hydrated);
+    setActiveSiteId(snapshot.id);
+    setSourceType(snapshot.source_type);
+    setSourceLabel(snapshot.source_label || snapshot.project_name);
+
+    const allPaths = snapshot.github_all_paths || [];
+    let fileMap: Record<string, string> = {};
+    let partialNotice: string | null = null;
+
+    if (snapshot.source_type === 'github') {
+      const repoUrl = snapshot.github_repo_url || '';
+      githubRepoUrlRef.current = repoUrl;
+      setGithubRepoUrl(repoUrl);
+      if (snapshot.github_branch) setGithubBranch(snapshot.github_branch);
+      if (snapshot.analysis.githubMeta?.branches?.length) {
+        setGithubBranches(snapshot.analysis.githubMeta.branches);
+      }
+      setGithubAllPaths(allPaths);
+      setProjectFileMap({});
+      setGithubRepoMeta(null);
+    } else if (snapshot.source_type === 'upload') {
+      githubRepoUrlRef.current = '';
+      setGithubRepoUrl('');
+      setGithubAllPaths([]);
+      setGithubRepoMeta(null);
+      if (snapshot.storage_bundle_path) {
+        const restored = await loadUploadedReaddyFileMap(snapshot.storage_bundle_path);
+        if (restored) {
+          fileMap = restored;
+          setProjectFileMap(restored);
+        } else {
+          setProjectFileMap({});
+          partialNotice = '已載入網站頁面清單。壓縮包原檔讀取不到，請重新上傳才能組裝頁面。';
+        }
+      } else {
+        setProjectFileMap({});
+        partialNotice = '已載入網站頁面清單。這次上傳沒有留下原檔，請重新上傳才能組裝頁面。';
+      }
+    } else {
+      githubRepoUrlRef.current = '';
+      setGithubRepoUrl('');
+      setGithubAllPaths([]);
+      setGithubRepoMeta(null);
+      setProjectFileMap({});
+      partialNotice = '已載入網站頁面清單。貼上的原始碼沒有留在網站記錄裡。';
+    }
+
+    const firstPage = pickLandingPage(hydrated.pages);
+    if (firstPage) {
+      await selectAndAssemblePage(firstPage, hydrated, fileMap, allPaths, true);
+    }
+    if (partialNotice) toast.message(partialNotice);
+    toast.success(`已載入網站「${snapshot.project_name}」（${hydrated.pages.length} 頁）`);
   };
 
   const handleStartBackgroundConversion = () => {
@@ -1095,10 +1368,19 @@ export function ReaddyFramerWorkbench() {
   };
 
   const sections = irPayload?.sections || [];
+  const rightPaneLoading = loadingPageId !== null || parsing;
+  const rightPaneLoadingLabel = loadingPageId !== null ? '載入頁面源碼中' : '解析頁面區塊中';
   const globalProgressPct = useMemo(() => {
     const sum = stages.reduce((acc, s) => acc + s.progress, 0);
     return Math.round(sum / stages.length);
   }, [stages]);
+
+  const pageAnalysisJobs = useMemo(() => {
+    const url = framerProjectUrl.trim();
+    if (!url) return recentJobs;
+    const matched = recentJobs.filter((job) => isSameFramerProject(job.framer_project_url, url));
+    return matched.length > 0 ? matched : recentJobs;
+  }, [recentJobs, framerProjectUrl]);
 
   return (
     <div className="-m-6 min-h-[calc(100vh-48px-var(--app-banner-h))] xl:h-[calc(100vh-48px-var(--app-banner-h))] xl:overflow-hidden bg-[#F4F6F9] p-4 sm:p-5 flex flex-col gap-4">
@@ -1107,12 +1389,16 @@ export function ReaddyFramerWorkbench() {
         isBusy={parsing || syncingAll}
         oauthStatus={oauthStatus}
         oauthConnecting={oauthConnecting}
-        recentJobs={recentJobs}
-        activeJobId={activeJobId}
-        onOpenProgressModal={() => setProgressModalOpen(true)}
+        siteSnapshots={siteSnapshots}
+        activeSiteId={activeSiteId}
+        onOpenProgressModal={() => {
+          if (syncingAll) setProgressFocus('sync');
+          else if (parsing) setProgressFocus('parse');
+          setProgressModalOpen(true);
+        }}
         onConnectFramer={() => void handleConnectFramer()}
         onDisconnectFramer={() => void handleDisconnectFramer()}
-        onSelectJob={handleSelectHistoryJob}
+        onSelectSite={(site) => void handleSelectSite(site)}
         onRefreshStatus={() => void refreshOAuthStatus()}
       />
 
@@ -1120,6 +1406,7 @@ export function ReaddyFramerWorkbench() {
       <div ref={splitRef} className="flex flex-col xl:flex-row gap-4 flex-1 min-h-0">
         {/* Left Column: Integrated Step 01 Project Import + Step 02 Page Inventory */}
         <div
+          ref={pageRailRef}
           className="relative flex w-full min-h-0 min-w-0 flex-col overflow-hidden xl:shrink-0 xl:grow-0 xl:w-[var(--page-rail-w)] xl:transition-[width] xl:duration-500 xl:ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
           style={{
             ['--page-rail-w' as string]: pageRailNarrow ? '300px' : railWidePx ? `${railWidePx}px` : '34%',
@@ -1155,15 +1442,18 @@ export function ReaddyFramerWorkbench() {
                 githubLoading={githubLoading}
                 onAnalyzeGitHubProject={() => void handleAnalyzeGitHubProject()}
                 onSaveTeamGitHubToken={handleSaveTeamGitHubToken}
+                compact={railCompact}
                 uploadLoading={uploadLoading}
                 onUploadFile={(f) => void handleUploadFile(f)}
                 pasteCode={pasteCode}
                 onPasteCodeChange={setPasteCode}
                 onAnalyzePasteCode={() => void handleAnalyzePasteCode()}
                 analysis={analysis}
+                collapseNonce={step1CollapseNonce}
               />
 
               <PageInventoryPanel
+                compact={railCompact}
                 analysis={analysis}
                 activePageId={activePageId}
                 loadingPageId={loadingPageId}
@@ -1258,6 +1548,12 @@ export function ReaddyFramerWorkbench() {
 
               {/* Navigation + Action Buttons */}
               <div className="flex flex-wrap items-center gap-2">
+                <PageAnalysisHistoryMenu
+                  jobs={pageAnalysisJobs}
+                  activePagePath={activePage?.path ?? null}
+                  activeJobId={activeJobId}
+                  onSelectJob={handleSelectHistoryJob}
+                />
                 {analysis && analysis.pages.length > 1 && (
                   <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
                     <button
@@ -1314,7 +1610,11 @@ export function ReaddyFramerWorkbench() {
 
                 <button
                   type="button"
-                  onClick={() => setProgressModalOpen(true)}
+                  onClick={() => {
+                    if (syncingAll) setProgressFocus('sync');
+                    else if (parsing) setProgressFocus('parse');
+                    setProgressModalOpen(true);
+                  }}
                   className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11.5px] font-medium text-[#101B2D]"
                 >
                   <Activity size={13} className="text-[#0BB59B]" />
@@ -1344,8 +1644,8 @@ export function ReaddyFramerWorkbench() {
             <div
               className={
                 expandedCanvas
-                  ? 'grid h-full grid-cols-1 gap-4'
-                  : 'grid h-full grid-cols-1 gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:grid-rows-1'
+                  ? 'grid h-full min-h-0 grid-cols-1 gap-4'
+                  : 'grid h-full min-h-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)] lg:grid-rows-1'
               }
             >
               {!expandedCanvas && (
@@ -1354,6 +1654,8 @@ export function ReaddyFramerWorkbench() {
                   hoveredSectionId={hoveredSectionId}
                   selectedSectionId={selectedSectionId}
                   syncingAll={syncingAll}
+                  loading={rightPaneLoading}
+                  loadingLabel={rightPaneLoadingLabel}
                   onHoverSection={setHoveredSectionId}
                   onSelectSection={setSelectedSectionId}
                   onSyncSingleSection={(stepIdx) => void handleSyncSingleSection(stepIdx)}
@@ -1370,14 +1672,11 @@ export function ReaddyFramerWorkbench() {
                 onToggleExpandedCanvas={() => setExpandedCanvas((v) => !v)}
                 hoveredSectionId={hoveredSectionId}
                 selectedSectionId={selectedSectionId}
+                loading={rightPaneLoading}
+                loadingLabel={rightPaneLoadingLabel}
                 onHoverSection={setHoveredSectionId}
                 onSelectSection={setSelectedSectionId}
-                pagePreview={
-                  (activePage?.path === '/' || activePage?.path === '/cn/') &&
-                  rawCode.includes('讓現場音樂，成為賓客記得住的部分') ? (
-                    <FaithfulHomeFrame />
-                  ) : undefined
-                }
+                pagePreview={faithfulPagePreview(activePage?.path, rawCode)}
               />
             </div>
 
@@ -1444,8 +1743,12 @@ export function ReaddyFramerWorkbench() {
       <ExecutionProgressModal
         open={progressModalOpen}
         onOpenChange={setProgressModalOpen}
-        globalProgressPct={globalProgressPct}
-        isRunning={parsing || syncingAll}
+        isRunning={
+          progressFocus === 'sync'
+            ? syncingAll || stages.some((stage) => stage.key === 'mcp' && stage.status === 'running')
+            : parsing
+        }
+        focus={progressFocus}
         stages={stages}
         logs={logs}
       />

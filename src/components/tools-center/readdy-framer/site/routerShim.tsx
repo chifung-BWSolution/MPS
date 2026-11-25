@@ -4,9 +4,9 @@ type LocationState = { pathname: string };
 
 const LocationContext = createContext<LocationState>({ pathname: '/' });
 
-/** Keeps the copied Readdy page on the homepage inside the tools shell. */
-export function SiteRouter({ children }: { children: ReactNode }) {
-  const value = useMemo(() => ({ pathname: '/' }), []);
+/** Keeps the copied Readdy page on one route inside the tools shell. */
+export function SiteRouter({ pathname = '/', children }: { pathname?: string; children: ReactNode }) {
+  const value = useMemo(() => ({ pathname }), [pathname]);
   return <LocationContext.Provider value={value}>{children}</LocationContext.Provider>;
 }
 

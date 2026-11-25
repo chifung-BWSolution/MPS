@@ -9,20 +9,38 @@ import {
   PlugZap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { FramerOAuthStatus, FramerSyncJob } from '@/types/readdyFramer';
+import type { FramerOAuthStatus, FramerSiteSnapshot, SourceType } from '@/types/readdyFramer';
 
 interface WorkbenchHeaderProps {
   globalProgressPct: number;
   isBusy: boolean;
   oauthStatus: FramerOAuthStatus | null;
   oauthConnecting: boolean;
-  recentJobs: FramerSyncJob[];
-  activeJobId: string | null;
+  siteSnapshots: FramerSiteSnapshot[];
+  activeSiteId: string | null;
   onOpenProgressModal: () => void;
   onConnectFramer: () => void;
   onDisconnectFramer: () => void;
-  onSelectJob: (job: FramerSyncJob) => void;
+  onSelectSite: (site: FramerSiteSnapshot) => void;
   onRefreshStatus: () => void;
+}
+
+function siteSourceLabel(sourceType: SourceType): string {
+  if (sourceType === 'github') return 'GitHub';
+  if (sourceType === 'upload') return '上傳';
+  return '貼上';
+}
+
+function formatSiteTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('zh-HK', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 }
 
 export function WorkbenchHeader({
@@ -30,12 +48,12 @@ export function WorkbenchHeader({
   isBusy,
   oauthStatus,
   oauthConnecting,
-  recentJobs,
-  activeJobId,
+  siteSnapshots,
+  activeSiteId,
   onOpenProgressModal,
   onConnectFramer,
   onDisconnectFramer,
-  onSelectJob,
+  onSelectSite,
   onRefreshStatus,
 }: WorkbenchHeaderProps) {
   const [mcpMenuOpen, setMcpMenuOpen] = useState(false);
@@ -72,17 +90,18 @@ export function WorkbenchHeader({
               setMcpMenuOpen(false);
             }}
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] text-slate-200 transition-colors"
-            title="載入歷史轉換記錄"
+            title="載入已導入的網站資料"
           >
             <History size={12} className="text-slate-300" />
-            <span>任務記錄 ({recentJobs.length})</span>
+            <span>網站記錄 ({siteSnapshots.length})</span>
           </button>
           {historyOpen && (
-            <div className="absolute right-0 mt-2 w-80 bg-white text-[#101B2D] rounded-lg shadow-xl border border-slate-200 z-50 overflow-hidden">
+            <div className="absolute right-0 mt-2 w-96 bg-white text-[#101B2D] rounded-lg shadow-xl border border-slate-200 z-50 overflow-hidden">
               <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                <span className="text-[11px] font-semibold text-slate-600">
-                  最近轉換任務
-                </span>
+                <div>
+                  <div className="text-[11px] font-semibold text-slate-600">網站記錄</div>
+                  <div className="text-[10px] text-slate-400">已導入的整站資料</div>
+                </div>
                 <button
                   type="button"
                   onClick={() => setHistoryOpen(false)}
@@ -91,41 +110,37 @@ export function WorkbenchHeader({
                   關閉
                 </button>
               </div>
-              {recentJobs.length === 0 ? (
-                <div className="p-4 text-[12px] text-slate-400 text-center">
-                  尚無已解析的歷史任務
+              {siteSnapshots.length === 0 ? (
+                <div className="p-4 text-[12px] text-slate-400 text-center leading-relaxed">
+                  尚無網站記錄。分析 GitHub 倉庫或上傳壓縮包後，整站資料會留在這裡。
                 </div>
               ) : (
-                <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
-                  {recentJobs.map((job) => (
+                <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                  {siteSnapshots.map((site) => (
                     <button
-                      key={job.id}
+                      key={site.id}
                       type="button"
                       onClick={() => {
-                        onSelectJob(job);
+                        onSelectSite(site);
                         setHistoryOpen(false);
                       }}
                       className={cn(
                         'w-full text-left px-3 py-2.5 hover:bg-slate-50 transition-colors',
-                        activeJobId === job.id && 'bg-teal-50/70',
+                        activeSiteId === site.id && 'bg-teal-50/70',
                       )}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[12px] font-medium truncate">
-                          {job.page_title ||
-                            job.ir_payload?.pageMeta?.title ||
-                            (job.github_repo_meta?.repo
-                              ? `${job.github_repo_meta.repo}`
-                              : job.source_type === 'upload'
-                                ? '本地上傳工程'
-                                : '貼上代碼轉換')}
+                          {site.project_name}
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-mono shrink-0">
-                          {job.status}
+                          {site.page_count} 頁
                         </span>
                       </div>
-                      <div className="text-[10px] text-slate-400 font-mono truncate mt-0.5">
-                        {job.page_path || job.ir_payload?.pageMeta?.path || job.framer_project_url}
+                      <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                        {siteSourceLabel(site.source_type)}
+                        {site.source_label ? ` · ${site.source_label}` : ''}
+                        {site.created_at ? ` · ${formatSiteTime(site.created_at)}` : ''}
                       </div>
                     </button>
                   ))}

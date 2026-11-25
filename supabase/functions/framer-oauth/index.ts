@@ -5,6 +5,7 @@ import {
   FRAMER_OAUTH_REGISTER_URL,
   FRAMER_OAUTH_SCOPE,
   FRAMER_OAUTH_TOKEN_URL,
+  FramerMcpClient,
   SUPABASE_SERVICE_ROLE_KEY,
   corsHeaders,
   extractBearerToken,
@@ -298,6 +299,7 @@ async function handleOAuthCallback(reqUrl: URL): Promise<Response> {
     pending_state: null,
     pending_code_verifier: null,
     pending_expires_at: null,
+    active_mcp_sessions: {},
   });
 
   return callbackResponse(
@@ -387,6 +389,16 @@ Deno.serve(async (req: Request) => {
 
     if (action === "disconnect") {
       const supabase = supabaseAdmin();
+      const row = await loadFramerConnection(supabase).catch(() => null);
+      if (row?.access_token && row.active_mcp_sessions && typeof row.active_mcp_sessions === "object") {
+        const entries = Object.values(row.active_mcp_sessions);
+        await Promise.all(
+          entries.map(async (entry) => {
+            if (!entry?.mcp_session_id) return;
+            await new FramerMcpClient(row.access_token!, entry.mcp_session_id).close();
+          }),
+        );
+      }
       await upsertFramerConnection(supabase, {
         access_token: null,
         refresh_token: null,
@@ -395,6 +407,7 @@ Deno.serve(async (req: Request) => {
         pending_state: null,
         pending_code_verifier: null,
         pending_expires_at: null,
+        active_mcp_sessions: {},
       });
       return jsonResponse({ ok: true, ...(await buildStatusResponse()) });
     }

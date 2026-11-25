@@ -11,6 +11,7 @@ import {
   type EdgeProjectAnalysis,
   analyzeReaddyFileMap,
   assembleReaddyPageCode,
+  extractLocalNamedDataImports,
   extractLocalSectionImports,
 } from "../_shared/readdy-analyzer.ts";
 
@@ -457,6 +458,25 @@ Deno.serve(async (req: Request) => {
             const content = await fetchRepoTextFile(p, activeBranch);
             if (content !== null) fileMap[p] = content;
           }),
+        );
+
+        const dataModulePaths = new Set<string>();
+        for (const sourcePath of [page.sourceFile, ...deps]) {
+          const code = fileMap[sourcePath];
+          if (!code) continue;
+          for (const dataImp of extractLocalNamedDataImports(code, sourcePath, allPaths)) {
+            if (!fileMap[dataImp.resolvedPath]) {
+              dataModulePaths.add(dataImp.resolvedPath);
+            }
+          }
+        }
+        await Promise.all(
+          Array.from(dataModulePaths)
+            .slice(0, 8)
+            .map(async (p) => {
+              const content = await fetchRepoTextFile(p, activeBranch);
+              if (content !== null) fileMap[p] = content;
+            }),
         );
       }
 

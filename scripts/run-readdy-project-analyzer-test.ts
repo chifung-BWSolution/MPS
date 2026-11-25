@@ -42,10 +42,23 @@ const fixtureMap = normalizeProjectFileMap({
   `,
   'demo/src/pages/home/page.tsx': `
     import Hero from './sections/Hero';
-    export default function Home() { return <main><Hero /></main>; }
+    import FaqSection from './sections/FaqSection';
+    export default function Home() { return <main><Hero /><FaqSection /></main>; }
   `,
   'demo/src/pages/home/sections/Hero.tsx': `
     export default function Hero() { return <section><h1>Demo Hero</h1></section>; }
+  `,
+  'demo/src/pages/home/sections/FaqSection.tsx': `
+    import { FAQ_ITEMS } from '@/lib/seo';
+    export default function FaqSection() {
+      return <section>{FAQ_ITEMS.map((item, idx) => <button key={idx} onClick={() => console.log(idx)}>{item.question}</button>)}</section>;
+    }
+  `,
+  'demo/src/lib/seo.ts': `
+    export const FAQ_ITEMS = [
+      { question: '第一個問題？', answer: '第一個回答。' },
+      { question: '第二個問題？', answer: '第二個回答。' },
+    ];
   `,
   'demo/src/pages/about/page.tsx': `
     import PageLayout from '@/components/layout/PageLayout';
@@ -65,6 +78,12 @@ assert.equal(fixtureAnalysis.pages[1].pageKind, 'layout-page');
 
 const fixtureHomeBundle = assembleReaddyPageCode(fixtureAnalysis.pages[0], fixtureMap, fixtureAnalysis);
 assert.ok(fixtureHomeBundle.code.includes('Demo Hero'), 'Home bundle includes Hero section');
+assert.ok(
+  fixtureHomeBundle.code.includes('const FAQ_ITEMS = [') &&
+    fixtureHomeBundle.code.includes('第一個問題？') &&
+    fixtureHomeBundle.code.includes('第二個回答。'),
+  'Home bundle inlines imported FAQ_ITEMS constant array into FaqSection',
+);
 
 // 3. Real uploaded Readdy ZIP verification (if present on local machine)
 const realZipPath =
@@ -116,6 +135,12 @@ if (existsSync(realZipPath)) {
   assert.ok(homeBundle.code.includes('服務一覽') && homeBundle.code.includes('音樂資訊'), 'Navbar includes top-level links');
   assert.ok(!homeBundle.code.includes('<a href="#">樂手名單</a>'), 'Navbar does not leak nested submenu items');
   assert.ok(homeBundle.code.includes('網上報價') && homeBundle.code.includes('聯絡我們'), 'Navbar includes dual CTAs');
+  assert.ok(
+    homeBundle.code.includes('const FAQ_ITEMS = [') &&
+      homeBundle.code.includes('可以只聘請歌手或樂隊嗎？') &&
+      homeBundle.code.includes('報價前需要準備甚麼資料？'),
+    'Real ZIP home bundle inlines all 6 FAQ_ITEMS into FaqSection',
+  );
 
   const servicesPage = realAnalysis.pages.find((p) => p.path === '/services/');
   assert.ok(servicesPage, 'Services page discovered');

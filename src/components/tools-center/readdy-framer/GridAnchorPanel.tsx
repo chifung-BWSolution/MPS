@@ -58,51 +58,51 @@ export function GridAnchorPanel({
         </button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5">
-          <div className="text-[10px] text-slate-400">桌面寬 (px)</div>
+      <div className="flex flex-col gap-2">
+        <label className="flex items-center justify-between gap-4 rounded-md border border-slate-200 bg-white px-3 py-2.5">
+          <span className="text-[12px] text-slate-500">桌面寬 (px)</span>
           <input
             type="number"
             min={320}
             max={3840}
             value={gridConfig.desktop_width}
             onChange={(e) => updateField('desktop_width', e.target.value)}
-            className="w-full bg-transparent text-[13px] font-bold font-mono text-[#101B2D] outline-none tabular-nums"
+            className="w-28 bg-transparent text-right text-[14px] font-bold font-mono text-[#101B2D] outline-none tabular-nums"
           />
-        </div>
-        <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5">
-          <div className="text-[10px] text-slate-400">最大容器 (px)</div>
+        </label>
+        <label className="flex items-center justify-between gap-4 rounded-md border border-slate-200 bg-white px-3 py-2.5">
+          <span className="text-[12px] text-slate-500">最大容器 (px)</span>
           <input
             type="number"
             min={320}
             max={2560}
             value={gridConfig.container_max_width}
             onChange={(e) => updateField('container_max_width', e.target.value)}
-            className="w-full bg-transparent text-[13px] font-bold font-mono text-[#101B2D] outline-none tabular-nums"
+            className="w-28 bg-transparent text-right text-[14px] font-bold font-mono text-[#101B2D] outline-none tabular-nums"
           />
-        </div>
-        <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5">
-          <div className="text-[10px] text-slate-400">柵格列數</div>
+        </label>
+        <label className="flex items-center justify-between gap-4 rounded-md border border-slate-200 bg-white px-3 py-2.5">
+          <span className="text-[12px] text-slate-500">柵格列數</span>
           <input
             type="number"
             min={1}
             max={24}
             value={gridConfig.columns}
             onChange={(e) => updateField('columns', e.target.value)}
-            className="w-full bg-transparent text-[13px] font-bold font-mono text-[#101B2D] outline-none tabular-nums"
+            className="w-28 bg-transparent text-right text-[14px] font-bold font-mono text-[#101B2D] outline-none tabular-nums"
           />
-        </div>
-        <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5">
-          <div className="text-[10px] text-slate-400">列間距 (px)</div>
+        </label>
+        <label className="flex items-center justify-between gap-4 rounded-md border border-slate-200 bg-white px-3 py-2.5">
+          <span className="text-[12px] text-slate-500">列間距 (px)</span>
           <input
             type="number"
             min={0}
             max={120}
             value={gridConfig.gutter}
             onChange={(e) => updateField('gutter', e.target.value)}
-            className="w-full bg-transparent text-[13px] font-bold font-mono text-[#101B2D] outline-none tabular-nums"
+            className="w-28 bg-transparent text-right text-[14px] font-bold font-mono text-[#101B2D] outline-none tabular-nums"
           />
-        </div>
+        </label>
       </div>
 
       {!gridConfirmed && highlightConfirmWarning && (

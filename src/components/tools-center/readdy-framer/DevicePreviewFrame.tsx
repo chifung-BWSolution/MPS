@@ -1,20 +1,28 @@
-import { useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { SiteScrollProvider } from './site/scrollRoot';
 
 /**
- * Renders the page in an iframe sized to the device width.
- * Tailwind breakpoints follow that iframe viewport, and the page scrolls inside it,
- * so position:fixed bars stick to the preview instead of the tools shell.
+ * Renders the page in an iframe whose layout width is the selected device width.
+ * CSS scale is applied on the iframe itself. Tailwind `lg:` follows that width,
+ * not the smaller pane the scaled page is drawn into.
  */
 export function DevicePreviewFrame({
   scrollerRef,
+  layoutWidth,
+  layoutHeight,
+  scale,
   children,
 }: {
   scrollerRef: MutableRefObject<HTMLElement | null>;
+  layoutWidth: number;
+  layoutHeight: number;
+  scale: number;
   children: ReactNode;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const layoutWidthRef = useRef(layoutWidth);
+  layoutWidthRef.current = layoutWidth;
   const [mountNode, setMountNode] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -22,8 +30,11 @@ export function DevicePreviewFrame({
     const doc = iframe?.contentDocument;
     if (!iframe || !doc) return;
 
+    const width = Math.max(320, Math.round(layoutWidthRef.current));
     doc.open();
-    doc.write('<!DOCTYPE html><html><head><meta charset="utf-8" /></head><body></body></html>');
+    doc.write(
+      `<!DOCTYPE html><html><head><meta charset="utf-8" /><meta name="viewport" content="width=${width}, initial-scale=1" /></head><body></body></html>`,
+    );
     doc.close();
 
     const syncStyles = () => {
@@ -63,9 +74,26 @@ export function DevicePreviewFrame({
     };
   }, [scrollerRef]);
 
+  useEffect(() => {
+    const meta = iframeRef.current?.contentDocument?.querySelector('meta[name="viewport"]');
+    if (!meta) return;
+    const next = `width=${Math.max(320, Math.round(layoutWidth))}, initial-scale=1`;
+    if (meta.getAttribute('content') !== next) meta.setAttribute('content', next);
+  }, [layoutWidth]);
+
+  const frameStyle: CSSProperties = {
+    width: layoutWidth,
+    height: layoutHeight,
+    transform: `scale(${scale})`,
+    transformOrigin: 'top left',
+    border: 0,
+    display: 'block',
+    background: '#fff',
+  };
+
   return (
     <>
-      <iframe ref={iframeRef} title="頁面預覽" className="block h-full w-full border-0 bg-white" />
+      <iframe ref={iframeRef} title="頁面預覽" style={frameStyle} />
       {mountNode
         ? createPortal(<SiteScrollProvider scrollerRef={scrollerRef}>{children}</SiteScrollProvider>, mountNode)
         : null}

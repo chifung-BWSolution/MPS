@@ -21,6 +21,7 @@ import type {
 } from '@/types/readdyFramer';
 
 interface PageInventoryPanelProps {
+  compact?: boolean;
   analysis: ReaddyProjectAnalysis | null;
   activePageId: string | null;
   loadingPageId: string | null;
@@ -46,6 +47,7 @@ const KIND_LABELS: Record<ReaddyPageKind, string> = {
 };
 
 export function PageInventoryPanel({
+  compact = false,
   analysis,
   activePageId,
   loadingPageId,
@@ -169,7 +171,7 @@ export function PageInventoryPanel({
             </div>
 
             {/* Extracted OKLCH Theme Swatches + Fonts */}
-            {(colorSwatches.length > 0 || analysis.cssTokens.fontHeading) && (
+            {(colorSwatches.length > 0 || (!compact && analysis.cssTokens.fontHeading)) && (
               <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5 text-[10.5px] text-slate-500">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Palette size={11} className="text-slate-400 shrink-0" />
@@ -183,11 +185,11 @@ export function PageInventoryPanel({
                         className="w-2.5 h-2.5 rounded-full border border-slate-300 shrink-0"
                         style={{ backgroundColor: sw.hex }}
                       />
-                      <span>{sw.hex}</span>
+                      {!compact && <span>{sw.hex}</span>}
                     </span>
                   ))}
                 </div>
-                {analysis.cssTokens.fontHeading && (
+                {!compact && analysis.cssTokens.fontHeading && (
                   <span className="font-mono text-[10px] text-slate-400 truncate max-w-[160px]">
                     {analysis.cssTokens.fontHeading.split(',')[0]}
                   </span>
@@ -196,96 +198,97 @@ export function PageInventoryPanel({
             )}
           </div>
 
-          {/* Search Box */}
-          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 focus-within:border-[#0BB59B] focus-within:bg-white transition-colors">
-            <Search size={13} className="text-slate-400 shrink-0" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜尋路由 /wedding、標題或檔名…"
-              className="w-full bg-transparent text-[12px] text-[#101B2D] outline-none placeholder:text-slate-400"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="text-[10.5px] text-slate-400 hover:text-slate-700 shrink-0"
-              >
-                清除
-              </button>
-            )}
-          </div>
-
-          {/* Locale & Kind Filters */}
-          <div className="space-y-2">
-            {localeOptions.length > 1 && (
-              <div className="flex flex-wrap items-center gap-1">
+          {/* Search + filters stay pinned while the page list scrolls in the rail */}
+          <div className="sticky top-0 z-20 -mx-4 space-y-2 border-b border-slate-200/80 bg-white/95 px-4 pb-3 pt-3.5 backdrop-blur-sm !mt-0">
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 focus-within:border-[#0BB59B] focus-within:bg-white transition-colors">
+              <Search size={13} className="text-slate-400 shrink-0" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="搜尋路由 /wedding、標題或檔名…"
+                className="w-full bg-transparent text-[12px] text-[#101B2D] outline-none placeholder:text-slate-400"
+              />
+              {search && (
                 <button
                   type="button"
-                  onClick={() => setLocaleFilter('all')}
-                  className={cn(
-                    'px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition-colors',
-                    localeFilter === 'all'
-                      ? 'bg-[#101B2D] text-white border-[#101B2D]'
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300',
-                  )}
+                  onClick={() => setSearch('')}
+                  className="text-[10.5px] text-slate-400 hover:text-slate-700 shrink-0"
                 >
-                  全部語系 ({pages.length})
+                  清除
                 </button>
-                {localeOptions.map(([loc, cnt]) => (
+              )}
+            </div>
+
+            <div className="space-y-2">
+              {localeOptions.length > 1 && (
+                <div className="flex flex-wrap items-center gap-1">
                   <button
-                    key={loc}
                     type="button"
-                    onClick={() => setLocaleFilter(loc)}
+                    onClick={() => setLocaleFilter('all')}
                     className={cn(
-                      'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition-colors',
-                      localeFilter === loc
-                        ? 'bg-[#0BB59B] text-[#081018] border-[#0BB59B] font-semibold'
+                      'px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition-colors',
+                      localeFilter === 'all'
+                        ? 'bg-[#101B2D] text-white border-[#101B2D]'
                         : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300',
                     )}
                   >
-                    <Globe2 size={10} />
-                    <span>{LOCALE_LABELS[loc] || loc}</span>
-                    <span className="font-mono opacity-80">{cnt}</span>
+                    全部語系 ({pages.length})
                   </button>
-                ))}
-              </div>
-            )}
+                  {localeOptions.map(([loc, cnt]) => (
+                    <button
+                      key={loc}
+                      type="button"
+                      onClick={() => setLocaleFilter(loc)}
+                      className={cn(
+                        'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition-colors',
+                        localeFilter === loc
+                          ? 'bg-[#0BB59B] text-[#081018] border-[#0BB59B] font-semibold'
+                          : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300',
+                      )}
+                    >
+                      <Globe2 size={10} />
+                      <span>{LOCALE_LABELS[loc] || loc}</span>
+                      <span className="font-mono opacity-80">{cnt}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
-            <div className="flex flex-wrap items-center justify-between gap-1.5">
-              <div className="flex flex-wrap items-center gap-1">
-                {[
-                  { id: 'all', label: '全類型' },
-                  { id: 'core', label: '核心頁面' },
-                  { id: 'article', label: '文章頁' },
-                  { id: 'mirror', label: '語言映射' },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setKindFilter(tab.id)}
-                    className={cn(
-                      'px-2 py-0.5 rounded text-[10.5px] font-medium transition-colors',
-                      kindFilter === tab.id
-                        ? 'bg-teal-50 text-[#08967F] border border-teal-200 font-semibold'
-                        : 'text-slate-500 hover:text-[#101B2D] border border-transparent',
-                    )}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
+                <div className="flex flex-wrap items-center gap-1">
+                  {[
+                    { id: 'all', label: '全類型' },
+                    { id: 'core', label: '核心頁面' },
+                    { id: 'article', label: '文章頁' },
+                    { id: 'mirror', label: '語言映射' },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setKindFilter(tab.id)}
+                      className={cn(
+                        'px-2 py-0.5 rounded text-[10.5px] font-medium transition-colors',
+                        kindFilter === tab.id
+                          ? 'bg-teal-50 text-[#08967F] border border-teal-200 font-semibold'
+                          : 'text-slate-500 hover:text-[#101B2D] border border-transparent',
+                      )}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
 
-              <label className="inline-flex items-center gap-1 text-[10.5px] text-slate-500 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={hideDone}
-                  onChange={(e) => setHideDone(e.target.checked)}
-                  className="rounded border-slate-300 accent-[#0BB59B]"
-                />
-                <span>隱藏已搬/跳過</span>
-              </label>
+                <label className="inline-flex items-center gap-1 text-[10.5px] text-slate-500 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={hideDone}
+                    onChange={(e) => setHideDone(e.target.checked)}
+                    className="rounded border-slate-300 accent-[#0BB59B]"
+                  />
+                  <span>隱藏已搬/跳過</span>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -317,7 +320,22 @@ export function PageInventoryPanel({
                     )}
                   >
                     <div className="flex items-start gap-2 min-w-0 flex-1">
-                      <span className="mt-0.5 shrink-0">
+                      <span
+                        className="mt-0.5 shrink-0"
+                        title={
+                          isLoading
+                            ? '載入頁面源碼中…'
+                            : isMigrated
+                              ? '已寫入 Framer'
+                              : isParsed
+                                ? '已解析區塊，待寫入 Framer'
+                                : isFailed
+                                  ? '上次解析或寫入失敗，可重新解析或同步'
+                                  : isSkipped
+                                    ? '已略過此頁'
+                                    : '待解析'
+                        }
+                      >
                         {isLoading ? (
                           <Loader2 size={14} className="animate-spin text-[#0BB59B]" />
                         ) : isMigrated ? (

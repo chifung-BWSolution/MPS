@@ -580,6 +580,121 @@ export function extractLocalSectionImports(
   return results;
 }
 
+export function extractLocalNamedDataImports(
+  code: string,
+  importerPath: string,
+  allPaths: Set<string>,
+): Array<{ localName: string; exportName: string; resolvedPath: string }> {
+  const results: Array<{ localName: string; exportName: string; resolvedPath: string }> = [];
+  const namedImportRe = /^\s*import\s+\{([^}]+)\}\s+from\s+["']([^"']+)["']/gm;
+  let m: RegExpExecArray | null;
+  while ((m = namedImportRe.exec(code)) !== null) {
+    const spec = m[2];
+    const resolved = resolveProjectModulePath(spec, importerPath, allPaths);
+    if (
+      !resolved ||
+      !/\.(tsx?|jsx?)$/i.test(resolved) ||
+      /articles\/(zh|en)-\d+\.ts$/i.test(resolved) ||
+      /pageSeoData\.(ts|tsx)$/i.test(resolved)
+    ) {
+      continue;
+    }
+    const codeOutsideImport = `${code.slice(0, m.index)}\n${code.slice(m.index + m[0].length)}`;
+    const names = m[1].split(",").map((s) => s.trim()).filter(Boolean);
+    for (const part of names) {
+      if (/^type\s+/.test(part)) continue;
+      const aliasMatch = part.match(/^([A-Za-z0-9_$]+)\s+as\s+([A-Za-z0-9_$]+)$/);
+      const exportName = aliasMatch ? aliasMatch[1] : part;
+      const localName = aliasMatch ? aliasMatch[2] : part;
+      const looksLikeDataConstant =
+        /^[A-Z][A-Z0-9_]{2,}$/.test(exportName) ||
+        /items|faq|list|data|cards|testimonials|services/i.test(exportName);
+      if (!looksLikeDataConstant) continue;
+      const refRe = new RegExp(`\\b${localName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
+      if (refRe.test(codeOutsideImport)) {
+        results.push({ localName, exportName, resolvedPath: resolved });
+      }
+    }
+  }
+  return results;
+}
+
+function extractExportedConstArray(
+  moduleCode: string,
+  exportName: string,
+  localName: string,
+): string | null {
+  const escapedExport = exportName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`\\bexport\\s+const\\s+${escapedExport}(?:\\s*:\\s*[^=;]+)?\\s*=\\s*\\[`);
+  const match = re.exec(moduleCode);
+  if (!match) return null;
+  const openBracket = match.index + match[0].length - 1;
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let inBacktick = false;
+  let escaped = false;
+  for (let i = openBracket; i < moduleCode.length; i++) {
+    const ch = moduleCode[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (!inDouble && !inBacktick && ch === "'") {
+      inSingle = !inSingle;
+      continue;
+    }
+    if (!inSingle && !inBacktick && ch === '"') {
+      inDouble = !inDouble;
+      continue;
+    }
+    if (!inSingle && !inDouble && ch === "`") {
+      inBacktick = !inBacktick;
+      continue;
+    }
+    if (inSingle || inDouble || inBacktick) continue;
+    if (ch === "[") depth++;
+    else if (ch === "]") {
+      depth--;
+      if (depth === 0) {
+        const arraySlice = moduleCode.slice(openBracket, i + 1);
+        if (arraySlice.length <= 25000) {
+          return `const ${localName} = ${arraySlice};`;
+        }
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+function prepareComponentCode(
+  compCode: string,
+  compPath: string,
+  fileMap: Record<string, string>,
+  allPaths: Set<string>,
+): string {
+  const dataImports = extractLocalNamedDataImports(compCode, compPath, allPaths);
+  const inlined: string[] = [];
+  const seenLocals = new Set<string>();
+  for (const imp of dataImports) {
+    if (seenLocals.has(imp.localName)) continue;
+    const modCode = fileMap[imp.resolvedPath];
+    if (!modCode) continue;
+    const extracted = extractExportedConstArray(modCode, imp.exportName, imp.localName);
+    if (extracted) {
+      seenLocals.add(imp.localName);
+      inlined.push(extracted);
+    }
+  }
+  const stripped = stripTsImportsAndTypes(compCode);
+  return inlined.length > 0 ? `${inlined.join("\n")}\n\n${stripped}` : stripped;
+}
+
 function humanizeRouteTitle(routePath: string): string {
   if (routePath === "/" || !routePath) return "Home";
   const clean = routePath.replace(/^\/(en|cn)\//, "/").replace(/^\/|\/$/g, "");
@@ -1097,7 +1212,7 @@ export function assembleReaddyPageCode(
       if (!compCode) continue;
       includedFiles.push(imp.resolvedPath);
       blocks.push(
-        `/* === COMPONENT: ${imp.localName} (${imp.resolvedPath}) === */\n${stripTsImportsAndTypes(compCode)}`,
+        `/* === COMPONENT: ${imp.localName} (${imp.resolvedPath}) === */\n${prepareComponentCode(compCode, imp.resolvedPath, fileMap, allPaths)}`,
       );
     }
     if (!galleryInserted && galleryMatch) {
@@ -1110,7 +1225,7 @@ export function assembleReaddyPageCode(
       if (!compCode || /ScenarioGallery/i.test(imp.localName)) continue;
       includedFiles.push(imp.resolvedPath);
       blocks.push(
-        `/* === COMPONENT: ${imp.localName} (${imp.resolvedPath}) === */\n${stripTsImportsAndTypes(compCode)}`,
+        `/* === COMPONENT: ${imp.localName} (${imp.resolvedPath}) === */\n${prepareComponentCode(compCode, imp.resolvedPath, fileMap, allPaths)}`,
       );
     }
   }

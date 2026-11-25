@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Check,
   CheckCircle2,
@@ -90,6 +90,9 @@ interface SourceConfigPanelProps {
 
   // Current project summary
   analysis: ReaddyProjectAnalysis | null;
+  compact?: boolean;
+  /** Bump to collapse this step. Used when a saved site is loaded from 網站記錄. */
+  collapseNonce?: number;
 }
 
 export function SourceConfigPanel({
@@ -126,6 +129,8 @@ export function SourceConfigPanel({
   onPasteCodeChange,
   onAnalyzePasteCode,
   analysis,
+  compact = false,
+  collapseNonce = 0,
 }: SourceConfigPanelProps) {
   const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
   const [repoPopoverOpen, setRepoPopoverOpen] = useState(false);
@@ -134,6 +139,13 @@ export function SourceConfigPanel({
   const [savingPat, setSavingPat] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const seenCollapseNonce = useRef(0);
+
+  useEffect(() => {
+    if (!collapseNonce || collapseNonce === seenCollapseNonce.current) return;
+    seenCollapseNonce.current = collapseNonce;
+    setCollapsed(true);
+  }, [collapseNonce]);
 
   const mcpConnected = Boolean(oauthStatus?.connected);
   const selectedFramerProject = findFramerProject(framerProjectUrl, framerProjects);
@@ -294,6 +306,8 @@ export function SourceConfigPanel({
         <button
           type="button"
           onClick={() => onSourceTypeChange('github')}
+          title="GitHub 倉庫"
+          aria-label="GitHub 倉庫"
           className={cn(
             'flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-[12px] font-medium transition-all',
             sourceType === 'github'
@@ -302,11 +316,13 @@ export function SourceConfigPanel({
           )}
         >
           <FolderGit2 size={13} />
-          <span>GitHub 倉庫</span>
+          {!compact && <span>GitHub 倉庫</span>}
         </button>
         <button
           type="button"
           onClick={() => onSourceTypeChange('upload')}
+          title="上傳 ZIP"
+          aria-label="上傳 ZIP"
           className={cn(
             'flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-[12px] font-medium transition-all',
             sourceType === 'upload'
@@ -315,11 +331,13 @@ export function SourceConfigPanel({
           )}
         >
           <Upload size={13} />
-          <span>上傳 ZIP</span>
+          {!compact && <span>上傳 ZIP</span>}
         </button>
         <button
           type="button"
           onClick={() => onSourceTypeChange('paste')}
+          title="貼上單頁"
+          aria-label="貼上單頁"
           className={cn(
             'flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-[12px] font-medium transition-all',
             sourceType === 'paste'
@@ -328,7 +346,7 @@ export function SourceConfigPanel({
           )}
         >
           <Code2 size={13} />
-          <span>貼上單頁</span>
+          {!compact && <span>貼上單頁</span>}
         </button>
       </div>
 
@@ -414,7 +432,7 @@ export function SourceConfigPanel({
       {sourceType === 'github' && (
         <div className="rounded-lg border border-slate-200/90 bg-slate-50/70 p-3.5 space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] font-medium text-slate-600">
+            <span className="min-w-0 truncate text-[11px] font-medium text-slate-600">
               Readdy 同步的 GitHub 倉庫
             </span>
             <div className="flex items-center gap-1.5">
@@ -431,19 +449,32 @@ export function SourceConfigPanel({
               <button
                 type="button"
                 onClick={() => setTokenPanelOpen((v) => !v)}
+                title={
+                  oauthStatus?.github_configured
+                    ? `Token (${oauthStatus.github_token_preview})`
+                    : 'Private Token'
+                }
+                aria-label={
+                  oauthStatus?.github_configured
+                    ? `Token ${oauthStatus.github_token_preview}`
+                    : 'Private Token'
+                }
                 className={cn(
-                  'inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded border transition-colors',
+                  'inline-flex shrink-0 items-center justify-center gap-1 rounded border text-[11px] font-medium transition-colors',
+                  compact ? 'p-1' : 'px-2 py-0.5',
                   oauthStatus?.github_configured
                     ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
                     : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100',
                 )}
               >
-                <Lock size={10} />
-                <span>
-                  {oauthStatus?.github_configured
-                    ? `Token (${oauthStatus.github_token_preview})`
-                    : 'Private Token'}
-                </span>
+                <Lock size={compact ? 12 : 10} />
+                {!compact && (
+                  <span className="whitespace-nowrap">
+                    {oauthStatus?.github_configured
+                      ? `Token (${oauthStatus.github_token_preview})`
+                      : 'Private Token'}
+                  </span>
+                )}
               </button>
             </div>
           </div>

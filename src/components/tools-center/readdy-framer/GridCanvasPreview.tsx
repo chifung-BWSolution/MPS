@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { Grid3X3, LayoutTemplate, Maximize2, Minimize2, Music2 } from 'lucide-react';
+import { Grid3X3, LayoutTemplate, Loader2, Maximize2, Minimize2, Music2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FramerIrDesignTokens, FramerIrSection, GridConfig } from '@/types/readdyFramer';
 import { DevicePreviewFrame } from './DevicePreviewFrame';
@@ -23,6 +23,8 @@ interface GridCanvasPreviewProps {
   onToggleExpandedCanvas?: () => void;
   hoveredSectionId: string | null;
   selectedSectionId: string | null;
+  loading?: boolean;
+  loadingLabel?: string;
   onHoverSection: (id: string | null) => void;
   onSelectSection: (id: string) => void;
   pagePreview?: ReactNode;
@@ -540,6 +542,8 @@ export function GridCanvasPreview({
   onToggleExpandedCanvas,
   hoveredSectionId,
   selectedSectionId,
+  loading = false,
+  loadingLabel = '載入中',
   onHoverSection,
   onSelectSection,
   pagePreview,
@@ -684,21 +688,28 @@ export function GridCanvasPreview({
             ref={viewportRef}
             className={cn(
               'relative min-h-0 flex-1',
-              pagePreview ? 'overflow-hidden bg-[#eef1f4]' : 'overflow-y-auto overflow-x-hidden bg-white',
+              !loading && pagePreview ? 'overflow-hidden bg-[#eef1f4]' : 'overflow-y-auto overflow-x-hidden bg-white',
             )}
           >
-            {pagePreview ? (
-              <div className="absolute inset-0 flex justify-center overflow-hidden">
-                <div
-                  className="relative shrink-0"
-                  style={{
-                    width: `${frameWidth}px`,
-                    height: `${frameHeight}px`,
-                    transform: `scale(${scale})`,
-                    transformOrigin: 'top center',
-                  }}
-                >
-                  <DevicePreviewFrame scrollerRef={frameScrollerRef}>{pagePreview}</DevicePreviewFrame>
+            {loading ? (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-8 text-center bg-white">
+                <Loader2 size={22} className="animate-spin text-[#0BB59B] mb-3" />
+                <p className="text-[13px] font-semibold text-[#101B2D]">{loadingLabel}</p>
+                <p className="text-[11.5px] text-slate-400 mt-1.5 max-w-[260px] leading-relaxed">
+                  頁面準備完成後，此處會以 {desktopWidth}px 桌面等比顯示
+                </p>
+              </div>
+            ) : pagePreview ? (
+              <div className="absolute inset-0 overflow-hidden bg-[#eef1f4]">
+                <div className="relative h-full w-full">
+                  <DevicePreviewFrame
+                    scrollerRef={frameScrollerRef}
+                    layoutWidth={frameWidth}
+                    layoutHeight={frameHeight}
+                    scale={scale}
+                  >
+                    {pagePreview}
+                  </DevicePreviewFrame>
                   {showGridOverlay && (
                     <div className="pointer-events-none absolute inset-0 z-20 flex justify-center">
                       <div

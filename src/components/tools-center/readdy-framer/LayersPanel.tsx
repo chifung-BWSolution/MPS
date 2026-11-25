@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import {
-  AlertTriangle,
   Check,
   ChevronDown,
   Copy,
+  Info,
   Layers,
   Loader2,
   Play,
@@ -19,6 +19,8 @@ interface LayersPanelProps {
   hoveredSectionId: string | null;
   selectedSectionId: string | null;
   syncingAll: boolean;
+  loading?: boolean;
+  loadingLabel?: string;
   onHoverSection: (id: string | null) => void;
   onSelectSection: (id: string) => void;
   onSyncSingleSection: (stepIndex: number) => void;
@@ -29,6 +31,8 @@ export function LayersPanel({
   hoveredSectionId,
   selectedSectionId,
   syncingAll,
+  loading = false,
+  loadingLabel = '載入中',
   onHoverSection,
   onSelectSection,
   onSyncSingleSection,
@@ -58,7 +62,15 @@ export function LayersPanel({
       </div>
 
       {/* Body */}
-      {sections.length === 0 ? (
+      {loading ? (
+        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center justify-center p-8 text-center">
+          <Loader2 size={22} className="animate-spin text-[#0BB59B] mb-3" />
+          <p className="text-[13px] font-semibold text-[#101B2D]">{loadingLabel}</p>
+          <p className="text-[11.5px] text-slate-400 mt-1.5 max-w-[240px] leading-relaxed">
+            頁面準備完成後，這裡會列出可逐段核對的區塊
+          </p>
+        </div>
+      ) : sections.length === 0 ? (
         <div className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center justify-center p-8 text-center">
           <div className="w-11 h-11 rounded-full bg-slate-100 border border-slate-200/80 flex items-center justify-center mb-3">
             <Layers size={18} className="text-slate-400" />
@@ -160,8 +172,8 @@ export function LayersPanel({
 
                 {/* Interactive placeholder note if detected */}
                 {section.interactivePlaceholders.length > 0 && (
-                  <div className="flex items-start gap-1.5 px-2.5 py-1.5 rounded bg-amber-50 border border-amber-200/80 text-[10.5px] text-amber-800">
-                    <AlertTriangle size={12} className="shrink-0 mt-0.5 text-amber-600" />
+                  <div className="flex items-start gap-1.5 px-2.5 py-1.5 rounded bg-slate-50 border border-slate-200/90 text-[10.5px] text-slate-600">
+                    <Info size={12} className="shrink-0 mt-0.5 text-slate-400" />
                     <span>{section.interactivePlaceholders.join(' · ')}</span>
                   </div>
                 )}

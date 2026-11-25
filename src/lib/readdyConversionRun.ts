@@ -3,8 +3,10 @@ import {
 } from '@/lib/readdyProjectAnalyzer';
 import {
   fetchGitHubPageBundle,
+  isFramerSessionLimitError,
   parseReaddyToIr,
   syncFramerStep,
+  type FramerMcpSessionHint,
 } from '@/lib/readdyFramerApi';
 import type { ReaddyConversionPageResult } from '@/lib/readdyConversionMail';
 import type {
@@ -63,29 +65,41 @@ async function loadPageCode(
   return { code: assembled.code, includedFiles: assembled.includedFiles, repoMeta: null };
 }
 
+/** Framer 帳號同時工作階段上限。每條連線會重複使用，不會每頁重開。 */
+export const FRAMER_PAGE_SYNC_CONCURRENCY = 9;
+
 export async function runReaddyConversion(
   input: ReaddyConversionRunInput,
   report: (progress: ReaddyConversionProgress) => void,
   isCancelled: () => boolean,
 ): Promise<ReaddyConversionRunResult> {
   const total = input.pages.length;
-  const pages: ReaddyConversionPageResult[] = [];
+  const workerCount = Math.min(FRAMER_PAGE_SYNC_CONCURRENCY, total);
+  const results: Array<ReaddyConversionPageResult | undefined> = new Array(total);
+  const queue = input.pages.map((_, index) => index);
+  const slotState = Array.from({ length: workerCount }, () => ({
+    session: null as FramerMcpSessionHint | null,
+    alive: true,
+  }));
   let cancelled = false;
-  let unstarted = 0;
 
-  for (let index = 0; index < total; index += 1) {
-    if (isCancelled()) {
-      cancelled = true;
-      unstarted = total - index;
-      break;
-    }
-
+  async function convertOnePage(
+    index: number,
+    slot: number,
+    session: FramerMcpSessionHint | null,
+  ): Promise<{
+    result: ReaddyConversionPageResult;
+    session: FramerMcpSessionHint | null;
+    limit: boolean;
+    cancelled: boolean;
+  }> {
     const page = input.pages[index];
+    let activeMcpSession = session;
     report({
       pageId: page.id,
       index,
       total,
-      message: `正在轉換 ${page.path}（${index + 1}/${total}）`,
+      message: `正在轉換 ${page.path}（${index + 1}/${total}，同時 ${workerCount} 頁）`,
       patch: { migrationStatus: 'syncing' },
     });
 
@@ -96,22 +110,7 @@ export async function runReaddyConversion(
       }
       if (isCancelled()) {
         cancelled = true;
-        unstarted = total - index - 1;
-        pages.push({
-          path: page.path,
-          title: page.title,
-          status: 'failed',
-          sectionCount: 0,
-          error: '已中止',
-        });
-        report({
-          pageId: page.id,
-          index,
-          total,
-          message: `${page.path} 已中止`,
-          patch: { migrationStatus: 'failed' },
-        });
-        break;
+        throw new Error('已中止');
       }
 
       const parsed = await parseReaddyToIr({
@@ -152,19 +151,21 @@ export async function runReaddyConversion(
         throw new Error('解析後沒有可寫入的區塊');
       }
 
-      await syncFramerStep({
+      const step0 = await syncFramerStep({
         job_id: parsed.job_id,
         step_index: 0,
         framer_project_url: input.framerProjectUrl.trim(),
         page_path: page.path,
         page_title: page.title,
+        session_slot: slot,
+        mcp_session: activeMcpSession,
       });
+      activeMcpSession = step0.mcp_session ?? activeMcpSession;
 
-      let framerPageNodeId: string | null = null;
+      let framerPageNodeId: string | null = step0.framer_page_node_id ?? null;
       for (let step = 0; step < sectionCount; step += 1) {
         if (isCancelled()) {
           cancelled = true;
-          unstarted = total - index - 1;
           throw new Error('已中止');
         }
         const section = parsed.ir_payload.sections[step];
@@ -180,17 +181,14 @@ export async function runReaddyConversion(
           framer_project_url: input.framerProjectUrl.trim(),
           page_path: page.path,
           page_title: page.title,
+          session_slot: slot,
+          mcp_session: activeMcpSession,
         });
+        activeMcpSession = synced.mcp_session ?? activeMcpSession;
         framerPageNodeId = synced.framer_page_node_id ?? framerPageNodeId;
       }
 
       const lastSyncedAt = new Date().toISOString();
-      pages.push({
-        path: page.path,
-        title: page.title,
-        status: 'migrated',
-        sectionCount,
-      });
       report({
         pageId: page.id,
         index,
@@ -204,17 +202,22 @@ export async function runReaddyConversion(
           lastSyncedAt,
         },
       });
+      return {
+        result: {
+          path: page.path,
+          title: page.title,
+          status: 'migrated',
+          sectionCount,
+        },
+        session: activeMcpSession,
+        limit: false,
+        cancelled: false,
+      };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const stopped = message === '已中止' || cancelled;
+      const hitSessionLimit = isFramerSessionLimitError(message);
       if (stopped) cancelled = true;
-      pages.push({
-        path: page.path,
-        title: page.title,
-        status: 'failed',
-        sectionCount: page.sectionCount ?? 0,
-        error: message,
-      });
       report({
         pageId: page.id,
         index,
@@ -222,12 +225,55 @@ export async function runReaddyConversion(
         message: `${page.path} 失敗：${message}`,
         patch: { migrationStatus: 'failed' },
       });
-      if (stopped) {
-        unstarted = total - index - 1;
+      return {
+        result: {
+          path: page.path,
+          title: page.title,
+          status: 'failed',
+          sectionCount: page.sectionCount ?? 0,
+          error: message,
+        },
+        session: activeMcpSession,
+        limit: hitSessionLimit,
+        cancelled: stopped,
+      };
+    }
+  }
+
+  async function worker(slot: number) {
+    const state = slotState[slot];
+    while (state.alive && !cancelled) {
+      if (isCancelled()) {
+        cancelled = true;
+        break;
+      }
+      const index = queue.shift();
+      if (index === undefined) break;
+      const hadSession = Boolean(state.session);
+      const outcome = await convertOnePage(index, slot, state.session);
+      if (outcome.session) state.session = outcome.session;
+      const openRejected = outcome.limit && !hadSession && !outcome.session;
+      if (openRejected) {
+        state.alive = false;
+        const peerAlive = slotState.some((peer, peerIndex) => peerIndex !== slot && peer.alive);
+        if (peerAlive) queue.unshift(index);
+        else results[index] = outcome.result;
+        break;
+      }
+      results[index] = outcome.result;
+      if (outcome.cancelled || outcome.limit) {
+        state.alive = false;
         break;
       }
     }
   }
+
+  if (workerCount > 0) {
+    await Promise.all(Array.from({ length: workerCount }, (_, slot) => worker(slot)));
+  }
+
+  const pages = results.filter((row): row is ReaddyConversionPageResult => Boolean(row));
+  const unstarted = queue.length;
 
   const failed = pages.some((page) => page.status === 'failed') || cancelled || unstarted > 0;
   const error = cancelled
