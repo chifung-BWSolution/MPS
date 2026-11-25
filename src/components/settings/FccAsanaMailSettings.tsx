@@ -134,6 +134,13 @@ function formatHkt(iso: string): string {
   }).format(new Date(iso));
 }
 
+function formatReceived(date: string | null): string {
+  if (!date) return '';
+  const [year, month, day] = date.split('-');
+  if (!year || !month || !day) return date;
+  return `${day}/${month}/${year}`;
+}
+
 function NameSearch<T extends { gid: string }>({
   items,
   labelOf,
@@ -609,7 +616,7 @@ export function FccAsanaMailSettings() {
       <div className="bg-white border border-border/50 rounded-md overflow-hidden">
         <div className="px-4 py-3 border-b border-border/50">
           <p className="text-[13px] font-medium">最近處理</p>
-          <p className="text-[12px] text-muted-foreground">點一行先展開。藍底是郵件，綠底是 Asana。</p>
+          <p className="text-[12px] text-muted-foreground">點一行先展開。左邊時間是系統處理時間，收信是郵件真正收到的日子。藍底是郵件，綠底是 Asana。</p>
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             {JOB_STATUS_FILTERS.map((filter) => (
               <button
@@ -693,7 +700,8 @@ export function FccAsanaMailSettings() {
                     <ChevronRight size={16} className={`shrink-0 text-muted-foreground motion-safe:transition-transform motion-safe:duration-150 ${open ? 'rotate-90' : ''}`} />
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
-                        <time dateTime={job.created_at}>{formatHkt(job.created_at)}</time>
+                        <time dateTime={job.created_at}>處理 {formatHkt(job.created_at)}</time>
+                        {job.received_on && <span>收信 {formatReceived(job.received_on)}</span>}
                         <span className={`rounded px-1.5 py-0.5 ${jobStatusClass(job.status)}`}>{jobStatusLabel(job.status)}</span>
                       </span>
                       <span className="block truncate text-[13px] font-medium text-foreground">{title}</span>

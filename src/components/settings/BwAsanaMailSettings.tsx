@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { AlertCircle, CheckCircle2, Mail, Plus, RefreshCw, Save, Search, X, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronRight, Mail, Plus, RefreshCw, Save, Search, X, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 
@@ -17,10 +17,30 @@ type Settings = {
 type MailJob = {
   id: string;
   subject: string | null;
+  received_on: string | null;
   status: string;
   task_name: string | null;
+  notes: string | null;
+  asana_task_gid: string | null;
   error: string | null;
   created_at: string;
+};
+
+type TaskStory = {
+  gid: string;
+  at: string;
+  by: string;
+  subtype: string;
+  label: string;
+  text: string;
+};
+
+type TaskActivity = {
+  completed: boolean;
+  assignee: string;
+  projects: Array<{ name: string; section: string }>;
+  stories: TaskStory[];
+  error?: string;
 };
 
 type Route = {
@@ -41,6 +61,71 @@ type RouteFilter = 'all' | 'open' | 'blank';
 
 const inputClass =
   'w-full min-h-11 text-[14px] border border-slate-300 rounded-md px-3 py-2 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600';
+
+const JOB_PAGE_SIZE = 10;
+
+const JOB_STATUS_FILTERS = [
+  { id: 'all', label: '全部' },
+  { id: 'created', label: '已開 task' },
+  { id: 'skipped', label: '略過' },
+  { id: 'error', label: '失敗' },
+  { id: 'processing', label: '處理中' },
+] as const;
+
+function jobStatusLabel(status: string): string {
+  if (status === 'created') return '已開 task';
+  if (status === 'skipped') return '略過';
+  if (status === 'error') return '失敗';
+  if (status === 'processing') return '處理中';
+  return status;
+}
+
+function jobStatusClass(status: string): string {
+  if (status === 'created') return 'bg-teal-100 text-teal-900';
+  if (status === 'error') return 'bg-amber-100 text-amber-950';
+  if (status === 'processing') return 'bg-sky-100 text-sky-950';
+  return 'bg-slate-100 text-slate-700';
+}
+
+function jobAccent(status: string): string {
+  if (status === 'created') return 'border-l-teal-500';
+  if (status === 'error') return 'border-l-amber-500';
+  if (status === 'processing') return 'border-l-sky-500';
+  return 'border-l-slate-300';
+}
+
+function storyTone(subtype: string): { card: string; badge: string } {
+  if (subtype === 'comment_added') return { card: 'border-teal-200 bg-teal-50', badge: 'bg-teal-200 text-teal-950' };
+  if (subtype === 'added_to_project' || subtype === 'removed_from_project' || subtype === 'section_changed') {
+    return { card: 'border-violet-200 bg-violet-50', badge: 'bg-violet-200 text-violet-950' };
+  }
+  if (subtype === 'marked_complete' || subtype === 'marked_incomplete') {
+    return { card: 'border-emerald-200 bg-emerald-50', badge: 'bg-emerald-200 text-emerald-950' };
+  }
+  if (subtype === 'assigned' || subtype === 'unassigned' || subtype === 'follower_added' || subtype === 'follower_removed') {
+    return { card: 'border-sky-200 bg-sky-50', badge: 'bg-sky-200 text-sky-950' };
+  }
+  return { card: 'border-slate-200 bg-slate-50', badge: 'bg-slate-200 text-slate-800' };
+}
+
+function formatHkt(iso: string): string {
+  return new Intl.DateTimeFormat('zh-HK', {
+    timeZone: 'Asia/Hong_Kong',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(iso));
+}
+
+function formatReceived(date: string | null): string {
+  if (!date) return '';
+  const [year, month, day] = date.split('-');
+  if (!year || !month || !day) return date;
+  return `${day}/${month}/${year}`;
+}
 
 function personLabel(person: AsanaPerson): string {
   if (person.email && person.name) return `${person.email}（${person.name}）`;
@@ -189,6 +274,15 @@ export function BwAsanaMailSettings() {
   const [savedEnabled, setSavedEnabled] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [jobs, setJobs] = useState<MailJob[]>([]);
+  const [jobStatus, setJobStatus] = useState<'all' | 'created' | 'skipped' | 'error' | 'processing'>('all');
+  const [jobQuery, setJobQuery] = useState('');
+  const [jobDraft, setJobDraft] = useState('');
+  const [jobPage, setJobPage] = useState(0);
+  const [jobTotal, setJobTotal] = useState(0);
+  const [jobsLoading, setJobsLoading] = useState(true);
+  const [openJobId, setOpenJobId] = useState<string | null>(null);
+  const [activity, setActivity] = useState<Record<string, TaskActivity>>({});
+  const [activityLoading, setActivityLoading] = useState<string | null>(null);
   const [routeFilter, setRouteFilter] = useState<RouteFilter>('all');
   const [projectFilter, setProjectFilter] = useState('');
   const [routeQuery, setRouteQuery] = useState('');
@@ -216,14 +310,6 @@ export function BwAsanaMailSettings() {
       });
       setSavedEnabled(row.enabled === true);
     }
-    const jobsRes = await supabase
-      .from('asana_mail_jobs')
-      .select('id, subject, status, task_name, error, created_at')
-      .eq('rule_code', 'bw')
-      .order('created_at', { ascending: false })
-      .limit(8);
-    if (jobsRes.error) toast.error(jobsRes.error.message);
-    setJobs((jobsRes.data || []) as MailJob[]);
     setRoutes((routesRes.data || []) as Route[]);
     if (directory.error) {
       setDirectoryError(directory.error);
@@ -237,6 +323,42 @@ export function BwAsanaMailSettings() {
     setGmail(gmailStatus);
     setLoading(false);
   };
+
+  const loadJobs = async (
+    status: 'all' | 'created' | 'skipped' | 'error' | 'processing',
+    query: string,
+    page: number,
+  ) => {
+    setJobsLoading(true);
+    const needle = query.replace(/[%_,]/g, ' ').trim();
+    const from = page * JOB_PAGE_SIZE;
+    let request = supabase
+      .from('asana_mail_jobs')
+      .select('id, subject, received_on, status, task_name, notes, asana_task_gid, error, created_at', { count: 'exact' })
+      .eq('rule_code', 'bw')
+      .order('created_at', { ascending: false });
+    if (status !== 'all') request = request.eq('status', status);
+    if (needle) {
+      request = request.or(`subject.ilike.%${needle}%,task_name.ilike.%${needle}%,notes.ilike.%${needle}%,error.ilike.%${needle}%`);
+    }
+    const { data, error, count } = await request.range(from, from + JOB_PAGE_SIZE - 1);
+    if (error) toast.error(error.message);
+    const total = count || 0;
+    const lastPage = Math.max(0, Math.ceil(total / JOB_PAGE_SIZE) - 1);
+    if (page > lastPage) {
+      setJobPage(lastPage);
+      setJobsLoading(false);
+      await loadJobs(status, query, lastPage);
+      return;
+    }
+    setJobs((data || []) as MailJob[]);
+    setJobTotal(total);
+    setJobsLoading(false);
+  };
+
+  useEffect(() => {
+    void loadJobs(jobStatus, jobQuery, jobPage);
+  }, [jobStatus, jobQuery, jobPage]);
 
   useEffect(() => {
     void load();
@@ -346,11 +468,27 @@ export function BwAsanaMailSettings() {
       const result = await callFunction<{ created?: number; skipped?: number; error?: string }>('sync-bw-asana-mail', {});
       if (result.error) toast.error(result.error);
       else toast.success(`已檢查。新開 ${result.created ?? 0} 個 task，略過 ${result.skipped ?? 0} 封。`);
-      await load();
+      await loadJobs(jobStatus, jobQuery, jobPage);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const openJob = async (job: MailJob) => {
+    const next = openJobId === job.id ? null : job.id;
+    setOpenJobId(next);
+    if (!next || !job.asana_task_gid || activity[job.asana_task_gid]) return;
+    const taskGid = job.asana_task_gid;
+    setActivityLoading(taskGid);
+    try {
+      const result = await callFunction<TaskActivity>('sync-fcc-asana-mail', { action: 'activity', taskGid });
+      setActivity((current) => ({ ...current, [taskGid]: result }));
+    } catch (e) {
+      setActivity((current) => ({ ...current, [taskGid]: { completed: false, assignee: '', projects: [], stories: [], error: e instanceof Error ? e.message : String(e) } }));
+    } finally {
+      setActivityLoading((current) => current === taskGid ? null : current);
     }
   };
 
@@ -448,18 +586,6 @@ export function BwAsanaMailSettings() {
           未填負責人電郵或專案的查詢不會開。同事回覆和客人回覆都不會再開。
           {settings.enabled && !savedEnabled ? ' 這個開關要儲存之後先生效。' : ''}
         </p>
-        {jobs.length > 0 && (
-          <ul className="mt-3 space-y-2">
-            {jobs.map((job) => (
-              <li key={job.id} className="rounded-md border border-sky-200 bg-white px-3 py-2 text-[14px] text-slate-800">
-                <span className="font-medium">{job.status === 'created' ? '已開 task' : job.status === 'error' ? '失敗' : '略過'}</span>
-                <span className="mx-2 text-slate-400">·</span>
-                {job.task_name || job.subject || '沒有主旨'}
-                {job.error && job.status !== 'created' ? <span className="mt-1 block text-[13px] text-slate-600">{job.error}</span> : null}
-              </li>
-            ))}
-          </ul>
-        )}
       </Section>
 
       <Section
@@ -751,6 +877,169 @@ export function BwAsanaMailSettings() {
           <Plus size={16} /> 加一種查詢
         </button>
       </Section>
+
+      <div className="bg-white border border-border/50 rounded-md overflow-hidden">
+        <div className="px-4 py-3 border-b border-border/50">
+          <p className="text-[13px] font-medium">最近處理</p>
+          <p className="text-[12px] text-muted-foreground">點一行先展開。左邊時間是系統處理時間，收信是郵件真正收到的日子。藍底是郵件，綠底是 Asana。</p>
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            {JOB_STATUS_FILTERS.map((filter) => (
+              <button
+                key={filter.id}
+                type="button"
+                className={`rounded-md px-2.5 py-1 text-[12px] ${jobStatus === filter.id ? 'bg-teal-700 text-white' : 'border border-border text-foreground hover:bg-muted/40'}`}
+                onClick={() => {
+                  setJobStatus(filter.id);
+                  setJobPage(0);
+                }}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+          <form
+            className="mt-2 flex flex-wrap gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setJobPage(0);
+              setJobQuery(jobDraft.trim());
+            }}
+          >
+            <input
+              className="min-w-0 flex-1 rounded-md border border-border bg-white px-3 py-2 text-[13px] focus:outline-none focus:ring-1 focus:ring-teal-500"
+              value={jobDraft}
+              placeholder="搜尋主旨、task 標題或郵件內容"
+              onChange={(event) => setJobDraft(event.target.value)}
+            />
+            <button type="submit" className="h-9 rounded-md border border-border px-3 text-[13px] hover:bg-muted/40">搜尋</button>
+          </form>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[12px] text-muted-foreground">
+            <p>{jobsLoading ? '載入中…' : (jobTotal === 0 ? '0 筆' : `第 ${jobPage * JOB_PAGE_SIZE + 1}–${Math.min(jobTotal, (jobPage + 1) * JOB_PAGE_SIZE)} 筆，共 ${jobTotal} 筆`)}</p>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                className="h-8 rounded-md border border-border px-2.5 text-foreground hover:bg-muted/40 disabled:opacity-40"
+                disabled={jobPage === 0 || jobsLoading}
+                onClick={() => setJobPage((page) => Math.max(0, page - 1))}
+              >
+                上一頁
+              </button>
+              <button
+                type="button"
+                className="h-8 rounded-md border border-border px-2.5 text-foreground hover:bg-muted/40 disabled:opacity-40"
+                disabled={jobsLoading || (jobPage + 1) * JOB_PAGE_SIZE >= jobTotal}
+                onClick={() => setJobPage((page) => page + 1)}
+              >
+                下一頁
+              </button>
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5 text-[12px]">
+            <span className="rounded px-1.5 py-0.5 bg-teal-100 text-teal-900">已開 task</span>
+            <span className="rounded px-1.5 py-0.5 bg-slate-100 text-slate-700">略過</span>
+            <span className="rounded px-1.5 py-0.5 bg-amber-100 text-amber-950">失敗</span>
+            <span className="rounded px-1.5 py-0.5 bg-teal-200 text-teal-950">留言</span>
+            <span className="rounded px-1.5 py-0.5 bg-violet-200 text-violet-950">轉專案</span>
+            <span className="rounded px-1.5 py-0.5 bg-emerald-200 text-emerald-950">完成</span>
+          </div>
+        </div>
+        {jobs.length === 0 && !jobsLoading && (
+          <p className="px-4 py-6 text-center text-[13px] text-muted-foreground">{jobQuery || jobStatus !== 'all' ? '沒有符合的紀錄' : '未有處理紀錄'}</p>
+        )}
+        <div className="divide-y divide-border/40">
+          {jobs.map((job) => {
+            const open = openJobId === job.id;
+            const title = job.task_name || job.subject || '—';
+            const taskActivity = job.asana_task_gid ? activity[job.asana_task_gid] : undefined;
+            const loadingActivity = job.asana_task_gid !== null && activityLoading === job.asana_task_gid;
+            return (
+              <article key={job.id} className={`border-l-4 ${jobAccent(job.status)}`}>
+                <div className="flex items-stretch">
+                  <button
+                    type="button"
+                    className="flex min-h-11 flex-1 cursor-pointer items-center gap-2 px-3 py-2 text-left hover:bg-muted/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-teal-600"
+                    aria-expanded={open}
+                    aria-label={`${open ? '收起' : '展開'} ${title}`}
+                    onClick={() => void openJob(job)}
+                  >
+                    <ChevronRight size={16} className={`shrink-0 text-muted-foreground motion-safe:transition-transform motion-safe:duration-150 ${open ? 'rotate-90' : ''}`} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
+                        <time dateTime={job.created_at}>處理 {formatHkt(job.created_at)}</time>
+                        {job.received_on && <span>收信 {formatReceived(job.received_on)}</span>}
+                        <span className={`rounded px-1.5 py-0.5 ${jobStatusClass(job.status)}`}>{jobStatusLabel(job.status)}</span>
+                      </span>
+                      <span className="block truncate text-[13px] font-medium text-foreground">{title}</span>
+                    </span>
+                  </button>
+                  {job.asana_task_gid && (
+                    <a
+                      href={`https://app.asana.com/0/0/${job.asana_task_gid}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-h-11 shrink-0 items-center px-3 text-[12px] text-teal-700 hover:underline"
+                    >
+                      開啟
+                    </a>
+                  )}
+                </div>
+                {open && (
+                  <div className="space-y-3 px-4 pb-4 pl-9">
+                    {job.error && <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-950">{job.error}</p>}
+                    <div className="rounded-md border border-sky-200 bg-sky-50 p-3">
+                      <p className="text-[12px] font-medium text-sky-950">郵件</p>
+                      <pre className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md bg-white px-3 py-2 font-sans text-[13px] leading-6 text-foreground">{job.notes || '未有儲存郵件內容'}</pre>
+                    </div>
+                    {job.asana_task_gid && (
+                      <div className="rounded-md border border-teal-200 bg-teal-50/70 p-3">
+                        <p className="text-[12px] font-medium text-teal-950">Asana 之後</p>
+                        {loadingActivity && <p className="mt-2 text-[13px] text-teal-900">讀取紀錄…</p>}
+                        {taskActivity?.error && <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-950">{taskActivity.error}</p>}
+                        {taskActivity && !taskActivity.error && (
+                          <div className="mt-2 space-y-2">
+                            <div className="flex flex-wrap gap-1.5">
+                              <span className={`rounded px-1.5 py-0.5 text-[12px] ${taskActivity.completed ? 'bg-emerald-200 text-emerald-950' : 'bg-white text-slate-700'}`}>
+                                {taskActivity.completed ? '已完成' : '未完成'}
+                              </span>
+                              {taskActivity.assignee && (
+                                <span className="rounded bg-sky-200 px-1.5 py-0.5 text-[12px] text-sky-950">負責人 {taskActivity.assignee}</span>
+                              )}
+                              {taskActivity.projects.map((project) => (
+                                <span key={`${project.name}-${project.section}`} className="rounded bg-violet-200 px-1.5 py-0.5 text-[12px] text-violet-950">
+                                  {project.section ? `${project.name} / ${project.section}` : project.name}
+                                </span>
+                              ))}
+                            </div>
+                            {taskActivity.stories.length === 0 ? (
+                              <p className="text-[13px] text-teal-900">開 task 之後未有留言或狀態更新。</p>
+                            ) : (
+                              <ol className="max-h-80 space-y-2 overflow-y-auto">
+                                {taskActivity.stories.map((story) => {
+                                  const tone = storyTone(story.subtype);
+                                  return (
+                                    <li key={story.gid || `${story.at}-${story.text}`} className={`rounded-md border px-3 py-2 ${tone.card}`}>
+                                      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px]">
+                                        <span className={`rounded px-1.5 py-0.5 ${tone.badge}`}>{story.label}</span>
+                                        {story.at && <time dateTime={story.at} className="text-slate-700">{formatHkt(story.at)}</time>}
+                                        {story.by && <span className="text-slate-700">{story.by}</span>}
+                                      </p>
+                                      <p className="mt-1 whitespace-pre-wrap text-[13px] leading-6 text-slate-950">{story.text}</p>
+                                    </li>
+                                  );
+                                })}
+                              </ol>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-300 bg-white/95 p-3 shadow-md">
         <p className="text-[14px] text-slate-700">已填好 {readyCount} 行，未填完 {blankCount} 行。{settings.enabled ? '儲存後，新郵件會自動開 task。' : '未啟用自動開 task。'}</p>
