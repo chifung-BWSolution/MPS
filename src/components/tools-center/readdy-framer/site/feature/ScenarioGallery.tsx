@@ -2,7 +2,7 @@ interface ScenarioItem {
   image: string;
   alt: string;
   title: string;
-  description: string;
+  description?: string;
 }
 
 interface ScenarioGalleryProps {
@@ -54,12 +54,14 @@ export default function ScenarioGallery({
               />
             </div>
             <div className="p-4 md:p-5">
-              <h4 className="font-heading text-sm md:text-base font-semibold text-foreground-950 mb-1.5">
+              <h4 className="font-heading text-sm md:text-base font-semibold text-foreground-950">
                 {item.title}
               </h4>
-              <p className="text-sm md:text-base text-foreground-600 leading-relaxed">
-                {item.description}
-              </p>
+              {item.description ? (
+                <p className="text-sm md:text-base text-foreground-600 leading-relaxed mt-1.5">
+                  {item.description}
+                </p>
+              ) : null}
             </div>
           </div>
         ))}

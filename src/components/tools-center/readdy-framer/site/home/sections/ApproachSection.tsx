@@ -15,15 +15,9 @@ export default function ApproachSection() {
       </div>
 
       <div className="relative z-10 max-w-4xl mx-auto text-center">
-        <h2 className="font-heading text-2xl md:text-4xl font-bold text-background-50 mb-6">
+        <h2 className="font-heading text-2xl md:text-4xl font-bold text-background-50 mb-8 md:mb-12">
           我們的統籌方式
         </h2>
-        <p className="text-sm md:text-base text-background-200 leading-relaxed mb-4 max-w-3xl mx-auto">
-          我們不是只提供一位歌手或一隊樂隊。我們為每一次聚會，設計合適的聲音、節奏和現場體驗。
-        </p>
-        <p className="text-sm md:text-base text-background-200 leading-relaxed mb-10 max-w-3xl mx-auto">
-          前期我們會了解賓客輪廓和場地限制，構思歌單和流程。演出當日，我們負責音響、燈光、LED 和現場協調。一個團隊連接表演、技術和活動節奏，讓你專心招待賓客。
-        </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 md:gap-6">
           <div className="bg-background-50/10 backdrop-blur-sm border border-background-50/20 rounded-lg p-5 md:p-6">
@@ -34,7 +28,7 @@ export default function ApproachSection() {
               單一責任窗口
             </h3>
             <p className="text-sm md:text-base text-background-300 leading-relaxed">
-              一個統籌團隊連接表演者、技術製作與場地，減少多供應商溝通的錯位與延誤。
+              表演、技術、場地由同一個團隊跟進。
             </p>
           </div>
 
@@ -46,7 +40,7 @@ export default function ApproachSection() {
               清晰流程文件
             </h3>
             <p className="text-sm md:text-base text-background-300 leading-relaxed">
-              每場活動均附詳細 run-down、cue sheet 與技術規格，確保各方在現場步調一致。
+              每場附 run-down、cue sheet 和技術規格。
             </p>
           </div>
 
@@ -58,7 +52,7 @@ export default function ApproachSection() {
               風險預備與備援
             </h3>
             <p className="text-sm md:text-base text-background-300 leading-relaxed">
-              重要活動預備替代方案與備用設備，以應對現場變化，確保活動順利進行。
+              重要場次備有替代方案和備用設備。
             </p>
           </div>
         </div>

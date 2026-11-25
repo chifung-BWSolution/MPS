@@ -45,12 +45,9 @@ export default function TestimonialsSection() {
     <section className="py-12 md:py-24 px-4 md:px-6 bg-background-100">
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-8 md:mb-16">
-          <h2 className="font-heading text-2xl md:text-4xl font-bold text-foreground-950 mb-4">
+          <h2 className="font-heading text-2xl md:text-4xl font-bold text-foreground-950">
             客戶的評價與信賴
           </h2>
-          <p className="text-sm md:text-base text-foreground-600 max-w-2xl mx-auto">
-            從婚禮新人、企業活動策劃到餐廳與品牌團隊，我們以穩定的現場執行，贏得來自不同行業客戶的信任。
-          </p>
         </div>
 
         {/* Stats */}

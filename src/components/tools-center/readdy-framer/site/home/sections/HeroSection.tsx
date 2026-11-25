@@ -21,14 +21,9 @@ export default function HeroSection() {
         <h1 className="font-heading text-3xl md:text-5xl lg:text-6xl font-bold text-background-50 leading-tight mb-6 animate-fade-in">
           讓現場音樂，成為賓客記得住的部分
         </h1>
-        <div className="max-w-3xl mx-auto mb-8 animate-fade-in-delay-1 space-y-3">
-          <p className="text-base md:text-lg text-background-200 leading-relaxed">
-            一首剛剛好的進場歌，一段讓晚宴升溫的現場演奏，或一套不打擾交談的爵士組合，都能令活動變得更完整。
-          </p>
-          <p className="text-base md:text-lg text-background-200 leading-relaxed">
-            BW Event Music 為婚禮、企業晚宴、VIP 接待、餐飲空間、商場和節日活動，統籌歌手、樂手、Live Band、排舞和音響製作。讓音樂、流程和現場節奏，由同一個團隊為你處理。
-          </p>
-        </div>
+        <p className="max-w-2xl mx-auto mb-8 text-base md:text-lg text-background-200 leading-relaxed animate-fade-in-delay-1">
+          婚禮、企業晚宴、VIP 接待、餐廳、商場和節日活動的現場音樂統籌。
+        </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 animate-fade-in-delay-2">
           <a
             href="https://www.emailmeform.com/builder/form/69aam00sCW063"

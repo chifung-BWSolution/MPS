@@ -4,42 +4,36 @@ const services = [
   {
     title: '婚禮演出',
     description: '證婚、迎賓、婚宴進場、敬酒與 After Party',
-    problem: '以你們的故事安排每一段旋律。',
     path: '/wedding-performance/',
     image: 'https://readdy.ai/api/search-image?query=Romantic%20Hong%20Kong%20wedding%20ceremony%20with%20Chinese%20couple%20and%20elegant%20live%20music%20performance%20by%20Asian%20musicians%2C%20warm%20candlelight%2C%20intimate%20atmosphere%2C%20champagne%20and%20gold%20tones%2C%20soft%20focus%20background&width=600&height=400&seq=service-wedding-01&orientation=landscape&nocache=true',
   },
   {
     title: '周年晚宴',
     description: '開場表演、頒獎串場、公司樂隊、歌手壓軸、音響及 LED',
-    problem: '讓節目與品牌訊息、舞台流程及賓客氣氛連成一體。',
     path: '/annual-dinner/',
     image: 'https://readdy.ai/api/search-image?query=Corporate%20annual%20dinner%20in%20Hong%20Kong%20with%20live%20band%20of%20Asian%20musicians%2C%20Chinese%20employees%20in%20formal%20attire%2C%20elegant%20ballroom%20setting%2C%20warm%20stage%20lighting%2C%20professional%20atmosphere%2C%20sophisticated%20decor&width=600&height=400&seq=service-corporate-01&orientation=landscape&nocache=true',
   },
   {
     title: 'VIP接待',
     description: 'CEO Dinner、VVIP 晚宴、遊船河與 Wine & Music Tasting',
-    problem: '讓款待感藏在細節中。',
     path: '/vip-reception/',
     image: 'https://readdy.ai/api/search-image?query=Exclusive%20VIP%20private%20dinner%20in%20Hong%20Kong%20with%20jazz%20trio%20of%20Asian%20musicians%2C%20Chinese%20guests%2C%20intimate%20elegant%20setting%2C%20warm%20ambient%20lighting%2C%20wine%20glasses%2C%20luxury%20atmosphere&width=600&height=400&seq=service-vip-01&orientation=landscape&nocache=true',
   },
   {
     title: '餐廳與駐場',
     description: '駐場歌手、爵士組合、主題晚和餐廳音響',
-    problem: '為餐飲空間建立夜間辨識度。',
     path: '/resident-singer/',
     image: 'https://readdy.ai/api/search-image?query=Upscale%20Hong%20Kong%20restaurant%20with%20live%20Asian%20singer%20performance%2C%20Chinese%20diners%20enjoying%20music%2C%20cozy%20warm%20lighting%2C%20sophisticated%20interior%20design&width=600&height=400&seq=service-restaurant-01&orientation=landscape&nocache=true',
   },
   {
     title: '商場與節日',
     description: '定時演出、互動音樂及主題節目',
-    problem: '讓人流願意停下來、參與和分享。',
     path: '/mall-performance/',
     image: 'https://readdy.ai/api/search-image?query=Shopping%20mall%20holiday%20event%20in%20Hong%20Kong%20with%20live%20music%20performance%2C%20Chinese%20families%20gathering%2C%20festive%20decorations%2C%20warm%20colorful%20lighting%2C%20family%20friendly%20atmosphere&width=600&height=400&seq=service-mall-01&orientation=landscape&nocache=true',
   },
   {
     title: '音響工程',
     description: '樂隊、司儀、影片、燈光與 LED',
-    problem: '放進同一份技術 run-down，讓每個 cue 都有人負責。',
     path: '/sound-engineering/',
     image: 'https://readdy.ai/api/search-image?query=Professional%20audio%20sound%20equipment%20setup%20for%20live%20event%2C%20Asian%20sound%20engineer%20at%20mixing%20console%2C%20speakers%2C%20warm%20stage%20lighting%2C%20technical%20production%20atmosphere&width=600&height=400&seq=service-sound-01&orientation=landscape&nocache=true',
   },
@@ -49,14 +43,9 @@ export default function ServicesSection() {
   return (
     <section className="py-12 md:py-24 px-4 md:px-6 bg-background-50">
       <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-8 md:mb-16">
-          <h2 className="font-heading text-2xl md:text-4xl font-bold text-foreground-950 mb-4">
-            我們可以為您統籌甚麼？
-          </h2>
-          <p className="text-sm md:text-base text-foreground-600 max-w-2xl mx-auto">
-            從私密的私人晚宴，到大型企業慶典，我們都能配對合適的方案。按活動氣氛、場地條件和賓客輪廓，為你選擇現場音樂和技術。
-          </p>
-        </div>
+        <h2 className="font-heading text-2xl md:text-4xl font-bold text-foreground-950 text-center mb-8 md:mb-16">
+          我們可以為您統籌甚麼？
+        </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
           {services.map((service) => (
@@ -80,11 +69,8 @@ export default function ServicesSection() {
                 <h3 className="font-heading text-lg font-semibold text-foreground-950 mb-2 group-hover:text-primary-700 transition-colors">
                   {service.title}
                 </h3>
-                <p className="text-sm text-foreground-600 mb-3 leading-relaxed">
+                <p className="text-sm text-foreground-600 leading-relaxed">
                   {service.description}
-                </p>
-                <p className="text-sm text-foreground-600 leading-relaxed border-l-2 border-primary-400 pl-3">
-                  {service.problem}
                 </p>
               </div>
             </Link>

@@ -29,31 +29,26 @@ export default function Home() {
           <div className="max-w-7xl mx-auto">
             <ScenarioGallery
               heading="真實活動情景"
-              subheading="無論是婚禮的感動、企業晚宴的儀式感，還是餐廳 Live 的溫度，我們都以香港團隊為每一場活動注入剛剛好的音樂。"
               items={[
                 {
                   image: 'https://readdy.ai/api/search-image?query=Hong%20Kong%20Chinese%20bride%20and%20groom%20celebrating%20at%20wedding%20banquet%20with%20live%20band%2C%20Asian%20guests%20applauding%2C%20elegant%20ballroom%2C%20warm%20golden%20lighting%2C%20joyful%20atmosphere%2C%20editorial%20photography&width=800&height=600&seq=home-scene-01&orientation=landscape',
                   alt: '香港婚禮演出情景',
                   title: '婚禮演出',
-                  description: '從證婚到 After Party，把音樂自然放進新人最重要的一天。',
                 },
                 {
                   image: 'https://readdy.ai/api/search-image?query=Hong%20Kong%20corporate%20annual%20dinner%20with%20live%20band%20on%20stage%2C%20Chinese%20employees%20celebrating%20in%20formal%20attire%2C%20warm%20golden%20spotlights%2C%20festive%20atmosphere%2C%20editorial%20photography&width=800&height=600&seq=home-scene-02&orientation=landscape',
                   alt: '香港周年晚宴情景',
                   title: '周年晚宴',
-                  description: '開場、頒獎、抽獎到壓軸，音樂與流程無縫配合。',
                 },
                 {
                   image: 'https://readdy.ai/api/search-image?query=Hong%20Kong%20Chinese%20singer%20performing%20at%20upscale%20restaurant%20with%20acoustic%20guitar%2C%20diners%20enjoying%20dinner%20and%20live%20music%2C%20warm%20candlelight%2C%20intimate%20atmosphere%2C%20editorial%20photography&width=800&height=600&seq=home-scene-03&orientation=landscape',
                   alt: '香港餐廳駐場情景',
                   title: '餐廳駐場',
-                  description: '駐場歌手為餐飲空間建立夜間辨識度，讓客人再回頭。',
                 },
                 {
                   image: 'https://readdy.ai/api/search-image?query=Hong%20Kong%20Chinese%20families%20enjoying%20festive%20live%20music%20at%20shopping%20mall%20celebration%2C%20colorful%20decorations%2C%20joyful%20atmosphere%2C%20editorial%20photography&width=800&height=600&seq=home-scene-04&orientation=landscape',
                   alt: '香港商場節日情景',
                   title: '商場與節日',
-                  description: '定時演出與互動節目，讓人流願意停下來、參與和分享。',
                 },
               ]}
             />
