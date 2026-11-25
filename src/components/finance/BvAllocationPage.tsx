@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useFinanceBvAllocation } from '@/hooks/useFinanceBvAllocation';
 import { useQuotationBv } from '@/hooks/useQuotationBv';
-import { isBvSourceRelatedType } from '@/lib/quotationBv';
+import { COMPANY_BV_RATIO, STAFF_BV_POOL, isBvSourceRelatedType } from '@/lib/quotationBv';
 import { formatFinanceMoney } from '@/lib/financeLedgers';
 import { formatIncomeDate } from '@/lib/quotationIncomes';
 import { QuotationBvBulkPanel } from '@/components/quotation/QuotationBvBulkPanel';
@@ -206,12 +206,18 @@ function BvAllocationBulkDialog({
   );
 }
 
-function BvAllocationList({
+export function BvAllocationList({
   groups,
   onRefresh,
+  projectTypeOptions,
+  header,
+  stickyChrome = false,
 }: {
   groups: BvAllocationGroup[];
   onRefresh: () => void;
+  projectTypeOptions?: Array<{ key: string; label: string }>;
+  header?: ReactNode;
+  stickyChrome?: boolean;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [ratioFilter, setRatioFilter] = useState<BvRatioFilter>(DEFAULT_BV_RATIO_FILTER);
@@ -240,8 +246,9 @@ function BvAllocationList({
     setRatioFilter((current) => (current === next ? 'all' : next));
   };
 
-  return (
-    <div className="space-y-6">
+  const chrome = (
+    <>
+      {header}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <BvStatCard
           label="Ratio = 100%"
@@ -278,7 +285,18 @@ function BvAllocationList({
           onChange={setSearchQuery}
           placeholder="搜尋項目名稱、編號或人員..."
         />
-        <FinanceProjectTypeFilter value={projectType} onChange={setProjectType} />
+        {projectTypeOptions ? (
+          <FinanceFilterSelect value={projectType} onChange={setProjectType} ariaLabel="項目類型">
+            <option value="all">全部項目類型</option>
+            {projectTypeOptions.map((option) => (
+              <option key={option.key} value={option.key}>
+                {option.label}
+              </option>
+            ))}
+          </FinanceFilterSelect>
+        ) : (
+          <FinanceProjectTypeFilter value={projectType} onChange={setProjectType} />
+        )}
         <FinanceFilterSelect
           value={staffFilter}
           onChange={setStaffFilter}
@@ -303,6 +321,18 @@ function BvAllocationList({
           ))}
         </FinanceFilterSelect>
       </div>
+    </>
+  );
+
+  return (
+    <div className="space-y-6">
+      {stickyChrome ? (
+        <div className="sticky top-[calc(48px+var(--app-banner-h))] z-30 -mx-6 px-6 pt-1 pb-3 space-y-3 bg-[#f5f8fc]/95 backdrop-blur-sm border-b border-[rgba(13,26,45,0.06)]">
+          {chrome}
+        </div>
+      ) : (
+        chrome
+      )}
 
       <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card overflow-hidden">
         <div className="overflow-x-auto">
@@ -455,7 +485,7 @@ export function BvAllocationPage() {
   return (
     <FinancePageFrame
       title="BV 分配"
-      description="列出 pitching / 網站項目的 BV 分配，包含尚未寫入 quotation_bv 的項目。公司固定 30%，協作者合計應為 70%，項目合計應為 100%。"
+      description={`列出 pitching / 網站項目的 BV 分配，包含尚未寫入 quotation_bv 的項目。公司固定 ${formatBvPercent(COMPANY_BV_RATIO)}，協作者合計應為 ${formatBvPercent(STAFF_BV_POOL)}，項目合計應為 100%。`}
       lastSyncedAt={lastSyncedAt}
       error={error}
       loading={loading}

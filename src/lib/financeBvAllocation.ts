@@ -1,7 +1,7 @@
 import { pitchingStatusConfig, type PitchingStatus } from '@/data/pitchingData';
-import { matchesFinanceProjectTypeFilter } from '@/lib/financeProjectType';
 import { compareQuotationListValues, type QuotationListSortDir } from '@/lib/quotationListSort';
 import { nextLedgerSort } from '@/lib/financeLedgers';
+import { matchesSectionProjectTypes } from '@/lib/quotationSectionScope';
 import {
   BV_RATIO_TOTAL,
   COMPANY_BV_LABEL,
@@ -55,6 +55,9 @@ export type BvAllocationGroup = {
   websiteId?: string;
   projectStatus?: string;
   projectTypeKey?: string;
+  projectTypeCode?: string;
+  /** Raw quotation_project_types id, or a legacy slug / resolved code. */
+  projectTypeRef?: string;
   projectTypeLabel?: string;
   mainPmId?: string;
   mainPmName?: string;
@@ -194,6 +197,8 @@ function buildGroup(
     websiteId: info?.websiteId,
     projectStatus: info?.projectStatus,
     projectTypeKey: info?.projectTypeKey,
+    projectTypeCode: info?.projectTypeCode,
+    projectTypeRef: info?.projectTypeRef,
     projectTypeLabel: info?.projectTypeLabel,
     mainPmId: info?.mainPmId,
     mainPmName: info?.mainPmName,
@@ -247,6 +252,29 @@ export function groupBvAllocations(
   );
 }
 
+function matchesBvProjectTypeFilter(group: BvAllocationGroup, filter: string | null | undefined): boolean {
+  if (!filter || filter === 'all') return true;
+  return group.projectTypeKey === filter || group.projectTypeCode === filter || group.projectTypeRef === filter;
+}
+
+/**
+ * Keep projects that belong to one 市場 / 系統開發 section.
+ * Untyped rows stay visible, the same way Pitching and Project do.
+ */
+export function filterBvAllocationsBySection(
+  groups: BvAllocationGroup[],
+  allowedTypeRefs: readonly string[],
+): BvAllocationGroup[] {
+  return groups.filter((group) =>
+    matchesSectionProjectTypes(
+      [group.projectTypeRef, group.projectTypeCode, group.projectTypeKey].filter(
+        (value): value is string => Boolean(value?.trim()),
+      ),
+      allowedTypeRefs,
+    ),
+  );
+}
+
 export function filterBvAllocations(
   groups: BvAllocationGroup[],
   opts: { search?: string; ratioStatus?: BvRatioFilter; staffId?: string; projectType?: string } = {},
@@ -256,7 +284,7 @@ export function filterBvAllocations(
   const staffId = opts.staffId?.trim() ?? '';
 
   return groups.filter((group) => {
-    if (!matchesFinanceProjectTypeFilter(group.projectTypeKey, opts.projectType)) return false;
+    if (!matchesBvProjectTypeFilter(group, opts.projectType)) return false;
     if (ratioStatus !== 'all' && group.ratioStatus !== ratioStatus) return false;
     if (staffId && !group.staff.some((row) => row.staffId === staffId)) return false;
     if (!query) return true;

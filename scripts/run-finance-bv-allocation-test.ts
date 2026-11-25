@@ -10,6 +10,7 @@ import {
   classifyBvRatioStatus,
   companyBvDetailRow,
   filterBvAllocations,
+  filterBvAllocationsBySection,
   formatBvPercent,
   formatBvStaffNames,
   groupBvAllocations,
@@ -74,6 +75,8 @@ assert.match(hook, /from\(PROJECTS_TABLE\)/);
 assert.match(hook, /webandsystem_list_id/);
 assert.match(hook, /main_pm_id/);
 assert.match(hook, /mainPmId/);
+assert.match(hook, /projectTypeRef/);
+assert.match(hook, /projectTypeCode/);
 
 assert.equal(DEFAULT_BV_RATIO_FILTER, 'all');
 assert.equal(DEFAULT_BV_ALLOCATION_SORT_KEY, 'signedDate');
@@ -150,8 +153,8 @@ const projects = new Map<string, BvAllocationProjectInfo>([
 
 const groups = groupBvAllocations(
   [
-    staff({ id: 'b1', projectId: 'p-complete', staffId: 's-ada', staffName: 'Ada', bvRatio: 40 }),
-    staff({ id: 'b2', projectId: 'p-complete', staffId: 's-ben', staffName: 'Ben', bvRatio: 30 }),
+    staff({ id: 'b1', projectId: 'p-complete', staffId: 's-ada', staffName: 'Ada', bvRatio: 36 }),
+    staff({ id: 'b2', projectId: 'p-complete', staffId: 's-ben', staffName: 'Ben', bvRatio: 24 }),
     staff({ id: 'b3', projectId: 'p-under', staffId: 's-ada', staffName: 'Ada', bvRatio: 20 }),
     staff({ id: 'b4', projectId: 'p-over', staffId: 's-cara', staffName: 'Cara', bvRatio: 70 }),
     staff({ id: 'b5', projectId: 'p-over', staffId: 's-dan', staffName: 'Dan', bvRatio: 10 }),
@@ -168,13 +171,13 @@ assert.deepEqual(byId.get('p-complete')?.staffNameItems, [
   { staffId: 's-ada', staffName: 'Ada', isMainPm: true },
   { staffId: 's-ben', staffName: 'Ben', isMainPm: false },
 ]);
-assert.equal(byId.get('p-under')?.totalRatio, 50);
+assert.equal(byId.get('p-under')?.totalRatio, 60);
 assert.equal(byId.get('p-under')?.ratioStatus, 'under');
 assert.equal(byId.get('p-under')?.staffNames, 'Ada');
 assert.deepEqual(byId.get('p-under')?.staffNameItems, [
   { staffId: 's-ada', staffName: 'Ada', isMainPm: false },
 ]);
-assert.equal(byId.get('p-over')?.totalRatio, 110);
+assert.equal(byId.get('p-over')?.totalRatio, 120);
 assert.equal(byId.get('p-over')?.ratioStatus, 'over');
 assert.equal(byId.get('p-over')?.staffNames, 'Dan、Cara');
 assert.deepEqual(byId.get('p-over')?.staffNameItems, [
@@ -255,6 +258,21 @@ assert.deepEqual(
     { projectType: 'bwl_event' },
   ).map((row) => row.projectId),
   [groups[0].projectId],
+);
+
+const sectionGroups = groups.map((group, index) => ({
+  ...group,
+  projectTypeRef: ['type-bwl', 'bwt_web', '', 'bwg_gift'][index],
+  projectTypeCode: ['bwl_event', 'bwt_web', undefined, 'bwg_gift'][index],
+  projectTypeKey: ['bwl_event', 'bwt_web', undefined, 'bwg_gift'][index],
+}));
+assert.deepEqual(
+  filterBvAllocationsBySection(sectionGroups, ['type-bwl', 'bwl_event', 'bwg_gift']).map((row) => row.projectId),
+  ['p-complete', 'p-over', 'p-empty'],
+);
+assert.deepEqual(
+  filterBvAllocationsBySection(sectionGroups, ['bwt_system', 'bwt_web']).map((row) => row.projectId),
+  ['p-under', 'p-over'],
 );
 
 const stats = summarizeBvAllocations(groups);

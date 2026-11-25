@@ -98,6 +98,7 @@ const quotationSectionSubMenus: SubMenuItem[] = [
     label: '項目AR收款',
     linkTo: { module: 'finance', subModule: 'receivables' },
   },
+  { id: 'bv-allocation', label: 'BV 分配' },
   { id: 'doc-types', label: '文件類型', section: '設置' },
   { id: 'project-types', label: '項目類型', section: '設置' },
 ];

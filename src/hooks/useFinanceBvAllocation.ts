@@ -268,6 +268,7 @@ export function useFinanceBvAllocation() {
           profileType: website?.profile_type,
           allowProfileFallback: picked.allowProfileFallback,
         });
+        const projectTypeCode = projectType?.code?.trim() || projectTypeKey;
 
         projectInfo.set(String(project.id), {
           projectId: String(project.id),
@@ -285,6 +286,8 @@ export function useFinanceBvAllocation() {
             relatedType === 'webandsystem' ? relatedId : optionalText(qcp?.webandsystem_list_id),
           projectStatus: optionalText(qcp?.status),
           projectTypeKey,
+          projectTypeCode,
+          projectTypeRef: optionalText(qcp?.project_types) || projectTypeCode,
           projectTypeLabel:
             projectType?.display ||
             financeProjectTypeLabel(projectTypeKey) ||

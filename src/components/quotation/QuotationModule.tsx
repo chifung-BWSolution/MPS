@@ -6,6 +6,7 @@ import { ImportantDatesModule } from '@/components/quotation/ImportantDatesModul
 import { QuotationDocTypesSettings } from '@/components/quotation/QuotationDocTypesSettings';
 import { QuotationProjectTypesSettings } from '@/components/quotation/QuotationProjectTypesSettings';
 import { QuotationDocsList } from '@/components/quotation/QuotationDocsList';
+import { QuotationBvAllocationPage } from '@/components/quotation/QuotationBvAllocationPage';
 import { QuotationSectionProvider } from '@/context/QuotationSectionContext';
 import type { QuotationSectionModule } from '@/lib/quotationSectionScope';
 
@@ -28,6 +29,10 @@ function QuotationSectionPages({ subModule }: { subModule?: string }) {
 
   if (subModule === 'important-dates') {
     return <ImportantDatesModule />;
+  }
+
+  if (subModule === 'bv-allocation') {
+    return <QuotationBvAllocationPage />;
   }
 
   if (subModule === 'doc-types') {

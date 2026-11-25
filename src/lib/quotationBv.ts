@@ -3,7 +3,7 @@ import type { ProjectHubRelatedType } from '@/lib/projectsHub';
 export const QUOTATION_BV_TABLE = 'quotation_bv';
 export const QUOTATION_BV_WITH_COMPANY_VIEW = 'quotation_bv_with_company';
 export const BV_RATIO_TOTAL = 100;
-export const COMPANY_BV_RATIO = 30;
+export const COMPANY_BV_RATIO = 40;
 export const COMPANY_BV_LABEL = 'Branding Works';
 export const STAFF_BV_POOL = BV_RATIO_TOTAL - COMPANY_BV_RATIO;
 export const BV_SOURCE_RELATED_TYPES = ['quotation_client', 'webandsystem'] as const;
@@ -73,10 +73,56 @@ export function isStaffBvComplete(staffRatios: Array<number | null | undefined>)
   return sumBvRatios(staffRatios) === STAFF_BV_POOL;
 }
 
-/** One-shot remap from the old 100% staff pool onto the 70% staff pool. */
+/** Remap a full 100% staff share onto the current staff pool. */
 export function scaleLegacyStaffBvRatio(value: number): number {
   return Math.max(0.01, roundBvRatio((value * STAFF_BV_POOL) / BV_RATIO_TOTAL));
 }
+
+/** Previous collaborator pool, before Branding Works moved from 30% to 40%. */
+export const PREVIOUS_STAFF_BV_POOL = 70;
+
+/**
+ * Shrink collaborator ratios from an older staff pool onto a smaller one.
+ * Each person's share of the others stays the same. Largest-remainder rounding
+ * keeps the project total equal to oldSum × toPool / fromPool.
+ */
+export function rescaleStaffBvRatios(
+  ratios: Array<number | null | undefined>,
+  fromPool = PREVIOUS_STAFF_BV_POOL,
+  toPool = STAFF_BV_POOL,
+): number[] {
+  const cents = ratios.map((value) =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value * 100) : 0,
+  );
+  if (fromPool <= 0 || toPool < 0) return cents.map(() => 0);
+  const oldSum = cents.reduce((sum, value) => sum + value, 0);
+  if (oldSum <= 0) return cents.map(() => 0);
+
+  const target = Math.round((oldSum * toPool) / fromPool);
+  const floors = cents.map((value) => Math.floor((value * target) / oldSum));
+  let leftover = target - floors.reduce((sum, value) => sum + value, 0);
+  if (leftover < 0) leftover = 0;
+
+  const order = cents
+    .map((value, index) => ({ index, remainder: (value * target) % oldSum, cents: value }))
+    .sort((a, b) => b.remainder - a.remainder || b.cents - a.cents || a.index - b.index);
+
+  const next = [...floors];
+  for (const item of order) {
+    if (leftover <= 0) break;
+    if (cents[item.index] <= 0) continue;
+    next[item.index] += 1;
+    leftover -= 1;
+  }
+
+  return next.map((value, index) => (cents[index] > 0 ? Math.max(1, value) / 100 : 0));
+}
+
+export type QuotationBvHourEntry = {
+  date: string;
+  title: string;
+  hours: number;
+};
 
 export type QuotationBvHourStat = {
   staffId: string;
@@ -84,6 +130,7 @@ export type QuotationBvHourStat = {
   position?: string;
   hours: number;
   entryCount: number;
+  entries?: QuotationBvHourEntry[];
 };
 
 export type QuotationBvDraftRow = {
@@ -97,7 +144,7 @@ export type QuotationBvDraftRow = {
 };
 
 /**
- * Split the 70% staff pool by each person's share of related day-report hours.
+ * Split the staff pool by each person's share of related day-report hours.
  * Largest-remainder rounding so the suggestions add up to STAFF_BV_POOL when any hours exist.
  */
 export function suggestStaffBvFromHours(hours: Array<number | null | undefined>): number[] {

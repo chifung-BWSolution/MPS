@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useActiveStaffOptions } from '@/hooks/useActiveStaffOptions';
 import { useRelatedProjectStaffHours } from '@/hooks/useRelatedProjectStaffHours';
-import type { QuotationBvRecord } from '@/lib/quotationBv';
+import type { QuotationBvHourEntry, QuotationBvRecord } from '@/lib/quotationBv';
 import {
   COMPANY_BV_LABEL,
   COMPANY_BV_RATIO,
@@ -40,6 +40,42 @@ function newRowKey(): string {
 function formatHours(hours: number): string {
   const rounded = Math.round(hours * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function formatEntryDate(value: string): string {
+  const [year, month, day] = value.slice(0, 10).split('-');
+  if (!year || !month || !day) return value || '—';
+  return `${year}/${month}/${day}`;
+}
+
+function HourEntries({ entries }: { entries: QuotationBvHourEntry[] }) {
+  if (entries.length === 0) return null;
+  return (
+    <div className="mt-2 overflow-hidden rounded-md border border-border/60 bg-[#f7f9fc]">
+      <table className="w-full text-left">
+        <thead>
+          <tr className="text-[11px] text-muted-foreground border-b border-border/50">
+            <th className="px-2.5 py-1.5 font-medium">日期</th>
+            <th className="px-2.5 py-1.5 font-medium">工作</th>
+            <th className="px-2.5 py-1.5 font-medium text-right">工時</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((entry, index) => (
+            <tr key={`${entry.date}-${entry.title}-${index}`} className="border-b border-border/40 last:border-0">
+              <td className="px-2.5 py-1.5 text-[12px] text-muted-foreground whitespace-nowrap tabular-nums">
+                {formatEntryDate(entry.date)}
+              </td>
+              <td className="px-2.5 py-1.5 text-[12px]">{entry.title}</td>
+              <td className="px-2.5 py-1.5 text-[12px] text-right tabular-nums whitespace-nowrap">
+                {formatHours(entry.hours)}h
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function emptyRow(): DraftRow {
@@ -95,6 +131,11 @@ export function QuotationBvBulkPanel({
     );
   }, [isOpen, assigned, hourStats]);
 
+  const entriesByStaff = useMemo(() => {
+    const map = new Map<string, QuotationBvHourEntry[]>();
+    for (const row of hourStats) map.set(row.staffId, row.entries ?? []);
+    return map;
+  }, [hourStats]);
   const suggestions = useMemo(
     () => suggestStaffBvFromHours(draftRows.map((row) => row.hours)),
     [draftRows],
@@ -126,7 +167,7 @@ export function QuotationBvBulkPanel({
 
   const applyAllSuggestions = () => {
     if (totalHours <= 0) {
-      toast.error('此項目尚未有相關工時，無法套用分拆建議');
+      toast.error('此項目尚未有相關工時，無法套用分析建議');
       return;
     }
     setDraftRows((prev) =>
@@ -264,9 +305,9 @@ export function QuotationBvBulkPanel({
                 為本項目所有 BV 人員設定分配比例。已有工時的同事會自動列出，可再新增人員。
               </p>
               <p className="text-[12px] text-amber-700 mt-1">
-                「分拆建議」= 工時 ÷ 總工時 × {formatBvRatio(STAFF_BV_POOL)}
+                「分析建議」= 工時 ÷ 總工時 × {formatBvRatio(STAFF_BV_POOL)}
                 %。公司固定 {formatBvRatio(COMPANY_BV_RATIO)}
-                %，其餘按相關 day report 工時比例分配。
+                %，其餘按 day report 已申報工時的比例分配。
               </p>
             </div>
           </div>
@@ -285,7 +326,7 @@ export function QuotationBvBulkPanel({
                   <th className="px-3 py-2 font-medium text-right whitespace-nowrap">工時</th>
                   <th className="px-3 py-2 font-medium text-right whitespace-nowrap">總工時</th>
                   <th className="px-3 py-2 font-medium text-right whitespace-nowrap">份額</th>
-                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">分拆建議</th>
+                  <th className="px-3 py-2 font-medium text-right whitespace-nowrap">分析建議</th>
                   <th className="px-3 py-2 font-medium text-right whitespace-nowrap w-[120px]">Ratio</th>
                   <th className="px-2 py-2 w-9" />
                 </tr>
@@ -337,7 +378,7 @@ export function QuotationBvBulkPanel({
                     return (
                       <tr key={row.key} className="border-b border-border/40 last:border-b-0">
                         <td className="px-3 py-2 align-top">
-                          {row.id && row.staffId ? (
+                          {row.staffId ? (
                             <div>
                               <p className="text-[13px] font-medium">{row.staffName}</p>
                               <p className="text-[11px] text-muted-foreground">
@@ -345,6 +386,7 @@ export function QuotationBvBulkPanel({
                                   .filter(Boolean)
                                   .join(' · ') || '協作者'}
                               </p>
+                              <HourEntries entries={entriesByStaff.get(row.staffId) ?? []} />
                             </div>
                           ) : (
                             <SearchableSelect

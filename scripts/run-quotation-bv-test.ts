@@ -16,6 +16,8 @@ import {
   parseBvRatio,
   projectBvTotal,
   remainingStaffBvRatio,
+  PREVIOUS_STAFF_BV_POOL,
+  rescaleStaffBvRatios,
   scaleLegacyStaffBvRatio,
   suggestStaffBvFromHours,
   sumBvRatios,
@@ -32,35 +34,48 @@ import {
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
 
-assert.equal(COMPANY_BV_RATIO, 30);
-assert.equal(STAFF_BV_POOL, 70);
+assert.equal(COMPANY_BV_RATIO, 40);
+assert.equal(STAFF_BV_POOL, 60);
+assert.equal(PREVIOUS_STAFF_BV_POOL, 70);
 assert.equal(COMPANY_BV_RATIO + STAFF_BV_POOL, BV_RATIO_TOTAL);
 assert.equal(COMPANY_BV_LABEL, 'Branding Works');
 assert.equal(QUOTATION_BV_WITH_COMPANY_VIEW, 'quotation_bv_with_company');
 assert.equal(parseBvRatio(''), null);
 assert.equal(parseBvRatio(0), null);
 assert.equal(parseBvRatio(100), null);
-assert.equal(parseBvRatio(70.01), null);
-assert.equal(parseBvRatio(70), 70);
+assert.equal(parseBvRatio(60.01), null);
+assert.equal(parseBvRatio(70), null);
+assert.equal(parseBvRatio(60), 60);
 assert.equal(parseBvRatio(50), 50);
 assert.equal(parseBvRatio('33.333'), 33.33);
 assert.equal(sumBvRatios([50, 25, 25]), BV_RATIO_TOTAL);
-assert.equal(remainingStaffBvRatio([40, 20]), 10);
-assert.equal(wouldExceedStaffBvPool(80, 30), true);
-assert.equal(wouldExceedStaffBvPool(40, 30), false);
-assert.equal(wouldExceedStaffBvPool(40, 30.01), true);
-assert.equal(scaleLegacyStaffBvRatio(100), 70);
-assert.equal(scaleLegacyStaffBvRatio(50), 35);
-assert.equal(projectBvTotal([35, 35]), BV_RATIO_TOTAL);
-assert.equal(isStaffBvComplete([35, 35]), true);
-assert.equal(isStaffBvComplete([40, 20]), false);
-assert.equal(formatBvRatio(30), '30');
+assert.equal(remainingStaffBvRatio([30, 20]), 10);
+assert.equal(wouldExceedStaffBvPool(40, 30), true);
+assert.equal(wouldExceedStaffBvPool(30, 30), false);
+assert.equal(wouldExceedStaffBvPool(30, 30.01), true);
+assert.equal(scaleLegacyStaffBvRatio(100), 60);
+assert.equal(scaleLegacyStaffBvRatio(50), 30);
+assert.equal(projectBvTotal([30, 30]), BV_RATIO_TOTAL);
+assert.equal(isStaffBvComplete([30, 30]), true);
+assert.equal(isStaffBvComplete([20, 20]), false);
+assert.equal(formatBvRatio(40), '40');
 assert.equal(formatBvRatio(7.5), '7.5');
-assert.deepEqual(suggestStaffBvFromHours([10, 10]), [35, 35]);
-assert.deepEqual(suggestStaffBvFromHours([0, 10]), [0, 70]);
+assert.deepEqual(suggestStaffBvFromHours([10, 10]), [30, 30]);
+assert.deepEqual(suggestStaffBvFromHours([0, 10]), [0, 60]);
 assert.deepEqual(suggestStaffBvFromHours([0, 0]), [0, 0]);
-assert.deepEqual(suggestStaffBvFromHours([3, 12, 23.5]), [5.45, 21.82, 42.73]);
+assert.deepEqual(suggestStaffBvFromHours([3, 12, 23.5]), [4.68, 18.7, 36.62]);
 assert.equal(sumBvRatios(suggestStaffBvFromHours([1, 2, 3])), STAFF_BV_POOL);
+assert.deepEqual(rescaleStaffBvRatios([70]), [60]);
+assert.deepEqual(rescaleStaffBvRatios([49, 10.5, 10.5]), [42, 9, 9]);
+assert.deepEqual(rescaleStaffBvRatios([35, 24.5, 10.5]), [30, 21, 9]);
+assert.deepEqual(rescaleStaffBvRatios([45.21, 21.87, 2.92]), [38.75, 18.75, 2.5]);
+assert.deepEqual(rescaleStaffBvRatios([50, 20]), [42.86, 17.14]);
+assert.deepEqual(rescaleStaffBvRatios([40, 30]), [34.29, 25.71]);
+assert.deepEqual(rescaleStaffBvRatios([35.21, 34.79]), [30.18, 29.82]);
+assert.deepEqual(rescaleStaffBvRatios([45, 25]), [38.57, 21.43]);
+assert.deepEqual(rescaleStaffBvRatios([60, 10]), [51.43, 8.57]);
+assert.deepEqual(rescaleStaffBvRatios([23.33, 23.33, 23.34]), [20, 20, 20]);
+assert.equal(sumBvRatios(rescaleStaffBvRatios([40, 30])), STAFF_BV_POOL);
 assert.deepEqual(
   mergeBvDraftStaff(
     [{ id: 'bv-1', staffId: 's1', staffName: 'Ada', bvRatio: 40 }],
@@ -140,6 +155,8 @@ assert.doesNotMatch(hook, /quotation_client_project_id/);
 const hoursHook = read('src/hooks/useRelatedProjectStaffHours.ts');
 assert.match(hoursHook, /resolveRelatedDayReportIds/);
 assert.match(hoursHook, /day_report_entries/);
+assert.match(hoursHook, /day_reports!inner\(report_date\)/);
+assert.match(hoursHook, /title/);
 assert.match(hoursHook, /\.in\('related_id', related\.data\)/);
 
 const card = read('src/components/quotation/QuotationBvCard.tsx');
@@ -170,9 +187,31 @@ assert.match(panel, /套用全部建議/);
 assert.match(panel, /suggestStaffBvFromHours/);
 assert.match(panel, /mergeBvDraftStaff/);
 assert.match(panel, /useRelatedProjectStaffHours/);
-assert.match(panel, /分拆建議/);
+assert.match(panel, /分析建議/);
+assert.match(panel, /day report 已申報工時/);
+assert.match(panel, /HourEntries/);
+assert.doesNotMatch(panel, /分拆建議/);
+assert.doesNotMatch(panel, /BV Logic/);
+assert.doesNotMatch(panel, /2026\/27/);
 assert.match(panel, /STAFF_BV_POOL/);
 assert.match(panel, /COMPANY_BV_RATIO/);
+
+const appMenu = read('src/context/AppContext.tsx');
+assert.match(
+  appMenu,
+  /label: '項目AR收款'[\s\S]{0,500}?id: 'bv-allocation',\s*label: 'BV 分配'/,
+);
+const quotationModule = read('src/components/quotation/QuotationModule.tsx');
+assert.match(quotationModule, /subModule === 'bv-allocation'/);
+assert.match(quotationModule, /QuotationBvAllocationPage/);
+const sectionPage = read('src/components/quotation/QuotationBvAllocationPage.tsx');
+assert.match(sectionPage, /filterBvAllocationsBySection/);
+assert.match(sectionPage, /useQuotationSection/);
+assert.match(sectionPage, /useFinanceBvAllocation/);
+assert.match(sectionPage, /BvAllocationList/);
+assert.match(sectionPage, /day report 已申報工時/);
+assert.doesNotMatch(sectionPage, /BV Logic/);
+assert.doesNotMatch(sectionPage, /2026\/27/);
 
 const pitching = read('src/components/quotation/PitchingModule.tsx');
 assert.match(pitching, /QuotationBvCard/);
@@ -223,6 +262,15 @@ assert.match(policyMigration, /VALUES \(v_project_id, NEW\.main_pm_id, v_staff_p
 assert.match(policyMigration, /CREATE OR REPLACE VIEW public\.quotation_bv_with_company/);
 assert.match(policyMigration, /security_invoker = true/);
 assert.doesNotMatch(policyMigration, /VALUES \(v_project_id, NEW\.main_pm_id, 100\)/);
+
+const ratio40Migration = read('supabase/migrations/20261125092841_quotation_bv_company_ratio_40.sql');
+assert.match(ratio40Migration, /SELECT 40::numeric\(6, 2\)/);
+assert.match(ratio40Migration, /SELECT 60::numeric\(6, 2\)/);
+assert.match(ratio40Migration, /HAVING SUM\(bv_ratio\) > 60/);
+assert.match(ratio40Migration, /ROUND\(old_cents \* 60::numeric \/ 70, 0\)/);
+assert.match(ratio40Migration, /ORDER BY remainder DESC, old_cents DESC, id/);
+assert.match(ratio40Migration, /bv_ratio <= 60/);
+assert.doesNotMatch(ratio40Migration, /bv_ratio <= 70/);
 
 assert.match(hook, /協作者上限/);
 
