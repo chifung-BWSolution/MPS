@@ -3,7 +3,6 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
-  ChevronUp,
   ChevronsUpDown,
   Code2,
   FolderGit2,
@@ -27,6 +26,7 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { isValidFramerProjectUrl } from '@/lib/readdyFramerApi';
+import { CollapsePane } from './CollapsePane';
 import type {
   FramerOAuthStatus,
   GitHubRepoSummary,
@@ -145,7 +145,7 @@ export function SourceConfigPanel({
   };
 
   return (
-    <section className={cn('p-4', collapsed ? 'space-y-2.5' : 'space-y-3.5')}>
+    <section className="p-4 space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5">
@@ -167,12 +167,19 @@ export function SourceConfigPanel({
             title={collapsed ? '展開導入專案設定' : '收合導入專案設定'}
             className="p-1 rounded-md text-slate-400 hover:text-[#101B2D] hover:bg-slate-100 transition-colors"
           >
-            {collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+            <ChevronDown
+              size={14}
+              className={cn(
+                'transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none',
+                !collapsed && 'rotate-180',
+              )}
+            />
           </button>
         </div>
       </div>
 
-      {collapsed ? (
+      <div className="grid">
+        <CollapsePane open={collapsed} className="col-start-1 row-start-1 self-start">
         <button
           type="button"
           onClick={() => setCollapsed(false)}
@@ -246,8 +253,9 @@ export function SourceConfigPanel({
             <span className="shrink-0 text-[10.5px] text-slate-400">展開設定</span>
           </div>
         </button>
-      ) : (
-        <>
+        </CollapsePane>
+        <CollapsePane open={!collapsed} className="col-start-1 row-start-1 self-start">
+        <div className="space-y-3.5">
 
       {/* Framer Project URL */}
       <div className="space-y-1.5">
@@ -455,7 +463,8 @@ export function SourceConfigPanel({
             </div>
           </div>
 
-          {tokenPanelOpen && (
+          <CollapsePane open={tokenPanelOpen} className="!-mt-3">
+            <div className="pt-3">
             <div className="rounded-lg bg-white border border-slate-200 p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-semibold text-[#101B2D] flex items-center gap-1.5">
@@ -486,7 +495,8 @@ export function SourceConfigPanel({
                 </button>
               </div>
             </div>
-          )}
+            </div>
+          </CollapsePane>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {oauthStatus?.github_configured ? (
@@ -678,8 +688,9 @@ export function SourceConfigPanel({
           </button>
         </div>
       )}
-        </>
-      )}
+        </div>
+        </CollapsePane>
+      </div>
     </section>
   );
 }

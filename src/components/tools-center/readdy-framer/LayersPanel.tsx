@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   Check,
   ChevronDown,
-  ChevronUp,
   Copy,
   Layers,
   Loader2,
@@ -12,6 +11,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { CollapsePane } from './CollapsePane';
 import type { FramerIrSection } from '@/types/readdyFramer';
 
 interface LayersPanelProps {
@@ -188,10 +188,16 @@ export function LayersPanel({
                     className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-[#08967F] font-medium transition-colors"
                   >
                     <span>查看結構代碼</span>
-                    {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                    <ChevronDown
+                      size={12}
+                      className={cn(
+                        'transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none',
+                        isExpanded && 'rotate-180',
+                      )}
+                    />
                   </button>
 
-                  {isExpanded && (
+                  <CollapsePane open={isExpanded}>
                     <div
                       onClick={(e) => e.stopPropagation()}
                       className="mt-2 rounded-lg border border-slate-200 bg-[#0B1322] text-slate-200 overflow-hidden"
@@ -211,7 +217,7 @@ export function LayersPanel({
                         {JSON.stringify(section, null, 2)}
                       </pre>
                     </div>
-                  )}
+                  </CollapsePane>
                 </div>
               </div>
             );
