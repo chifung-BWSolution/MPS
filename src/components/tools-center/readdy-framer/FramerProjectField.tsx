@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronsUpDown, FolderKanban, KeyRound, Link2, Loader2, Plus, RefreshCw } from 'lucide-react';
+import { Check, ChevronsUpDown, FolderKanban, KeyRound, Loader2, Plus, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -96,7 +96,6 @@ export function FramerProjectField({
   const [createTitle, setCreateTitle] = useState('');
   const [createWorkspaceId, setCreateWorkspaceId] = useState('');
   const [creating, setCreating] = useState(false);
-  const [linkOpen, setLinkOpen] = useState(false);
 
   const labels = useMemo(() => framerWorkspaceLabels(workspaces), [workspaces]);
   const creatable = workspaces.filter((workspace) => workspace.canCreate);
@@ -247,31 +246,7 @@ export function FramerProjectField({
         </button>
         </div>
         {!urlValid && (
-          <p className="text-[11px] text-amber-600">請選擇 Framer 專案，或貼上完整專案連結。</p>
-        )}
-        <button
-          type="button"
-          onClick={() => setLinkOpen((value) => !value)}
-          className="text-[11px] font-medium text-slate-500 hover:text-[#101B2D]"
-        >
-          {linkOpen ? '收合專案連結' : '或貼上專案連結'}
-        </button>
-        {linkOpen && (
-          <div
-            className={cn(
-              'flex items-center gap-2 px-3 py-2 rounded-lg border bg-slate-50/70',
-              urlValid ? 'border-slate-200 focus-within:border-[#0BB59B]' : 'border-amber-300',
-            )}
-          >
-            <Link2 size={14} className="text-slate-400 shrink-0" />
-            <input
-              type="url"
-              value={framerProjectUrl}
-              onChange={(event) => onFramerProjectUrlChange(event.target.value)}
-              placeholder="https://framer.com/projects/..."
-              className="w-full bg-transparent text-[12px] font-mono text-[#101B2D] outline-none placeholder:text-slate-400"
-            />
-          </div>
+          <p className="text-[11px] text-amber-600">請選擇 Framer 專案。</p>
         )}
         {truncated && (
           <p className="text-[11px] text-slate-400">列表顯示最近開啟的專案。</p>
