@@ -3,6 +3,13 @@ import { Check, ChevronsUpDown, FolderKanban, KeyRound, Link2, Loader2, Plus, Re
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Command,
   CommandEmpty,
   CommandGroup,
@@ -231,7 +238,7 @@ export function FramerProjectField({
         </div>
         <button
           type="button"
-          onClick={() => setCreateOpen((value) => !value)}
+          onClick={() => setCreateOpen(true)}
           disabled={!mcpConnected}
           className="shrink-0 inline-flex items-center justify-center gap-1 px-3 rounded-lg border border-[#0BB59B]/40 bg-[#E7F6F2] text-[12px] font-semibold text-[#067864] hover:bg-[#d8f3ec] disabled:opacity-50 whitespace-nowrap"
         >
@@ -279,42 +286,70 @@ export function FramerProjectField({
         )}
       </div>
 
-      {createOpen && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-2.5 space-y-2">
-          <p className="text-[11px] text-slate-500">在已連線的 Framer 帳號建立，完成後會自動選用。</p>
-          <input
-            value={createTitle}
-            onChange={(event) => setCreateTitle(event.target.value)}
-            placeholder="新專案名稱，例如 bwdesign.com 2026"
-            className="w-full px-2.5 py-1.5 rounded border border-slate-200 bg-white text-[12px] text-[#101B2D] outline-none focus:border-[#0BB59B]"
-          />
-          {creatable.length > 1 && (
-            <select
-              value={createWorkspaceId}
-              onChange={(event) => setCreateWorkspaceId(event.target.value)}
-              aria-label="Framer 工作區"
-              className="w-full px-2.5 py-1.5 rounded border border-slate-200 bg-white text-[12px] text-[#101B2D] outline-none focus:border-[#0BB59B]"
-            >
-              {creatable.map((workspace) => (
-                <option key={workspace.id} value={workspace.id}>
-                  {labels.get(workspace.id) || workspace.name}
-                </option>
-              ))}
-            </select>
-          )}
-          {mcpConnected && !loading && creatable.length === 0 && (
-            <p className="text-[11px] text-amber-700">這個 Framer 帳號沒有建立專案的權限。</p>
-          )}
-          <button
-            type="button"
-            disabled={creating || !createTitle.trim() || !targetWorkspace?.canCreate}
-            onClick={() => void handleCreate()}
-            className="w-full py-1.5 rounded-lg bg-[#101B2D] hover:bg-[#192842] text-white text-[12px] font-semibold disabled:opacity-50"
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          if (!creating) setCreateOpen(open);
+        }}
+      >
+        <DialogContent className="max-w-md bg-white border-slate-200">
+          <DialogHeader>
+            <DialogTitle className="text-[16px] font-bold text-[#101B2D]">新建 Framer 專案</DialogTitle>
+            <DialogDescription className="text-[12px] text-slate-500">
+              在已連線的 Framer 帳號建立，完成後會自動選用。
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleCreate();
+            }}
+            className="space-y-3"
           >
-            {creating ? '建立中…' : '建立並選用'}
-          </button>
-        </div>
-      )}
+            <input
+              autoFocus
+              value={createTitle}
+              onChange={(event) => setCreateTitle(event.target.value)}
+              placeholder="新專案名稱，例如 bwdesign.com 2026"
+              className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-[13px] text-[#101B2D] outline-none focus:border-[#0BB59B]"
+            />
+            {creatable.length > 1 && (
+              <select
+                value={createWorkspaceId}
+                onChange={(event) => setCreateWorkspaceId(event.target.value)}
+                aria-label="Framer 工作區"
+                className="w-full px-2.5 py-2 rounded-lg border border-slate-200 bg-white text-[13px] text-[#101B2D] outline-none focus:border-[#0BB59B]"
+              >
+                {creatable.map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {labels.get(workspace.id) || workspace.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            {mcpConnected && !loading && creatable.length === 0 && (
+              <p className="text-[12px] text-amber-700">這個 Framer 帳號沒有建立專案的權限。</p>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                disabled={creating}
+                onClick={() => setCreateOpen(false)}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                disabled={creating || !createTitle.trim() || !targetWorkspace?.canCreate}
+                className="px-3 py-1.5 rounded-lg bg-[#101B2D] hover:bg-[#192842] text-white text-[12px] font-semibold disabled:opacity-50"
+              >
+                {creating ? '建立中…' : '建立並選用'}
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
