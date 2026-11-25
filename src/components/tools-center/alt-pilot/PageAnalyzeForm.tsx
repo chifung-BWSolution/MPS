@@ -20,6 +20,7 @@ export interface PageAnalyzeFormProps {
   onUrlChange: (url: string) => void;
   onAnalyze: () => void;
   analyzing: boolean;
+  disabled?: boolean;
 }
 
 export function PageAnalyzeForm({
@@ -31,6 +32,7 @@ export function PageAnalyzeForm({
   onUrlChange,
   onAnalyze,
   analyzing,
+  disabled = false,
 }: PageAnalyzeFormProps) {
   return (
     <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,260px)_minmax(0,1fr)_auto]">
@@ -42,7 +44,7 @@ export function PageAnalyzeForm({
         <Select
           value={siteId || undefined}
           onValueChange={onSiteIdChange}
-          disabled={sitesLoading || sites.length === 0 || analyzing}
+          disabled={disabled || sitesLoading || sites.length === 0 || analyzing}
         >
           <SelectTrigger className="h-9 bg-white pl-9" aria-label="選擇站點">
             <SelectValue placeholder={sitesLoading ? '載入站點…' : '選擇站點'} />
@@ -67,24 +69,25 @@ export function PageAnalyzeForm({
           value={url}
           onChange={(event) => onUrlChange(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && !analyzing) onAnalyze();
+            if (event.key === 'Enter' && !analyzing && !disabled) onAnalyze();
           }}
-          placeholder="https://www.example.com/page 或 /page"
+          placeholder={disabled ? 'ALT Pilot 已停用' : 'https://www.example.com/page 或 /page'}
           className="h-9 bg-white pl-9"
           aria-label="頁面 URL"
           autoComplete="off"
           spellCheck={false}
+          disabled={disabled}
         />
       </div>
 
       <Button
         type="button"
         onClick={onAnalyze}
-        disabled={analyzing || !url.trim()}
+        disabled={disabled || analyzing || !url.trim()}
         className="h-9 gap-2 bg-[#0D9488] px-4 text-white hover:bg-[#0b8076]"
       >
         {analyzing ? <Loader2 size={15} className="animate-spin" /> : <ScanSearch size={15} />}
-        {analyzing ? '分析中…' : '分析頁面'}
+        {disabled ? '已停用' : analyzing ? '分析中…' : '分析頁面'}
       </Button>
     </div>
   );

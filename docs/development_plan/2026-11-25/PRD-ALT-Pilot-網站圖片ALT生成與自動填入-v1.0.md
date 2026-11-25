@@ -4,14 +4,14 @@
 |---|---|
 | 版本 | v1.1 |
 | 日期 | 2026-11-25 |
-| 狀態 | 本機 MVP 已實作；**未推送線上** |
+| 狀態 | **Production DB＋Edge Function 已部署；`enabled=false`；production 前端仍是舊版 ALT UI（最新開關 UI 未部署）** |
 | 類型 | 工具中心新插件（新子模組） |
 | 落點 | `#tools-center/alt-pilot` |
 | 名稱 | **ALT Pilot**（副標：用整頁文案與圖片畫面生成 ALT，半自動填入 Framer） |
 | 主要檔案 | `src/components/tools-center/alt-pilot/*`、`supabase/functions/alt-pilot/*`、`src/lib/alt*.ts` |
 | 配套文件 | `執行清單-ALT-Pilot-v1.0.md`（同目錄） |
 
-> **本機 MVP 範圍**：程式、migration、Edge Function、文件都已寫入本地；**沒有執行 `supabase db push`、沒有部署 Edge Function、沒有推送 git**。因此線上仍未有 `alt_*` 表，介面會顯示「功能尚未啟用」。
+> **目前狀態**：migration 已用單支 SQL 套用到 production（未用 `db push`，因 remote migration drift）；`alt-pilot` Edge Function 已部署；`alt_settings.enabled=false`；**前端與 git 尚未推送**。因此正式站目前看不到 ALT Pilot，資料庫與 function 已就緒。
 
 ---
 
@@ -226,7 +226,7 @@ Migration：`supabase/migrations/20261125183000_alt_pilot.sql`（只做加法）
 | `alt_runs` | 每次頁面分析 | `page_url`、`page_host`、`context_summary`、`keyword`、`status`、`image_count`、`generated_count`、`approved_count`、`model`、`created_by` |
 | `alt_suggestions` | 每張圖的建議 | `run_id`、`image_url`、`current_alt`、`suggested_alt`、`short_alt`、`alternatives`、`rationale`、`confidence`、`risk`、`issues`、`decorative`、`status`、`final_alt`、`reviewed_by`；`UNIQUE(run_id,image_url)` |
 | `alt_llm_usage` | LLM 用量 | `run_id`、`model`、`provider`、`tokens_in/out`、`cost_usd` |
-| `alt_settings` | 單列設定 | `enabled`、`model`、`fallback_model`、`daily_call_limit`、`max_images_per_run`、`max_images_per_call` |
+| `alt_settings` | 單列設定（**上線總開關**） | `enabled`（預設 **false**）、`model`（預設 `grok-4.5`）、`fallback_model`、`daily_call_limit`、`max_images_per_run`、`max_images_per_call` |
 
 ### 8.1 RLS
 
@@ -238,6 +238,31 @@ Migration：`supabase/migrations/20261125183000_alt_pilot.sql`（只做加法）
 | `alt_llm_usage` | SELECT only | 全開 |
 
 不建 anon policy；不改任何既有 policy。
+
+### 8.2 上線總開關
+
+`alt_settings.enabled` 預設 **false**：
+
+- false：前端顯示「ALT Pilot 目前已停用」，分析／生成按鈕停用；Edge Function 的 `analyze`／`generate`／`regenerate` 回 `disabled`。歷史與 `verify` 仍可讀。
+- true：功能開放；`daily_call_limit` 仍是第二層硬上限。
+
+開啟方式（只動新表、帶主鍵 WHERE）：
+
+```sql
+update public.alt_settings
+set enabled = true,
+    daily_call_limit = 50
+where id = 'default';
+```
+
+關閉方式：
+
+```sql
+update public.alt_settings
+set enabled = false,
+    daily_call_limit = 0
+where id = 'default';
+```
 
 ### 8.2 安全審查結論
 

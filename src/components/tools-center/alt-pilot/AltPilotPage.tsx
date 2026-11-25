@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Database, FlaskConical, Loader2 } from 'lucide-react';
+import { AlertTriangle, Database, FlaskConical, Loader2, Power } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
@@ -143,6 +143,58 @@ function SchemaMissingNotice({
         >
           <FlaskConical size={13} />
           預覽介面（示範資料）
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function AltPilotDisabledNotice({
+  onHistory,
+  onRetry,
+  retrying,
+}: {
+  onHistory: () => void;
+  onRetry: () => void;
+  retrying: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-amber-200 bg-white p-6 shadow-card">
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-amber-50 text-amber-700">
+          <Power size={18} />
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-[16px] font-semibold text-[#0d1a2d]">ALT Pilot 目前已停用</h2>
+          <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+            <code className="rounded bg-[#f5f8fc] px-1">alt_settings.enabled = false</code>
+            。歷史與已批准資料仍在；管理員確認後可用 SQL 開啟。
+          </p>
+          <code className="mt-2 block rounded border border-border bg-[#f8fafc] px-3 py-2 text-[11px] text-[#0d1a2d]">
+            update public.alt_settings set enabled = true where id = 'default';
+          </code>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5 bg-white"
+          onClick={onHistory}
+        >
+          查看歷史
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="gap-1.5 text-[#0D9488] hover:bg-[#f0fdfa]"
+          onClick={onRetry}
+          disabled={retrying}
+        >
+          {retrying ? <Loader2 size={13} className="animate-spin" /> : null}
+          重新檢查
         </Button>
       </div>
     </div>
@@ -411,6 +463,10 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
   );
 
   const handleAnalyze = () => {
+    if (settings && !settings.enabled) {
+      toast.info('ALT Pilot 目前已停用，請先由管理員開啟 alt_settings.enabled。');
+      return;
+    }
     if (!url.trim()) {
       toast.info('請先貼上頁面 URL');
       return;
@@ -426,6 +482,10 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
   const generateImages = useCallback(
     async (targets: AltImageCandidate[]) => {
       if (!run) return;
+      if (settings && !settings.enabled) {
+        toast.info('ALT Pilot 目前已停用，無法生成 ALT。');
+        return;
+      }
       if (targets.length === 0) {
         toast.info('請先勾選尚未批准的圖片');
         return;
@@ -814,13 +874,8 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
             setHistoryOpen(true);
             void refreshRuns();
           }}
+          disabled={Boolean(settings && !settings.enabled)}
         />
-
-        {settings && !settings.enabled ? (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] text-amber-800">
-            ALT Pilot 目前在 alt_settings 被停用；可以查看歷史，但不能再生成。
-          </div>
-        ) : null}
 
         {error ? (
           <ErrorBanner
@@ -833,7 +888,16 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
           />
         ) : null}
 
-        {schemaMissing ? (
+        {settings && !settings.enabled ? (
+          <AltPilotDisabledNotice
+            onHistory={() => {
+              setHistoryOpen(true);
+              void refreshRuns();
+            }}
+            onRetry={() => void loadBootstrap()}
+            retrying={bootstrapLoading}
+          />
+        ) : schemaMissing ? (
           <SchemaMissingNotice
             onRetry={() => void loadBootstrap()}
             retrying={bootstrapLoading}

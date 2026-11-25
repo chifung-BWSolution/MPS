@@ -7,7 +7,7 @@
 | 對應計劃書 | `docs/development_plan/2026-11-25/PRD-ALT-Pilot-網站圖片ALT生成與自動填入-v1.0.md` |
 | 上線手冊 | `docs/development_plan/2026-11-25/上線手冊-ALT-Pilot-v1.0.md` |
 | 專案根目錄 | `D:\Project\MPS` |
-| 本次範圍 | **本機 MVP；不 push、不部署、不改既有表** |
+| 本次範圍 | **本機 MVP + production DB／function（開關 off）；前端未部署** |
 | 圖例 | ☑ 完成／△ 已寫未驗證／☐ 未做 |
 
 > 本機沒有 Supabase（54321/54322 不通）與 Docker，因此 migration 未執行、Edge Function 未部署、沒有真實頁面 E2E。純函式測試、TypeScript（新檔）與 Vite build 已跑。
@@ -46,14 +46,14 @@
 
 | | ID | 任務 | 主要檔案 | 狀態／備註 |
 |---|---|---|---|---|
-| ☑ | M1-01 | Migration：4 張表＋預設列 | `supabase/migrations/20261125183000_alt_pilot.sql` | 已寫；**未執行** |
-| ☑ | M1-02 | RLS（DELETE 只 service_role） | 同上 | 已寫；未在 DB 驗證 |
+| ☑ | M1-01 | Migration：4 張表＋預設列 | `supabase/migrations/20261125183000_alt_pilot.sql` | **已套用 production**（單支 SQL，非 `db push`）；`enabled` 預設 **false** |
+| ☑ | M1-02 | RLS（DELETE 只 service_role） | 同上 | production 已驗證：8 policy／4 RLS／3 trigger；authenticated DELETE=false |
 | ☑ | M1-03 | Function 設定 | `supabase/config.toml` | 已加 `[functions.alt-pilot] verify_jwt=false` |
 | ☑ | M1-04 | 型別 | `src/lib/altTypes.ts` | 已寫 |
 | ☑ | M1-05 | API 封裝 | `src/lib/altApi.ts` | 已寫 |
 | ☑ | M1-06 | 安全審查（靜態） | `scripts/alt-sql-audit.mjs`、migration | `node scripts/alt-sql-audit.mjs` → passed；4 表／8 policy／4 RLS／3 trigger／0 destructive statement |
-| ☐ | M1-07 | 推送 migration | `npx supabase db push --linked` | 未執行（本機 MVP 禁止推線上） |
-| ☐ | M1-08 | 權限回歸 | SQL console | 未執行 |
+| ☑ | M1-07 | 推送 migration | `supabase db query --linked --file`＋history insert | **已套用 production**；`db push` 因 remote migration drift（`20261125015219`／`20261125092550`）被阻擋，改用單支 SQL |
+| ☑ | M1-08 | 權限回歸 | production SQL | anon `alt_runs` 401／`42501`；authenticated DELETE=false；`alt_settings` 1 列 enabled=false |
 
 ---
 
@@ -74,7 +74,7 @@
 
 | | ID | 任務 | 主要檔案 | 狀態／備註 |
 |---|---|---|---|---|
-| ☑ | M3-01 | 骨架＋驗身分＋CORS | `supabase/functions/alt-pilot/index.ts` | 已寫；未部署 |
+| ☑ | M3-01 | 骨架＋驗身分＋CORS | `supabase/functions/alt-pilot/index.ts` | **已部署 production**；anon 呼叫回 401、OPTIONS 200 |
 | ☑ | M3-02 | URL allowlist／SSRF | `guard.ts`、`index.ts` | 已寫；未實測 |
 | ☑ | M3-03 | `analyze` | `index.ts` | 已寫；未實測 |
 | ☑ | M3-04 | 圖片下載＋Gemini vision | `guard.ts`、`providers.ts` | 已寫；未實測 |
@@ -102,6 +102,7 @@
 | ☑ | M4-11 | Prompt 資料庫入口 | `PromptLibrary.tsx` | 已加入口卡 |
 | ☑ | M4-12 | 空狀態／錯誤／配額／schema | `AltEmptyState.tsx`、`AltPilotPage.tsx` | 已寫 |
 | ☑ | M4-13 | 本機示範預覽 | `AltPilotDemoPage.tsx`、`altDemoData.ts`、`App.tsx` | schema 未建立時可按「預覽介面（示範資料）」；`?demo=1` 可直接開；`VITE_ALT_PILOT_DEMO=1` build 時多 `/alt-pilot-demo` 免登入路由；不寫 DB、不呼叫 LLM |
+| ☑ | M4-14 | 上線總開關 | `alt_settings.enabled`、`AltPilotPage.tsx`、`PageAnalyzeForm.tsx` | 預設 false；false 時前端停用分析／生成、Edge Function 回 `disabled`；可用 SQL 開啟 |
 
 ---
 
@@ -117,6 +118,23 @@
 | ☐ | M5-06 | 回歸 | 工具中心其他子項、Prompt 資料庫 | 只做 build 級驗證 |
 | ☐ | M5-07 | 成本核對 | `alt_llm_usage` | 未執行 |
 | ☐ | M5-08 | 文件與 PR | PRD／清單／Tools-Center | PRD／清單完成；PR 未開 |
+
+---
+
+## Production 執行紀錄（2026-11-25）
+
+| 項目 | 結果 |
+|---|---|
+| 目標 project | `kwcevjcmdjadhrygjyfp`（FT - MPS - Marketing Project System） |
+| Migration | 先 `begin; … rollback;` dry-run（表不存在殘留），再單支 `db query --linked --file` 套用；未用 `db push` |
+| Migration history | 已寫入 `20261125183000` / `alt_pilot`；`migration list` 顯示 local=remote |
+| 表 | `alt_runs`、`alt_suggestions`、`alt_llm_usage`、`alt_settings` 全部存在 |
+| 設定 | `enabled=false`、`daily_call_limit=50`、`model=grok-4.5`、`fallback_model=gemini-2.5-flash` |
+| 權限 | 8 policy；4 表 RLS；3 trigger；anon REST 401／42501；authenticated DELETE=false |
+| Edge Function | `alt-pilot` 已部署；anon 呼叫 401；OPTIONS 200 |
+| Secrets | `XAI_API_KEY` 已存在；**沒有** `GEMINI_API_KEY`，所以目前只有 Grok 主 provider |
+| 前端 | production 現有 bundle 已含 ALT Pilot 舊版 UI（有「已停用」提示），但**不含最新開關 UI**；本次未 `git push`／未部署前端。目前靠 DB `enabled=false` 停用。 |
+| 已知 blocker | `db push` 被 remote migration drift 阻擋（`20261125015219`、`20261125092550`）；未用 `migration repair`，避免改壞 production history |
 
 ---
 
@@ -138,11 +156,11 @@
 
 ## 尚未完成／下一步
 
-1. 在**本機或 staging** 執行 migration，跑 `to_regclass`、`db push --dry-run`、推送後權限回歸。
-2. 部署 `alt-pilot` Edge Function，設 `GEMINI_API_KEY`／`XAI_API_KEY`，跑 3 個真實頁的 analyze／generate／verify。
-3. 做 30 張盲測，調整 prompt 與品質門檻。
-4. 驗證 Framer 貼上後 `verify` 能比對到新 alt。
-5. 補 `scripts/run-alt-pilot-contract-test.ts`（mock provider／fetch）。
-6. 更新 `docs/05-Page-Specifications/Tools-Center.md`。
+1. **前端 production 部署**：目前只有 DB＋function；正式站還看不到 ALT Pilot。需你確認用哪個部署流程（Vercel／git push），不要把所有 concurrent 改動一起上。
+2. **用真實登入 user JWT 跑 E2E**：3 個代表頁 analyze → generate → 批准 → 匯出 → verify；目前只有 anon 401 與 DB 權限驗證。
+3. **開啟總開關**：確認 Grok 在 production 正常後，執行 `update alt_settings set enabled=true, daily_call_limit=50`。
+4. 做 30 張盲測，調整 prompt 與品質門檻。
+5. 驗證 Framer 貼上後 `verify` 能比對到新 alt。
+6. **處理 migration history drift**：`20261125015219`、`20261125092550` 不在本地；不要在未授權下 `migration repair`。這是 `db push` 的 blocker，不影響本次單支 SQL。
 
-> **禁止**：未經批准不要 `supabase db push`、不要部署 function、不要 `git push`。本次只在本機留下可審閱的 MVP。
+> **目前**：DB migration、history、function 已上 production；`enabled=false`；前端與 git 未推。不要把 `db push` 當成日常工具，除非 drift 已修復。

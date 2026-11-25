@@ -135,7 +135,7 @@ CREATE INDEX IF NOT EXISTS alt_llm_usage_run_idx
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.alt_settings (
   id                   text PRIMARY KEY DEFAULT 'default',
-  enabled              boolean NOT NULL DEFAULT true,
+  enabled              boolean NOT NULL DEFAULT false,
   model                text NOT NULL DEFAULT 'grok-4.5',
   fallback_model       text NOT NULL DEFAULT 'gemini-2.5-flash',
   daily_call_limit     integer NOT NULL DEFAULT 300 CHECK (daily_call_limit >= 0),
@@ -292,11 +292,13 @@ BEGIN
   END IF;
 END $$;
 
--- 顯式授權：RLS 之外仍需要 table privilege；anon 明確收回。
-GRANT SELECT, INSERT, UPDATE ON public.alt_runs TO authenticated;
-GRANT SELECT, INSERT, UPDATE ON public.alt_suggestions TO authenticated;
-GRANT SELECT ON public.alt_settings TO authenticated;
-GRANT SELECT ON public.alt_llm_usage TO authenticated;
+-- 顯式授權：先收回 Supabase default privileges，再只給必要權限。
+-- 這樣 authenticated 不會有 DELETE／TRUNCATE／REFERENCES 等預設權限。
+REVOKE ALL ON public.alt_runs, public.alt_suggestions, public.alt_llm_usage, public.alt_settings
+  FROM authenticated;
+
+GRANT SELECT, INSERT, UPDATE ON public.alt_runs, public.alt_suggestions TO authenticated;
+GRANT SELECT ON public.alt_settings, public.alt_llm_usage TO authenticated;
 
 GRANT ALL ON public.alt_runs TO service_role;
 GRANT ALL ON public.alt_suggestions TO service_role;

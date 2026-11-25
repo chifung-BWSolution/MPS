@@ -135,7 +135,7 @@ function settingsFromRow(row: Partial<AltSettingsRow> | null | undefined): AltSe
   return {
     ...DEFAULT_ALT_SETTINGS,
     ...(row || {}),
-    enabled: row?.enabled !== false,
+    enabled: row?.enabled === true,
     model: asString(row?.model, DEFAULT_ALT_SETTINGS.model),
     fallback_model: asString(row?.fallback_model, DEFAULT_ALT_SETTINGS.fallback_model),
     daily_call_limit: Math.max(0, Math.round(asNumber(row?.daily_call_limit, DEFAULT_ALT_SETTINGS.daily_call_limit))),

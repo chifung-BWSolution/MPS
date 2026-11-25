@@ -335,7 +335,7 @@ Step 3: 逐張審批 → 匯出
 | `alt_runs` | 每次頁面分析（page_url、context_summary、keyword、counts） |
 | `alt_suggestions` | 每張圖的建議與審批（`UNIQUE(run_id,image_url)`） |
 | `alt_llm_usage` | 每次 LLM 呼叫的 token／成本 |
-| `alt_settings` | 單列：enabled／model／daily_call_limit／max_images_* |
+| `alt_settings` | 單列：`enabled`（預設 false，上線總開關）／`model`（預設 grok-4.5）／`daily_call_limit`／`max_images_*` |
 
 Migration：`supabase/migrations/20261125183000_alt_pilot.sql`（只新增表；不改既有表／policy／cron）。
 

@@ -16,6 +16,7 @@ export interface AltPilotHeaderProps {
   usage: AltUsageSummary | null;
   settings: AltSettingsRow | null;
   onHistory: () => void;
+  disabled?: boolean;
 }
 
 export function AltPilotHeader({
@@ -30,6 +31,7 @@ export function AltPilotHeader({
   usage,
   settings,
   onHistory,
+  disabled = false,
 }: AltPilotHeaderProps) {
   return (
     <div className="sticky top-[48px] z-30 -mx-6 px-6 pt-1 pb-3 mb-5 space-y-3 border-b border-[rgba(13,26,45,0.06)] bg-[#f5f8fc]/95 backdrop-blur-sm">
@@ -78,6 +80,7 @@ export function AltPilotHeader({
         onUrlChange={onUrlChange}
         onAnalyze={onAnalyze}
         analyzing={analyzing}
+        disabled={disabled}
       />
 
       <p className="text-[11px] text-muted-foreground">

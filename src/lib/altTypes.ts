@@ -225,7 +225,7 @@ export const ALT_LOCATION_LABELS: Record<AltImageLocation, string> = {
 
 export const DEFAULT_ALT_SETTINGS: AltSettingsRow = {
   id: 'default',
-  enabled: true,
+  enabled: false,
   model: 'grok-4.5',
   fallback_model: 'gemini-2.5-flash',
   daily_call_limit: 300,
