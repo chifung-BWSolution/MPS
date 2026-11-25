@@ -7,7 +7,6 @@ import {
   Loader2,
   LogOut,
   PlugZap,
-  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FramerOAuthStatus, FramerSyncJob } from '@/types/readdyFramer';
@@ -24,8 +23,6 @@ interface WorkbenchHeaderProps {
   onDisconnectFramer: () => void;
   onSelectJob: (job: FramerSyncJob) => void;
   onRefreshStatus: () => void;
-  conversionRunning: boolean;
-  onStartConversion: () => void;
 }
 
 export function WorkbenchHeader({
@@ -40,8 +37,6 @@ export function WorkbenchHeader({
   onDisconnectFramer,
   onSelectJob,
   onRefreshStatus,
-  conversionRunning,
-  onStartConversion,
 }: WorkbenchHeaderProps) {
   const [mcpMenuOpen, setMcpMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -68,17 +63,6 @@ export function WorkbenchHeader({
 
       {/* Right Status Pills */}
       <div className="flex flex-wrap items-center gap-2 relative">
-        <button
-          type="button"
-          onClick={onStartConversion}
-          disabled={conversionRunning}
-          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0BB59B] text-[#08151F] text-[11px] font-bold hover:bg-[#09a78e] disabled:opacity-70"
-          title="把未跳過、尚未搬完的頁面放進後台轉換，完成後寄出結果郵件"
-        >
-          {conversionRunning ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-          <span>{conversionRunning ? '後台轉換中' : '一鍵轉換'}</span>
-        </button>
-
         {/* History Switcher */}
         <div className="relative">
           <button

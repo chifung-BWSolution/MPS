@@ -1115,8 +1115,6 @@ export function ReaddyFramerWorkbench() {
         onDisconnectFramer={() => void handleDisconnectFramer()}
         onSelectJob={handleSelectHistoryJob}
         onRefreshStatus={() => void refreshOAuthStatus()}
-        conversionRunning={conversionJob.phase === 'running'}
-        onStartConversion={handleStartBackgroundConversion}
       />
 
       {/* Main Split Grid */}
@@ -1189,6 +1187,22 @@ export function ReaddyFramerWorkbench() {
                     <Sparkles size={13} className="shrink-0 text-[#0BB59B]" />
                   )}
                   <span className="truncate">{parsing ? '解析中…' : '解析此頁區塊'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartBackgroundConversion}
+                  disabled={conversionJob.phase === 'running'}
+                  title="把未跳過、尚未搬完的頁面放進後台轉換，完成後寄出結果郵件"
+                  className="inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#0BB59B] px-3 py-2 text-[12px] font-semibold text-[#08151F] transition-colors hover:bg-[#09a78e] disabled:opacity-70"
+                >
+                  {conversionJob.phase === 'running' ? (
+                    <Loader2 size={13} className="shrink-0 animate-spin" />
+                  ) : (
+                    <Sparkles size={13} className="shrink-0" />
+                  )}
+                  <span className="truncate">
+                    {conversionJob.phase === 'running' ? '後台轉換中' : '一鍵轉換'}
+                  </span>
                 </button>
                 {pageRailNarrow && (
                   <button
