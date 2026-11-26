@@ -77,6 +77,7 @@ const ACTION_LABEL: Record<string, string> = {
   confirm: '確認排程',
   schedule: '排程',
   restore: '還原版本',
+  delete: '遠端刪除',
 };
 
 const ACTION_OPTIONS: ContentPublishAction[] = [
@@ -90,6 +91,7 @@ const ACTION_OPTIONS: ContentPublishAction[] = [
   'confirm',
   'schedule',
   'restore',
+  'delete',
 ];
 
 function actionLabel(action: string | null | undefined): string {
@@ -377,7 +379,7 @@ export function PublishLogView({ route, navigate }: ContentViewProps) {
         <ContentEmptyState
           icon={CheckCircle2}
           title="沒有待回填的文章"
-          description="手動模式（publish_mode = manual）的文章到點、內容包產生後會出現在這裡。貼上官網後回填 live URL，狀態即轉為「已手動上線」；不計入自動發布漏斗。"
+          description="手動模式（publish_mode = manual）的文章到點、內容包產生後會出現在這裡。貼上官網後回填 live URL，狀態即轉為「已手動上線」；不計入自動發布漏斗。Beauty100 自動發佈不需要回填，狀態請看文章佇列的「發佈」欄。"
           action={
             <Button size="sm" variant="outline" onClick={() => navigate('seo', 'articles')}>
               前往文章佇列

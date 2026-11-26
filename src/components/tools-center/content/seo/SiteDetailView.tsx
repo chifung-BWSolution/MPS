@@ -19,6 +19,7 @@ import {
   CalendarDays,
   CheckCircle2,
   DatabaseZap,
+  ExternalLink,
   FileText,
   KeyRound,
   LayoutList,
@@ -30,6 +31,7 @@ import {
   RefreshCw,
   Save,
   Settings2,
+  ShieldCheck,
   Sparkles,
   Trash2,
   Wifi,
@@ -80,7 +82,12 @@ import {
   SITE_HEALTH_LABEL,
   TIER_LABEL,
   TIER_OPTION_LABEL,
+  publishStage,
 } from '@/lib/contentState';
+import {
+  BEAUTY100_CREDENTIAL_TEMPLATE,
+  beauty100CategoryForSection,
+} from '@/lib/contentBeauty100';
 import {
   cadenceSummary,
   normalizeCadence,
@@ -200,6 +207,27 @@ function countSections(sections: ContentSiteSection[]): SectionCounts {
 function describeCheck(check: ContentSiteCheck): string {
   const detail = check.detail ?? {};
   const error = typeof detail.error === 'string' ? detail.error : null;
+  const adapterChecks = Array.isArray(detail.checks)
+    ? (detail.checks as Array<{ label?: unknown; ok?: unknown; detail?: unknown }>)
+    : null;
+  if (check.kind === 'adapter') {
+    if (detail.skipped) return '已略過（手動模式或沿用既有憑證檢查）';
+    if (Array.isArray(detail.expected_kinds) && detail.expected_kinds.length > 0) {
+      return `尚未設定 ${detail.expected_kinds.join('／')} 憑證`;
+    }
+    if (typeof detail.publish_mode === 'string' && !adapterChecks) {
+      return `不支援 ${detail.publish_mode} 模式`;
+    }
+    if (adapterChecks) {
+      const failed = adapterChecks.filter((item) => item.ok !== true);
+      if (failed.length > 0) {
+        return `失敗：${failed
+          .map((item) => (typeof item.label === 'string' ? item.label : '未知項目'))
+          .join('、')}`;
+      }
+      return `${adapterChecks.length} 項連接檢查通過`;
+    }
+  }
   if (!check.ok) {
     if (Array.isArray(detail.missing) && detail.missing.length > 0) {
       return `缺少：${detail.missing.join('、')}`;
@@ -352,13 +380,21 @@ function CredentialsCard({
   onRefresh: () => Promise<void>;
 }) {
   const siteId = site.website_profile_id;
-  const [kind, setKind] = useState<ContentCredentialKind>('http_bearer');
+  const isBeauty100 = site.adapter === 'beauty100';
+  const [kind, setKind] = useState<ContentCredentialKind>(
+    isBeauty100 ? 'beauty100_admin' : 'http_bearer',
+  );
   const [secret, setSecret] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
   const [saving, setSaving] = useState(false);
   const [pendingClear, setPendingClear] = useState<ContentCredentialKind | null>(null);
   const [clearing, setClearing] = useState(false);
   const [lastSaved, setLastSaved] = useState<ContentCredentialMeta | null>(null);
+
+  // 站點切到 Beauty100 時，預設用它的 JSON 憑證；使用者仍可手動改。
+  useEffect(() => {
+    setKind(isBeauty100 ? 'beauty100_admin' : 'http_bearer');
+  }, [isBeauty100]);
 
   const handleSave = async () => {
     if (!canManageSites) {
@@ -514,26 +550,67 @@ function CredentialsCard({
             className="h-9 bg-white text-[13px]"
           />
         </Field>
-        <Field label="憑證內容" hint="只會加密送到後端，不會顯示在畫面上，也不會存進瀏覽器" className="sm:col-span-2">
-          <div className="flex items-center gap-2">
-            <Input
-              type="password"
-              autoComplete="new-password"
-              value={secret}
-              onChange={(event) => setSecret(event.target.value)}
-              placeholder="貼上 token／應用程式密碼"
-              disabled={!canManageSites}
-              className="h-9 bg-white font-mono text-[12.5px]"
-            />
-            <Button
-              size="sm"
-              className="h-9 shrink-0 gap-1.5"
-              onClick={() => void handleSave()}
-              disabled={!canManageSites || saving || !secret.trim()}
-            >
-              {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-              儲存憑證
-            </Button>
+        <Field
+          label="憑證內容"
+          hint={
+            kind === 'beauty100_admin'
+              ? '貼上 Beauty100 專用 staff 帳號的 JSON；內容只會加密送到後端，不會顯示或存進瀏覽器'
+              : '只會加密送到後端，不會顯示在畫面上，也不會存進瀏覽器'
+          }
+          className="sm:col-span-2"
+        >
+          <div className="space-y-2">
+            {kind === 'beauty100_admin' ? (
+              <>
+                <Textarea
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={secret}
+                  onChange={(event) => setSecret(event.target.value)}
+                  placeholder={BEAUTY100_CREDENTIAL_TEMPLATE}
+                  disabled={!canManageSites}
+                  className="min-h-[150px] bg-white font-mono text-[11.5px] leading-relaxed"
+                />
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  帳號必須是 Beauty100 的 admin／marketing；JWT 只用來寫 `blog_articles` 與上傳封面。
+                  若這個帳號停用或改密碼，請回來重存憑證。
+                </p>
+              </>
+            ) : (
+              <Input
+                type="password"
+                autoComplete="new-password"
+                value={secret}
+                onChange={(event) => setSecret(event.target.value)}
+                placeholder="貼上 token／應用程式密碼"
+                disabled={!canManageSites}
+                className="h-9 bg-white font-mono text-[12.5px]"
+              />
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {kind === 'beauty100_admin' && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-9 shrink-0 gap-1.5"
+                  onClick={() => setSecret(BEAUTY100_CREDENTIAL_TEMPLATE)}
+                  disabled={!canManageSites}
+                >
+                  <FileText size={13} />
+                  貼上 JSON 範本
+                </Button>
+              )}
+              <Button
+                size="sm"
+                className="ml-auto h-9 shrink-0 gap-1.5"
+                onClick={() => void handleSave()}
+                disabled={!canManageSites || saving || !secret.trim()}
+              >
+                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                儲存憑證
+              </Button>
+            </div>
           </div>
         </Field>
       </div>
@@ -579,6 +656,188 @@ function toSettingsDraft(site: ContentSiteWithProfile): SettingsDraft {
     status: site.status,
     notes: site.notes ?? '',
   };
+}
+
+function looksLikeBeauty100Site(site: ContentSiteWithProfile): boolean {
+  if (site.adapter === 'beauty100') return true;
+  const haystack = `${site.profile?.website_name ?? ''} ${site.profile?.domain_url ?? ''}`.toLowerCase();
+  return haystack.includes('beauty100');
+}
+
+/**
+ * Beauty100 連接摘要：讓營運一眼看到「有沒有接好、發到哪個分類、憑證是否可用」。
+ * 真正的細節（adapter checks）在健康分頁；這裡只放最關鍵的狀態與入口。
+ */
+function Beauty100ConnectionCard({
+  site,
+  sections,
+  credentials,
+  testing,
+  onTest,
+}: {
+  site: ContentSiteWithProfile;
+  sections: ContentSiteSection[];
+  credentials: ContentCredentialMeta[];
+  testing: boolean;
+  onTest: () => void;
+}) {
+  const credential = credentials.find((item) => item.kind === 'beauty100_admin');
+  const configured = site.adapter === 'beauty100';
+  const firstSection = sections[0] ?? null;
+  const externalId = (firstSection?.external_id ?? '').trim();
+  const category = beauty100CategoryForSection(firstSection);
+  const domain = site.profile?.domain_url?.trim() || '';
+  const liveHref = domain
+    ? /^https?:\/\//i.test(domain)
+      ? domain
+      : `https://${domain}`
+    : null;
+
+  const status = !configured
+    ? { label: '未啟用自動發佈', tone: 'amber-outline' as const }
+    : site.publish_mode !== 'direct'
+      ? { label: '手動模式（未自動發佈）', tone: 'amber-outline' as const }
+      : site.status !== 'active'
+        ? { label: '已暫停', tone: 'amber-outline' as const }
+        : !credential
+          ? { label: '未設定憑證', tone: 'amber' as const }
+          : site.health === 'down'
+            ? { label: '連接異常', tone: 'rose' as const }
+            : site.health === 'ok'
+              ? { label: '已連接', tone: 'green' as const }
+              : site.health === 'degraded'
+                ? { label: '連接正常（sitemap 警告）', tone: 'amber' as const }
+                : { label: '尚未測試', tone: 'slate' as const };
+
+  return (
+    <section className="rounded-lg border border-teal-200 bg-teal-50/40 p-4 shadow-card">
+      <header className="mb-3 flex flex-wrap items-center gap-2">
+        <ShieldCheck size={14} className="text-teal-700" />
+        <h3 className="text-[13.5px] font-bold text-[#0d1a2d]">Beauty100 自動發佈</h3>
+        <ContentStatusPill label={status.label} tone={status.tone} />
+        {!configured && (
+          <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-amber-700">
+            請把「發佈方式」改成 Beauty100 自動發佈
+          </span>
+        )}
+        {site.publish_mode !== 'direct' && (
+          <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-amber-700">
+            上線方式不是「直接公開」
+          </span>
+        )}
+        {!externalId && (
+          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10.5px] font-semibold text-slate-600">
+            未指定欄目，預設 trending-topics
+          </span>
+        )}
+      </header>
+
+      <div className="grid gap-2 text-[12px] sm:grid-cols-2">
+        <div className="rounded-md border border-teal-100 bg-white/80 px-2.5 py-2">
+          <p className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+            發佈分類
+          </p>
+          <p className="mt-0.5 font-semibold text-[#0d1a2d]">
+            {category}
+            {category === 'trending-topics' ? '（焦點話題）' : ''}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            文章會出現在 Beauty100 的 /topics 列表，詳情網址 /topics/文章代稱
+          </p>
+        </div>
+
+        <div className="rounded-md border border-teal-100 bg-white/80 px-2.5 py-2">
+          <p className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+            專用帳號憑證
+          </p>
+          {credential ? (
+            <>
+              <p className="mt-0.5 font-semibold text-[#0d1a2d]">
+                {credential.fingerprint ? `•••• ${credential.fingerprint}` : '已設定'}
+              </p>
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                {CREDENTIAL_STATUS_LABEL[credential.status]}
+                {credential.last_verified_at
+                  ? ` · ${formatZoneDateTime(credential.last_verified_at, site.timezone)}`
+                  : ' · 尚未測試'}
+              </p>
+            </>
+          ) : (
+            <p className="mt-0.5 text-[11.5px] text-amber-700">
+              尚未設定。請在下方「憑證」貼上 beauty100_admin JSON。
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-md border border-teal-100 bg-white/80 px-2.5 py-2">
+          <p className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+            連接狀態
+          </p>
+          <p className="mt-0.5 font-semibold text-[#0d1a2d]">
+            {SITE_HEALTH_LABEL[site.health] ?? site.health}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            {site.last_verified_at
+              ? `最後測試 ${formatZoneDateTime(site.last_verified_at, site.timezone)}`
+              : '尚未測試連線'}
+          </p>
+        </div>
+
+        <div className="rounded-md border border-teal-100 bg-white/80 px-2.5 py-2">
+          <p className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+            官網
+          </p>
+          {liveHref ? (
+            <a
+              href={liveHref}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="mt-0.5 inline-flex items-center gap-1 font-semibold text-teal-700 underline decoration-teal-200 underline-offset-2 hover:text-teal-800"
+            >
+              {domain}
+              <ExternalLink size={11} />
+            </a>
+          ) : (
+            <p className="mt-0.5 text-[11.5px] text-amber-700">
+              站點主檔沒有 domain_url，無法組出文章網址。
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 px-2 text-[11.5px]"
+          onClick={onTest}
+          disabled={testing || !configured || site.publish_mode !== 'direct'}
+          title={
+            configured && site.publish_mode === 'direct'
+              ? '測試 Beauty100 登入／文章表／封面 bucket'
+              : '先把發佈方式改成 Beauty100、上線方式改成直接公開'
+          }
+        >
+          {testing ? <Loader2 size={12} className="animate-spin" /> : <Wifi size={12} />}
+          測試 Beauty100 連接
+        </Button>
+        {liveHref && (
+          <a
+            href={liveHref}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-[rgba(13,26,45,0.12)] bg-white px-2 text-[11.5px] font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <ExternalLink size={11} />
+            前往官網
+          </a>
+        )}
+        <span className="text-[11px] text-slate-500">
+          測試會真的登入、讀 `blog_articles`、上傳／刪除一個 probe 檔。
+        </span>
+      </div>
+    </section>
+  );
 }
 
 function SettingsTab({
@@ -798,6 +1057,16 @@ function SettingsTab({
         </div>
       </section>
 
+      {looksLikeBeauty100Site(site) && (
+        <Beauty100ConnectionCard
+          site={site}
+          sections={sections}
+          credentials={credentials}
+          testing={testing}
+          onTest={onTest}
+        />
+      )}
+
       <section className="rounded-lg border border-[rgba(13,26,45,0.08)] bg-white p-4 shadow-card">
         <header className="mb-2 flex flex-wrap items-center gap-2">
           <CalendarDays size={14} className="text-teal-600" />
@@ -851,28 +1120,43 @@ function SettingsTab({
         </p>
       )}
 
-      <section className="rounded-lg border border-rose-200 bg-rose-50/50 p-3">
-        <div className="flex flex-wrap items-start gap-2">
-          <Trash2 size={14} className="mt-0.5 shrink-0 text-rose-600" />
-          <div className="min-w-0 flex-1">
-            <h3 className="text-[13px] font-bold text-rose-800">移除接入</h3>
-            <p className="mt-0.5 text-[11.5px] leading-relaxed text-rose-700/90">
-              把這個站點退回「未接入」，之後可以重新走接入精靈。欄目、排程、文章與版本、憑證、檢查紀錄會一併刪除且無法復原；不影響官網清單與 GSC／廣告資料。
-            </p>
+      {looksLikeBeauty100Site(site) ? (
+        <section className="rounded-lg border border-teal-200 bg-teal-50/40 p-3">
+          <div className="flex flex-wrap items-start gap-2">
+            <ShieldCheck size={14} className="mt-0.5 shrink-0 text-teal-700" />
+            <div className="min-w-0 flex-1">
+              <h3 className="text-[13px] font-bold text-teal-900">Beauty100 接入由系統維護</h3>
+              <p className="mt-0.5 text-[11.5px] leading-relaxed text-teal-800/90">
+                這個站點不提供「移除接入」，避免一次連帶刪除 MPS 的文章、排程與憑證。
+                要停止自動發佈，請把「上線方式」改成手動，或把營運狀態改成暫停。
+              </p>
+            </div>
           </div>
-          <Button
-            variant="destructive"
-            size="sm"
-            className="h-7 gap-1 px-2 text-[11.5px]"
-            onClick={onRemove}
-            disabled={!canManageSites}
-            title={canManageSites ? '移除接入（可重新接入）' : '只有管理層可以移除接入'}
-          >
-            <Trash2 size={11} />
-            移除接入
-          </Button>
-        </div>
-      </section>
+        </section>
+      ) : (
+        <section className="rounded-lg border border-rose-200 bg-rose-50/50 p-3">
+          <div className="flex flex-wrap items-start gap-2">
+            <Trash2 size={14} className="mt-0.5 shrink-0 text-rose-600" />
+            <div className="min-w-0 flex-1">
+              <h3 className="text-[13px] font-bold text-rose-800">移除接入</h3>
+              <p className="mt-0.5 text-[11.5px] leading-relaxed text-rose-700/90">
+                把這個站點退回「未接入」，之後可以重新走接入精靈。欄目、排程、文章與版本、憑證、檢查紀錄會一併刪除且無法復原；不影響官網清單與 GSC／廣告資料。
+              </p>
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-7 gap-1 px-2 text-[11.5px]"
+              onClick={onRemove}
+              disabled={!canManageSites}
+              title={canManageSites ? '移除接入（可重新接入）' : '只有管理層可以移除接入'}
+            >
+              <Trash2 size={11} />
+              移除接入
+            </Button>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -1469,34 +1753,63 @@ function ArticlesTab({
             <TableRow className="bg-slate-50/70">
               <TableHead className="text-[11.5px]">標題</TableHead>
               <TableHead className="text-[11.5px]">狀態</TableHead>
+              <TableHead className="text-[11.5px]">發佈</TableHead>
               <TableHead className="text-[11.5px]">建立時間</TableHead>
               <TableHead className="text-[11.5px]">發佈時間</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => (
-              <TableRow
-                key={row.id}
-                className="cursor-pointer"
-                onClick={() => navigate('seo', 'studio', row.id)}
-              >
-                <TableCell className="max-w-[320px] truncate text-[12.5px] font-medium text-[#0d1a2d]">
-                  {row.title || '（未命名文章）'}
-                </TableCell>
-                <TableCell>
-                  <ContentStatusPill
-                    status={ARTICLE_STATUS_OPTIONS.includes(row.status) ? row.status : 'draft'}
-                    machine="article"
-                  />
-                </TableCell>
-                <TableCell className="whitespace-nowrap text-[11.5px] text-slate-500">
-                  {formatZoneDateTime(row.created_at, site.timezone)}
-                </TableCell>
-                <TableCell className="whitespace-nowrap text-[11.5px] text-slate-500">
-                  {row.published_at ? formatZoneDateTime(row.published_at, site.timezone) : '—'}
-                </TableCell>
-              </TableRow>
-            ))}
+            {rows.map((row) => {
+              const stage = publishStage(
+                {
+                  status: row.status,
+                  deleted_at: row.deleted_at,
+                  checks: row.checks,
+                  scheduled_publish_at: null,
+                },
+                { manual: site.publish_mode === 'manual' },
+              );
+              return (
+                <TableRow
+                  key={row.id}
+                  className="cursor-pointer"
+                  onClick={() => navigate('seo', 'studio', row.id)}
+                >
+                  <TableCell className="max-w-[320px] truncate text-[12.5px] font-medium text-[#0d1a2d]">
+                    {row.title || '（未命名文章）'}
+                  </TableCell>
+                  <TableCell>
+                    <ContentStatusPill
+                      status={ARTICLE_STATUS_OPTIONS.includes(row.status) ? row.status : 'draft'}
+                      machine="article"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex min-w-[110px] flex-wrap items-center gap-1">
+                      <ContentStatusPill label={stage.label} tone={stage.tone} />
+                      {row.live_url && (
+                        <a
+                          href={row.live_url}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="inline-flex items-center gap-0.5 text-[10.5px] text-teal-700 underline decoration-teal-200 underline-offset-2"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          連結
+                          <ExternalLink size={9} />
+                        </a>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-[11.5px] text-slate-500">
+                    {formatZoneDateTime(row.created_at, site.timezone)}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-[11.5px] text-slate-500">
+                    {row.published_at ? formatZoneDateTime(row.published_at, site.timezone) : '—'}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>

@@ -52,7 +52,12 @@ import {
   normalizeCadence,
   toZoneInputValue,
 } from '@/lib/contentPlanner.ts';
-import { PUBLISH_MODE_LABEL } from '@/lib/contentState.ts';
+import { ADAPTER_REQUIRES_COVER, PUBLISH_MODE_LABEL } from '@/lib/contentState.ts';
+import {
+  BEAUTY100_CATEGORY_LABEL,
+  beauty100ArticleUrl,
+  beauty100CategoryForSection,
+} from '@/lib/contentBeauty100.ts';
 import { contentErrorMessage } from '@/lib/contentApi.ts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -194,6 +199,18 @@ export function ConfirmDialog({
   const domain = site?.profile?.domain_url ?? null;
   const language = article.language || site?.locale || '—';
   const publishMode = site?.publish_mode ?? 'manual';
+  const isBeauty100 = site?.adapter === 'beauty100';
+  const beauty100Category = beauty100CategoryForSection(section);
+  const beauty100Url = isBeauty100
+    ? beauty100ArticleUrl(domain, beauty100Category, article.slug)
+    : null;
+  const needsCover = Boolean(
+    site &&
+      publishMode !== 'manual' &&
+      ADAPTER_REQUIRES_COVER[site.adapter] &&
+      !article.cover_asset_id,
+  );
+  const siteInactive = Boolean(site && publishMode !== 'manual' && site.status !== 'active');
 
   const existingSlugSet = useMemo(
     () => new Set(existingSlugs.map((slug) => normalizeSlug(slug)).filter(Boolean)),
@@ -212,11 +229,15 @@ export function ConfirmDialog({
 
   const disabledReason = !hardPassed
     ? `硬檢查有 ${reasons.length} 項未過`
-    : !scheduledIso
-      ? '發佈時間格式不正確'
-      : tooFarInPast
-        ? '發佈時間已過去超過 2 小時，請改用下一個空 slot'
-        : null;
+    : needsCover
+      ? 'Beauty100 發佈必須先有封面圖（請先在工作室產生或上傳封面）'
+      : siteInactive
+        ? '站點不是 active，不能排程自動發佈'
+        : !scheduledIso
+          ? '發佈時間格式不正確'
+          : tooFarInPast
+            ? '發佈時間已過去超過 2 小時，請改用下一個空 slot'
+            : null;
 
   const canSubmit = !disabledReason && !busy && !submitting;
 
@@ -306,16 +327,28 @@ export function ConfirmDialog({
                     {publishMode === 'manual'
                       ? '到點產內容包，人工貼上後回填 URL（manual_done）'
                       : publishMode === 'draft'
-                        ? '到點由 adapter 建立草稿（draft_published，日後）'
-                        : '到點由 adapter 直接公開（published，日後）'}
+                        ? '到點由 adapter 建立草稿（draft_published）'
+                        : isBeauty100
+                          ? '到點由 adapter 直接公開到 Beauty100，並自動驗證'
+                          : '到點由 adapter 直接公開（published）'}
                   </span>
                 </span>
               </Field>
+              {isBeauty100 && (
+                <Field label="Beauty100 目標分類">
+                  <span className="font-semibold">
+                    {beauty100Category}（{BEAUTY100_CATEGORY_LABEL[beauty100Category]}）
+                  </span>
+                  <span className="ml-1 break-all font-mono text-[11px] text-muted-foreground">
+                    {beauty100Url ?? '/topics/{handle}'}
+                  </span>
+                </Field>
+              )}
               <Field label="是否更新既有文章">
                 {updatesExistingArticle ? (
                   <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-amber-700">
                     <AlertTriangle size={12} strokeWidth={2.2} />
-                    是：站內已有同 slug／external_id，Confirm 會更新既有文章，不重建
+                    是：站內已有同 slug／external_id，Confirm 會沿用既有文章；Beauty100 若 slug 相同但標題不同會拒絕，請先改 slug
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 text-[12px] font-medium text-emerald-700">
@@ -487,6 +520,10 @@ export function ConfirmDialog({
                   · 手動模式仍需人工貼上官網並回填 URL，系統會標「已手動上線」，
                   不會顯示為自動發布。
                 </p>
+                <p>
+                  · Beauty100 會由專用帳號直接寫入官網文章，並用 REST 重新讀取驗證；
+                  沒有封面或未批准會在後端被擋下。
+                </p>
                 <p>· 同一版本重複 Confirm 具冪等鍵保護，不會重建文章。</p>
               </div>
             </div>
@@ -502,6 +539,13 @@ export function ConfirmDialog({
             <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
               <FileText size={11} />
               請回到工作室修好硬檢查項目後再 Confirm；後端也會重驗，繞過前端不會成功。
+            </p>
+          )}
+
+          {disabledReason && hardPassed && (
+            <p className="flex items-center gap-1 text-[11px] text-amber-700">
+              <AlertTriangle size={11} />
+              {disabledReason}
             </p>
           )}
         </div>

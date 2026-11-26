@@ -134,6 +134,8 @@ export interface UseContentArticleResult {
   approve: (expectedVersion: number, scheduledPublishAt?: string | null) => Promise<void>;
   requestChanges: (expectedVersion: number, reason: string) => Promise<void>;
   confirm: (input: { expectedVersion: number; scheduledPublishAt: string }) => Promise<void>;
+  /** 遠端刪除已發佈文章（approve；實際刪除由 worker 呼叫站點 adapter） */
+  deletePublished: (reason: string) => Promise<void>;
   generateCover: () => Promise<void>;
   setCover: (assetId: string | null) => Promise<void>;
 }
@@ -272,6 +274,36 @@ async function fetchSiteProfiles(ids: readonly string[]): Promise<Map<string, Co
   return map;
 }
 
+/**
+ * 站點的自動發佈設定（publish_mode／adapter）。
+ * 只用於佇列的發佈狀態顯示；表還沒建或 RLS 不允許時回空 Map，不讓文章列表一起壞。
+ */
+async function fetchSiteSettings(
+  ids: readonly string[],
+): Promise<Map<string, Pick<ContentSite, 'publish_mode' | 'adapter'>>> {
+  const map = new Map<string, Pick<ContentSite, 'publish_mode' | 'adapter'>>();
+  if (ids.length === 0) return map;
+  const { data, error } = await supabase
+    .from('content_sites')
+    .select('website_profile_id, publish_mode, adapter')
+    .in('website_profile_id', [...ids]);
+  if (error) {
+    if (isContentSchemaMissing(error)) return map;
+    throw error;
+  }
+  for (const row of (data ?? []) as {
+    website_profile_id: string;
+    publish_mode: ContentSite['publish_mode'];
+    adapter: ContentSite['adapter'];
+  }[]) {
+    map.set(row.website_profile_id, {
+      publish_mode: row.publish_mode,
+      adapter: row.adapter,
+    });
+  }
+  return map;
+}
+
 // ============================================================
 // 佇列 hook
 // ============================================================
@@ -361,9 +393,10 @@ export function useContentArticles(filter?: ContentArticleFilter): UseContentArt
         ...articles.map((article) => article.keyword_id),
         ...articles.map((article) => (article.slot_id ? slotKeywordMap.get(article.slot_id) : null)),
       ]);
-      const [keywordMap, siteProfileMap] = await Promise.all([
+      const [keywordMap, siteProfileMap, siteSettingsMap] = await Promise.all([
         fetchKeywords(keywordIds),
         fetchSiteProfiles(siteIds),
+        fetchSiteSettings(siteIds),
       ]);
 
       if (requestIdRef.current !== requestId) return;
@@ -379,6 +412,7 @@ export function useContentArticles(filter?: ContentArticleFilter): UseContentArt
             article.status === 'pending_review'
               ? hoursBetween(article.created_at)
               : null,
+          siteSettings: siteSettingsMap.get(article.site_id) ?? null,
         };
       });
 
@@ -715,6 +749,20 @@ export function useContentArticle(
     [refresh, requireDetail],
   );
 
+  /** 遠端刪除：只排 job；實際刪除由 content-worker 呼叫 adapter（不是刪 MPS 記錄） */
+  const deletePublished = useCallback(
+    async (reason: string) => {
+      const current = requireDetail();
+      await invokePublish<{ queued: boolean; article_id: string }>({
+        action: 'delete_published',
+        article_id: current.article.id,
+        reason: (reason ?? '').trim(),
+      });
+      await refresh();
+    },
+    [refresh, requireDetail],
+  );
+
   const setCover = useCallback(
     async (assetId: string | null) => {
       const current = requireDetail();
@@ -804,6 +852,7 @@ export function useContentArticle(
     approve,
     requestChanges,
     confirm,
+    deletePublished,
     generateCover,
     setCover,
   };

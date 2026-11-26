@@ -18,6 +18,9 @@
     "content:remote-audit": "node scripts/content-remote-audit.mjs",
     "content:deploy:apply": "node scripts/content-apply-migrations.mjs",
     "content:deploy:verify": "node scripts/content-deploy-verify.mjs",
+    "content:adapter-contract": "node scripts/content-adapter-contract.mjs",
+    "content:beauty100-smoke": "node scripts/beauty100-smoke.mjs",
+    "content:beauty100-selftest": "node scripts/beauty100-selftest.mjs",
     "content:run-sql": "node scripts/content-run-sql.mjs",
     "radar:test": "node scripts/run-seo-radar-test.ts"
   },

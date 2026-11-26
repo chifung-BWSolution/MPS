@@ -176,7 +176,7 @@ export interface ContentSitePage {
   created_at: string;
 }
 
-export type ContentSiteCheckKind = 'settings' | 'domain' | 'sitemap' | 'credential';
+export type ContentSiteCheckKind = 'settings' | 'domain' | 'sitemap' | 'credential' | 'adapter';
 
 export interface ContentSiteCheck {
   id: string;
@@ -207,7 +207,8 @@ export type ContentCredentialKind =
   | 'http_hmac'
   | 'wp_app_password'
   | 'shopify_admin'
-  | 'webflow_token';
+  | 'webflow_token'
+  | 'beauty100_admin';
 
 export interface ContentCredentialMeta {
   kind: ContentCredentialKind;
@@ -406,6 +407,9 @@ export interface ContentArticle {
   package_path: string | null;
   checks: ContentQaSnapshot;
   reason: string | null;
+  /** 遠端刪除成功時間（站點上的文章已實際刪除，不只是刪 MPS 記錄） */
+  deleted_at?: string | null;
+  deleted_reason?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -432,6 +436,8 @@ export interface ContentArticleListItem {
   keyword: ContentKeyword | null;
   site: ContentSiteProfile | null;
   waitingHours: number | null;
+  /** 站點的自動發佈設定（給佇列顯示排隊中／人工發佈用） */
+  siteSettings?: Pick<ContentSite, 'publish_mode' | 'adapter'> | null;
 }
 
 /** 審核工作室的完整資料 */
@@ -543,7 +549,8 @@ export type ContentJobType =
   | 'refresh_site_pages'
   | 'site_health'
   | 'send_digest'
-  | 'generate_social';
+  | 'generate_social'
+  | 'delete_article';
 
 export type ContentJobStatus = 'queued' | 'running' | 'done' | 'failed' | 'dead';
 
@@ -572,6 +579,7 @@ export interface ContentJobPayloads {
   site_health: { site_id: string; dedupe_key?: string };
   send_digest: { date: string; dedupe_key?: string; resend?: boolean };
   generate_social: { event_id: string; dedupe_key?: string };
+  delete_article: { article_id: string; reason?: string; dedupe_key?: string };
 }
 
 export interface ContentLlmUsage {
@@ -601,7 +609,8 @@ export type ContentPublishAction =
   | 'reject'
   | 'confirm'
   | 'schedule'
-  | 'restore';
+  | 'restore'
+  | 'delete';
 
 export interface ContentPublishLog {
   id: string;

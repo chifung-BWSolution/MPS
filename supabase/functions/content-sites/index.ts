@@ -12,9 +12,19 @@ import {
 import {
   ContentVaultError,
   sealCredential,
+  unsealCredential,
   vaultConfigured,
   verifyCredentialCiphertext,
 } from "../_shared/contentVault.ts";
+import {
+  getContentAdapter,
+  type AdapterSite,
+} from "../_shared/contentAdapters/index.ts";
+import {
+  beauty100FingerprintSource,
+  isBeauty100Category,
+  parseBeauty100Credential,
+} from "../../../src/lib/contentBeauty100.ts";
 import {
   CONTENT_NOT_ENABLED_MESSAGE,
   type ContentAdapterName,
@@ -99,6 +109,7 @@ const CREDENTIAL_KINDS: ReadonlySet<ContentCredentialKind> = new Set<ContentCred
   "wp_app_password",
   "shopify_admin",
   "webflow_token",
+  "beauty100_admin",
 ]);
 const JSON_LD_TYPES: ReadonlySet<ContentJsonLdType> = new Set<ContentJsonLdType>([
   "BlogPosting",
@@ -109,6 +120,7 @@ const CHECK_KINDS: ReadonlySet<ContentSiteCheckKind> = new Set<ContentSiteCheckK
   "domain",
   "sitemap",
   "credential",
+  "adapter",
 ]);
 
 const CHECK_LABELS: Record<ContentSiteCheckKind, string> = {
@@ -116,6 +128,16 @@ const CHECK_LABELS: Record<ContentSiteCheckKind, string> = {
   domain: "網域可達",
   sitemap: "Sitemap 可解析",
   credential: "憑證可解密",
+  adapter: "自動發佈連接",
+};
+
+/** adapter → 可接受的憑證 kind；與 content-worker 的對照表保持一致 */
+const ADAPTER_CREDENTIAL_KINDS: Record<string, string[]> = {
+  next_custom: ["http_bearer", "http_hmac"],
+  beauty100: ["beauty100_admin"],
+  wordpress: ["wp_app_password"],
+  shopify: ["shopify_admin"],
+  webflow: ["webflow_token"],
 };
 
 /** 站點主檔可選欄位（webandsystem_list 是站點身份唯一真實來源） */
@@ -1064,9 +1086,24 @@ async function handleSaveCredential(body: Record<string, unknown>): Promise<Cont
   }
   const expiresAt = parseOptionalDateTime(body.expires_at, "expires_at", "invalid_expires_at");
 
+  // Beauty100 的憑證是一段 JSON；先驗形狀再加密，避免存進去才在發佈時爆炸。
+  let fingerprintSource: string | undefined;
+  if (kind === "beauty100_admin") {
+    const parsed = parseBeauty100Credential(secret);
+    if ("errors" in parsed) {
+      fail(
+        400,
+        "invalid_credential",
+        `Beauty100 憑證格式不正確：${parsed.errors.join("；")}`,
+        parsed.errors,
+      );
+    }
+    fingerprintSource = beauty100FingerprintSource(parsed.config);
+  }
+
   let sealed: { ciphertext: string; fingerprint: string };
   try {
-    sealed = await sealCredential(secret);
+    sealed = await sealCredential(secret, fingerprintSource);
   } catch (error) {
     if (error instanceof ContentVaultError) fail(503, error.code, error.message);
     throw error;
@@ -1394,16 +1431,153 @@ async function checkCredentials(
   };
 }
 
-/** 健康判定：設定缺失=untested、domain/credential 失敗=down、只有 sitemap 失敗=degraded */
+/**
+ * (5) 自動發佈連接：真的呼叫 adapter.testConnection（Beauty100：登入／表／分類／bucket）。
+ * manual 站跳過，不影響既有站點。
+ */
+async function checkAdapter(
+  site: ContentSite,
+  profile: ContentSiteProfile | null,
+  sections: ContentSiteSection[],
+  rows: CredentialCipherRow[],
+): Promise<CheckOutcome> {
+  if (site.publish_mode === "manual") {
+    return {
+      kind: "adapter",
+      ok: true,
+      blocking: false,
+      detail: { skipped: true, publish_mode: site.publish_mode },
+      summary: "手動模式，未啟用自動發佈",
+    };
+  }
+
+  // 這次只為 Beauty100 加「真的打站點」的檢查；其他 adapter 沿用既有憑證檢查，
+  // 避免改動 WordPress／Shopify／Webflow 站點既有的健康判定。
+  if (site.adapter !== "beauty100") {
+    return {
+      kind: "adapter",
+      ok: true,
+      blocking: false,
+      detail: { skipped: true, adapter: site.adapter },
+      summary: "這個 adapter 沿用既有憑證檢查",
+    };
+  }
+
+  const adapter = getContentAdapter(site.adapter);
+  if (!adapter.supports(site.publish_mode)) {
+    return {
+      kind: "adapter",
+      ok: false,
+      blocking: true,
+      detail: { adapter: adapter.name, publish_mode: site.publish_mode },
+      summary: `adapter「${adapter.name}」不支援 ${site.publish_mode} 模式`,
+    };
+  }
+
+  const kinds = ADAPTER_CREDENTIAL_KINDS[adapter.name] ?? [];
+  if (kinds.length === 0) {
+    return {
+      kind: "adapter",
+      ok: false,
+      blocking: true,
+      detail: { adapter: adapter.name },
+      summary: `adapter「${adapter.name}」沒有對應的憑證類型`,
+    };
+  }
+
+  if (!vaultConfigured()) {
+    return {
+      kind: "adapter",
+      ok: false,
+      blocking: true,
+      detail: { adapter: adapter.name, error: "vault_not_configured" },
+      summary: "伺服器未設定 CONTENT_VAULT_KEY，無法讀取憑證",
+    };
+  }
+
+  const row = rows.find((item) => kinds.includes(item.kind));
+  if (!row) {
+    return {
+      kind: "adapter",
+      ok: false,
+      blocking: true,
+      detail: { adapter: adapter.name, expected_kinds: kinds },
+      summary: `尚未設定 ${kinds.join("／")} 憑證，無法自動發佈`,
+    };
+  }
+
+  let secret: string;
+  try {
+    secret = await unsealCredential(row.ciphertext);
+  } catch (error) {
+    if (error instanceof ContentVaultError) {
+      return {
+        kind: "adapter",
+        ok: false,
+        blocking: true,
+        detail: { adapter: adapter.name, error: error.code },
+        summary: `憑證無法解密：${error.message}`,
+      };
+    }
+    throw error;
+  }
+
+  const adapterSite: AdapterSite = {
+    id: site.website_profile_id,
+    name: profile?.website_name ?? site.website_profile_id,
+    domain: profile?.domain_url || site.seo_defaults?.canonicalBase || null,
+    publishMode: site.publish_mode,
+    timezone: site.timezone,
+    sectionExternalId:
+      sections
+        .map((section) => (section.external_id ?? "").trim())
+        .find((value) => isBeauty100Category(value)) ??
+      sections[0]?.external_id ??
+      null,
+  };
+
+  try {
+    const result = await adapter.testConnection({
+      site: adapterSite,
+      credentials: { secret },
+    });
+    const failed = result.checks.filter((check) => !check.ok);
+    return {
+      kind: "adapter",
+      ok: result.ok && failed.length === 0,
+      blocking: true,
+      detail: {
+        adapter: adapter.name,
+        publish_mode: site.publish_mode,
+        checks: result.checks,
+      },
+      summary:
+        result.ok && failed.length === 0
+          ? `自動發佈連接正常（${result.checks.length} 項）`
+          : `自動發佈連接失敗：${failed.map((check) => check.label).join("、") || "未知原因"}`,
+    };
+  } catch (error) {
+    return {
+      kind: "adapter",
+      ok: false,
+      blocking: true,
+      detail: { adapter: adapter.name },
+      summary: `自動發佈連接失敗：${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+/** 健康判定：設定缺失=untested、domain/credential/adapter 失敗=down、只有 sitemap 失敗=degraded */
 function resolveHealth(checks: CheckOutcome[]): ContentSiteHealth {
   const byKind = new Map(checks.map((check) => [check.kind, check]));
   const settingsOk = byKind.get("settings")?.ok ?? false;
   const domainOk = byKind.get("domain")?.ok ?? false;
   const sitemapOk = byKind.get("sitemap")?.ok ?? false;
   const credentialOk = byKind.get("credential")?.ok ?? true;
+  const adapterOk = byKind.get("adapter")?.ok ?? true;
 
   if (!settingsOk) return "untested";
-  if (!domainOk || !credentialOk) return "down";
+  if (!domainOk || !credentialOk || !adapterOk) return "down";
   if (!sitemapOk) return "degraded";
   return "ok";
 }
@@ -1438,6 +1612,9 @@ async function handleTestConnection(
   checks.push(domainCheck);
   checks.push(await checkSitemap(domainUrl, domainCheck.ok));
   checks.push(await checkCredentials(db, siteId, credentialRows, testedAt));
+  checks.push(
+    await checkAdapter(toContentSite(siteRow), profile, sections, credentialRows),
+  );
 
   const health = resolveHealth(checks);
 

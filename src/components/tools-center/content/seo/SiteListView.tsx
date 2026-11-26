@@ -14,8 +14,11 @@ import { toast } from 'sonner';
 import {
   AlertTriangle,
   CalendarDays,
+  CheckCircle2,
   ChevronRight,
   DatabaseZap,
+  ExternalLink,
+  FileText,
   Globe2,
   Loader2,
   Pause,
@@ -23,7 +26,10 @@ import {
   Plus,
   RefreshCw,
   ServerCog,
+  Settings2,
   Trash2,
+  Wifi,
+  XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -45,12 +51,14 @@ import { cadenceSummary } from '@/lib/contentPlanner';
 import {
   ADAPTER_LABEL,
   CADENCE_FREQUENCY_LABEL,
+  PUBLISH_MODE_LABEL,
   TIER_LABEL,
 } from '@/lib/contentState';
-import { domainFromUrl } from '@/lib/contentFormat';
+import { domainFromUrl, formatZoneDateTime } from '@/lib/contentFormat';
 import { contentErrorMessage } from '@/lib/contentApi';
 import {
   CONTENT_NOT_ENABLED_MESSAGE,
+  type ContentConnectionTestResult,
   type ContentSiteStatus,
   type ContentSiteWithProfile,
   type ContentTier,
@@ -58,6 +66,7 @@ import {
 import type { ContentViewProps } from '@/lib/contentNavigation';
 import {
   removeSite,
+  runConnectionTest,
   siteDisplayName,
   useContentOverviewMetrics,
   useContentSites,
@@ -87,6 +96,20 @@ const EMPTY_COUNTS: ContentSiteTodayCounts = {
 function siteDomain(site: ContentSiteWithProfile): string {
   const raw = site.profile?.domain_url ?? '';
   return domainFromUrl(raw) || raw.replace(/^https?:\/\//i, '').replace(/\/$/, '') || '—';
+}
+
+/**
+ * 判斷是否為 Beauty100。
+ *
+ * 不能只看 adapter：既有站點在切換成 beauty100 之前，adapter 可能仍是 manual；
+ * 但名稱／網域已經是 Beauty100。這種站點也要走專用卡片（沒有「移除接入」）。
+ */
+function isBeauty100Site(site: ContentSiteWithProfile): boolean {
+  if (site.adapter === 'beauty100') return true;
+  const haystack = `${siteDisplayName(site)} ${site.profile?.domain_url ?? ''} ${
+    site.profile?.brand ?? ''
+  }`.toLowerCase();
+  return haystack.includes('beauty100');
 }
 
 function SiteCardSkeleton() {
@@ -133,6 +156,7 @@ function SiteCard({
   const name = siteDisplayName(site);
   const paused = site.status === 'paused';
   const archived = site.status === 'archived';
+  const looksLikeBeauty100 = isBeauty100Site(site);
 
   return (
     <article
@@ -142,7 +166,7 @@ function SiteCard({
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <span
             title={TIER_LABEL[site.tier] ?? site.tier}
             className={cn(
@@ -153,6 +177,20 @@ function SiteCard({
             {site.tier}
           </span>
           <ContentStatusPill status={site.health} machine="health" />
+          {looksLikeBeauty100 && (
+            <ContentStatusPill
+              label={
+                site.adapter === 'beauty100' && site.publish_mode === 'direct'
+                  ? 'Beauty100 自動發佈'
+                  : 'Beauty100（未啟用）'
+              }
+              tone={
+                site.adapter === 'beauty100' && site.publish_mode === 'direct'
+                  ? 'teal'
+                  : 'amber-outline'
+              }
+            />
+          )}
           {paused && <ContentStatusPill label={SITE_STATUS_LABEL.paused} tone="amber-outline" />}
           {archived && <ContentStatusPill label={SITE_STATUS_LABEL.archived} tone="muted" />}
         </div>
@@ -269,6 +307,215 @@ function SiteCard({
   );
 }
 
+interface Beauty100SiteCardProps {
+  site: ContentSiteWithProfile;
+  counts: ContentSiteTodayCounts;
+  canManageSites: boolean;
+  busy: boolean;
+  testing: boolean;
+  onManage: () => void;
+  onArticles: () => void;
+  onPlan: () => void;
+  onTest: () => void;
+  onToggleStatus: () => void;
+}
+
+/**
+ * Beauty100 專用站點卡。
+ *
+ * 與其他站點不同：**沒有「移除接入」**（避免誤刪 MPS 內的文章／排程／憑證）。
+ * 但保留手動站點該有的管理能力：設定、文章、排程、暫停／啟用、測試連線、官網。
+ */
+function Beauty100SiteCard({
+  site,
+  counts,
+  canManageSites,
+  busy,
+  testing,
+  onManage,
+  onArticles,
+  onPlan,
+  onTest,
+  onToggleStatus,
+}: Beauty100SiteCardProps) {
+  const name = siteDisplayName(site);
+  const paused = site.status === 'paused';
+  const archived = site.status === 'archived';
+  const configured = site.adapter === 'beauty100' && site.publish_mode === 'direct';
+  const domain = site.profile?.domain_url?.trim() || '';
+  const liveHref = domain
+    ? /^https?:\/\//i.test(domain)
+      ? domain
+      : `https://${domain}`
+    : null;
+
+  return (
+    <article className="rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50/80 via-white to-white p-4 shadow-card">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span
+              title={TIER_LABEL[site.tier] ?? site.tier}
+              className={cn(
+                'inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[10.5px] font-bold leading-4',
+                TIER_BADGE_CLASS[site.tier],
+              )}
+            >
+              {site.tier}
+            </span>
+            <ContentStatusPill status={site.health} machine="health" />
+            <ContentStatusPill
+              label={configured ? 'Beauty100 自動發佈' : '尚未啟用自動發佈'}
+              tone={configured ? 'teal' : 'amber-outline'}
+            />
+            {paused && <ContentStatusPill label={SITE_STATUS_LABEL.paused} tone="amber-outline" />}
+            {archived && <ContentStatusPill label={SITE_STATUS_LABEL.archived} tone="muted" />}
+          </div>
+
+          <h3 className="mt-1.5 text-[16px] font-bold leading-snug text-[#0d1a2d]">{name}</h3>
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-muted-foreground">
+            <Globe2 size={11} className="shrink-0" />
+            <span className="truncate">{domain || '未設定網域'}</span>
+            <span>·</span>
+            <span>{ADAPTER_LABEL[site.adapter] ?? site.adapter}</span>
+            <span>·</span>
+            <span>{PUBLISH_MODE_LABEL[site.publish_mode] ?? site.publish_mode}</span>
+          </p>
+        </div>
+
+        {liveHref && (
+          <a
+            href={liveHref}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-teal-200 bg-white px-2 text-[11.5px] font-semibold text-teal-700 hover:bg-teal-50"
+          >
+            <ExternalLink size={11} />
+            前往官網
+          </a>
+        )}
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-md border border-teal-100 bg-white/80 px-2.5 py-2">
+          <p className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+            今日生成
+          </p>
+          <p className="mt-0.5 text-[16px] font-bold tabular-nums text-[#0d1a2d]">
+            {counts.generated}
+          </p>
+        </div>
+        <div className="rounded-md border border-teal-100 bg-white/80 px-2.5 py-2">
+          <p className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+            待審
+          </p>
+          <p className="mt-0.5 text-[16px] font-bold tabular-nums text-amber-700">{counts.pending}</p>
+        </div>
+        <div className="rounded-md border border-teal-100 bg-white/80 px-2.5 py-2">
+          <p className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+            今日已發
+          </p>
+          <p className="mt-0.5 text-[16px] font-bold tabular-nums text-teal-700">
+            {counts.published}
+          </p>
+        </div>
+        <div className="rounded-md border border-teal-100 bg-white/80 px-2.5 py-2">
+          <p className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+            失敗
+          </p>
+          <p
+            className={cn(
+              'mt-0.5 text-[16px] font-bold tabular-nums',
+              counts.failed > 0 ? 'text-rose-600' : 'text-slate-400',
+            )}
+          >
+            {counts.failed}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-slate-600">
+        <span className="inline-flex items-center gap-1">
+          <CalendarDays size={11} className="text-teal-600" />
+          {CADENCE_FREQUENCY_LABEL[site.cadence.frequency] ?? site.cadence.frequency} ·{' '}
+          {cadenceSummary(site.cadence)}
+        </span>
+        <span className="text-muted-foreground">
+          最後測試：
+          {site.last_verified_at
+            ? formatZoneDateTime(site.last_verified_at, site.timezone)
+            : '尚未測試'}
+        </span>
+        {!configured && (
+          <span className="text-amber-700">
+            尚未啟用：請到「管理設定」把發佈方式改成 Beauty100、上線方式改成直接公開。
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-teal-100 pt-3">
+        <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-[11.5px]" onClick={onManage}>
+          <Settings2 size={11} />
+          管理設定
+        </Button>
+        <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-[11.5px]" onClick={onArticles}>
+          <FileText size={11} />
+          文章佇列
+        </Button>
+        <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-[11.5px]" onClick={onPlan}>
+          <CalendarDays size={11} />
+          排程
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 gap-1 px-2 text-[11.5px]"
+          onClick={onTest}
+          disabled={!canManageSites || testing || archived || !configured}
+          title={
+            !configured
+              ? '先把發佈方式改成 Beauty100、上線方式改成直接公開'
+              : canManageSites
+                ? '登入 Beauty100、讀文章表、上傳／刪除 probe 檔'
+                : '只有管理層可以測試連線'
+          }
+        >
+          {testing ? <Loader2 size={11} className="animate-spin" /> : <Wifi size={11} />}
+          測試連線
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 gap-1 px-2 text-[11.5px]"
+          onClick={onToggleStatus}
+          disabled={busy || !canManageSites || archived}
+          title={
+            archived
+              ? '已歸檔站點不會自動運作'
+              : canManageSites
+                ? paused
+                  ? '恢復排程與自動生成'
+                  : '暫停排程與自動生成（既有文章保留）'
+                : '只有管理層可以變更站點狀態'
+          }
+        >
+          {busy ? (
+            <Loader2 size={11} className="animate-spin" />
+          ) : paused ? (
+            <Play size={11} />
+          ) : (
+            <Pause size={11} />
+          )}
+          {paused ? '啟用' : '暫停'}
+        </Button>
+        <span className="ml-auto text-[10.5px] text-muted-foreground">
+          Beauty100 卡片不提供「移除接入」，避免誤刪 MPS 的文章與排程。
+        </span>
+      </div>
+    </article>
+  );
+}
+
 export function SiteListView({ navigate }: ContentViewProps) {
   const { sites, loading, error, missingSchema, refresh } = useContentSites();
   const metrics = useContentOverviewMetrics();
@@ -277,6 +524,23 @@ export function SiteListView({ navigate }: ContentViewProps) {
   const [busySiteId, setBusySiteId] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<ContentSiteWithProfile | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [beauty100TestOpen, setBeauty100TestOpen] = useState(false);
+  const [beauty100Testing, setBeauty100Testing] = useState(false);
+  const [beauty100TestResult, setBeauty100TestResult] =
+    useState<ContentConnectionTestResult | null>(null);
+  const [beauty100TestFailure, setBeauty100TestFailure] = useState<string | null>(null);
+
+  const beauty100Site = useMemo(
+    () =>
+      sites.find((site) => site.adapter === 'beauty100') ??
+      sites.find((site) => isBeauty100Site(site)) ??
+      null,
+    [sites],
+  );
+  const otherSites = useMemo(
+    () => sites.filter((site) => !isBeauty100Site(site)),
+    [sites],
+  );
 
   const refreshAll = useCallback(async () => {
     await Promise.all([refresh(), metrics.refresh()]);
@@ -335,6 +599,51 @@ export function SiteListView({ navigate }: ContentViewProps) {
       setRemoving(false);
     }
   }, [canManageSites, refreshAll, removeTarget]);
+
+  const handleTestBeauty100 = useCallback(
+    async (site: ContentSiteWithProfile) => {
+      if (!canManageSites) {
+        toast.error('沒有測試連線的權限', {
+          description: '測試 Beauty100 連線需要管理層（management／system_dev）權限。',
+        });
+        return;
+      }
+      setBeauty100TestOpen(true);
+      setBeauty100Testing(true);
+      setBeauty100TestResult(null);
+      setBeauty100TestFailure(null);
+      try {
+        const result = await runConnectionTest(site.website_profile_id);
+        setBeauty100TestResult(result);
+        if (result.health === 'ok') {
+          toast.success('Beauty100 連線測試通過', {
+            description: '登入、文章表、分類與封面 bucket 都正常。',
+          });
+        } else if (result.health === 'degraded') {
+          toast.message('Beauty100 可用但降級', {
+            description: '非阻擋檢查（通常是 sitemap）失敗，請看逐項結果。',
+          });
+        } else {
+          toast.error('Beauty100 連線測試未通過', {
+            description: '請看逐項結果並修正憑證或 bucket 設定。',
+          });
+        }
+        // 測試本身已成功；refresh 失敗不應把結果誤報成「測試失敗」。
+        try {
+          await refreshAll();
+        } catch (refreshError) {
+          console.warn('Beauty100 test refresh failed', refreshError);
+        }
+      } catch (thrown) {
+        const message = contentErrorMessage(thrown);
+        setBeauty100TestFailure(message);
+        toast.error('Beauty100 測試失敗', { description: message });
+      } finally {
+        setBeauty100Testing(false);
+      }
+    },
+    [canManageSites, refreshAll],
+  );
 
   const metricItems = useMemo<ContentMetricItem[]>(    () => [
       {
@@ -484,20 +793,67 @@ export function SiteListView({ navigate }: ContentViewProps) {
     }
 
     return (
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {sites.map((site) => (
-          <SiteCard
-            key={site.website_profile_id}
-            site={site}
-            counts={metrics.perSite[site.website_profile_id] ?? EMPTY_COUNTS}
+      <div className="space-y-4">
+        {beauty100Site ? (
+          <Beauty100SiteCard
+            site={beauty100Site}
+            counts={metrics.perSite[beauty100Site.website_profile_id] ?? EMPTY_COUNTS}
             canManageSites={canManageSites}
-            busy={busySiteId === site.website_profile_id}
-            onOpen={() => navigate('seo', 'site', site.website_profile_id)}
-            onPlan={() => navigate('seo', 'plan', site.website_profile_id)}
-            onToggleStatus={() => void handleToggleStatus(site)}
-            onRemove={() => setRemoveTarget(site)}
+            busy={busySiteId === beauty100Site.website_profile_id}
+            testing={beauty100Testing}
+            onManage={() => navigate('seo', 'site', beauty100Site.website_profile_id)}
+            onArticles={() => navigate('seo', 'articles', beauty100Site.website_profile_id)}
+            onPlan={() => navigate('seo', 'plan', beauty100Site.website_profile_id)}
+            onTest={() => void handleTestBeauty100(beauty100Site)}
+            onToggleStatus={() => void handleToggleStatus(beauty100Site)}
           />
-        ))}
+        ) : (
+          <section className="rounded-xl border border-dashed border-teal-300 bg-teal-50/40 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-[15px] font-bold text-[#0d1a2d]">Beauty100</h3>
+                <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-slate-600">
+                  尚未接入內容自動化，或站點主檔沒有 Beauty100。接入後會顯示專用管理卡：
+                  有設定、文章、排程、測試連線與暫停／啟用，但沒有「移除接入」，
+                  避免誤刪 MPS 的文章與排程。
+                </p>
+              </div>
+              <Button
+                size="sm"
+                className="shrink-0 gap-1"
+                onClick={() => navigate('seo', 'site')}
+                disabled={!canManageSites}
+                title={canManageSites ? '從站點主檔接入 Beauty100' : '只有管理層可以接入站點'}
+              >
+                <Plus size={13} />
+                接入 Beauty100
+              </Button>
+            </div>
+          </section>
+        )}
+
+        {otherSites.length > 0 && (
+          <div className="space-y-2">
+            {beauty100Site && (
+              <h2 className="text-[13px] font-bold text-[#0d1a2d]">其他站點</h2>
+            )}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {otherSites.map((site) => (
+                <SiteCard
+                  key={site.website_profile_id}
+                  site={site}
+                  counts={metrics.perSite[site.website_profile_id] ?? EMPTY_COUNTS}
+                  canManageSites={canManageSites}
+                  busy={busySiteId === site.website_profile_id}
+                  onOpen={() => navigate('seo', 'site', site.website_profile_id)}
+                  onPlan={() => navigate('seo', 'plan', site.website_profile_id)}
+                  onToggleStatus={() => void handleToggleStatus(site)}
+                  onRemove={() => setRemoveTarget(site)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -564,6 +920,106 @@ export function SiteListView({ navigate }: ContentViewProps) {
             >
               {removing && <Loader2 size={13} className="animate-spin" />}
               確認移除接入
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={beauty100TestOpen}
+        onOpenChange={(open) => {
+          if (!open && !beauty100Testing) setBeauty100TestOpen(false);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[15px]">
+              <Wifi size={15} className="text-teal-600" />
+              Beauty100 連線測試
+            </DialogTitle>
+            <DialogDescription className="text-[12.5px] leading-relaxed">
+              會真的登入 Beauty100、讀取 `blog_articles`、上傳並刪除一個 probe 檔、確認封面 bucket
+              公開可讀；<b>不會發佈文章</b>。
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="min-h-[120px] space-y-2">
+            {beauty100Testing ? (
+              <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-4 text-[12px] text-slate-600">
+                <Loader2 size={14} className="animate-spin text-teal-600" />
+                正在登入、讀表與測試封面 bucket...
+              </div>
+            ) : beauty100TestFailure ? (
+              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-3 text-[12px] leading-relaxed text-rose-700">
+                <p className="font-semibold">測試失敗</p>
+                <p className="mt-1">{beauty100TestFailure}</p>
+              </div>
+            ) : beauty100TestResult ? (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <ContentStatusPill status={beauty100TestResult.health} machine="health" />
+                  <span className="text-[11.5px] text-muted-foreground">
+                    {beauty100TestResult.checks.filter((check) => check.ok).length}／
+                    {beauty100TestResult.checks.length} 項通過
+                  </span>
+                </div>
+                <ul className="space-y-1.5">
+                  {beauty100TestResult.checks.map((check) => (
+                    <li
+                      key={check.kind}
+                      className={cn(
+                        'flex items-start gap-2 rounded-md border px-2.5 py-2 text-[12px] leading-relaxed',
+                        check.ok
+                          ? 'border-emerald-100 bg-emerald-50/50'
+                          : 'border-rose-200 bg-rose-50/50',
+                      )}
+                    >
+                      {check.ok ? (
+                        <CheckCircle2 size={13} className="mt-0.5 shrink-0 text-emerald-600" />
+                      ) : (
+                        <XCircle size={13} className="mt-0.5 shrink-0 text-rose-600" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-700">{check.label}</p>
+                        <p className="break-words text-[11.5px] text-slate-500">{check.detail}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="text-[12px] text-muted-foreground">尚未測試。</p>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setBeauty100TestOpen(false)}
+              disabled={beauty100Testing}
+            >
+              關閉
+            </Button>
+            <Button
+              size="sm"
+              className="gap-1.5 bg-teal-600 hover:bg-teal-700"
+              onClick={() => {
+                if (beauty100Site) void handleTestBeauty100(beauty100Site);
+              }}
+              disabled={
+                beauty100Testing ||
+                !beauty100Site ||
+                beauty100Site.adapter !== 'beauty100' ||
+                beauty100Site.publish_mode !== 'direct'
+              }
+            >
+              {beauty100Testing ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <RefreshCw size={13} />
+              )}
+              重測
             </Button>
           </DialogFooter>
         </DialogContent>

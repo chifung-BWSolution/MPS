@@ -72,7 +72,11 @@ export interface SealedCredential {
   fingerprint: string;
 }
 
-export async function sealCredential(secret: string): Promise<SealedCredential> {
+export async function sealCredential(
+  secret: string,
+  /** 顯示用指紋來源；JSON 憑證可傳 email，避免只看到 JSON 尾字元 */
+  fingerprintSource?: string,
+): Promise<SealedCredential> {
   const plaintext = String(secret || "");
   if (!plaintext.trim()) {
     throw new ContentVaultError("empty_secret", "憑證內容不可為空");
@@ -86,7 +90,7 @@ export async function sealCredential(secret: string): Promise<SealedCredential> 
   );
   return {
     ciphertext: `${VERSION}.${bytesToBase64(iv)}.${bytesToBase64(new Uint8Array(cipher))}`,
-    fingerprint: credentialFingerprint(plaintext),
+    fingerprint: credentialFingerprint(fingerprintSource?.trim() || plaintext),
   };
 }
 

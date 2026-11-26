@@ -12,6 +12,16 @@ import {
 } from "../_shared/contentAuth.ts";
 import { generateArticleWithLlm, llmConfigured } from "../_shared/contentLlm.ts";
 import {
+  AdapterError,
+  getContentAdapter,
+  type AdapterArticleInput,
+  type AdapterImage,
+  type AdapterSite,
+  type AdapterVerifyResult,
+  type ContentAdapter,
+} from "../_shared/contentAdapters/index.ts";
+import { ContentVaultError, unsealCredential } from "../_shared/contentVault.ts";
+import {
   getResendApiKey,
   isResendApiKeyConfigured,
   sendResendEmail,
@@ -62,7 +72,7 @@ import {
 } from "../../../src/lib/contentPackage.ts";
 import { planSlots, validateCadence } from "../../../src/lib/contentPlanner.ts";
 import { evaluateSeoQa } from "../../../src/lib/contentSeoQa.ts";
-import { assertTransition, canTransition } from "../../../src/lib/contentState.ts";
+import { assertTransition, canTransition, isApprovedForPublish } from "../../../src/lib/contentState.ts";
 import { ContentLlmError } from "../_shared/contentLlm.ts";
 import type {
   ContentArticle,
@@ -574,6 +584,9 @@ async function setArticleStatus(
     .select("*")
     .single();
   if (error) throw new JobFailure("article_update_failed", dbError(error), true);
+  // 與 setSlotStatus／setKeywordStatus 一致：同步本地物件，避免同一 job 內
+  // 後續再用舊 status 做狀態機檢查（scheduled → published 會被擋）。
+  article.status = to;
   return data as ContentArticle;
 }
 
@@ -736,6 +749,8 @@ async function runJob(ctx: JobContext): Promise<HandlerResult> {
       return runSiteHealthJob(ctx);
     case "send_digest":
       return runSendDigestJob(ctx);
+    case "delete_article":
+      return runDeleteArticleJob(ctx);
     default:
       throw new JobFailure("unknown_job_type", `未知的 job 類型：${ctx.job.type}`, false);
   }
@@ -1284,6 +1299,55 @@ class KeywordConflictError extends Error {
  * 單一候選詞的完整生成流程：brief → LLM → QA → 配圖 → 寫入文章／slot／keyword／usage。
  * LLM 失敗時會 hold slot 並把 keyword 退回 backlog，然後丟可重試的 JobFailure。
  */
+/**
+ * 為生成文章挑選站內欄目（PRD §9.1.3 categoryMap）。
+ *
+ * 規則：
+ *   1. `seo_defaults.categoryMap` 命中（key 出現在 keyword.cluster／keyword）→ 用對應欄目
+ *   2. 否則第一個 content_type='article'，再退回 'post'，最後任一欄目
+ *   3. 站點沒有欄目 → null（不阻擋生成；Confirm 會顯示「未指定欄目」）
+ */
+async function resolveSectionForGeneration(
+  supabase: Db,
+  siteId: string,
+  keyword: Pick<ContentKeyword, "keyword" | "cluster">,
+  seoDefaults: ContentSeoDefaults,
+): Promise<ContentSiteSection | null> {
+  const { data, error } = await supabase
+    .from("content_site_sections")
+    .select("*")
+    .eq("site_id", siteId)
+    .order("created_at", { ascending: true });
+  if (error) {
+    console.warn("content-worker: load sections failed", dbError(error));
+    return null;
+  }
+  const sections = (data ?? []) as ContentSiteSection[];
+  if (sections.length === 0) return null;
+
+  const categoryMap = (seoDefaults.categoryMap ?? {}) as Record<string, string>;
+  const haystack = `${keyword.cluster ?? ""} ${keyword.keyword ?? ""}`.toLowerCase();
+  for (const [category, target] of Object.entries(categoryMap)) {
+    const categoryKey = String(category ?? "").trim().toLowerCase();
+    const targetKey = String(target ?? "").trim().toLowerCase();
+    if (!categoryKey || !targetKey) continue;
+    if (!haystack.includes(categoryKey)) continue;
+    const match = sections.find((section) =>
+      [section.id, section.slug, section.name]
+        .map((value) => String(value ?? "").trim().toLowerCase())
+        .includes(targetKey),
+    );
+    if (match) return match;
+  }
+
+  return (
+    sections.find((section) => section.content_type === "article") ??
+    sections.find((section) => section.content_type === "post") ??
+    sections[0] ??
+    null
+  );
+}
+
 async function generateArticleForKeyword(params: {
   supabase: Db;
   job: ContentJob;
@@ -1313,15 +1377,19 @@ async function generateArticleForKeyword(params: {
 
   await setKeywordStatus(supabase, keyword, "generating");
 
+  const seoDefaults = normalizeSeoDefaults(site);
+  const brandVoice = site.brand_voice || DEFAULT_BRAND_VOICE;
+  const section = await resolveSectionForGeneration(supabase, slot.site_id, keyword, seoDefaults);
+
   // ---- 步驟 3–4：brief → Gemini（JSON、重試、usage 都在 _shared/contentLlm） ----
   const brief = buildBrief({
     site: { ...profile, timezone: site.timezone, locale: site.locale },
     keyword: keyword.keyword,
     keywordIntent: keyword.intent,
     cluster: keyword.cluster,
-    brandVoice: site.brand_voice || DEFAULT_BRAND_VOICE,
-    seoDefaults: normalizeSeoDefaults(site),
-    section: null,
+    brandVoice,
+    seoDefaults,
+    section,
     sitePages,
     existingTitles,
     publishAt: slot.publish_at,
@@ -1359,8 +1427,6 @@ async function generateArticleForKeyword(params: {
     usage,
   });
 
-  const seoDefaults = normalizeSeoDefaults(site);
-  const brandVoice = site.brand_voice || DEFAULT_BRAND_VOICE;
   const generatedAt = nowIso();
   const articleId = crypto.randomUUID();
   const slug = ensureUniqueSlug(generated.slug || generated.title, existingSlugs);
@@ -1384,7 +1450,7 @@ async function generateArticleForKeyword(params: {
     },
     seoDefaults,
     brandVoice,
-    section: null,
+    section,
     existingSlugs,
     sitePages,
     internalLinks: generated.internal_links,
@@ -1399,7 +1465,7 @@ async function generateArticleForKeyword(params: {
     title: generated.title,
     keyword: keyword.keyword,
     cluster: keyword.cluster,
-    sectionName: null,
+    sectionName: section?.name ?? null,
     brand: profile.website_name,
   });
 
@@ -1427,14 +1493,14 @@ async function generateArticleForKeyword(params: {
     canonical,
     liveUrl: null,
     coverUrl: null,
-    section: null,
+    section,
     wordCount: qaReport.wordCount,
   });
 
   const insertRow: Record<string, unknown> = {
     id: articleId,
     site_id: slot.site_id,
-    section_id: null,
+    section_id: section?.id ?? null,
     keyword_id: keyword.id,
     slot_id: slot.id,
     title: generated.title,
@@ -1693,7 +1759,7 @@ async function insertPublishLog(params: {
   supabase: Db;
   siteId: string | null;
   articleId: string | null;
-  action: "package" | "verify" | "manual_done" | "publish" | "retry" | "approve" | "reject" | "confirm" | "schedule" | "restore";
+  action: "package" | "verify" | "manual_done" | "publish" | "retry" | "approve" | "reject" | "confirm" | "schedule" | "restore" | "delete";
   request?: Record<string, unknown>;
   response?: Record<string, unknown>;
   externalId?: string | null;
@@ -1779,6 +1845,591 @@ async function markArticlePublishFailed(
   if (error) throw new JobFailure("article_update_failed", dbError(error), true);
 }
 
+// ============================================================
+// 自動發佈（direct／draft adapter，M5-03）
+//
+// 只補「發佈能力」：job 仍只會在文章已 scheduled（經人工審核＋Confirm）後才被排入，
+// 這裡不改任何審核／排期閘門；manual 路徑保持原樣。
+// ============================================================
+
+/** adapter → 可接受的站點憑證 kind（第一筆找到的為準） */
+const ADAPTER_CREDENTIAL_KINDS: Record<string, string[]> = {
+  next_custom: ["http_bearer", "http_hmac"],
+  beauty100: ["beauty100_admin"],
+  wordpress: ["wp_app_password"],
+  shopify: ["shopify_admin"],
+  webflow: ["webflow_token"],
+};
+
+interface AdapterSecretRow {
+  kind: string;
+  ciphertext: string;
+}
+
+/** 解密 adapter 所需憑證；沒有憑證屬「不可重試」的人為缺漏 */
+async function loadAdapterSecret(
+  supabase: Db,
+  siteId: string,
+  adapterName: string,
+): Promise<string> {
+  const kinds = ADAPTER_CREDENTIAL_KINDS[adapterName] ?? [];
+  if (kinds.length === 0) {
+    throw new JobFailure(
+      "missing_credential",
+      `adapter「${adapterName}」沒有對應的憑證類型，請先到站點詳情儲存憑證`,
+      false,
+    );
+  }
+  const { data, error } = await supabase
+    .from("content_site_credentials")
+    .select("kind, ciphertext")
+    .eq("site_id", siteId)
+    .in("kind", kinds);
+  if (error) throw new JobFailure("credential_load_failed", dbError(error), true);
+
+  const row = ((data ?? []) as AdapterSecretRow[]).find((item) => kinds.includes(item.kind));
+  if (!row) {
+    throw new JobFailure(
+      "missing_credential",
+      `站點尚未設定 ${kinds.join("／")} 憑證，無法自動發佈`,
+      false,
+    );
+  }
+  try {
+    return await unsealCredential(row.ciphertext);
+  } catch (error) {
+    if (error instanceof ContentVaultError) {
+      throw new JobFailure("credential_decrypt_failed", error.message, false);
+    }
+    throw error;
+  }
+}
+
+/** 讀封面圖給 adapter（沒有封面就回 null，不阻擋發佈） */
+async function loadCoverImage(
+  supabase: Db,
+  article: ContentArticle,
+): Promise<AdapterImage | null> {
+  if (!article.cover_asset_id) return null;
+  const { data, error } = await supabase
+    .from("content_assets")
+    .select("bucket, storage_path, mime_type, filename")
+    .eq("id", article.cover_asset_id)
+    .maybeSingle();
+  if (error || !data) return null;
+
+  const asset = data as {
+    bucket: string | null;
+    storage_path: string;
+    mime_type: string | null;
+    filename: string | null;
+  };
+  const { data: blob, error: downloadError } = await supabase.storage
+    .from(asset.bucket || STORAGE_BUCKET)
+    .download(asset.storage_path);
+  if (downloadError || !blob) return null;
+
+  return {
+    filename: asset.filename || asset.storage_path.split("/").pop() || "cover",
+    contentType: asset.mime_type || "application/octet-stream",
+    bytes: new Uint8Array(await blob.arrayBuffer()),
+    alt: article.title,
+  };
+}
+
+async function loadSlotByArticle(
+  supabase: Db,
+  articleId: string,
+): Promise<Pick<ContentSlot, "id" | "status"> | null> {
+  const { data } = await supabase
+    .from("content_slots")
+    .select("id, status")
+    .eq("article_id", articleId)
+    .maybeSingle();
+  return (data as Pick<ContentSlot, "id" | "status"> | null) ?? null;
+}
+
+/** 排程格交付完成：scheduled → publishing → published（照狀態機走，不硬跳） */
+async function markSlotDelivered(supabase: Db, articleId: string): Promise<void> {
+  const slot = await loadSlotByArticle(supabase, articleId);
+  if (!slot || slot.status === "published") return;
+  try {
+    if (slot.status === "scheduled") {
+      await setSlotStatus(supabase, slot, "publishing", articleId);
+      await setSlotStatus(supabase, { id: slot.id, status: "publishing" }, "published", articleId);
+      return;
+    }
+    if (slot.status === "publishing") {
+      await setSlotStatus(supabase, slot, "published", articleId);
+      return;
+    }
+    console.warn(`content-worker: slot ${slot.id} 狀態 ${slot.status} 不適合標記已發佈，略過`);
+  } catch (error) {
+    console.warn("content-worker: mark slot delivered failed", errorMessage(error));
+  }
+}
+
+/**
+ * 自動發佈：呼叫 adapter 把文章送到站點 API。
+ * 成功 → published（有 live URL）或 draft_published（平台只給草稿／沒有 URL）；
+ * 失敗 → publish_failed + 拋 JobFailure（由既有重試機制處理，不改狀態機）。
+ */
+async function runAutoPublishJob(
+  ctx: JobContext,
+  article: ContentArticle,
+  site: ContentSite,
+  adapter: ContentAdapter,
+): Promise<HandlerResult> {
+  const { supabase } = ctx;
+  const startedAt = Date.now();
+  const previousStatus = article.status;
+
+  // 審核閘門（PRD §6.3 不變量 1）：只有真的留下 reviewer_id／approved_at 的文章才可以
+  // 自動送到站點。不能只靠 UI；即使有人直接改 DB 狀態，也要在這裡擋下。
+  if (!isApprovedForPublish(article)) {
+    const message = "未經管理員批准：文章缺少 reviewer_id／approved_at，拒絕自動發佈";
+    await markArticlePublishFailed(supabase, article, message);
+    throw new JobFailure("not_approved", message, false);
+  }
+
+  // 有 adapter 宣告 requiresCover（Beauty100）就必須先有封面；不要等到站點才失敗。
+  if (adapter.requiresCover && !article.cover_asset_id) {
+    const message = "Beauty100 發佈必須有封面圖；請先在審核工作室產生或上傳封面";
+    await markArticlePublishFailed(supabase, article, message);
+    throw new JobFailure("cover_required", message, false);
+  }
+
+  let current = article;
+  if (previousStatus === "scheduled") {
+    current = await setArticleStatus(supabase, article, "publishing");
+  } else if (previousStatus !== "publishing") {
+    throw new JobFailure(
+      "invalid_article_status",
+      `文章狀態為 ${previousStatus}，不允許自動發佈`,
+      false,
+    );
+  }
+
+  try {
+    const profile = await loadProfile(supabase, article.site_id);
+    const secret = await loadAdapterSecret(supabase, article.site_id, adapter.name);
+    const cover = await loadCoverImage(supabase, article);
+
+    const sectionResult = article.section_id
+      ? await supabase
+          .from("content_site_sections")
+          .select("*")
+          .eq("id", article.section_id)
+          .maybeSingle()
+      : null;
+    const section = (sectionResult?.data ?? null) as ContentSiteSection | null;
+
+    const keywordResult = article.keyword_id
+      ? await supabase
+          .from("seo_keywords")
+          .select("keyword")
+          .eq("id", article.keyword_id)
+          .maybeSingle()
+      : null;
+    const keyword = (keywordResult?.data ?? null) as { keyword?: string | null } | null;
+    const tags = [keyword?.keyword, section?.name]
+      .map((value) => String(value ?? "").trim())
+      .filter(Boolean)
+      .filter((value, index, all) => all.indexOf(value) === index)
+      .slice(0, 5);
+
+    const adapterSite: AdapterSite = {
+      id: article.site_id,
+      name: profile?.website_name ?? article.site_id,
+      domain: profile?.domain_url || site.seo_defaults?.canonicalBase || null,
+      publishMode: site.publish_mode,
+      timezone: site.timezone,
+      sectionExternalId: section?.external_id ?? null,
+    };
+    const adapterArticle: AdapterArticleInput = {
+      title: article.title,
+      slug: article.slug,
+      excerpt: article.excerpt || truncateText(article.body_md ?? "", 150),
+      bodyHtml: article.body_html || renderMarkdownToHtml(article.body_md ?? ""),
+      bodyMd: article.body_md ?? "",
+      canonical:
+        article.canonical ||
+        canonicalUrl(
+          site.seo_defaults?.canonicalBase || profile?.domain_url || "",
+          article.slug,
+        ),
+      metaDescription:
+        article.meta_description ||
+        article.excerpt ||
+        truncateText(article.body_md ?? "", 155),
+      metaTitle: article.meta_title,
+      coverImage: cover,
+      author: site.seo_defaults?.author || null,
+      tags,
+      keyword: keyword?.keyword ?? null,
+      section: section
+        ? {
+            id: section.id,
+            name: section.name,
+            slug: section.slug,
+            externalId: section.external_id,
+            contentType: section.content_type,
+            mapping: section.mapping,
+          }
+        : null,
+    };
+
+    const result = await adapter.createArticle({
+      site: adapterSite,
+      credentials: { secret },
+      article: adapterArticle,
+    });
+    const durationMs = Date.now() - startedAt;
+    if (!result.ok) {
+      throw new JobFailure("adapter_rejected", `adapter「${adapter.name}」回報發佈未成功`, true);
+    }
+
+    const externalId = result.externalId || null;
+    const publicUrl = result.liveUrl || null;
+    const draftUrl = result.draftUrl || null;
+    const canonical = result.canonicalUrl || adapterArticle.canonical || null;
+    const wantDraft = site.publish_mode === "draft";
+
+    let finalUrl: string | null = publicUrl;
+    if (!wantDraft && externalId && publicUrl) {
+      await setArticleStatus(supabase, current, "published", {
+        external_id: externalId,
+        live_url: publicUrl,
+        canonical,
+        published_at: nowIso(),
+        reason: null,
+      });
+    } else {
+      // draft 模式，或平台（如 Webflow）只建立內容但沒有公開 URL：誠實落「已建草稿」
+      finalUrl = draftUrl || publicUrl;
+      await setArticleStatus(supabase, current, "draft_published", {
+        external_id: externalId,
+        live_url: finalUrl,
+        canonical,
+        reason: wantDraft
+          ? "已建立草稿，待站方確認後公開"
+          : "平台已建立內容，但未回傳公開 URL；請在平台發佈後回填",
+      });
+    }
+
+    await markSlotDelivered(supabase, article.id);
+
+    await insertPublishLog({
+      supabase,
+      siteId: article.site_id,
+      articleId: article.id,
+      action: "publish",
+      request: {
+        mode: site.publish_mode,
+        adapter: adapter.name,
+        version: article.version,
+      },
+      response: {
+        ok: true,
+        external_id: externalId,
+        url: finalUrl,
+        http_status: result.httpStatus,
+        raw: result.raw ?? null,
+      },
+      externalId,
+      url: finalUrl,
+      httpStatus: result.httpStatus,
+      durationMs,
+      idempotencyKey: contentIdempotencyKey("publish", article.id, article.version),
+    });
+
+    // 真的公開了才排「上線驗證」；草稿狀態沒有 live URL 可驗
+    if (!wantDraft && publicUrl) {
+      try {
+        await enqueueJob(supabase, "verify_publish", {
+          article_id: article.id,
+          dedupe_key: `verify:${article.id}:v${article.version}`,
+        });
+      } catch (error) {
+        // 文章已經發佈成功，不要因為驗證 job 排不進去而把文章標成失敗。
+        console.warn("content-worker: enqueue verify failed", errorMessage(error));
+      }
+    }
+
+    return done({
+      article_id: article.id,
+      adapter: adapter.name,
+      mode: site.publish_mode,
+      external_id: externalId,
+      url: finalUrl,
+    });
+  } catch (error) {
+    const message = errorMessage(error);
+    try {
+      const current = await loadArticle(supabase, article.id);
+      if (
+        current &&
+        !["published", "draft_published", "cancelled", "manual_done"].includes(current.status)
+      ) {
+        await markArticlePublishFailed(supabase, current, `自動發佈失敗：${message}`);
+      }
+    } catch (statusError) {
+      console.warn("content-worker: mark publish_failed failed", errorMessage(statusError));
+    }
+
+    const httpStatus = error instanceof AdapterError ? error.httpStatus : null;
+    // 自動發佈失敗也要留一筆回執，UI 才看得到原因（不只 article.reason）。
+    await insertPublishLog({
+      supabase,
+      siteId: article.site_id,
+      articleId: article.id,
+      action: "publish",
+      request: {
+        mode: site.publish_mode,
+        adapter: adapter.name,
+        version: article.version,
+        failed: true,
+      },
+      response: {
+        ok: false,
+        error: message,
+      },
+      httpStatus,
+      durationMs: Date.now() - startedAt,
+      idempotencyKey: contentIdempotencyKey("publish-failed", article.id, article.version),
+    });
+    if (error instanceof JobFailure) throw error;
+    // 沒有 HTTP status 的 adapter 錯誤要按 code 判斷：缺封面／缺網域／slug 衝突
+    // 重試幾次也不會好，其餘（network_error／timeout）才值得重試。
+    const nonRetryableCodes = new Set([
+      "missing_cover",
+      "missing_domain",
+      "invalid_article",
+      "invalid_category",
+      "invalid_credential",
+      "slug_conflict",
+      "cover_upload_forbidden",
+      "cover_not_public",
+    ]);
+    const retryable =
+      error instanceof AdapterError
+        ? httpStatus == null
+          ? !nonRetryableCodes.has(error.code)
+          : httpStatus >= 500 || httpStatus === 429
+        : true;
+    throw new JobFailure("adapter_publish_failed", message, retryable);
+  }
+}
+
+// ============================================================
+// delete_article：真正刪除站點上的文章（不是只刪 MPS 記錄）
+//
+// 只在文章已由 adapter 實際發佈（有 external_id）且 adapter 支援 deleteArticle 時執行；
+// 成功後文章進終態 cancelled、清空 live_url、寫入 deleted_at 與 publish log(action=delete)。
+// 審核／排期邏輯不變；此 job 由 content-publish 的 delete_published（approve 權限）排入。
+// ============================================================
+
+const DELETABLE_ARTICLE_STATUSES: ContentArticleStatus[] = [
+  "published",
+  "updating",
+  "verify_failed",
+  "draft_published",
+];
+
+/**
+ * 從最近一次 publish 回執找 adapter 上傳的封面位置，刪文時 best-effort 清掉。
+ * 舊資料沒有這個欄位就回 null；不影響刪文。
+ */
+async function loadPublishedCover(
+  supabase: Db,
+  articleId: string,
+): Promise<{ bucket: string; path: string } | null> {
+  const { data, error } = await supabase
+    .from("content_publish_logs")
+    .select("response")
+    .eq("article_id", articleId)
+    .eq("action", "publish")
+    .order("created_at", { ascending: false })
+    .limit(10);
+  if (error || !Array.isArray(data)) return null;
+  // 最新一筆可能是「adopt 既有文章」的回執（沒有 cover_bucket/path），
+  // 往前找第一次真正上傳封面的 publish 回執。
+  for (const row of data as { response?: unknown }[]) {
+    const response = row.response;
+    if (!response || typeof response !== "object" || Array.isArray(response)) continue;
+    const raw = (response as { raw?: unknown }).raw;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const bucket = typeof (raw as { cover_bucket?: unknown }).cover_bucket === "string"
+      ? String((raw as { cover_bucket: string }).cover_bucket).trim()
+      : "";
+    const path = typeof (raw as { cover_path?: unknown }).cover_path === "string"
+      ? String((raw as { cover_path: string }).cover_path).trim()
+      : "";
+    if (bucket && path) return { bucket, path };
+  }
+  return null;
+}
+
+async function runDeleteArticleJob(ctx: JobContext): Promise<HandlerResult> {
+  const { supabase } = ctx;
+  const payload = (ctx.job.payload ?? {}) as ContentJobPayloads["delete_article"];
+  const articleId = text(payload.article_id);
+  if (!articleId) throw new JobFailure("invalid_payload", "delete_article 缺少 article_id", false);
+
+  const article = await loadArticle(supabase, articleId);
+  if (!article) throw new JobFailure("article_not_found", `找不到文章 ${articleId}`, false);
+  if (article.deleted_at) {
+    return done({ skipped: "already_deleted", article_id: article.id });
+  }
+  if (!DELETABLE_ARTICLE_STATUSES.includes(article.status)) {
+    throw new JobFailure(
+      "invalid_article_status",
+      `文章狀態為 ${article.status}，不可遠端刪除`,
+      false,
+    );
+  }
+  if (!article.external_id) {
+    throw new JobFailure(
+      "no_remote_id",
+      "這篇文章沒有站點 external_id（手動內容包或尚未用 adapter 發佈），請到站點後台手動刪除",
+      false,
+    );
+  }
+
+  const site = await loadSite(supabase, article.site_id);
+  if (!site) throw new JobFailure("site_not_found", `站點 ${article.site_id} 不存在`, false);
+
+  const adapter = getContentAdapter(site.adapter);
+  if (!adapter.deleteArticle) {
+    throw new JobFailure(
+      "delete_unsupported",
+      `站點 adapter「${site.adapter}」不支援遠端刪除，請到站點後台手動刪除`,
+      false,
+    );
+  }
+
+  const startedAt = Date.now();
+  const profile = await loadProfile(supabase, article.site_id);
+  let secret: string;
+  try {
+    secret = await loadAdapterSecret(supabase, article.site_id, adapter.name);
+  } catch (error) {
+    await insertPublishLog({
+      supabase,
+      siteId: article.site_id,
+      articleId: article.id,
+      action: "delete",
+      request: {
+        article_id: article.id,
+        adapter: adapter.name,
+        external_id: article.external_id,
+      },
+      response: {
+        ok: false,
+        error: errorMessage(error),
+      },
+      externalId: article.external_id,
+      durationMs: Date.now() - startedAt,
+      idempotencyKey: contentIdempotencyKey("delete-failed", article.id, article.version),
+    });
+    throw error;
+  }
+  const adapterSite: AdapterSite = {
+    id: article.site_id,
+    name: profile?.website_name ?? article.site_id,
+    domain: profile?.domain_url || site.seo_defaults?.canonicalBase || null,
+    publishMode: site.publish_mode,
+    timezone: site.timezone,
+  };
+  const cover = await loadPublishedCover(supabase, article.id);
+
+  let result;
+  try {
+    result = await adapter.deleteArticle({
+      site: adapterSite,
+      credentials: { secret },
+      externalId: article.external_id,
+      slug: article.slug,
+      cover,
+    });
+  } catch (error) {
+    const httpStatus = error instanceof AdapterError ? error.httpStatus : null;
+    const retryable = !httpStatus || httpStatus >= 500 || httpStatus === 429;
+    // 刪除失敗要留回執，否則 UI 只看得到文章仍是 published，不知道為什麼。
+    await insertPublishLog({
+      supabase,
+      siteId: article.site_id,
+      articleId: article.id,
+      action: "delete",
+      request: {
+        article_id: article.id,
+        adapter: adapter.name,
+        external_id: article.external_id,
+        cover,
+      },
+      response: {
+        ok: false,
+        error: errorMessage(error),
+      },
+      externalId: article.external_id,
+      durationMs: Date.now() - startedAt,
+      idempotencyKey: contentIdempotencyKey("delete-failed", article.id, article.version),
+    });
+    throw new JobFailure("delete_failed", errorMessage(error), retryable);
+  }
+  if (!result.ok) {
+    throw new JobFailure("delete_failed", `adapter「${adapter.name}」回報刪除未成功`, true);
+  }
+
+  const now = nowIso();
+  const current = await loadArticle(supabase, article.id);
+  if (!current || current.deleted_at) {
+    return done({ skipped: "already_deleted", article_id: article.id });
+  }
+  const deletedReason =
+    text(payload.reason) ||
+    (result.alreadyGone ? "站點文章已不存在（冪等視為刪除成功）" : "已從站點刪除");
+
+  await setArticleStatus(supabase, current, "cancelled", {
+    live_url: null,
+    deleted_at: now,
+    deleted_reason: truncate(deletedReason, 500),
+    reason: null,
+  });
+
+  await insertPublishLog({
+    supabase,
+    siteId: article.site_id,
+    articleId: article.id,
+    action: "delete",
+    request: {
+      article_id: article.id,
+      adapter: adapter.name,
+      external_id: article.external_id,
+      status_before: article.status,
+      version: article.version,
+    },
+    response: {
+      ok: true,
+      already_gone: result.alreadyGone,
+      http_status: result.httpStatus,
+      raw: result.raw ?? null,
+    },
+    externalId: article.external_id,
+    url: null,
+    httpStatus: result.httpStatus,
+    durationMs: Date.now() - startedAt,
+    idempotencyKey: contentIdempotencyKey("delete", article.id, article.version),
+  });
+
+  return done({
+    article_id: article.id,
+    adapter: adapter.name,
+    external_id: article.external_id,
+    already_gone: result.alreadyGone,
+  });
+}
+
 async function runPublishArticleJob(ctx: JobContext): Promise<HandlerResult> {
   const { supabase, job } = ctx;
   const payload = (job.payload ?? {}) as ContentJobPayloads["publish_article"];
@@ -1794,16 +2445,26 @@ async function runPublishArticleJob(ctx: JobContext): Promise<HandlerResult> {
   const site = await loadSite(supabase, article.site_id);
   if (!site) throw new JobFailure("site_not_found", `站點 ${article.site_id} 不存在`, false);
 
-  // v1 只支援 manual：內容包 + 通知 + 人工回填（PRD §9.3.4）
+  // 自動發佈（draft／direct）：只補發佈能力，審核與排期閘門不變
+  const adapter = getContentAdapter(site.adapter);
+  const autoPublish =
+    site.publish_mode !== "manual" &&
+    adapter.name !== "manual" &&
+    adapter.supports(site.publish_mode);
+  if (autoPublish) {
+    return runAutoPublishJob(ctx, article, site, adapter);
+  }
+
+  // 其餘維持 v1 manual：內容包 + 通知 + 人工回填（PRD §9.3.4）
   if (site.publish_mode !== "manual") {
     await markArticlePublishFailed(
       supabase,
       article,
-      `v1 尚未支援 ${site.publish_mode} 自動發布，請改用手動內容包`,
+      `站點 adapter「${site.adapter}」不支援 ${site.publish_mode} 自動發佈，請改用手動內容包`,
     );
     throw new JobFailure(
       "publish_mode_unsupported",
-      `publish_mode=${site.publish_mode} 尚未支援自動發布（v1 只做 manual）`,
+      `adapter=${site.adapter} publish_mode=${site.publish_mode} 尚未支援自動發佈`,
       false,
     );
   }
@@ -1971,6 +2632,180 @@ function checkItem(
   return { id, label, severity: "hard", passed, detail };
 }
 
+/**
+ * adapter 專屬上線驗證的收尾：寫 checks／狀態／回執，失敗才丟 JobFailure。
+ * 與 HTML 驗證共用 resolveVerifyStatus，狀態機不變。
+ */
+async function finishAdapterVerify(
+  ctx: JobContext,
+  article: ContentArticle,
+  liveUrl: string,
+  result: AdapterVerifyResult,
+  startedAt: number,
+): Promise<HandlerResult> {
+  const { supabase, job } = ctx;
+  const checks: ContentQaCheck[] = result.checks.map((check) => ({
+    id: `adapter_${check.id}`,
+    label: check.label,
+    severity: "hard",
+    passed: check.ok,
+    detail: check.detail,
+  }));
+  const report: ContentVerifyReport = {
+    ok: result.ok && checks.every((check) => check.passed),
+    httpStatus: result.httpStatus,
+    checkedAt: nowIso(),
+    items: checks,
+  };
+
+  const checksPatch = {
+    ...(article.checks || {}),
+    verify: report,
+    verifiedAt: report.checkedAt,
+  };
+  const nextStatus = resolveVerifyStatus(article, report);
+  const { error } = await supabase
+    .from("content_articles")
+    .update({ checks: checksPatch, ...(nextStatus ? { status: nextStatus } : {}) })
+    .eq("id", article.id);
+  if (error) throw new JobFailure("article_update_failed", dbError(error), true);
+
+  await insertPublishLog({
+    supabase,
+    siteId: article.site_id,
+    articleId: article.id,
+    action: "verify",
+    request: { article_id: article.id, url: liveUrl, mode: "adapter" },
+    response: {
+      ok: report.ok,
+      failed: checks.filter((item) => !item.passed).map((item) => item.id),
+      items: checks,
+      raw: result.raw ?? null,
+    },
+    url: liveUrl,
+    httpStatus: report.httpStatus,
+    durationMs: Date.now() - startedAt,
+  });
+
+  if (!report.ok) {
+    throw new JobFailure(
+      "verify_failed",
+      `上線驗證未通過：${checks
+        .filter((item) => !item.passed)
+        .map((item) => item.id)
+        .join(", ")}`,
+      Number(job.attempts || 1) < VERIFY_RETRY_LIMIT,
+    );
+  }
+  return done({ article_id: article.id, url: liveUrl, ok: true, mode: "adapter" });
+}
+
+async function runAdapterVerifyJob(
+  ctx: JobContext,
+  article: ContentArticle,
+  site: ContentSite,
+  adapter: ContentAdapter,
+  liveUrl: string,
+): Promise<HandlerResult> {
+  const { supabase } = ctx;
+  const startedAt = Date.now();
+  const externalId = article.external_id;
+  if (!externalId) {
+    return finishAdapterVerify(
+      ctx,
+      article,
+      liveUrl,
+      {
+        ok: false,
+        httpStatus: null,
+        checks: [
+          {
+            id: "external_id",
+            label: "站點文章 id",
+            ok: false,
+            detail: "文章沒有 external_id，無法用站點 API 驗證",
+          },
+        ],
+      },
+      startedAt,
+    );
+  }
+
+  let secret: string;
+  try {
+    secret = await loadAdapterSecret(supabase, article.site_id, adapter.name);
+  } catch (error) {
+    return finishAdapterVerify(
+      ctx,
+      article,
+      liveUrl,
+      {
+        ok: false,
+        httpStatus: null,
+        checks: [
+          {
+            id: "credential",
+            label: "站點憑證",
+            ok: false,
+            detail: errorMessage(error),
+          },
+        ],
+      },
+      startedAt,
+    );
+  }
+
+  const profile = await loadProfile(supabase, article.site_id);
+  const sectionResult = article.section_id
+    ? await supabase
+        .from("content_site_sections")
+        .select("*")
+        .eq("id", article.section_id)
+        .maybeSingle()
+    : null;
+  const section = (sectionResult?.data ?? null) as ContentSiteSection | null;
+  const adapterSite: AdapterSite = {
+    id: article.site_id,
+    name: profile?.website_name ?? article.site_id,
+    domain: profile?.domain_url || site.seo_defaults?.canonicalBase || null,
+    publishMode: site.publish_mode,
+    timezone: site.timezone,
+    sectionExternalId: section?.external_id ?? null,
+  };
+
+  let result: AdapterVerifyResult;
+  try {
+    result = await adapter.verifyArticle!({
+      site: adapterSite,
+      credentials: { secret },
+      article: {
+        externalId,
+        liveUrl,
+        slug: article.slug,
+        title: article.title,
+        metaTitle: article.meta_title,
+        metaDescription: article.meta_description,
+        sectionExternalId: section?.external_id ?? null,
+      },
+    });
+  } catch (error) {
+    result = {
+      ok: false,
+      httpStatus: null,
+      checks: [
+        {
+          id: "request",
+          label: "站點 API 驗證",
+          ok: false,
+          detail: errorMessage(error),
+        },
+      ],
+    };
+  }
+
+  return finishAdapterVerify(ctx, article, liveUrl, result, startedAt);
+}
+
 async function runVerifyPublishJob(ctx: JobContext): Promise<HandlerResult> {
   const { supabase, job } = ctx;
   const payload = (job.payload ?? {}) as ContentJobPayloads["verify_publish"];
@@ -1981,6 +2816,16 @@ async function runVerifyPublishJob(ctx: JobContext): Promise<HandlerResult> {
   if (!article) throw new JobFailure("article_not_found", `找不到文章 ${articleId}`, false);
   const liveUrl = article.live_url || article.manual_url;
   if (!liveUrl) throw new JobFailure("missing_live_url", "文章沒有 live_url／manual_url，無法驗證", false);
+
+  // 站點有 adapter 專屬驗證（Beauty100）就不要再抓 HTML meta：
+  // 站方文章頁是 client render，metadata 目前是分類預設值，HTML 檢查會誤判。
+  const site = await loadSite(supabase, article.site_id);
+  if (site) {
+    const adapter = getContentAdapter(site.adapter);
+    if (adapter.verifyArticle && article.external_id) {
+      return runAdapterVerifyJob(ctx, article, site, adapter, liveUrl);
+    }
+  }
 
   const startedAt = Date.now();
   const page = await fetchWithTimeout(liveUrl, "GET");

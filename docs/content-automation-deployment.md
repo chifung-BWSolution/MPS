@@ -181,6 +181,13 @@ Invoke-RestMethod -Method Post -Uri "$env:URL/functions/v1/content-worker" `
 | 驗證 | ✅ `content-deploy-verify.mjs` 34/34、`content-remote-audit.mjs` 物件全符 |
 | 社媒 v0 自動營運 | ✅ `content-social` 已部署；`content-social-tick` 每 2 分鐘自動掃描熱點並產稿；文案由 **Grok（`grok-4.3`）** 生成，失敗自動退回模板 |
 | 社媒 LLM | ✅ 使用專案既有 `XAI_API_KEY`，模型以 `CONTENT_SOCIAL_MODEL` 覆寫（預設 `grok-4.3`）；`content_llm_usage` 記 `use_case=social`，稿件以 `generator` 欄標示 `grok`／`template` |
+| M5-02 熱點自動抓取 | ✅ `content-sources` 已部署；`content_sources` 2 個 Google News RSS，每小時 :15 抓取；48 小時新鮮度＋URL／simhash 去重＋AIHOT 式聚簇（候選→Grok 判斷→掛到事件）；首輪 80 則抓到、71 則入庫、9 則去重跳過 |
+| Grok 成本估算 | ✅ `content_llm_usage.cost_usd` 以 `LLM_PRICING` 估算（Grok 4 系列 $3 in／$15 out per 1M）；生成 166 次 ≈ **US$2.76**，聚簇判斷另記 `use_case=social_dedupe`；用量頁可按模型／用途看 |
+| 自動營運總開關 | ✅ `content_settings.feature_flags.social_autopilot`；關閉時 RSS 抓取與 cron 自動產稿停止（手動生成仍可用）；右上角開關只有管理層可切換 |
+| 聚簇維護 | ✅ `content-sources?action=dedupe_backfill`（分批，每次最多 4 次模型判斷）與 `merge_events`（指定合併）；已清理 3 組重複、12 個事件標記忽略 |
+| M5-03 Adapter | ✅ `_shared/contentAdapters/`（manual／next_custom＋registry）；契約測試 `node scripts/content-adapter-contract.mjs` 9/9 |
+| M5-04 監控告警 | ✅ `content-sources:health`（憑證失效／待審逾期／job dead／發布失敗／來源異常）＋「今日工作」橫幅 |
+| M5-05 文件 | ✅ `docs/content-operations-manual.md`、`content-site-onboarding-sop.md`、`content-troubleshooting.md` |
 | `content_claim_jobs` | ✅ security definer + `search_path=public, pg_temp`；anon／authenticated 無 execute、service_role 有 |
 | 資料安全 | ✅ `seo_keywords` 仍 48,617 列（只加欄未動資料）；憑證 0 條 policy；bucket private |
 
@@ -245,9 +252,70 @@ PostgREST 回 400 → 程式忽略錯誤 → 角色回落成 `staff` → 後端 
 
 ### 部署後仍待辦
 
-- [ ] `supabase secrets set GEMINI_API_KEY=...`（生成必要；`GEMINI_MODEL` 選用）
+- [x] `supabase secrets set GEMINI_API_KEY=...`（已於 2026-11-26 由並行工作線補上；`GEMINI_MODEL` 選用）
 - [ ] 結構快照（本機無 Docker／pg_dump；已確認 2026-11-25 01:20Z 有 Supabase 受管備份）
 - [ ] 推送後回歸煙霧測試（網站+系統、GSC、廣告、財務、專案、其他工具中心子項）
 - [ ] M1／M2／M3 手動 E2E（3 站接入、100 詞去重、10 篇生成、Sylvia 角色、409、cutoff）
 - [ ] 到設定頁把 `daily_article_limit` 從 0 調到目標值（先 8 篇／30 呼叫觀察一週）
 - [ ] 建議輪換本次使用的個人 access token（`sbp_...`）
+
+### 2026-11-26 追加：社群帳號登入憑證（半自動）
+
+- migration `20261127092000_content_social_credentials.sql`：新表 `content_social_account_credentials`（RLS + 0 policy，只有 service_role 可讀密文）＋ `content_social_accounts` 5 個非機密鏡像欄。
+- `content-social` 重新部署，新增 `save_credential`／`clear_credential`／`diagnose_credentials`（只做加密儲存與到期判斷，不呼叫平台 API）。
+- 驗證：`content-deploy-verify.mjs` 38/38；service_role 冒煙（存→檢測→清除）通過；anon 讀憑證表 401。
+- 尚未部署前端；`GEMINI_API_KEY` 仍未設定（與本功能無關，但生成需要）。
+
+### 2026-11-26 追加：各平台 OAuth 登入
+
+- migration `20261127100000_content_social_oauth.sql`：新表 `content_social_oauth_states`（一次性 state、10 分鐘、RLS + 0 policy、只有 service_role）。
+- `content-social` 新增 `oauth_providers`／`oauth_start`／`oauth_callback`；支援 Meta（IG/FB）、Threads、Google（YouTube）；小紅書等無公開 OAuth 會明確提示手動。
+- 前端新增 `/social-oauth-callback` 路由（popup 回呼頁）與各帳號列的「平台登入」入口。
+- 要真正登入仍需設定 secrets 並在平台後台登記 redirect URI：
+  ```powershell
+  supabase secrets set META_APP_ID=... META_APP_SECRET=...
+  supabase secrets set THREADS_APP_ID=... THREADS_APP_SECRET=...
+  supabase secrets set GOOGLE_OAUTH_CLIENT_ID=... GOOGLE_OAUTH_CLIENT_SECRET=...
+  ```
+  redirect URI：`https://bwteam-marketing.com/social-oauth-callback`（本機 dev 另加 `http://localhost:5174/social-oauth-callback`）。
+- 驗證：`content-deploy-verify.mjs` 39/39；OAuth smoke（provider 未設定 → 503 並列出缺失 secrets；小紅書 → 400；anon → 401）通過。
+
+### 2026-11-26 追加：發佈能力（站點自動發佈＋社媒交付頁）
+
+- adapter：新增 `wordpress`（Application Password）、`shopify`（Admin token）、`webflow`（API token）；`next_custom／beauty100` 沿用既有契約。
+- `content-worker`：`publish_mode=direct/draft` 且 adapter 支援時自動呼叫 adapter；成功寫 `published`（有 live URL）或 `draft_published`、slot 交付、publish log、排 `verify_publish`；失敗 `publish_failed` 走既有重試。**審核／排期閘門未變。**
+- 憑證格式：
+  - WordPress：`使用者名稱:應用程式密碼`（kind `wp_app_password`）
+  - Shopify：token 或 `{"token":"shpat_…","blog_id":9}`（kind `shopify_admin`）
+  - Webflow：token 或 `{"token":"wf_…","collection_id":"…","field_map":{…}}`（kind `webflow_token`）
+- `content-social`：新增 `delivery`（view，只讀）；前端新增 `/social-delivery/:postId` 手機交付頁與看板「交付頁」入口。
+- 已部署：`content-worker` v6、`content-social` v15；自測 68/68、build 4,432 modules、delivery 冒煙通過。
+- 限制：adapter 尚未上傳封面圖；Webflow 不回公開 URL（direct 會落 draft_published）。
+
+### 2026-11-26 追加：已發文章「真遠端刪除」
+
+- migration `20261127110000_content_article_delete.sql`：`content_articles` 加 `deleted_at／deleted_reason`；`content_jobs.type` 允許 `delete_article`；`content_publish_logs.action` 允許 `delete`。
+- `content-publish` 新 action `delete_published`（approve）：前置檢查 status／external_id／adapter 是否支援刪除 → 排 `delete_article` job。
+- `content-worker` 新 job `delete_article`：呼叫 adapter 的 `deleteArticle`（WordPress force delete／Shopify／Webflow／next_custom），成功後文章轉 `cancelled`、清 `live_url`、寫 `deleted_at` 與 `delete` 回執；**永不刪除既有 publish logs**。
+- UI：審核工作室決策條「刪除站點文章…」（approve 權限＋確認對話框），刪除後顯示「已遠端刪除」。
+- 驗證：自測 72/72、build 4,433、`content-deploy-verify` 40/40；守門冒煙（400／404／401／409）。production 尚無文章與站點憑證，端到端刪除未實測。
+
+### 2026-11-26 接手補完：SEO 兩個缺口（Lead）
+
+- `content-worker`：生成時指派 `section_id`（`seo_defaults.categoryMap` 比對 cluster／keyword → 否則第一個 `article`／`post`／任一欄目），並把同一欄目帶入 brief、QA、JSON-LD、內容包。
+- `content-publish`：`approve`／`confirm` 前重跑 `evaluateSeoQa`；硬檢查未過回 **409 `qa_blocked`** 並列出未過項目（API 無法繞過，與工作室 UI 共用同一支純函式）。
+- 部署：`content-worker` **v10**、`content-publish` **v9**（`--use-api`）。
+- 驗證：`content-selftest` 72/72、`vite build` 4,433 modules、`content-deploy-verify` **40/40**、worker tick 200、publish 未知 action 400。
+
+### 2026-11-26 追加：Beauty100 自動發佈（本地實作，尚未部署）
+
+> 詳見 `docs/content-beauty100-publishing.md`。**不改 `D:\Project\beauty100-Next.js`**。
+
+- 新 migration `20261127130000_content_beauty100_publish.sql`：`content_site_credentials.kind` 加 `beauty100_admin`、`content_site_checks.kind` 加 `adapter`。
+- 新 adapter `supabase/functions/_shared/contentAdapters/beauty100.ts`：用專用 staff JWT 直接呼叫 Beauty100 既有 Supabase REST（`blog_articles`）與 Storage（封面），不再走不存在的 `/api/content/*`。
+- `content-worker`：發佈前檢查 `reviewer_id／approved_at`（只有已批准文章可自動發）、`requiresCover`、把 `section／author／tags／metaTitle` 傳給 adapter、寫回 `canonical`；新增 adapter 專屬 `verify_publish`（REST 驗證，不抓 HTML meta）；刪除時讀最近 publish 回執的封面位置，best-effort 清掉。
+- `content-publish`：`confirm` 對非 manual 站加 `not_approved／site_inactive／cover_required／publish_mode_unsupported` 閘門；`writePublishLog` 補 `external_id`。
+- `content-sites`：`beauty100_admin` 憑證 JSON 驗證（存檔前擋錯格式）；`test_connection` 對 Beauty100 真的登入／讀表／檢查分類／上傳 probe；新增 check kind `adapter`，health 納入判定。
+- UI：站點清單「Beauty100 自動發佈」標籤；站點詳情「Beauty100 自動發佈」連接卡；憑證 JSON textarea＋範本；文章佇列「發佈」欄；工作室發佈狀態帶；回執頁 `delete` 動作；Confirm 顯示分類／網址並擋無封面。
+- 測試：`node scripts/content-adapter-contract.mjs`（23 項）、`node scripts/beauty100-selftest.mjs`（8 項）、`node scripts/content-selftest.mjs`（80 項）、`vite build` 通過；真實環境需 `node scripts/beauty100-smoke.mjs --full`（會寫入 Beauty100，執行前需同意）。
+- 部署順序：套 migration → 部署 `content-sites`／`content-publish`／`content-worker`（`--use-api`）→ 前端 build → 站點設 `adapter=beauty100`、`publish_mode=direct`、欄目 `external_id=trending-topics` → 貼 credential JSON → 測試連線 → 驗收。

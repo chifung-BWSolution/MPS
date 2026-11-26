@@ -91,6 +91,7 @@ export const CREDENTIAL_KIND_OPTIONS: readonly { value: ContentCredentialKind; l
   { value: 'wp_app_password', label: 'WordPress 應用程式密碼' },
   { value: 'shopify_admin', label: 'Shopify 後台 API 權杖' },
   { value: 'webflow_token', label: 'Webflow API 權杖' },
+  { value: 'beauty100_admin', label: 'Beauty100 專用帳號（JSON）' },
 ];
 
 export const LOCALE_OPTIONS: readonly { value: string; label: string }[] = [
@@ -124,6 +125,7 @@ export const CHECK_KIND_LABEL: Readonly<Record<ContentSiteCheckKind, string>> = 
   domain: '網站首頁可開啟',
   sitemap: '網站地圖（選填）',
   credential: '登入憑證可用',
+  adapter: '自動發佈連接',
 };
 
 /** 由站點主檔 level（1–5）推薦 tier：1 → A1、2 → A2、其餘 B */
@@ -872,12 +874,16 @@ export type SiteArticleRow = {
   created_at: string;
   published_at: string | null;
   updated_at: string;
+  external_id: string | null;
+  live_url: string | null;
+  deleted_at: string | null;
+  checks: Record<string, unknown>;
 };
 
 export async function fetchSiteArticles(siteId: string, limit = 20): Promise<SiteArticleRow[]> {
   const { data, error } = await supabase
     .from('content_articles')
-    .select('id,site_id,title,status,created_at,published_at,updated_at')
+    .select('id,site_id,title,status,created_at,published_at,updated_at,external_id,live_url,deleted_at,checks')
     .eq('site_id', siteId)
     .order('created_at', { ascending: false })
     .limit(Math.max(1, limit));
@@ -916,6 +922,10 @@ export async function fetchSiteArticles(siteId: string, limit = 20): Promise<Sit
       created_at: asTrimmedString(record.created_at) ?? new Date(0).toISOString(),
       published_at: asTrimmedString(record.published_at),
       updated_at: asTrimmedString(record.updated_at) ?? new Date(0).toISOString(),
+      external_id: asTrimmedString(record.external_id),
+      live_url: asTrimmedString(record.live_url),
+      deleted_at: asTrimmedString(record.deleted_at),
+      checks: asRecord(record.checks) as Record<string, unknown>,
     });
   }
   return rows;

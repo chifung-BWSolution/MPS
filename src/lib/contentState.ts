@@ -9,6 +9,7 @@
  */
 
 import type {
+  ContentArticle,
   ContentArticleStatus,
   ContentJobStatus,
   ContentKeywordPipelineStatus,
@@ -32,12 +33,13 @@ export const ARTICLE_TRANSITIONS: TransitionMap<ContentArticleStatus> = {
   approved: ['scheduled', 'cancelled', 'held'],
   scheduled: ['publishing', 'cancelled', 'held', 'approved'],
   publishing: ['published', 'publish_failed', 'manual_done', 'draft_published'],
-  published: ['updating', 'verify_failed'],
-  updating: ['published', 'verify_failed'],
+  // cancelled 也是「遠端刪除」的終態（worker 實際刪除成功後才會轉入）
+  published: ['updating', 'verify_failed', 'cancelled'],
+  updating: ['published', 'verify_failed', 'cancelled'],
   publish_failed: ['scheduled', 'publishing', 'cancelled', 'held'],
-  verify_failed: ['published', 'updating', 'publish_failed'],
+  verify_failed: ['published', 'updating', 'publish_failed', 'cancelled'],
   manual_done: [],
-  draft_published: [],
+  draft_published: ['cancelled'],
   cancelled: [],
 };
 
@@ -182,6 +184,17 @@ export function isArticleAutoPublishBlocked(status: ContentArticleStatus): boole
   return ARTICLE_LOCKED_FROM_AUTO_PUBLISH.has(status);
 }
 
+/**
+ * 自動發佈（direct／draft）的批准閘門：必須留下審核人與批准時間。
+ * DB 只在 status='approved' 時強制這兩個欄位；scheduled 可能被繞過，
+ * 所以 confirm 與 worker 都要再驗一次（PRD §6.3 不變量 1）。
+ */
+export function isApprovedForPublish(
+  article: Pick<ContentArticle, 'reviewer_id' | 'approved_at'>,
+): boolean {
+  return Boolean(article.reviewer_id && article.approved_at);
+}
+
 export function isSlotOpen(status: ContentSlotStatus): boolean {
   return status !== 'published' && status !== 'skipped' && status !== 'failed';
 }
@@ -252,6 +265,7 @@ export const JOB_TYPE_LABEL: Record<string, string> = {
   site_health: '站點健康檢查',
   send_digest: '寄送日報',
   generate_social: '生成社媒稿',
+  delete_article: '刪除站點文章',
 };
 
 export const SITE_HEALTH_LABEL: Record<ContentSiteHealth, string> = {
@@ -273,7 +287,15 @@ export const ADAPTER_LABEL: Record<string, string> = {
   shopify: 'Shopify',
   wordpress: 'WordPress',
   webflow: 'Webflow',
-  beauty100: 'beauty100',
+  beauty100: 'Beauty100 自動發佈',
+};
+
+/**
+ * 需要封面才可發佈的 adapter（伺服器端另有 adapter.requiresCover 為最終依據）。
+ * 前端用它提前禁用 Confirm；兩邊由 content-selftest 檢查一致。
+ */
+export const ADAPTER_REQUIRES_COVER: Readonly<Record<string, boolean>> = {
+  beauty100: true,
 };
 
 export const PUBLISH_MODE_LABEL: Record<string, string> = {
@@ -296,12 +318,12 @@ export const TIER_OPTION_LABEL: Record<string, string> = {
 };
 
 export const ADAPTER_OPTION_LABEL: Record<string, string> = {
-  manual: '手動內容（下載後自行發佈）',
+  manual: '手動內容（用戶自行下載內容發佈）',
   next_custom: '網站 API（自動發佈到自家網站）',
   shopify: 'Shopify（自動發佈到商店部落格）',
   wordpress: 'WordPress（用應用程式密碼自動發佈）',
   webflow: 'Webflow（自動發佈到 CMS）',
-  beauty100: 'beauty100（品牌自家系統）',
+  beauty100: 'Beauty100 自動發佈（用專用帳號寫入官網）',
 };
 
 export const PUBLISH_MODE_OPTION_LABEL: Record<string, string> = {
@@ -450,4 +472,193 @@ export function statusTone(
     default:
       return 'slate';
   }
+}
+
+// ============================================================
+// 發佈狀態（文章佇列／審核工作室共用）
+//
+// 只根據 content_articles 既有欄位推導，不新增 DB 欄位、不額外查 job。
+// scheduled → 排隊中；publishing → 發佈中；published → 成功（或驗證中）；
+// deleted_at → 已下架；publish_failed／verify_failed → 失敗。
+// ============================================================
+
+export type PublishStage =
+  | 'manual'
+  | 'deleted'
+  | 'failed'
+  | 'published'
+  | 'verify_pending'
+  | 'publishing'
+  | 'queued'
+  | 'approved'
+  | 'draft'
+  | 'blocked';
+
+export interface PublishStageInfo {
+  stage: PublishStage;
+  label: string;
+  tone: ContentStatusTone;
+  /** 給 tooltip／副標的一句話；沒有就 null */
+  hint: string | null;
+}
+
+export interface PublishStageOptions {
+  /** 站點 publish_mode='manual'：沒有自動發佈 */
+  manual?: boolean;
+  /** 測試注入，避免 flaky */
+  now?: Date;
+}
+
+/** 排程時間超過這個門檻仍在 scheduled → 顯示「延遲」提示（worker 可能沒跑） */
+export const PUBLISH_DELAY_WARNING_MS = 10 * 60 * 1000;
+
+export function publishStage(
+  article: Pick<
+    ContentArticle,
+    'status' | 'deleted_at' | 'checks' | 'scheduled_publish_at'
+  >,
+  options: PublishStageOptions = {},
+): PublishStageInfo {
+  const status = article.status;
+  const verify = article.checks?.verify;
+
+  if (status === 'manual_done') {
+    return {
+      stage: 'manual',
+      label: '已手動上線',
+      tone: 'indigo',
+      hint: '手動內容包已由人工回填上線 URL',
+    };
+  }
+
+  if (options.manual) {
+    return {
+      stage: 'manual',
+      label: '人工發佈',
+      tone: 'indigo',
+      hint: '這個站點是手動模式，內容包產生後由人工貼上',
+    };
+  }
+
+  if (article.deleted_at) {
+    return {
+      stage: 'deleted',
+      label: '已下架（遠端刪除）',
+      tone: 'muted',
+      hint: '站點上的文章已實際刪除；MPS 保留發佈回執',
+    };
+  }
+
+  if (status === 'published') {
+    if (verify && verify.ok === false) {
+      return {
+        stage: 'failed',
+        label: '上線驗證失敗',
+        tone: 'rose',
+        hint: '文章已發出，但上線驗證未通過；可查看回執後重試',
+      };
+    }
+    if (verify && verify.ok === true) {
+      return {
+        stage: 'published',
+        label: '已發佈（成功）',
+        tone: 'teal-dark',
+        hint: '站點已上線，且通過上線驗證',
+      };
+    }
+    return {
+      stage: 'verify_pending',
+      label: '已發佈（驗證中）',
+      tone: 'teal',
+      hint: '文章已送到站點，等待上線驗證完成',
+    };
+  }
+
+  if (status === 'publishing') {
+    return {
+      stage: 'publishing',
+      label: '發佈中',
+      tone: 'blue',
+      hint: 'worker 正在呼叫站點 API',
+    };
+  }
+
+  if (status === 'scheduled') {
+    const scheduledAt = article.scheduled_publish_at
+      ? new Date(article.scheduled_publish_at).getTime()
+      : Number.NaN;
+    const now = (options.now ?? new Date()).getTime();
+    const late =
+      Number.isFinite(scheduledAt) &&
+      now - scheduledAt > PUBLISH_DELAY_WARNING_MS;
+    return {
+      stage: 'queued',
+      label: late ? '排隊中（延遲）' : '排隊中',
+      tone: late ? 'amber' : 'blue',
+      hint: late
+        ? '已過排程時間超過 10 分鐘仍未發佈，請檢查 content-worker 是否正常執行'
+        : '已排程，到點後由 worker 發佈',
+    };
+  }
+
+  if (status === 'approved') {
+    return {
+      stage: 'approved',
+      label: '已批准（未排程）',
+      tone: 'teal',
+      hint: '已通過審核，尚未 Confirm 排定發佈時間',
+    };
+  }
+
+  if (status === 'updating') {
+    return {
+      stage: 'publishing',
+      label: '更新中',
+      tone: 'blue',
+      hint: '站點文章更新中',
+    };
+  }
+
+  if (status === 'draft_published') {
+    return {
+      stage: 'draft',
+      label: '已建草稿',
+      tone: 'indigo-outline',
+      hint: '站點只建立草稿，尚未公開發佈',
+    };
+  }
+
+  if (status === 'publish_failed') {
+    return {
+      stage: 'failed',
+      label: '發佈失敗',
+      tone: 'rose',
+      hint: '發佈失敗；可在回執頁查看原因並重試',
+    };
+  }
+
+  if (status === 'verify_failed') {
+    return {
+      stage: 'failed',
+      label: '上線驗證失敗',
+      tone: 'rose',
+      hint: '文章已發出，但上線驗證未通過',
+    };
+  }
+
+  if (status === 'cancelled') {
+    return {
+      stage: 'blocked',
+      label: '已取消',
+      tone: 'muted',
+      hint: '文章已取消，不會發佈',
+    };
+  }
+
+  return {
+    stage: 'blocked',
+    label: ARTICLE_STATUS_LABEL[status] ?? status,
+    tone: ARTICLE_STATUS_TONE[status] ?? 'slate',
+    hint: '尚未批准／排程，不會發佈到站點',
+  };
 }

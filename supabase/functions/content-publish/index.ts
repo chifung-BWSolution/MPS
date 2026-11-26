@@ -19,10 +19,17 @@ import {
 } from "../_shared/resend.ts";
 import {
   contentIdempotencyKey,
+  DEFAULT_BRAND_VOICE,
   DEFAULT_SEO_DEFAULTS,
   truncateText,
 } from "../../../src/lib/contentFormat.ts";
+import {
+  blockingReasons,
+  buildQaInput,
+  evaluateSeoQa,
+} from "../../../src/lib/contentSeoQa.ts";
 import { buildArticleJsonLd, renderMarkdownToHtml } from "../../../src/lib/contentGenerate.ts";
+import { getContentAdapter } from "../_shared/contentAdapters/index.ts";
 import { packageImagePath } from "../../../src/lib/contentMedia.ts";
 import {
   buildPackageMeta,
@@ -33,6 +40,7 @@ import {
   assertTransition,
   canTransition,
   ContentTransitionError,
+  isApprovedForPublish,
 } from "../../../src/lib/contentState.ts";
 import type {
   ContentAction,
@@ -78,6 +86,7 @@ const ACTION_PERMISSIONS: Record<string, ContentAction> = {
   build_package: "approve",
   manual_done: "write",
   retry: "approve",
+  delete_published: "approve",
 };
 
 const DRAFT_PATCH_KEYS = [
@@ -294,6 +303,65 @@ async function loadKeyword(
   return (data as ContentKeyword | null) ?? null;
 }
 
+async function loadExistingSlugs(
+  supabase: Db,
+  siteId: string,
+  excludeArticleId: string,
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("content_articles")
+    .select("slug")
+    .eq("site_id", siteId)
+    .neq("id", excludeArticleId)
+    .limit(500);
+  if (error) {
+    console.warn("content-publish: load slugs failed", dbError(error));
+    return [];
+  }
+  return (data ?? [])
+    .map((row) => String((row as { slug?: string | null }).slug ?? ""))
+    .filter(Boolean);
+}
+
+/**
+ * 伺服器端 SEO 硬閘門（PRD §9.3.3）。
+ *
+ * 工作室 UI 會即時計算並禁用 Confirm，但直接呼叫 API 也要擋下來：
+ * approve／confirm 前重跑 evaluateSeoQa，硬檢查未過一律 409 qa_blocked。
+ * 站點設定缺失時放行（狀態機與權限已驗），避免設定被歸檔後無法收尾。
+ */
+async function assertSeoHardChecksPass(supabase: Db, article: ContentArticle): Promise<void> {
+  const site = await loadSite(supabase, article.site_id);
+  if (!site) return;
+
+  const [keyword, section, existingSlugs] = await Promise.all([
+    loadKeyword(supabase, article.keyword_id),
+    loadSection(supabase, article.section_id),
+    loadExistingSlugs(supabase, article.site_id, article.id),
+  ]);
+
+  const seoDefaults = { ...DEFAULT_SEO_DEFAULTS, ...(site.seo_defaults ?? {}) };
+  const brandVoice = { ...DEFAULT_BRAND_VOICE, ...(site.brand_voice ?? {}) };
+  const report = evaluateSeoQa(
+    buildQaInput({
+      article,
+      seoDefaults,
+      brandVoice,
+      section,
+      keyword: keyword?.keyword ?? null,
+      existingSlugs,
+    }),
+  );
+
+  if (!report.hardPassed) {
+    throw new ActionError(
+      409,
+      "qa_blocked",
+      `SEO 硬檢查未過，不能批准：${blockingReasons(report).join("；")}`,
+    );
+  }
+}
+
 async function loadSettingsRecipients(supabase: Db): Promise<string[]> {
   const { data, error } = await supabase
     .from("content_settings")
@@ -386,6 +454,8 @@ async function writePublishLog(
     url?: string | null;
     httpStatus?: number | null;
     idempotencyKey?: string | null;
+    /** 遠端文章 id（delete 回執需要） */
+    externalId?: string | null;
     actorId: string | null;
   },
 ): Promise<ContentPublishLog | null> {
@@ -400,6 +470,7 @@ async function writePublishLog(
       url: params.url ?? null,
       http_status: params.httpStatus ?? null,
       idempotency_key: params.idempotencyKey ?? null,
+      external_id: params.externalId ?? null,
       actor_id: params.actorId,
     })
     .select("*")
@@ -426,7 +497,7 @@ async function writePublishLog(
 
 async function enqueueJob(
   supabase: Db,
-  type: "publish_article" | "verify_publish" | "generate_article" | "plan_slots" | "site_health" | "refresh_site_pages" | "send_digest",
+  type: "publish_article" | "verify_publish" | "generate_article" | "plan_slots" | "site_health" | "refresh_site_pages" | "send_digest" | "delete_article",
   payload: Record<string, unknown>,
   runAt: string,
 ): Promise<number> {
@@ -718,6 +789,8 @@ async function approveArticle(
     }
   }
 
+  await assertSeoHardChecksPass(supabase, article);
+
   const slot = await loadSlotForArticle(supabase, article);
   const scheduledPublishAt =
     text(body.scheduled_publish_at) || article.scheduled_publish_at || slot?.publish_at || null;
@@ -796,6 +869,46 @@ async function confirmArticle(
     throw new ActionError(400, "invalid_schedule", `scheduled_publish_at 不是合法時間：${scheduledRaw}`);
   }
 
+  // 自動發佈站（Beauty100 等）的硬閘門：必須先經管理員／總編輯批准，
+  // 且 adapter 支援這個發佈模式、封面符合要求。manual 站行為不變。
+  const site = await loadSite(supabase, article.site_id);
+  if (site && site.publish_mode !== "manual") {
+    if (site.status !== "active") {
+      throw new ActionError(409, "site_inactive", "站點不是 active，不能排程自動發佈");
+    }
+    if (!isApprovedForPublish(article)) {
+      throw new ActionError(
+        409,
+        "not_approved",
+        "文章尚未經管理員／總編輯批准（缺少 reviewer_id／approved_at），不能排程自動發佈",
+      );
+    }
+    // 只有 approved／scheduled 可以進入自動發佈；held／changes_requested 即使
+    // 留著舊的批准欄位，也不能繞過狀態機直接排程。
+    if (article.status !== "approved" && article.status !== "scheduled") {
+      throw new ActionError(
+        409,
+        "invalid_transition",
+        `文章狀態為 ${article.status}，只有 approved／scheduled 可以排程自動發佈`,
+      );
+    }
+    const adapter = getContentAdapter(site.adapter);
+    if (!adapter.supports(site.publish_mode)) {
+      throw new ActionError(
+        409,
+        "publish_mode_unsupported",
+        `站點 adapter「${site.adapter}」不支援 ${site.publish_mode} 模式`,
+      );
+    }
+    if (adapter.requiresCover && !article.cover_asset_id) {
+      throw new ActionError(
+        409,
+        "cover_required",
+        "這個站點發佈必須有封面圖；請先在工作室產生或上傳封面",
+      );
+    }
+  }
+
   // 重複 Confirm：冪等（PRD §12），不重建內容包、不重複加版本
   if (article.status === "scheduled") {
     await enqueueJob(
@@ -812,6 +925,8 @@ async function confirmArticle(
   } catch (error) {
     throw transitionError(error);
   }
+
+  await assertSeoHardChecksPass(supabase, article);
 
   const reviewerId = article.reviewer_id ?? actorUserId(actor);
   const approvedAt = article.approved_at ?? nowIso();
@@ -1041,6 +1156,87 @@ async function retryArticle(
 }
 
 // ============================================================
+// delete_published：真正刪除站點上的文章（不是只刪 MPS 記錄）
+//
+// 這裡只做前置檢查＋排 job；實際刪除由 content-worker 的 delete_article 呼叫 adapter。
+// 只有「已由 adapter 發佈、有 external_id」的文章可以刪；手動內容包沒有遠端 ID，必須到站點手動刪。
+// ============================================================
+
+const DELETABLE_STATUSES: ContentArticleStatus[] = [
+  "published",
+  "updating",
+  "verify_failed",
+  "draft_published",
+];
+
+async function deletePublished(
+  supabase: Db,
+  actor: ContentActor,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const articleId = text(body.article_id);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(articleId)) {
+    return failJson(400, "invalid_article_id", "缺少有效的 article_id");
+  }
+
+  const article = await loadArticle(supabase, articleId);
+  if (article.deleted_at) {
+    return okJson({ queued: false, already_deleted: true, article_id: article.id });
+  }
+  if (!DELETABLE_STATUSES.includes(article.status)) {
+    return failJson(
+      409,
+      "not_deletable",
+      `文章狀態為 ${article.status}，只有已發佈／已建草稿的文章可以遠端刪除`,
+    );
+  }
+  if (!article.external_id) {
+    return failJson(
+      409,
+      "no_remote_id",
+      "這篇文章沒有站點 external_id（手動內容包或尚未用 adapter 發佈），請到站點後台手動刪除",
+    );
+  }
+
+  const site = await loadSite(supabase, article.site_id);
+  if (!site) return failJson(404, "site_not_found", "找不到文章所屬站點");
+  const adapter = getContentAdapter(site.adapter);
+  if (!adapter.deleteArticle) {
+    return failJson(
+      409,
+      "delete_unsupported",
+      `站點 adapter「${site.adapter}」不支援遠端刪除，請到站點後台手動刪除`,
+    );
+  }
+
+  const reason = text(body.reason) || "手動下架";
+  await enqueueJob(
+    supabase,
+    "delete_article",
+    { article_id: article.id, reason, dedupe_key: `delete:${article.id}` },
+    nowIso(),
+  );
+
+  await writePublishLog(supabase, {
+    siteId: article.site_id,
+    articleId: article.id,
+    action: "delete",
+    request: {
+      article_id: article.id,
+      adapter: adapter.name,
+      external_id: article.external_id,
+      reason,
+      queued: true,
+    },
+    response: { queued: true },
+    externalId: article.external_id,
+    actorId: actorUserId(actor),
+  });
+
+  return okJson({ queued: true, article_id: article.id, adapter: adapter.name });
+}
+
+// ============================================================
 // 入口
 // ============================================================
 
@@ -1067,6 +1263,8 @@ async function handleAction(
       return manualDone(supabase, actor, body);
     case "retry":
       return retryArticle(supabase, actor, body);
+    case "delete_published":
+      return deletePublished(supabase, actor, body);
     default:
       return failJson(400, "unknown_action", `不支援的 action：${action}`);
   }

@@ -14,6 +14,7 @@ import {
   ArrowRight,
   CalendarDays,
   DatabaseZap,
+  ExternalLink,
   Inbox,
   RefreshCw,
   Search,
@@ -24,7 +25,7 @@ import { cn } from '@/lib/utils';
 import type { ContentViewProps } from '@/lib/contentNavigation.ts';
 import { pageMeta } from '@/lib/contentNavigation.ts';
 import type { ContentArticleListItem } from '@/lib/contentTypes.ts';
-import { ARTICLE_STATUS_LABEL } from '@/lib/contentState.ts';
+import { ARTICLE_STATUS_LABEL, publishStage } from '@/lib/contentState.ts';
 import { HONG_KONG_TIME_ZONE, formatRelativeHours, formatZoneDateTime } from '@/lib/contentFormat.ts';
 import { can } from '@/lib/contentPermissions.ts';
 import type { ContentArticleStatus } from '@/lib/contentTypes.ts';
@@ -256,6 +257,39 @@ export function ArticleQueueView({ route, navigate }: ContentViewProps) {
         width: '96px',
         align: 'center',
         render: (item) => <ContentStatusPill machine="article" status={item.article.status} />,
+      },
+      {
+        key: 'publish',
+        header: '發佈',
+        width: '150px',
+        render: (item) => {
+          const stage = publishStage(item.article, {
+            manual: item.siteSettings?.publish_mode === 'manual',
+          });
+          return (
+            <div className="min-w-0" title={stage.hint ?? undefined}>
+              <ContentStatusPill label={stage.label} tone={stage.tone} />
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10.5px] text-muted-foreground">
+                {item.article.live_url ? (
+                  <a
+                    href={item.article.live_url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="inline-flex items-center gap-0.5 text-teal-700 underline decoration-teal-200 underline-offset-2 hover:text-teal-800"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    文章連結
+                    <ExternalLink size={9} />
+                  </a>
+                ) : item.article.scheduled_publish_at ? (
+                  <span className="tabular-nums">
+                    {formatZoneDateTime(item.article.scheduled_publish_at, HONG_KONG_TIME_ZONE)}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          );
+        },
       },
       {
         key: 'scheduled',

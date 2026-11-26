@@ -19,6 +19,7 @@ import {
   ArrowLeft,
   CalendarClock,
   DatabaseZap,
+  ExternalLink,
   Image as ImageIcon,
   Loader2,
   RefreshCw,
@@ -26,6 +27,7 @@ import {
   Send,
   ShieldCheck,
   ThumbsDown,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -38,7 +40,7 @@ import {
   formatZoneDateTime,
 } from '@/lib/contentFormat.ts';
 import { buildQaInput, evaluateSeoQa } from '@/lib/contentSeoQa.ts';
-import { ARTICLE_STATUS_LABEL } from '@/lib/contentState.ts';
+import { ARTICLE_STATUS_LABEL, publishStage } from '@/lib/contentState.ts';
 import { can } from '@/lib/contentPermissions.ts';
 import { contentErrorMessage } from '@/lib/contentApi.ts';
 import { isVersionConflictError, useContentArticle } from '@/hooks/useContentArticles';
@@ -215,6 +217,7 @@ export function ArticleStudioView({ route, navigate }: ContentViewProps) {
     approve,
     requestChanges,
     confirm,
+    deletePublished,
     generateCover,
     setCover,
   } = useContentArticle(route.id, systemUser?.id ?? null);
@@ -227,6 +230,9 @@ export function ArticleStudioView({ route, navigate }: ContentViewProps) {
   const [rejectReason, setRejectReason] = useState('');
   const [rejectError, setRejectError] = useState<string | null>(null);
   const [conflictOpen, setConflictOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [rightTab, setRightTab] = useState<'qa' | 'images'>('qa');
 
   const loadedVersionRef = useRef<string | null>(null);
@@ -242,6 +248,42 @@ export function ArticleStudioView({ route, navigate }: ContentViewProps) {
 
   const article = detail?.article ?? null;
   const timezone = detail?.site?.timezone?.trim() || HONG_KONG_TIME_ZONE;
+  const stage = useMemo(
+    () =>
+      article
+        ? publishStage(article, {
+            manual: detail?.site?.publish_mode === 'manual',
+          })
+        : null,
+    [article, detail?.site?.publish_mode],
+  );
+
+  /** 遠端刪除只對「真的由 adapter 發佈出去、有 external_id」的文章開放 */
+  const deletable = Boolean(
+    article &&
+      !article.deleted_at &&
+      article.external_id &&
+      ['published', 'updating', 'verify_failed', 'draft_published'].includes(article.status),
+  );
+
+  const handleDeletePublished = async () => {
+    if (!article) return;
+    setBusyAction('delete');
+    setDeleteError(null);
+    try {
+      await deletePublished(deleteReason);
+      toast.success('已排入遠端刪除', {
+        description:
+          'worker 會在 2 分鐘內呼叫站點 API 真的刪除文章；完成後狀態變「已取消」並記錄刪除時間。',
+      });
+      setDeleteOpen(false);
+      setDeleteReason('');
+    } catch (thrown) {
+      setDeleteError(contentErrorMessage(thrown));
+    } finally {
+      setBusyAction(null);
+    }
+  };
 
   const dirty = Boolean(
     detail && draftValues && isDraftDirty(draftValues, detail.article),
@@ -551,6 +593,51 @@ export function ArticleStudioView({ route, navigate }: ContentViewProps) {
         }
       />
 
+      {stage && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-[rgba(13,26,45,0.08)] bg-white px-3 py-2 shadow-card">
+          <span className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+            發佈狀態
+          </span>
+          <ContentStatusPill label={stage.label} tone={stage.tone} />
+          {detail?.site?.adapter === 'beauty100' && (
+            <span className="text-[11.5px] text-slate-600">
+              Beauty100 · {detail.section?.external_id || 'trending-topics'}
+            </span>
+          )}
+          {article.live_url && (
+            <a
+              href={article.live_url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-1 text-[11.5px] font-medium text-teal-700 underline decoration-teal-200 underline-offset-2 hover:text-teal-800"
+            >
+              站點文章
+              <ExternalLink size={11} />
+            </a>
+          )}
+          {article.external_id && (
+            <span className="font-mono text-[10.5px] text-slate-400" title="站點文章 id">
+              {article.external_id}
+            </span>
+          )}
+          {article.deleted_at && (
+            <span className="text-[11.5px] text-slate-500">
+              已於 {formatZoneDateTime(article.deleted_at, timezone)} 遠端刪除
+            </span>
+          )}
+          {stage.hint && (
+            <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground" title={stage.hint}>
+              {stage.hint}
+            </span>
+          )}
+          {article.reason && (
+            <span className="max-w-full truncate text-[11px] text-rose-600" title={article.reason}>
+              {article.reason}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1.2fr)_360px]">
         {/* 左：站點版式預覽 */}
         <div className="min-w-0">
@@ -718,6 +805,29 @@ export function ArticleStudioView({ route, navigate }: ContentViewProps) {
             <ShieldCheck size={13} />
             {article.status === 'approved' || article.status === 'scheduled' ? '確認排定 →' : '批准並排定 →'}
           </Button>
+
+          {article.deleted_at && (
+            <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-500">
+              已遠端刪除
+            </span>
+          )}
+
+          {deletable && canApprove && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-rose-600 hover:text-rose-700"
+              onClick={() => {
+                setDeleteError(null);
+                setDeleteOpen(true);
+              }}
+              title="呼叫站點 API 真的刪除這篇文章（不是只刪 MPS 記錄）"
+            >
+              <Trash2 size={13} />
+              刪除站點文章…
+            </Button>
+          )}
         </div>
       </div>
 
@@ -739,6 +849,67 @@ export function ArticleStudioView({ route, navigate }: ContentViewProps) {
         submitting={busyAction === 'confirm'}
         onConfirm={handleConfirm}
       />
+
+      {/* 遠端刪除（真的呼叫站點 API，不是只刪 MPS 記錄） */}
+      <Dialog
+        open={deleteOpen}
+        onOpenChange={(next) => (!busy ? setDeleteOpen(next) : undefined)}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-[16px]">刪除站點上的文章？</DialogTitle>
+            <DialogDescription className="text-[12.5px] leading-relaxed">
+              這會呼叫站點 API <b>真的刪除</b>已發佈的文章（external_id：
+              <code className="mx-1 rounded bg-slate-100 px-1">{article.external_id}</code>），
+              不是只刪 MPS 記錄。刪除後無法復原；MPS 會保留一筆 delete 發佈回執供審計。
+              Beauty100 的列表會自動重排，不會留下佔位符。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-2 text-[11.5px] leading-relaxed text-rose-700">
+              只支援由 adapter（Beauty100／WordPress／Shopify／Webflow／自訂端點）發佈的文章。
+              Beauty100 會直接刪除官網上的文章，官網列表會自動重排；手動內容包沒有站點 ID，
+              無法自動刪除，系統會明確提示改為手動處理。
+            </p>
+            <Textarea
+              value={deleteReason}
+              onChange={(event) => {
+                setDeleteReason(event.target.value);
+                setDeleteError(null);
+              }}
+              placeholder="下架原因（選填，會寫入刪除記錄）"
+              className="min-h-[90px] text-[12.5px] leading-relaxed"
+              disabled={busy}
+            />
+            {deleteError && <p className="text-[11.5px] text-rose-600">{deleteError}</p>}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+              disabled={busy}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={busy}
+              onClick={() => void handleDeletePublished()}
+            >
+              {busyAction === 'delete' ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Trash2 size={13} />
+              )}
+              確認刪除站點文章
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 駁回 */}
       <Dialog open={rejectOpen} onOpenChange={(next) => (!busy ? setRejectOpen(next) : undefined)}>
