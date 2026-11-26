@@ -313,6 +313,7 @@ ALT Pilot 上方 tab：[單頁生成] [站點盤點]。
 - 顯示每頁：圖片數、缺 ALT、重複、過長、裝飾圖；按「開啟」進入單頁流程。
 - 批次分析**不呼叫 LLM**，沒有 Grok 成本；仍受 `alt_settings.enabled` 控制。
 - 「批次生成缺 ALT」只處理非裝飾、目前空白的 ALT；每批最多 20 張，需確認；結果只寫入建議，不自動批准或寫回。
+- 盤點表含頁內重複、過長與跨頁重複；可匯出 `alt-pilot-inventory-YYYY-MM-DD.csv`。
 
 ### Edge Function
 

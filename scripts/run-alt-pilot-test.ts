@@ -7,6 +7,7 @@ import { buildAltPrompt, normalizeAltDraft, parseAltModelJson } from '../src/lib
 import { evaluateAlt } from '../src/lib/altQuality.ts';
 import {
   buildAltExportRows,
+  toBatchReportCsv,
   toCsv,
   toJson,
   toTsv,
@@ -271,6 +272,22 @@ assert.equal(audit.imageCount, 6);
 assert.equal(audit.missing, 1);
 assert.equal(audit.decorative, 2);
 assert.equal(audit.duplicates, 0);
+assert.equal(audit.currentAlts.length, 4);
+
+const batchCsv = toBatchReportCsv([
+  {
+    page_url: 'https://example.com/a',
+    title: 'A "quoted" page',
+    image_count: 3,
+    missing: 1,
+    duplicates: 0,
+    too_long: 0,
+    decorative: 1,
+  },
+]);
+assert.equal(batchCsv.startsWith('\uFEFF'), true);
+assert.equal(batchCsv.includes('page_url,title,image_count,missing,duplicates,too_long,decorative'), true);
+assert.equal(batchCsv.includes('"A ""quoted"" page"'), true);
 
 // ---------------------------------------------------------------------------
 // 6) Text helper

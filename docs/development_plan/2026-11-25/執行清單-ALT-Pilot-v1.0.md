@@ -107,6 +107,7 @@
 | ☑ | M4-14 | 上線總開關 | `alt_settings.enabled`、`AltPilotPage.tsx`、`PageAnalyzeForm.tsx` | 預設 false；false 時前端停用分析／生成、Edge Function 回 `disabled`；可用 SQL 開啟 |
 | ☑ | M4-15 | 站點盤點／批次 | `AltBatchPage.tsx`、`AltPilotPage.tsx` | sitemap → 最多 10 頁 analyze；不呼叫 LLM；顯示缺 ALT／重複／過長 |
 | ☑ | M4-16 | 批次生成缺 ALT | `AltBatchPage.tsx`、`altAudit.ts` | 只處理非裝飾空白 ALT；每批最多 20 張；確認後呼叫 Grok；不自動批准／寫回 |
+| ☑ | M4-17 | 跨頁重複／盤點匯出 | `altAudit.ts`、`altCsv.ts`、`AltBatchPage.tsx` | 跨頁重複指標；每頁缺口 CSV（BOM、escape） |
 
 ---
 

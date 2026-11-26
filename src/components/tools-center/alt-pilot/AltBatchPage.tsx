@@ -43,6 +43,8 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { invokeAltFunction } from '@/lib/altApi.ts';
 import { auditAltImages } from '@/lib/altAudit.ts';
+import { downloadTextFile, toBatchReportCsv } from '@/lib/altCsv.ts';
+import { normalizeForCompare } from '@/lib/altText.ts';
 import { hostOf } from '@/lib/altUrl.ts';
 import type {
   AltAnalyzeResponse,
@@ -67,6 +69,7 @@ interface BatchPageResult {
   error?: string;
   targets?: AltImageCandidate[];
   generated?: number;
+  currentAlts?: string[];
 }
 
 const MAX_BATCH_TARGETS = 20;
@@ -136,6 +139,25 @@ export function AltBatchPage({
   );
 
   const batchTargetCount = Math.min(MAX_BATCH_TARGETS, totals.targets);
+
+  const crossPageDuplicates = useMemo(() => {
+    const altPages = new Map<string, Set<string>>();
+    for (const [url, result] of Object.entries(results)) {
+      if (result.status !== 'done') continue;
+      for (const alt of result.currentAlts || []) {
+        const key = normalizeForCompare(alt);
+        if (!key) continue;
+        const pages = altPages.get(key) || new Set<string>();
+        pages.add(url);
+        altPages.set(key, pages);
+      }
+    }
+    let duplicates = 0;
+    for (const pages of altPages.values()) {
+      if (pages.size > 1) duplicates += pages.size - 1;
+    }
+    return duplicates;
+  }, [results]);
 
   const handleSiteChange = (nextSiteId: string) => {
     onSiteIdChange(nextSiteId);
@@ -261,6 +283,7 @@ export function AltBatchPage({
               decorative: audit.decorative,
               targets: audit.missingImages,
               generated: 0,
+              currentAlts: audit.currentAlts,
             },
           }));
         } catch (analyzeError) {
@@ -281,6 +304,31 @@ export function AltBatchPage({
       setAnalyzing(false);
       setProgress(null);
     }
+  };
+
+  const handleExportReport = () => {
+    const rows = candidates
+      .map((url) => ({ url, result: results[url] }))
+      .filter((item) => item.result?.status === 'done')
+      .map((item) => ({
+        page_url: item.url,
+        title: item.result?.title || '',
+        image_count: item.result?.imageCount || 0,
+        missing: item.result?.missing || 0,
+        duplicates: item.result?.duplicates || 0,
+        too_long: item.result?.tooLong || 0,
+        decorative: item.result?.decorative || 0,
+      }));
+    if (rows.length === 0) {
+      toast.info('先分析至少一頁，才可匯出盤點報告');
+      return;
+    }
+    downloadTextFile(
+      `alt-pilot-inventory-${new Date().toISOString().slice(0, 10)}.csv`,
+      toBatchReportCsv(rows),
+      'text/csv;charset=utf-8',
+    );
+    toast.success(`已匯出 ${rows.length} 頁盤點報告`);
   };
 
   const handleGenerateBatch = async () => {
@@ -473,12 +521,13 @@ export function AltBatchPage({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         {[
           { label: '已分析頁面', value: doneResults.length, tone: 'text-[#0D9488]' },
           { label: '可處理圖片', value: totals.images, tone: 'text-[#0d1a2d]' },
           { label: '缺 ALT', value: totals.missing, tone: 'text-amber-700' },
-          { label: '重複／過長', value: `${totals.duplicates}／${totals.tooLong}`, tone: 'text-rose-700' },
+          { label: '頁內重複／過長', value: `${totals.duplicates}／${totals.tooLong}`, tone: 'text-rose-700' },
+          { label: '跨頁重複', value: crossPageDuplicates, tone: 'text-rose-700' },
         ].map((metric) => (
           <div
             key={metric.label}
@@ -512,6 +561,16 @@ export function AltBatchPage({
               disabled={candidates.length === 0 || analyzing || generatingBatch}
             >
               {selected.size >= Math.min(10, candidates.length) ? '取消全選' : '全選前 10 頁'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 bg-white px-3 text-[12px]"
+              onClick={handleExportReport}
+              disabled={doneResults.length === 0}
+            >
+              匯出盤點 CSV
             </Button>
             <Button
               type="button"

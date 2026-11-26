@@ -17,6 +17,8 @@ export interface AltPageAudit {
   tooLong: number;
   decorative: number;
   missingImages: AltImageCandidate[];
+  /** 同頁去重後的非空 ALT；用於跨頁重複比對。 */
+  currentAlts: string[];
 }
 
 export function auditAltImages(images: readonly AltImageCandidate[]): AltPageAudit {
@@ -40,5 +42,12 @@ export function auditAltImages(images: readonly AltImageCandidate[]): AltPageAud
     tooLong: images.filter((image) => countChars(image.currentAlt || '') > 125).length,
     decorative: images.filter((image) => image.decorative).length,
     missingImages,
+    currentAlts: Array.from(
+      new Set(
+        images
+          .map((image) => String(image.currentAlt || '').trim())
+          .filter(Boolean),
+      ),
+    ),
   };
 }
