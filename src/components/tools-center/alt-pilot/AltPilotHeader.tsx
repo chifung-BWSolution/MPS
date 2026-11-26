@@ -1,6 +1,7 @@
 import { Activity, History, ScanSearch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { AltSettingsRow, AltUsageSummary } from '@/lib/altTypes.ts';
+import { formatAltQuota } from '@/lib/altQuota.ts';
 import type { WebsiteProfileFull } from '@/types/app';
 import { PageAnalyzeForm } from './PageAnalyzeForm';
 
@@ -51,7 +52,7 @@ export function AltPilotHeader({
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-white px-2.5 py-1 text-[11px] font-medium text-teal-700">
             <Activity size={12} />
-            今日 {usage ? `${usage.today}/${usage.limit}` : '—'}
+            今日 {usage ? formatAltQuota(usage.today, usage.limit) : '—'}
           </span>
           {settings ? (
             <span className="hidden rounded-full border border-border bg-white px-2.5 py-1 text-[11px] text-muted-foreground sm:inline-flex">

@@ -228,7 +228,7 @@ export const DEFAULT_ALT_SETTINGS: AltSettingsRow = {
   enabled: false,
   model: 'grok-4.5',
   fallback_model: 'gemini-2.5-flash',
-  daily_call_limit: 300,
+  daily_call_limit: 0,
   max_images_per_run: 40,
   max_images_per_call: 6,
   created_at: new Date(0).toISOString(),

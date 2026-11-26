@@ -164,7 +164,7 @@ export function AltImageTable({
                 <TableHead className="w-[170px]">現有 ALT</TableHead>
                 <TableHead className="w-[300px]">建議 ALT</TableHead>
                 <TableHead className="w-[110px]">狀態／風險</TableHead>
-                <TableHead className="w-[70px]">信心</TableHead>
+                <TableHead className="w-[84px]">置信度</TableHead>
                 <TableHead className="w-[150px] pr-3 text-right">操作</TableHead>
               </TableRow>
             </TableHeader>

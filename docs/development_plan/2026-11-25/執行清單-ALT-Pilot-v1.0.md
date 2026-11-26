@@ -129,7 +129,7 @@
 | Migration | 先 `begin; … rollback;` dry-run（表不存在殘留），再單支 `db query --linked --file` 套用；未用 `db push` |
 | Migration history | 已寫入 `20261125183000` / `alt_pilot`；`migration list` 顯示 local=remote |
 | 表 | `alt_runs`、`alt_suggestions`、`alt_llm_usage`、`alt_settings` 全部存在 |
-| 設定 | `enabled=false`、`daily_call_limit=50`、`model=grok-4.5`、`fallback_model=gemini-2.5-flash` |
+| 設定 | **2026-11-26 已開啟**：`enabled=true`、`daily_call_limit=0`（不限）、`model=grok-4.5`、`fallback_model=gemini-2.5-flash` |
 | 權限 | 8 policy；4 表 RLS；3 trigger；anon REST 401／42501；authenticated DELETE=false |
 | Edge Function | `alt-pilot` 已部署；anon 呼叫 401；OPTIONS 200 |
 | Secrets | `XAI_API_KEY` 已存在；**沒有** `GEMINI_API_KEY`，所以目前只有 Grok 主 provider |
@@ -159,7 +159,7 @@
 
 1. **前端 production 部署**：目前只有 DB＋function；正式站還看不到 ALT Pilot。需你確認用哪個部署流程（Vercel／git push），不要把所有 concurrent 改動一起上。
 2. **用真實登入 user JWT 跑 E2E**：3 個代表頁 analyze → generate → 批准 → 匯出 → verify；目前只有 anon 401 與 DB 權限驗證。
-3. **開啟總開關**：確認 Grok 在 production 正常後，執行 `update alt_settings set enabled=true, daily_call_limit=50`。
+3. **總開關已開**：`enabled=true`、`daily_call_limit=0`（不限）。關閉用 `update alt_settings set enabled=false`。
 4. 做 30 張盲測，調整 prompt 與品質門檻。
 5. 驗證 Framer 貼上後 `verify` 能比對到新 alt。
 6. **處理 migration history drift**：`20261125015219`、`20261125092550` 不在本地；不要在未授權下 `migration repair`。這是 `db push` 的 blocker，不影響本次單支 SQL。

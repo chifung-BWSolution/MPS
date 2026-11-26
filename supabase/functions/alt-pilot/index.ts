@@ -32,6 +32,7 @@ import {
   type AltSuggestionDraft,
   type AltSuggestionRow,
 } from "../../../src/lib/altTypes.ts";
+import { isAltQuotaExceeded } from "../../../src/lib/altQuota.ts";
 import {
   AltFetchError,
   bytesToBase64,
@@ -481,7 +482,7 @@ async function generateForImage(params: {
 }): Promise<GeneratedImageResult> {
   const { admin, run, image, settings, keyword, existingAlts, usage } = params;
 
-  if (usage.calls >= usage.limit) {
+  if (isAltQuotaExceeded(usage.calls, usage.limit)) {
     throw new AltRequestError(
       "quota_exceeded",
       "今日 ALT 生成次數已達上限，請明天再試或請管理員調整 alt_settings.daily_call_limit。",
@@ -494,7 +495,7 @@ async function generateForImage(params: {
   const prompt = buildAltPrompt({ page, image, keyword, existingAlts });
 
   const callProvider = async (user: string): Promise<{ draft: AltSuggestionDraft; result: ProviderResult }> => {
-    if (usage.calls >= usage.limit) {
+    if (isAltQuotaExceeded(usage.calls, usage.limit)) {
       throw new AltRequestError("quota_exceeded", "今日 ALT 生成次數已達上限。", 429);
     }
     usage.calls += 1;
@@ -737,7 +738,7 @@ async function handleGenerate(admin: DbClient, body: Record<string, unknown>) {
       continue;
     }
 
-    if (usage.calls >= usage.limit) {
+    if (isAltQuotaExceeded(usage.calls, usage.limit)) {
       errors.push({
         image_url: image.url,
         code: "quota_exceeded",

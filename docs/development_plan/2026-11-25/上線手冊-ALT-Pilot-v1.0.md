@@ -139,16 +139,16 @@ npx vite build
 
 - 正常 build **不包含** `/alt-pilot-demo`；可用 `Select-String dist/assets/index-*.js -Pattern 'alt-pilot-demo'` 確認（應無結果）。
 - 部署後開 `/#tools-center/alt-pilot`，應顯示「ALT Pilot 目前已停用」（`alt_settings.enabled=false`）。
-- 先用 function 對 1 個頁面跑 analyze，確認 Grok 正常；再把開關打開並設每日上限：
+- 先用 function 對 1 個頁面跑 analyze，確認 Grok 正常；再把開關打開（目前不設每日上限）：
 
 ```sql
 update public.alt_settings
 set enabled = true,
-    daily_call_limit = 50
+    daily_call_limit = 0
 where id = 'default';
 ```
 
-（這是唯一建議的人工 UPDATE，帶主鍵 WHERE，只動新表。關閉同樣用 `enabled=false, daily_call_limit=0`。）
+（`daily_call_limit = 0` 代表不限。這是唯一建議的人工 UPDATE，帶主鍵 WHERE，只動新表。關閉用 `enabled=false`，不要用 limit=0 當關閉。）
 
 ---
 

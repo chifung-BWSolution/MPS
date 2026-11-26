@@ -19,6 +19,7 @@ import {
   sha256Hex,
 } from '../supabase/functions/alt-pilot/guard.ts';
 import { countWords } from '../src/lib/altText.ts';
+import { formatAltQuota, isAltQuotaExceeded } from '../src/lib/altQuota.ts';
 import type { AltPageContext, AltSuggestionRow } from '../src/lib/altTypes.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -248,5 +249,14 @@ assert.throws(() => assertPublicHost('localhost'), /localhost/);
 assert.throws(() => assertPublicHost('127.0.0.1'), /內網/);
 assert.equal(bytesToBase64(new Uint8Array([104, 105])), 'aGk=');
 assert.equal((await sha256Hex(new Uint8Array([104, 105]))).length, 64);
+
+// ---------------------------------------------------------------------------
+// 8) Quota: 0 = unlimited
+// ---------------------------------------------------------------------------
+assert.equal(isAltQuotaExceeded(9999, 0), false);
+assert.equal(isAltQuotaExceeded(49, 50), false);
+assert.equal(isAltQuotaExceeded(50, 50), true);
+assert.equal(formatAltQuota(12, 0), '12／不限');
+assert.equal(formatAltQuota(12, 50), '12/50');
 
 console.log('alt pilot tests passed');

@@ -98,7 +98,7 @@ export function AltDetailDrawer({
                 <AltLocationBadge location={row.image.location} />
                 {suggestion ? (
                   <span className="rounded-full border border-border bg-white px-2 py-0.5 text-[10px] text-muted-foreground">
-                    信心 {formatPercent(suggestion.confidence)} · {suggestion.provider || '—'}
+                    置信度 {formatPercent(suggestion.confidence)} · {suggestion.provider || '—'}
                   </span>
                 ) : null}
                 {suggestion?.issues.length ? <AltIssueHint issues={suggestion.issues} /> : null}

@@ -145,7 +145,7 @@ src/components/tools-center/alt-pilot/
 │ 頁面摘要：H1、語言、字數、圖片數、主關鍵字、[重新分析] [驗證已填]   │
 │ [全選] [生成 ALT（12）] [批准（12）] [略過]                        │
 ├──┬────┬──────────────┬──────────┬──────────────┬──────┬──────┬────┤
-│☑ │縮圖│檔名／位置     │現有 ALT  │建議 ALT       │狀態  │信心  │操作│
+│☑ │縮圖│檔名／位置     │現有 ALT  │建議 ALT       │狀態  │置信度│操作│
 └──┴────┴──────────────┴──────────┴──────────────┴──────┴──────┴────┘
 │ 已批准 N · 待批准 M        [複製] [JSON] [匯出 CSV] [標記已匯出]   │
 └────────────────────────────────────────────────────────────────────┘
@@ -174,7 +174,7 @@ src/components/tools-center/alt-pilot/
 | 抓頁 | `text/html`、≤2MB、10s timeout、≤2 redirect |
 | 抓圖 | `image/jpeg|png|webp`、≤6MB、≤2 redirect |
 | Provider | **Grok 4.5 主（`alt_settings.model`）**；失敗轉 Gemini；JSON parse 失敗重試一次 |
-| 配額 | `alt_settings.daily_call_limit`（HKT 當日） |
+| 配額 | `alt_settings.daily_call_limit`（HKT 當日）；**0 = 不限**，預設 0 |
 
 ### 7.2 SSRF 與 allowlist
 
@@ -244,23 +244,22 @@ Migration：`supabase/migrations/20261125183000_alt_pilot.sql`（只做加法）
 `alt_settings.enabled` 預設 **false**：
 
 - false：前端顯示「ALT Pilot 目前已停用」，分析／生成按鈕停用；Edge Function 的 `analyze`／`generate`／`regenerate` 回 `disabled`。歷史與 `verify` 仍可讀。
-- true：功能開放；`daily_call_limit` 仍是第二層硬上限。
+- true：功能開放；`daily_call_limit` 預設 **0 = 不限**。若日後要加軟上限，可設正整數（例如 50），超過才擋。
 
 開啟方式（只動新表、帶主鍵 WHERE）：
 
 ```sql
 update public.alt_settings
 set enabled = true,
-    daily_call_limit = 50
+    daily_call_limit = 0
 where id = 'default';
 ```
 
-關閉方式：
+關閉方式（用 `enabled`，不要用 limit=0 當關閉）：
 
 ```sql
 update public.alt_settings
-set enabled = false,
-    daily_call_limit = 0
+set enabled = false
 where id = 'default';
 ```
 
@@ -307,10 +306,10 @@ CSV 欄位：`page_url,image_url,filename,location,current_alt,suggested_alt,sho
 |---|---|
 | 每張圖 | Grok 成本依 XAI 帳單（本系統暫記 0）；Gemini 備援約 US$0.0013／張 |
 | 每頁 20 張 | Grok 依實際 token；Gemini 備援約 US$0.026 |
-| 每日 300 次 | 以 `alt_llm_usage` 的 token 與帳單核對 |
-| 每月 20 工作日 | 建議先用 `daily_call_limit=50` 觀察 |
+| 每日用量 | 以 `alt_llm_usage` 的 token 與帳單核對；目前**沒有每日硬上限** |
+| 每月 20 工作日 | 依實際使用量；需要時可把 `daily_call_limit` 設為正整數作軟上限 |
 
-`daily_call_limit` 是硬上限；`alt_llm_usage` 會記 model／provider／tokens／cost_usd，Grok 的 cost_usd 目前記 0，需以 XAI 帳單為準。
+`daily_call_limit = 0` 代表不限；`alt_llm_usage` 會記 model／provider／tokens／cost_usd，Grok 的 cost_usd 目前記 0，需以 XAI 帳單為準。沒有硬上限時，建議每週檢查用量。
 
 ---
 
