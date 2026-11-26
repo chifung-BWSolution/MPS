@@ -387,7 +387,7 @@ export function AltPilotDemoPage({ onExit }: AltPilotDemoPageProps) {
             <div>
               <p className="text-[13px] font-semibold text-amber-900">本地預覽模式</p>
               <p className="mt-0.5 text-[11px] leading-relaxed text-amber-800">
-                畫面上的頁面、圖片與 ALT 都是示範資料；不會寫入 Supabase，也不會呼叫 LLM。批准、編輯、匯出都可以試。
+                畫面上的頁面、圖片與 ALT 都是示範資料；不會寫入 Supabase，也不會呼叫 LLM。編輯、複製、匯出都可以試。
               </p>
             </div>
           </div>
