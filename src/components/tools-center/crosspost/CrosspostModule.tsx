@@ -60,7 +60,7 @@ function EmptyResult() {
     <div className="rounded-md border border-dashed border-border bg-white p-10 text-center">
       <Sparkles size={28} className="mx-auto text-teal-600" />
       <p className="mt-3 text-[14px] font-medium text-[#0d1a2d]">
-        填好左邊三個必填欄位，按「生成五版文案」
+        填好左邊三個必填欄位，按「生成文案」
       </p>
       <p className="mx-auto mt-1 max-w-md text-[12px] text-muted-foreground">
         IG、FB、Threads、小紅書、eDM 會一次出稿；每個版本自動標示字數上限與 Hashtag 建議。
@@ -151,7 +151,7 @@ export function CrosspostModule() {
             : prev,
         );
         void refreshHistory({ silent: true });
-        toast.success('五版文案已生成並存入歷史');
+        toast.success('文案已生成並存入歷史');
       } catch (saveError) {
         const message = saveError instanceof Error ? saveError.message : '未能存入歷史';
         setResult((prev) =>
@@ -239,7 +239,7 @@ export function CrosspostModule() {
     setResult(null);
     setFormError(null);
     setMode('compose');
-    toast.success('已填入 brief，按「生成五版文案」重新生成');
+    toast.success('已填入 brief，按「生成文案」重新生成');
   }, []);
 
   const handleDelete = useCallback(

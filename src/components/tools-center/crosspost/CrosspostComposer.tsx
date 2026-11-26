@@ -309,7 +309,7 @@ export function CrosspostComposer({
         )}
       >
         {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-        {generating ? '生成中…（約 20–40 秒）' : '生成五版文案'}
+        {generating ? '生成中…（約 20–40 秒）' : '生成文案'}
       </button>
 
       <p className="text-center text-[11px] text-muted-foreground">
