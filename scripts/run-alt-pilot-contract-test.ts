@@ -10,7 +10,12 @@
  */
 
 import assert from 'node:assert/strict';
-import { AltFetchError, fetchImageBytes, fetchPageHtml } from '../supabase/functions/alt-pilot/guard.ts';
+import {
+  AltFetchError,
+  fetchImageBytes,
+  fetchPageHtml,
+  fetchSitemapText,
+} from '../supabase/functions/alt-pilot/guard.ts';
 import { AltProviderError, generateVision } from '../supabase/functions/alt-pilot/providers.ts';
 
 const realFetch = globalThis.fetch;
@@ -96,6 +101,24 @@ try {
   await expectCode(
     () => fetchPageHtml('https://example.com/page', ['example.com']),
     'page_too_large',
+  );
+
+  // -------------------------------------------------------------------------
+  // 4b) Sitemap 抓取
+  // -------------------------------------------------------------------------
+  installFetch(async () =>
+    new Response(
+      '<?xml version="1.0"?><urlset><url><loc>https://example.com/a</loc></url></urlset>',
+      { status: 200, headers: { 'content-type': 'application/xml' } },
+    ),
+  );
+  const sitemap = await fetchSitemapText('https://example.com/sitemap.xml', ['example.com']);
+  assert.match(sitemap.xml, /<loc>https:\/\/example\.com\/a<\/loc>/);
+  assert.equal(sitemap.finalUrl, 'https://example.com/sitemap.xml');
+
+  await expectCode(
+    () => fetchSitemapText('https://evil.example/sitemap.xml', ['example.com']),
+    'host_not_allowed',
   );
 
   // -------------------------------------------------------------------------

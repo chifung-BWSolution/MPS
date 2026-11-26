@@ -301,11 +301,23 @@ Step 3: 逐張審批 → 匯出
 - 裝飾圖回傳 `alt=""`；非裝飾圖空字串會被硬規則擋下。
 - Framer 沒有公開 server-side alt API，第一期是「匯出對照表 → 人工貼上 → 驗證已填」。
 
+### 批次盤點
+
+ALT Pilot 上方 tab：[單頁生成] [站點盤點]。
+
+- 站點盤點：抓 `/sitemap.xml`（或手動貼 URL）→ 勾選最多 10 頁 → `analyze` 逐頁分析。
+- 顯示每頁：圖片數、缺 ALT、重複、過長、裝飾圖；按「開啟」進入單頁流程。
+- 批次分析**不呼叫 LLM**，沒有 Grok 成本；仍受 `alt_settings.enabled` 控制。
+
 ### Edge Function
 
 `POST /functions/v1/alt-pilot`（`verify_jwt = false`，函式自行 `auth.getUser()`）
 
 ```typescript
+// 取得 sitemap 頁面（批次盤點用）
+{ action: 'discover', site_id?: string, sitemap_url?: string }
+→ { sitemap_url, kind, sitemap_count, pages: [{ url }], truncated, warnings }
+
 // 分析
 { action: 'analyze', site_id?: string, url: string, keyword?: string }
 → { run, page, images, usage }
@@ -335,7 +347,7 @@ Step 3: 逐張審批 → 匯出
 | `alt_runs` | 每次頁面分析（page_url、context_summary、keyword、counts） |
 | `alt_suggestions` | 每張圖的建議與審批（`UNIQUE(run_id,image_url)`） |
 | `alt_llm_usage` | 每次 LLM 呼叫的 token／成本 |
-| `alt_settings` | 單列：`enabled`（預設 false，上線總開關）／`model`（預設 grok-4.5）／`daily_call_limit`／`max_images_*` |
+| `alt_settings` | 單列：`enabled`（預設 false，上線總開關）／`model`（預設 grok-4.5）／`daily_call_limit`（0 = 不限）／`max_images_*` |
 
 Migration：`supabase/migrations/20261125183000_alt_pilot.sql`（只新增表；不改既有表／policy／cron）。
 

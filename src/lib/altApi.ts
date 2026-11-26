@@ -87,7 +87,7 @@ async function authHeaders(): Promise<Record<string, string>> {
 
 /** 呼叫 Edge Function `alt-pilot`；契約：`{ ok:true, data }` 或 `{ ok:false, code, error }`。 */
 export async function invokeAltFunction<TResponse>(
-  action: 'analyze' | 'generate' | 'regenerate' | 'verify',
+  action: 'discover' | 'analyze' | 'generate' | 'regenerate' | 'verify',
   payload: Record<string, unknown> = {},
 ): Promise<TResponse> {
   const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/+$/, '');

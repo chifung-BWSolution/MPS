@@ -19,7 +19,8 @@ import {
   parseAltModelJson,
 } from "../../../src/lib/altPrompt.ts";
 import { combineIssues, evaluateAlt, normalizeModelIssues } from "../../../src/lib/altQuality.ts";
-import { normalizePageUrl } from "../../../src/lib/altUrl.ts";
+import { hostMatches, normalizePageUrl } from "../../../src/lib/altUrl.ts";
+import { parseSitemap } from "../../../src/lib/altSitemap.ts";
 import { normalizeForCompare, normalizeWhitespace, truncateText } from "../../../src/lib/altText.ts";
 import {
   DEFAULT_ALT_SETTINGS,
@@ -39,6 +40,7 @@ import {
   extractBearerToken,
   fetchImageBytes,
   fetchPageHtml,
+  fetchSitemapText,
   sha256Hex,
 } from "./guard.ts";
 import { AltProviderError, generateVision, type ProviderResult } from "./providers.ts";
@@ -644,6 +646,69 @@ async function upsertFailedSuggestion(params: {
   return data as AltSuggestionRow;
 }
 
+async function handleDiscover(admin: DbClient, body: Record<string, unknown>) {
+  const siteId = asString(body.site_id).trim();
+  const siteDomain = await loadSiteDomain(admin, siteId);
+  const inputUrl = asString(body.sitemap_url).trim();
+
+  if (!inputUrl && !siteDomain) {
+    throw new AltRequestError(
+      "invalid_sitemap",
+      "請提供 sitemap URL，或先選擇一個已登記站點。",
+      400,
+    );
+  }
+
+  const sitemapUrl = normalizePageUrl(
+    inputUrl || new URL("/sitemap.xml", normalizePageUrl(siteDomain)).href,
+    siteDomain || undefined,
+  );
+  const allowedHosts = await loadAllowedHosts(admin, siteId);
+  const root = await fetchSitemapText(sitemapUrl, allowedHosts);
+  const parsed = parseSitemap(root.xml, root.finalUrl);
+  const warnings: string[] = [];
+  const pages = new Set<string>();
+
+  const addPages = (urls: string[]): void => {
+    for (const url of urls) {
+      if (pages.size >= 300) return;
+      try {
+        const host = new URL(url).hostname;
+        if (allowedHosts.some((allowed) => hostMatches(host, allowed))) pages.add(url);
+      } catch {
+        // skip malformed URL
+      }
+    }
+  };
+
+  if (parsed.kind === "sitemapindex") {
+    const children = parsed.urls.slice(0, 5);
+    for (const child of children) {
+      try {
+        const fetched = await fetchSitemapText(child, allowedHosts);
+        const childParsed = parseSitemap(fetched.xml, fetched.finalUrl);
+        addPages(childParsed.urls);
+      } catch (error) {
+        warnings.push(
+          `略過子 sitemap：${child}（${error instanceof Error ? error.message : String(error)}）`,
+        );
+      }
+    }
+  } else {
+    addPages(parsed.urls);
+  }
+
+  const allPages = Array.from(pages);
+  return {
+    sitemap_url: root.finalUrl,
+    kind: parsed.kind,
+    sitemap_count: parsed.kind === "sitemapindex" ? parsed.urls.length : 1,
+    pages: allPages.slice(0, 100).map((url) => ({ url })),
+    truncated: allPages.length > 100,
+    warnings: warnings.slice(0, 5),
+  };
+}
+
 async function handleAnalyze(admin: DbClient, body: Record<string, unknown>, appUserId: string | null) {
   const settings = await loadSettings(admin);
   if (!settings.enabled) {
@@ -967,6 +1032,9 @@ Deno.serve(async (req: Request) => {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const action = asString(body.action);
 
+    if (action === "discover") {
+      return jsonResponse({ ok: true, data: await handleDiscover(admin, body) });
+    }
     if (action === "analyze") {
       return jsonResponse({ ok: true, data: await handleAnalyze(admin, body, auth.appUserId) });
     }

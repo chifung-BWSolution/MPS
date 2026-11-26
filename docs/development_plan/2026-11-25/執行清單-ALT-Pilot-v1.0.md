@@ -67,6 +67,7 @@
 | ☑ | M2-04 | CSV／JSON／TSV | `src/lib/altCsv.ts` | 已寫；BOM／escape 測試通過 |
 | ☑ | M2-05 | 單元測試 | `scripts/run-alt-pilot-test.ts` | `node scripts/run-alt-pilot-test.ts` → passed |
 | ☑ | M2-06 | Fixture | `scripts/fixtures/alt-page-*.html` | Framer／WordPress 各一 |
+| ☑ | M2-07 | Sitemap 解析 | `src/lib/altSitemap.ts` | urlset／sitemapindex、相對路徑、entity、去重測試通過 |
 
 ---
 
@@ -82,6 +83,7 @@
 | ☑ | M3-06 | 配額＋用量 | `index.ts` | 已寫；未實測 |
 | ☑ | M3-07 | `generate`／`regenerate`／`verify` | `index.ts` | 已寫；未實測 |
 | ☑ | M3-08 | 契約測試 | `scripts/run-alt-pilot-contract-test.ts` | `node scripts/run-alt-pilot-contract-test.ts` → passed（mock fetch／provider，不連網） |
+| ☑ | M3-09 | `discover` sitemap | `index.ts`、`guard.ts` | 抓 `/sitemap.xml`、sitemap index、allowlist／private IP；最多 100 頁 |
 
 ---
 
@@ -103,6 +105,7 @@
 | ☑ | M4-12 | 空狀態／錯誤／配額／schema | `AltEmptyState.tsx`、`AltPilotPage.tsx` | 已寫 |
 | ☑ | M4-13 | 本機示範預覽 | `AltPilotDemoPage.tsx`、`altDemoData.ts`、`App.tsx` | schema 未建立時可按「預覽介面（示範資料）」；`?demo=1` 可直接開；`VITE_ALT_PILOT_DEMO=1` build 時多 `/alt-pilot-demo` 免登入路由；不寫 DB、不呼叫 LLM |
 | ☑ | M4-14 | 上線總開關 | `alt_settings.enabled`、`AltPilotPage.tsx`、`PageAnalyzeForm.tsx` | 預設 false；false 時前端停用分析／生成、Edge Function 回 `disabled`；可用 SQL 開啟 |
+| ☑ | M4-15 | 站點盤點／批次 | `AltBatchPage.tsx`、`AltPilotPage.tsx` | sitemap → 最多 10 頁 analyze；不呼叫 LLM；顯示缺 ALT／重複／過長 |
 
 ---
 

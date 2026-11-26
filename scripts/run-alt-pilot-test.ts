@@ -12,6 +12,7 @@ import {
   toTsv,
 } from '../src/lib/altCsv.ts';
 import { hostMatches, normalizePageUrl } from '../src/lib/altUrl.ts';
+import { parseSitemap } from '../src/lib/altSitemap.ts';
 import {
   assertPublicHost,
   bytesToBase64,
@@ -231,6 +232,29 @@ assert.throws(() => normalizePageUrl('javascript:alert(1)'), /http/);
 assert.equal(hostMatches('blog.example.com', 'example.com'), true);
 assert.equal(hostMatches('example.com.evil.com', 'example.com'), false);
 assert.equal(hostMatches('www.example.com', 'example.com'), true);
+
+// ---------------------------------------------------------------------------
+// 5b) Sitemap parser
+// ---------------------------------------------------------------------------
+const urlset = parseSitemap(
+  '<?xml version="1.0"?><urlset><url><loc>https://example.com/a</loc></url><url><loc>/b</loc></url><url><loc>https://example.com/a</loc></url></urlset>',
+  'https://example.com/',
+);
+assert.equal(urlset.kind, 'urlset');
+assert.deepEqual(urlset.urls, ['https://example.com/a', 'https://example.com/b']);
+
+const index = parseSitemap(
+  '<?xml version="1.0"?><sitemapindex><sitemap><loc>https://example.com/sitemap-1.xml</loc></sitemap><sitemap><loc>https://example.com/sitemap-2.xml</loc></sitemap></sitemapindex>',
+  'https://example.com/',
+);
+assert.equal(index.kind, 'sitemapindex');
+assert.equal(index.urls.length, 2);
+
+const entities = parseSitemap(
+  '<urlset><url><loc>https://example.com/a?x=1&amp;y=2</loc></url></urlset>',
+  'https://example.com/',
+);
+assert.equal(entities.urls[0], 'https://example.com/a?x=1&y=2');
 
 // ---------------------------------------------------------------------------
 // 6) Text helper

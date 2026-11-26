@@ -124,6 +124,7 @@ src/components/tools-center/alt-pilot/
 ├── AltPilotHeader.tsx        sticky header、用量、歷史
 ├── PageAnalyzeForm.tsx       站點 + URL + 分析
 ├── PageSummaryCard.tsx       頁面摘要、關鍵字、重新分析、驗證
+├── AltBatchPage.tsx          站點盤點：sitemap、批次分析（不呼叫 LLM）
 ├── AltImageTable.tsx         表格、全選、批次
 ├── AltSuggestionRow.tsx      單列：縮圖、現有/建議 ALT、風險
 ├── AltDetailDrawer.tsx       大圖、上下文、理由、備選
@@ -158,6 +159,28 @@ src/components/tools-center/alt-pilot/
 - 八種狀態：schema 未建立、無站點、無圖片、分析失敗、配額用盡、生成失敗、全部已達標、歷史為空。
 - schema 未建立時，除「重新檢查」外提供「預覽介面（示範資料）」；示範資料只存在記憶體，不寫 DB、不呼叫 LLM，用來先看 UI 與流程。
 - 本機亦可直接開 `#tools-center/alt-pilot?demo=1`；若 build 時設 `VITE_ALT_PILOT_DEMO=1`，會多一個無需登入的 `/alt-pilot-demo` 預覽路由（正常 build 不含）。
+
+### 6.3 站點 ALT 盤點（批次）
+
+ALT Pilot 上方有兩個 tab：
+
+- **單頁生成**：原有流程。
+- **站點盤點**：一次查看多頁的 ALT 缺口，不呼叫 LLM。
+
+流程：
+
+1. 選站點 → 按「取得頁面」抓 `/sitemap.xml`（可手動改 sitemap URL，或手動貼 URL）。
+2. sitemap index 會再抓最多 5 個子 sitemap；只保留 allowlist 網域。
+3. 勾選最多 **10 頁** → 按「分析選取」。
+4. 每頁呼叫現有 `analyze`，逐頁顯示：圖片數、缺 ALT、重複、過長、裝飾圖。
+5. 按「開啟」進入該頁的單頁生成／審批流程。
+
+限制與邊界：
+
+- 批次分析**不呼叫 Grok**，只抓 HTML；沒有 token 成本。
+- 每批 10 頁；sitemap 最多列 100 頁。
+- 仍受 `alt_settings.enabled` 總開關控制。
+- 尚未做「批次生成」與「自動寫回」；這兩項留第二期後段。
 
 ---
 

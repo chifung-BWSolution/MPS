@@ -25,6 +25,7 @@ export class AltFetchError extends Error {
 
 const USER_AGENT = 'MPS-AltPilot/1.0';
 const MAX_HTML_BYTES = 2 * 1024 * 1024;
+const MAX_SITEMAP_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_REDIRECTS = 2;
@@ -221,6 +222,85 @@ export async function fetchPageHtml(rawUrl: string, allowedHosts: string[]): Pro
   }
 
   throw new AltFetchError('too_many_redirects', '目標網站 redirect 次數過多', 502);
+}
+
+export interface FetchedSitemap {
+  xml: string;
+  finalUrl: string;
+}
+
+/**
+ * 抓 sitemap（XML）。與 fetchPageHtml 相同的 allowlist／private IP／redirect 規則，
+ * 但允許 XML／text，上限 5MB。
+ */
+export async function fetchSitemapText(
+  rawUrl: string,
+  allowedHosts: string[],
+): Promise<FetchedSitemap> {
+  let current: URL;
+  try {
+    current = new URL(rawUrl);
+  } catch {
+    throw new AltFetchError('invalid_url', 'sitemap URL 格式不正確', 400);
+  }
+
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    assertAllowedPageHost(current.hostname, allowedHosts);
+    await assertPublicHostDeep(current.hostname);
+
+    let response: Response;
+    try {
+      response = await fetch(current.href, {
+        method: 'GET',
+        redirect: 'manual',
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        headers: {
+          'User-Agent': USER_AGENT,
+          Accept: 'application/xml,text/xml,text/plain;q=0.9,*/*;q=0.5',
+        },
+      });
+    } catch (error) {
+      throw new AltFetchError(
+        'fetch_failed',
+        `無法連線 sitemap：${error instanceof Error ? error.message : String(error)}`,
+        502,
+      );
+    }
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      if (!location) throw new AltFetchError('fetch_failed', 'sitemap 回傳空 redirect', 502);
+      if (hop === MAX_REDIRECTS) {
+        throw new AltFetchError('too_many_redirects', 'sitemap redirect 次數過多', 502);
+      }
+      current = new URL(location, current);
+      continue;
+    }
+
+    if (!response.ok) throw responseError(response.status);
+
+    const contentType = (response.headers.get('content-type') || '').toLowerCase();
+    if (contentType && !/xml|text\//i.test(contentType)) {
+      throw new AltFetchError('not_sitemap', `目標不是 sitemap XML（${contentType}）`, 422);
+    }
+
+    const declaredLength = Number(response.headers.get('content-length') || 0);
+    if (declaredLength > MAX_SITEMAP_BYTES) {
+      throw new AltFetchError('sitemap_too_large', 'sitemap 超過 5MB 上限', 413);
+    }
+
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > MAX_SITEMAP_BYTES) {
+      throw new AltFetchError('sitemap_too_large', 'sitemap 超過 5MB 上限', 413);
+    }
+
+    return {
+      xml: new TextDecoder('utf-8').decode(buffer).replace(/^\uFEFF/, ''),
+      finalUrl: current.href,
+    };
+  }
+
+  throw new AltFetchError('too_many_redirects', 'sitemap redirect 次數過多', 502);
 }
 
 export interface FetchedImage {

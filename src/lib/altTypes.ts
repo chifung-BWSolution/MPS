@@ -185,6 +185,15 @@ export interface AltAnalyzeResponse {
   usage: AltUsageSummary;
 }
 
+export interface AltDiscoverResult {
+  sitemap_url: string;
+  kind: 'urlset' | 'sitemapindex';
+  sitemap_count: number;
+  pages: Array<{ url: string }>;
+  truncated: boolean;
+  warnings: string[];
+}
+
 export interface AltRegenerateResponse {
   suggestion: AltSuggestionRow;
   usage: AltUsageSummary;

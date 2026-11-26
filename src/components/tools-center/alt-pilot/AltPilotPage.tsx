@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Database, FlaskConical, Loader2, Power } from 'lucide-react';
+import { AlertTriangle, Database, FlaskConical, Layers, Loader2, Power, ScanSearch } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
@@ -47,6 +47,7 @@ import type {
   AltUsageSummary,
   AltVerifyResult,
 } from '@/lib/altTypes.ts';
+import { AltBatchPage } from './AltBatchPage';
 import { AltDetailDrawer } from './AltDetailDrawer';
 import { AltEmptyState } from './AltEmptyState';
 import { AltPilotDemoPage } from './AltPilotDemoPage';
@@ -210,11 +211,45 @@ function LoadingCard({ label }: { label: string }) {
   );
 }
 
+function AltPilotViewTabs({
+  view,
+  onChange,
+}: {
+  view: 'single' | 'batch';
+  onChange: (view: 'single' | 'batch') => void;
+}) {
+  return (
+    <div className="inline-flex items-center gap-0.5 rounded-md border border-[rgba(13,26,45,0.08)] bg-white p-0.5 shadow-card">
+      <button
+        type="button"
+        onClick={() => onChange('single')}
+        className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-[12px] font-medium transition-colors ${
+          view === 'single' ? 'bg-[#0D9488] text-white' : 'text-muted-foreground hover:text-[#0d1a2d]'
+        }`}
+      >
+        <ScanSearch size={13} />
+        單頁生成
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('batch')}
+        className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-[12px] font-medium transition-colors ${
+          view === 'batch' ? 'bg-[#0D9488] text-white' : 'text-muted-foreground hover:text-[#0d1a2d]'
+        }`}
+      >
+        <Layers size={13} />
+        站點盤點
+      </button>
+    </div>
+  );
+}
+
 function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
   const { profiles, loading: sitesLoading } = useWebsiteProfiles();
   const { user } = useApp();
   const reviewerId = user.id && user.id !== '0' ? user.id : null;
 
+  const [view, setView] = useState<'single' | 'batch'>('single');
   const [settings, setSettings] = useState<AltSettingsRow | null>(null);
   const [usage, setUsage] = useState<AltUsageSummary | null>(null);
   const [runs, setRuns] = useState<AltRunRow[]>([]);
@@ -856,9 +891,66 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
     return null;
   };
 
+  if (view === 'batch') {
+    return (
+      <TooltipProvider delayDuration={200}>
+        <div className="space-y-5 pb-10">
+          <AltPilotViewTabs view={view} onChange={setView} />
+
+          {bootstrapLoading ? (
+            <LoadingCard label="正在載入 ALT Pilot…" />
+          ) : schemaMissing ? (
+            <SchemaMissingNotice
+              onRetry={() => void loadBootstrap()}
+              retrying={bootstrapLoading}
+              onPreviewDemo={onPreviewDemo}
+            />
+          ) : settings && !settings.enabled ? (
+            <AltPilotDisabledNotice
+              onHistory={() => {
+                setHistoryOpen(true);
+                void refreshRuns();
+              }}
+              onRetry={() => void loadBootstrap()}
+              retrying={bootstrapLoading}
+            />
+          ) : (
+            <AltBatchPage
+              sites={sites}
+              sitesLoading={sitesLoading}
+              siteId={siteId}
+              onSiteIdChange={handleSiteChange}
+              usage={usage}
+              settings={settings}
+              onHistory={() => {
+                setHistoryOpen(true);
+                void refreshRuns();
+              }}
+              onOpenRun={(runId) => {
+                setView('single');
+                replaceRunHash(runId);
+                void loadRun(runId);
+              }}
+              disabled={Boolean(settings && !settings.enabled)}
+            />
+          )}
+
+          <AltRunHistory
+            runs={runs}
+            open={historyOpen}
+            onOpenChange={setHistoryOpen}
+            onSelect={handleHistorySelect}
+            loading={historyLoading}
+          />
+        </div>
+      </TooltipProvider>
+    );
+  }
+
   return (
     <TooltipProvider delayDuration={200}>
       <div className="space-y-5 pb-10">
+        <AltPilotViewTabs view={view} onChange={setView} />
         <AltPilotHeader
           sites={sites}
           sitesLoading={sitesLoading}
