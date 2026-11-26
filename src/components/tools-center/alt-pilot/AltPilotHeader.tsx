@@ -56,7 +56,6 @@ export function AltPilotHeader({
           >
             <Activity size={12} />
             今日已分析 {usage ? (usage.analyses ?? usage.today) : '—'}
-            {usage && usage.limit > 0 ? ` · ${formatAltQuota(usage.today, usage.limit)}` : ''}
           </span>
           {settings ? (
             <span className="hidden rounded-full border border-border bg-white px-2.5 py-1 text-[11px] text-muted-foreground sm:inline-flex">
