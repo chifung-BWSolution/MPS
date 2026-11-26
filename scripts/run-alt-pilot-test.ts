@@ -256,6 +256,12 @@ const entities = parseSitemap(
 );
 assert.equal(entities.urls[0], 'https://example.com/a?x=1&y=2');
 
+const cdata = parseSitemap(
+  '<urlset><url><loc><![CDATA[https://example.com/cdata]]></loc></url></urlset>',
+  'https://example.com/',
+);
+assert.equal(cdata.urls[0], 'https://example.com/cdata');
+
 // ---------------------------------------------------------------------------
 // 6) Text helper
 // ---------------------------------------------------------------------------

@@ -40,7 +40,9 @@ export function parseSitemap(xml: string, baseUrl: string): ParsedSitemap {
   LOC_RE.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = LOC_RE.exec(source))) {
-    const raw = decodeXmlEntities(match[1] || '').trim();
+    const raw = decodeXmlEntities(
+      (match[1] || '').replace(/^\s*<!\[CDATA\[|\]\]>\s*$/g, '').trim(),
+    ).trim();
     if (!raw) continue;
     let resolved: URL;
     try {
