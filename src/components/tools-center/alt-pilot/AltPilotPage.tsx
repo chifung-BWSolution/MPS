@@ -8,6 +8,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import {
   approveAltSuggestions,
   altErrorMessage,
+  deleteAltRun,
   fetchAltRunBundle,
   fetchAltSettings,
   fetchAltUsageToday,
@@ -31,6 +32,7 @@ import {
   toJson,
   toTsv,
 } from '@/lib/altCsv.ts';
+import { canManageAltPilot } from '@/lib/altPermissions.ts';
 import { truncateText } from '@/lib/altText.ts';
 import { normalizePageUrl, sameHost } from '@/lib/altUrl.ts';
 import type {
@@ -280,7 +282,9 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
   const [verifyResult, setVerifyResult] = useState<AltVerifyResult | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [deletingRunId, setDeletingRunId] = useState<string | null>(null);
   const [detailUrl, setDetailUrl] = useState<string | null>(null);
+  const canManage = canManageAltPilot(user.role);
 
   const runIdRef = useRef<string | null>(null);
 
@@ -880,6 +884,29 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
     void loadRun(runId);
   };
 
+  const handleDeleteRun = async (runId: string) => {
+    setDeletingRunId(runId);
+    try {
+      await deleteAltRun(runId);
+      setRuns((previous) => previous.filter((item) => item.id !== runId));
+      if (run?.id === runId) {
+        setRun(null);
+        setPage(null);
+        setImages([]);
+        setSuggestions([]);
+        setSelected(new Set());
+        setDrafts({});
+        setVerifyResult(null);
+        replaceRunHash(null);
+      }
+      toast.success('已刪除歷史紀錄');
+    } catch (deleteError) {
+      toast.error(altErrorMessage(deleteError));
+    } finally {
+      setDeletingRunId(null);
+    }
+  };
+
   const detailRow = detailUrl ? rows.find((row) => row.image.url === detailUrl) || null : null;
   const detailBusy = Boolean(
     generating ||
@@ -945,6 +972,9 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
             onOpenChange={setHistoryOpen}
             onSelect={handleHistorySelect}
             loading={historyLoading}
+            canDelete={canManage}
+            onDelete={(runId) => void handleDeleteRun(runId)}
+            deletingId={deletingRunId}
           />
         </div>
       </TooltipProvider>
@@ -1079,6 +1109,9 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
           onOpenChange={setHistoryOpen}
           onSelect={handleHistorySelect}
           loading={historyLoading}
+          canDelete={canManage}
+          onDelete={(runId) => void handleDeleteRun(runId)}
+          deletingId={deletingRunId}
         />
 
         <AltDetailDrawer

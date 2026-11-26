@@ -474,6 +474,9 @@ export function AltPilotDemoPage({ onExit }: AltPilotDemoPageProps) {
             toast.info('示範模式只展示目前這筆 run。');
           }}
           loading={false}
+          canDelete={false}
+          onDelete={() => undefined}
+          deletingId={null}
         />
 
         <AltDetailDrawer

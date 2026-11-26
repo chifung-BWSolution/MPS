@@ -455,6 +455,10 @@ export async function resetAltSuggestion(id: string): Promise<AltSuggestionRow> 
   return normalizeAltSuggestion(data as Partial<AltSuggestionRow>);
 }
 
+export async function deleteAltRun(runId: string): Promise<void> {
+  await invokeAltFunction<{ deleted: string }>('delete_run', { run_id: runId });
+}
+
 export async function markAltRunExported(runId: string, approvedCount: number): Promise<void> {
   const { error } = await supabase
     .from('alt_runs')

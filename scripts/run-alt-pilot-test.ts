@@ -23,6 +23,7 @@ import {
 } from '../supabase/functions/alt-pilot/guard.ts';
 import { countWords } from '../src/lib/altText.ts';
 import { formatAltQuota, isAltQuotaExceeded } from '../src/lib/altQuota.ts';
+import { canManageAltPilot } from '../src/lib/altPermissions.ts';
 import type { AltPageContext, AltSuggestionRow } from '../src/lib/altTypes.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -324,5 +325,14 @@ assert.equal(isAltQuotaExceeded(49, 50), false);
 assert.equal(isAltQuotaExceeded(50, 50), true);
 assert.equal(formatAltQuota(12, 0), '12');
 assert.equal(formatAltQuota(12, 50), '12/50');
+
+// ---------------------------------------------------------------------------
+// 9) Delete permission
+// ---------------------------------------------------------------------------
+assert.equal(canManageAltPilot('management'), true);
+assert.equal(canManageAltPilot('super_admin'), true);
+assert.equal(canManageAltPilot('system_dev'), true);
+assert.equal(canManageAltPilot('designer'), false);
+assert.equal(canManageAltPilot(null), false);
 
 console.log('alt pilot tests passed');

@@ -33,6 +33,7 @@ import {
   type AltSuggestionDraft,
   type AltSuggestionRow,
 } from "../../../src/lib/altTypes.ts";
+import { canManageAltPilot } from "../../../src/lib/altPermissions.ts";
 import { isAltQuotaExceeded } from "../../../src/lib/altQuota.ts";
 import {
   AltFetchError,
@@ -185,36 +186,42 @@ async function usageSummary(
   };
 }
 
-async function resolveAppUserId(
+async function resolveAppUser(
   admin: DbClient,
   authUserId: string,
   email: string,
-): Promise<string | null> {
-  if (!authUserId) return null;
+): Promise<{ id: string | null; roleTag: string | null }> {
+  if (!authUserId) return { id: null, roleTag: null };
 
-  const byAuth = await admin.from("users").select("id").eq("auth_user_id", authUserId).maybeSingle();
-  if (!byAuth.error && byAuth.data?.id) return String(byAuth.data.id);
+  const byAuth = await admin
+    .from("users")
+    .select("id, role_tag")
+    .eq("auth_user_id", authUserId)
+    .maybeSingle();
+  if (!byAuth.error && byAuth.data?.id) {
+    return { id: String(byAuth.data.id), roleTag: String(byAuth.data.role_tag || "") };
+  }
 
   const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail) return null;
+  if (!normalizedEmail) return { id: null, roleTag: null };
 
-  const byEmail = await admin.from("users").select("id").eq("email", normalizedEmail).limit(1).maybeSingle();
-  if (!byEmail.error && byEmail.data?.id) return String(byEmail.data.id);
-
-  const byGoogle = await admin
+  const byEmail = await admin
     .from("users")
-    .select("id")
-    .eq("google_email", normalizedEmail)
+    .select("id, role_tag")
+    .eq("email", normalizedEmail)
     .limit(1)
     .maybeSingle();
-  if (!byGoogle.error && byGoogle.data?.id) return String(byGoogle.data.id);
+  if (!byEmail.error && byEmail.data?.id) {
+    return { id: String(byEmail.data.id), roleTag: String(byEmail.data.role_tag || "") };
+  }
 
-  return null;
+  return { id: null, roleTag: null };
 }
 
 async function authenticate(admin: DbClient, req: Request): Promise<{
   authUserId: string;
   appUserId: string | null;
+  appRoleTag: string | null;
 }> {
   const token = extractBearerToken(req);
   if (!token) throw new AltRequestError("unauthorized", "未登入", 401);
@@ -223,7 +230,7 @@ async function authenticate(admin: DbClient, req: Request): Promise<{
     if (!ALLOW_ANON) {
       throw new AltRequestError("unauthorized", "ALT Pilot 需要登入後才能使用", 401);
     }
-    return { authUserId: "", appUserId: null };
+    return { authUserId: "", appUserId: null, appRoleTag: null };
   }
 
   let authUser: { id: string; email?: string } | null = null;
@@ -237,8 +244,8 @@ async function authenticate(admin: DbClient, req: Request): Promise<{
     throw new AltRequestError("unauthorized", "登入狀態已失效，請重新登入", 401);
   }
 
-  const appUserId = await resolveAppUserId(admin, authUser.id, authUser.email || "");
-  return { authUserId: authUser.id, appUserId };
+  const appUser = await resolveAppUser(admin, authUser.id, authUser.email || "");
+  return { authUserId: authUser.id, appUserId: appUser.id, appRoleTag: appUser.roleTag };
 }
 
 async function loadAllowedHosts(admin: DbClient, siteId: string): Promise<string[]> {
@@ -1026,6 +1033,23 @@ async function handleVerify(admin: DbClient, body: Record<string, unknown>) {
   };
 }
 
+async function handleDeleteRun(
+  admin: DbClient,
+  body: Record<string, unknown>,
+  roleTag: string | null,
+) {
+  if (!canManageAltPilot(roleTag)) {
+    throw new AltRequestError("forbidden", "只有管理人員可以刪除歷史紀錄。", 403);
+  }
+
+  const runId = asString(body.run_id).trim();
+  if (!runId) throw new AltRequestError("invalid_run", "缺少 run_id", 400);
+
+  const { error } = await admin.from("alt_runs").delete().eq("id", runId);
+  if (error) throw error;
+  return { deleted: runId };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders, status: 200 });
@@ -1054,6 +1078,12 @@ Deno.serve(async (req: Request) => {
     }
     if (action === "verify") {
       return jsonResponse({ ok: true, data: await handleVerify(admin, body) });
+    }
+    if (action === "delete_run") {
+      return jsonResponse({
+        ok: true,
+        data: await handleDeleteRun(admin, body, auth.appRoleTag),
+      });
     }
 
     return errorResponse("invalid_action", `未知的 action：${action || "（空白）"}`, 400);
