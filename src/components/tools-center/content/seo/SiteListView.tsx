@@ -350,7 +350,7 @@ function Beauty100SiteCard({
     : null;
 
   return (
-    <article className="rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50/80 via-white to-white p-4 shadow-card">
+    <article className="rounded-lg border border-[rgba(13,26,45,0.08)] bg-white p-4 shadow-card transition-shadow hover:shadow-card-hover">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -388,7 +388,7 @@ function Beauty100SiteCard({
             href={liveHref}
             target="_blank"
             rel="noreferrer noopener"
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-teal-200 bg-white px-2 text-[11.5px] font-semibold text-teal-700 hover:bg-teal-50"
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-[rgba(13,26,45,0.12)] bg-white px-2 text-[11.5px] font-semibold text-slate-700 hover:bg-slate-50"
           >
             <ExternalLink size={11} />
             前往官網
@@ -397,7 +397,7 @@ function Beauty100SiteCard({
       </div>
 
       <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-md border border-teal-100 bg-white/80 px-2.5 py-2">
+        <div className="rounded-md border border-[rgba(13,26,45,0.08)] bg-slate-50/70 px-2.5 py-2">
           <p className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
             今日生成
           </p>
@@ -405,13 +405,13 @@ function Beauty100SiteCard({
             {counts.generated}
           </p>
         </div>
-        <div className="rounded-md border border-teal-100 bg-white/80 px-2.5 py-2">
+        <div className="rounded-md border border-[rgba(13,26,45,0.08)] bg-slate-50/70 px-2.5 py-2">
           <p className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
             待審
           </p>
           <p className="mt-0.5 text-[16px] font-bold tabular-nums text-amber-700">{counts.pending}</p>
         </div>
-        <div className="rounded-md border border-teal-100 bg-white/80 px-2.5 py-2">
+        <div className="rounded-md border border-[rgba(13,26,45,0.08)] bg-slate-50/70 px-2.5 py-2">
           <p className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
             今日已發
           </p>
@@ -419,7 +419,7 @@ function Beauty100SiteCard({
             {counts.published}
           </p>
         </div>
-        <div className="rounded-md border border-teal-100 bg-white/80 px-2.5 py-2">
+        <div className="rounded-md border border-[rgba(13,26,45,0.08)] bg-slate-50/70 px-2.5 py-2">
           <p className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
             失敗
           </p>
@@ -453,7 +453,7 @@ function Beauty100SiteCard({
         )}
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-teal-100 pt-3">
+      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-[rgba(13,26,45,0.08)] pt-3">
         <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-[11.5px]" onClick={onManage}>
           <Settings2 size={11} />
           管理設定
@@ -808,7 +808,7 @@ export function SiteListView({ navigate }: ContentViewProps) {
             onToggleStatus={() => void handleToggleStatus(beauty100Site)}
           />
         ) : (
-          <section className="rounded-xl border border-dashed border-teal-300 bg-teal-50/40 p-4">
+          <section className="rounded-lg border border-dashed border-[rgba(13,26,45,0.12)] bg-white p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="text-[15px] font-bold text-[#0d1a2d]">Beauty100</h3>

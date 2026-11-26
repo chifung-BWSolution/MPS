@@ -710,7 +710,7 @@ function Beauty100ConnectionCard({
                 : { label: '尚未測試', tone: 'slate' as const };
 
   return (
-    <section className="rounded-lg border border-teal-200 bg-teal-50/40 p-4 shadow-card">
+    <section className="rounded-lg border border-[rgba(13,26,45,0.08)] bg-white p-4 shadow-card">
       <header className="mb-3 flex flex-wrap items-center gap-2">
         <ShieldCheck size={14} className="text-teal-700" />
         <h3 className="text-[13.5px] font-bold text-[#0d1a2d]">Beauty100 自動發佈</h3>
@@ -733,7 +733,7 @@ function Beauty100ConnectionCard({
       </header>
 
       <div className="grid gap-2 text-[12px] sm:grid-cols-2">
-        <div className="rounded-md border border-teal-100 bg-white/80 px-2.5 py-2">
+        <div className="rounded-md border border-[rgba(13,26,45,0.08)] bg-slate-50/70 px-2.5 py-2">
           <p className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
             發佈分類
           </p>
@@ -746,7 +746,7 @@ function Beauty100ConnectionCard({
           </p>
         </div>
 
-        <div className="rounded-md border border-teal-100 bg-white/80 px-2.5 py-2">
+        <div className="rounded-md border border-[rgba(13,26,45,0.08)] bg-slate-50/70 px-2.5 py-2">
           <p className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
             專用帳號憑證
           </p>
@@ -769,7 +769,7 @@ function Beauty100ConnectionCard({
           )}
         </div>
 
-        <div className="rounded-md border border-teal-100 bg-white/80 px-2.5 py-2">
+        <div className="rounded-md border border-[rgba(13,26,45,0.08)] bg-slate-50/70 px-2.5 py-2">
           <p className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
             連接狀態
           </p>
@@ -783,7 +783,7 @@ function Beauty100ConnectionCard({
           </p>
         </div>
 
-        <div className="rounded-md border border-teal-100 bg-white/80 px-2.5 py-2">
+        <div className="rounded-md border border-[rgba(13,26,45,0.08)] bg-slate-50/70 px-2.5 py-2">
           <p className="text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
             官網
           </p>
@@ -1121,12 +1121,12 @@ function SettingsTab({
       )}
 
       {looksLikeBeauty100Site(site) ? (
-        <section className="rounded-lg border border-teal-200 bg-teal-50/40 p-3">
+        <section className="rounded-lg border border-[rgba(13,26,45,0.08)] bg-slate-50/70 p-3">
           <div className="flex flex-wrap items-start gap-2">
-            <ShieldCheck size={14} className="mt-0.5 shrink-0 text-teal-700" />
+            <ShieldCheck size={14} className="mt-0.5 shrink-0 text-slate-500" />
             <div className="min-w-0 flex-1">
-              <h3 className="text-[13px] font-bold text-teal-900">Beauty100 接入由系統維護</h3>
-              <p className="mt-0.5 text-[11.5px] leading-relaxed text-teal-800/90">
+              <h3 className="text-[13px] font-bold text-[#0d1a2d]">Beauty100 接入由系統維護</h3>
+              <p className="mt-0.5 text-[11.5px] leading-relaxed text-slate-600">
                 這個站點不提供「移除接入」，避免一次連帶刪除 MPS 的文章、排程與憑證。
                 要停止自動發佈，請把「上線方式」改成手動，或把營運狀態改成暫停。
               </p>

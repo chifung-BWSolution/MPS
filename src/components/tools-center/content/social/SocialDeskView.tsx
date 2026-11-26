@@ -293,7 +293,7 @@ function EventRow({
     event.status === 'used' ? '已使用' : event.status === 'ignored' ? '已略過' : null;
 
   return (
-    <li className="rounded-md border border-[rgba(13,26,45,0.08)] bg-white px-2.5 py-2 transition-colors hover:border-teal-200">
+    <li className="rounded-md border border-[rgba(13,26,45,0.08)] bg-white px-2.5 py-2 transition-colors hover:border-[rgba(13,26,45,0.16)]">
       <div className="flex items-start gap-2">
         <HeatBadge heat={event.heat} />
         <div className="min-w-0 flex-1">

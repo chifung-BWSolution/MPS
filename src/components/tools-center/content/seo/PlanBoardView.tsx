@@ -680,13 +680,13 @@ export function PlanBoardView({ route, navigate }: ContentViewProps) {
         </div>
 
         {planPreview && (
-          <div className="mt-3 rounded-md border border-teal-200 bg-teal-50/40 p-3">
+          <div className="mt-3 rounded-md border border-[rgba(13,26,45,0.08)] bg-slate-50/60 p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-[13px] font-semibold text-teal-800">
+              <div className="text-[13px] font-semibold text-[#0d1a2d]">
                 重算預覽（未寫入）· 未來 {planPreview.horizonDays} 天
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[12px] text-teal-900">
+                <span className="text-[12px] text-slate-600">
                   將新增 <strong>{planPreview.totalWouldCreate}</strong> 格 · 已存在{' '}
                   {planPreview.totalExisting} 格（冪等略過）
                 </span>
