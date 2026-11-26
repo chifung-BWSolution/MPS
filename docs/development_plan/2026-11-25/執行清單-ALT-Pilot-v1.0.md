@@ -113,7 +113,7 @@
 | ☑ | M5-01 | 型別 | `npx tsc --noEmit` | 新檔 0 錯誤；專案其他既有檔案有既存錯誤 |
 | ☑ | M5-02 | 建置 | `vite build` | 成功（4390 modules） |
 | ☑ | M5-03 | 自動測試 | `node scripts/run-alt-pilot-test.ts`；`node scripts/run-alt-pilot-contract-test.ts` | 兩支都 passed |
-| ☐ | M5-04 | 真實 E2E | 3 個代表頁 | 未執行（無本機 Supabase／secrets） |
+| △ | M5-04 | 真實 E2E | `scripts/alt-pilot-production-smoke.mjs` | 腳本已備；未執行（需要登入 user JWT；production `enabled=false`） |
 | ☐ | M5-05 | 盲測 | 30 張 | 未執行 |
 | ☐ | M5-06 | 回歸 | 工具中心其他子項、Prompt 資料庫 | 只做 build 級驗證 |
 | ☐ | M5-07 | 成本核對 | `alt_llm_usage` | 未執行 |

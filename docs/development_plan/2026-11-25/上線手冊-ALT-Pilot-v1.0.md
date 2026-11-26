@@ -108,6 +108,28 @@ npx supabase secrets set XAI_API_KEY=...
 
 ---
 
+## 4.1 Production E2E smoke（需要登入 token）
+
+腳本：`scripts/alt-pilot-production-smoke.mjs`
+
+```powershell
+$env:SUPABASE_URL="https://kwcevjcmdjadhrygjyfp.supabase.co"
+$env:SUPABASE_ANON_KEY="<anon key>"
+$env:ALT_USER_JWT="<登入後的 access token>"
+$env:ALT_TEST_URL="https://www.bwteam.com/office-design"
+
+# 只 analyze，不呼叫 LLM
+node scripts/alt-pilot-production-smoke.mjs
+
+# 測 1 張 Grok（會寫 1 筆 suggestion）
+$env:ALT_GENERATE="1"
+node scripts/alt-pilot-production-smoke.mjs
+```
+
+- token 不要寫入 repo、不要貼在對話。
+- 執行前先把 `alt_settings.enabled=true`；測完立即關閉。
+- 腳本不列印 token；只印 run_id、page、suggestion、usage。
+
 ## 5. 前端部署
 
 ```powershell
