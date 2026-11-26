@@ -2,8 +2,8 @@
 
 | 項目 | 內容 |
 |---|---|
-| 版本 | v1.0 |
-| 日期 | 2026-11-25 |
+| 版本 | v1.4 |
+| 日期 | 2026-11-26 |
 | 狀態 | **已實作，文件為實作後定稿** |
 | 落點 | 工具中心 → 語氣校對改寫器（`#tools-center/tone-rewrite`） |
 | 專案根目錄 | `D:\Project\MPS` |
@@ -56,7 +56,7 @@ MPS 工具中心現有 AI 子項多為前端假資料（`setTimeout`），沒有
 - 替換標示、替換表、已核對狀態、篩選、全部標記。
 - 語氣提醒（反 AI 味、宣傳腔、浮誇、簡體殘留）。
 - B100 改寫 prompt 面板與複製。
-- 英文商務版入口（disabled／第二批提示）。
+- 英文商務版入口（disabled／toast「敬請期待」，無 badge）。
 
 ### 3.2 本次不包含
 
@@ -103,7 +103,7 @@ MPS 工具中心現有 AI 子項多為前端假資料（`setTimeout`），沒有
 | 元件 | `Textarea`（`src/components/ui/textarea.tsx`） |
 | 上限 | 20,000 字（`maxLength`；引擎另有截斷保護） |
 | 字數顯示 | `input.length`，超過 90% 變 amber |
-| 快捷 | Ctrl／Cmd + Enter 執行 |
+| 快捷 | Ctrl／Cmd + Enter 執行（中文輸入法組字中不觸發） |
 | 平台選擇 | IG／FB／小紅書 chip，`aria-pressed`；至少保留一個 |
 | 其他 | 清空、載入示例；隱私提示「全部在瀏覽器處理，草稿不會上傳」 |
 
@@ -145,21 +145,23 @@ MPS 工具中心現有 AI 子項多為前端假資料（`setTimeout`），沒有
 - 浮誇：徹底改變、革命性、前所未有、史無前例、顛覆性、極致體驗、完美解決。
 - AI 句式：「不是 X，而是 Y」、解鎖／之旅／重新定義、首先…其次、句長太均勻。
 - 簡體殘留：`发复尽几钟历` 等幾乎不會在繁體出現的字，只提醒不自動轉。
-- 純英文：提示「此工具針對中文草稿；英文商務版將於第二批加入」。
+- 純英文：提示「此工具針對中文草稿；英文版敬請期待」。
 - 最多 8 條；只針對文字風格，不代表事實／療效／法律審查。
 
 ### 6.6 Prompt 面板
 
 - `<details>` 收合，標題「改寫規則與 Prompt」。
 - **可見性：只有 `canAccessSettings(systemUser.role)` 為 true 的角色看到**（`management`／`system_dev`／`admin` 等）；`staff`、`chief_editor` 及其餘角色看不到。其餘兩張主卡（香港書面語版、社群口語版）所有人可見。
+- 可見文案保持通用，不提及 B100／Beauty100；來源只保留在開發註解與本文件。
 - 註明來源：`D:\Project\B100-Manager\src\lib\content.ts:618-627` 的 `DEFAULT_PROMPTS`。
 - 顯示系統 prompt；可複製純 prompt 或 prompt＋原文。
 - 文案說明：本工具用同一套規則在瀏覽器即時處理；要更自然的全文改寫，可貼到 ChatGPT／Gemini。
 
-### 6.7 工具切換與第二批
+### 6.7 工具切換與英文商務版
 
-- 頂部 segmented：`港式語氣改寫器`（啟用）／`英文商務語氣改寫器`（`第二批` badge、`aria-disabled`，點了 toast 提示）。
-- 第二批只需在 `ToneRewriteTool` 加一個可選 tab，換成對應 panel；路由與側欄不用再改。
+- 頂部 segmented：`港式語氣改寫器`（啟用）／`英文商務語氣改寫器`（`aria-disabled`，點了 toast「敬請期待」；**不加 badge**）。
+- toast「敬請期待」使用 `fit-content` 寬度（`maxWidth: calc(100vw - 2rem)`），不再固定 356px；只影響這一個 toast，不改全域 Toaster。
+- 英文版只需在 `ToneRewriteTool` 加一個可選 tab，換成對應 panel；路由與側欄不用再改。
 
 ## 7. 規則引擎規格
 
@@ -339,7 +341,7 @@ Textarea → rewriteHkDraft(input, platforms)
 | 歧義簡體字 | 不自動轉；列表提醒人手確認 |
 | 粵語口語原文 | formalize 規則轉書面語；保護詞不被拆字 |
 | 超長（>20,000 字） | UI `maxLength` 先擋；引擎另截斷並標記 |
-| 純英文 | 不套中文規則，顯示英文版第二批提示 |
+| 純英文 | 不套中文規則，顯示英文版敬請期待提示 |
 | 平台未選 | 按鈕 disabled；嘗試取消最後一個平台會 toast |
 | 平台超限 | 按 UTF-16 長度保守截短、加 `…`、顯示提示 |
 | 剪貼簿被封 | toast 指示手動選取 |
@@ -362,7 +364,7 @@ Textarea → rewriteHkDraft(input, platforms)
 7. 平台約束（IG 5–12、FB ≤3、小紅書 6–10、無 `{}`）。
 8. 平台超長截斷。
 9. 語氣檢查與乾淨文字。
-10. Prompt 含痛點／口語／hashtag／小紅書／B100。
+10. Prompt 含痛點／口語／hashtag／小紅書／香港，且不含 B100。
 11. 規則 id 唯一、`HK_RULE_CONFLICTS` 為空。
 12. 靜態導覽（tone-rewrite 在 ai-caption 後、prompt-library 前）。
 13. 超長輸入標記。
@@ -384,6 +386,11 @@ node .\node_modules\typescript\bin\tsc --noEmit 2>&1 | Select-String "hkCantones
 node .\node_modules\vite\bin\vite.js build
 ```
 
+- `tsc` 全專案有既有錯誤（營銷、財務、Readdy 等），只要求**新檔案零錯誤**（上面的 `Select-String` 應無輸出）。
+- 若另一條內容自動化工作流仍在施工、缺少 `content/social/*` 模組（例如 `LibraryView`），全量 `vite build` 會被那些**既有未完成檔案**擋住；本次另用「只 stub 外部 `ContentAutomationCenter`」的隔離 build 驗證本功能，結果 `ISOLATED BUILD OK`。
+- 手動驗證（可選）：`node ./node_modules/vite/bin/vite.js`，開 `http://localhost:5173/#tools-center/tone-rewrite`。
+- **以上指令全部不連資料庫、不改任何資料。**
+
 ### 12.3 驗收清單
 
 - [x] 側欄位置正確、路由可開、不白屏。
@@ -391,7 +398,7 @@ node .\node_modules\vite\bin\vite.js build
 - [x] 替換表有 `质量→質素`、`空调→冷氣機`、`自行车→單車`。
 - [x] 標記、複製、已核對、篩選、全部標記可用。
 - [x] Prompt 面板可複製。
-- [x] 新測試全過、新檔案 tsc 零錯、`vite build` 成功。
+- [x] 新測試全過、新檔案 tsc 零錯、隔離 production build 成功；全量 build 現況受另一條工作流缺少 `content/social/*` 影響（非本功能檔案）。
 - [x] 整份 diff 沒有 `.sql`、migration、RLS、cron、Supabase client 變更。
 
 ## 13. 風險與緩解
@@ -426,3 +433,7 @@ node .\node_modules\vite\bin\vite.js build
 | 版本 | 日期 | 變更 |
 |---|---|---|
 | v1.0 | 2026-11-25 | 初版；港式語氣改寫器已實作並通過驗證 |
+| v1.1 | 2026-11-26 | 移除未輸入時的空白狀態卡（圖1）；Prompt 介紹改為通用文案，不再提及 B100／Beauty100 |
+| v1.2 | 2026-11-26 | 英文商務版入口 badge 由「第二批」改為「敬請期待」；移除 UI 與純英文提示中的「第二批」字樣 |
+| v1.3 | 2026-11-26 | 移除英文入口的「敬請期待」藥丸；toast 只保留「敬請期待」 |
+| v1.4 | 2026-11-26 | 「敬請期待」toast 改為 `fit-content` 自適應寬度，不再固定 356px |

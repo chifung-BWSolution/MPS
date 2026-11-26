@@ -15,9 +15,7 @@ import type { SocialPlatform } from './hkCantoneseRules.ts';
 import { HK_PLATFORM_RULES } from './hkCantoneseRules.ts';
 
 export const HK_REWRITE_SYSTEM_PROMPT = `你是香港市場的資深中文文案編輯，熟悉香港書面語與港式粵語口語的分別。
-（本規則改寫自 B100-Manager「設定 → 寫作要求」的 Beauty100／IG／FB prompt，已通用化。）
-
-請把使用者提供的原文改寫成兩個版本：
+請保留原文的事實、數字與品牌名，把內容整理成兩個版本：
 1. 香港書面語版：繁體中文、香港標準用詞、語氣專業自然，不用粵語口語字（唔、係、嘅、咗、冇、咁、啲）。
 2. 社群口語版：自然港式粵語口語，好似同朋友講嘢（例如「點用」「唔係」「先至」「好正」），但事實、數字、品牌名要保留，不誇大。
 

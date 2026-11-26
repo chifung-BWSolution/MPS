@@ -746,7 +746,7 @@ export function rewriteHkDraft(
 
   const issues = lintHkCopy(writtenText);
   if (!/[\u3400-\u9FFF]/.test(writtenText)) {
-    issues.unshift('此工具針對中文草稿；英文商務語氣改寫器將於第二批加入。');
+    issues.unshift('此工具針對中文草稿；英文版敬請期待。');
   }
   const totalReplacements = replacements.reduce((sum, row) => sum + row.count, 0);
 

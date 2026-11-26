@@ -17,7 +17,7 @@ export function RewriteRulesPanel({ input }: RewriteRulesPanelProps) {
             改寫規則與 Prompt
           </span>
           <span className="mt-1 block text-[12px] text-muted-foreground">
-            來源：B100-Manager「設定 → 寫作要求」（Beauty100／IG／FB），已改成通用品牌版本。
+            內置香港書面語與社群口語的改寫規則；可複製成 prompt，貼到 ChatGPT／Gemini 使用。
           </span>
         </span>
         <ChevronDown size={16} className="mt-1 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />

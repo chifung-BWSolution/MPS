@@ -143,6 +143,8 @@ export function HkRewritePanel() {
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
+            // 中文輸入法組字中按 Ctrl/Cmd+Enter 不應觸發改寫
+            if (event.nativeEvent.isComposing) return;
             if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
               event.preventDefault();
               handleRun();
@@ -235,9 +237,7 @@ export function HkRewritePanel() {
             <ToneIssuesCard issues={result.issues} colloquialCount={result.colloquialCount} />
           </div>
         </>
-      ) : (
-        <EmptyState onSample={handleSample} />
-      )}
+      ) : null}
 
       {canViewPrompt && <RewriteRulesPanel input={input} />}
     </div>
@@ -326,48 +326,6 @@ export function ToneIssuesCard({
 
       <p className="mt-auto pt-4 text-[11px] leading-relaxed text-muted-foreground">
         提醒只針對文字風格，不代表事實、療效或法律審查。
-      </p>
-    </section>
-  );
-}
-
-function EmptyState({ onSample }: { onSample: () => void }) {
-  const steps = [
-    '貼入原文、草稿或粵語口語稿',
-    '一鍵產生香港書面語版 + IG／FB／小紅書口語版',
-    '用顏色標示及替換表逐項核對',
-  ];
-
-  return (
-    <section className="rounded-md border border-[rgba(13,26,45,0.08)] bg-white p-8 text-center shadow-[0_2px_6px_rgba(0,20,40,0.05)]">
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-teal-50">
-        <Sparkles size={22} className="text-teal-600" />
-      </div>
-      <h3 className="mt-3 text-[16px] font-bold">貼入原文，一鍵輸出兩個版本</h3>
-      <p className="mx-auto mt-1 max-w-xl text-[12px] leading-relaxed text-muted-foreground">
-        香港書面語版 + 社群口語版；替換詞會標色並列成清單，方便人手快速核對。
-      </p>
-      <ol className="mx-auto mt-4 flex max-w-2xl flex-col gap-2 text-left sm:flex-row sm:gap-3">
-        {steps.map((step, index) => (
-          <li key={step} className="flex flex-1 items-start gap-2 rounded-md border border-border/60 bg-[#fbfdff] px-3 py-2 text-[12px] leading-relaxed">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-600 text-[10px] font-bold text-white">
-              {index + 1}
-            </span>
-            {step}
-          </li>
-        ))}
-      </ol>
-      <button
-        type="button"
-        onClick={onSample}
-        className="mt-4 inline-flex h-8 items-center gap-1.5 rounded-md border border-teal-200 bg-teal-50 px-3 text-[12px] font-medium text-teal-700 transition-colors hover:bg-teal-100"
-      >
-        <Sparkles size={13} />
-        載入示例
-      </button>
-      <p className="mt-3 flex items-center justify-center gap-1 text-[11px] text-muted-foreground">
-        <ShieldCheck size={12} />
-        全部在瀏覽器處理，草稿不會上傳。
       </p>
     </section>
   );

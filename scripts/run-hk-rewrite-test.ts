@@ -109,9 +109,10 @@ assert.equal(clean.issues.length, 0);
 
 // 10. Prompt
 const prompt = buildHkRewritePrompt('草稿');
-for (const token of ['痛點', '口語', 'hashtag', '小紅書', '草稿', 'B100']) {
+for (const token of ['痛點', '口語', 'hashtag', '小紅書', '草稿', '香港']) {
   assert.ok(prompt.includes(token), `prompt missing ${token}`);
 }
+assert.ok(!prompt.includes('B100'), 'prompt must not mention B100');
 
 // 11. 規則唯一性與衝突
 assert.deepEqual(HK_RULE_CONFLICTS, []);
@@ -152,6 +153,11 @@ assert.ok(
   panelSource.includes('canViewPrompt && <RewriteRulesPanel'),
   'prompt card must be conditionally rendered',
 );
+const toneToolSource = read('../src/components/tools-center/tone-rewrite/ToneRewriteTool.tsx');
+assert.ok(toneToolSource.includes("toast.info('敬請期待'"), 'toast must only say 敬請期待');
+assert.ok(toneToolSource.includes("width: 'fit-content'"), 'toast must use adaptive width');
+assert.ok(!toneToolSource.includes('第二批'), 'english tab must not say 第二批');
+assert.ok(!toneToolSource.includes('rounded-full bg-amber-50'), 'english tab badge must be removed');
 
 // 13. 超長輸入標記
 const huge = rewriteHkDraft('字'.repeat(HK_REWRITE_MAX_INPUT + 100));
@@ -185,7 +191,8 @@ assert.equal(platformVariant(thisIs, 'instagram').text.split('\n')[0], '呢個�
 
 // 17. 純英文提示
 const english = rewriteHkDraft('This is a test.');
-assert.ok(english.issues.some((issue) => issue.includes('英文')));
+assert.ok(english.issues.some((issue) => issue.includes('敬請期待')));
+assert.ok(english.issues.every((issue) => !issue.includes('第二批')));
 
 // 18. 中文標點與空格正規化（URL 內逗號不改）
 assert.equal(rewriteHkDraft('香港 , 九龍 , 新界').writtenText, '香港，九龍，新界');

@@ -5,7 +5,7 @@ import { HkRewritePanel } from './hk/HkRewritePanel';
 
 /**
  * 《語氣校對改寫器》工具切換器。
- * 第一批只有港式；第二批英文商務版只需要在這裡加一個可選 tab，
+ * 目前只有港式；英文商務版只需要在這裡加一個可選 tab，
  * 下方換成對應 panel 即可，路由與側欄都不用再改。
  */
 export function ToneRewriteTool() {
@@ -23,15 +23,21 @@ export function ToneRewriteTool() {
         <button
           type="button"
           aria-disabled="true"
-          title="英文商務語氣改寫器會於第二批加入"
-          onClick={() => toast.info('英文商務語氣改寫器會於第二批加入')}
+          title="敬請期待"
+          onClick={() =>
+            toast.info('敬請期待', {
+              className: '!w-fit !min-w-0',
+              style: {
+                width: 'fit-content',
+                maxWidth: 'calc(100vw - 2rem)',
+                minWidth: 0,
+              },
+            })
+          }
           className="inline-flex h-8 items-center gap-1.5 rounded-[4px] px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted/60"
         >
           <Languages size={14} />
           英文商務語氣改寫器
-          <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
-            第二批
-          </span>
         </button>
       </div>
 
