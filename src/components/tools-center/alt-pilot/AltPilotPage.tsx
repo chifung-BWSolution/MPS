@@ -872,6 +872,7 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
 
   const handleHistorySelect = (runId: string) => {
     setHistoryOpen(false);
+    setView('single');
     replaceRunHash(runId);
     void loadRun(runId);
   };

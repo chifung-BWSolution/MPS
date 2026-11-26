@@ -369,8 +369,8 @@ export function AltBatchPage({
 
       {warnings.length > 0 ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] leading-relaxed text-amber-800">
-          {warnings.map((warning) => (
-            <p key={warning}>{warning}</p>
+          {warnings.map((warning, index) => (
+            <p key={`${warning}-${index}`}>{warning}</p>
           ))}
         </div>
       ) : null}
