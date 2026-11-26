@@ -95,3 +95,12 @@ export function displayAlt(suggestion: AltSuggestionRow | null): string {
   if (!suggestion) return '';
   return (suggestion.final_alt || suggestion.suggested_alt || '').trim();
 }
+
+/** 營運流程不需要「批准」：已生成且有名稱／裝飾圖空 alt 就可以直接匯出。 */
+export function isExportableSuggestion(suggestion: AltSuggestionRow | null): boolean {
+  if (!suggestion) return false;
+  if (suggestion.status !== 'pending' && suggestion.status !== 'approved' && suggestion.status !== 'exported') {
+    return false;
+  }
+  return suggestion.decorative || displayAlt(suggestion).length > 0;
+}

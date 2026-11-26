@@ -9,9 +9,9 @@ export function FramerPasteGuide() {
             <Info size={15} />
           </span>
           <div>
-            <p className="text-[13px] font-semibold text-[#0d1a2d]">Framer 貼上指引（半自動）</p>
+            <p className="text-[13px] font-semibold text-[#0d1a2d]">Framer 貼上指引</p>
             <p className="text-[11px] text-muted-foreground">
-              Framer 沒有公開的伺服器端 alt API；第一期用對照表人工貼上，貼完可按「驗證已填」。
+              Framer 沒有公開的伺服器端 alt API；用對照表貼上，貼完可按「驗證已填」。
             </p>
           </div>
         </div>
@@ -20,7 +20,7 @@ export function FramerPasteGuide() {
 
       <ol className="mt-4 space-y-2 border-t border-border pt-4 text-[12px] leading-relaxed text-muted-foreground">
         <li>
-          <span className="font-medium text-[#0d1a2d]">1. 匯出 CSV 或按「複製已批准」</span>
+          <span className="font-medium text-[#0d1a2d]">1. 匯出 CSV 或按「複製全部」</span>
           ，檔案包含檔名、位置、現有 ALT 與建議 ALT。
         </li>
         <li>
@@ -51,7 +51,7 @@ export function FramerPasteGuide() {
           Framer 無障礙說明
           <ExternalLink size={11} />
         </a>
-        <span>· 第二期才會評估 MCP 寫入，不在本次範圍。</span>
+
       </div>
     </details>
   );

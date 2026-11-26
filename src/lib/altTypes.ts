@@ -207,16 +207,16 @@ export const ALT_SCHEMA_MISSING_MESSAGE =
 export const ALT_RUN_STATUS_LABELS: Record<AltRunStatus, string> = {
   analyzed: '已分析',
   generating: '生成中',
-  ready: '待審批',
+  ready: '已生成',
   exported: '已匯出',
   failed: '失敗',
   archived: '已歸檔',
 };
 
 export const ALT_SUGGESTION_STATUS_LABELS: Record<AltSuggestionStatus, string> = {
-  pending: '待批准',
-  approved: '已批准',
-  rejected: '已略過',
+  pending: '已生成',
+  approved: '已生成',
+  rejected: '已忽略',
   exported: '已匯出',
   failed: '生成失敗',
 };

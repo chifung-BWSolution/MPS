@@ -85,7 +85,7 @@ export function AltRunHistory({ runs, open, onOpenChange, onSelect, loading }: A
                     <span>·</span>
                     <span>{run.image_count} 張</span>
                     <span>·</span>
-                    <span>已批准 {run.approved_count}</span>
+                    <span>已生成 {run.generated_count}</span>
                     {run.keyword ? (
                       <>
                         <span>·</span>

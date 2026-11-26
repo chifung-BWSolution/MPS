@@ -56,6 +56,7 @@ import { AltImageTable } from './AltImageTable';
 import { AltPilotHeader } from './AltPilotHeader';
 import {
   imageFromSuggestion,
+  isExportableSuggestion,
   isPendingRow,
   pageFromRunRow,
   rowsFromSuggestions,
@@ -169,7 +170,7 @@ function AltPilotDisabledNotice({
           <h2 className="text-[16px] font-semibold text-[#0d1a2d]">ALT Pilot 目前已停用</h2>
           <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
             <code className="rounded bg-[#f5f8fc] px-1">alt_settings.enabled = false</code>
-            。歷史與已批准資料仍在；管理員確認後可用 SQL 開啟。
+            。歷史與已生成資料仍在；管理員確認後可用 SQL 開啟。
           </p>
           <code className="mt-2 block rounded border border-border bg-[#f8fafc] px-3 py-2 text-[11px] text-[#0d1a2d]">
             update public.alt_settings set enabled = true where id = 'default';
@@ -438,10 +439,8 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
     [images, suggestionByUrl],
   );
 
-  const approvedCount = suggestions.filter((suggestion) => suggestion.status === 'approved').length;
-  const pendingCount = suggestions.filter(
-    (suggestion) => suggestion.status === 'pending' || suggestion.status === 'failed',
-  ).length;
+  const exportableCount = suggestions.filter(isExportableSuggestion).length;
+  const failedCount = suggestions.filter((suggestion) => suggestion.status === 'failed').length;
 
   const handleSiteChange = (nextSiteId: string) => {
     const previous = sites.find((site) => site.id === siteId);
@@ -526,7 +525,7 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
         return;
       }
       if (targets.length === 0) {
-        toast.info('請先勾選尚未批准的圖片');
+        toast.info('請先勾選尚未生成的圖片');
         return;
       }
 
@@ -787,21 +786,21 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
 
   const handleCopyApproved = async () => {
     if (!run) return;
-    const approved = suggestions.filter((suggestion) => suggestion.status === 'approved');
-    if (approved.length === 0) {
-      toast.info('先批准至少一張 ALT');
+    const exportable = suggestions.filter(isExportableSuggestion);
+    if (exportable.length === 0) {
+      toast.info('先選擇或生成至少一張 ALT');
       return;
     }
-    const exportRows = buildAltExportRows(run, approved);
+    const exportRows = buildAltExportRows(run, exportable);
     const copied = await copyTextToClipboard(toTsv(exportRows));
     if (copied) toast.success(`已複製 ${exportRows.length} 張（檔名 + ALT）`);
     else toast.error('複製失敗');
   };
 
-  const markExported = async (approved: AltSuggestionRow[]) => {
-    if (!run || approved.length === 0) return;
+  const markExported = async (exportable: AltSuggestionRow[]) => {
+    if (!run || exportable.length === 0) return;
     try {
-      await markAltRunExported(run.id, approved.length);
+      await markAltRunExported(run.id, exportable.length);
       await refreshRun(run.id);
       void refreshRuns();
     } catch (exportError) {
@@ -811,13 +810,13 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
 
   const handleExport = async (format: 'csv' | 'json' | 'checklist') => {
     if (!run) return;
-    const approved = suggestions.filter((suggestion) => suggestion.status === 'approved');
-    if (approved.length === 0) {
-      toast.info('先批准至少一張 ALT 再匯出');
+    const exportable = suggestions.filter(isExportableSuggestion);
+    if (exportable.length === 0) {
+      toast.info('先選擇或生成至少一張 ALT 再匯出');
       return;
     }
 
-    const exportRows = buildAltExportRows(run, approved);
+    const exportRows = buildAltExportRows(run, exportable);
     if (format === 'csv') {
       downloadTextFile(exportFilename(run, 'csv'), toCsv(exportRows), 'text/csv;charset=utf-8');
     } else if (format === 'json') {
@@ -834,17 +833,17 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
       );
     }
 
-    await markExported(approved);
+    await markExported(exportable);
     toast.success(`已匯出 ${exportRows.length} 張 ALT`);
   };
 
   const handleMarkExported = async () => {
-    const approved = suggestions.filter((suggestion) => suggestion.status === 'approved');
-    if (approved.length === 0) {
-      toast.info('沒有已批准的 ALT');
+    const exportable = suggestions.filter(isExportableSuggestion);
+    if (exportable.length === 0) {
+      toast.info('沒有可匯出的 ALT');
       return;
     }
-    await markExported(approved);
+    await markExported(exportable);
     toast.success('已標記為已匯出');
   };
 
@@ -855,7 +854,7 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
     try {
       const result = await invokeAltFunction<AltVerifyResult>('verify', { run_id: run.id });
       setVerifyResult(result);
-      if (result.checked === 0) toast.info('沒有已批准的 ALT 可驗證');
+      if (result.checked === 0) toast.info('沒有可驗證的 ALT');
       else if (result.missing.length === 0) toast.success(`已寫回 ${result.matched}/${result.checked} 張`);
       else toast.warning(`已寫回 ${result.matched}/${result.checked} 張，仍有 ${result.missing.length} 張是舊值`);
     } catch (verifyError) {
@@ -1059,11 +1058,11 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
                 />
 
                 <AltExportBar
-                  approvedCount={approvedCount}
-                  pendingCount={pendingCount}
+                  generatedCount={exportableCount}
+                  failedCount={failedCount}
                   onExportCsv={() => void handleExport('csv')}
                   onExportJson={() => void handleExport('json')}
-                  onCopyApproved={() => void handleCopyApproved()}
+                  onCopyAll={() => void handleCopyApproved()}
                   onMarkExported={() => void handleMarkExported()}
                   canMarkExported={Boolean(run && run.status !== 'exported')}
                 />

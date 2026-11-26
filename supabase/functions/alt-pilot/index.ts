@@ -992,7 +992,13 @@ async function handleVerify(admin: DbClient, body: Record<string, unknown>) {
   const fetched = await fetchPageHtml(run.page_url, allowedHosts);
   const analysis = analyzePage(fetched.html, fetched.finalUrl);
   const suggestions = await loadSuggestions(admin, run.id);
-  const approved = suggestions.filter((suggestion) => suggestion.status === "approved");
+  const approved = suggestions.filter(
+    (suggestion) =>
+      (suggestion.status === "pending" ||
+        suggestion.status === "approved" ||
+        suggestion.status === "exported") &&
+      (suggestion.decorative || normalizeWhitespace(suggestion.final_alt || suggestion.suggested_alt).length > 0),
+  );
 
   const byUrl = new Map(analysis.images.map((image) => [image.url, image]));
   const missing: Array<{ image_url: string; expected: string; actual: string }> = [];

@@ -58,7 +58,13 @@ export function buildAltExportRows(
   suggestions: AltSuggestionRow[],
 ): AltExportRow[] {
   return suggestions
-    .filter((suggestion) => suggestion.status === 'approved' || suggestion.status === 'exported')
+    .filter(
+      (suggestion) =>
+        (suggestion.status === 'pending' ||
+          suggestion.status === 'approved' ||
+          suggestion.status === 'exported') &&
+        (suggestion.decorative || chosenAlt(suggestion).length > 0),
+    )
     .map((suggestion) => ({
       page_url: run.page_url,
       image_url: suggestion.image_url,

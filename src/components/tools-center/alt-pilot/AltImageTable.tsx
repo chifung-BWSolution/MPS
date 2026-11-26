@@ -1,4 +1,4 @@
-import { Check, Loader2, Sparkles, X } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
@@ -65,11 +65,6 @@ export function AltImageTable({
   const generatableSelected = selectedRows.filter(
     (row) => !row.suggestion || isPendingRow(row),
   );
-  const approvableSelected = selectedRows.filter(
-    (row) =>
-      isPendingRow(row) &&
-      (Boolean(row.suggestion?.suggested_alt.trim()) || Boolean(row.suggestion?.decorative)),
-  );
 
   return (
     <div className="overflow-hidden rounded-lg border border-[rgba(13,26,45,0.08)] bg-white shadow-card">
@@ -77,7 +72,7 @@ export function AltImageTable({
         <div>
           <h2 className="text-[15px] font-semibold text-[#0d1a2d]">圖片與 ALT</h2>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
-            生成後逐張確認；批准後才會出現在匯出檔。裝飾圖會建議 <code className="rounded bg-[#f5f8fc] px-1">alt=""</code>。
+            生成後可直接複製或匯出；裝飾圖會建議 <code className="rounded bg-[#f5f8fc] px-1">alt=""</code>。
           </p>
         </div>
 
@@ -102,28 +97,6 @@ export function AltImageTable({
             {generating ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
             生成 ALT（{generatableSelected.length}）
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5 bg-white px-3 text-[12px]"
-            onClick={onApproveSelected}
-            disabled={generating || bulkBusy || approvableSelected.length === 0}
-          >
-            <Check size={13} />
-            批准（{approvableSelected.length}）
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-8 gap-1.5 px-2 text-[12px] text-muted-foreground"
-            onClick={onRejectSelected}
-            disabled={generating || bulkBusy || selectedRows.length === 0}
-          >
-            <X size={13} />
-            略過
-          </Button>
         </div>
       </div>
 
@@ -144,7 +117,7 @@ export function AltImageTable({
 
       {rows.length === 0 ? (
         <div className="px-6 py-14 text-center text-[13px] text-muted-foreground">
-          這次分析沒有可處理的圖片；背景圖、iframe、SVG 不在第一期範圍。
+          這次分析沒有可處理的圖片。
         </div>
       ) : (
         <div className="overflow-x-auto">

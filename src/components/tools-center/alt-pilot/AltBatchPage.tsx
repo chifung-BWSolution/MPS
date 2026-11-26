@@ -739,7 +739,7 @@ export function AltBatchPage({
             <AlertDialogDescription className="space-y-2 text-[12px] leading-relaxed">
               <span className="block">
                 這次會處理最多 <strong>{batchTargetCount}</strong> 張「目前沒有 ALT」的圖片，
-                每張通常呼叫 Grok 1 次；失敗可能重試。生成結果只會寫入建議，不會自動批准或貼上網站。
+                每張通常呼叫 Grok 1 次；失敗可能重試。生成結果只會寫入建議，不會自動貼上網站。
               </span>
               {settings?.daily_call_limit === 0 ? (
                 <span className="block rounded border border-amber-200 bg-amber-50 p-2 text-amber-800">
