@@ -261,7 +261,7 @@ function Section({
   );
 }
 
-export function BwAsanaMailSettings() {
+export function BwAsanaMailSettings({ panel = 'all' }: { panel?: 'all' | 'rules' | 'records' | 'errors' } = {}) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [people, setPeople] = useState<AsanaPerson[]>([]);
@@ -274,7 +274,7 @@ export function BwAsanaMailSettings() {
   const [savedEnabled, setSavedEnabled] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [jobs, setJobs] = useState<MailJob[]>([]);
-  const [jobStatus, setJobStatus] = useState<'all' | 'created' | 'skipped' | 'error' | 'processing'>('all');
+  const [jobStatus, setJobStatus] = useState<'all' | 'created' | 'skipped' | 'error' | 'processing'>(panel === 'errors' ? 'error' : 'all');
   const [jobQuery, setJobQuery] = useState('');
   const [jobDraft, setJobDraft] = useState('');
   const [jobPage, setJobPage] = useState(0);
@@ -336,6 +336,7 @@ export function BwAsanaMailSettings() {
       .from('asana_mail_jobs')
       .select('id, subject, received_on, status, task_name, notes, asana_task_gid, error, created_at', { count: 'exact' })
       .eq('rule_code', 'bw')
+      .not('status', 'in', '(unmatched,ignored)')
       .order('created_at', { ascending: false });
     if (status !== 'all') request = request.eq('status', status);
     if (needle) {
@@ -523,13 +524,17 @@ export function BwAsanaMailSettings() {
     });
   }, [routes, routeFilter, projectFilter, routeQuery]);
 
-  if (loading) return <p className="text-[14px] text-slate-600">載入中…</p>;
-  if (!settings) return <p className="text-[14px] text-slate-600">尚未有 BW 規則。資料表更新後先可以核對。</p>;
+  const showRules = panel === 'all' || panel === 'rules';
+  const showJobs = panel !== 'rules';
+  if (showRules && loading) return <p className="text-[14px] text-slate-600">載入中…</p>;
+  if (showRules && !settings) return <p className="text-[14px] text-slate-600">尚未有 BW 規則。資料表更新後先可以核對。</p>;
 
   const loginHint = gmail?.login_hint || 'brandingworks.services@gmail.com';
 
   return (
     <div className="space-y-5 pb-24">
+      {showRules && settings && (
+      <>
       <Section
         step="1"
         title="授權電郵"
@@ -877,13 +882,16 @@ export function BwAsanaMailSettings() {
           <Plus size={16} /> 加一種查詢
         </button>
       </Section>
+      </>
+      )}
 
+      {showJobs && (
       <div className="bg-white border border-border/50 rounded-md overflow-hidden">
         <div className="px-4 py-3 border-b border-border/50">
-          <p className="text-[13px] font-medium">最近處理</p>
+          <p className="text-[13px] font-medium">{panel === 'errors' ? '失敗' : '最近處理'}</p>
           <p className="text-[12px] text-muted-foreground">點一行先展開。左邊時間是系統處理時間，收信是郵件真正收到的日子。藍底是郵件，綠底是 Asana。</p>
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            {JOB_STATUS_FILTERS.map((filter) => (
+            {panel !== 'errors' && JOB_STATUS_FILTERS.map((filter) => (
               <button
                 key={filter.id}
                 type="button"
@@ -1040,7 +1048,9 @@ export function BwAsanaMailSettings() {
           })}
         </div>
       </div>
+      )}
 
+      {showRules && settings && (
       <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-300 bg-white/95 p-3 shadow-md">
         <p className="text-[14px] text-slate-700">已填好 {readyCount} 行，未填完 {blankCount} 行。{settings.enabled ? '儲存後，新郵件會自動開 task。' : '未啟用自動開 task。'}</p>
         <button
@@ -1052,6 +1062,7 @@ export function BwAsanaMailSettings() {
           <Save size={16} /> {saving ? '儲存中…' : '儲存規則'}
         </button>
       </div>
+      )}
     </div>
   );
 }

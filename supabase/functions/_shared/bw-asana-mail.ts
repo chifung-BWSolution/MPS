@@ -96,6 +96,7 @@ export function bwSkipReason(subject: string, skipSubjects: string[]): string | 
   }
   if (/payment disabled/i.test(text)) return "EmailMeForm 系統通知，不開 task";
   if (/FCC\s*到會|FCP活動|開店預約|開店說明會|餐廳開店/.test(text)) return "這是 FC 查詢，不在 BW 開 task";
+  if (text.includes("商業及私人派對服務")) return "這是 WP 查詢，不在 BW 開 task";
   const hit = skipSubjects.map((item) => item.trim()).filter(Boolean).find((item) => text.toLowerCase().includes(item.toLowerCase()));
   if (hit) return `主旨包含略過字句「${hit}」，不開 task`;
   return null;

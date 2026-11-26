@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, ChevronRight, Mail, RefreshCw, Save, X, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronRight, Mail, RefreshCw, Save, X, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 
@@ -220,7 +220,7 @@ async function callFunction<T>(slug: string, body: Record<string, unknown>): Pro
   return json;
 }
 
-export function FccAsanaMailSettings() {
+export function FccAsanaMailSettings({ panel = 'all' }: { panel?: 'all' | 'rules' | 'records' | 'errors' } = {}) {
   const [rule, setRule] = useState<MailRule | null>(null);
   const [collaborators, setCollaborators] = useState<string[]>([]);
   const [people, setPeople] = useState<AsanaPerson[]>([]);
@@ -229,7 +229,7 @@ export function FccAsanaMailSettings() {
   const [creator, setCreator] = useState<{ name: string; email: string } | null>(null);
   const [peopleError, setPeopleError] = useState('');
   const [jobs, setJobs] = useState<MailJob[]>([]);
-  const [jobStatus, setJobStatus] = useState<'all' | 'created' | 'skipped' | 'error' | 'processing'>('all');
+  const [jobStatus, setJobStatus] = useState<'all' | 'created' | 'skipped' | 'error' | 'processing'>(panel === 'errors' ? 'error' : 'all');
   const [jobQuery, setJobQuery] = useState('');
   const [jobDraft, setJobDraft] = useState('');
   const [jobPage, setJobPage] = useState(0);
@@ -255,6 +255,7 @@ export function FccAsanaMailSettings() {
       .from('asana_mail_jobs')
       .select('id, subject, received_on, status, task_name, notes, asana_task_gid, error, created_at', { count: 'exact' })
       .eq('rule_code', 'fcc')
+      .not('status', 'in', '(unmatched,ignored)')
       .order('created_at', { ascending: false });
     if (status !== 'all') request = request.eq('status', status);
     if (needle) {
@@ -395,34 +396,28 @@ export function FccAsanaMailSettings() {
     }
   };
 
-  if (loading && !rule) {
+  const showRules = panel === 'all' || panel === 'rules';
+  const showJobs = panel !== 'rules';
+  if (showRules && loading && !rule) {
     return <p className="text-[13px] text-muted-foreground">載入 FC 查詢設定…</p>;
   }
-  if (!rule) {
+  if (showRules && !rule) {
     return <p className="text-[13px] text-muted-foreground">找不到 FCC 規則。請先套用資料庫 migration。</p>;
   }
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="text-[13px] text-muted-foreground max-w-3xl">
-          讀 {rule.gmail_address} 的「{rule.gmail_label_name}」，以及同一信箱主旨是 FCP活動策劃、到會商戶合作查詢、開店預約見面或開店說明會的郵件。只有 EmailMeForm 寄出的信（寄件人是 @emailmeform.com）先會開 task。同事回覆或客人回覆同一封信，即使主旨一樣，都不會再開。正餐或小食到會開 Catering，只有飯盒或下午茶開 Lunch Box。FCP 活動策劃用下面的 FCP 專案。開店預約同開店說明會用 Consulting，負責人可以同到會不同。BWL 活動策劃、禮品查詢同療程預約唔會開。到期日是郵件當日（香港時間）。
-          {creator?.email
-            ? ` 開 task 的 Asana 帳號是 ${creator.email}。`
-            : ' 開 task 的 Asana 帳號未設定，暫停期間不會再開。'}
-        </p>
-        <button
-          type="button"
-          onClick={() => void syncNow()}
-          disabled={syncing}
-          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-teal-600 text-white text-[13px] font-medium hover:bg-teal-700 disabled:opacity-60"
-        >
-          <RefreshCw size={14} className={syncing ? 'animate-spin' : undefined} />
-          {syncing ? '處理中…' : '立即檢查郵件'}
-        </button>
-      </div>
-
-      <div className="bg-white border border-border/50 rounded-md p-4 flex flex-wrap items-center justify-between gap-3">
+      {showRules && rule && (
+      <>
+      <section className="rounded-md border border-teal-300 bg-teal-50 p-4 sm:p-5">
+        <div className="mb-4 flex items-start gap-3">
+          <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-md bg-teal-700 px-2 text-[13px] font-semibold text-white">1</span>
+          <div>
+            <h2 className="text-[18px] font-semibold text-slate-900">授權電郵</h2>
+            <p className="mt-1 text-[14px] leading-6 text-slate-700">讀 {rule.gmail_address} 的「{rule.gmail_label_name}」。只有 EmailMeForm 寄出的信先會開 task。同事回覆或客人回覆都不會再開。</p>
+          </div>
+        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-teal-200 bg-white p-4">
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-md flex items-center justify-center ${gmail?.connected ? 'bg-teal-50' : 'bg-amber-50'}`}>
             <Mail size={18} className={gmail?.connected ? 'text-teal-600' : 'text-amber-600'} />
@@ -435,28 +430,47 @@ export function FccAsanaMailSettings() {
             <p className="text-[12px] text-muted-foreground">請用 {gmail?.login_hint || rule.gmail_address} 授權，只讀郵件。</p>
           </div>
         </div>
-        <button type="button" onClick={() => void connect()} className="h-8 px-3 rounded-md border border-border text-[12px] hover:bg-muted/40">
-          {gmail?.connected ? '重新授權' : '連接 Gmail'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => void connect()} className="inline-flex min-h-11 items-center rounded-md bg-teal-700 px-4 text-[14px] font-medium text-white hover:bg-teal-800">
+            {gmail?.connected ? '重新授權' : '授權這個信箱'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void syncNow()}
+            disabled={syncing}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-teal-300 bg-white px-3 text-[14px] text-teal-950 hover:bg-teal-100 disabled:opacity-60"
+          >
+            <RefreshCw size={16} className={syncing ? 'animate-spin' : undefined} />
+            {syncing ? '檢查中…' : '立即檢查郵件'}
+          </button>
+        </div>
       </div>
-      {gmail?.redirect_uri && (
-        <p className="text-[12px] text-muted-foreground break-all">
-          Google OAuth redirect URI：{gmail.redirect_uri}
-        </p>
-      )}
+      <label className="mt-4 flex min-h-11 items-center gap-3 text-[15px] font-medium text-slate-900">
+        <input
+          type="checkbox"
+          className="h-4 w-4"
+          checked={rule.enabled}
+          onChange={(e) => setRule({ ...rule, enabled: e.target.checked })}
+        />
+        啟用自動開 task
+      </label>
+      <p className="mt-2 text-[14px] leading-6 text-slate-700">
+        正餐或小食到會開 Catering，只有飯盒或下午茶開 Lunch Box。FCP 活動策劃同開店查詢用下面各自的專案。BWL、禮品同療程唔會開。
+        {creator?.email ? ` 開 task 的 Asana 帳號是 ${creator.email}。` : ' 開 task 的 Asana 帳號未設定，暫停期間不會再開。'}
+      </p>
+      </section>
 
-      <div className="bg-white border border-border/50 rounded-md p-4 space-y-4">
-        <label className="flex items-center gap-2 text-[13px]">
-          <input
-            type="checkbox"
-            checked={rule.enabled}
-            onChange={(e) => setRule({ ...rule, enabled: e.target.checked })}
-          />
-          啟用自動開 task
-        </label>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="block text-[12px] text-muted-foreground">
-            負責人
+      <section className="rounded-md border border-sky-300 bg-sky-50 p-4 sm:p-5">
+        <div className="mb-4 flex items-start gap-3">
+          <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-md bg-sky-700 px-2 text-[13px] font-semibold text-white">2</span>
+          <div>
+            <h2 className="text-[18px] font-semibold text-slate-900">負責人同協作者</h2>
+            <p className="mt-1 text-[14px] leading-6 text-slate-700">到會、飯盒同 FCP 用同一個負責人。開店查詢可以另外指定。協作者會加進每一個新 task。</p>
+          </div>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <div className="rounded-md border border-sky-300 bg-white p-3">
+            <p className="text-[13px] font-semibold text-sky-900">負責人</p>
             <div className="mt-1 space-y-1">
               <p className="text-[13px] text-foreground min-h-5">
                 {people.find((person) => person.gid === rule.assignee_gid)
@@ -473,27 +487,27 @@ export function FccAsanaMailSettings() {
               />
             </div>
           </div>
-          <div className="block text-[12px] text-muted-foreground sm:row-span-2">
-            協作者
-            <div className="mt-1 space-y-2">
+          <div className="rounded-md border border-sky-300 bg-white p-3">
+            <p className="text-[13px] font-semibold text-sky-900">協作者</p>
+            <div className="mt-2 space-y-2">
               <div className="flex flex-wrap gap-1.5">
                 {collaborators.map((gid) => {
                   const person = people.find((item) => item.gid === gid);
                   return (
-                    <span key={gid} className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/30 px-2 py-1 text-[12px] text-foreground">
+                    <span key={gid} className="inline-flex min-h-11 items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-2 text-[14px] text-slate-900">
                       {person ? personLabel(person) : '未能對上 Gmail'}
                       <button
                         type="button"
-                        className="text-muted-foreground hover:text-foreground"
+                        className="inline-flex h-11 w-8 items-center justify-center text-slate-600 hover:text-slate-900"
                         onClick={() => setCollaborators((current) => current.filter((item) => item !== gid))}
                         aria-label="移除協作者"
                       >
-                        <X size={12} />
+                        <X size={14} />
                       </button>
                     </span>
                   );
                 })}
-                {collaborators.length === 0 && <span className="text-[12px]">未加入協作者</span>}
+                {collaborators.length === 0 && <span className="text-[14px] text-slate-700">未加入協作者</span>}
               </div>
               <NameSearch
                 items={people}
@@ -505,92 +519,60 @@ export function FccAsanaMailSettings() {
               />
             </div>
           </div>
-          <div className="block text-[12px] text-muted-foreground">
-            Lunch Box 專案
-            <div className="mt-1 space-y-1">
-              <p className="text-[13px] text-foreground min-h-5">
-                {projects.find((project) => project.gid === rule.lunch_project_gid)?.name || (rule.lunch_project_gid ? '未能對上專案名稱' : '未選擇')}
-              </p>
-              <NameSearch
-                items={projects}
-                labelOf={(project) => project.name}
-                exclude={rule.lunch_project_gid ? [rule.lunch_project_gid] : []}
-                placeholder="搜尋專案名稱"
-                emptyText={projectError || '找不到這個專案'}
-                onPick={(project) => setRule({ ...rule, lunch_project_gid: project.gid })}
-              />
-            </div>
+        </div>
+      </section>
+
+      <section className="rounded-md border border-emerald-300 bg-emerald-50 p-4 sm:p-5">
+        <div className="mb-4 flex items-start gap-3">
+          <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-md bg-emerald-700 px-2 text-[13px] font-semibold text-white">3</span>
+          <div>
+            <h2 className="text-[18px] font-semibold text-slate-900">四種查詢</h2>
+            <p className="mt-1 text-[14px] leading-6 text-slate-700">每種查詢一張卡。未選專案就不會開。標題是 task 名稱前面那截。</p>
           </div>
-          <label className="block text-[12px] text-muted-foreground">
-            Lunch Box 標題
-            <input className={`${inputClass} mt-1`} value={rule.lunch_title_prefix} onChange={(e) => setRule({ ...rule, lunch_title_prefix: e.target.value })} />
-          </label>
-          <div className="block text-[12px] text-muted-foreground">
-            Catering 專案
-            <div className="mt-1 space-y-1">
-              <p className="text-[13px] text-foreground min-h-5">
-                {projects.find((project) => project.gid === rule.catering_project_gid)?.name || (rule.catering_project_gid ? '未能對上專案名稱' : '未選擇')}
-              </p>
-              <NameSearch
-                items={projects}
-                labelOf={(project) => project.name}
-                exclude={rule.catering_project_gid ? [rule.catering_project_gid] : []}
-                placeholder="搜尋專案名稱"
-                emptyText={projectError || '找不到這個專案'}
-                onPick={(project) => setRule({ ...rule, catering_project_gid: project.gid })}
-              />
-            </div>
-          </div>
-          <label className="block text-[12px] text-muted-foreground">
-            Catering 標題
-            <input className={`${inputClass} mt-1`} value={rule.catering_title_prefix} onChange={(e) => setRule({ ...rule, catering_title_prefix: e.target.value })} />
-          </label>
-          <div className="block text-[12px] text-muted-foreground">
-            FCP 專案
-            <div className="mt-1 space-y-1">
-              <p className="text-[13px] text-foreground min-h-5">
-                {projects.find((project) => project.gid === rule.fcp_project_gid)?.name || (rule.fcp_project_gid ? '未能對上專案名稱' : '未選擇')}
-              </p>
-              <NameSearch
-                items={projects}
-                labelOf={(project) => project.name}
-                exclude={rule.fcp_project_gid ? [rule.fcp_project_gid] : []}
-                placeholder="搜尋專案名稱"
-                emptyText={projectError || '找不到這個專案'}
-                onPick={(project) => setRule({ ...rule, fcp_project_gid: project.gid })}
-              />
-            </div>
-          </div>
-          <label className="block text-[12px] text-muted-foreground">
-            FCP 標題
-            <input className={`${inputClass} mt-1`} value={rule.fcp_title_prefix} onChange={(e) => setRule({ ...rule, fcp_title_prefix: e.target.value })} />
-          </label>
-          <div className="block text-[12px] text-muted-foreground">
-            Consulting 專案
-            <div className="mt-1 space-y-1">
-              <p className="text-[13px] text-foreground min-h-5">
-                {projects.find((project) => project.gid === rule.consulting_project_gid)?.name || (rule.consulting_project_gid ? '未能對上專案名稱' : '未選擇')}
-              </p>
-              <NameSearch
-                items={projects}
-                labelOf={(project) => project.name}
-                exclude={rule.consulting_project_gid ? [rule.consulting_project_gid] : []}
-                placeholder="搜尋專案名稱"
-                emptyText={projectError || '找不到這個專案'}
-                onPick={(project) => setRule({ ...rule, consulting_project_gid: project.gid })}
-              />
-            </div>
-          </div>
-          <label className="block text-[12px] text-muted-foreground">
-            Consulting 標題
-            <input className={`${inputClass} mt-1`} value={rule.consulting_title_prefix} onChange={(e) => setRule({ ...rule, consulting_title_prefix: e.target.value })} />
-          </label>
-          <div className="block text-[12px] text-muted-foreground sm:col-span-2">
-            Consulting 負責人
-            <div className="mt-1 space-y-1">
-              <p className="text-[13px] text-foreground min-h-5">
-                {people.find((person) => person.gid === rule.consulting_assignee_gid) ? personLabel(people.find((person) => person.gid === rule.consulting_assignee_gid)!) : (rule.consulting_assignee_gid ? '未能對上 Gmail' : '未選擇')}
-              </p>
+        </div>
+        <div className="space-y-3">
+          {([
+            ['Lunch Box', '只有飯盒或下午茶', 'lunch_project_gid', 'lunch_title_prefix'],
+            ['Catering', '正餐或小食到會', 'catering_project_gid', 'catering_title_prefix'],
+            ['FCP', 'FCP 活動策劃', 'fcp_project_gid', 'fcp_title_prefix'],
+            ['Consulting', '開店預約同開店說明會', 'consulting_project_gid', 'consulting_title_prefix'],
+          ] as const).map(([title, hint, projectKey, prefixKey]) => {
+            const projectGid = rule[projectKey];
+            const ready = Boolean(projectGid.trim() && rule[prefixKey].trim());
+            return (
+              <article key={title} className={`rounded-md border-2 bg-white p-4 ${ready ? 'border-emerald-300' : 'border-amber-400'}`}>
+                <p className={`mb-3 inline-flex items-center gap-1.5 text-[14px] font-semibold ${ready ? 'text-emerald-900' : 'text-amber-950'}`}>
+                  {ready ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                  {title} · {ready ? '已填好，可以開' : '未填完，不會開'}
+                </p>
+                <p className="mb-3 text-[14px] text-slate-700">{hint}</p>
+                <label className="block text-[14px] font-medium text-slate-900">
+                  標題
+                  <input className={`${inputClass} mt-1 min-h-11 text-[14px]`} value={rule[prefixKey]} onChange={(e) => setRule({ ...rule, [prefixKey]: e.target.value })} />
+                </label>
+                <div className="mt-3 rounded-md border border-emerald-300 bg-emerald-50 p-3">
+                  <p className="text-[13px] font-semibold text-emerald-900">Asana 專案</p>
+                  <p className="mt-1 text-[16px] font-semibold text-slate-900">{projects.find((project) => project.gid === projectGid)?.name || (projectGid ? '未能對上專案名稱' : '未選專案')}</p>
+                  <div className="mt-2">
+                    <NameSearch
+                      items={projects}
+                      labelOf={(project) => project.name}
+                      exclude={projectGid ? [projectGid] : []}
+                      placeholder="搜尋專案名稱"
+                      emptyText={projectError || '找不到這個專案'}
+                      onPick={(project) => setRule({ ...rule, [projectKey]: project.gid })}
+                    />
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+          <article className="rounded-md border-2 border-sky-300 bg-white p-4">
+            <p className="mb-3 text-[14px] font-semibold text-sky-950">Consulting 負責人</p>
+            <p className="text-[16px] font-semibold text-slate-900">
+              {people.find((person) => person.gid === rule.consulting_assignee_gid) ? personLabel(people.find((person) => person.gid === rule.consulting_assignee_gid)!) : (rule.consulting_assignee_gid ? '未能對上 Gmail' : '未選擇，開店查詢用上面的負責人')}
+            </p>
+            <div className="mt-2">
               <NameSearch
                 items={people}
                 labelOf={personLabel}
@@ -600,25 +582,30 @@ export function FccAsanaMailSettings() {
                 onPick={(person) => setRule({ ...rule, consulting_assignee_gid: person.gid })}
               />
             </div>
-          </div>
+          </article>
         </div>
+      </section>
+      <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-end gap-3 rounded-md border border-slate-300 bg-white/95 p-3 shadow-md">
         <button
           type="button"
           onClick={() => void save()}
           disabled={saving}
-          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border text-[13px] hover:bg-muted/40 disabled:opacity-60"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-teal-700 px-4 text-[14px] font-medium text-white hover:bg-teal-800 disabled:opacity-60"
         >
-          <Save size={14} />
-          {saving ? '儲存中…' : '儲存設定'}
+          <Save size={16} />
+          {saving ? '儲存中…' : '儲存規則'}
         </button>
       </div>
+      </>
+      )}
 
+      {showJobs && (
       <div className="bg-white border border-border/50 rounded-md overflow-hidden">
         <div className="px-4 py-3 border-b border-border/50">
-          <p className="text-[13px] font-medium">最近處理</p>
+          <p className="text-[13px] font-medium">{panel === 'errors' ? '失敗' : '最近處理'}</p>
           <p className="text-[12px] text-muted-foreground">點一行先展開。左邊時間是系統處理時間，收信是郵件真正收到的日子。藍底是郵件，綠底是 Asana。</p>
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            {JOB_STATUS_FILTERS.map((filter) => (
+            {panel !== 'errors' && JOB_STATUS_FILTERS.map((filter) => (
               <button
                 key={filter.id}
                 type="button"
@@ -775,6 +762,7 @@ export function FccAsanaMailSettings() {
           })}
         </div>
       </div>
+      )}
     </div>
   );
 }

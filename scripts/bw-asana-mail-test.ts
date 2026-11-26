@@ -57,6 +57,7 @@ assert.equal(matchBwRoute('OTHER solar', otherRoutes, 'phrase', 3)?.keyword, 'OT
 assert.equal(matchBwRoute('寫字樓 Office工程查詢: 周 98803692', routes, 'phrase', 3)?.keyword, '工程查詢');
 assert.equal(matchBwRoute('Project Connect寫字樓 Office:Ken', routes, 'phrase', 3)?.keyword, '寫字樓');
 assert.equal(bwSkipReason('FCC到會查詢 學校團購: 蘇', []), '這是 FC 查詢，不在 BW 開 task');
+assert.equal(bwSkipReason('商業及私人派對服務 - Daisy Li, tel 27464984', []), '這是 WP 查詢，不在 BW 開 task');
 assert.equal(bwSkipReason('Payment Disabled', []), 'EmailMeForm 系統通知，不開 task');
 assert.equal(bwSkipReason('Daily Sales Report', ['daily sales report']), '主旨包含略過字句「daily sales report」，不開 task');
 

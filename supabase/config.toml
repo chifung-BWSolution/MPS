@@ -54,6 +54,9 @@ verify_jwt = false
 [functions.sync-bw-asana-mail]
 verify_jwt = false
 
+[functions.sync-wp-asana-runs]
+verify_jwt = false
+
 [functions.fcc-asana-digest]
 verify_jwt = false
 

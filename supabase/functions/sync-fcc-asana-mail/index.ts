@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/google-gsc.ts";
 import { attachMailImages, collectFormImageUrls } from "../_shared/asana-mail-images.ts";
 import { hktDate, inquiryAlreadyOpened, isEmailMeFormSender, normalizeFccBody, parseFccInquiry, resolveFccGmailOAuthClient, type FccMailRule } from "../_shared/fcc-asana-mail.ts";
+import { sendUnmatchedInquiryAlert } from "../_shared/asana-unmatched-alert.ts";
 
 const PROVIDER = "gmail_fcc";
 const ASANA_API = "https://app.asana.com/api/1.0";
@@ -427,7 +428,7 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { error: "Method not allowed" });
   const denied = await requireCaller(req);
   if (denied) return denied;
-  const body = await req.json().catch(() => ({})) as { action?: string; taskGid?: string };
+  const body = await req.json().catch(() => ({})) as { action?: string; taskGid?: string; jobId?: string };
 
   const supabase = admin();
   const { data: rule, error: ruleErr } = await supabase
@@ -437,6 +438,13 @@ Deno.serve(async (req) => {
     .maybeSingle();
   if (ruleErr) return json(500, { error: ruleErr.message });
   if (!rule) return json(404, { error: "尚未設定 FCC 規則" });
+  if (body.action === "ignore") {
+    const jobId = String(body.jobId || "").trim();
+    if (!jobId) return json(400, { error: "缺少紀錄" });
+    const { error } = await supabase.from("asana_mail_jobs").update({ status: "ignored" }).eq("id", jobId).eq("rule_code", "fcc").eq("status", "unmatched");
+    if (error) return json(500, { error: error.message });
+    return json(200, { ok: true });
+  }
   const row = rule as MailRuleRow;
   if (body.action === "users") {
     try {
@@ -511,7 +519,7 @@ Deno.serve(async (req) => {
         .eq("gmail_message_id", item.id)
         .maybeSingle();
       if (existingErr) return json(500, { error: existingErr.message });
-      if (existing?.asana_task_gid || (existing && existing.status !== "error")) {
+      if (existing?.asana_task_gid || (existing && existing.status !== "error" && existing.status !== "unmatched")) {
         skipped += 1;
         continue;
       }
@@ -554,16 +562,30 @@ Deno.serve(async (req) => {
       }
       const parsed = parseFccInquiry(mailBody(message.payload), toRule(row), subject);
       if (!parsed.ok) {
+        const unmatched = parsed.reason === "郵件沒有飯盒或到會選項，不開 task";
         await supabase.from("asana_mail_jobs").upsert({
           rule_code: "fcc",
           gmail_message_id: item.id,
           subject,
           received_on: received,
-          status: "skipped",
+          status: unmatched ? "unmatched" : "skipped",
           notes: emailText,
           error: parsed.reason,
         }, { onConflict: "rule_code,gmail_message_id" });
         skipped += 1;
+        if (unmatched && !existing) {
+          try {
+            await sendUnmatchedInquiryAlert(supabase, {
+              department: "FC",
+              ruleCode: "fcc",
+              gmailMessageId: item.id,
+              subject,
+              receivedOn: received,
+            });
+          } catch (_err) {
+            errors.push(`${item.id}: 對不上規則的通知未能寄出`);
+          }
+        }
         continue;
       }
       let existingTaskGid: string | null = null;

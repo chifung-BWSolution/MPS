@@ -139,17 +139,23 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-export function buildFccAsanaDigestEmail(input: { date: string; tasks: FccDigestTask[]; notice?: string }): {
-  subject: string;
-  html: string;
-  text: string;
-} {
-  const count = input.tasks.length;
-  const subject = `FC 查詢 Asana ${input.date} — 今日新開 ${count} 個 task`;
-  const intro = count === 0
-    ? `${input.date}（香港時間）沒有新開的 FC 查詢 Asana task。`
-    : `${input.date}（香港時間）新開了 ${count} 個 FC 查詢 Asana task。`;
-  const cards = input.tasks.map((task) => {
+export type DigestDepartment = {
+  label: string;
+  color: string;
+  tasks: FccDigestTask[];
+};
+
+const DIGEST_DEPARTMENTS: Array<{ label: string; color: string }> = [
+  { label: 'BW', color: '#0369a1' },
+  { label: 'FC', color: '#0f766e' },
+  { label: 'WP', color: '#6d28d9' },
+];
+
+function taskCards(tasks: FccDigestTask[], color: string): string {
+  if (tasks.length === 0) {
+    return '<p style="margin:8px 0 0;font-size:14px;line-height:1.6;color:#64748b;">今日沒有新開 task。</p>';
+  }
+  return tasks.map((task) => {
     const done = task.completed === true;
     const missing = task.completed == null;
     const badgeBg = missing ? '#f1f5f9' : done ? '#dcfce7' : '#ffedd5';
@@ -158,25 +164,45 @@ export function buildFccAsanaDigestEmail(input: { date: string; tasks: FccDigest
     const projects = task.projects.length
       ? task.projects.map((project) => `<div style="margin:2px 0;font-size:14px;line-height:1.5;color:#0d1a2d;">${escapeHtml(project)}</div>`).join('')
       : '<div style="font-size:14px;line-height:1.5;color:#64748b;">未有專案</div>';
-    return `<div style="margin-top:12px;border:1px solid #e6ebf2;border-radius:10px;padding:14px 16px;">
+    return `<div style="margin-top:12px;border:1px solid #e6ebf2;border-left:4px solid ${color};border-radius:10px;padding:14px 16px;">
       <div style="display:inline-block;padding:4px 8px;border-radius:6px;background:${badgeBg};color:${badgeColor};font-size:13px;font-weight:700;line-height:1.4;">${badge}</div>
-      <a href="${escapeHtml(task.url)}" style="display:block;margin-top:8px;color:#0f766e;font-size:16px;font-weight:700;line-height:1.5;text-decoration:none;">${escapeHtml(task.title)}</a>
+      <a href="${escapeHtml(task.url)}" style="display:block;margin-top:8px;color:${color};font-size:16px;font-weight:700;line-height:1.5;text-decoration:none;">${escapeHtml(task.title)}</a>
       <div style="margin-top:10px;font-size:12px;line-height:1.4;color:#64748b;">負責人</div>
       <div style="font-size:14px;line-height:1.5;color:#0d1a2d;">${escapeHtml(task.assignee || '未指派')}</div>
       <div style="margin-top:8px;font-size:12px;line-height:1.4;color:#64748b;">專案</div>
       ${projects}
     </div>`;
   }).join('');
+}
+
+export function buildFccAsanaDigestEmail(input: { date: string; tasks?: FccDigestTask[]; departments?: DigestDepartment[]; notice?: string }): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const departments = input.departments && input.departments.length > 0
+    ? input.departments
+    : [{ label: 'FC', color: '#0f766e', tasks: input.tasks || [] }];
+  const count = departments.reduce((sum, department) => sum + department.tasks.length, 0);
+  const subject = `查詢 Asana ${input.date} — 今日新開 ${count} 個 task`;
+  const intro = `${input.date}（香港時間）BW、FC、WP 合共新開 ${count} 個查詢 Asana task。`;
+  const sections = departments.map((department) => `
+    <h2 style="margin:22px 0 0;font-size:16px;line-height:1.4;color:${department.color};">${escapeHtml(department.label)} · ${department.tasks.length} 個</h2>
+    ${taskCards(department.tasks, department.color)}
+  `).join('');
   const text = [
     intro,
     '',
-    ...input.tasks.flatMap((task) => [
-      task.completed == null ? '找不到 task' : task.completed ? '已完成' : '未完成',
-      task.title,
-      `負責人：${task.assignee || '未指派'}`,
-      `專案：${task.projects.join('；') || '未有專案'}`,
-      task.url,
-      '',
+    ...departments.flatMap((department) => [
+      `${department.label} · ${department.tasks.length} 個`,
+      ...(department.tasks.length === 0 ? ['今日沒有新開 task。', ''] : department.tasks.flatMap((task) => [
+        task.completed == null ? '找不到 task' : task.completed ? '已完成' : '未完成',
+        task.title,
+        `負責人：${task.assignee || '未指派'}`,
+        `專案：${task.projects.join('；') || '未有專案'}`,
+        task.url,
+        '',
+      ])),
     ]),
   ].join('\n').trim();
   const notice = input.notice
@@ -192,12 +218,47 @@ export function buildFccAsanaDigestEmail(input: { date: string; tasks: FccDigest
 <body style="margin:0;padding:24px;background:#f4f7fb;color:#0d1a2d;font-family:Arial,Helvetica,sans-serif;">
   <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:12px;padding:24px;">
     ${notice}
-    <p style="margin:0 0 8px;font-size:12px;letter-spacing:0.04em;color:#0f766e;font-weight:700;">FC 查詢</p>
+    <p style="margin:0 0 8px;font-size:12px;letter-spacing:0.04em;color:#0f766e;font-weight:700;">BW · FC · WP</p>
     <h1 style="margin:0;font-size:20px;line-height:1.4;">今日新開 ${count} 個 task</h1>
     <p style="margin:12px 0 0;font-size:14px;line-height:1.6;">${escapeHtml(intro)}</p>
-    ${cards}
+    ${sections}
   </div>
 </body>
 </html>`;
   return { subject, html, text };
 }
+
+export function buildUnmatchedInquiryEmail(input: { department: string; subjectLine: string; receivedOn: string }): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const subject = `Asana 查詢對不上規則 — ${input.department}`;
+  const received = input.receivedOn || '未知';
+  const text = [
+    `${input.department} 收到一封 EmailMeForm，主旨對不上現有規則，所以未有開 task。`,
+    `收信：${received}`,
+    `主旨：${input.subjectLine || '（沒有主旨）'}`,
+    '請到 Asana 查詢的錯誤頁查看。加一行關鍵字、負責人同專案，下一輪檢查就會開。如果不需要，在該頁按略過。',
+  ].join('\n');
+  const html = `<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin:0;padding:24px;background:#f4f7fb;color:#0d1a2d;font-family:Arial,Helvetica,sans-serif;">
+  <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:12px;padding:24px;">
+    <p style="margin:0 0 8px;font-size:12px;letter-spacing:0.04em;color:#9a3412;font-weight:700;">對不上規則</p>
+    <h1 style="margin:0;font-size:20px;line-height:1.4;">${escapeHtml(input.department)} 未有開 task</h1>
+    <p style="margin:12px 0 0;font-size:14px;line-height:1.6;">主旨對不上現有規則。加一行之後，下一輪檢查會開這封信。如果不需要，在錯誤頁按略過。</p>
+    <p style="margin:16px 0 0;font-size:12px;line-height:1.4;color:#64748b;">收信 ${escapeHtml(received)}</p>
+    <p style="margin:4px 0 0;font-size:16px;font-weight:700;line-height:1.5;">${escapeHtml(input.subjectLine || '（沒有主旨）')}</p>
+  </div>
+</body>
+</html>`;
+  return { subject, html, text };
+}
+
+export { DIGEST_DEPARTMENTS };

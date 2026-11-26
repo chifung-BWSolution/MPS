@@ -77,7 +77,7 @@ export function SystemNotificationsSettings() {
   return (
     <div className="space-y-4">
       <p className="text-[13px] text-muted-foreground">
-        目前有 {scheduled} 個排程電郵，以及 {manual} 個由同事手動發送的電郵通知。FC 查詢 Asana 日報的收件人、時間同頻率可以在下面儲存。
+        目前有 {scheduled} 個排程電郵，以及 {manual} 個由同事手動發送的電郵通知。查詢 Asana 日報的收件人、時間同頻率可以在下面儲存，BW、FC、WP 會放在同一封信。對不上規則的通知用同一份收件人。
       </p>
       {docs.map((doc) => (
         <NotificationCard

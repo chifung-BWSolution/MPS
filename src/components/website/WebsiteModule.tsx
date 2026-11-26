@@ -62,6 +62,7 @@ import { WebsiteTrafficTab } from './traffic/WebsiteTrafficTab';
 import { GscReportModule } from './gsc/GscReportModule';
 import { WebsiteGscTab } from './gsc/WebsiteGscTab';
 import { AnalyticsConnectionsModule } from './AnalyticsConnectionsModule';
+import { AsanaInquiryPage } from './AsanaInquiryPage';
 
 const statusConfig = {
   development: { label: '開發中', color: 'text-blue-700', bgColor: 'bg-blue-50' },
@@ -1339,7 +1340,7 @@ function websiteListPageOf(subModule?: string): WebsiteListPage {
 }
 
 function isWebsiteStandalonePage(subModule?: string): boolean {
-  return subModule === 'traffic' || subModule === 'gsc' || subModule === 'analytics-connections';
+  return subModule === 'traffic' || subModule === 'gsc' || subModule === 'analytics-connections' || subModule === 'asana-inquiries';
 }
 
 // ===== Main Export =====
@@ -1397,6 +1398,10 @@ export function WebsiteModule({ subModule }: { subModule?: string }) {
 
   if (subModule === 'analytics-connections') {
     return <AnalyticsConnectionsModule />;
+  }
+
+  if (subModule === 'asana-inquiries') {
+    return <AsanaInquiryPage />;
   }
 
   if (detailId) {

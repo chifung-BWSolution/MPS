@@ -4,6 +4,7 @@ import { corsHeaders } from "../_shared/google-gsc.ts";
 import { hktDate, isEmailMeFormSender, normalizeFccBody, resolveFccGmailOAuthClient } from "../_shared/fcc-asana-mail.ts";
 import { attachMailImages, collectFormImageUrls } from "../_shared/asana-mail-images.ts";
 import { bwInquiryAlreadyOpened, bwSkipReason, matchBwRoute, parseBwInquiry, type BwRouteRule } from "../_shared/bw-asana-mail.ts";
+import { sendUnmatchedInquiryAlert } from "../_shared/asana-unmatched-alert.ts";
 
 const PROVIDER = "gmail_bw";
 const RULE = "bw";
@@ -258,8 +259,16 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { error: "Method not allowed" });
   const denied = await requireCaller(req);
   if (denied) return denied;
+  const body = await req.json().catch(() => ({})) as { action?: string; jobId?: string };
 
   const supabase = admin();
+  if (body.action === "ignore") {
+    const jobId = String(body.jobId || "").trim();
+    if (!jobId) return json(400, { error: "缺少紀錄" });
+    const { error } = await supabase.from("asana_mail_jobs").update({ status: "ignored" }).eq("id", jobId).eq("rule_code", RULE).eq("status", "unmatched");
+    if (error) return json(500, { error: error.message });
+    return json(200, { ok: true });
+  }
   const { data: settings, error: settingsErr } = await supabase
     .from("bw_asana_mail_settings")
     .select("enabled, gmail_address, workspace_gid, match_mode, min_match_words, skip_subjects, collaborator_gids, not_before")
@@ -320,7 +329,7 @@ Deno.serve(async (req) => {
         .eq("gmail_message_id", item.id)
         .maybeSingle();
       if (existingErr) return json(500, { error: existingErr.message });
-      if (existing?.asana_task_gid || (existing && existing.status !== "error")) {
+      if (existing?.asana_task_gid || (existing && existing.status !== "error" && existing.status !== "unmatched")) {
         skipped += 1;
         continue;
       }
@@ -363,7 +372,29 @@ Deno.serve(async (req) => {
       }
       const matched = matchBwRoute(subject, routes, mode, minWords);
       if (!matched) {
-        await skip("主旨對不上關鍵字，不開 task");
+        await supabase.from("asana_mail_jobs").upsert({
+          rule_code: RULE,
+          gmail_message_id: item.id,
+          subject,
+          received_on: received,
+          status: "unmatched",
+          notes: emailText,
+          error: "主旨對不上關鍵字，不開 task",
+        }, { onConflict: "rule_code,gmail_message_id" });
+        skipped += 1;
+        if (!existing) {
+          try {
+            await sendUnmatchedInquiryAlert(supabase, {
+              department: "BW",
+              ruleCode: RULE,
+              gmailMessageId: item.id,
+              subject,
+              receivedOn: received,
+            });
+          } catch (_err) {
+            errors.push(`${item.id}: 對不上規則的通知未能寄出`);
+          }
+        }
         continue;
       }
       if (!matched.assigneeEmail.trim() || !matched.projectGid.trim()) {

@@ -86,23 +86,33 @@ assert.deepEqual(
 
 const email = buildFccAsanaDigestEmail({
   date: '2026-11-19',
-  tasks: [{
-    title: 'FC Lunch Box - A',
-    url: 'https://app.asana.com/0/0/1',
-    completed: false,
-    assignee: 'Rebecca',
-    projects: ['Lunch'],
-  }],
+  departments: [
+    { label: 'BW', color: '#0369a1', tasks: [] },
+    {
+      label: 'FC',
+      color: '#0f766e',
+      tasks: [{
+        title: 'FC Lunch Box - A',
+        url: 'https://app.asana.com/0/0/1',
+        completed: false,
+        assignee: 'Rebecca',
+        projects: ['Lunch'],
+      }],
+    },
+    { label: 'WP', color: '#6d28d9', tasks: [] },
+  ],
 });
-assert.equal(email.subject, 'FC 查詢 Asana 2026-11-19 — 今日新開 1 個 task');
+assert.equal(email.subject, '查詢 Asana 2026-11-19 — 今日新開 1 個 task');
 assert.match(email.html, /未完成/);
 assert.match(email.html, /負責人/);
 assert.match(email.html, /Rebecca/);
 assert.match(email.html, /專案/);
 assert.match(email.html, /Lunch/);
+assert.match(email.html, /BW/);
+assert.match(email.html, /WP/);
 assert.match(email.text, /https:\/\/app\.asana\.com\/0\/0\/1/);
 
-const empty = buildFccAsanaDigestEmail({ date: '2026-11-19', tasks: [] });
+const empty = buildFccAsanaDigestEmail({ date: '2026-11-19', departments: [{ label: 'FC', color: '#0f766e', tasks: [] }] });
 assert.match(empty.subject, /新開 0 個 task/);
 assert.match(empty.html, /沒有新開/);
 
