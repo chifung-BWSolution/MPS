@@ -58,6 +58,14 @@ function formatPosition(value: number | null): string {
   return value.toFixed(1);
 }
 
+/**
+ * 只有「已採納」不可選：採納過的是歷史證據；
+ * 「已忽略」是舊版軟隱藏留下的狀態，必須能勾選才能補刪。
+ */
+function isSelectable(idea: SeoRadarIdeaRow): boolean {
+  return idea.status === 'new' || idea.status === 'ignored';
+}
+
 function sortValue(idea: SeoRadarIdeaRow, key: SortKey): number | string {
   switch (key) {
     case 'keyword':
@@ -129,7 +137,7 @@ export function SeoRadarTable({
     setPage((value) => Math.min(Math.max(1, value), totalPages));
   }, [totalPages]);
 
-  const selectableOnPage = pageRows.filter((row) => row.status === 'new').map((row) => row.id);
+  const selectableOnPage = pageRows.filter(isSelectable).map((row) => row.id);
   const allSelected =
     selectableOnPage.length > 0 && selectableOnPage.every((id) => selected.has(id));
 
@@ -206,7 +214,7 @@ export function SeoRadarTable({
             )}
 
             {pageRows.map((idea) => {
-              const selectable = canWrite && idea.status === 'new';
+              const selectable = canWrite && isSelectable(idea);
               const checked = selected.has(idea.id);
               return (
                 <tr
@@ -228,7 +236,7 @@ export function SeoRadarTable({
                     <div className="text-[13px] font-medium text-foreground">{idea.keyword}</div>
                     {idea.seed_keyword && (
                       <div className="text-[11px] text-muted-foreground">
-                        種子：{idea.seed_keyword}
+                        來源：{idea.seed_keyword}
                       </div>
                     )}
                   </td>

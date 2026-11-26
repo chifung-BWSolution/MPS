@@ -44,7 +44,7 @@
 
 ## 3. 範圍與非目標
 
-**做**：菜單/路由、頁面（選站、市場覆寫、抓取、結果表、採納/忽略、deep link）、2 張表、1 支 Edge Function（4 actions）、每日 cron、共用純函式與自測、回滾腳本、文件。
+**做**：菜單/路由、頁面（選站、市場覆寫、抓取、結果表、採納/刪除、deep link）、2 張表、1 支 Edge Function（5 actions）、每日 cron、共用純函式與自測、回滾腳本、文件。
 
 **不做**：Google Trends、付費關鍵詞 API、真實月搜尋量、難度真值、文章生成（沿用 content worker）、成效追蹤頁、舊 `ai-keyword` 改動、`seo_keywords` 結構與 CHECK 改動。
 
@@ -138,9 +138,13 @@
 | action | 輸入 | 權限 | 回傳 |
 |---|---|---|---|
 | `scan` | `{ website_profile_id, market_override?, limit? }` | `write` | `{ run, gsc_terms, suggest_terms, inserted, updated, warnings[] }` |
+| `scan_all` | 無 | `write` | `{ sites_scanned, sites_remaining, ideas_upserted, skipped[] }` — 手動全站，最多 60 站、100 秒預算 |
 | `adopt` | `{ website_profile_id, idea_ids[], enqueue? }` | `write` | `{ adopted, skipped, enqueued, keyword_ids[] }` |
-| `ignore` | `{ idea_ids[], website_profile_id? }` | `write` | `{ updated }` |
+| `delete` | `{ website_profile_id, idea_ids[] }` | `write` | `{ deleted }` — 真刪除，只刪 `status='new'` |
+| `ignore`（舊版相容） | `{ idea_ids[], website_profile_id? }` | `write` | `{ updated }` — 軟隱藏；新 UI 已不再使用 |
 | `cron_scan` | `action` 省略 + service_role | service_role | `{ sites_scanned, ideas_upserted, skipped[] }` |
+| `cron_status` | 無 | `write` | `{ enabled, schedule, jobname }`（經 RPC `seo_radar_daily_status`） |
+| `set_daily` | `{ enabled: boolean }` | **`manage_settings`** | `{ enabled, schedule, jobname }`（經 RPC `seo_radar_set_daily` → `cron.alter_job`） |
 
 `readAction`：service_role 且無 `action` → `cron_scan`；其餘 → 400。因此 cron migration 只需替換 URL。
 
@@ -156,7 +160,7 @@
 
 ### 6.3 adopt 流程
 
-1. 讀 ideas（限同站點、排除 `ignored`）。
+1. 讀 ideas（限同站點；`new` 與舊版 `ignored` 都可以採納，與表格可勾選範圍一致）。
 2. `seo_keywords` upsert `ignoreDuplicates: true`：
    - `source`：gsc → `'gsc'`；suggest → `'import'`（不擴充既有 CHECK）。
    - `search_volume = impressions`、`current_ranking = avg_position`、`level='level_3'`、`status='monitoring'`。
@@ -176,7 +180,7 @@ update public.seo_keywords
 
 ### 6.5 錯誤碼
 
-`site_not_found`(404)／`gsc_not_linked`(warning)／`suggest_unavailable`(warning)／`ideas_empty`(warning)／`forbidden`(403)／`schema_missing`(500, 42P01)／`internal_error`(500)。
+`site_not_found`(404)／`gsc_not_linked`(warning)／`suggest_unavailable`(warning)／`ideas_empty`(warning)／`forbidden`(403)／**`scan_in_progress`(409，已有全站抓取在跑)**／`schema_missing`(500, 42P01)／`internal_error`(500)。
 
 ---
 
@@ -214,13 +218,13 @@ update public.seo_keywords
 ### 8.1 頁面結構
 
 ```
-SEO 雷達                                              [上次抓取 2 小時前]
+SEO 雷達                        [全站抓取] [⏸ 每日自動抓取]   [上次抓取 2 小時前]
 抓取真實熱門關鍵詞：GSC 28 天曝光＋Google 搜尋建議，勾選後一鍵採納進關鍵字庫。
 
 站點 [BW Design Centre ● GSC 已連接]  市場 [自動（香港・繁中）]  [抓取熱門關鍵詞] [↻]
 
-┌ 抓取詞 100 │ GSC 60 │ 建議詞 40 │ 已採納 12 │ 已忽略 3 ┐
-[全部 100][GSC 60][建議詞 40][已採納 12][已忽略 3]      [關鍵字庫↗][忽略][採納（3）]
+┌ 抓取詞 100 │ GSC 60 │ 建議詞 40 │ 已採納 12 ┐
+[全部 100][GSC 60][建議詞 40][已採納 12]      [關鍵字庫↗][刪除][採納（3）]
 
 ☐ 關鍵字      來源    曝光   點擊  CTR   平均排名  分數  狀態
 ```
@@ -239,7 +243,7 @@ SEO 雷達                                              [上次抓取 2 小時�
 | 未綁 GSC | 黃色提示，仍可抓建議詞 |
 | 抓取中 | 按鈕 spinner「抓取中…」 |
 | 結果為空 | 表格空狀態文案 |
-| 權限不足 | 抓取／採納／忽略 disabled + tooltip |
+| 權限不足 | 抓取／採納／刪除 disabled + tooltip |
 
 ### 8.3 權限
 
@@ -267,7 +271,7 @@ SEO 雷達                                              [上次抓取 2 小時�
 
 ### 自動
 
-`node scripts/run-seo-radar-test.ts`（或 `npm run radar:test`）— **37 項**：市場判定、正規化、GSC 聚合與排序、種子、建議詞解析、評分、合併與上限、回看窗口、接線契約（菜單順序、早退分支、權限檢查、H2 條件、migration 無破壞性語句、cron 斷言）、DB 契約（前端 `IDEA_COLUMNS`／`RUN_COLUMNS` ↔ migration 欄位；寫庫 payload 不得有不存在欄位、不得帶 `status`）、3 個 bug 修正回歸。
+`node scripts/run-seo-radar-test.ts`（或 `npm run radar:test`）— **46 項**：市場判定、正規化、GSC 聚合與排序、種子分級與預篩（縮寫／中文／英文）、建議詞解析、評分、合併與上限、回看窗口、接線契約（菜單順序、早退分支、權限檢查、H2 條件、migration 無破壞性語句、cron 斷言）、DB 契約（前端 `IDEA_COLUMNS`／`RUN_COLUMNS` ↔ migration 欄位；寫庫 payload 不得有不存在欄位、不得帶 `status`）、刪除邊界與「來源」排序／標籤回歸。
 
 ### 手動驗收
 
@@ -314,7 +318,7 @@ DB 層是純新增（2 張新表、0 筆 DML、0 個既有物件被改），可�
 
 | 檢查 | 指令 | 結果 |
 |---|---|---|
-| 自測 | `node scripts/run-seo-radar-test.ts` | **37 項全部通過**（市場判定 7、正規化 2、GSC 聚合 4、種子 3、回應解析 4、評分 2、合併 3、接線 6、DB 契約 3、bug 回歸 3） |
+| 自測 | `node scripts/run-seo-radar-test.ts` | **46 項全部通過**（含種子分級／預篩、刪除邊界、來源排序與標籤） |
 | 建置 | `vite build` | **exit 0**，4372 modules，12s；bundle 已含 `seo-radar` 路由、頁面文案、`採納到關鍵字庫` |
 | 型別 | `tsc --noEmit` | 本功能 **0 錯誤**；倉庫既有 **34** 個錯誤（ads／quotation／settings／hooks 等），與本功能無關 |
 | 語法 | esbuild transform（9 個新檔） | 全部通過 |
@@ -402,7 +406,7 @@ DETAIL: Key columns "adopted_keyword_id" and "id" are of incompatible types: uui
 | 4 | `scan`（ws2） | `200`，3.7s，91 詞（GSC 60 + 建議 35，去重後 31） |
 | 5 | `adopt` 2 詞（`enqueue=false`） | `200`；詞庫 +2、ideas 轉 `adopted` 並回連、`pipeline_status` 仍 **NULL**、`source=import` |
 | 6 | 重複採納 | 不重複插列（仍 1090） |
-| 7 | `ignore` | `200`，status → `ignored` |
+| 7 | `delete` | `200`；刪 3 筆（91→88）、重複刪 0、跨站被擋、重掃後 3 個詞全部回來（8/8） |
 | 8 | 資料還原 | 詞庫回到 **1088**、ideas 全部回到 `new` |
 | 9 | `cron_scan`（service_role、無 action） | `200`，14.5s，**10 站 / 700 詞 / 0 失敗**；每站上限 100 生效（最高站剛好 100） |
 | 10 | CORS preflight / GET | `200` + `Access-Control-Allow-Origin: *`；GET → `405 method_not_allowed` |
@@ -432,6 +436,59 @@ DETAIL: Key columns "adopted_keyword_id" and "id" are of incompatible types: uui
 
 **重新部署後回歸**：函數 **v4**、`verify_jwt=false`；重掃 `ws2` → `inserted=0 / updated=91`（upsert 冪等，不會重複建列）。
 
+### 11.9 2026-11-26 變更：「忽略」→「刪除」
+
+| 層 | 改動 |
+|---|---|
+| UI | 「忽略」按鈕改為**「刪除」**（rose 樣式）；新增 `DeleteDialog` 二次確認；篩選 chip 與指標移除「已忽略」 |
+| Edge Function | 新增 `action: 'delete'`：帶 `website_profile_id`、只刪 `status in ('new','ignored')`、以 service_role 執行；舊 `ignore` 保留給舊前端 |
+| 為什麼排除 `adopted` | 已採納的詞是「這篇文章用過這個詞」的證據，不該被刪 |
+| 部署 | 函數 **v5**、`verify_jwt=false` |
+| 線上實測 | 8/8：刪 3 筆（91→88）、重複刪 `deleted=0`、跨站 `deleted=0`、重掃後 3 個詞全部回來（`inserted=7 updated=79`） |
+
+> 刪除不可復原，但**下一次抓取會重新抓到**（只要該詞仍有 GSC 曝光或搜尋建議）。這也是為什麼刪除要二次確認：它不是「永久封鎖某個詞」。
+
+### 11.9.1 補修（同日 11:30）：舊「已忽略」的詞勾不到、也刪不掉
+
+| 項目 | 內容 |
+|---|---|
+| 症狀 | 之前用舊版 UI 按過「忽略」的詞，checkbox 灰掉、選不中，因此無法刪除 |
+| 根因 | `SeoRadarTable` 的勾選條件一直是 `status === 'new'`；而 `delete` 後端也只收 `status='new'`。`ignored` 變成兩邊都不認的孤兒狀態 |
+| 前端修正 | 抽出 `isSelectable()`：`new` 與 `ignored` 可勾，只有 `adopted` 不行（表頭「全選本頁」同步） |
+| 後端修正 | `handleDelete` 改為 `.in("status", ["new", "ignored"])` |
+| 資料清理 | production 共 5 個 `ignored`（全在 `ws58` Food Channels，都是「復仇者聯盟」系列），已用新的 delete 路徑刪除；現時 `ignored` 數量 = 0 |
+| 部署 | 函數 **v6**、`verify_jwt=false` |
+| 驗證 | 自測 **45 項**（新增「已忽略仍可勾選」斷言）；表格渲染 6/6（新詞可勾、已忽略可勾、已採納不可勾、全選可用） |
+| 回歸 | 重掃 `ws58`：`inserted=9 updated=2`，**「復仇者聯盟」系列 0 個**（新版種子預篩已擋掉），14 個詞全為餐飲相關 |
+
+**2026-11-26 追加：UI 用詞「種子」→「來源」**
+
+表內建議詞下方的副標由 `種子：FCC` 改為 `來源：FCC`——使用者反映「種子」這個說法太模糊。技術文件與程式碼仍用 seed（`seed_keyword`、`buildSuggestSeeds`），只有介面文案改。注意：表格另有一欄「來源」顯示 `GSC／建議詞`，兩者語義不同（欄位＝資料類型；副標＝產生該詞的查詢來源）。
+
+### 11.10 2026-11-26 追加：一鍵全站抓取與每日開關
+
+| 項目 | 內容 |
+|---|---|
+| UI | 頁首右上兩個入口：`全站抓取`（一次性，**白底**、無圖示）、`▶／⏸ 每日自動抓取`（開關，**已開啟＝綠底＋⏸／已暫停＝白底＋▶**） |
+| 二次確認 | 兩者都開 `ConfirmActionDialog`；文案刻意用非技術語言（不出現 GSC／cron／API／SQL），自測有斷言守住 |
+| 權限 | 全站抓取＝`write`；每日開關＝`manage_settings`（只有管理層），前端 `canManageDaily` 與後端 `ADMIN_ONLY_ACTIONS` 一致 |
+| 後端 | `scan_all`（最多 60 站、100 秒預算，回 `sites_remaining`）、`cron_status`、`set_daily` |
+| DB | `20261127120000_seo_radar_controls.sql`：兩支 `SECURITY DEFINER` RPC，只授權 `service_role`；用 `cron.alter_job(active => …)` 切換，**不刪 job、不動其他 job** |
+| 部署 | 函數 **v8**（`verify_jwt=false`）；migration 已套用並寫入 `schema_migrations` |
+| 線上實測 | **8/8**：讀狀態 → 暫停（`cron.job.active=false`）→ 恢復（`true`）；`scan_all` **60 站 / 79 秒 / 3,159 詞 / 剩 9 站** |
+| 前端驗證 | 頁首渲染 10/10（兩個入口、SVG 圖示、class 無 `border`、浮層預設不顯示）；`tsc` 0 錯誤、`vite build` exit 0 |
+
+> 「全站」是**分批**的：一次最多 60 站（Edge Function 有牆鐘上限），其餘由每日自動抓取補上，回應裡的 `sites_remaining` 會告訴使用者還剩多少。站點總數目前 69。
+
+### 11.11 競態與併發加固（2026-11-26 二次審查）
+
+| 問題 | 為什麼是 bug | 修法 | 驗證 |
+|---|---|---|---|
+| 切站時舊請求後回來，把 A 站的詞寫進 B 站的畫面 | `refresh()` 只認呼叫當下的 siteId，慢的請求會「後蓋前」 | 加 `siteIdRef` + 遞增 `refreshSeq`，回應回來時比對站點與序號，過期就丟 | 自測斷言 + 不影響原有流程 |
+| 兩個「全站抓取」可同時跑 | 重複打 Google 建議、浪費額度，且兩筆 run 交錯 | 後端先查 10 分鐘內 `meta.scope='all'` 的 running run，有就回 **409 `scan_in_progress`** | 線上 5/5：造假的 running run → 409；刪掉後單站抓取仍 200；>10 分鐘的舊 run 不擋 |
+
+> 併發保護只看「10 分鐘內」的 run，崩潰留下的 `running` 不會永久鎖住功能。
+
 ---
 
 ## 12. 假設與風險
@@ -451,6 +508,7 @@ DETAIL: Key columns "adopted_keyword_id" and "id" are of incompatible types: uui
 | 誤勾 backlog | 預設不勾 + dialog 明示 + SQL 條件只碰 NULL/backlog |
 | cron 克隆錯 URL | 替換後斷言，失敗不建立 job 並 `RAISE NOTICE` |
 | 半成品表（IF NOT EXISTS 掩蓋） | push 後驗證 UNIQUE／policy（清單 M1-05） |
+| 候選詞會累積（每次抓取只 upsert、不刪舊） | 單站可能超過 100（目前 3 站：115／102／101） | UI 已寫明「舊候選會保留，不會自動清掉」；要清就用「刪除」，日後可加保留策略 |
 
 ---
 

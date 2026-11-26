@@ -45,6 +45,7 @@
 | 4 | migration 把 `adopted_keyword_id` 寫成 `uuid`，但 production `seo_keywords.id` 是 `text` | FK 建不起來（42804），整支 migration 失敗 | 改為 `text`；交易內完整回滾，未留半成品 | 部署時實測 |
 | 5 | `config.toml` 是 GBK，CLI 靜默跳過 `[functions.*]`，部署出來的函數 `verify_jwt=true` | 使用者 session（ES256）會被 gateway 擋掉，前端一按抓取就失敗 | 把 `config.toml` 轉 UTF-8 後重新部署，`verify_jwt` 變 `false` | 部署後查 `verify_jwt` 欄位 |
 | 6 | 共用 `contentAuth.requireActor` select `users.classification`／`display_name`，但 production `users` 只有 7 欄 | **每次真人呼叫都查詢失敗 → 角色回落 staff → 403**（既有問題，本功能會繼承） | 共用模組已改成「完整→最小欄位」兩段式（非本次改動）；本次重新部署確認吃到新版 | 最小欄位查詢實測通過 |
+| 7 | 舊版按「忽略」的詞：前端只允許勾 `status='new'`，後端也只刪 `new` | `ignored` 的詞勾不到也刪不掉，變成孤兒 | `isSelectable()` 允許 `new`/`ignored`；`handleDelete` 改 `.in('status',['new','ignored'])` | 45 項自測 + 渲染 6/6 + 線上刪 5 筆 |
 
 另新增 3 組 **DB 契約測試**，在沒有資料庫的情況下守住最容易出錯的接縫：前端 `IDEA_COLUMNS`／`RUN_COLUMNS` 的每個欄位都必須存在於 migration；寫庫 payload 不得出現 migration 沒有的欄位，且**不得帶 `status`**（否則會把已採納／已忽略的詞覆蓋回 `new`）。
 
@@ -93,13 +94,46 @@
 | 4 | `scan` ws2 | `200`／3.7s／91 詞 |
 | 5 | `adopt` 2 詞（不勾 backlog） | `200`；詞庫 +2、ideas→adopted 並回連、`pipeline_status` 仍 NULL、`source=import` |
 | 6 | 重複採納 | 不重複插列（1090） |
-| 7 | `ignore` | `200`；status→ignored |
+| 7 | `delete` | `200`；刪 3 筆（91→88）、重複刪 0、跨站被擋、重掃後全部回來（8/8） |
 | 8 | 還原 | 詞庫回 1088、ideas 全部 new |
 | 9 | `cron_scan` | `200`／14.5s／10 站 700 詞／0 失敗；每站上限 100 生效 |
 | 10 | CORS／GET | `200` + `*`；GET `405` |
 | 11 | 完整性 | 0 重複、0 非法 status、`seo_keywords` 全庫仍 48617（未帶動） |
 
 **刻意未測**：`enqueue=true`（會設 `backlog`，可能觸發 content planner 花 Gemini 額度）。SQL 條件已由自測 H2 覆蓋。
+
+### 2026-11-26：「忽略」→「刪除」
+
+| 層 | 改動 | 驗證 |
+|---|---|---|
+| UI | 按鈕改「刪除」（rose 樣式）+ `DeleteDialog` 二次確認；移除「已忽略」chip 與指標 | 頁面渲染 7/7（含「不再出現忽略」斷言） |
+| Edge Function | 新增 `action: 'delete'`：限定站點、只刪 `status='new'`；舊 `ignore` 保留 | 線上 8/8（見上表 #7） |
+| 部署 | 函數 **v5**、`verify_jwt=false` | Dashboard／API 查得 |
+| 回歸 | 自測 **45 項**（含來源排序、刪除邊界、已忽略可勾） | 全綠 |
+
+**補修（11:30）**：舊 `ignored` 的詞勾不到 → `isSelectable()` 放行 `new`/`ignored`、後端 `handleDelete` 改收兩者；production 5 個「復仇者聯盟」已刪、`ignored` 歸零；函數 **v6**。重掃 `ws58` 後該系列 0 個（新版種子預篩擋掉）。
+
+### 2026-11-26（下午）：全站自動抓取 + 每日開關
+
+| 層 | 改動 | 驗證 |
+|---|---|---|
+| UI | 頁首右上加 `全站抓取`（白底一次性）、`▶／⏸ 每日自動抓取`（綠底開關），兩者都開二次確認浮層，文案用非技術語言 | 頁首渲染 **8/8**（一次）+ **10/10**（初版） |
+| Edge Function | 新增 `scan_all`（≤60 站、100 秒預算）、`cron_status`、`set_daily`（限 `manage_settings`） | 線上 **8/8** |
+| DB | `20261127120000_seo_radar_controls.sql`：兩支 SECURITY DEFINER RPC，只授 `service_role`；用 `cron.alter_job` 開關，不刪 job | RPC 正確、匿名授權 0 |
+| 部署 | 函數 **v8**、`verify_jwt=false`；cron `active=true`、排程 `15 23 * * *` 未變 | 查得 |
+| 線上實測 | 暫停→`active=false`、恢復→`true`；`scan_all` **60 站 / 79 秒 / 3,159 詞 / 剩 9 站** | 8/8 |
+| 自測 | **53 項**全綠（新增 5 項：入口／SVG／無外框／非技術文案／權限一致） | 全綠 |
+
+### 2026-11-26（下午）：審查修正
+
+| # | 問題 | 影響 | 修法 | 驗證 |
+|---|---|---|---|---|
+| A | 表格讓 `ignored` 可勾選，但後端 `handleAdopt` 仍把它濾掉 | 勾了 `ignored` 的詞按採納會被**靜默跳過** | 移除過濾，`new`＋`ignored` 都可採納 | 線上 7/7（含寫庫與還原） |
+| B | 部署版本落後於 repo（v8 未含 `new+ignored` 刪除） | `ignored` 的詞按刪除會回 `deleted=0` | 重新部署 **v9** | 行為測試 4/4 |
+| C | UI 文案「每次最多 100 個詞」易誤讀 | 候選會累積，單站可能 >100（3 站：115／102／101） | 改成「每次抓取最多 100 個詞；舊候選會保留，不會自動清掉」 | 文案已更新 |
+| D | 切站時慢請求後回來會覆蓋新站點的清單 | 可能「選 A 站卻看到 B 站的詞」 | `siteIdRef` + `refreshSeq` 丟棄過期回應 | 自測 55 項 |
+| E | 兩個「全站抓取」可同時跑 | 重複打 Google 建議、浪費額度 | 後端併發保護，回 409 `scan_in_progress` | 線上 5/5 |
+
 
 ---
 
@@ -164,7 +198,7 @@ select column_name from information_schema.columns
 | ☑ | M2-02 | 純函式 | `src/lib/seoRadar.ts`、`src/lib/seoRadarMarket.ts` | 無 Deno／瀏覽器 API，前後端共用 |
 | ☑ | M2-03 | GSC 聚合 | `supabase/functions/seo-radar/gsc-aggregate.ts` | 1000/頁、40 頁上限 |
 | ☑ | M2-04 | 入口與 `scan` | `supabase/functions/seo-radar/index.ts` | 守門順序正確；run 表寫入正確 |
-| ☑ | M2-05 | `adopt`／`ignore`（**H2**） | 同上 | backlog 更新帶 `pipeline_status is null / = backlog`；`enqueue=false` 時不寫 |
+| ☑ | M2-05 | `adopt`／`delete`（**H2**） | 同上 | backlog 更新帶 `pipeline_status is null / = backlog`；`enqueue=false` 時不寫；`delete` 只刪 `status='new'` |
 | ☑ | M2-06 | `cron_scan` | 同上 | 只接受 service_role；≤10 站；單站失敗不中斷 |
 | ☑ | M2-07 | 部署與設定 | `supabase/config.toml` + `npx supabase functions deploy seo-radar` | 已部署 **v2**、`verify_jwt=false`；401／400／404／200 四條路徑實測通過 |
 | ☑ | M2-08 | 自測 | `scripts/run-seo-radar-test.ts` + `package.json` | 37 項全過（含 DB 契約 3 項、bug 回歸 3 項） |

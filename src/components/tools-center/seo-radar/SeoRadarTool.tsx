@@ -15,8 +15,11 @@ import {
   ArrowUpRight,
   DatabaseZap,
   Loader2,
+  Pause,
+  Play,
   Radar,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -35,11 +38,13 @@ import { MARKET_OPTIONS, detectMarket } from '@/lib/seoRadarMarket';
 import { useRadarSites, useSeoRadar } from '@/hooks/useSeoRadar';
 import type { RadarMarketCode, SeoRadarIdeaRow, SeoRadarRunRow } from '@/types/seoRadar';
 import { AdoptDialog } from './AdoptDialog';
+import { ConfirmActionDialog } from './ConfirmActionDialog';
+import { DeleteDialog } from './DeleteDialog';
 import { SeoRadarTable } from './SeoRadarTable';
 
 const SITE_STORAGE_KEY = 'mps.seo-radar.site';
 
-type FilterKey = 'all' | 'gsc' | 'suggest' | 'adopted' | 'ignored';
+type FilterKey = 'all' | 'gsc' | 'suggest' | 'adopted';
 
 const WARNING_LABEL: Record<string, string> = {
   gsc_not_linked: '此站點尚未綁定 GSC，本次只有搜尋建議詞（沒有曝光數據）。',
@@ -53,7 +58,6 @@ const FILTER_LABEL: Record<FilterKey, string> = {
   gsc: 'GSC',
   suggest: '建議詞',
   adopted: '已採納',
-  ignored: '已忽略',
 };
 
 function readStoredSite(): string | null {
@@ -102,8 +106,6 @@ function matchesFilter(idea: SeoRadarIdeaRow, filter: FilterKey): boolean {
       return idea.source === 'suggest';
     case 'adopted':
       return idea.status === 'adopted';
-    case 'ignored':
-      return idea.status === 'ignored';
     case 'all':
     default:
       return true;
@@ -138,6 +140,8 @@ function MetricItem({
 export function SeoRadarTool() {
   const { systemUser } = useAuth();
   const canWrite = can({ role: systemUser?.role ?? null }, 'write');
+  // 每日自動抓取影響全域排程，只有管理層能切換（與後端 manage_settings 一致）
+  const canManageDaily = can({ role: systemUser?.role ?? null }, 'manage_settings');
 
   const { sites, loading: sitesLoading, error: sitesError, refresh: refreshSites } = useRadarSites();
   const [siteId, setSiteId] = useState<string | null>(() => readStoredSite());
@@ -145,6 +149,9 @@ export function SeoRadarTool() {
   const [filter, setFilter] = useState<FilterKey>('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [adoptOpen, setAdoptOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [scanAllOpen, setScanAllOpen] = useState(false);
+  const [dailyOpen, setDailyOpen] = useState(false);
   const [scanNotes, setScanNotes] = useState<string[]>([]);
 
   const radar = useSeoRadar(siteId);
@@ -159,8 +166,13 @@ export function SeoRadarTool() {
     warnings,
     refresh,
     scan,
+    scanAll,
     adopt,
-    ignore,
+    remove,
+    dailyStatus,
+    dailyBusy,
+    scanningAll,
+    setDaily,
   } = radar;
 
   // 站點清單載入後修正選擇（保留上次選的，失效就退回第一個）
@@ -193,12 +205,11 @@ export function SeoRadarTool() {
   );
 
   const counts = useMemo(() => {
-    const result = { all: ideas.length, gsc: 0, suggest: 0, adopted: 0, ignored: 0 };
+    const result = { all: ideas.length, gsc: 0, suggest: 0, adopted: 0 };
     for (const idea of ideas) {
       if (idea.source === 'gsc') result.gsc += 1;
       if (idea.source === 'suggest') result.suggest += 1;
       if (idea.status === 'adopted') result.adopted += 1;
-      if (idea.status === 'ignored') result.ignored += 1;
     }
     return result;
   }, [ideas]);
@@ -261,13 +272,37 @@ export function SeoRadarTool() {
     [adopt, selectedIdeas],
   );
 
-  const handleIgnore = useCallback(async () => {
+  const handleDeleteConfirm = useCallback(async () => {
     const ids = selectedIdeas.map((idea) => idea.id);
-    const result = await ignore(ids);
+    const result = await remove(ids);
+    setDeleteOpen(false);
     if (!result) return;
     setSelected(new Set());
-    toast.success(`已忽略 ${result.updated} 個詞`);
-  }, [ignore, selectedIdeas]);
+    toast.success(`已刪除 ${result.deleted} 個候選詞`);
+  }, [remove, selectedIdeas]);
+
+  const handleScanAll = useCallback(async () => {
+    const result = await scanAll();
+    setScanAllOpen(false);
+    if (!result) return;
+    toast.success(
+      result.sites_remaining > 0
+        ? `已更新 ${result.sites_scanned} 個站點，還有 ${result.sites_remaining} 個會由每日自動抓取補上`
+        : `已更新 ${result.sites_scanned} 個站點`,
+    );
+  }, [scanAll]);
+
+  const handleDailyToggle = useCallback(async () => {
+    const next = !(dailyStatus?.enabled ?? false);
+    const result = await setDaily(next);
+    setDailyOpen(false);
+    if (!result) return;
+    toast.success(
+      result.enabled
+        ? '已開啟每日自動抓取，每天深夜會自動更新'
+        : '已暫停每日自動抓取，仍可隨時手動更新',
+    );
+  }, [dailyStatus?.enabled, setDaily]);
 
   const openKeywordLibrary = useCallback(() => {
     if (!siteId) return;
@@ -319,14 +354,63 @@ export function SeoRadarTool() {
             抓取真實熱門關鍵詞：GSC 28 天曝光＋Google 搜尋建議，勾選後一鍵採納進關鍵字庫。
           </p>
         </div>
-        <div className="text-right text-[12px] text-muted-foreground">
-          <div className="inline-flex items-center gap-1.5">
-            <Radar size={13} className="text-teal-600" />
-            {isStaleRunning(lastRun) ? '上次抓取未完成' : `上次抓取 ${formatRelative(lastRun?.started_at ?? null)}`}
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex items-center gap-2">
+            {/* 一次性動作：白底按鈕、不帶播放／暫停圖示 */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 px-3 text-[12px] font-medium"
+              onClick={() => setScanAllOpen(true)}
+              disabled={!canWrite || scanningAll}
+              title={canWrite ? '立即為所有站點更新熱門關鍵詞（一次性）' : '需要管理層／文案／市場推廣等角色'}
+            >
+              {scanningAll && <Loader2 size={13} className="animate-spin" />}
+              全站抓取
+            </Button>
+
+            {/* 開關：已開啟＝綠底＋暫停圖示；已暫停＝白底＋播放圖示 */}
+            <Button
+              size="sm"
+              variant={dailyStatus?.enabled ? 'default' : 'outline'}
+              className={cn(
+                'h-8 gap-1.5 px-3 text-[12px] font-medium',
+                dailyStatus?.enabled && 'bg-teal-600 text-white hover:bg-teal-700',
+              )}
+              onClick={() => setDailyOpen(true)}
+              disabled={!canManageDaily || dailyBusy}
+              title={
+                canManageDaily
+                  ? dailyStatus?.enabled
+                    ? '每日自動抓取：已開啟（點擊暫停）'
+                    : '每日自動抓取：已暫停（點擊開啟）'
+                  : '只有管理層可以切換每日自動抓取'
+              }
+            >
+              {dailyBusy ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : dailyStatus?.enabled ? (
+                <Pause size={13} />
+              ) : (
+                <Play size={13} />
+              )}
+              每日自動抓取
+            </Button>
           </div>
-          {lastRun?.status === 'error' && (
-            <div className="mt-1 max-w-[280px] text-rose-600">{lastRun.error_message ?? '抓取失敗'}</div>
-          )}
+
+          <div className="text-right text-[12px] text-muted-foreground">
+            <div className="inline-flex items-center gap-1.5">
+              <Radar size={13} className="text-teal-600" />
+              {isStaleRunning(lastRun)
+                ? '上次抓取未完成'
+                : `上次抓取 ${formatRelative(lastRun?.started_at ?? null)}`}
+            </div>
+            {lastRun?.status === 'error' && (
+              <div className="mt-1 max-w-[280px] text-rose-600">
+                {lastRun.error_message ?? '抓取失敗'}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -413,7 +497,7 @@ export function SeoRadarTool() {
 
         <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
           <span>曝光＝GSC 近 28 天曝光次數，不是月搜尋量。</span>
-          <span>每次最多 100 個詞。</span>
+          <span>每次抓取最多 100 個詞；舊候選會保留，不會自動清掉。</span>
           {selectedSite && !selectedSite.gscConnected && (
             <span className="text-amber-700">此站點未綁定 GSC，只能抓到搜尋建議詞。</span>
           )}
@@ -426,7 +510,6 @@ export function SeoRadarTool() {
         <MetricItem label="GSC" value={counts.gsc} tone="teal" />
         <MetricItem label="建議詞" value={counts.suggest} />
         <MetricItem label="已採納" value={counts.adopted} tone="emerald" />
-        <MetricItem label="已忽略" value={counts.ignored} />
       </div>
 
       {/* 警告 / 錯誤 */}
@@ -501,11 +584,13 @@ export function SeoRadarTool() {
           <Button
             size="sm"
             variant="outline"
-            className="h-8"
-            onClick={() => void handleIgnore()}
-            disabled={!canWrite || working || selectedIdeas.length === 0}
+            className="h-8 border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+            onClick={() => setDeleteOpen(true)}
+            disabled={!canWrite || selectedIdeas.length === 0}
+            title="刪除已勾選的候選詞"
           >
-            忽略
+            <Trash2 size={13} />
+            刪除
           </Button>
           <Button
             size="sm"
@@ -546,6 +631,45 @@ export function SeoRadarTool() {
         onClose={() => setAdoptOpen(false)}
         onConfirm={(enqueue) => void handleAdoptConfirm(enqueue)}
       />
+
+      <DeleteDialog
+        open={deleteOpen}
+        count={selectedIdeas.length}
+        busy={working}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={() => void handleDeleteConfirm()}
+      />
+
+      <ConfirmActionDialog
+        open={scanAllOpen}
+        title="現在更新所有站點？"
+        description="系統會逐個查看你的網站在 Google 最近一個月的表現，整理成值得寫的候選詞。"
+        confirmLabel="開始更新"
+        busy={scanningAll}
+        onClose={() => setScanAllOpen(false)}
+        onConfirm={() => void handleScanAll()}
+      >
+        <p>站點較多時，會先做最久沒更新的；其餘會由每日自動抓取補上。</p>
+        <p>過程大約幾十秒到一兩分鐘，期間你可以繼續使用其他頁面。</p>
+      </ConfirmActionDialog>
+
+      <ConfirmActionDialog
+        open={dailyOpen}
+        title={dailyStatus?.enabled ? '暫停每日自動抓取？' : '開啟每日自動抓取？'}
+        description={
+          dailyStatus?.enabled
+            ? '暫停後，系統不會再每天自動更新；你隨時可以按「全站抓取」手動更新。'
+            : '開啟後，系統每天深夜會自動幫所有站點更新一次，你早上回來就會看到新的詞。'
+        }
+        confirmLabel={dailyStatus?.enabled ? '暫停' : '開啟'}
+        tone={dailyStatus?.enabled ? 'danger' : 'default'}
+        busy={dailyBusy}
+        onClose={() => setDailyOpen(false)}
+        onConfirm={() => void handleDailyToggle()}
+      >
+        <p>已經抓到的詞都會保留，不會因為這個開關而消失。</p>
+        <p>你採納或刪除過的詞，也不會被自動更新改動。</p>
+      </ConfirmActionDialog>
     </div>
   );
 }

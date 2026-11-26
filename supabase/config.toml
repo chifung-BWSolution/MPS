@@ -115,6 +115,11 @@ verify_jwt = false
 [functions.content-social]
 verify_jwt = false
 
+# Hotspot fetching + ops health: health is read by the SPA, fetch_sources is
+# service_role only (cron); the function checks the role itself.
+[functions.content-sources]
+verify_jwt = false
+
 # content-worker is cron/service-role only; the service_role JWT is HS256 and
 # passes the gateway check, and the function additionally checks the role.
 [functions.content-worker]

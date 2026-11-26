@@ -78,7 +78,22 @@ export interface RadarAdoptResponse {
   keyword_ids: string[];
 }
 
-/** `action: 'ignore'` 的回應 */
-export interface RadarIgnoreResponse {
-  updated: number;
+/** `action: 'scan_all'` 的回應 */
+export interface RadarScanAllResponse {
+  sites_scanned: number;
+  sites_remaining: number;
+  ideas_upserted: number;
+  skipped: string[];
+}
+
+/** `action: 'cron_status'` / `'set_daily'` 的回應 */
+export interface RadarCronStatus {
+  enabled: boolean;
+  schedule: string | null;
+  jobname: string | null;
+}
+
+/** `action: 'delete'` 的回應 */
+export interface RadarDeleteResponse {
+  deleted: number;
 }

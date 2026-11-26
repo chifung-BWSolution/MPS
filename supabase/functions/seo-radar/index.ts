@@ -15,9 +15,12 @@ import { fetchSuggestions } from "../_shared/google-suggest.ts";
 import { loadGscMetrics } from "./gsc-aggregate.ts";
 import {
   RADAR_GSC_BUDGET,
+  RADAR_MANUAL_BUDGET_MS,
+  RADAR_MANUAL_SITE_LIMIT,
   RADAR_MAX_IDEAS,
   RADAR_SCAN_BUDGET_MS,
   RADAR_SITE_LIMIT,
+  RADAR_SUGGEST_LOW_CONFIDENCE_LIMIT,
   RADAR_WINDOW_DAYS,
   buildSuggestIdeas,
   buildSuggestSeeds,
@@ -51,6 +54,8 @@ const SITE_COLUMNS = "id, website_name, domain_url, brand, status, gsc_site_url"
 const MAX_IDEA_IDS = 200;
 const CHUNK_SIZE = 100;
 const CRON_IDEA_LOOKBACK_DAYS = 30;
+/** cron 一次最多跑多久（留 buffer 給平台 150s 上限） */
+const CRON_TIME_BUDGET_MS = 90_000;
 
 type Db = ReturnType<typeof serviceClient>;
 
@@ -188,14 +193,37 @@ async function resolveGscSiteUrls(db: Db, site: SiteRow): Promise<string[]> {
 // 抓取
 // ============================================================
 
-async function startRun(db: Db, trigger: "manual" | "cron"): Promise<string> {
+async function startRun(
+  db: Db,
+  trigger: "manual" | "cron",
+  meta?: Record<string, unknown>,
+): Promise<string> {
   const { data, error } = await db
     .from("seo_radar_runs")
-    .insert({ trigger, status: "running" })
+    .insert({ trigger, status: "running", ...(meta ? { meta } : {}) })
     .select("id")
     .single();
   throwDb(error, "建立抓取紀錄失敗");
   return (data as { id: string }).id;
+}
+
+/**
+ * 避免兩個「全站抓取」同時跑（會重複打 Google 建議、浪費額度）。
+ * 只看 10 分鐘內、scope='all' 的 running run；崩潰留下的舊 run 不會永久擋住。
+ */
+async function assertNoRunningFullScan(db: Db): Promise<void> {
+  const since = new Date(Date.now() - 10 * 60_000).toISOString();
+  const { data, error } = await db
+    .from("seo_radar_runs")
+    .select("id")
+    .eq("status", "running")
+    .eq("meta->>scope", "all")
+    .gte("started_at", since)
+    .limit(1);
+  throwDb(error, "檢查進行中的全站抓取失敗");
+  if ((data ?? []).length > 0) {
+    throw new RadarHttpError(409, "scan_in_progress", "全站抓取正在進行中，請稍後再試");
+  }
 }
 
 async function finishRun(
@@ -239,13 +267,17 @@ async function scanSite(
     gscTop: gscIdeas.map((idea) => idea.keyword),
     websiteName: site.website_name,
     brand: site.brand,
+    domainUrl: site.domain_url,
   });
 
-  const suggest = await fetchSuggestions(seeds, {
-    hl: market.hl,
-    gl: market.gl,
-    deadline: Date.now() + RADAR_SCAN_BUDGET_MS,
-  });
+  const suggest = await fetchSuggestions(
+    seeds.map((seed) => seed.phrase),
+    {
+      hl: market.hl,
+      gl: market.gl,
+      deadline: Date.now() + RADAR_SCAN_BUDGET_MS,
+    },
+  );
   if (suggest.errors.length > 0) warnings.push("suggest_unavailable");
 
   const seedImpressions = new Map<string, number>(
@@ -253,10 +285,16 @@ async function scanSite(
   );
   const suggestIdeas = buildSuggestIdeas({
     suggestions: suggest.terms,
+    seeds,
     seedImpressions,
   });
 
-  const ideas = mergeScanResults({ gscIdeas, suggestIdeas, limit });
+  // 低信度模式：GSC 完全沒有資料時只靠站名／域名／品牌推測，寧可少取
+  const effectiveLimit =
+    gscIdeas.length === 0
+      ? Math.min(limit, RADAR_SUGGEST_LOW_CONFIDENCE_LIMIT)
+      : limit;
+  const ideas = mergeScanResults({ gscIdeas, suggestIdeas, limit: effectiveLimit });
   if (ideas.length === 0) warnings.push("ideas_empty");
 
   return {
@@ -395,10 +433,14 @@ async function handleAdopt(body: Record<string, unknown>) {
   throwDb(error, "讀取候選詞失敗");
 
   const ideas = (data ?? []) as IdeaRow[];
-  const adoptable = ideas.filter((idea) => idea.status !== "ignored");
-  if (adoptable.length === 0) {
+  // 表格的可勾選範圍是 new / ignored（見 isSelectable），採納必須一致；
+  // 舊版 'ignored' 是軟隱藏留下的狀態，使用者既然勾了就是要採納。
+  if (ideas.length === 0) {
     return { adopted: 0, skipped: ideaIds.length, enqueued: 0, keyword_ids: [] };
   }
+
+  const adoptable = ideas;
+  const skippedCount = ideaIds.length - ideas.length;
 
   // source：GSC → gsc；建議詞 → import（不擴充 seo_keywords.source 的 CHECK）
   const payload = adoptable.map((idea) => ({
@@ -480,12 +522,13 @@ async function handleAdopt(body: Record<string, unknown>) {
 
   return {
     adopted: adoptable.filter((idea) => keywordIdByNormalized.has(idea.normalized_keyword)).length,
-    skipped: ideaIds.length - adoptable.length,
+    skipped: skippedCount,
     enqueued,
     keyword_ids: keywordIds,
   };
 }
 
+/** 保留給舊版前端（軟隱藏）；新 UI 已改用 delete */
 async function handleIgnore(body: Record<string, unknown>) {
   const db = serviceClient();
   const ideaIds = parseIdeaIds(body.idea_ids);
@@ -506,11 +549,37 @@ async function handleIgnore(body: Record<string, unknown>) {
   return { updated: (data ?? []).length };
 }
 
+/**
+ * 真的刪除候選詞（UI 的「刪除」）。
+ *
+ * 安全規則：
+ *   - 一律帶 website_profile_id，避免跨站誤刪
+ *   - 只刪 status 為 'new' 或 'ignored'：已採納的是歷史證據，不准刪
+ *     （'ignored' 是舊版軟隱藏留下的，必須能一併清掉，否則那些詞會永遠卡住）
+ *   - 刪掉的詞下次抓取若仍有曝光／建議，會重新長回來
+ */
+async function handleDelete(body: Record<string, unknown>) {
+  const db = serviceClient();
+  const siteId = requireSiteId(body);
+  const ideaIds = parseIdeaIds(body.idea_ids);
+
+  const { data, error } = await db
+    .from("seo_keyword_ideas")
+    .delete()
+    .eq("website_profile_id", siteId)
+    .in("id", ideaIds)
+    .in("status", ["new", "ignored"])
+    .select("id");
+  throwDb(error, "刪除候選詞失敗");
+
+  return { deleted: (data ?? []).length };
+}
+
 // ============================================================
 // cron：掃描最久沒更新的站點
 // ============================================================
 
-async function loadCronCandidates(db: Db): Promise<SiteRow[]> {
+async function listCandidateSites(db: Db): Promise<SiteRow[]> {
   const { data: siteRows, error: siteError } = await db
     .from("webandsystem_list")
     .select(SITE_COLUMNS)
@@ -555,21 +624,41 @@ async function loadCronCandidates(db: Db): Promise<SiteRow[]> {
     return left.localeCompare(right) || a.id.localeCompare(b.id);
   });
 
-  return candidates.slice(0, RADAR_SITE_LIMIT);
+  return candidates;
 }
 
-async function handleCronScan() {
-  const db = serviceClient();
-  const runId = await startRun(db, "cron");
-  const sites = await loadCronCandidates(db);
+interface SiteBatchResult {
+  sites_scanned: number;
+  ideas_upserted: number;
+  gsc_terms: number;
+  suggest_terms: number;
+  skipped: string[];
+  site_ids: string[];
+}
 
+/** 逐站掃描；超過時間預算就停手，剩下的留給下一次（每日 cron 會補上） */
+async function runSiteBatch(
+  db: Db,
+  sites: readonly SiteRow[],
+  runId: string,
+  deadline: number,
+): Promise<SiteBatchResult> {
   let sitesScanned = 0;
   let ideasUpserted = 0;
   let gscTerms = 0;
   let suggestTerms = 0;
   const skipped: string[] = [];
+  const siteIds: string[] = [];
 
-  for (const site of sites) {
+  for (let index = 0; index < sites.length; index += 1) {
+    const site = sites[index];
+
+    if (sitesScanned > 0 && Date.now() >= deadline) {
+      // 只記一條，避免 skipped 陣列被幾十個站點灌爆
+      skipped.push(`time_budget_reached: ${sites.length - index} sites left`);
+      break;
+    }
+
     try {
       const result = await scanSite(db, site, null, RADAR_MAX_IDEAS);
       const { inserted, updated } = await persistIdeas(
@@ -583,23 +672,100 @@ async function handleCronScan() {
       ideasUpserted += inserted + updated;
       gscTerms += result.gsc_terms;
       suggestTerms += result.suggest_terms;
+      siteIds.push(site.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       skipped.push(`${site.id}: ${message.slice(0, 160)}`);
     }
   }
 
-  await finishRun(db, runId, {
-    status: skipped.length > 0 && sitesScanned === 0 ? "error" : "success",
+  return {
     sites_scanned: sitesScanned,
     ideas_upserted: ideasUpserted,
     gsc_terms: gscTerms,
     suggest_terms: suggestTerms,
-    error_message: skipped.length > 0 ? skipped.join(" · ").slice(0, 500) : null,
-    meta: { site_ids: sites.map((site) => site.id), skipped },
+    skipped,
+    site_ids: siteIds,
+  };
+}
+
+async function handleCronScan() {
+  const db = serviceClient();
+  const runId = await startRun(db, "cron");
+  const sites = (await listCandidateSites(db)).slice(0, RADAR_SITE_LIMIT);
+  const batch = await runSiteBatch(db, sites, runId, Date.now() + CRON_TIME_BUDGET_MS);
+
+  await finishRun(db, runId, {
+    status: batch.skipped.length > 0 && batch.sites_scanned === 0 ? "error" : "success",
+    sites_scanned: batch.sites_scanned,
+    ideas_upserted: batch.ideas_upserted,
+    gsc_terms: batch.gsc_terms,
+    suggest_terms: batch.suggest_terms,
+    error_message: batch.skipped.length > 0 ? batch.skipped.join(" · ").slice(0, 500) : null,
+    meta: { site_ids: batch.site_ids, skipped: batch.skipped },
   });
 
-  return { sites_scanned: sitesScanned, ideas_upserted: ideasUpserted, skipped };
+  return {
+    sites_scanned: batch.sites_scanned,
+    ideas_upserted: batch.ideas_upserted,
+    skipped: batch.skipped,
+  };
+}
+
+/**
+ * 使用者按「全站自動抓取」：手動跑一次，處理最久沒更新的 N 個站點。
+ * 站點總數可能遠超一次能處理的數量，剩下的交給每日 cron。
+ */
+async function handleScanAll() {
+  const db = serviceClient();
+  await assertNoRunningFullScan(db);
+  const all = await listCandidateSites(db);
+  const sites = all.slice(0, RADAR_MANUAL_SITE_LIMIT);
+  const runId = await startRun(db, "manual", { scope: "all" });
+  const batch = await runSiteBatch(db, sites, runId, Date.now() + RADAR_MANUAL_BUDGET_MS);
+  // 用「實際完成數」算剩下多少，而不是切片長度（時間預算可能提早收工）
+  const remaining = Math.max(0, all.length - batch.sites_scanned);
+
+  await finishRun(db, runId, {
+    status: batch.skipped.length > 0 && batch.sites_scanned === 0 ? "error" : "success",
+    sites_scanned: batch.sites_scanned,
+    ideas_upserted: batch.ideas_upserted,
+    gsc_terms: batch.gsc_terms,
+    suggest_terms: batch.suggest_terms,
+    error_message: batch.skipped.length > 0 ? batch.skipped.join(" · ").slice(0, 500) : null,
+    meta: { scope: "all", site_ids: batch.site_ids, remaining, skipped: batch.skipped },
+  });
+
+  return {
+    sites_scanned: batch.sites_scanned,
+    sites_remaining: remaining,
+    ideas_upserted: batch.ideas_upserted,
+    skipped: batch.skipped,
+  };
+}
+
+// ============================================================
+// 每日自動抓取：狀態與開關（經 RPC，cron schema 不對外）
+// ============================================================
+
+async function handleCronStatus() {
+  const db = serviceClient();
+  const { data, error } = await db.rpc("seo_radar_daily_status");
+  throwDb(error, "讀取每日自動抓取狀態失敗");
+  return data ?? { enabled: false, schedule: null, jobname: null };
+}
+
+async function handleSetDaily(body: Record<string, unknown>) {
+  const enabled = body.enabled === true;
+  const db = serviceClient();
+  const { data, error } = await db.rpc("seo_radar_set_daily", { p_enabled: enabled });
+  throwDb(error, "切換每日自動抓取失敗");
+
+  if (data && (data as { ok?: boolean }).ok === false) {
+    throw new RadarHttpError(409, "job_missing", "每日自動抓取尚未建立，請先完成部署");
+  }
+
+  return data;
 }
 
 // ============================================================
@@ -610,9 +776,16 @@ type ActionHandler = (body: Record<string, unknown>) => Promise<unknown>;
 
 const ACTION_HANDLERS: Record<string, ActionHandler> = {
   scan: handleScan,
+  scan_all: handleScanAll,
   adopt: handleAdopt,
+  delete: handleDelete,
   ignore: handleIgnore,
+  cron_status: handleCronStatus,
+  set_daily: handleSetDaily,
 };
+
+/** 只有管理層可以切換「每日自動抓取」（影響全域排程） */
+const ADMIN_ONLY_ACTIONS = new Set(["set_daily"]);
 
 function readAction(body: Record<string, unknown>, actor: ContentActor): string {
   const action = typeof body.action === "string" ? body.action.trim() : "";
@@ -641,7 +814,8 @@ Deno.serve(async (req: Request) => {
       return okJson(await handleCronScan());
     }
 
-    const forbidden = requireAction(actor, "write");
+    const permission = ADMIN_ONLY_ACTIONS.has(action) ? "manage_settings" : "write";
+    const forbidden = requireAction(actor, permission);
     if (forbidden) return forbidden;
 
     const handler = ACTION_HANDLERS[action];

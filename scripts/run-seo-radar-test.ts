@@ -15,10 +15,14 @@ import {
   buildSuggestSeeds,
   clampLimit,
   cleanSeedPhrase,
+  dedupeKey,
+  domainSeedPhrase,
+  isAcronymSeed,
   isUsableKeywordPhrase,
   mergeScanResults,
   normalizeKeywordPhrase,
   parseSuggestPayload,
+  passesSeedGate,
   radarWindowStart,
   scoreGscIdea,
   scoreSuggestIdea,
@@ -171,22 +175,21 @@ check('排序：曝光 → 點擊 → 排名；並受 budget 限制', () => {
 // ============================================================
 console.log('\n建議詞種子');
 
-check('站名／品牌去尾、順序為 GSC 前 5 → 站名 → 品牌', () => {
+check('種子分級與順序：GSC 前 5 → 域名 → 站名 → 品牌', () => {
   const seeds = buildSuggestSeeds({
     gscTop: ['kw one', 'kw two', 'kw three', 'kw four', 'kw five', 'kw six', 'kw seven'],
     websiteName: 'BW Design Centre | 網頁設計公司',
     brand: 'BW',
+    domainUrl: 'https://bwdesign.com.hk/',
   });
-  assert.deepEqual(seeds, [
-    'kw one',
-    'kw two',
-    'kw three',
-    'kw four',
-    'kw five',
-    'BW Design Centre',
-    'BW',
-    'kw six',
-  ]);
+  assert.deepEqual(
+    seeds.map((seed) => seed.phrase),
+    ['kw one', 'kw two', 'kw three', 'kw four', 'kw five', 'bwdesign', 'BW Design Centre', 'BW'],
+  );
+  assert.deepEqual(
+    seeds.map((seed) => seed.source),
+    ['gsc', 'gsc', 'gsc', 'gsc', 'gsc', 'domain', 'site', 'brand'],
+  );
 });
 
 check('去重、排除單字元、最多 8 個', () => {
@@ -195,8 +198,48 @@ check('去重、排除單字元、最多 8 個', () => {
     websiteName: 'dup',
     brand: null,
   });
-  assert.deepEqual(seeds, ['dup', 'keep me']);
+  assert.deepEqual(seeds.map((seed) => seed.phrase), ['dup', 'keep me']);
   assert.ok(seeds.length <= 8);
+});
+
+check('域名種子：food-channels.com → food channels', () => {
+  assert.equal(domainSeedPhrase('https://www.food-channels.com/'), 'food channels');
+  assert.equal(domainSeedPhrase('foodchannels-catering.com'), 'foodchannels catering');
+  assert.equal(domainSeedPhrase('https://example.co.uk'), 'example');
+  assert.equal(domainSeedPhrase(''), '');
+  assert.equal(domainSeedPhrase(null), '');
+});
+
+check('縮寫判定（2–4 個純英文字母）', () => {
+  assert.equal(isAcronymSeed('FCC'), true);
+  assert.equal(isAcronymSeed('bwa'), true);
+  assert.equal(isAcronymSeed('attitude'), false);
+  assert.equal(isAcronymSeed('Tea Mikoo'), false);
+  assert.equal(isAcronymSeed('開餐廳'), false);
+});
+
+check('預篩：縮寫種子只收完整包含縮寫的建議（擋掉復仇者聯盟）', () => {
+  assert.equal(passesSeedGate('fcc hk', 'FCC'), true);
+  assert.equal(passesSeedGate('fcc analytics', 'FCC'), true);
+  assert.equal(passesSeedGate('復仇者聯盟', 'FCC'), false);
+  assert.equal(passesSeedGate('復仇者聯盟5', 'FCC'), false);
+  assert.equal(passesSeedGate('番茄炒蛋', 'FCC'), false);
+  assert.equal(passesSeedGate('FCC', 'FCC'), false); // 等於種子，沒有新資訊
+});
+
+check('預篩：中文容許換序、英文不容許拼寫相近', () => {
+  assert.equal(passesSeedGate('生暗瘡成因', '暗瘡 成因'), true);
+  assert.equal(passesSeedGate('魚尾紋 形成 原因', '魚尾紋 原因'), true);
+  assert.equal(passesSeedGate('food channels catering', 'food channels'), true);
+  assert.equal(passesSeedGate('mikoolab tea', 'Tea Mikoo'), true);
+  assert.equal(passesSeedGate('aptitude test', 'attitude'), false);
+  assert.equal(passesSeedGate('beacon', 'BWA'), false);
+});
+
+check('判重鍵：忽略空白與標點', () => {
+  assert.equal(dedupeKey('fcc hk'), dedupeKey('fcchk'));
+  assert.equal(dedupeKey('補肺 保健品'), dedupeKey('補肺保健品'));
+  assert.notEqual(dedupeKey('寫字樓設計'), dedupeKey('寫字樓裝修'));
 });
 
 check('cleanSeedPhrase 只切常見分隔符', () => {
@@ -230,22 +273,35 @@ check('非陣列／長度不足／第二項非陣列 → SuggestFormatError', ()
   assert.throws(() => parseSuggestPayload(null), SuggestFormatError);
 });
 
-check('建議詞轉候選：來源 suggest、曝光 0、種子曝光給基準分', () => {
-  const seedImpressions = new Map([['kw one', 1000]]);
+check('建議詞轉候選：先預篩、再判重、按種子分級計分', () => {
+  const seeds = [
+    { phrase: 'kw one', source: 'gsc' as const },
+    { phrase: 'fcc', source: 'brand' as const },
+  ];
+  const seedImpressions = new Map([
+    ['kw one', 1000],
+    ['fcc', 1000],
+  ]);
   const ideas = buildSuggestIdeas({
     suggestions: [
       { seed: 'kw one', keyword: 'kw one 推薦' },
-      { seed: 'kw one', keyword: 'kw one 推薦' },
-      { seed: 'kw two', keyword: 'kw two 推薦' },
+      { seed: 'kw one', keyword: 'kw one 推薦' }, // 重複，判重後只留一個
+      { seed: 'kw one', keyword: 'zzz 無關' }, // 與種子零交集 → 預篩丟棄
+      { seed: 'fcc', keyword: 'fcc hk' }, // 通過
+      { seed: 'fcc', keyword: '復仇者聯盟' }, // 雜訊 → 預篩丟棄
     ],
+    seeds,
     seedImpressions,
   });
-  assert.equal(ideas.length, 2);
+  assert.deepEqual(
+    ideas.map((idea) => idea.keyword),
+    ['kw one 推薦', 'fcc hk'],
+  );
   assert.equal(ideas[0].source, 'suggest');
   assert.equal(ideas[0].impressions, 0);
   assert.equal(ideas[0].seed_keyword, 'kw one');
-  assert.equal(ideas[0].score, 355);
-  assert.equal(ideas[1].score, 5);
+  assert.equal(ideas[0].score, 355); // gsc 級別全額
+  assert.equal(ideas[1].score, 177.5); // brand 級別 ×0.5
 });
 
 // ============================================================
@@ -358,7 +414,12 @@ check('ToolsCenterModule 有 seo-radar 早退分支', () => {
 });
 
 check('函數入口：write 權限檢查 + cron 只限 service_role', () => {
-  assert.match(functionSource, /requireAction\(actor, "write"\)/);
+  // set_daily 走 manage_settings，其餘走 write
+  assert.match(
+    functionSource,
+    /const permission = ADMIN_ONLY_ACTIONS\.has\(action\) \? "manage_settings" : "write"/,
+  );
+  assert.match(functionSource, /requireAction\(actor, permission\)/);
   assert.match(functionSource, /requireServiceRole\(req\)/);
 });
 
@@ -457,12 +518,48 @@ check('cron 候選站點包含只有 webandsystem_list.gsc_site_url 的站點', 
   assert.match(functionSource, /Boolean\(\(site\.gsc_site_url \?\? ""\)\.trim\(\)\)/);
 });
 
-check('ignore 會限定站點，且前端有帶 website_profile_id', () => {
+check('delete 會限定站點、只刪 new/ignored，且前端有帶 website_profile_id', () => {
   assert.match(
     functionSource,
-    /async function handleIgnore[\s\S]{0,900}eq\("website_profile_id", siteId\)/,
+    /async function handleDelete[\s\S]{0,900}\.delete\(\)[\s\S]{0,200}eq\("website_profile_id", siteId\)[\s\S]{0,220}in\("status", \["new", "ignored"\]\)/,
   );
-  assert.match(hookSource, /action: 'ignore'[\s\S]{0,160}website_profile_id: siteId/);
+  assert.match(hookSource, /action: 'delete'[\s\S]{0,160}website_profile_id: siteId/);
+});
+
+check('已忽略的候選詞仍可勾選（否則永遠刪不掉）', () => {
+  const tableSource = readFileSync(
+    join(root, 'src/components/tools-center/seo-radar/SeoRadarTable.tsx'),
+    'utf8',
+  );
+  assert.match(tableSource, /function isSelectable[\s\S]{0,200}status === 'ignored'/);
+  assert.doesNotMatch(tableSource, /canWrite && idea\.status === 'new'/);
+});
+
+check('採納範圍與可勾選範圍一致（new + ignored）', () => {
+  // 表格讓 ignored 可勾選，後端就不能再把它濾掉（否則勾了卻靜默不採納）
+  assert.doesNotMatch(functionSource, /status !== "ignored"/);
+
+  const tableSource = readFileSync(
+    join(root, 'src/components/tools-center/seo-radar/SeoRadarTable.tsx'),
+    'utf8',
+  );
+  assert.match(tableSource, /status === 'new' \|\| idea\.status === 'ignored'/);
+});
+
+check('UI 不再有「忽略」：改為「刪除」且要二次確認', () => {
+  const toolSource = readFileSync(
+    join(root, 'src/components/tools-center/seo-radar/SeoRadarTool.tsx'),
+    'utf8',
+  );
+  assert.doesNotMatch(toolSource, /已忽略/);
+  assert.match(toolSource, /<DeleteDialog/);
+
+  const dialogSource = readFileSync(
+    join(root, 'src/components/tools-center/seo-radar/DeleteDialog.tsx'),
+    'utf8',
+  );
+  assert.match(dialogSource, /確認刪除/);
+  assert.match(dialogSource, /無法復原/);
 });
 
 check('候選詞頁碼在篩選後會回夾，不會停在空頁', () => {
@@ -483,6 +580,103 @@ check('「來源」欄可排序（表頭帶排序按鈕與箭頭）', () => {
   // 排序鍵要能取到來源值
   assert.match(tableSource, /case 'source':\s*\n\s*return idea\.source;/);
   assert.doesNotMatch(tableSource, /<th[^>]*>\s*來源\s*<\/th>/);
+});
+
+console.log('\n全站／每日自動抓取');
+
+const toolSource = readFileSync(
+  join(root, 'src/components/tools-center/seo-radar/SeoRadarTool.tsx'),
+  'utf8',
+);
+const hookSrc = readFileSync(join(root, 'src/hooks/useSeoRadar.ts'), 'utf8');
+
+check('右上角：全站抓取是白底一次性按鈕（無播放圖示）', () => {
+  assert.match(toolSource, /全站抓取/);
+  assert.doesNotMatch(toolSource, /全站自動抓取/);
+
+  const blocks = [
+    ...toolSource.matchAll(/<Button[\s\S]{0,900}?全站抓取[\s\S]{0,80}?<\/Button>/g),
+  ].map((m) => m[0]);
+  assert.equal(blocks.length, 1, `找到 ${blocks.length} 個全站抓取按鈕`);
+  assert.match(blocks[0], /variant="outline"/, '應為白底 outline 樣式');
+  assert.doesNotMatch(blocks[0], /<Play|<Pause/, '一次性動作不應有播放／暫停圖示');
+});
+
+check('每日自動抓取是開關：綠底＋暫停圖示／白底＋播放圖示', () => {
+  assert.match(toolSource, /每日自動抓取/);
+  assert.match(toolSource, /<Pause size=\{13\}/);
+  assert.match(toolSource, /<Play size=\{13\}/);
+  assert.match(toolSource, /bg-teal-600 text-white hover:bg-teal-700/);
+  assert.match(toolSource, /dailyStatus\?\.enabled \? 'default' : 'outline'/);
+});
+
+check('點擊後有二次確認浮層，且說明文字不含技術詞', () => {
+  assert.match(toolSource, /<ConfirmActionDialog/);
+  const dialogs = [
+    ...toolSource.matchAll(/<ConfirmActionDialog[\s\S]*?<\/ConfirmActionDialog>/g),
+  ].map((m) => m[0]);
+  assert.equal(dialogs.length, 2, `找到 ${dialogs.length} 個確認浮層`);
+  for (const dialog of dialogs) {
+    assert.doesNotMatch(dialog, /GSC|cron|API|Edge Function|SQL|RPC/i);
+  }
+});
+
+check('每日自動抓取只有管理層可切換（前端與後端一致）', () => {
+  assert.match(toolSource, /canManageDaily = can\(\{ role: systemUser\?\.role \?\? null \}, 'manage_settings'\)/);
+  assert.match(functionSource, /ADMIN_ONLY_ACTIONS = new Set\(\["set_daily"\]\)/);
+  assert.match(functionSource, /"manage_settings"/);
+});
+
+check('後端有三個新 action，前端有對應呼叫', () => {
+  assert.match(functionSource, /scan_all: handleScanAll/);
+  assert.match(functionSource, /cron_status: handleCronStatus/);
+  assert.match(functionSource, /set_daily: handleSetDaily/);
+  // cron 操作只能經 RPC（cron schema 不對外）
+  assert.match(functionSource, /db\.rpc\("seo_radar_set_daily"/);
+  assert.match(functionSource, /db\.rpc\("seo_radar_daily_status"\)/);
+  assert.match(hookSrc, /action: 'scan_all'/);
+  assert.match(hookSrc, /action: 'cron_status'/);
+  assert.match(hookSrc, /action: 'set_daily'/);
+});
+
+check('cron 開關 RPC 的 migration 只授權 service_role', () => {
+  const sql = readFileSync(
+    join(root, 'supabase/migrations/20261127120000_seo_radar_controls.sql'),
+    'utf8',
+  );
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.seo_radar_daily_status/i);
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.seo_radar_set_daily/i);
+  assert.match(sql, /cron\.alter_job\(job_id := v_jobid, active := p_enabled\)/);
+  assert.match(
+    sql,
+    /REVOKE ALL ON FUNCTION public\.seo_radar_set_daily\(boolean\) FROM PUBLIC, anon, authenticated/i,
+  );
+  assert.match(
+    sql,
+    /GRANT EXECUTE ON FUNCTION public\.seo_radar_set_daily\(boolean\) TO service_role/i,
+  );
+});
+
+check('建議詞的來源標籤用「來源」，不再用「種子」', () => {
+  const tableSource = readFileSync(
+    join(root, 'src/components/tools-center/seo-radar/SeoRadarTable.tsx'),
+    'utf8',
+  );
+  assert.match(tableSource, /來源：\{idea\.seed_keyword\}/);
+  assert.doesNotMatch(tableSource, /種子：/);
+});
+
+check('全站抓取有併發保護（同時間只跑一個）', () => {
+  assert.match(functionSource, /async function assertNoRunningFullScan/);
+  assert.match(functionSource, /scan_in_progress/);
+  assert.match(functionSource, /meta->>scope/);
+  assert.match(functionSource, /await assertNoRunningFullScan\(db\)/);
+});
+
+check('切站時會丟棄過期回應（避免顯示別站的詞）', () => {
+  assert.match(hookSrc, /const siteIdRef = useRef/);
+  assert.match(hookSrc, /siteIdRef\.current !== requestedSite/);
+  assert.match(hookSrc, /seq !== refreshSeq\.current/);
 });
 
 console.log(`\nSEO 雷達自測：${passed} 項全部通過\n`);

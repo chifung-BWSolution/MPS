@@ -9,7 +9,7 @@
  * 「功能尚未啟用」，不拋錯、不白屏（比照 ContentAutomationCenter）。
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   contentErrorMessage,
@@ -18,8 +18,10 @@ import {
 } from '@/lib/contentApi';
 import type {
   RadarAdoptResponse,
-  RadarIgnoreResponse,
+  RadarCronStatus,
+  RadarDeleteResponse,
   RadarMarketCode,
+  RadarScanAllResponse,
   RadarScanResponse,
   SeoRadarIdeaRow,
   SeoRadarRunRow,
@@ -164,9 +166,40 @@ export function useSeoRadar(siteId: string | null) {
   const [scanning, setScanning] = useState(false);
   const [working, setWorking] = useState(false);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [dailyStatus, setDailyStatus] = useState<RadarCronStatus | null>(null);
+  const [dailyBusy, setDailyBusy] = useState(false);
+  const [scanningAll, setScanningAll] = useState(false);
+
+  // 切站時的競態防護：慢的請求回來時如果站點已換，就丟棄結果，
+  // 否則會出現「選了 A 站卻顯示 B 站的詞」。
+  const siteIdRef = useRef<string | null>(siteId);
+  const refreshSeq = useRef(0);
+  useEffect(() => {
+    siteIdRef.current = siteId;
+  }, [siteId]);
+
+  /** 每日自動抓取的狀態（全域，與站點無關；讀不到就當未知，不影響主流程） */
+  const refreshDailyStatus = useCallback(async () => {
+    try {
+      const result = await invokeContentFunction<RadarCronStatus>('seo-radar', {
+        action: 'cron_status',
+      });
+      setDailyStatus(result);
+    } catch {
+      setDailyStatus(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshDailyStatus();
+  }, [refreshDailyStatus]);
 
   const refresh = useCallback(async () => {
-    if (!siteId) {
+    const requestedSite = siteId;
+    const seq = refreshSeq.current + 1;
+    refreshSeq.current = seq;
+
+    if (!requestedSite) {
       setIdeas([]);
       setLastRun(null);
       setError(null);
@@ -180,7 +213,7 @@ export function useSeoRadar(siteId: string | null) {
         supabase
           .from('seo_keyword_ideas')
           .select(IDEA_COLUMNS)
-          .eq('website_profile_id', siteId)
+          .eq('website_profile_id', requestedSite)
           .order('score', { ascending: false })
           .limit(IDEA_LIMIT),
         supabase
@@ -191,6 +224,9 @@ export function useSeoRadar(siteId: string | null) {
           .maybeSingle(),
       ]);
 
+      // 已經有更新的請求，或使用者已切站 → 丟棄這次結果
+      if (seq !== refreshSeq.current || siteIdRef.current !== requestedSite) return;
+
       if (ideaResult.error) throw ideaResult.error;
 
       setIdeas(((ideaResult.data ?? []) as Record<string, unknown>[]).map(mapIdea));
@@ -198,6 +234,7 @@ export function useSeoRadar(siteId: string | null) {
       setMissingSchema(false);
       setError(null);
     } catch (err) {
+      if (seq !== refreshSeq.current || siteIdRef.current !== requestedSite) return;
       if (isContentSchemaMissing(err)) {
         setMissingSchema(true);
         setIdeas([]);
@@ -206,7 +243,7 @@ export function useSeoRadar(siteId: string | null) {
         setError(contentErrorMessage(err));
       }
     } finally {
-      setLoading(false);
+      if (seq === refreshSeq.current) setLoading(false);
     }
   }, [siteId]);
 
@@ -217,6 +254,7 @@ export function useSeoRadar(siteId: string | null) {
   const scan = useCallback(
     async (marketOverride: RadarMarketCode | null): Promise<RadarScanResponse | null> => {
       if (!siteId) return null;
+      const requestedSite = siteId;
       setScanning(true);
       setError(null);
       setWarnings([]);
@@ -226,11 +264,16 @@ export function useSeoRadar(siteId: string | null) {
           website_profile_id: siteId,
           ...(marketOverride ? { market_override: marketOverride } : {}),
         });
-        setWarnings(result.warnings ?? []);
+        // 掃描期間使用者可能已切站，過期結果不要覆蓋新站點的畫面
+        if (siteIdRef.current === requestedSite) {
+          setWarnings(result.warnings ?? []);
+        }
         await refresh();
         return result;
       } catch (err) {
-        setError(contentErrorMessage(err));
+        if (siteIdRef.current === requestedSite) {
+          setError(contentErrorMessage(err));
+        }
         return null;
       } finally {
         setScanning(false);
@@ -263,14 +306,14 @@ export function useSeoRadar(siteId: string | null) {
     [siteId, refresh],
   );
 
-  const ignore = useCallback(
-    async (ideaIds: string[]): Promise<RadarIgnoreResponse | null> => {
+  const remove = useCallback(
+    async (ideaIds: string[]): Promise<RadarDeleteResponse | null> => {
       if (!siteId || ideaIds.length === 0) return null;
       setWorking(true);
       setError(null);
       try {
-        const result = await invokeContentFunction<RadarIgnoreResponse>('seo-radar', {
-          action: 'ignore',
+        const result = await invokeContentFunction<RadarDeleteResponse>('seo-radar', {
+          action: 'delete',
           website_profile_id: siteId,
           idea_ids: ideaIds,
         });
@@ -286,6 +329,47 @@ export function useSeoRadar(siteId: string | null) {
     [siteId, refresh],
   );
 
+  /** 手動「全站自動抓取」：一次處理最久沒更新的若干站點 */
+  const scanAll = useCallback(async (): Promise<RadarScanAllResponse | null> => {
+    setScanningAll(true);
+    setError(null);
+    try {
+      const result = await invokeContentFunction<RadarScanAllResponse>('seo-radar', {
+        action: 'scan_all',
+      });
+      await refresh();
+      await refreshDailyStatus();
+      return result;
+    } catch (err) {
+      setError(contentErrorMessage(err));
+      return null;
+    } finally {
+      setScanningAll(false);
+    }
+  }, [refresh, refreshDailyStatus]);
+
+  /** 開／關每日自動抓取 */
+  const setDaily = useCallback(
+    async (enabled: boolean): Promise<RadarCronStatus | null> => {
+      setDailyBusy(true);
+      setError(null);
+      try {
+        const result = await invokeContentFunction<RadarCronStatus>('seo-radar', {
+          action: 'set_daily',
+          enabled,
+        });
+        setDailyStatus(result);
+        return result;
+      } catch (err) {
+        setError(contentErrorMessage(err));
+        return null;
+      } finally {
+        setDailyBusy(false);
+      }
+    },
+    [],
+  );
+
   return {
     ideas,
     lastRun,
@@ -297,7 +381,13 @@ export function useSeoRadar(siteId: string | null) {
     warnings,
     refresh,
     scan,
+    scanAll,
     adopt,
-    ignore,
+    remove,
+    dailyStatus,
+    dailyBusy,
+    scanningAll,
+    refreshDailyStatus,
+    setDaily,
   };
 }
