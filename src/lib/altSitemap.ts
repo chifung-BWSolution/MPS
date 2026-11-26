@@ -23,12 +23,21 @@ function decodeXmlEntities(input: string): string {
     .replace(/&apos;/g, "'")
     .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => {
       const code = Number.parseInt(hex, 16);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : '';
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff
+        ? String.fromCodePoint(code)
+        : '';
     })
     .replace(/&#(\d+);/g, (_, decimal: string) => {
       const code = Number.parseInt(decimal, 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : '';
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff
+        ? String.fromCodePoint(code)
+        : '';
     });
+}
+
+/** 子 sitemap 的 loc 仍然會是 .xml／.xml.gz；這不是內容頁。 */
+export function isSitemapUrl(url: string): boolean {
+  return /\.xml(?:\.gz)?(?:$|[?#])/i.test(String(url || ''));
 }
 
 export function parseSitemap(xml: string, baseUrl: string): ParsedSitemap {

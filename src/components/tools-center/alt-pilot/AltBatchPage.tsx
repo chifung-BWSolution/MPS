@@ -448,7 +448,9 @@ export function AltBatchPage({
           <Select
             value={siteId || undefined}
             onValueChange={handleSiteChange}
-            disabled={disabled || sitesLoading || sites.length === 0}
+            disabled={
+              disabled || analyzing || generatingBatch || sitesLoading || sites.length === 0
+            }
           >
             <SelectTrigger className="h-9 bg-white" aria-label="選擇站點">
               <SelectValue placeholder={sitesLoading ? '載入站點…' : '選擇站點'} />
@@ -468,7 +470,7 @@ export function AltBatchPage({
             onChange={(event) => setSitemapUrl(event.target.value)}
             placeholder="sitemap URL（留空會用站點的 /sitemap.xml）"
             className="h-9 bg-white"
-            disabled={disabled}
+            disabled={disabled || analyzing || generatingBatch}
             aria-label="sitemap URL"
           />
 
@@ -478,7 +480,7 @@ export function AltBatchPage({
             size="sm"
             className="h-9 gap-1.5 bg-white"
             onClick={() => void handleDiscover()}
-            disabled={disabled || discovering}
+            disabled={disabled || discovering || analyzing || generatingBatch}
           >
             {discovering ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             取得頁面
@@ -489,7 +491,7 @@ export function AltBatchPage({
             size="sm"
             className="h-9 gap-1.5 bg-[#0D9488] px-4 text-white hover:bg-[#0b8076]"
             onClick={() => void handleAnalyze()}
-            disabled={disabled || analyzing || selectedUrls.length === 0}
+            disabled={disabled || analyzing || generatingBatch || selectedUrls.length === 0}
           >
             {analyzing ? <Loader2 size={14} className="animate-spin" /> : <ScanSearch size={14} />}
             分析選取（{selectedUrls.length}）
@@ -609,7 +611,7 @@ export function AltBatchPage({
                 size="sm"
                 className="mt-2 gap-1.5 bg-white"
                 onClick={handleLoadManual}
-                disabled={disabled}
+                disabled={disabled || analyzing || generatingBatch}
               >
                 <ArrowRight size={13} />
                 載入 URL
@@ -641,7 +643,7 @@ export function AltBatchPage({
                         <Checkbox
                           checked={selected.has(url)}
                           onCheckedChange={() => handleToggle(url)}
-                          disabled={analyzing}
+                          disabled={analyzing || generatingBatch}
                           aria-label={`選擇 ${url}`}
                         />
                       </TableCell>
@@ -687,6 +689,7 @@ export function AltBatchPage({
                             size="sm"
                             className="h-7 gap-1 px-2 text-[11px] text-[#0D9488]"
                             onClick={() => onOpenRun(result.runId!)}
+                            disabled={generatingBatch}
                           >
                             開啟
                             <ArrowRight size={11} />

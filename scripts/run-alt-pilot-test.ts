@@ -13,7 +13,7 @@ import {
   toTsv,
 } from '../src/lib/altCsv.ts';
 import { hostMatches, normalizePageUrl } from '../src/lib/altUrl.ts';
-import { parseSitemap } from '../src/lib/altSitemap.ts';
+import { isSitemapUrl, parseSitemap } from '../src/lib/altSitemap.ts';
 import { auditAltImages } from '../src/lib/altAudit.ts';
 import {
   assertPublicHost,
@@ -263,6 +263,15 @@ const cdata = parseSitemap(
   'https://example.com/',
 );
 assert.equal(cdata.urls[0], 'https://example.com/cdata');
+assert.equal(isSitemapUrl('https://example.com/sitemap.xml'), true);
+assert.equal(isSitemapUrl('https://example.com/sitemap.xml.gz'), true);
+assert.equal(isSitemapUrl('https://example.com/page'), false);
+
+const invalidEntity = parseSitemap(
+  '<urlset><url><loc>https://example.com/a&#999999;</loc></url></urlset>',
+  'https://example.com/',
+);
+assert.equal(invalidEntity.urls.length, 1);
 
 // ---------------------------------------------------------------------------
 // 5c) Audit summary

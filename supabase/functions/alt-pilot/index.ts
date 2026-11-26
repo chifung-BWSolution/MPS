@@ -20,7 +20,7 @@ import {
 } from "../../../src/lib/altPrompt.ts";
 import { combineIssues, evaluateAlt, normalizeModelIssues } from "../../../src/lib/altQuality.ts";
 import { hostMatches, normalizePageUrl } from "../../../src/lib/altUrl.ts";
-import { parseSitemap } from "../../../src/lib/altSitemap.ts";
+import { isSitemapUrl, parseSitemap } from "../../../src/lib/altSitemap.ts";
 import { normalizeForCompare, normalizeWhitespace, truncateText } from "../../../src/lib/altText.ts";
 import {
   DEFAULT_ALT_SETTINGS,
@@ -672,6 +672,8 @@ async function handleDiscover(admin: DbClient, body: Record<string, unknown>) {
   const addPages = (urls: string[]): void => {
     for (const url of urls) {
       if (pages.size >= 300) return;
+      // 子 sitemap 若仍是 index，其 loc 會是 .xml；不要把它當成頁面。
+      if (isSitemapUrl(url)) continue;
       try {
         const host = new URL(url).hostname;
         if (allowedHosts.some((allowed) => hostMatches(host, allowed))) pages.add(url);
