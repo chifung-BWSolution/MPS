@@ -89,12 +89,10 @@ export function CrosspostResultView({
   );
 
   useEffect(() => {
-    if (generation.variants.length > 0 && !existing.has(active)) {
-      setActive(generation.variants[0].platform);
-    }
-    // existing 每次 render 都是新 Set，這裡只依賴 variants 與 active
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [generation.variants, active]);
+    // 只在換一組結果（token 改變）時重設 tab；
+    // 使用者點「未生成」的 tab 時不應被立刻彈走。
+    setActive(generation.variants[0]?.platform ?? 'ig');
+  }, [generation.token]);
 
   const activeVariant = generation.variants.find((variant) => variant.platform === active);
 
