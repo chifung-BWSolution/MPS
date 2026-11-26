@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/google-gsc.ts";
+import { attachMailImages, collectFormImageUrls } from "../_shared/asana-mail-images.ts";
 import { hktDate, inquiryAlreadyOpened, isEmailMeFormSender, normalizeFccBody, parseFccInquiry, resolveFccGmailOAuthClient, type FccMailRule } from "../_shared/fcc-asana-mail.ts";
 
 const PROVIDER = "gmail_fcc";
@@ -108,7 +109,7 @@ function decodeB64Url(data: string): string {
   return new TextDecoder().decode(bytes);
 }
 
-type GmailPart = { mimeType?: string; body?: { data?: string }; parts?: GmailPart[] };
+type GmailPart = { mimeType?: string; filename?: string; body?: { data?: string; attachmentId?: string; size?: number }; parts?: GmailPart[] };
 
 function partText(part: GmailPart | undefined): string {
   if (!part?.body?.data) return "";
@@ -174,6 +175,28 @@ async function createTask(input: {
     throw new Error(await accessDenied(raw) || raw || "建立 Asana task 失敗");
   }
   return payload.data.gid;
+}
+
+async function attachTodayFormImages(supabase: ReturnType<typeof admin>, receivedOn: string): Promise<void> {
+  const token = Deno.env.get("ASANA_FCC_ACCESS_TOKEN")?.trim() || "";
+  if (!token) return;
+  const { data, error } = await supabase
+    .from("asana_mail_jobs")
+    .select("asana_task_gid, notes")
+    .eq("rule_code", "fcc")
+    .eq("status", "created")
+    .eq("received_on", receivedOn)
+    .limit(20);
+  if (error || !data) return;
+  for (const job of data) {
+    const taskGid = String(job.asana_task_gid || "").trim();
+    if (!taskGid || !collectFormImageUrls(String(job.notes || "")).length) continue;
+    try {
+      await attachMailImages(token, taskGid, { text: String(job.notes || "") });
+    } catch {
+      // The next check uploads only files that are not already on the task.
+    }
+  }
 }
 
 type AsanaPerson = { gid: string; name: string; email: string };
@@ -479,6 +502,7 @@ Deno.serve(async (req) => {
     let created = 0;
     let skipped = 0;
     const errors: string[] = [];
+    await attachTodayFormImages(supabase, hktDate(Date.now()));
     for (const item of listed.messages || []) {
       const { data: existing, error: existingErr } = await supabase
         .from("asana_mail_jobs")
@@ -616,6 +640,23 @@ Deno.serve(async (req) => {
             : row.assignee_gid.trim(),
           followers: (row.collaborator_gids || []).map((gid) => gid.trim()).filter(Boolean),
         });
+        let imageError: string | null = null;
+        const asanaToken = Deno.env.get("ASANA_FCC_ACCESS_TOKEN")?.trim() || "";
+        if (asanaToken) {
+          try {
+            const images = await attachMailImages(asanaToken, taskGid, {
+              text: `${emailText}\n${parsed.mail.notes}`,
+              payload: message.payload,
+              loadGmailAttachment: async (attachmentId) => {
+                const loaded = await gmailGet<{ data?: string }>(token, `/messages/${item.id}/attachments/${attachmentId}`);
+                return loaded.data || "";
+              },
+            });
+            if (images.failed) imageError = `task 已開，${images.failed} 張圖片未能上傳`;
+          } catch (err) {
+            imageError = err instanceof Error ? err.message : String(err);
+          }
+        }
         await supabase.from("asana_mail_jobs").upsert({
           rule_code: "fcc",
           gmail_message_id: item.id,
@@ -627,7 +668,7 @@ Deno.serve(async (req) => {
           asana_project_gid: parsed.mail.projectGid,
           task_name: parsed.mail.title,
           notes: parsed.mail.notes,
-          error: null,
+          error: imageError,
         }, { onConflict: "rule_code,gmail_message_id" });
         created += 1;
       } catch (err) {

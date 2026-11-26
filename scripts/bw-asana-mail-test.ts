@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { bwSkipReason, formatBwInquiryTitle, matchBwRoute, organizeBwNotes, parseBwInquiry } from '../supabase/functions/_shared/bw-asana-mail.ts';
+import { collectFormImageUrls } from '../supabase/functions/_shared/asana-mail-images.ts';
+import { bwInquiryAlreadyOpened, bwSkipReason, formatBwInquiryTitle, matchBwRoute, organizeBwNotes, parseBwInquiry, stableBwNotes } from '../supabase/functions/_shared/bw-asana-mail.ts';
 
 const wall = formatBwInquiryTitle({
   subject: '[九龍]牆身工程查詢: Ivy 93093186 -',
@@ -65,5 +66,45 @@ const parsed = parseBwInquiry(
 );
 assert.equal(parsed.title, '[九龍]牆身工程查詢 - Ivy 9309 3186 九龍灣');
 assert.equal(parsed.title.includes(':'), false);
+
+const kwok = parseBwInquiry(
+  ['姓名: Ms Kwok', '機構名稱: 佛教林金殿紀念小學', '(Whatsapp/SMS): 63079079', '固網電話: 24221747', '工程項目地區: 葵芳'].join('\n'),
+  '[葵芳]牆身工程查詢: Ms Kwok 63079079 - 佛教林金殿紀念小學 - 姓名*',
+);
+assert.equal(kwok.title, '[葵芳]牆身工程查詢 - Ms Kwok 6307 9079 2422 1747 佛教林金殿紀念小學 葵芳');
+assert.equal(kwok.phone.includes('2422'), false);
+
+const amy = parseBwInquiry(
+  ['姓名: AMY', '(Whatsapp/SMS): 66898329', '地區: 香港'].join('\n'),
+  '辦公室工程設計: AMY, tel 66898329',
+);
+assert.equal(amy.title, '辦公室工程設計 - AMY 6689 8329 香港');
+
+const subjectPhone = parseBwInquiry(
+  ['姓名: AMY', '地區: 香港'].join('\n'),
+  '辦公室工程設計: AMY, tel 66898329',
+);
+assert.equal(subjectPhone.title, '辦公室工程設計 - AMY 6689 8329 香港');
+
+const landline = parseBwInquiry(
+  ['姓名: A', '固網電話: 24221747', '地區: 葵芳'].join('\n'),
+  '牆身工程查詢: A',
+);
+assert.equal(landline.title, '牆身工程查詢 - A 2422 1747 葵芳');
+
+const copyA = '現場相片 1: https://files.emailmeform.com/1045185/wEzKadD3/IMG_1941.jpeg';
+const copyB = '現場相片 1: https://files.emailmeform.com/1045185/b7NtVTGO/IMG_1941.jpeg';
+assert.equal(stableBwNotes(copyA), stableBwNotes(copyB));
+assert.equal(bwInquiryAlreadyOpened('[葵芳]牆身工程查詢 - Ms Kwok 葵芳', copyA, '[葵芳]牆身工程查詢 - Ms Kwok 6307 9079 2422 1747 葵芳', copyB), true);
+
+const imageNotes = [
+  '現場相片 1: https://files.emailmeform.com/1045185/wEzKadD3/IMG_1941.jpeg',
+  '現場相片 2: https://files.emailmeform.com/1045185/eJDuYOpN/IMG_1925.jpeg',
+  'Referrer URL: https://hkofficedesign.com/photo.jpg',
+].join('\n');
+assert.deepEqual(collectFormImageUrls(imageNotes), [
+  'https://files.emailmeform.com/1045185/wEzKadD3/IMG_1941.jpeg',
+  'https://files.emailmeform.com/1045185/eJDuYOpN/IMG_1925.jpeg',
+]);
 
 console.log('bw asana mail tests passed');
