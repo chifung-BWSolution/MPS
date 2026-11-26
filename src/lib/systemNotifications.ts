@@ -19,7 +19,7 @@ import {
   RECEIVABLES_ALERT_DUE_WITHIN_DAYS,
   buildReceivablesAlertEmail,
 } from './receivablesAlert.ts';
-import { buildFccAsanaDigestEmail, describeFccDigestSchedule, fccAsanaTaskUrl } from './fccAsanaDigest.ts';
+import { buildFccAsanaDigestEmail, buildUnmatchedInquiryEmail, describeFccDigestSchedule, fccAsanaTaskUrl } from './fccAsanaDigest.ts';
 import {
   READDY_CONVERSION_RESULT_TO,
   buildReaddyConversionResultEmail,
@@ -60,6 +60,7 @@ export function buildSystemNotificationCatalog(): SystemNotificationDoc[] {
   const annualPreview = buildAnnualFeePreview();
   const receivablesPreview = buildReceivablesPreview();
   const fccDigestPreview = buildFccDigestPreview();
+  const unmatchedPreview = buildUnmatchedPreview();
   const adsPreview = buildAdsPreview();
   const readdyPreview = buildReaddyConversionPreview();
 
@@ -102,11 +103,11 @@ export function buildSystemNotificationCatalog(): SystemNotificationDoc[] {
     },
     {
       id: 'fcc-asana-digest',
-      name: 'FC 查詢 Asana 日報',
+      name: '查詢 Asana 日報',
       kind: 'scheduled',
-      subject: 'FC 查詢 Asana {日期} — 今日新開 {個數} 個 task',
-      purpose: '把當日新開的 FC 查詢 Asana task 整理成一封電郵，列出每個 task 的 Asana 連結和而家的狀態，方便老闆查看今日開了幾多個。',
-      trigger: '排程 fcc-asana-digest 於本頁儲存的香港時間寄出。已啟用而且有至少一個收件人時才寄出。當日沒有新 task 仍會寄出，並寫明新開 0 個。同一日不會寄第二次。',
+      subject: '查詢 Asana {日期} — 今日新開 {個數} 個 task',
+      purpose: '把當日 BW、FC、WP 新開的查詢 Asana task 放在同一封電郵，列出每個 task 的 Asana 連結和而家的狀態。',
+      trigger: '排程 fcc-asana-digest 於本頁儲存的香港時間寄出。已啟用而且有至少一個收件人時才寄出。某個部門當日沒有新 task 仍會列出 0 個。同一日不會寄第二次。',
       frequency: describeFccDigestSchedule({
         enabled: false,
         sendTime: '18:00',
@@ -122,6 +123,24 @@ export function buildSystemNotificationCatalog(): SystemNotificationDoc[] {
       bcc: [],
       previewHtml: fccDigestPreview.html,
       previewSubject: fccDigestPreview.subject,
+    },
+    {
+      id: 'asana-inquiry-unmatched',
+      name: '查詢對不上規則',
+      kind: 'manual',
+      subject: 'Asana 查詢對不上規則 — {部門}',
+      purpose: 'BW 或 FC 收到 EmailMeForm，但主旨對不上現有規則、所以未有開 task 時，通知收件人去加一行，或者在錯誤頁略過。',
+      trigger: 'BW 或 FC 的郵件同步第一次記低一封對不上規則的信時寄出。同一封信不會再寄。收件人沿用查詢 Asana 日報的名單；名單是空的就只記在錯誤頁，不寄信。',
+      frequency: '無固定排程。對不上規則的新郵件出現時寄出。',
+      to: {
+        addresses: [],
+        summary: '同查詢 Asana 日報的收件人',
+        note: '沒有另一份名單。日報未加入收件人時，這封通知也不會寄。Cc、Bcc 不用。',
+      },
+      cc: [],
+      bcc: [],
+      previewHtml: unmatchedPreview.html,
+      previewSubject: unmatchedPreview.subject,
     },
     {
       id: 'ads-email-alert',
@@ -319,22 +338,40 @@ function metricCell(
 function buildFccDigestPreview(): { html: string; subject: string } {
   const email = buildFccAsanaDigestEmail({
     date: '2026-11-19',
-    tasks: [
+    departments: [
       {
-        title: 'FC Lunch Box - 範例客人 9123 4567 範例公司',
-        url: fccAsanaTaskUrl('1000000000000001'),
-        completed: false,
-        assignee: '範例同事',
-        projects: ['FCC Active 1 飯盒報價 Lunch Box Follow Up'],
+        label: 'BW',
+        color: '#0369a1',
+        tasks: [{
+          title: '辦公室工程設計 - 範例客人 9123 4567 範例公司',
+          url: fccAsanaTaskUrl('1000000000000001'),
+          completed: false,
+          assignee: '範例同事',
+          projects: ['BWL Active 1 準備報價單 Quote Stage'],
+        }],
       },
       {
-        title: 'FC Catering - 另一客人 6123 4567 到會公司',
-        url: fccAsanaTaskUrl('1000000000000002'),
-        completed: true,
-        assignee: '範例同事',
-        projects: ['FCC Active 1 到會報價 Catering Follow Up'],
+        label: 'FC',
+        color: '#0f766e',
+        tasks: [{
+          title: 'FC Catering - 另一客人 6123 4567 到會公司',
+          url: fccAsanaTaskUrl('1000000000000002'),
+          completed: true,
+          assignee: '範例同事',
+          projects: ['FCC Active 1 到會報價 Catering Follow Up'],
+        }],
       },
+      { label: 'WP', color: '#6d28d9', tasks: [] },
     ],
+  });
+  return { html: email.html, subject: email.subject };
+}
+
+function buildUnmatchedPreview(): { html: string; subject: string } {
+  const email = buildUnmatchedInquiryEmail({
+    department: 'BW',
+    subjectLine: '寫字樓 Office工程查詢: 範例客人 9123 4567',
+    receivedOn: '2026-11-26',
   });
   return { html: email.html, subject: email.subject };
 }

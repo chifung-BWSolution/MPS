@@ -156,6 +156,8 @@ export interface AltKeywordOption {
 export interface AltUsageSummary {
   today: number;
   limit: number;
+  /** 今日建立的 alt_runs 數量（頁面分析次數）。 */
+  analyses?: number;
 }
 
 export interface AltVerifyResult {
@@ -183,6 +185,15 @@ export interface AltAnalyzeResponse {
   usage: AltUsageSummary;
 }
 
+export interface AltDiscoverResult {
+  sitemap_url: string;
+  kind: 'urlset' | 'sitemapindex';
+  sitemap_count: number;
+  pages: Array<{ url: string }>;
+  truncated: boolean;
+  warnings: string[];
+}
+
 export interface AltRegenerateResponse {
   suggestion: AltSuggestionRow;
   usage: AltUsageSummary;
@@ -196,16 +207,16 @@ export const ALT_SCHEMA_MISSING_MESSAGE =
 export const ALT_RUN_STATUS_LABELS: Record<AltRunStatus, string> = {
   analyzed: '已分析',
   generating: '生成中',
-  ready: '待審批',
+  ready: '已生成',
   exported: '已匯出',
   failed: '失敗',
   archived: '已歸檔',
 };
 
 export const ALT_SUGGESTION_STATUS_LABELS: Record<AltSuggestionStatus, string> = {
-  pending: '待批准',
-  approved: '已批准',
-  rejected: '已略過',
+  pending: '已生成',
+  approved: '已生成',
+  rejected: '已忽略',
   exported: '已匯出',
   failed: '生成失敗',
 };
@@ -228,7 +239,7 @@ export const DEFAULT_ALT_SETTINGS: AltSettingsRow = {
   enabled: false,
   model: 'grok-4.7',
   fallback_model: 'gemini-2.5-flash',
-  daily_call_limit: 300,
+  daily_call_limit: 0,
   max_images_per_run: 40,
   max_images_per_call: 6,
   created_at: new Date(0).toISOString(),

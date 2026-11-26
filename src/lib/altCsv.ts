@@ -7,6 +7,33 @@
 
 import type { AltRunRow, AltSuggestionRow } from './altTypes.ts';
 
+export interface AltBatchReportRow {
+  page_url: string;
+  title: string;
+  image_count: number;
+  missing: number;
+  duplicates: number;
+  too_long: number;
+  decorative: number;
+}
+
+export function toBatchReportCsv(rows: AltBatchReportRow[]): string {
+  const headers: Array<keyof AltBatchReportRow> = [
+    'page_url',
+    'title',
+    'image_count',
+    'missing',
+    'duplicates',
+    'too_long',
+    'decorative',
+  ];
+  const lines = [
+    headers.join(','),
+    ...rows.map((row) => headers.map((header) => csvCell(row[header])).join(',')),
+  ];
+  return `\uFEFF${lines.join('\r\n')}`;
+}
+
 export interface AltExportRow {
   page_url: string;
   image_url: string;
@@ -31,7 +58,13 @@ export function buildAltExportRows(
   suggestions: AltSuggestionRow[],
 ): AltExportRow[] {
   return suggestions
-    .filter((suggestion) => suggestion.status === 'approved' || suggestion.status === 'exported')
+    .filter(
+      (suggestion) =>
+        (suggestion.status === 'pending' ||
+          suggestion.status === 'approved' ||
+          suggestion.status === 'exported') &&
+        (suggestion.decorative || chosenAlt(suggestion).length > 0),
+    )
     .map((suggestion) => ({
       page_url: run.page_url,
       image_url: suggestion.image_url,

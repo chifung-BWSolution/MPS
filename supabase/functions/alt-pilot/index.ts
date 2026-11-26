@@ -19,7 +19,8 @@ import {
   parseAltModelJson,
 } from "../../../src/lib/altPrompt.ts";
 import { combineIssues, evaluateAlt, normalizeModelIssues } from "../../../src/lib/altQuality.ts";
-import { normalizePageUrl } from "../../../src/lib/altUrl.ts";
+import { hostMatches, normalizePageUrl } from "../../../src/lib/altUrl.ts";
+import { isSitemapUrl, parseSitemap } from "../../../src/lib/altSitemap.ts";
 import { normalizeForCompare, normalizeWhitespace, truncateText } from "../../../src/lib/altText.ts";
 import {
   DEFAULT_ALT_SETTINGS,
@@ -32,12 +33,15 @@ import {
   type AltSuggestionDraft,
   type AltSuggestionRow,
 } from "../../../src/lib/altTypes.ts";
+import { canManageAltPilot } from "../../../src/lib/altPermissions.ts";
+import { isAltQuotaExceeded } from "../../../src/lib/altQuota.ts";
 import {
   AltFetchError,
   bytesToBase64,
   extractBearerToken,
   fetchImageBytes,
   fetchPageHtml,
+  fetchSitemapText,
   sha256Hex,
 } from "./guard.ts";
 import { AltProviderError, generateVision, type ProviderResult } from "./providers.ts";
@@ -158,45 +162,66 @@ async function loadSettings(admin: DbClient): Promise<AltSettingsRow> {
   return { ...DEFAULT_ALT_SETTINGS };
 }
 
-async function usageSummary(admin: DbClient, settings: AltSettingsRow): Promise<{ today: number; limit: number }> {
-  const { count, error } = await admin
-    .from("alt_llm_usage")
-    .select("id", { count: "exact", head: true })
-    .gte("created_at", hongKongDayStartIso());
-  if (error) throw error;
-  return { today: count ?? 0, limit: settings.daily_call_limit };
+async function usageSummary(
+  admin: DbClient,
+  settings: AltSettingsRow,
+): Promise<{ today: number; limit: number; analyses: number }> {
+  const start = hongKongDayStartIso();
+  const [usageResult, runResult] = await Promise.all([
+    admin
+      .from("alt_llm_usage")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", start),
+    admin
+      .from("alt_runs")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", start),
+  ]);
+  if (usageResult.error) throw usageResult.error;
+  if (runResult.error) throw runResult.error;
+  return {
+    today: usageResult.count ?? 0,
+    limit: settings.daily_call_limit,
+    analyses: runResult.count ?? 0,
+  };
 }
 
-async function resolveAppUserId(
+async function resolveAppUser(
   admin: DbClient,
   authUserId: string,
   email: string,
-): Promise<string | null> {
-  if (!authUserId) return null;
+): Promise<{ id: string | null; roleTag: string | null }> {
+  if (!authUserId) return { id: null, roleTag: null };
 
-  const byAuth = await admin.from("users").select("id").eq("auth_user_id", authUserId).maybeSingle();
-  if (!byAuth.error && byAuth.data?.id) return String(byAuth.data.id);
+  const byAuth = await admin
+    .from("users")
+    .select("id, role_tag")
+    .eq("auth_user_id", authUserId)
+    .maybeSingle();
+  if (!byAuth.error && byAuth.data?.id) {
+    return { id: String(byAuth.data.id), roleTag: String(byAuth.data.role_tag || "") };
+  }
 
   const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail) return null;
+  if (!normalizedEmail) return { id: null, roleTag: null };
 
-  const byEmail = await admin.from("users").select("id").eq("email", normalizedEmail).limit(1).maybeSingle();
-  if (!byEmail.error && byEmail.data?.id) return String(byEmail.data.id);
-
-  const byGoogle = await admin
+  const byEmail = await admin
     .from("users")
-    .select("id")
-    .eq("google_email", normalizedEmail)
+    .select("id, role_tag")
+    .eq("email", normalizedEmail)
     .limit(1)
     .maybeSingle();
-  if (!byGoogle.error && byGoogle.data?.id) return String(byGoogle.data.id);
+  if (!byEmail.error && byEmail.data?.id) {
+    return { id: String(byEmail.data.id), roleTag: String(byEmail.data.role_tag || "") };
+  }
 
-  return null;
+  return { id: null, roleTag: null };
 }
 
 async function authenticate(admin: DbClient, req: Request): Promise<{
   authUserId: string;
   appUserId: string | null;
+  appRoleTag: string | null;
 }> {
   const token = extractBearerToken(req);
   if (!token) throw new AltRequestError("unauthorized", "未登入", 401);
@@ -205,7 +230,7 @@ async function authenticate(admin: DbClient, req: Request): Promise<{
     if (!ALLOW_ANON) {
       throw new AltRequestError("unauthorized", "ALT Pilot 需要登入後才能使用", 401);
     }
-    return { authUserId: "", appUserId: null };
+    return { authUserId: "", appUserId: null, appRoleTag: null };
   }
 
   let authUser: { id: string; email?: string } | null = null;
@@ -219,8 +244,8 @@ async function authenticate(admin: DbClient, req: Request): Promise<{
     throw new AltRequestError("unauthorized", "登入狀態已失效，請重新登入", 401);
   }
 
-  const appUserId = await resolveAppUserId(admin, authUser.id, authUser.email || "");
-  return { authUserId: authUser.id, appUserId };
+  const appUser = await resolveAppUser(admin, authUser.id, authUser.email || "");
+  return { authUserId: authUser.id, appUserId: appUser.id, appRoleTag: appUser.roleTag };
 }
 
 async function loadAllowedHosts(admin: DbClient, siteId: string): Promise<string[]> {
@@ -481,7 +506,7 @@ async function generateForImage(params: {
 }): Promise<GeneratedImageResult> {
   const { admin, run, image, settings, keyword, existingAlts, usage } = params;
 
-  if (usage.calls >= usage.limit) {
+  if (isAltQuotaExceeded(usage.calls, usage.limit)) {
     throw new AltRequestError(
       "quota_exceeded",
       "今日 ALT 生成次數已達上限，請明天再試或請管理員調整 alt_settings.daily_call_limit。",
@@ -494,7 +519,7 @@ async function generateForImage(params: {
   const prompt = buildAltPrompt({ page, image, keyword, existingAlts });
 
   const callProvider = async (user: string): Promise<{ draft: AltSuggestionDraft; result: ProviderResult }> => {
-    if (usage.calls >= usage.limit) {
+    if (isAltQuotaExceeded(usage.calls, usage.limit)) {
       throw new AltRequestError("quota_exceeded", "今日 ALT 生成次數已達上限。", 429);
     }
     usage.calls += 1;
@@ -628,6 +653,71 @@ async function upsertFailedSuggestion(params: {
   return data as AltSuggestionRow;
 }
 
+async function handleDiscover(admin: DbClient, body: Record<string, unknown>) {
+  const siteId = asString(body.site_id).trim();
+  const siteDomain = await loadSiteDomain(admin, siteId);
+  const inputUrl = asString(body.sitemap_url).trim();
+
+  if (!inputUrl && !siteDomain) {
+    throw new AltRequestError(
+      "invalid_sitemap",
+      "請提供 sitemap URL，或先選擇一個已登記站點。",
+      400,
+    );
+  }
+
+  const sitemapUrl = normalizePageUrl(
+    inputUrl || new URL("/sitemap.xml", normalizePageUrl(siteDomain)).href,
+    siteDomain || undefined,
+  );
+  const allowedHosts = await loadAllowedHosts(admin, siteId);
+  const root = await fetchSitemapText(sitemapUrl, allowedHosts);
+  const parsed = parseSitemap(root.xml, root.finalUrl);
+  const warnings: string[] = [];
+  const pages = new Set<string>();
+
+  const addPages = (urls: string[]): void => {
+    for (const url of urls) {
+      if (pages.size >= 300) return;
+      // 子 sitemap 若仍是 index，其 loc 會是 .xml；不要把它當成頁面。
+      if (isSitemapUrl(url)) continue;
+      try {
+        const host = new URL(url).hostname;
+        if (allowedHosts.some((allowed) => hostMatches(host, allowed))) pages.add(url);
+      } catch {
+        // skip malformed URL
+      }
+    }
+  };
+
+  if (parsed.kind === "sitemapindex") {
+    const children = parsed.urls.slice(0, 5);
+    for (const child of children) {
+      try {
+        const fetched = await fetchSitemapText(child, allowedHosts);
+        const childParsed = parseSitemap(fetched.xml, fetched.finalUrl);
+        addPages(childParsed.urls);
+      } catch (error) {
+        warnings.push(
+          `略過子 sitemap：${child}（${error instanceof Error ? error.message : String(error)}）`,
+        );
+      }
+    }
+  } else {
+    addPages(parsed.urls);
+  }
+
+  const allPages = Array.from(pages);
+  return {
+    sitemap_url: root.finalUrl,
+    kind: parsed.kind,
+    sitemap_count: parsed.kind === "sitemapindex" ? parsed.urls.length : 1,
+    pages: allPages.slice(0, 100).map((url) => ({ url })),
+    truncated: allPages.length > 100,
+    warnings: warnings.slice(0, 5),
+  };
+}
+
 async function handleAnalyze(admin: DbClient, body: Record<string, unknown>, appUserId: string | null) {
   const settings = await loadSettings(admin);
   if (!settings.enabled) {
@@ -737,7 +827,7 @@ async function handleGenerate(admin: DbClient, body: Record<string, unknown>) {
       continue;
     }
 
-    if (usage.calls >= usage.limit) {
+    if (isAltQuotaExceeded(usage.calls, usage.limit)) {
       errors.push({
         image_url: image.url,
         code: "quota_exceeded",
@@ -909,7 +999,13 @@ async function handleVerify(admin: DbClient, body: Record<string, unknown>) {
   const fetched = await fetchPageHtml(run.page_url, allowedHosts);
   const analysis = analyzePage(fetched.html, fetched.finalUrl);
   const suggestions = await loadSuggestions(admin, run.id);
-  const approved = suggestions.filter((suggestion) => suggestion.status === "approved");
+  const approved = suggestions.filter(
+    (suggestion) =>
+      (suggestion.status === "pending" ||
+        suggestion.status === "approved" ||
+        suggestion.status === "exported") &&
+      (suggestion.decorative || normalizeWhitespace(suggestion.final_alt || suggestion.suggested_alt).length > 0),
+  );
 
   const byUrl = new Map(analysis.images.map((image) => [image.url, image]));
   const missing: Array<{ image_url: string; expected: string; actual: string }> = [];
@@ -937,6 +1033,23 @@ async function handleVerify(admin: DbClient, body: Record<string, unknown>) {
   };
 }
 
+async function handleDeleteRun(
+  admin: DbClient,
+  body: Record<string, unknown>,
+  roleTag: string | null,
+) {
+  if (!canManageAltPilot(roleTag)) {
+    throw new AltRequestError("forbidden", "只有管理人員可以刪除歷史紀錄。", 403);
+  }
+
+  const runId = asString(body.run_id).trim();
+  if (!runId) throw new AltRequestError("invalid_run", "缺少 run_id", 400);
+
+  const { error } = await admin.from("alt_runs").delete().eq("id", runId);
+  if (error) throw error;
+  return { deleted: runId };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders, status: 200 });
@@ -951,6 +1064,9 @@ Deno.serve(async (req: Request) => {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const action = asString(body.action);
 
+    if (action === "discover") {
+      return jsonResponse({ ok: true, data: await handleDiscover(admin, body) });
+    }
     if (action === "analyze") {
       return jsonResponse({ ok: true, data: await handleAnalyze(admin, body, auth.appUserId) });
     }
@@ -962,6 +1078,12 @@ Deno.serve(async (req: Request) => {
     }
     if (action === "verify") {
       return jsonResponse({ ok: true, data: await handleVerify(admin, body) });
+    }
+    if (action === "delete_run") {
+      return jsonResponse({
+        ok: true,
+        data: await handleDeleteRun(admin, body, auth.appRoleTag),
+      });
     }
 
     return errorResponse("invalid_action", `未知的 action：${action || "（空白）"}`, 400);

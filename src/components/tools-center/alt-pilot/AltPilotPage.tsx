@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Database, FlaskConical, Loader2, Power } from 'lucide-react';
+import { AlertTriangle, Database, FlaskConical, Layers, Loader2, Power, ScanSearch } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { useWebsiteProfiles } from '@/hooks/useWebsiteProfiles';
@@ -8,6 +8,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import {
   approveAltSuggestions,
   altErrorMessage,
+  deleteAltRun,
   fetchAltRunBundle,
   fetchAltSettings,
   fetchAltUsageToday,
@@ -31,6 +32,7 @@ import {
   toJson,
   toTsv,
 } from '@/lib/altCsv.ts';
+import { canManageAltPilot } from '@/lib/altPermissions.ts';
 import { truncateText } from '@/lib/altText.ts';
 import { normalizePageUrl, sameHost } from '@/lib/altUrl.ts';
 import type {
@@ -47,6 +49,7 @@ import type {
   AltUsageSummary,
   AltVerifyResult,
 } from '@/lib/altTypes.ts';
+import { AltBatchPage } from './AltBatchPage';
 import { AltDetailDrawer } from './AltDetailDrawer';
 import { AltEmptyState } from './AltEmptyState';
 import { AltPilotDemoPage } from './AltPilotDemoPage';
@@ -55,6 +58,7 @@ import { AltImageTable } from './AltImageTable';
 import { AltPilotHeader } from './AltPilotHeader';
 import {
   imageFromSuggestion,
+  isExportableSuggestion,
   isPendingRow,
   pageFromRunRow,
   rowsFromSuggestions,
@@ -168,7 +172,7 @@ function AltPilotDisabledNotice({
           <h2 className="text-[16px] font-semibold text-[#0d1a2d]">ALT Pilot 目前已停用</h2>
           <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
             <code className="rounded bg-[#f5f8fc] px-1">alt_settings.enabled = false</code>
-            。歷史與已批准資料仍在；管理員確認後可用 SQL 開啟。
+            。歷史與已生成資料仍在；管理員確認後可用 SQL 開啟。
           </p>
           <code className="mt-2 block rounded border border-border bg-[#f8fafc] px-3 py-2 text-[11px] text-[#0d1a2d]">
             update public.alt_settings set enabled = true where id = 'default';
@@ -210,11 +214,45 @@ function LoadingCard({ label }: { label: string }) {
   );
 }
 
+function AltPilotViewTabs({
+  view,
+  onChange,
+}: {
+  view: 'single' | 'batch';
+  onChange: (view: 'single' | 'batch') => void;
+}) {
+  return (
+    <div className="inline-flex items-center gap-0.5 rounded-md border border-[rgba(13,26,45,0.08)] bg-white p-0.5 shadow-card">
+      <button
+        type="button"
+        onClick={() => onChange('single')}
+        className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-[12px] font-medium transition-colors ${
+          view === 'single' ? 'bg-[#0D9488] text-white' : 'text-muted-foreground hover:text-[#0d1a2d]'
+        }`}
+      >
+        <ScanSearch size={13} />
+        單頁生成
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('batch')}
+        className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-[12px] font-medium transition-colors ${
+          view === 'batch' ? 'bg-[#0D9488] text-white' : 'text-muted-foreground hover:text-[#0d1a2d]'
+        }`}
+      >
+        <Layers size={13} />
+        站點盤點
+      </button>
+    </div>
+  );
+}
+
 function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
   const { profiles, loading: sitesLoading } = useWebsiteProfiles();
   const { user } = useApp();
   const reviewerId = user.id && user.id !== '0' ? user.id : null;
 
+  const [view, setView] = useState<'single' | 'batch'>('single');
   const [settings, setSettings] = useState<AltSettingsRow | null>(null);
   const [usage, setUsage] = useState<AltUsageSummary | null>(null);
   const [runs, setRuns] = useState<AltRunRow[]>([]);
@@ -244,7 +282,9 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
   const [verifyResult, setVerifyResult] = useState<AltVerifyResult | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [deletingRunId, setDeletingRunId] = useState<string | null>(null);
   const [detailUrl, setDetailUrl] = useState<string | null>(null);
+  const canManage = canManageAltPilot(user.role);
 
   const runIdRef = useRef<string | null>(null);
 
@@ -403,10 +443,8 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
     [images, suggestionByUrl],
   );
 
-  const approvedCount = suggestions.filter((suggestion) => suggestion.status === 'approved').length;
-  const pendingCount = suggestions.filter(
-    (suggestion) => suggestion.status === 'pending' || suggestion.status === 'failed',
-  ).length;
+  const exportableCount = suggestions.filter(isExportableSuggestion).length;
+  const failedCount = suggestions.filter((suggestion) => suggestion.status === 'failed').length;
 
   const handleSiteChange = (nextSiteId: string) => {
     const previous = sites.find((site) => site.id === siteId);
@@ -463,6 +501,10 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
   );
 
   const handleAnalyze = () => {
+    if (schemaMissing) {
+      toast.info('ALT Pilot 尚未啟用，請先執行 migration。');
+      return;
+    }
     if (settings && !settings.enabled) {
       toast.info('ALT Pilot 目前已停用，請先由管理員開啟 alt_settings.enabled。');
       return;
@@ -487,7 +529,7 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
         return;
       }
       if (targets.length === 0) {
-        toast.info('請先勾選尚未批准的圖片');
+        toast.info('請先勾選尚未生成的圖片');
         return;
       }
 
@@ -748,21 +790,21 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
 
   const handleCopyApproved = async () => {
     if (!run) return;
-    const approved = suggestions.filter((suggestion) => suggestion.status === 'approved');
-    if (approved.length === 0) {
-      toast.info('先批准至少一張 ALT');
+    const exportable = suggestions.filter(isExportableSuggestion);
+    if (exportable.length === 0) {
+      toast.info('先選擇或生成至少一張 ALT');
       return;
     }
-    const exportRows = buildAltExportRows(run, approved);
+    const exportRows = buildAltExportRows(run, exportable);
     const copied = await copyTextToClipboard(toTsv(exportRows));
     if (copied) toast.success(`已複製 ${exportRows.length} 張（檔名 + ALT）`);
     else toast.error('複製失敗');
   };
 
-  const markExported = async (approved: AltSuggestionRow[]) => {
-    if (!run || approved.length === 0) return;
+  const markExported = async (exportable: AltSuggestionRow[]) => {
+    if (!run || exportable.length === 0) return;
     try {
-      await markAltRunExported(run.id, approved.length);
+      await markAltRunExported(run.id, exportable.length);
       await refreshRun(run.id);
       void refreshRuns();
     } catch (exportError) {
@@ -772,13 +814,13 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
 
   const handleExport = async (format: 'csv' | 'json' | 'checklist') => {
     if (!run) return;
-    const approved = suggestions.filter((suggestion) => suggestion.status === 'approved');
-    if (approved.length === 0) {
-      toast.info('先批准至少一張 ALT 再匯出');
+    const exportable = suggestions.filter(isExportableSuggestion);
+    if (exportable.length === 0) {
+      toast.info('先選擇或生成至少一張 ALT 再匯出');
       return;
     }
 
-    const exportRows = buildAltExportRows(run, approved);
+    const exportRows = buildAltExportRows(run, exportable);
     if (format === 'csv') {
       downloadTextFile(exportFilename(run, 'csv'), toCsv(exportRows), 'text/csv;charset=utf-8');
     } else if (format === 'json') {
@@ -795,17 +837,17 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
       );
     }
 
-    await markExported(approved);
+    await markExported(exportable);
     toast.success(`已匯出 ${exportRows.length} 張 ALT`);
   };
 
   const handleMarkExported = async () => {
-    const approved = suggestions.filter((suggestion) => suggestion.status === 'approved');
-    if (approved.length === 0) {
-      toast.info('沒有已批准的 ALT');
+    const exportable = suggestions.filter(isExportableSuggestion);
+    if (exportable.length === 0) {
+      toast.info('沒有可匯出的 ALT');
       return;
     }
-    await markExported(approved);
+    await markExported(exportable);
     toast.success('已標記為已匯出');
   };
 
@@ -816,7 +858,7 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
     try {
       const result = await invokeAltFunction<AltVerifyResult>('verify', { run_id: run.id });
       setVerifyResult(result);
-      if (result.checked === 0) toast.info('沒有已批准的 ALT 可驗證');
+      if (result.checked === 0) toast.info('沒有可驗證的 ALT');
       else if (result.missing.length === 0) toast.success(`已寫回 ${result.matched}/${result.checked} 張`);
       else toast.warning(`已寫回 ${result.matched}/${result.checked} 張，仍有 ${result.missing.length} 張是舊值`);
     } catch (verifyError) {
@@ -837,8 +879,32 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
 
   const handleHistorySelect = (runId: string) => {
     setHistoryOpen(false);
+    setView('single');
     replaceRunHash(runId);
     void loadRun(runId);
+  };
+
+  const handleDeleteRun = async (runId: string) => {
+    setDeletingRunId(runId);
+    try {
+      await deleteAltRun(runId);
+      setRuns((previous) => previous.filter((item) => item.id !== runId));
+      if (run?.id === runId) {
+        setRun(null);
+        setPage(null);
+        setImages([]);
+        setSuggestions([]);
+        setSelected(new Set());
+        setDrafts({});
+        setVerifyResult(null);
+        replaceRunHash(null);
+      }
+      toast.success('已刪除歷史紀錄');
+    } catch (deleteError) {
+      toast.error(altErrorMessage(deleteError));
+    } finally {
+      setDeletingRunId(null);
+    }
   };
 
   const detailRow = detailUrl ? rows.find((row) => row.image.url === detailUrl) || null : null;
@@ -856,9 +922,69 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
     return null;
   };
 
+  if (view === 'batch') {
+    return (
+      <TooltipProvider delayDuration={200}>
+        <div className="space-y-5 pb-10">
+          <AltPilotViewTabs view={view} onChange={setView} />
+
+          {bootstrapLoading ? (
+            <LoadingCard label="正在載入 ALT Pilot…" />
+          ) : schemaMissing ? (
+            <SchemaMissingNotice
+              onRetry={() => void loadBootstrap()}
+              retrying={bootstrapLoading}
+              onPreviewDemo={onPreviewDemo}
+            />
+          ) : settings && !settings.enabled ? (
+            <AltPilotDisabledNotice
+              onHistory={() => {
+                setHistoryOpen(true);
+                void refreshRuns();
+              }}
+              onRetry={() => void loadBootstrap()}
+              retrying={bootstrapLoading}
+            />
+          ) : (
+            <AltBatchPage
+              sites={sites}
+              sitesLoading={sitesLoading}
+              siteId={siteId}
+              onSiteIdChange={handleSiteChange}
+              usage={usage}
+              settings={settings}
+              onHistory={() => {
+                setHistoryOpen(true);
+                void refreshRuns();
+              }}
+              onOpenRun={(runId) => {
+                setView('single');
+                replaceRunHash(runId);
+                void loadRun(runId);
+              }}
+              disabled={Boolean(settings && !settings.enabled)}
+            />
+          )}
+
+          <AltRunHistory
+            runs={runs}
+            open={historyOpen}
+            onOpenChange={setHistoryOpen}
+            onSelect={handleHistorySelect}
+            loading={historyLoading}
+            canDelete={canManage}
+            onDelete={(runId) => void handleDeleteRun(runId)}
+            deletingId={deletingRunId}
+          />
+        </div>
+      </TooltipProvider>
+    );
+  }
+
   return (
     <TooltipProvider delayDuration={200}>
       <div className="space-y-5 pb-10">
+        <AltPilotViewTabs view={view} onChange={setView} />
         <AltPilotHeader
           sites={sites}
           sitesLoading={sitesLoading}
@@ -874,7 +1000,7 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
             setHistoryOpen(true);
             void refreshRuns();
           }}
-          disabled={Boolean(settings && !settings.enabled)}
+          disabled={Boolean(schemaMissing || (settings && !settings.enabled))}
         />
 
         {error ? (
@@ -962,11 +1088,11 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
                 />
 
                 <AltExportBar
-                  approvedCount={approvedCount}
-                  pendingCount={pendingCount}
+                  generatedCount={exportableCount}
+                  failedCount={failedCount}
                   onExportCsv={() => void handleExport('csv')}
                   onExportJson={() => void handleExport('json')}
-                  onCopyApproved={() => void handleCopyApproved()}
+                  onCopyAll={() => void handleCopyApproved()}
                   onMarkExported={() => void handleMarkExported()}
                   canMarkExported={Boolean(run && run.status !== 'exported')}
                 />
@@ -983,6 +1109,9 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
           onOpenChange={setHistoryOpen}
           onSelect={handleHistorySelect}
           loading={historyLoading}
+          canDelete={canManage}
+          onDelete={(runId) => void handleDeleteRun(runId)}
+          deletingId={deletingRunId}
         />
 
         <AltDetailDrawer

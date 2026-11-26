@@ -1,4 +1,4 @@
-import { formatFccPhone, normalizeFccBody } from "./fcc-asana-mail.ts";
+import { formatFccPhone, inquiryAlreadyOpened, normalizeFccBody, sameInquiryContent } from "./fcc-asana-mail.ts";
 
 export type BwRouteRule = {
   keyword: string;
@@ -27,6 +27,68 @@ function readBwField(body: string, labels: string[]): string {
   return "";
 }
 
+function readBwMobile(body: string): string {
+  const labeled = readBwField(body, [
+    "聯絡電話",
+    "手提電話",
+    "電話",
+    "手機",
+    "Phone",
+    "(Whatsapp/SMS)",
+    "(WhatsApp/SMS)",
+    "Whatsapp/SMS",
+    "WhatsApp",
+  ]);
+  if (labeled) return labeled;
+  for (const line of body.split(/\r?\n/)) {
+    const match = line.trim().match(/^(.*)[:：]\s*(.+)$/);
+    if (!match) continue;
+    const label = match[1].replace(/\*+/g, "").trim();
+    if (!/whatsapp|\bsms\b/i.test(label)) continue;
+    const value = match[2].replace(/^(?:[:：]\s*)+/, "").trim();
+    if (value) return value;
+  }
+  return "";
+}
+
+function readBwLandline(body: string): string {
+  return readBwField(body, ["固網電話"]);
+}
+
+function readBwOrganization(body: string): string {
+  return readBwField(body, ["機構名稱", "機構名", "公司名稱", "公司", "學校名稱"]);
+}
+
+function organizationFromSubject(subject: string): string {
+  const cut = String(subject || "").search(/[:：]/);
+  if (cut < 0) return "";
+  const parts = subject.slice(cut + 1).split(/\s+-\s+/).map((part) => part.replace(/\*+$/g, "").trim()).filter(Boolean);
+  const org = parts.find((part) => !/\d{8}/.test(part) && !/^姓名$/.test(part) && part.length > 1);
+  return org || "";
+}
+
+function phoneFromSubject(subject: string): string {
+  const cut = String(subject || "").search(/[:：]/);
+  const tail = cut >= 0 ? subject.slice(cut + 1) : "";
+  const labeled = tail.match(/(?:tel|phone|電話|手提)\s*[:：]?\s*(\+?\d[\d\s-]{6,}\d)/i);
+  if (labeled) return labeled[1];
+  const bare = tail.match(/(?:^|[\s,，])(\d{8})(?=$|[\s,，-])/);
+  return bare?.[1] || "";
+}
+
+export function stableBwNotes(notes: string): string {
+  return sameInquiryContent(notes)
+    .replace(/https?:\/\/files\.emailmeform\.com\/\d+\/[A-Za-z0-9]+\//gi, "https://files.emailmeform.com/file/")
+    .trim();
+}
+
+export function bwInquiryAlreadyOpened(taskName: string, taskNotes: string, title: string, notes: string): boolean {
+  const expected = stableBwNotes(notes);
+  const existing = stableBwNotes(taskNotes);
+  if (expected && existing && expected === existing) return true;
+  return inquiryAlreadyOpened(taskName, taskNotes, title, notes);
+}
+
 export function bwSkipReason(subject: string, skipSubjects: string[]): string | null {
   const text = String(subject || "").trim();
   if (/^(re|fw|fwd)\s*[:：]/i.test(text) || /^回覆[:：]/.test(text) || /^轉寄[:：]/.test(text)) {
@@ -34,6 +96,7 @@ export function bwSkipReason(subject: string, skipSubjects: string[]): string | 
   }
   if (/payment disabled/i.test(text)) return "EmailMeForm 系統通知，不開 task";
   if (/FCC\s*到會|FCP活動|開店預約|開店說明會|餐廳開店/.test(text)) return "這是 FC 查詢，不在 BW 開 task";
+  if (text.includes("商業及私人派對服務")) return "這是 WP 查詢，不在 BW 開 task";
   const hit = skipSubjects.map((item) => item.trim()).filter(Boolean).find((item) => text.toLowerCase().includes(item.toLowerCase()));
   if (hit) return `主旨包含略過字句「${hit}」，不開 task`;
   return null;
@@ -73,13 +136,15 @@ export function parseBwInquiry(body: string, subject: string): {
 } {
   const source = normalizeFccBody(body);
   const name = readBwField(source, ["姓名", "客人姓名"]);
-  const phone = readBwField(source, ["聯絡電話", "手提電話", "電話", "手機", "Phone"]);
+  const mobile = readBwMobile(source) || phoneFromSubject(subject);
+  const landline = readBwLandline(source);
+  const organization = readBwOrganization(source) || organizationFromSubject(subject);
   const address = readBwField(source, ["送貨地址", "工程地點", "工程項目地區", "地址", "地區"]);
   return {
-    title: formatBwInquiryTitle({ subject, name, phone, address }),
+    title: formatBwInquiryTitle({ subject, name, phone: mobile, landline, organization, address }),
     notes: organizeBwNotes(source),
     name,
-    phone,
+    phone: mobile || landline,
     address,
   };
 }
@@ -94,18 +159,37 @@ export function bwSubjectTopic(subject: string): string {
   return plainPart(cut >= 0 ? text.slice(0, cut) : text);
 }
 
+function titlePhones(phone: string, landline: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of [phone, landline]) {
+    const formatted = formatFccPhone(plainPart(value));
+    const digits = formatted.replace(/\D/g, "");
+    if (!digits || seen.has(digits)) continue;
+    seen.add(digits);
+    out.push(formatted);
+  }
+  return out;
+}
+
 export function formatBwInquiryTitle(input: {
   subject: string;
   name?: string;
   phone?: string;
+  landline?: string;
+  organization?: string;
   address?: string;
 }): string {
   const topic = bwSubjectTopic(input.subject);
-  const phone = plainPart(input.phone || "");
+  const name = plainPart(input.name || "");
+  const organization = plainPart(input.organization || "");
+  const address = plainPart(input.address || "");
+  const orgText = organization && organization !== name && organization !== address && !topic.includes(organization) ? organization : "";
   const parts = [
-    plainPart(input.name || ""),
-    phone ? formatFccPhone(phone) : "",
-    plainPart(input.address || ""),
+    name,
+    ...titlePhones(input.phone || "", input.landline || ""),
+    orgText,
+    address,
   ].map(plainPart).filter(Boolean);
   if (!topic) return parts.join(" ");
   if (parts.length === 0) return topic;

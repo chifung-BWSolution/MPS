@@ -5,8 +5,6 @@ import { CompanyManagementSettings } from './CompanyManagementSettings';
 import { BrandManagementSettings } from './BrandManagementSettings';
 import { CreditCardsSettings } from './CreditCardsSettings';
 import { EmailConnectionSettings } from './EmailConnectionSettings';
-import { FccAsanaMailSettings } from './FccAsanaMailSettings';
-import { BwAsanaMailSettings } from './BwAsanaMailSettings';
 import { SystemNotificationsSettings } from './SystemNotificationsSettings';
 import { LoginLogsSettings } from './LoginLogsSettings';
 import { TermsConditionsSettings } from './TermsConditionsSettings';
@@ -46,8 +44,6 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
       case 'profile': return { title: '個人設定', subtitle: '查看個人資料。資料由 OTC2 同步，無法在此修改。' };
       case 'users': return { title: '用戶管理', subtitle: '從員工列表選擇員工加入系統，支援 Google 電郵登入。' };
       case 'email-connection': return { title: '電郵連接', subtitle: '以 Resend 寄出所有系統電郵。請把 re_xxxxxxxxx 換成正式 API key。' };
-      case 'fcc-asana-mail': return { title: 'FC 查詢開 Asana', subtitle: 'foodchannels.plan@gmail.com 的到會、FCP 活動策劃同開店查詢會建立 Asana task。' };
-      case 'bw-asana-mail': return { title: 'BW 查詢開 Asana', subtitle: '授權 brandingworks.services@gmail.com，填好負責人同專案，再開啟自動開 task。只會開啟用之後的新郵件。' };
       case 'system-notifications': return { title: '系統通知', subtitle: '記錄已設定的系統電郵，並可預覽正式 HTML 範本。' };
       case 'companies': return { title: '公司管理', subtitle: '管理多間公司資料及銀行帳戶。' };
       case 'brands': return { title: '品牌管理', subtitle: '管理品牌，每個品牌歸屬於一間公司。' };
@@ -87,10 +83,6 @@ export function SettingsModule({ subModule }: { subModule?: string }) {
         <UserManagement />
       ) : activeTab === 'system-notifications' ? (
         <SystemNotificationsSettings />
-      ) : activeTab === 'fcc-asana-mail' ? (
-        <FccAsanaMailSettings />
-      ) : activeTab === 'bw-asana-mail' ? (
-        <BwAsanaMailSettings />
       ) : (
         <div className="bg-white rounded-md border border-[rgba(13,26,45,0.08)] shadow-card p-6">
           {activeTab === 'profile' && <ProfileSection />}

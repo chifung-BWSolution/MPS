@@ -97,7 +97,7 @@ export function CrosspostComposer({
         <div>
           <h2 className="text-[16px] font-bold text-[#0d1a2d]">輸入活動資料</h2>
           <p className="mt-0.5 text-[12px] text-muted-foreground">
-            同一份資料會按平台改寫成 5 個版本；三個必填欄位足夠，其他可留空。
+            寫下活動或產品的重點，AI 會按各平台語氣寫成各自的版本；只要填三項，其他可留空。
           </p>
         </div>
       </div>
@@ -309,7 +309,7 @@ export function CrosspostComposer({
         )}
       >
         {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-        {generating ? '生成中…（約 20–40 秒）' : '生成五版文案'}
+        {generating ? '生成中…（約 20–40 秒）' : '生成文案'}
       </button>
 
       <p className="text-center text-[11px] text-muted-foreground">

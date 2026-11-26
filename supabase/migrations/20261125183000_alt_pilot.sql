@@ -138,7 +138,7 @@ CREATE TABLE IF NOT EXISTS public.alt_settings (
   enabled              boolean NOT NULL DEFAULT false,
   model                text NOT NULL DEFAULT 'grok-4.5',
   fallback_model       text NOT NULL DEFAULT 'gemini-2.5-flash',
-  daily_call_limit     integer NOT NULL DEFAULT 300 CHECK (daily_call_limit >= 0),
+  daily_call_limit     integer NOT NULL DEFAULT 0 CHECK (daily_call_limit >= 0),
   max_images_per_run   integer NOT NULL DEFAULT 40 CHECK (max_images_per_run BETWEEN 1 AND 200),
   max_images_per_call  integer NOT NULL DEFAULT 6 CHECK (max_images_per_call BETWEEN 1 AND 12),
   created_at           timestamptz NOT NULL DEFAULT now(),

@@ -7,11 +7,14 @@ import { buildAltPrompt, normalizeAltDraft, parseAltModelJson } from '../src/lib
 import { evaluateAlt } from '../src/lib/altQuality.ts';
 import {
   buildAltExportRows,
+  toBatchReportCsv,
   toCsv,
   toJson,
   toTsv,
 } from '../src/lib/altCsv.ts';
 import { hostMatches, normalizePageUrl } from '../src/lib/altUrl.ts';
+import { isSitemapUrl, parseSitemap } from '../src/lib/altSitemap.ts';
+import { auditAltImages } from '../src/lib/altAudit.ts';
 import {
   assertPublicHost,
   bytesToBase64,
@@ -19,6 +22,8 @@ import {
   sha256Hex,
 } from '../supabase/functions/alt-pilot/guard.ts';
 import { countWords } from '../src/lib/altText.ts';
+import { formatAltQuota, isAltQuotaExceeded } from '../src/lib/altQuota.ts';
+import { canManageAltPilot } from '../src/lib/altPermissions.ts';
 import type { AltPageContext, AltSuggestionRow } from '../src/lib/altTypes.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -232,6 +237,69 @@ assert.equal(hostMatches('example.com.evil.com', 'example.com'), false);
 assert.equal(hostMatches('www.example.com', 'example.com'), true);
 
 // ---------------------------------------------------------------------------
+// 5b) Sitemap parser
+// ---------------------------------------------------------------------------
+const urlset = parseSitemap(
+  '<?xml version="1.0"?><urlset><url><loc>https://example.com/a</loc></url><url><loc>/b</loc></url><url><loc>https://example.com/a</loc></url></urlset>',
+  'https://example.com/',
+);
+assert.equal(urlset.kind, 'urlset');
+assert.deepEqual(urlset.urls, ['https://example.com/a', 'https://example.com/b']);
+
+const index = parseSitemap(
+  '<?xml version="1.0"?><sitemapindex><sitemap><loc>https://example.com/sitemap-1.xml</loc></sitemap><sitemap><loc>https://example.com/sitemap-2.xml</loc></sitemap></sitemapindex>',
+  'https://example.com/',
+);
+assert.equal(index.kind, 'sitemapindex');
+assert.equal(index.urls.length, 2);
+
+const entities = parseSitemap(
+  '<urlset><url><loc>https://example.com/a?x=1&amp;y=2</loc></url></urlset>',
+  'https://example.com/',
+);
+assert.equal(entities.urls[0], 'https://example.com/a?x=1&y=2');
+
+const cdata = parseSitemap(
+  '<urlset><url><loc><![CDATA[https://example.com/cdata]]></loc></url></urlset>',
+  'https://example.com/',
+);
+assert.equal(cdata.urls[0], 'https://example.com/cdata');
+assert.equal(isSitemapUrl('https://example.com/sitemap.xml'), true);
+assert.equal(isSitemapUrl('https://example.com/sitemap.xml.gz'), true);
+assert.equal(isSitemapUrl('https://example.com/page'), false);
+
+const invalidEntity = parseSitemap(
+  '<urlset><url><loc>https://example.com/a&#999999;</loc></url></urlset>',
+  'https://example.com/',
+);
+assert.equal(invalidEntity.urls.length, 1);
+
+// ---------------------------------------------------------------------------
+// 5c) Audit summary
+// ---------------------------------------------------------------------------
+const audit = auditAltImages(framer.images);
+assert.equal(audit.imageCount, 6);
+assert.equal(audit.missing, 1);
+assert.equal(audit.decorative, 2);
+assert.equal(audit.duplicates, 0);
+assert.equal(audit.currentAlts.length, 4);
+
+const batchCsv = toBatchReportCsv([
+  {
+    page_url: 'https://example.com/a',
+    title: 'A "quoted" page',
+    image_count: 3,
+    missing: 1,
+    duplicates: 0,
+    too_long: 0,
+    decorative: 1,
+  },
+]);
+assert.equal(batchCsv.startsWith('\uFEFF'), true);
+assert.equal(batchCsv.includes('page_url,title,image_count,missing,duplicates,too_long,decorative'), true);
+assert.equal(batchCsv.includes('"A ""quoted"" page"'), true);
+
+// ---------------------------------------------------------------------------
 // 6) Text helper
 // ---------------------------------------------------------------------------
 assert.equal(countWords('香港辦公室 design studio'), 7);
@@ -248,5 +316,23 @@ assert.throws(() => assertPublicHost('localhost'), /localhost/);
 assert.throws(() => assertPublicHost('127.0.0.1'), /內網/);
 assert.equal(bytesToBase64(new Uint8Array([104, 105])), 'aGk=');
 assert.equal((await sha256Hex(new Uint8Array([104, 105]))).length, 64);
+
+// ---------------------------------------------------------------------------
+// 8) Quota: 0 = unlimited
+// ---------------------------------------------------------------------------
+assert.equal(isAltQuotaExceeded(9999, 0), false);
+assert.equal(isAltQuotaExceeded(49, 50), false);
+assert.equal(isAltQuotaExceeded(50, 50), true);
+assert.equal(formatAltQuota(12, 0), '12');
+assert.equal(formatAltQuota(12, 50), '12/50');
+
+// ---------------------------------------------------------------------------
+// 9) Delete permission
+// ---------------------------------------------------------------------------
+assert.equal(canManageAltPilot('management'), true);
+assert.equal(canManageAltPilot('super_admin'), true);
+assert.equal(canManageAltPilot('system_dev'), true);
+assert.equal(canManageAltPilot('designer'), false);
+assert.equal(canManageAltPilot(null), false);
 
 console.log('alt pilot tests passed');

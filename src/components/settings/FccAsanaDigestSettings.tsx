@@ -37,7 +37,7 @@ export function FccAsanaDigestSettings({ onChange }: { onChange: (form: FccDiges
       .then(({ data, error }) => {
         if (cancelled) return;
         if (error || !data) {
-          toast.error(error?.message || '讀取 FC 日報設定失敗');
+          toast.error(error?.message || '讀取查詢日報設定失敗');
           return;
         }
         const next: FccDigestForm = {
@@ -120,7 +120,7 @@ export function FccAsanaDigestSettings({ onChange }: { onChange: (form: FccDiges
       toast.error(error instanceof Error ? error.message : '發送時間未更新');
       return;
     }
-    toast.success('已儲存 FC 日報設定');
+    toast.success('已儲存查詢日報設定');
   };
 
   const sendTest = async () => {
@@ -140,7 +140,7 @@ export function FccAsanaDigestSettings({ onChange }: { onChange: (form: FccDiges
   };
 
   if (!form) {
-    return <p className="text-[13px] text-muted-foreground">載入 FC 日報設定…</p>;
+    return <p className="text-[13px] text-muted-foreground">載入查詢日報設定…</p>;
   }
 
   return (

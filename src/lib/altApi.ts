@@ -87,7 +87,7 @@ async function authHeaders(): Promise<Record<string, string>> {
 
 /** 呼叫 Edge Function `alt-pilot`；契約：`{ ok:true, data }` 或 `{ ok:false, code, error }`。 */
 export async function invokeAltFunction<TResponse>(
-  action: 'analyze' | 'generate' | 'regenerate' | 'verify',
+  action: 'discover' | 'analyze' | 'generate' | 'regenerate' | 'verify',
   payload: Record<string, unknown> = {},
 ): Promise<TResponse> {
   const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/+$/, '');
@@ -283,12 +283,24 @@ export function hongKongDayStartIso(now = new Date()): string {
 }
 
 export async function fetchAltUsageToday(limit: number): Promise<AltUsageSummary> {
-  const { count, error } = await supabase
-    .from('alt_llm_usage')
-    .select('id', { count: 'exact', head: true })
-    .gte('created_at', hongKongDayStartIso());
-  if (error) throw toAltApiError(error);
-  return { today: count ?? 0, limit };
+  const start = hongKongDayStartIso();
+  const [usageResult, runResult] = await Promise.all([
+    supabase
+      .from('alt_llm_usage')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', start),
+    supabase
+      .from('alt_runs')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', start),
+  ]);
+  if (usageResult.error) throw toAltApiError(usageResult.error);
+  if (runResult.error) throw toAltApiError(runResult.error);
+  return {
+    today: usageResult.count ?? 0,
+    limit,
+    analyses: runResult.count ?? 0,
+  };
 }
 
 export async function listAltRuns(limit = 30): Promise<AltRunRow[]> {
@@ -441,6 +453,10 @@ export async function resetAltSuggestion(id: string): Promise<AltSuggestionRow> 
     .single();
   if (error) throw toAltApiError(error);
   return normalizeAltSuggestion(data as Partial<AltSuggestionRow>);
+}
+
+export async function deleteAltRun(runId: string): Promise<void> {
+  await invokeAltFunction<{ deleted: string }>('delete_run', { run_id: runId });
 }
 
 export async function markAltRunExported(runId: string, approvedCount: number): Promise<void> {

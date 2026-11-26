@@ -1,8 +1,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/google-gsc.ts";
-import { hktDate, inquiryAlreadyOpened, isEmailMeFormSender, normalizeFccBody, resolveFccGmailOAuthClient } from "../_shared/fcc-asana-mail.ts";
-import { bwSkipReason, matchBwRoute, parseBwInquiry, type BwRouteRule } from "../_shared/bw-asana-mail.ts";
+import { hktDate, isEmailMeFormSender, normalizeFccBody, resolveFccGmailOAuthClient } from "../_shared/fcc-asana-mail.ts";
+import { attachMailImages, collectFormImageUrls } from "../_shared/asana-mail-images.ts";
+import { bwInquiryAlreadyOpened, bwSkipReason, matchBwRoute, parseBwInquiry, type BwRouteRule } from "../_shared/bw-asana-mail.ts";
+import { sendUnmatchedInquiryAlert } from "../_shared/asana-unmatched-alert.ts";
 
 const PROVIDER = "gmail_bw";
 const RULE = "bw";
@@ -89,7 +91,7 @@ function decodeB64Url(data: string): string {
   return new TextDecoder().decode(bytes);
 }
 
-type GmailPart = { mimeType?: string; body?: { data?: string }; parts?: GmailPart[] };
+type GmailPart = { mimeType?: string; filename?: string; body?: { data?: string; attachmentId?: string; size?: number }; parts?: GmailPart[] };
 
 function partText(part: GmailPart | undefined): string {
   if (!part?.body?.data) return "";
@@ -155,6 +157,57 @@ async function createTask(input: {
   return payload.data.gid;
 }
 
+async function renameTask(taskGid: string, name: string): Promise<void> {
+  const token = asanaToken();
+  if (!token) throw new Error("未設定 Asana token，未能補上電話");
+  const res = await fetch(`${ASANA_API}/tasks/${taskGid}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ data: { name } }),
+  });
+  const payload = await res.json() as { errors?: Array<{ message?: string }> };
+  if (!res.ok) throw new Error(payload.errors?.[0]?.message || "更新 Asana 標題失敗");
+}
+
+async function repairMissingPhones(
+  supabase: ReturnType<typeof admin>,
+  receivedOn: string,
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("asana_mail_jobs")
+    .select("id, subject, task_name, notes, asana_task_gid")
+    .eq("rule_code", RULE)
+    .eq("status", "created")
+    .eq("received_on", receivedOn);
+  if (error) throw new Error(error.message);
+  let renamed = 0;
+  for (const job of data || []) {
+    const taskGid = String(job.asana_task_gid || "").trim();
+    if (!taskGid) continue;
+    const parsed = parseBwInquiry(String(job.notes || ""), String(job.subject || ""));
+    const stored = String(job.task_name || "").trim();
+    if (parsed.title && parsed.title !== stored) {
+      try {
+        await renameTask(taskGid, parsed.title);
+        const { error: updateErr } = await supabase.from("asana_mail_jobs").update({ task_name: parsed.title }).eq("id", job.id);
+        if (updateErr) throw new Error(updateErr.message);
+        renamed += 1;
+      } catch {
+        // Leave the stored title unchanged so the next check can try again.
+      }
+    }
+    const token = asanaToken();
+    if (token && collectFormImageUrls(String(job.notes || "")).length) {
+      try {
+        await attachMailImages(token, taskGid, { text: String(job.notes || "") });
+      } catch {
+        // The next check lists existing attachments and uploads only the missing ones.
+      }
+    }
+  }
+  return renamed;
+}
+
 async function listPeople(workspaceGid: string): Promise<Array<{ gid: string; email: string }>> {
   const token = asanaToken();
   if (!token) return [];
@@ -197,7 +250,7 @@ async function findExistingTask(workspace: string, project: string, phone: strin
   });
   const payload = await res.json() as { data?: Array<{ gid?: string; name?: string; notes?: string }>; errors?: Array<{ message?: string }> };
   if (!res.ok) throw new Error(payload.errors?.[0]?.message || "檢查 Asana 現有 task 失敗");
-  const hit = (payload.data || []).find((task) => inquiryAlreadyOpened(String(task.name || ""), String(task.notes || ""), title, notes));
+  const hit = (payload.data || []).find((task) => bwInquiryAlreadyOpened(String(task.name || ""), String(task.notes || ""), title, notes));
   return hit?.gid ? String(hit.gid) : null;
 }
 
@@ -206,8 +259,16 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { error: "Method not allowed" });
   const denied = await requireCaller(req);
   if (denied) return denied;
+  const body = await req.json().catch(() => ({})) as { action?: string; jobId?: string };
 
   const supabase = admin();
+  if (body.action === "ignore") {
+    const jobId = String(body.jobId || "").trim();
+    if (!jobId) return json(400, { error: "缺少紀錄" });
+    const { error } = await supabase.from("asana_mail_jobs").update({ status: "ignored" }).eq("id", jobId).eq("rule_code", RULE).eq("status", "unmatched");
+    if (error) return json(500, { error: error.message });
+    return json(200, { ok: true });
+  }
   const { data: settings, error: settingsErr } = await supabase
     .from("bw_asana_mail_settings")
     .select("enabled, gmail_address, workspace_gid, match_mode, min_match_words, skip_subjects, collaborator_gids, not_before")
@@ -247,6 +308,7 @@ Deno.serve(async (req) => {
       return json(200, { success: false, error: `授權信箱是 ${mailbox}，規則要求 ${row.gmail_address}` });
     }
     const people = await listPeople(row.workspace_gid);
+    const renamed = await repairMissingPhones(supabase, hktDate(Date.now()));
     const listed = await gmailGet<{ messages?: Array<{ id: string }> }>(
       token,
       `/messages?q=${encodeURIComponent("from:emailmeform.com in:inbox")}&maxResults=20`,
@@ -267,7 +329,7 @@ Deno.serve(async (req) => {
         .eq("gmail_message_id", item.id)
         .maybeSingle();
       if (existingErr) return json(500, { error: existingErr.message });
-      if (existing?.asana_task_gid || (existing && existing.status !== "error")) {
+      if (existing?.asana_task_gid || (existing && existing.status !== "error" && existing.status !== "unmatched")) {
         skipped += 1;
         continue;
       }
@@ -310,7 +372,29 @@ Deno.serve(async (req) => {
       }
       const matched = matchBwRoute(subject, routes, mode, minWords);
       if (!matched) {
-        await skip("主旨對不上關鍵字，不開 task");
+        await supabase.from("asana_mail_jobs").upsert({
+          rule_code: RULE,
+          gmail_message_id: item.id,
+          subject,
+          received_on: received,
+          status: "unmatched",
+          notes: emailText,
+          error: "主旨對不上關鍵字，不開 task",
+        }, { onConflict: "rule_code,gmail_message_id" });
+        skipped += 1;
+        if (!existing) {
+          try {
+            await sendUnmatchedInquiryAlert(supabase, {
+              department: "BW",
+              ruleCode: RULE,
+              gmailMessageId: item.id,
+              subject,
+              receivedOn: received,
+            });
+          } catch (_err) {
+            errors.push(`${item.id}: 對不上規則的通知未能寄出`);
+          }
+        }
         continue;
       }
       if (!matched.assigneeEmail.trim() || !matched.projectGid.trim()) {
@@ -337,7 +421,7 @@ Deno.serve(async (req) => {
         if (historyErr) throw new Error(historyErr.message);
         const alreadyOpened = (history || []).some((job) => {
           if (String(job.gmail_message_id || "") === item.id) return false;
-          return inquiryAlreadyOpened(String(job.task_name || ""), String(job.notes || ""), parsed.title, parsed.notes);
+          return bwInquiryAlreadyOpened(String(job.task_name || ""), String(job.notes || ""), parsed.title, parsed.notes);
         });
         existingTaskGid = alreadyOpened ? "opened" : await findExistingTask(row.workspace_gid, matched.projectGid, parsed.phone, parsed.title, parsed.notes);
         if (alreadyOpened || existingTaskGid) {
@@ -382,6 +466,20 @@ Deno.serve(async (req) => {
           assignee,
           followers: followers.filter((gid) => gid !== assignee),
         });
+        let imageError: string | null = null;
+        try {
+          const images = await attachMailImages(asanaToken(), taskGid, {
+            text: `${rawBody}\n${parsed.notes}`,
+            payload: message.payload,
+            loadGmailAttachment: async (attachmentId) => {
+              const loaded = await gmailGet<{ data?: string }>(token, `/messages/${item.id}/attachments/${attachmentId}`);
+              return loaded.data || "";
+            },
+          });
+          if (images.failed) imageError = `task 已開，${images.failed} 張圖片未能上傳`;
+        } catch (err) {
+          imageError = err instanceof Error ? err.message : String(err);
+        }
         await supabase.from("asana_mail_jobs").upsert({
           rule_code: RULE,
           gmail_message_id: item.id,
@@ -392,7 +490,7 @@ Deno.serve(async (req) => {
           asana_project_gid: matched.projectGid,
           task_name: parsed.title,
           notes: parsed.notes,
-          error: null,
+          error: imageError,
         }, { onConflict: "rule_code,gmail_message_id" });
         created += 1;
       } catch (err) {
@@ -411,7 +509,7 @@ Deno.serve(async (req) => {
         }, { onConflict: "rule_code,gmail_message_id" });
       }
     }
-    return json(200, { success: errors.length === 0, created, skipped, errors });
+    return json(200, { success: errors.length === 0, created, skipped, renamed, errors });
   } catch (err) {
     return json(500, { error: err instanceof Error ? err.message : String(err) });
   }

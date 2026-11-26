@@ -142,16 +142,6 @@ export function PageSummaryCard({
         </div>
       </div>
 
-      {page.skippedImageCount > 0 || page.backgroundImageCount > 0 || page.truncated ? (
-        <p className="mt-3 text-[11px] text-muted-foreground">
-          {page.skippedImageCount > 0 ? `已略過 ${page.skippedImageCount} 張（SVG／GIF／1x1／重複）` : ''}
-          {page.skippedImageCount > 0 && page.backgroundImageCount > 0 ? ' · ' : ''}
-          {page.backgroundImageCount > 0 ? `${page.backgroundImageCount} 張背景圖未處理` : ''}
-          {(page.skippedImageCount > 0 || page.backgroundImageCount > 0) && page.truncated ? ' · ' : ''}
-          {page.truncated ? '圖片超過 40 張，只顯示前 40 張' : ''}
-        </p>
-      ) : null}
-
       {verifyResult ? (
         <div
           className={`mt-3 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-[12px] ${
@@ -166,7 +156,7 @@ export function PageSummaryCard({
             <AlertTriangle size={14} />
           )}
           {verifyResult.checked === 0
-            ? '沒有已批准的 ALT 可驗證。'
+            ? '沒有可驗證的 ALT。'
             : `已寫回 ${verifyResult.matched}/${verifyResult.checked} 張。`}
           {verifyResult.missing.length > 0
             ? ` 仍有 ${verifyResult.missing.length} 張是舊值或找不到圖片。`

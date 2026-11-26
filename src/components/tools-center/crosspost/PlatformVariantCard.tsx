@@ -159,7 +159,11 @@ export function PlatformVariantCard({ variant }: { variant: CopyVariant }) {
           </div>
         ) : (
           <p className="text-[12px] text-muted-foreground">
-            {rule.hashtagLimit > 0 ? 'AI 未提供 Hashtag，可重新生成。' : 'eDM 不需要 Hashtag。'}
+            {rule.hashtagLimit <= 0
+              ? 'eDM 不需要 Hashtag。'
+              : evaluation.hashtagMin > 0
+                ? 'AI 未提供 Hashtag，可重新生成。'
+                : '此平台 Hashtag 屬選填（0–3 個）。'}
           </p>
         )}
       </div>

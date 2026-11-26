@@ -13,8 +13,8 @@ const STEPS = [
   },
   {
     icon: ClipboardCheck,
-    title: '逐張批准，匯出對照表',
-    body: '批准後匯出 CSV／JSON，貼進 Framer；貼完可按「驗證已填」比對。',
+    title: '確認 ALT，匯出對照表',
+    body: '生成後直接複製或匯出 CSV／JSON，貼進 Framer；貼完可按「驗證已填」比對。',
   },
 ];
 
@@ -62,9 +62,7 @@ export function AltEmptyState() {
           <li>· 長度是否在 20–60 字（硬上限 125 字元）</li>
           <li>· 裝飾圖是否應該留空 <code className="rounded bg-[#f5f8fc] px-1">alt=""</code></li>
         </ul>
-        <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-[11px] leading-relaxed text-amber-800">
-          第一期只處理公開頁面的 <code>&lt;img&gt;</code>；背景圖、iframe、SVG、GIF 不在範圍。Framer 的填入是半自動，不會直接改你的專案。
-        </div>
+
       </div>
     </div>
   );

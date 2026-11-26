@@ -20,6 +20,7 @@ import type {
   AltVerifyResult,
 } from '@/lib/altTypes.ts';
 import { AltDetailDrawer } from './AltDetailDrawer';
+import { isExportableSuggestion } from './AltPilotUtils';
 import { AltExportBar } from './AltExportBar';
 import { AltImageTable } from './AltImageTable';
 import { AltPilotHeader } from './AltPilotHeader';
@@ -75,10 +76,8 @@ export function AltPilotDemoPage({ onExit }: AltPilotDemoPageProps) {
     [suggestionByUrl],
   );
 
-  const approvedCount = suggestions.filter((suggestion) => suggestion.status === 'approved').length;
-  const pendingCount = suggestions.filter(
-    (suggestion) => suggestion.status === 'pending' || suggestion.status === 'failed',
-  ).length;
+  const exportableCount = suggestions.filter(isExportableSuggestion).length;
+  const failedCount = suggestions.filter((suggestion) => suggestion.status === 'failed').length;
   const detailRow = detailUrl ? rows.find((row) => row.image.url === detailUrl) || null : null;
 
   const applySuggestion = (next: AltSuggestionRow) => {
@@ -91,7 +90,7 @@ export function AltPilotDemoPage({ onExit }: AltPilotDemoPageProps) {
 
   const generateImages = async (targets: AltImageCandidate[]) => {
     if (targets.length === 0) {
-      toast.info('請先勾選尚未批准的圖片');
+      toast.info('請先勾選尚未生成的圖片');
       return;
     }
     setGenerating(true);
@@ -336,23 +335,23 @@ export function AltPilotDemoPage({ onExit }: AltPilotDemoPageProps) {
   };
 
   const handleCopyApproved = async () => {
-    const approved = suggestions.filter((suggestion) => suggestion.status === 'approved');
-    if (approved.length === 0) {
-      toast.info('先批准至少一張 ALT');
+    const exportable = suggestions.filter(isExportableSuggestion);
+    if (exportable.length === 0) {
+      toast.info('先選擇或生成至少一張 ALT');
       return;
     }
-    const copied = await copyTextToClipboard(toTsv(buildAltExportRows(run, approved)));
-    if (copied) toast.success(`已複製 ${approved.length} 張（示範）`);
+    const copied = await copyTextToClipboard(toTsv(buildAltExportRows(run, exportable)));
+    if (copied) toast.success(`已複製 ${exportable.length} 張（示範）`);
     else toast.error('複製失敗');
   };
 
   const handleExport = (format: 'csv' | 'json') => {
-    const approved = suggestions.filter((suggestion) => suggestion.status === 'approved');
-    if (approved.length === 0) {
-      toast.info('先批准至少一張 ALT 再匯出');
+    const exportable = suggestions.filter(isExportableSuggestion);
+    if (exportable.length === 0) {
+      toast.info('先選擇或生成至少一張 ALT 再匯出');
       return;
     }
-    const exportRows = buildAltExportRows(run, approved);
+    const exportRows = buildAltExportRows(run, exportable);
     if (format === 'csv') {
       downloadTextFile(exportFilename(run, 'csv'), toCsv(exportRows), 'text/csv;charset=utf-8');
     } else {
@@ -366,11 +365,11 @@ export function AltPilotDemoPage({ onExit }: AltPilotDemoPageProps) {
   };
 
   const handleVerify = () => {
-    const approved = suggestions.filter((suggestion) => suggestion.status === 'approved');
+    const exportable = suggestions.filter(isExportableSuggestion);
     setVerifyResult({
-      checked: approved.length,
+      checked: exportable.length,
       matched: 0,
-      missing: approved.map((suggestion) => ({
+      missing: exportable.map((suggestion) => ({
         image_url: suggestion.image_url,
         expected: suggestion.final_alt || suggestion.suggested_alt,
         actual: '（示範模式未抓取真實頁面）',
@@ -388,7 +387,7 @@ export function AltPilotDemoPage({ onExit }: AltPilotDemoPageProps) {
             <div>
               <p className="text-[13px] font-semibold text-amber-900">本地預覽模式</p>
               <p className="mt-0.5 text-[11px] leading-relaxed text-amber-800">
-                畫面上的頁面、圖片與 ALT 都是示範資料；不會寫入 Supabase，也不會呼叫 LLM。批准、編輯、匯出都可以試。
+                畫面上的頁面、圖片與 ALT 都是示範資料；不會寫入 Supabase，也不會呼叫 LLM。編輯、複製、匯出都可以試。
               </p>
             </div>
           </div>
@@ -455,11 +454,11 @@ export function AltPilotDemoPage({ onExit }: AltPilotDemoPageProps) {
         />
 
         <AltExportBar
-          approvedCount={approvedCount}
-          pendingCount={pendingCount}
+          generatedCount={exportableCount}
+          failedCount={failedCount}
           onExportCsv={() => handleExport('csv')}
           onExportJson={() => handleExport('json')}
-          onCopyApproved={() => void handleCopyApproved()}
+          onCopyAll={() => void handleCopyApproved()}
           onMarkExported={() => toast.info('示範模式不會寫入資料庫。')}
           canMarkExported={false}
         />
@@ -475,6 +474,9 @@ export function AltPilotDemoPage({ onExit }: AltPilotDemoPageProps) {
             toast.info('示範模式只展示目前這筆 run。');
           }}
           loading={false}
+          canDelete={false}
+          onDelete={() => undefined}
+          deletingId={null}
         />
 
         <AltDetailDrawer

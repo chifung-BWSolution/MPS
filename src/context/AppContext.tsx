@@ -14,6 +14,8 @@ export interface SubMenuItem {
   hidden?: boolean;
   /** Opens another module instead of a page in the current one. */
   linkTo?: { module: string; subModule: string };
+  /** Same visibility as 系統設定: 管理層 or above. */
+  adminOnly?: boolean;
 }
 
 export function resolveSubModule(module: string, sub?: string): string {
@@ -48,6 +50,9 @@ export function resolveRoute(module: string, sub?: string): { module: string; su
   // Removed: V1 藝人表格 preview. Live form is 藝人管理 → 新增藝人.
   if (module === 'settings' && sub === 'talent-form') {
     return { module: 'talent', subModule: 'invite' };
+  }
+  if (module === 'settings' && (sub === 'fcc-asana-mail' || sub === 'bw-asana-mail')) {
+    return { module: 'website', subModule: 'asana-inquiries' };
   }
   // Removed: 待跟進項目 was a mock-only website page
   if (module === 'website' && sub === 'pending') {
@@ -154,6 +159,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'traffic', label: '網站流量' },
       { id: 'gsc', label: 'Search Console' },
       { id: 'analytics-connections', label: '分析工具連接' },
+      { id: 'asana-inquiries', label: 'Asana 查詢', adminOnly: true },
     ],
   },
   {
@@ -264,8 +270,6 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'terms-conditions', label: '條款及細則管理' },
       { id: 'users', label: '用戶管理' },
       { id: 'email-connection', label: '電郵連接' },
-      { id: 'fcc-asana-mail', label: 'FC 查詢開 Asana' },
-      { id: 'bw-asana-mail', label: 'BW 查詢開 Asana' },
       { id: 'system-notifications', label: '系統通知' },
       { id: 'login-logs', label: '登入紀錄' },
     ],

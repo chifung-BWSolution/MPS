@@ -1,13 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  Check,
-  Copy,
-  ImageOff,
-  RefreshCw,
-  Sparkles,
-  Undo2,
-  X,
-} from 'lucide-react';
+import { Copy, ImageOff, RefreshCw, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -98,7 +90,7 @@ export function AltDetailDrawer({
                 <AltLocationBadge location={row.image.location} />
                 {suggestion ? (
                   <span className="rounded-full border border-border bg-white px-2 py-0.5 text-[10px] text-muted-foreground">
-                    信心 {formatPercent(suggestion.confidence)} · {suggestion.provider || '—'}
+                    置信度 {formatPercent(suggestion.confidence)} · {suggestion.provider || '—'}
                   </span>
                 ) : null}
                 {suggestion?.issues.length ? <AltIssueHint issues={suggestion.issues} /> : null}
@@ -222,56 +214,17 @@ export function AltDetailDrawer({
             <div className="shrink-0 border-t border-border bg-white px-6 py-3">
               <div className="flex flex-wrap items-center justify-end gap-2">
                 {suggestion ? (
-                  <>
-                    {approved ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 bg-white"
-                        onClick={() => onUnapprove(suggestion.id)}
-                        disabled={busy}
-                      >
-                        <Undo2 size={13} />
-                        解除批准
-                      </Button>
-                    ) : (
-                      <>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5 bg-white text-muted-foreground"
-                          onClick={() => onReject(suggestion.id)}
-                          disabled={busy || suggestion.status === 'rejected'}
-                        >
-                          <X size={13} />
-                          略過
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="gap-1.5 bg-[#0D9488] text-white hover:bg-[#0b8076]"
-                          onClick={() => onApprove(suggestion.id, draftAlt)}
-                          disabled={busy || (!draftAlt.trim() && !suggestion.decorative)}
-                        >
-                          <Check size={13} />
-                          批准
-                        </Button>
-                      </>
-                    )}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 bg-white"
-                      onClick={() => onRegenerate(suggestion.id)}
-                      disabled={busy}
-                    >
-                      <RefreshCw size={13} className={busy ? 'animate-spin' : ''} />
-                      重新生成
-                    </Button>
-                  </>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 bg-white"
+                    onClick={() => onRegenerate(suggestion.id)}
+                    disabled={busy}
+                  >
+                    <RefreshCw size={13} className={busy ? 'animate-spin' : ''} />
+                    重新生成
+                  </Button>
                 ) : (
                   <Button
                     type="button"

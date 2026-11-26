@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   buildFccAsanaDigestEmail,
+  DIGEST_DEPARTMENTS,
   fccAsanaTaskUrl,
   fccDigestCron,
   fccDigestIsDue,
@@ -67,31 +68,42 @@ async function loadRule(supabase: Admin): Promise<DigestRule | null> {
   return data as DigestRule | null;
 }
 
-async function todayTasks(supabase: Admin, now: Date): Promise<FccDigestTask[]> {
+const RULE_CODES = [
+  { code: "bw", label: "BW" },
+  { code: "fcc", label: "FC" },
+  { code: "wp", label: "WP" },
+] as const;
+
+async function todayDepartments(supabase: Admin, now: Date) {
   const today = hongKongParts(now).date;
   const start = new Date(`${today}T00:00:00+08:00`).toISOString();
   const end = new Date(new Date(`${today}T00:00:00+08:00`).getTime() + 24 * 60 * 60 * 1000).toISOString();
-  const jobs = await supabase
-    .from("asana_mail_jobs")
-    .select("task_name, subject, asana_task_gid, created_at")
-    .eq("rule_code", "fcc")
-    .eq("status", "created")
-    .gte("created_at", start)
-    .lt("created_at", end)
-    .order("created_at", { ascending: true });
-  if (jobs.error) throw new Error(jobs.error.message);
-  const tasks: FccDigestTask[] = [];
-  for (const job of jobs.data || []) {
-    const gid = String(job.asana_task_gid || "").trim();
-    if (!gid) continue;
-    const facts = await asanaFacts(gid);
-    tasks.push({
-      title: String(job.task_name || job.subject || "FC 查詢").trim(),
-      url: fccAsanaTaskUrl(gid),
-      ...facts,
-    });
+  const departments = [];
+  for (const rule of RULE_CODES) {
+    const jobs = await supabase
+      .from("asana_mail_jobs")
+      .select("task_name, subject, asana_task_gid, created_at")
+      .eq("rule_code", rule.code)
+      .eq("status", "created")
+      .gte("created_at", start)
+      .lt("created_at", end)
+      .order("created_at", { ascending: true });
+    if (jobs.error) throw new Error(jobs.error.message);
+    const tasks: FccDigestTask[] = [];
+    for (const job of jobs.data || []) {
+      const gid = String(job.asana_task_gid || "").trim();
+      if (!gid) continue;
+      const facts = await asanaFacts(gid);
+      tasks.push({
+        title: String(job.task_name || job.subject || `${rule.label} 查詢`).trim(),
+        url: fccAsanaTaskUrl(gid),
+        ...facts,
+      });
+    }
+    const tone = DIGEST_DEPARTMENTS.find((item) => item.label === rule.label);
+    departments.push({ label: rule.label, color: tone?.color || "#0f766e", tasks });
   }
-  return tasks;
+  return departments;
 }
 
 export async function sendFccAsanaDigestIfDue(supabase: Admin, now = new Date()): Promise<Record<string, unknown>> {
@@ -113,8 +125,8 @@ export async function sendFccAsanaDigestIfDue(supabase: Admin, now = new Date())
   if (recipients.length === 0) return { skipped: "no-recipients" };
 
   const today = hongKongParts(now).date;
-  const tasks = await todayTasks(supabase, now);
-  const email = buildFccAsanaDigestEmail({ date: today, tasks });
+  const departments = await todayDepartments(supabase, now);
+  const email = buildFccAsanaDigestEmail({ date: today, departments });
   const sent = await sendResendEmail({
     to: recipients,
     subject: email.subject,
@@ -127,18 +139,18 @@ export async function sendFccAsanaDigestIfDue(supabase: Admin, now = new Date())
     .update({ digest_last_sent_on: today })
     .eq("code", "fcc");
   if (saved.error) throw new Error(saved.error.message);
-  return { sent: true, id: sent.id, count: tasks.length, to: recipients.length };
+  return { sent: true, id: sent.id, count: departments.reduce((sum, item) => sum + item.tasks.length, 0), to: recipients.length };
 }
 
 export async function sendFccAsanaDigestTest(supabase: Admin, to: string, now = new Date()): Promise<Record<string, unknown>> {
   const recipients = normalizeDigestRecipients([to]);
   if (recipients.length === 0) throw new Error("請輸入有效電郵");
   const today = hongKongParts(now).date;
-  const tasks = await todayTasks(supabase, now);
+  const departments = await todayDepartments(supabase, now);
   const email = buildFccAsanaDigestEmail({
     date: today,
-    tasks,
-    notice: "這是測試信，只寄給你輸入的電郵。下面是今日實際新開的 task。",
+    departments,
+    notice: "這是測試信，只寄給你輸入的電郵。下面是今日 BW、FC、WP 實際新開的 task。",
   });
   const sent = await sendResendEmail({
     to: recipients,
@@ -147,7 +159,7 @@ export async function sendFccAsanaDigestTest(supabase: Admin, to: string, now = 
     text: `這是測試信，只寄給你輸入的電郵。\n\n${email.text}`,
     idempotencyKey: `fcc-asana-digest-test/${today}/${recipients[0]}/${now.getTime()}`,
   });
-  return { sent: true, id: sent.id, count: tasks.length, to: recipients[0] };
+  return { sent: true, id: sent.id, count: departments.reduce((sum, item) => sum + item.tasks.length, 0), to: recipients[0] };
 }
 
 export async function rescheduleFccAsanaDigest(supabase: Admin): Promise<Record<string, unknown>> {

@@ -83,7 +83,10 @@ export async function checkCrosspostService(): Promise<CrosspostServiceStatus> {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
   if (!supabaseUrl) return 'unknown';
   try {
-    const response = await fetch(`${supabaseUrl}/functions/v1/crosspost-writer`, { method: 'GET' });
+    const response = await fetch(`${supabaseUrl}/functions/v1/crosspost-writer`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
     return response.status === 404 ? 'missing' : 'ready';
   } catch {
     return 'unknown';

@@ -1,14 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Check,
   Copy,
   ImageOff,
   Loader2,
   Maximize2,
   RefreshCw,
   Sparkles,
-  Undo2,
-  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -89,7 +86,6 @@ export function AltSuggestionRow({
 }: AltSuggestionRowProps) {
   const suggestion = row.suggestion;
   const approved = suggestion?.status === 'approved';
-  const rejected = suggestion?.status === 'rejected';
   const failed = suggestion?.status === 'failed';
   const selectable = isSelectableRow(row);
   const [draft, setDraft] = useState(suggestion?.suggested_alt || '');
@@ -100,7 +96,6 @@ export function AltSuggestionRow({
   }, [suggestion?.id, suggestion?.suggested_alt]);
 
   const savedAlt = displayAlt(suggestion);
-  const valueForApprove = (approved ? savedAlt : draft).trim();
   const charCount = countChars(draft);
   const overLimit = charCount > 125;
 
@@ -163,7 +158,7 @@ export function AltSuggestionRow({
             <div>
               <p className="text-[12px] leading-relaxed text-[#0d1a2d]">{savedAlt || '（裝飾圖，alt=""）'}</p>
               <div className="mt-1 flex items-center gap-2">
-                <span className="text-[10px] text-muted-foreground">已鎖定，解除後可再編輯</span>
+                <span className="text-[10px] text-muted-foreground">已生成</span>
                 {suggestion.issues.length > 0 ? <AltIssueHint issues={suggestion.issues} /> : null}
               </div>
             </div>
@@ -246,24 +241,6 @@ export function AltSuggestionRow({
           >
             <Copy size={13} />
           </IconAction>
-          {approved ? (
-            <IconAction label="解除批准" onClick={onUnapprove} disabled={busy}>
-              <Undo2 size={13} />
-            </IconAction>
-          ) : (
-            <>
-              <IconAction
-                label="批准"
-                onClick={() => onApprove(valueForApprove)}
-                disabled={busy || rejected || (!valueForApprove && !suggestion?.decorative)}
-              >
-                <Check size={14} />
-              </IconAction>
-              <IconAction label="略過" onClick={onReject} disabled={busy || rejected}>
-                <X size={14} />
-              </IconAction>
-            </>
-          )}
           <IconAction
             label="重新生成"
             onClick={onRegenerate}

@@ -124,6 +124,7 @@ src/components/tools-center/alt-pilot/
 ├── AltPilotHeader.tsx        sticky header、用量、歷史
 ├── PageAnalyzeForm.tsx       站點 + URL + 分析
 ├── PageSummaryCard.tsx       頁面摘要、關鍵字、重新分析、驗證
+├── AltBatchPage.tsx          站點盤點：sitemap、批次分析（不呼叫 LLM）
 ├── AltImageTable.tsx         表格、全選、批次
 ├── AltSuggestionRow.tsx      單列：縮圖、現有/建議 ALT、風險
 ├── AltDetailDrawer.tsx       大圖、上下文、理由、備選
@@ -145,7 +146,7 @@ src/components/tools-center/alt-pilot/
 │ 頁面摘要：H1、語言、字數、圖片數、主關鍵字、[重新分析] [驗證已填]   │
 │ [全選] [生成 ALT（12）] [批准（12）] [略過]                        │
 ├──┬────┬──────────────┬──────────┬──────────────┬──────┬──────┬────┤
-│☑ │縮圖│檔名／位置     │現有 ALT  │建議 ALT       │狀態  │信心  │操作│
+│☑ │縮圖│檔名／位置     │現有 ALT  │建議 ALT       │狀態  │置信度│操作│
 └──┴────┴──────────────┴──────────┴──────────────┴──────┴──────┴────┘
 │ 已批准 N · 待批准 M        [複製] [JSON] [匯出 CSV] [標記已匯出]   │
 └────────────────────────────────────────────────────────────────────┘
@@ -158,6 +159,30 @@ src/components/tools-center/alt-pilot/
 - 八種狀態：schema 未建立、無站點、無圖片、分析失敗、配額用盡、生成失敗、全部已達標、歷史為空。
 - schema 未建立時，除「重新檢查」外提供「預覽介面（示範資料）」；示範資料只存在記憶體，不寫 DB、不呼叫 LLM，用來先看 UI 與流程。
 - 本機亦可直接開 `#tools-center/alt-pilot?demo=1`；若 build 時設 `VITE_ALT_PILOT_DEMO=1`，會多一個無需登入的 `/alt-pilot-demo` 預覽路由（正常 build 不含）。
+
+### 6.3 站點 ALT 盤點（批次）
+
+ALT Pilot 上方有兩個 tab：
+
+- **單頁生成**：原有流程。
+- **站點盤點**：一次查看多頁的 ALT 缺口，不呼叫 LLM。
+
+流程：
+
+1. 選站點 → 按「取得頁面」抓 `/sitemap.xml`（可手動改 sitemap URL，或手動貼 URL）。
+2. sitemap index 會再抓最多 5 個子 sitemap；只保留 allowlist 網域。
+3. 勾選最多 **10 頁** → 按「分析選取」。
+4. 每頁呼叫現有 `analyze`，逐頁顯示：圖片數、缺 ALT、重複、過長、裝飾圖。
+5. 按「開啟」進入該頁的單頁生成／審批流程。
+
+限制與邊界：
+
+- 批次分析**不呼叫 Grok**，只抓 HTML；沒有 token 成本。
+- 每批 10 頁；sitemap 最多列 100 頁。
+- 仍受 `alt_settings.enabled` 總開關控制。
+- **批次生成缺 ALT**：只處理非裝飾且目前空白的 ALT；每批最多 20 張，生成前有確認對話框；呼叫 Grok，結果只寫入 `alt_suggestions`，**不自動批准、不自動寫回**。
+- 盤點指標另含**跨頁重複 ALT**；可按「匯出盤點 CSV」下載每頁缺口報告。
+- 尚未做「自動排程」與「自動寫回」；這兩項留第二期後段。
 
 ---
 
@@ -174,7 +199,7 @@ src/components/tools-center/alt-pilot/
 | 抓頁 | `text/html`、≤2MB、10s timeout、≤2 redirect |
 | 抓圖 | `image/jpeg|png|webp`、≤6MB、≤2 redirect |
 | Provider | **Grok 4.5 主（`alt_settings.model`）**；失敗轉 Gemini；JSON parse 失敗重試一次 |
-| 配額 | `alt_settings.daily_call_limit`（HKT 當日） |
+| 配額 | `alt_settings.daily_call_limit`（HKT 當日）；**0 = 不限**，預設 0 |
 
 ### 7.2 SSRF 與 allowlist
 
@@ -244,23 +269,22 @@ Migration：`supabase/migrations/20261125183000_alt_pilot.sql`（只做加法）
 `alt_settings.enabled` 預設 **false**：
 
 - false：前端顯示「ALT Pilot 目前已停用」，分析／生成按鈕停用；Edge Function 的 `analyze`／`generate`／`regenerate` 回 `disabled`。歷史與 `verify` 仍可讀。
-- true：功能開放；`daily_call_limit` 仍是第二層硬上限。
+- true：功能開放；`daily_call_limit` 預設 **0 = 不限**。若日後要加軟上限，可設正整數（例如 50），超過才擋。
 
 開啟方式（只動新表、帶主鍵 WHERE）：
 
 ```sql
 update public.alt_settings
 set enabled = true,
-    daily_call_limit = 50
+    daily_call_limit = 0
 where id = 'default';
 ```
 
-關閉方式：
+關閉方式（用 `enabled`，不要用 limit=0 當關閉）：
 
 ```sql
 update public.alt_settings
-set enabled = false,
-    daily_call_limit = 0
+set enabled = false
 where id = 'default';
 ```
 
@@ -275,11 +299,13 @@ where id = 'default';
 
 ## 9. 匯出與 Framer 流程
 
-1. 批准 ALT。
-2. 匯出 CSV（UTF-8 BOM）／JSON，或複製已批准（`filename<TAB>alt`）。
+1. 生成／編輯 ALT（不需要批准）。
+2. 匯出 CSV（UTF-8 BOM）／JSON，或按「複製全部」（`filename<TAB>alt`）。
 3. 在 Framer 依檔名／URL／位置找到圖層，貼上 ALT 並 Publish。
 4. 回 ALT Pilot 按「重新分析」→「驗證已填」，比對線上 alt。
 5. 若仍是舊值，檢查是否貼到 asset 而非頁面圖層。
+
+歷史紀錄以浮層顯示；管理人員（management／super_admin／system_dev 等）可刪除紀錄。刪除會移除該次 `alt_runs` 與其 `alt_suggestions`（cascade）；`alt_llm_usage` 保留但 `run_id` 會設為 NULL，作為匿名成本紀錄。
 
 CSV 欄位：`page_url,image_url,filename,location,current_alt,suggested_alt,short_alt,keyword,confidence,risk,status,note`。
 
@@ -307,10 +333,10 @@ CSV 欄位：`page_url,image_url,filename,location,current_alt,suggested_alt,sho
 |---|---|
 | 每張圖 | Grok 成本依 XAI 帳單（本系統暫記 0）；Gemini 備援約 US$0.0013／張 |
 | 每頁 20 張 | Grok 依實際 token；Gemini 備援約 US$0.026 |
-| 每日 300 次 | 以 `alt_llm_usage` 的 token 與帳單核對 |
-| 每月 20 工作日 | 建議先用 `daily_call_limit=50` 觀察 |
+| 每日用量 | 以 `alt_llm_usage` 的 token 與帳單核對；目前**沒有每日硬上限** |
+| 每月 20 工作日 | 依實際使用量；需要時可把 `daily_call_limit` 設為正整數作軟上限 |
 
-`daily_call_limit` 是硬上限；`alt_llm_usage` 會記 model／provider／tokens／cost_usd，Grok 的 cost_usd 目前記 0，需以 XAI 帳單為準。
+`daily_call_limit = 0` 代表不限；`alt_llm_usage` 會記 model／provider／tokens／cost_usd，Grok 的 cost_usd 目前記 0，需以 XAI 帳單為準。沒有硬上限時，建議每週檢查用量。
 
 ---
 
