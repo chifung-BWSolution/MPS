@@ -20,7 +20,7 @@ import {
   type SocialPlatform,
 } from '@/lib/hkCantoneseRewrite';
 import { Textarea } from '@/components/ui/textarea';
-import { CopyButton } from './CopyButton';
+import { CopyButton } from '../../shared/CopyButton';
 import { HighlightedText, MarkLegend } from './HighlightedText';
 import { ReplacementTable, type ReplacementFilter } from './ReplacementTable';
 import { SocialPreview } from './SocialPreview';

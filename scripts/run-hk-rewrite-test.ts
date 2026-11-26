@@ -138,7 +138,7 @@ const promptIndex = appContext.indexOf("id: 'prompt-library'");
 assert.ok(toneIndex > -1, 'tone-rewrite submenu missing');
 assert.ok(toneIndex > captionIndex && toneIndex < promptIndex, 'tone-rewrite must sit after ai-caption');
 const toolsCenter = read('../src/components/tools-center/ToolsCenterModule.tsx');
-assert.ok(toolsCenter.includes('ToneRewriteTool'), 'ToolsCenterModule must render ToneRewriteTool');
+assert.ok(toolsCenter.includes('CopyStudioTool'), 'ToolsCenterModule must render CopyStudioTool');
 
 // 12b. Prompt 卡只限管理層（canAccessSettings）；其餘卡片不設限
 assert.equal(canAccessSettings('management'), true);

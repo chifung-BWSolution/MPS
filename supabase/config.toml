@@ -131,3 +131,9 @@ verify_jwt = false
 # with auth/v1/user (and allow the anon key for dev-bypass logins).
 [functions.crosspost-writer]
 verify_jwt = false
+
+# Ad creative matrix (tools center): called from the SPA.
+# User JWT is ES256 while the gateway checks HS256, so validate in-function
+# with auth/v1/user (and allow the anon key for dev-bypass logins).
+[functions.ad-creative-writer]
+verify_jwt = false

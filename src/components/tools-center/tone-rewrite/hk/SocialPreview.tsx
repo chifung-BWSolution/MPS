@@ -2,7 +2,7 @@ import { AlertTriangle, MessageCircle, Share2 } from 'lucide-react';
 
 import type { HkSocialVariant, SocialPlatform } from '@/lib/hkCantoneseRewrite';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CopyButton } from './CopyButton';
+import { CopyButton } from '../../shared/CopyButton';
 import { HighlightedText } from './HighlightedText';
 
 export interface SocialPreviewProps {

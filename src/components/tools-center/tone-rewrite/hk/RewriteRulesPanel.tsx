@@ -1,7 +1,7 @@
 import { ChevronDown, Wand2 } from 'lucide-react';
 
 import { buildHkRewritePrompt, HK_REWRITE_SYSTEM_PROMPT } from '@/lib/hkCantonesePrompts';
-import { CopyButton } from './CopyButton';
+import { CopyButton } from '../../shared/CopyButton';
 
 export interface RewriteRulesPanelProps {
   input: string;
