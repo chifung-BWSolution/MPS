@@ -57,6 +57,8 @@ export interface SocialDeskEvent {
   summary: string | null;
   url: string | null;
   heat: number;
+  /** manual｜rss｜csv｜hotlist：熱點來源 */
+  source: string;
   status: string;
   created_at: string;
   /** 這個熱點已產出的批次數（0 = 還沒生成） */
@@ -192,6 +194,7 @@ function normalizeEvent(raw: unknown): SocialDeskEvent {
     summary: asNullableString(row.summary),
     url: asNullableString(row.url),
     heat: asNumber(row.heat),
+    source: asString(row.source, 'manual'),
     status: asString(row.status, 'open'),
     created_at: asString(row.created_at),
     post_count: asNumber(row.post_count),
@@ -301,7 +304,11 @@ export function useSocialDesk(): SocialDeskHook {
   /** 抓一次 list；失敗留在頁面 error（mutation 也用同一支確保畫面同步） */
   const loadData = useCallback(async () => {
     try {
-      const payload = await invokeContentFunction<unknown>(SOCIAL_FUNCTION, { action: 'list' });
+      const payload = await invokeContentFunction<unknown>(SOCIAL_FUNCTION, {
+        action: 'list',
+        post_limit: 300,
+        event_limit: 200,
+      });
       if (!mountedRef.current) return;
       setData(normalizeSocialDeskData(payload));
       setError(null);
@@ -389,14 +396,13 @@ export function useSocialDesk(): SocialDeskHook {
         action: 'generate_now',
         event_id: eventId,
       });
-      // 後端只回「本次新建」的批次：0 筆代表這個熱點沒有可產稿的組／帳號，
-      // 說真話比給一個假的成功 toast 好。
-      const created = Array.isArray((payload as { posts?: unknown } | null)?.posts)
-        ? ((payload as { posts: unknown[] }).posts.length)
-        : 0;
-      if (created === 0) {
-        throw new Error('這個熱點沒有可產稿的品牌組或帳號，請先建立帳號後再生成');
-      }
+      const result = payload as { posts?: unknown; duplicate_of?: string } | null;
+      const created = Array.isArray(result?.posts) ? (result!.posts as unknown[]).length : 0;
+      if (created > 0) return;
+      // 已被判定為同一件事 → 併進既有熱點、只補導流；這是正確結果，不是失敗
+      if (result?.duplicate_of) return;
+      // 後端只回「本次新建」的稿件：0 筆代表這個熱點沒有可用帳號，說真話比假成功好
+      throw new Error('這個熱點沒有可產稿的品牌組或帳號，請先建立帳號後再生成');
     },
     [runMutation],
   );

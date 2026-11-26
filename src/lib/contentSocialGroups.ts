@@ -42,6 +42,15 @@ export interface SocialAccountRow {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * 憑證鏡像（非機密，可安全顯示；null = 未設定）。
+   * 密文只存在 content_social_account_credentials，前端永遠拿不到。
+   */
+  credential_status?: string | null;
+  credential_kind?: string | null;
+  credential_expires_at?: string | null;
+  credential_fingerprint?: string | null;
+  credential_updated_at?: string | null;
 }
 
 export interface SocialGroupMemberRow {
@@ -104,6 +113,121 @@ export function loginStatusMeta(status: string | null | undefined) {
 
 export function platformDotClass(platform: string | null | undefined): string {
   return SOCIAL_PLATFORM_DOT[String(platform || 'other')] ?? SOCIAL_PLATFORM_DOT.other;
+}
+
+// ============================================================
+// 登入憑證（半自動，M4-03）
+//
+// v1 不呼叫平台 API：只記錄加密後的憑證 + 到期日，
+// 由「到期日」與「解密自檢」判斷狀態；前端只讀非機密鏡像。
+// ============================================================
+
+export type SocialCredentialStatus = 'none' | 'active' | 'expiring' | 'expired' | 'invalid';
+
+/** 少於這個天數就顯示「即將到期」，讓負責人先重登，不要等到失效 */
+export const CREDENTIAL_EXPIRING_DAYS = 7;
+
+export interface SocialCredentialMeta {
+  label: string;
+  tone: 'slate' | 'emerald' | 'amber' | 'rose';
+  hint: string;
+}
+
+export const SOCIAL_CREDENTIAL_STATUS_META: Record<SocialCredentialStatus, SocialCredentialMeta> = {
+  none: { label: '未設定憑證', tone: 'slate', hint: '尚未記錄登入憑證；到期檢測會略過此帳號' },
+  active: { label: '憑證有效', tone: 'emerald', hint: '憑證已加密儲存，且未到期' },
+  expiring: { label: '即將到期', tone: 'amber', hint: `${CREDENTIAL_EXPIRING_DAYS} 天內到期，請安排重新登入` },
+  expired: { label: '憑證已過期', tone: 'rose', hint: '到期日已過，請重新登入並更新憑證' },
+  invalid: { label: '憑證失效', tone: 'rose', hint: '無法解密（金鑰可能已輪換）或內容已失效，請重新貼上' },
+};
+
+export function credentialStatusMeta(status: string | null | undefined): SocialCredentialMeta {
+  return SOCIAL_CREDENTIAL_STATUS_META[(status || 'none') as SocialCredentialStatus] ?? SOCIAL_CREDENTIAL_STATUS_META.none;
+}
+
+/** 剩餘天數：未到期進位、已過期退位；沒有到期日回 null（長效 token） */
+export function credentialDaysLeft(
+  expiresAt: string | null | undefined,
+  now: Date = new Date(),
+): number | null {
+  if (!expiresAt) return null;
+  const value = new Date(expiresAt).getTime();
+  if (!Number.isFinite(value)) return null;
+  const days = (value - now.getTime()) / 86_400_000;
+  return days >= 0 ? Math.ceil(days) : -Math.ceil(-days);
+}
+
+/**
+ * 由帳號的鏡像欄位推導憑證狀態（前端即時計算，不依賴後端更新）。
+ * 規則與 Edge Function `deriveCredentialMirror` 一致：
+ *   invalid（後端標記）> 無到期日 = active > 已過期 expired > 7 天內 expiring > active
+ */
+export function deriveCredentialStatus(
+  account: Pick<
+    SocialAccountRow,
+    'credential_status' | 'credential_expires_at'
+  > | null | undefined,
+  now: Date = new Date(),
+): SocialCredentialStatus {
+  if (!account) return 'none';
+  if (account.credential_status === 'invalid') return 'invalid';
+  const hasCredential =
+    Boolean(account.credential_status) || Boolean(account.credential_expires_at);
+  if (!hasCredential) return 'none';
+  const daysLeft = credentialDaysLeft(account.credential_expires_at, now);
+  if (daysLeft === null) return 'active';
+  if (daysLeft < 0) return 'expired';
+  if (daysLeft <= CREDENTIAL_EXPIRING_DAYS) return 'expiring';
+  return 'active';
+}
+
+export function credentialNeedsAttention(status: SocialCredentialStatus): boolean {
+  return status === 'expiring' || status === 'expired' || status === 'invalid';
+}
+
+export interface CredentialSummary {
+  total: number;
+  active: number;
+  expiring: number;
+  expired: number;
+  invalid: number;
+  none: number;
+  /** 過期／失效／即將到期 */
+  needsAttention: number;
+}
+
+export function summarizeCredentials(
+  accounts: readonly Pick<SocialAccountRow, 'credential_status' | 'credential_expires_at'>[],
+  now: Date = new Date(),
+): CredentialSummary {
+  const summary: CredentialSummary = {
+    total: accounts.length,
+    active: 0,
+    expiring: 0,
+    expired: 0,
+    invalid: 0,
+    none: 0,
+    needsAttention: 0,
+  };
+  for (const account of accounts) {
+    const status = deriveCredentialStatus(account, now);
+    summary[status] += 1;
+    if (credentialNeedsAttention(status)) summary.needsAttention += 1;
+  }
+  return summary;
+}
+
+/** 到期日顯示（YYYY-MM-DD，站點一律香港時間） */
+export function credentialExpiryLabel(expiresAt: string | null | undefined): string | null {
+  if (!expiresAt) return null;
+  const date = new Date(expiresAt);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat('zh-HK', {
+    timeZone: 'Asia/Hong_Kong',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
 }
 
 // ============================================================

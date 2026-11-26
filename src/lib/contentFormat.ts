@@ -62,11 +62,18 @@ export const DEFAULT_CONTENT_MODEL = 'gemini-2.5-flash';
 export const RECOMMENDED_DAILY_ARTICLE_LIMIT = 8;
 export const RECOMMENDED_DAILY_LLM_CALL_LIMIT = 30;
 
-/** Gemini 公開牌價（USD / 1M tokens）；只用於估算看板，結帳以 Google 帳單為準 */
+/** 公開牌價（USD / 1M tokens）；只用於估算看板，結帳以供應商帳單為準 */
 export const LLM_PRICING: Record<string, { input: number; output: number }> = {
   'gemini-2.5-flash': { input: 0.3, output: 2.5 },
   'gemini-2.5-flash-lite': { input: 0.1, output: 0.4 },
   'gemini-2.0-flash': { input: 0.1, output: 0.4 },
+  // xAI Grok：以 Grok 4 系列公開牌價估算（輸入 $3／輸出 $15 per 1M tokens）。
+  // 實際方案（含 batch／促銷）可能不同，這裡只作成本可視化。
+  'grok-4.3': { input: 3, output: 15 },
+  'grok-4.5': { input: 3, output: 15 },
+  'grok-4.20-0309-reasoning': { input: 3, output: 15 },
+  'grok-4.20-0309-non-reasoning': { input: 0.2, output: 0.5 },
+  'grok-4.20-multi-agent-0309': { input: 3, output: 15 },
 };
 
 export function estimateLlmCostUsd(

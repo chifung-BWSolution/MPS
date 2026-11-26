@@ -23,6 +23,9 @@ const MIGRATIONS = [
   '20261126093000_content_automation_rls.sql',
   '20261126100000_content_social.sql',
   '20261126110000_content_cron.sql',
+  '20261127092000_content_social_credentials.sql',
+  '20261127100000_content_social_oauth.sql',
+  '20261127110000_content_article_delete.sql',
 ];
 
 const BANNED = [
@@ -45,8 +48,10 @@ function rel(file) {
 }
 
 function stripComments(sql) {
-  // 行註解與區塊註解都移除，避免說明文字誤觸規則
+  // 行註解與區塊註解都移除，避免說明文字誤觸規則。
+  // 先正規化 CRLF：`--.*$` 在 CRLF 下不會吃掉註解（$ 停在 \r 前），會造成誤報。
   return sql
+    .replace(/\r\n?/g, '\n')
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .split('\n')
     .map((line) => line.replace(/--.*$/, ''))
@@ -189,6 +194,70 @@ if (cron) {
   if (/Bearer\s+eyJ/i.test(cron.raw)) {
     issues.push('cron migration 出現硬編碼 JWT（service_role 不可入庫）');
   }
+}
+
+// --- 規則 4：社群帳號憑證（半自動 M4-03）------------------------------
+const socialCredentials = contents.get('20261127092000_content_social_credentials.sql');
+if (socialCredentials) {
+  const sql = socialCredentials.sql;
+  if (!/enable row level security/i.test(sql)) {
+    issues.push('content_social_account_credentials 必須啟用 RLS');
+  }
+  if (
+    !/revoke all on public\.content_social_account_credentials from public,\s*anon,\s*authenticated/i.test(
+      sql,
+    )
+  ) {
+    issues.push('content_social_account_credentials 必須 revoke anon／authenticated（密文只給 service_role）');
+  }
+  if (!/grant all on public\.content_social_account_credentials to service_role/i.test(sql)) {
+    issues.push('content_social_account_credentials 必須 grant service_role');
+  }
+  if (/\bcreate policy\b[\s\S]{0,200}?content_social_account_credentials/i.test(sql)) {
+    issues.push('content_social_account_credentials 不應建立 policy（RLS + 0 policy = deny all）');
+  }
+  const mirrorAlter = sql.match(/alter table public\.content_social_accounts[\s\S]*?;/i)?.[0] ?? '';
+  if (!/credential_status/i.test(mirrorAlter) || !/credential_expires_at/i.test(mirrorAlter)) {
+    issues.push('content_social_accounts 缺少 credential_status／credential_expires_at 鏡像欄');
+  }
+  if (/credential_[a-z_]+\s+[a-z ]+\s+default/i.test(mirrorAlter)) {
+    issues.push('憑證鏡像欄不得給 DEFAULT（避免既有帳號被誤標成有憑證）');
+  }
+}
+
+// --- 規則 5：OAuth state（一次性、僅 service_role）--------------------
+const socialOAuthMigration = contents.get('20261127100000_content_social_oauth.sql');
+if (socialOAuthMigration) {
+  const sql = socialOAuthMigration.sql;
+  if (!/enable row level security/i.test(sql)) {
+    issues.push('content_social_oauth_states 必須啟用 RLS');
+  }
+  if (!/revoke all on public\.content_social_oauth_states from public,\s*anon,\s*authenticated/i.test(sql)) {
+    issues.push('content_social_oauth_states 必須 revoke anon／authenticated');
+  }
+  if (!/grant all on public\.content_social_oauth_states to service_role/i.test(sql)) {
+    issues.push('content_social_oauth_states 必須 grant service_role');
+  }
+  if (/\bcreate policy\b[\s\S]{0,200}?content_social_oauth_states/i.test(sql)) {
+    issues.push('content_social_oauth_states 不應建立 policy（0 policy = deny all）');
+  }
+  if (!/state\s+uuid\s+primary key/i.test(sql) || !/expires_at\s+timestamptz\s+not null/i.test(sql)) {
+    issues.push('content_social_oauth_states 需有 uuid state 與 expires_at');
+  }
+}
+
+// --- 規則 6：遠端刪除（只加欄位／放寬 CHECK，不得硬刪資料）----------------
+const articleDelete = contents.get('20261127110000_content_article_delete.sql');
+if (articleDelete) {
+  const sql = articleDelete.sql;
+  if (!/add column if not exists deleted_at/i.test(sql) || !/deleted_reason/i.test(sql)) {
+    issues.push('content_articles 需有 deleted_at／deleted_reason（審計用，不得只刪記錄）');
+  }
+  if (/\bdelete\s+from\b/i.test(sql) || /\btruncate\b/i.test(sql)) {
+    issues.push('遠端刪除 migration 不得直接刪除資料列');
+  }
+  if (!/delete_article/.test(sql)) issues.push('content_jobs type 需允許 delete_article');
+  if (!/'delete'/.test(sql)) issues.push('content_publish_logs action 需允許 delete');
 }
 
 // --- 輸出 -------------------------------------------------------------

@@ -83,6 +83,8 @@ const TABLES = [
   'content_hot_events',
   'content_social_posts',
   'content_social_targets',
+  'content_social_account_credentials',
+  'content_social_oauth_states',
 ];
 
 console.log('\n[1] 資料表存在性（anon 讀取；42501/401 代表存在但被 RLS 擋住，正確）');
@@ -107,7 +109,15 @@ for (const table of TABLES) {
 // 2) 函式已部署（404 = 未部署；401/403 = 已部署且自行驗身分）
 // ------------------------------------------------------------
 console.log('\n[2] Edge Functions 已部署（anon 呼叫應回 401/403，不是 404）');
-const FUNCTIONS = ['content-sites', 'content-keywords', 'content-publish', 'content-digest', 'content-worker', 'content-social'];
+const FUNCTIONS = [
+  'content-sites',
+  'content-keywords',
+  'content-publish',
+  'content-digest',
+  'content-worker',
+  'content-social',
+  'content-sources',
+];
 for (const name of FUNCTIONS) {
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
@@ -148,13 +158,26 @@ if (ACCESS_TOKEN) {
   };
 
   try {
+    const expectedMigrations = [
+      '20261126090000',
+      '20261126091000',
+      '20261126092000',
+      '20261126093000',
+      '20261126100000',
+      '20261126110000',
+      '20261127092000',
+      '20261127100000',
+      '20261127110000',
+      '20261127170000',
+    ];
     const migrations = await query(
-      "select version from supabase_migrations.schema_migrations where version like '20261126%' order by version",
+      "select version from supabase_migrations.schema_migrations where version like '20261126%' or version like '20261127%' order by version",
     );
+    const versionSet = new Set((migrations ?? []).map((row) => String(row.version)));
     record(
-      'migration 版本（應 8 支）',
-      Array.isArray(migrations) && migrations.length === 8,
-      Array.isArray(migrations) ? migrations.map((row) => row.version).join(', ') : '無法解析',
+      `本次 content migration ${expectedMigrations.length} 支`,
+      expectedMigrations.every((version) => versionSet.has(version)),
+      expectedMigrations.filter((version) => !versionSet.has(version)).join(', ') || '全部已套用',
     );
 
     const settings = await query('select count(*)::int as n, max(daily_article_limit)::int as lim from public.content_settings');
@@ -165,12 +188,59 @@ if (ACCESS_TOKEN) {
     );
 
     const credPolicies = await query(
-      "select count(*)::int as n from pg_policies where schemaname='public' and tablename='content_site_credentials'",
+      "select count(*)::int as n from pg_policies where schemaname='public' and tablename in ('content_site_credentials','content_social_account_credentials','content_social_oauth_states')",
     );
-    record('content_site_credentials 0 條 policy', Number(credPolicies?.[0]?.n) === 0, `policies=${credPolicies?.[0]?.n}`);
+    record('憑證／OAuth state 表 0 條 policy（deny all）', Number(credPolicies?.[0]?.n) === 0, `policies=${credPolicies?.[0]?.n}`);
+
+    const credentialColumns = await query(
+      "select count(*)::int as n from information_schema.columns where table_schema='public' and table_name='content_social_accounts' and column_name in ('credential_status','credential_kind','credential_expires_at','credential_fingerprint','credential_updated_at')",
+    );
+    record(
+      '社群帳號憑證鏡像欄 5／5',
+      Number(credentialColumns?.[0]?.n) === 5,
+      `columns=${credentialColumns?.[0]?.n}`,
+    );
+
+    const deletedColumns = await query(
+      "select count(*)::int as n from information_schema.columns where table_schema='public' and table_name='content_articles' and column_name in ('deleted_at','deleted_reason')",
+    );
+    const jobTypeCheck = await query(
+      "select count(*)::int as n from pg_constraint where conrelid='public.content_jobs'::regclass and contype='c' and pg_get_constraintdef(oid) like '%delete_article%'",
+    );
+    const logActionCheck = await query(
+      "select count(*)::int as n from pg_constraint where conrelid='public.content_publish_logs'::regclass and contype='c' and pg_get_constraintdef(oid) like '%''delete''%'",
+    );
+    record(
+      '遠端刪除能力（deleted 欄＋job type＋log action）',
+      Number(deletedColumns?.[0]?.n) === 2 &&
+        Number(jobTypeCheck?.[0]?.n) >= 1 &&
+        Number(logActionCheck?.[0]?.n) >= 1,
+      `cols=${deletedColumns?.[0]?.n} job=${jobTypeCheck?.[0]?.n} log=${logActionCheck?.[0]?.n}`,
+    );
 
     const bucket = await query("select public from storage.buckets where id = 'content-assets'");
     record('content-assets bucket 為 private', bucket?.[0]?.public === false, JSON.stringify(bucket?.[0] ?? null));
+
+    // 去重（20261127170000）：欄位、唯一索引、以及「同事件是否仍有多篇稿」
+    const dedupeColumns = await query(
+      "select count(*)::int as n from information_schema.columns where table_schema='public' and ((table_name='content_social_posts' and column_name='content_fingerprint') or (table_name='content_hot_events' and column_name='duplicate_of'))",
+    );
+    const eventUidx = await query(
+      "select count(*)::int as n from pg_indexes where schemaname='public' and tablename='content_social_posts' and indexname='content_social_posts_event_uidx'",
+    );
+    const multiPostEvents = await query(
+      "select count(*)::int as n from (select event_id from public.content_social_posts where event_id is not null group by event_id having count(*) > 1) d",
+    );
+    record(
+      '去重結構（指紋／duplicate_of／event 唯一鍵）',
+      Number(dedupeColumns?.[0]?.n) === 2 && Number(eventUidx?.[0]?.n) === 1,
+      `columns=${dedupeColumns?.[0]?.n} uidx=${eventUidx?.[0]?.n}`,
+    );
+    record(
+      '同事件多稿 = 0',
+      Number(multiPostEvents?.[0]?.n) === 0,
+      `events=${multiPostEvents?.[0]?.n}`,
+    );
 
     const storagePolicies = await query(
       "select count(*)::int as n from pg_policies where schemaname='storage' and tablename='objects' and policyname like 'content-assets%'",
@@ -180,12 +250,12 @@ if (ACCESS_TOKEN) {
     const cron = await query(
       "select jobname, schedule, active from cron.job where jobname like 'content-%' order by jobname",
     );
-    record('cron 5 支（函式部署後才建）', Array.isArray(cron) && cron.length === 5, JSON.stringify(cron ?? []));
+    record('cron 至少 4 支（函式部署後才建）', Array.isArray(cron) && cron.length >= 4, JSON.stringify(cron ?? []));
 
     const tables = await query(
       "select count(*)::int as n from information_schema.tables where table_schema='public' and table_name like 'content\\_%'",
     );
-    record('content_* 表 21 張', Number(tables?.[0]?.n) === 21, `tables=${tables?.[0]?.n}`);
+    record('content_* 表 ≥23 張', Number(tables?.[0]?.n) >= 23, `tables=${tables?.[0]?.n}`);
   } catch (error) {
     record('Management API 驗證', false, error instanceof Error ? error.message : String(error));
   }

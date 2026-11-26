@@ -9,6 +9,8 @@ import { TalentInvitePublicPage } from "./components/talent/TalentInvitePublicPa
 import { TalentSubmissionViewPage } from "./components/talent/TalentSubmissionViewPage";
 import { VolunteerApplyPublicPage } from "./components/marketing/VolunteerApplyPublicPage";
 import { FramerOAuthCallbackPage } from "./components/tools-center/readdy-framer/FramerOAuthCallbackPage";
+import { SocialOAuthCallbackPage } from "./components/tools-center/content/social/accounts/SocialOAuthCallbackPage";
+import { SocialDeliveryPage } from "./components/tools-center/content/social/accounts/SocialDeliveryPage";
 import { AltPilotDemoPage } from "./components/tools-center/alt-pilot/AltPilotDemoPage";
 import { VersionUpdateBar } from "./components/layout/VersionUpdateBar";
 
@@ -57,6 +59,15 @@ function App() {
             <Route path="/volunteer/apply/:slug" element={<VolunteerApplyPublicPage />} />
             {/* Framer MCP OAuth popup callback — renders in app origin so Supabase text/plain override is bypassed */}
             <Route path="/framer-oauth-callback" element={<FramerOAuthCallbackPage />} />
+            {/* 社群平台 OAuth popup callback：需要登入 session 才能把 token 加密落庫 */}
+            <Route
+              path="/social-oauth-callback"
+              element={
+                <AuthGuard>
+                  <SocialOAuthCallbackPage />
+                </AuthGuard>
+              }
+            />
             {/* Local-only ALT Pilot preview; only present when VITE_ALT_PILOT_DEMO=1 at build time */}
             {SHOW_ALT_PILOT_DEMO ? (
               <Route
@@ -78,6 +89,15 @@ function App() {
               element={
                 <AuthGuard>
                   <TalentSubmissionViewPage />
+                </AuthGuard>
+              }
+            />
+            {/* 社媒半自動交付頁（手機用）：複製文案 → 開平台 → 回來標記已發 */}
+            <Route
+              path="/social-delivery/:postId"
+              element={
+                <AuthGuard>
+                  <SocialDeliveryPage />
                 </AuthGuard>
               }
             />

@@ -105,6 +105,7 @@ select cron.schedule('content-health-daily', '0 18 * * *', $$<...>$$);
 | `content-digest-tick` | `0 * * * *` | 每小時整點 | `?enqueue=send_digest`：HKT 對上 `content_settings.digest_time` 才真的寄 |
 | `content-health-daily` | `0 18 * * *` | 02:00 | `?enqueue=site_health`：站點健康 + 內鏈頁面刷新 |
 | `content-social-tick` | `*/2 * * * *` | 每 2 分鐘 | POST `content-social?action=auto_tick`：推進到期社媒稿 + 自動把新熱點產成「1 長文 + 每帳號導流」 |
+| `content-sources-hourly` | `15 * * * *` | 每小時 :15 | POST `content-sources?action=fetch_sources`：抓 RSS、去重評分、寫入新熱點 |
 
 ## 5. 建立後驗證（必做）
 

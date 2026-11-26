@@ -11,7 +11,12 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import { ContentApiError, isContentApiError, isContentSchemaMissing } from '@/lib/contentApi.ts';
+import {
+  ContentApiError,
+  invokeContentFunction,
+  isContentApiError,
+  isContentSchemaMissing,
+} from '@/lib/contentApi.ts';
 import {
   buildSocialDirectory,
   normalizeSocialGroupName,
@@ -20,11 +25,18 @@ import {
   type SocialGroupMemberRow,
   type SocialGroupRow,
   type SocialDirectory,
+  type SocialLoginStatus,
 } from './contentSocialGroups.ts';
+
+import type {
+  SocialOAuthProvider,
+  SocialOAuthProviderStatus,
+} from './contentSocialOAuth.ts';
 
 const GROUP_COLUMNS = 'id, name, description, archived, created_at, updated_at';
 const ACCOUNT_COLUMNS =
-  'id, brand_id, platform, handle, display_name, login_status, last_checked_at, archived, notes, created_at, updated_at';
+  'id, brand_id, platform, handle, display_name, login_status, last_checked_at, archived, notes, created_at, updated_at, ' +
+  'credential_status, credential_kind, credential_expires_at, credential_fingerprint, credential_updated_at';
 const MEMBER_COLUMNS = 'group_id, account_id, created_at';
 
 type PostgrestLikeError = {
@@ -181,6 +193,8 @@ export interface CreateSocialAccountInput {
   platform: SocialAccountRow['platform'];
   handle: string;
   displayName?: string | null;
+  /** 未給時預設 unknown（待人工核對） */
+  loginStatus?: SocialLoginStatus;
 }
 
 export interface CreateSocialAccountsResult {
@@ -205,13 +219,18 @@ export async function createSocialAccounts(
       errors.push({ handle: row.handle, message: '缺少平台帳號' });
       continue;
     }
+    const loginStatus: SocialLoginStatus = ['active', 'expired', 'unknown'].includes(
+      String(row.loginStatus ?? ''),
+    )
+      ? (row.loginStatus as SocialLoginStatus)
+      : 'unknown';
     const { data, error } = await supabase
       .from('content_social_accounts')
       .insert({
         platform: row.platform,
         handle,
         display_name: (row.displayName ?? '').trim() || null,
-        login_status: 'unknown',
+        login_status: loginStatus,
       })
       .select(ACCOUNT_COLUMNS)
       .single();
@@ -301,4 +320,179 @@ export function isSocialSchemaMissingError(error: unknown): boolean {
 
 export function isSocialApiError(error: unknown): error is ContentApiError {
   return isContentApiError(error);
+}
+
+// ============================================================
+// 登入憑證（半自動，M4-03）
+//
+// 透過 content-social Edge Function：
+//   - save_credential       ：加密儲存（前端永不讀回明文）
+//   - clear_credential      ：刪除密文並恢復「未設定」
+//   - diagnose_credentials  ：解密自檢 + 到期日判斷（不呼叫平台 API）
+// ============================================================
+
+export type SocialCredentialKind = 'oauth_token' | 'app_password' | 'manual_note';
+
+export interface SocialCredentialMeta {
+  account_id: string;
+  kind: string;
+  credential_status: 'active' | 'expiring' | 'expired' | 'invalid';
+  credential_expires_at: string | null;
+  credential_fingerprint: string | null;
+  days_left: number | null;
+  checked_at: string;
+}
+
+export interface SocialCredentialDiagnoseItem {
+  account_id: string;
+  handle: string;
+  platform: string;
+  credential_status: 'none' | 'active' | 'expiring' | 'expired' | 'invalid';
+  credential_expires_at: string | null;
+  days_left: number | null;
+  login_status: string | null;
+  last_error: string | null;
+}
+
+export interface SocialCredentialDiagnoseResult {
+  checked_at: string;
+  summary: {
+    accounts: number;
+    with_credential: number;
+    active: number;
+    expiring: number;
+    expired: number;
+    invalid: number;
+    missing: number;
+  };
+  accounts: SocialCredentialDiagnoseItem[];
+}
+
+/** 儲存憑證；expiresAt 接受 `YYYY-MM-DD`（當天 23:59 HKT 到期）或 ISO 時間 */
+export async function saveSocialAccountCredential(input: {
+  accountId: string;
+  secret: string;
+  expiresAt?: string | null;
+  kind?: SocialCredentialKind;
+}): Promise<SocialCredentialMeta> {
+  const secret = (input.secret || '').trim();
+  if (!secret) throw new ContentApiError('missing_secret', '請貼上平台憑證（access token／應用程式密碼）');
+  return invokeContentFunction<SocialCredentialMeta>('content-social', {
+    action: 'save_credential',
+    account_id: input.accountId,
+    secret,
+    ...(input.expiresAt ? { expires_at: input.expiresAt } : {}),
+    ...(input.kind ? { kind: input.kind } : {}),
+  });
+}
+
+export async function clearSocialAccountCredential(accountId: string): Promise<void> {
+  await invokeContentFunction('content-social', {
+    action: 'clear_credential',
+    account_id: accountId,
+  });
+}
+
+/** 批次（或單一）檢測；不傳 accountId = 全部未歸檔帳號（上限 500） */
+export async function diagnoseSocialAccountCredentials(
+  accountId?: string | null,
+): Promise<SocialCredentialDiagnoseResult> {
+  return invokeContentFunction<SocialCredentialDiagnoseResult>('content-social', {
+    action: 'diagnose_credentials',
+    ...(accountId ? { account_id: accountId } : {}),
+  });
+}
+
+// ============================================================
+// 半自動交付頁（C）
+// ============================================================
+
+export interface SocialDeliveryPost {
+  id: string;
+  title: string;
+  body_md: string;
+  status: string;
+  scheduled_at: string | null;
+  group_name: string | null;
+  event_title: string | null;
+  cover_asset_id: string | null;
+  cover_url: string | null;
+  targets: Array<{
+    id: string;
+    account_id: string;
+    platform: string;
+    handle: string;
+    display_name: string | null;
+    copy_text: string;
+    status: string;
+    published_url: string | null;
+    published_at: string | null;
+  }>;
+}
+
+export interface SocialDeliveryResponse {
+  post: SocialDeliveryPost;
+  generated_at: string;
+}
+
+/** 交付頁資料（只讀） */
+export async function fetchSocialDelivery(postId: string): Promise<SocialDeliveryResponse> {
+  return invokeContentFunction<SocialDeliveryResponse>('content-social', {
+    action: 'delivery',
+    post_id: postId,
+  });
+}
+
+/** 標記已發（整批或單一帳號；可附平台連結） */
+export async function markSocialTargetPublished(
+  postId: string,
+  targetId?: string | null,
+  url?: string | null,
+): Promise<void> {
+  await invokeContentFunction('content-social', {
+    action: 'mark',
+    post_id: postId,
+    ...(targetId ? { target_id: targetId } : {}),
+    ...(url ? { url } : {}),
+  });
+}
+
+/** 回各 provider 是否已設定（缺哪些 secrets） */
+export async function fetchSocialOAuthProviders(): Promise<SocialOAuthProviderStatus[]> {
+  const result = await invokeContentFunction<{ providers: SocialOAuthProviderStatus[] }>(
+    'content-social',
+    { action: 'oauth_providers' },
+  );
+  return Array.isArray(result?.providers) ? result.providers : [];
+}
+
+export interface SocialOAuthStartResult {
+  provider: SocialOAuthProvider;
+  provider_label: string;
+  authorization_url: string;
+  state: string;
+  redirect_uri: string;
+  expires_at: string;
+  expires_minutes: number;
+}
+
+/** 發起 OAuth：回平台授權 URL（由前端開 popup） */
+export async function startSocialOAuth(accountId: string): Promise<SocialOAuthStartResult> {
+  return invokeContentFunction<SocialOAuthStartResult>('content-social', {
+    action: 'oauth_start',
+    account_id: accountId,
+    return_origin: typeof window === 'undefined' ? undefined : window.location.origin,
+  });
+}
+
+/** OAuth callback 頁用：用 code + state 換 token 並加密落庫 */
+export async function completeSocialOAuth(
+  code: string,
+  state: string,
+): Promise<SocialCredentialMeta & { provider: SocialOAuthProvider; provider_label: string; account_id: string }> {
+  return invokeContentFunction('content-social', {
+    action: 'oauth_callback',
+    code,
+    state,
+  });
 }

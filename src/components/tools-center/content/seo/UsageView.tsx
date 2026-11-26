@@ -196,6 +196,15 @@ function CapMeter({
 // 頁面
 // ============================================================
 
+const USE_CASE_LABEL: Record<string, string> = {
+  social: '社媒生成（Grok）',
+  social_dedupe: '熱點聚簇判斷（Grok）',
+  article: '文章生成（Gemini）',
+  generate_article: '文章生成（Gemini）',
+  digest: '日報（Gemini）',
+  seo_qa: 'SEO 檢查（Gemini）',
+};
+
 export function UsageView({ navigate }: ContentViewProps) {
   const { summary, daily, byModel, loading, error, missingSchema, refresh } = useContentUsage(7);
   const today = useContentUsageToday();
@@ -490,7 +499,7 @@ export function UsageView({ navigate }: ContentViewProps) {
                           {row.model}
                         </TableCell>
                         <TableCell className="py-2 text-muted-foreground">
-                          {row.useCase}
+                          {USE_CASE_LABEL[row.useCase] ?? row.useCase}
                         </TableCell>
                         <TableCell className="py-2 text-right tabular-nums">
                           {formatNumber(row.calls)}
@@ -508,7 +517,7 @@ export function UsageView({ navigate }: ContentViewProps) {
               </div>
             )}
             <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-              成本依 LLM_PRICING 牌價估算（每 100 萬 tokens），實際費用以 Google 帳單為準；免費層不計費。
+              成本依 LLM_PRICING 牌價估算（每 100 萬 tokens）：Gemini 以 Google 帳單為準，Grok 以 xAI 帳單為準；免費層不計費。
             </p>
           </SectionCard>
         </>

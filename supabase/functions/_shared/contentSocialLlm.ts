@@ -190,6 +190,161 @@ function extractJson(raw: string): unknown {
 }
 
 /**
+ * 判斷兩則新聞的關係（AIHOT 式聚簇的「模型判斷」步驟）。
+ *
+ * 為什麼不是 Yes/No：實測（AIHOT）二元問法在「同一件事」上拒絕掉近一半真配對；
+ * 改成四種關係 + 信心度後，才分得清「同一次發生／直接進展／不同事／綜合稿」。
+ *
+ * 關係定義與判斷方法移植自 AIHOT `industry/prompts/group-definitions.md`／`group-method.md`。
+ */
+export const EVENT_RELATIONS = [
+  'SAME_OCCURRENCE',
+  'SAME_STORY',
+  'UNRELATED',
+  'ROUNDUP',
+] as const;
+export type EventRelation = (typeof EVENT_RELATIONS)[number];
+
+/** 只有這兩種關係算「同一件事」；ROUNDUP／UNRELATED 都不合併 */
+export const SAME_EVENT_RELATIONS: readonly EventRelation[] = ['SAME_OCCURRENCE', 'SAME_STORY'];
+/** 合併需要的信心度（AIHOT 的 TIE_MIN_CONFIDENCE） */
+export const SAME_EVENT_MIN_CONFIDENCE = 0.75;
+
+const RELATION_DEFINITIONS = [
+  'SAME_OCCURRENCE（同一次發生）：同一個主體在同一時間對同一個具體對象做的同一件事。跨語言轉述、不同媒體的側重、細節多寡，不改變身份。同一場發布、同一判決、同一報告、同一場訪談、同一促銷／同一截止日期的重複宣傳，都算；但同一公司同一天的不同獨立發布要分開判斷。',
+  'SAME_STORY（同一事件的不同進展）：不是同一次發生，但圍繞同一個具體發生有直接先後關係：預告與正式發布；發布與之後的上架、評測、實測、榜單、回應、後續披露。兩個各自獨立的新功能或新成績，不能只因為同一產品、同一週期就歸到同一事件。',
+  'UNRELATED（不同的事）：不同產品或不同版本的兩次不同發布；同一公司同一天兩件不同事；同一話題的不同研究、不同觀點、不同事故；只是提到同一品牌或產品。教程、用法分享、個人觀點、營銷帖，除非明確針對候選那一次具體發生，否則都是 UNRELATED。',
+  'ROUNDUP（綜合稿）：其中一方匯集多個獨立發生，把對方的事件當成多個條目之一（多話題盤點、日報、週報、大會回顧）。綜合稿與其中某個單事件報導不能合併。',
+].join('\n');
+
+const RELATION_METHOD = [
+  '判斷方法：先看每篇是否實質報導了多個獨立發生，是綜合稿就先判 ROUNDUP；再各自用一句話說清楚「誰、對什麼、做了什麼、何時」，逐對比較。',
+  '拿不准 SAME_OCCURRENCE 與 SAME_STORY 時問自己：如果兩篇都是真的，世界上是發生了一件事，還是先後發生了兩件有直接關係的事？',
+].join('\n');
+
+export interface EventRelationVerdict {
+  relation: EventRelation;
+  confidence: number;
+  reason: string;
+  usage: { model: string; tokens_in: number; tokens_out: number };
+}
+
+/**
+ * 判斷兩則資料的關係。
+ *
+ * `pass = 'review'` 是 AIHOT 的「寫入前再讓模型覆核一遍」：用同一個模型、
+ * 換一個更嚴格的視角，只決定「是否同一次發生／直接進展」。召回分數不夠高時才呼叫。
+ */
+export async function judgeEventRelation(input: {
+  titleA: string;
+  summaryA?: string | null;
+  titleB: string;
+  summaryB?: string | null;
+  pass?: 'first' | 'review';
+  model?: string;
+  timeoutMs?: number;
+}): Promise<EventRelationVerdict | null> {
+  const key = apiKey();
+  if (!key) return null;
+
+  const model = input.model || grokModel();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), input.timeoutMs ?? 20_000);
+  const review = input.pass === 'review';
+  const prompt = [
+    review
+      ? '你是新聞事件的覆核編輯。主編認為以下兩則可能是同一件事，請獨立重讀後再判斷一次。'
+      : '你是新聞事件編輯。判斷以下兩則報導的關係：',
+    '',
+    RELATION_DEFINITIONS,
+    '',
+    RELATION_METHOD,
+    review
+      ? '覆核視角：把兩篇各自讀成「一次具體發生」。只有主體、對象、動作都對得上，或後一篇是前一篇的直接進展，才合併；只是同一品牌、同一話題、同一品類，一律 UNRELATED。'
+      : '',
+    '',
+    `A：${input.titleA}`,
+    input.summaryA ? `A 摘要：${String(input.summaryA).slice(0, 300)}` : '',
+    `B：${input.titleB}`,
+    input.summaryB ? `B 摘要：${String(input.summaryB).slice(0, 300)}` : '',
+    '',
+    '只輸出 JSON：{"relation":"SAME_OCCURRENCE|SAME_STORY|UNRELATED|ROUNDUP","confidence":0到1,"reason":"30 字內理由"}',
+  ]
+    .filter((line) => line !== '')
+    .join('\n');
+
+  try {
+    const response = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        max_tokens: 300,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: '你只輸出合法 JSON，不要加任何解釋或 markdown 圍欄。' },
+          { role: 'user', content: prompt },
+        ],
+      }),
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    if (!response.ok) return null;
+    const payload = JSON.parse(text) as {
+      choices?: { message?: { content?: string | null } }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+    };
+    const parsed = extractJson(payload.choices?.[0]?.message?.content ?? '') as {
+      relation?: unknown;
+      confidence?: unknown;
+      reason?: unknown;
+    };
+    const relation = String(parsed.relation ?? '').trim().toUpperCase();
+    if (!(EVENT_RELATIONS as readonly string[]).includes(relation)) return null;
+    const confidence = Number(parsed.confidence);
+    return {
+      relation: relation as EventRelation,
+      confidence: Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0,
+      reason: String(parsed.reason ?? '').slice(0, 120),
+      usage: {
+        model,
+        tokens_in: Number(payload.usage?.prompt_tokens) || 0,
+        tokens_out: Number(payload.usage?.completion_tokens) || 0,
+      },
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 向後相容：舊呼叫端只要 Yes/No，這裡把四種關係收斂成同一個答案 */
+export async function judgeSameEvent(input: {
+  titleA: string;
+  summaryA?: string | null;
+  titleB: string;
+  summaryB?: string | null;
+  model?: string;
+  timeoutMs?: number;
+}): Promise<{
+  same: boolean;
+  reason: string;
+  usage: { model: string; tokens_in: number; tokens_out: number };
+} | null> {
+  const verdict = await judgeEventRelation(input);
+  if (!verdict) return null;
+  return {
+    same:
+      SAME_EVENT_RELATIONS.includes(verdict.relation) &&
+      verdict.confidence >= SAME_EVENT_MIN_CONFIDENCE,
+    reason: verdict.reason,
+    usage: verdict.usage,
+  };
+}
+
+/**
  * 用 Grok 產生一批內容。失敗一律拋 SocialLlmError，由呼叫端 fallback 模板。
  */
 export async function composeWithGrok(input: SocialLlmInput): Promise<SocialLlmResult> {

@@ -22,7 +22,15 @@ const media = await import('../src/lib/contentMedia.ts');
 const pkg = await import('../src/lib/contentPackage.ts');
 const permissions = await import('../src/lib/contentPermissions.ts');
 const navigation = await import('../src/lib/contentNavigation.ts');
+const socialGroups = await import('../src/lib/contentSocialGroups.ts');
+const socialOAuth = await import('../src/lib/contentSocialOAuth.ts');
+const socialDelivery = await import('../src/lib/contentSocialDelivery.ts');
+const adapters = await import('../supabase/functions/_shared/contentAdapters/index.ts');
+const contentState = await import('../src/lib/contentState.ts');
 const socialGenerate = await import('../src/lib/contentSocialGenerate.ts');
+const socialDedupe = await import('../src/lib/contentSocialDedupe.ts');
+const socialCluster = await import('../src/lib/contentSocialCluster.ts');
+const beauty100 = await import('../src/lib/contentBeauty100.ts');
 
 // ============================================================
 // 時區與格式化
@@ -738,6 +746,159 @@ test('社媒：下一個排定時間是香港時間 10:00', () => {
   assert.equal(early, '2026-11-25T02:00:00.000Z');
 });
 
+test('社媒：去重鍵（URL 正規化 + simhash）', () => {
+  const a = socialDedupe.dedupeKey('https://example.com/a?utm_source=x&id=1', '標題');
+  const b = socialDedupe.dedupeKey('https://example.com/a?id=1', '另一個標題');
+  assert.equal(a, b);
+  assert.match(a, /^url:/);
+  const sim = socialDedupe.dedupeKey(null, '果酸煥膚適合什麼膚質');
+  assert.match(sim, /^sim:/);
+  assert.equal(socialDedupe.hamming(socialDedupe.simhash('同一個標題'), socialDedupe.simhash('同一個標題')), 0);
+});
+
+test('社媒：熱度隨來源分級與時間衰減', () => {
+  assert.ok(socialDedupe.heatScore(1, 0) > socialDedupe.heatScore(2, 0));
+  assert.ok(socialDedupe.heatScore(2, 0) > socialDedupe.heatScore(2, 24));
+  assert.ok(socialDedupe.heatScore(1, 0) <= 100);
+});
+
+// ============================================================
+// 社媒去重（2026-11-26）：事件召回分數、輸出指紋、保留規則
+// ============================================================
+
+test('社媒去重：事件相似度分數用真實資料校準', () => {
+  // 同一促銷換了折扣（真重複）
+  assert.equal(
+    socialCluster.duplicateVerdict(
+      socialCluster.eventSimilarity(
+        { title: 'Sephora限時75折！護膚化妝/香水$21起：必買M·A·C唇膏、NARS胭脂' },
+        { title: 'Sephora限時4折！護膚化妝/香水$21起：必買M·A·C唇膏、NARS胭脂' },
+      ),
+    ),
+    'duplicate',
+  );
+  // 同一活動換了標題措辭（真重複）
+  assert.equal(
+    socialCluster.duplicateVerdict(
+      socialCluster.eventSimilarity(
+        {
+          title:
+            'Coupang酷澎攜手國際美妝與台灣在地品牌韓系美妝官方好禮、金車暖心湯底「火箭速配」最快隔日到貨',
+        },
+        {
+          title:
+            'Coupang酷澎黑五購物節開跑 韓系美妝官方好禮、金車暖心湯底「火箭速配」最快隔日到貨',
+        },
+      ),
+    ),
+    'duplicate',
+  );
+  // 同一節目不同寫法 → 交給模型（不直接合併）
+  assert.equal(
+    socialCluster.duplicateVerdict(
+      socialCluster.eventSimilarity(
+        { title: 'Just Makeup 2｜化妝師生存戰 太妍允兒娜璉Winter神級女團主持' },
+        { title: '《Just Makeup》第2季強勢回歸 !太妍、Winter等星級女神聯手主持' },
+      ),
+    ),
+    'review',
+  );
+  // 短標題剛好被長清單包含，不能當成同一件事（重疊係數的陷阱）
+  assert.equal(
+    socialCluster.duplicateVerdict(
+      socialCluster.eventSimilarity(
+        { title: '保濕精華實測💧', summary: '實測幾款開架保濕精華的質地與吸收度' },
+        {
+          title: '雙11優惠！iHerb必買護膚品推介｜16款好評平價護膚品：保濕精華、面霜、抗老精華等推薦',
+          summary: '整理 iHerb 雙11 必買清單，涵蓋保濕精華、面霜與抗老精華',
+        },
+      ),
+    ),
+    'distinct',
+  );
+  // 完全不同的兩件事
+  assert.equal(
+    socialCluster.duplicateVerdict(
+      socialCluster.eventSimilarity(
+        { title: '換季敏感肌潔面選擇：界面活性劑與洗後感覺' },
+        { title: '抗老護膚品2026｜編輯部推薦回購眼霜與熬夜精華水' },
+      ),
+    ),
+    'distinct',
+  );
+  assert.ok(socialCluster.EVENT_REVIEW < socialCluster.EVENT_DUPLICATE);
+  assert.equal(socialCluster.duplicateVerdict(1), 'duplicate');
+  assert.equal(socialCluster.duplicateVerdict(Number.NaN), 'distinct');
+});
+
+test('社媒去重：成稿指紋忽略 Markdown 語法與標點', () => {
+  const withMarkdown =
+    '## 點解呢件事值得留意\n\n最近好多人都喺度問同一個問題：**測試**。\n\n## 重點整理\n\n- 一\n- 二\n';
+  const flattened =
+    '## 點解呢件事值得留意 最近好多人都喺度問同一個問題：測試  ## 重點整理 - 一 - 二';
+  assert.equal(
+    socialDedupe.contentFingerprint('標題', withMarkdown),
+    socialDedupe.contentFingerprint('標題', flattened),
+  );
+  assert.notEqual(
+    socialDedupe.contentFingerprint('標題', withMarkdown),
+    socialDedupe.contentFingerprint('另一個標題', withMarkdown),
+  );
+  assert.equal(socialDedupe.contentFingerprint('標題', withMarkdown).length, 16);
+  // 同一篇：相似度接近 1；不同內容：明顯較低
+  assert.ok(
+    socialDedupe.postSimilarity(
+      { title: '標題', body_md: withMarkdown },
+      { title: '標題', body_md: flattened },
+    ) >= 0.9,
+  );
+  assert.ok(
+    socialDedupe.postSimilarity(
+      { title: '標題', body_md: withMarkdown },
+      { title: '另一篇', body_md: '## 完全不同的內容\n\n講另一件事，同上面無關。' },
+    ) < 0.6,
+  );
+});
+
+test('社媒去重：同事件多稿的保留順序（狀態 > 生成來源 > 導流數 > 時間）', () => {
+  const base = { target_count: 4, created_at: '2026-11-26T01:00:00.000Z' };
+  const posts = [
+    { id: 'pending-grok', status: 'pending_review', generator: 'grok', ...base },
+    {
+      id: 'pending-template-earlier',
+      status: 'pending_review',
+      generator: 'template',
+      target_count: 4,
+      created_at: '2026-11-25T00:00:00.000Z',
+    },
+    {
+      id: 'published-template',
+      status: 'published',
+      generator: 'template',
+      target_count: 1,
+      created_at: '2026-11-26T02:00:00.000Z',
+    },
+  ];
+  assert.equal(socialDedupe.pickCanonicalPost(posts).id, 'published-template');
+
+  const withoutPublished = posts.filter((post) => post.status !== 'published');
+  assert.equal(socialDedupe.pickCanonicalPost(withoutPublished).id, 'pending-grok');
+
+  // 同狀態同來源：導流多者優先；再同：較早建立者優先
+  const targetTie = [
+    { id: 'few', status: 'pending_review', generator: 'grok', target_count: 2, created_at: '2026-11-26T00:00:00.000Z' },
+    { id: 'many', status: 'pending_review', generator: 'grok', target_count: 5, created_at: '2026-11-26T03:00:00.000Z' },
+  ];
+  assert.equal(socialDedupe.pickCanonicalPost(targetTie).id, 'many');
+
+  const timeTie = [
+    { id: 'later', status: 'pending_review', generator: 'grok', target_count: 2, created_at: '2026-11-26T03:00:00.000Z' },
+    { id: 'earlier', status: 'pending_review', generator: 'grok', target_count: 2, created_at: '2026-11-26T00:00:00.000Z' },
+  ];
+  assert.equal(socialDedupe.pickCanonicalPost(timeTie).id, 'earlier');
+  assert.equal(socialDedupe.pickCanonicalPost([]), null);
+});
+
 // ============================================================
 // 權限與路由
 // ============================================================
@@ -789,7 +950,641 @@ test('路由：hash 解析與組裝、非法值回落', () => {
 });
 
 // ============================================================
+// 社媒品牌組與帳號（P4／M4-02）
+// ============================================================
+
+test('社媒：handle 正規化（全形、@、空白）', () => {
+  assert.equal(socialGroups.normalizeSocialHandle(' ＠Beauty 100 '), 'Beauty100');
+  assert.equal(socialGroups.normalizeSocialHandle('@@beauty100.hk'), 'beauty100.hk');
+  assert.equal(socialGroups.normalizeSocialHandle(''), '');
+});
+
+test('社媒：批量新增帳號逐行解析與問題回報', () => {
+  const parsed = socialGroups.parseBulkAccountLines(
+    ['beauty100.hk', 'Beauty100 編輯室 | beauty100.editor', '', '@dup', 'DUP', '顯示名 |'].join('\n'),
+    'instagram',
+  );
+  assert.equal(parsed.rows.length, 3);
+  assert.equal(parsed.rows[0].handle, 'beauty100.hk');
+  assert.equal(parsed.rows[0].displayName, null);
+  assert.equal(parsed.rows[1].handle, 'beauty100.editor');
+  assert.equal(parsed.rows[1].displayName, 'Beauty100 編輯室');
+  assert.equal(parsed.rows[2].handle, 'dup');
+  // 第 5 行與第 4 行重複；第 6 行缺少 handle
+  assert.equal(parsed.problems.length, 2);
+  assert.match(parsed.problems[0], /第 5 行/);
+  assert.match(parsed.problems[1], /第 6 行/);
+});
+
+test('社媒：組名驗證（必填、長度、重複、改名排除自己）', () => {
+  assert.equal(socialGroups.validateSocialGroupName(''), '請輸入組名');
+  assert.match(socialGroups.validateSocialGroupName('x'.repeat(41)), /最多 40/);
+  assert.equal(
+    socialGroups.validateSocialGroupName('Beauty100 美妝組', { existing: ['beauty100 美妝組'] }),
+    '已經有同名組，請換一個名稱',
+  );
+  assert.equal(
+    socialGroups.validateSocialGroupName('Beauty100 美妝組', {
+      existing: ['Beauty100 美妝組'],
+      selfName: 'Beauty100 美妝組',
+    }),
+    null,
+  );
+});
+
+test('社媒：目錄索引（一帳號多組、歸檔組分開、同平台排序）', () => {
+  const groups = [
+    { id: 'g1', name: 'Beauty100 美妝組', description: null, archived: false, created_at: '', updated_at: '' },
+    { id: 'g2', name: 'Beauty100 生活組', description: null, archived: true, created_at: '', updated_at: '' },
+  ];
+  const accounts = [
+    {
+      id: 'a1',
+      brand_id: null,
+      platform: 'facebook',
+      handle: 'beauty100magazine',
+      display_name: 'Beauty100 Magazine',
+      login_status: 'active',
+      last_checked_at: null,
+      archived: false,
+      notes: null,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'a2',
+      brand_id: null,
+      platform: 'instagram',
+      handle: 'beauty100hk',
+      display_name: null,
+      login_status: 'expired',
+      last_checked_at: null,
+      archived: false,
+      notes: null,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+  const members = [
+    { group_id: 'g1', account_id: 'a1' },
+    { group_id: 'g1', account_id: 'a2' },
+    { group_id: 'g2', account_id: 'a1' },
+  ];
+  const directory = socialGroups.buildSocialDirectory({ groups, accounts, members });
+  assert.equal(directory.groups.length, 1);
+  assert.equal(directory.archivedGroups.length, 1);
+  assert.deepEqual(
+    directory.groups[0].accounts.map((account) => account.handle),
+    ['beauty100hk', 'beauty100magazine'],
+  );
+  const a1 = directory.accounts.find((account) => account.id === 'a1');
+  assert.deepEqual(a1.groups.map((group) => group.id).sort(), ['g1', 'g2']);
+  assert.equal(a1.groups.find((group) => group.id === 'g2').archived, true);
+});
+
+test('社媒：歸檔保護（至少保留一個未歸檔組）', () => {
+  assert.equal(
+    socialGroups.canArchiveSocialGroup(
+      [{ id: 'g1', archived: false }, { id: 'g2', archived: false }],
+      'g1',
+    ),
+    true,
+  );
+  assert.equal(socialGroups.canArchiveSocialGroup([{ id: 'g1', archived: false }], 'g1'), false);
+});
+
+test('社媒：組健康摘要與帳號顯示名', () => {
+  assert.deepEqual(
+    socialGroups.summarizeGroupHealth([
+      { login_status: 'active' },
+      { login_status: 'expired' },
+      { login_status: 'unknown' },
+    ]),
+    { total: 3, connected: 1, needsAttention: 2 },
+  );
+  assert.equal(
+    socialGroups.accountDisplayLabel({ handle: 'beauty100hk', display_name: 'Beauty100 美妝誌' }),
+    'Beauty100 美妝誌',
+  );
+  assert.equal(socialGroups.accountDisplayLabel({ handle: 'beauty100hk', display_name: null }), '@beauty100hk');
+});
+
+test('社媒：未知登入狀態與平台安全回落', () => {
+  assert.equal(socialGroups.loginStatusMeta('something-else').label, '未設定');
+  assert.equal(socialGroups.loginStatusMeta('active').tone, 'green');
+  assert.equal(socialGroups.platformDotClass('mastodon'), socialGroups.SOCIAL_PLATFORM_DOT.other);
+});
+
+// ============================================================
+// 社媒登入憑證（半自動，M4-03）
+// ============================================================
+
+test('憑證：狀態推導（未設定／有效／即將到期／已過期／失效）', () => {
+  const now = new Date('2026-11-26T00:00:00Z');
+  const at = (credential_status, credential_expires_at) => ({ credential_status, credential_expires_at });
+  assert.equal(socialGroups.deriveCredentialStatus(null, now), 'none');
+  assert.equal(socialGroups.deriveCredentialStatus(at(null, null), now), 'none');
+  assert.equal(socialGroups.deriveCredentialStatus(at('active', null), now), 'active');
+  assert.equal(
+    socialGroups.deriveCredentialStatus(at('active', '2026-11-27T00:00:00Z'), now),
+    'expiring',
+  );
+  assert.equal(
+    socialGroups.deriveCredentialStatus(at('active', '2026-12-31T00:00:00Z'), now),
+    'active',
+  );
+  assert.equal(
+    socialGroups.deriveCredentialStatus(at('active', '2026-11-20T00:00:00Z'), now),
+    'expired',
+  );
+  assert.equal(
+    socialGroups.deriveCredentialStatus(at('invalid', '2026-12-31T00:00:00Z'), now),
+    'invalid',
+  );
+});
+
+test('憑證：剩餘天數（進位／退位）與到期日標籤', () => {
+  const now = new Date('2026-11-26T00:00:00Z');
+  assert.equal(socialGroups.credentialDaysLeft('2026-11-27T00:00:00Z', now), 1);
+  assert.equal(socialGroups.credentialDaysLeft('2026-11-26T12:00:00Z', now), 1);
+  assert.equal(socialGroups.credentialDaysLeft('2026-11-20T00:00:00Z', now), -6);
+  assert.equal(socialGroups.credentialDaysLeft(null, now), null);
+  assert.match(socialGroups.credentialExpiryLabel('2026-11-27T15:59:59Z'), /2026/);
+});
+
+test('憑證：摘要統計與待處理判斷', () => {
+  const now = new Date('2026-11-26T00:00:00Z');
+  const summary = socialGroups.summarizeCredentials(
+    [
+      { credential_status: 'active', credential_expires_at: null },
+      { credential_status: 'active', credential_expires_at: '2026-11-28T00:00:00Z' },
+      { credential_status: 'active', credential_expires_at: '2026-11-20T00:00:00Z' },
+      { credential_status: 'invalid', credential_expires_at: null },
+      { credential_status: null, credential_expires_at: null },
+    ],
+    now,
+  );
+  assert.deepEqual(summary, {
+    total: 5,
+    active: 1,
+    expiring: 1,
+    expired: 1,
+    invalid: 1,
+    none: 1,
+    needsAttention: 3,
+  });
+  assert.equal(socialGroups.credentialNeedsAttention('active'), false);
+  assert.equal(socialGroups.credentialNeedsAttention('expiring'), true);
+  assert.equal(socialGroups.credentialStatusMeta('expired').tone, 'rose');
+  assert.equal(socialGroups.credentialStatusMeta('unknown-value').label, '未設定憑證');
+});
+
+// ============================================================
+// 社媒平台 OAuth（M4-03）
+// ============================================================
+
+test('OAuth：平台 → provider 對照與標籤', () => {
+  assert.equal(socialOAuth.oauthProviderForPlatform('instagram'), 'meta');
+  assert.equal(socialOAuth.oauthProviderForPlatform('facebook'), 'meta');
+  assert.equal(socialOAuth.oauthProviderForPlatform('threads'), 'threads');
+  assert.equal(socialOAuth.oauthProviderForPlatform('youtube'), 'google');
+  assert.equal(socialOAuth.oauthProviderForPlatform('xiaohongshu'), null);
+  assert.equal(socialOAuth.oauthProviderForPlatform('other'), null);
+  assert.match(socialOAuth.oauthProviderLabelForPlatform('instagram'), /Meta/);
+  assert.equal(socialOAuth.oauthProviderLabelForPlatform('xiaohongshu'), null);
+});
+
+test('OAuth：callback origin 白名單（正式網域／本機，其餘拒絕）', () => {
+  assert.equal(socialOAuth.isAllowedSocialOAuthOrigin('https://bwteam-marketing.com'), true);
+  assert.equal(socialOAuth.isAllowedSocialOAuthOrigin('https://mps.bwteam-marketing.com'), true);
+  assert.equal(socialOAuth.isAllowedSocialOAuthOrigin('http://localhost:5174'), true);
+  assert.equal(socialOAuth.isAllowedSocialOAuthOrigin('http://127.0.0.1:5174'), true);
+  assert.equal(socialOAuth.isAllowedSocialOAuthOrigin('https://evil.example.com'), false);
+  assert.equal(socialOAuth.isAllowedSocialOAuthOrigin('http://bwteam-marketing.com'), false);
+  assert.equal(socialOAuth.isAllowedSocialOAuthOrigin(''), false);
+});
+
+test('OAuth：redirect URI 與訊息型別', () => {
+  assert.equal(
+    socialOAuth.socialOAuthRedirectUri('https://bwteam-marketing.com/'),
+    'https://bwteam-marketing.com/social-oauth-callback',
+  );
+  assert.equal(socialOAuth.SOCIAL_OAUTH_MESSAGE, 'mps-social-oauth');
+  assert.equal(socialOAuth.SOCIAL_OAUTH_PROVIDERS.meta.platforms.includes('instagram'), true);
+  assert.equal(socialOAuth.SOCIAL_OAUTH_PROVIDERS.google.envKeys.includes('GOOGLE_OAUTH_CLIENT_ID'), true);
+});
+
+// ============================================================
+// 自動發佈 adapters（A）＋半自動交付頁（C）
+// ============================================================
+
+test('交付頁：平台 deeplink、分組與進度', () => {
+  const links = socialDelivery.buildSocialDeliveryLinks('threads', 'Hi 100');
+  assert.equal(links.length, 1);
+  assert.match(links[0].href, /threads\.net\/intent\/post\?text=Hi%20100/);
+  assert.equal(
+    socialDelivery.buildSocialDeliveryLinks('facebook', 'x')[0].href,
+    'https://www.facebook.com/',
+  );
+  assert.equal(
+    socialDelivery.buildSocialDeliveryLinks('xiaohongshu', 'x')[0].note.includes('沒有公開 API'),
+    true,
+  );
+  assert.deepEqual(socialDelivery.buildSocialDeliveryLinks('other', 'x'), []);
+
+  const groups = socialDelivery.buildDeliveryPlatformGroups([
+    { platform: 'threads', handle: 'b', copy_text: '', display_name: null, status: 'ready' },
+    { platform: 'instagram', handle: 'a', copy_text: 'IG copy', display_name: null, status: 'ready' },
+    { platform: 'threads', handle: 'c', copy_text: 'TH copy', display_name: null, status: 'ready' },
+  ]);
+  assert.equal(groups.length, 2);
+  const threads = groups.find((group) => group.platform === 'threads');
+  assert.equal(threads.copyText, 'TH copy');
+  assert.equal(threads.targets.length, 2);
+  assert.equal(socialDelivery.deliveryProgress([{ status: 'published' }, { status: 'ready' }]).remaining, 1);
+});
+
+test('Adapter：WordPress 契約（Basic auth＋direct→publish）', async () => {
+  const calls = [];
+  const fakeFetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    if (String(url).includes('?slug=')) return new Response('[]', { status: 200 });
+    return new Response(JSON.stringify({ id: 42, link: 'https://wp.example/?p=42' }), { status: 201 });
+  };
+  const result = await adapters.wordpressAdapter.createArticle({
+    site: { id: 's', name: 'S', domain: 'wp.example', publishMode: 'direct', timezone: 'Asia/Hong_Kong' },
+    credentials: { secret: 'admin:abcd 1234' },
+    article: {
+      title: 'T',
+      slug: 't',
+      excerpt: 'E',
+      bodyHtml: '<p>B</p>',
+      bodyMd: 'B',
+      canonical: 'https://wp.example/t',
+      metaDescription: 'M',
+    },
+    fetchImpl: fakeFetch,
+  });
+  const post = calls.find((call) => String(call.init.method) === 'POST');
+  assert.equal(JSON.parse(String(post.init.body)).status, 'publish');
+  assert.match(String(post.init.headers.Authorization), /^Basic /);
+  assert.equal(result.ok, true);
+  assert.equal(result.externalId, '42');
+  assert.equal(result.liveUrl, 'https://wp.example/?p=42');
+});
+
+test('Adapter：Shopify 契約（token header＋文章公開 URL）', async () => {
+  const calls = [];
+  const fakeFetch = async (url) => {
+    calls.push(String(url));
+    if (String(url).includes('articles.json')) {
+      return new Response(JSON.stringify({ article: { id: 77, handle: 'hello' } }), { status: 201 });
+    }
+    if (String(url).includes('blogs/9.json')) {
+      return new Response(JSON.stringify({ blog: { id: 9, handle: 'news' } }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ blogs: [{ id: 9, handle: 'news' }] }), { status: 200 });
+  };
+  const result = await adapters.shopifyAdapter.createArticle({
+    site: { id: 's', name: 'S', domain: 'shop.example', publishMode: 'direct', timezone: 'Asia/Hong_Kong' },
+    credentials: { secret: JSON.stringify({ token: 'shpat_x', blog_id: 9 }) },
+    article: {
+      title: 'T',
+      slug: 'hello',
+      excerpt: 'E',
+      bodyHtml: '<p>B</p>',
+      bodyMd: 'B',
+      canonical: '',
+      metaDescription: 'M',
+    },
+    fetchImpl: fakeFetch,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.externalId, '77');
+  assert.equal(result.liveUrl, 'https://shop.example/blogs/news/hello');
+  // 指定 blog_id 時不需要先列 blogs
+  assert.equal(calls.some((url) => url.includes('blogs.json')), false);
+});
+
+test('Adapter：Webflow 契約（RichText 欄位＋draft 不送 live）', async () => {
+  const calls = [];
+  const fakeFetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    if (String(url).endsWith('/sites')) {
+      return new Response(
+        JSON.stringify({
+          sites: [{ id: 's1', displayName: 'S', shortName: 'shop', customDomains: [{ url: 'https://shop.example' }] }],
+        }),
+        { status: 200 },
+      );
+    }
+    if (String(url).includes('/collections') && !String(url).includes('/items')) {
+      return new Response(
+        JSON.stringify({
+          collections: [
+            {
+              id: 'c1',
+              displayName: 'Blog',
+              fields: [
+                { slug: 'name', type: 'PlainText' },
+                { slug: 'slug', type: 'PlainText' },
+                { slug: 'post-body', type: 'RichText' },
+              ],
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    }
+    return new Response(JSON.stringify({ id: 'i1' }), { status: 200 });
+  };
+  const result = await adapters.webflowAdapter.createArticle({
+    site: { id: 's', name: 'S', domain: 'shop.example', publishMode: 'draft', timezone: 'Asia/Hong_Kong' },
+    credentials: { secret: 'wf_x' },
+    article: {
+      title: 'T',
+      slug: 'hello',
+      excerpt: 'E',
+      bodyHtml: '<p>B</p>',
+      bodyMd: 'B',
+      canonical: '',
+      metaDescription: 'M',
+    },
+    fetchImpl: fakeFetch,
+  });
+  const post = calls.find((call) => call.url.includes('/items'));
+  const body = JSON.parse(String(post.init.body));
+  assert.equal(body.isDraft, true);
+  assert.equal(body.fieldData.name, 'T');
+  assert.equal(body.fieldData['post-body'], '<p>B</p>');
+  assert.equal(String(post.url).includes('live=true'), false);
+  assert.equal(result.ok, true);
+  assert.equal(result.externalId, 'i1');
+});
+
+test('Adapter：registry 對應（wordpress/shopify/webflow 不再是 manual）', () => {
+  assert.equal(adapters.getContentAdapter('wordpress').name, 'wordpress');
+  assert.equal(adapters.getContentAdapter('shopify').name, 'shopify');
+  assert.equal(adapters.getContentAdapter('webflow').name, 'webflow');
+  assert.equal(adapters.getContentAdapter('beauty100').name, 'beauty100');
+  assert.equal(adapters.getContentAdapter('manual').supports('direct'), false);
+});
+
+// ============================================================
+// 遠端刪除（不是只刪 MPS 記錄）
+// ============================================================
+
+test('狀態機：已發佈文章可轉 cancelled（遠端刪除終態）', () => {
+  assert.equal(contentState.canTransition('article', 'published', 'cancelled'), true);
+  assert.equal(contentState.canTransition('article', 'updating', 'cancelled'), true);
+  assert.equal(contentState.canTransition('article', 'verify_failed', 'cancelled'), true);
+  assert.equal(contentState.canTransition('article', 'draft_published', 'cancelled'), true);
+  // 手動完成／已取消仍是終態，不可再轉
+  assert.equal(contentState.canTransition('article', 'manual_done', 'cancelled'), false);
+  assert.equal(contentState.canTransition('article', 'cancelled', 'published'), false);
+});
+
+test('Adapter：WordPress 遠端刪除（force=true；404 視為已刪）', async () => {
+  const calls = [];
+  const fakeFetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    if (String(url).includes('/404')) return new Response(JSON.stringify({ code: 'rest_post_invalid_id' }), { status: 404 });
+    return new Response(JSON.stringify({ deleted: true, previous: { id: 42 } }), { status: 200 });
+  };
+  const site = { id: 's', name: 'S', domain: 'wp.example', publishMode: 'direct', timezone: 'Asia/Hong_Kong' };
+  const credentials = { secret: 'admin:abcd 1234' };
+  const okResult = await adapters.wordpressAdapter.deleteArticle({
+    site,
+    credentials,
+    externalId: '42',
+    fetchImpl: fakeFetch,
+  });
+  assert.equal(okResult.ok, true);
+  assert.equal(okResult.alreadyGone, false);
+  assert.equal(String(calls[0].init.method), 'DELETE');
+  assert.match(String(calls[0].url), /\/wp-json\/wp\/v2\/posts\/42\?force=true/);
+  const gone = await adapters.wordpressAdapter.deleteArticle({
+    site,
+    credentials,
+    externalId: '404',
+    fetchImpl: fakeFetch,
+  });
+  assert.equal(gone.ok, true);
+  assert.equal(gone.alreadyGone, true);
+});
+
+test('Adapter：Shopify／Webflow 遠端刪除契約', async () => {
+  const calls = [];
+  const shopifyFetch = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    if (String(url).includes('articles/77.json')) return new Response('{}', { status: 200 });
+    return new Response(JSON.stringify({ blog: { id: 9, handle: 'news' } }), { status: 200 });
+  };
+  const shopify = await adapters.shopifyAdapter.deleteArticle({
+    site: { id: 's', name: 'S', domain: 'shop.example', publishMode: 'direct', timezone: 'Asia/Hong_Kong' },
+    credentials: { secret: JSON.stringify({ token: 'shpat_x', blog_id: 9 }) },
+    externalId: '77',
+    fetchImpl: shopifyFetch,
+  });
+  assert.equal(shopify.ok, true);
+  const shopifyDelete = calls.find((call) => String(call.init.method) === 'DELETE');
+  assert.match(String(shopifyDelete.url), /blogs\/9\/articles\/77\.json/);
+
+  const webflowCalls = [];
+  const webflowFetch = async (url, init = {}) => {
+    webflowCalls.push({ url: String(url), init });
+    const text = String(url);
+    if (text.endsWith('/sites')) {
+      return new Response(JSON.stringify({ sites: [{ id: 's1', displayName: 'S', shortName: 'shop', customDomains: [] }] }), { status: 200 });
+    }
+    if (text.includes('/collections') && !text.includes('/items')) {
+      return new Response(JSON.stringify({ collections: [{ id: 'c1', fields: [{ slug: 'name', type: 'PlainText' }, { slug: 'slug', type: 'PlainText' }] }] }), { status: 200 });
+    }
+    if (text.includes('/items/gone')) return new Response('{}', { status: 404 });
+    return new Response('{}', { status: 200 });
+  };
+  const webflow = await adapters.webflowAdapter.deleteArticle({
+    site: { id: 's', name: 'S', domain: 'shop.example', publishMode: 'draft', timezone: 'Asia/Hong_Kong' },
+    credentials: { secret: 'wf_x' },
+    externalId: 'item1',
+    fetchImpl: webflowFetch,
+  });
+  assert.equal(webflow.ok, true);
+  const webflowDelete = webflowCalls.find((call) => String(call.init.method) === 'DELETE');
+  assert.match(String(webflowDelete.url), /\/collections\/c1\/items\/item1/);
+  const gone = await adapters.webflowAdapter.deleteArticle({
+    site: { id: 's', name: 'S', domain: 'shop.example', publishMode: 'draft', timezone: 'Asia/Hong_Kong' },
+    credentials: { secret: 'wf_x' },
+    externalId: 'gone',
+    fetchImpl: webflowFetch,
+  });
+  assert.equal(gone.alreadyGone, true);
+});
+
+test('Adapter：manual 不支援遠端刪除（不可靜默假成功）', () => {
+  assert.equal(typeof adapters.getContentAdapter('manual').deleteArticle, 'undefined');
+});
+
+// ============================================================
 // 結果
 // ============================================================
+
+// ============================================================
+// Beauty100 純函式／發佈狀態
+// ============================================================
+
+test('Beauty100：憑證 JSON 驗證與預設 bucket', () => {
+  const parsed = beauty100.parseBeauty100Credential(
+    JSON.stringify({
+      supabase_url: 'https://gkqctvtteafjprkudgsb.supabase.co/',
+      anon_key: 'sb_publishable_test_key_123456',
+      email: 'mps@beauty100.test',
+      password: 'secret123',
+    }),
+  );
+  assert.equal(parsed.ok, true);
+  if (parsed.ok) {
+    assert.equal(parsed.config.supabaseUrl, 'https://gkqctvtteafjprkudgsb.supabase.co');
+    assert.equal(parsed.config.bucket, 'uploads');
+  }
+
+  const missing = beauty100.parseBeauty100Credential('{}');
+  assert.equal(missing.ok, false);
+  if (!missing.ok) {
+    assert.ok(missing.errors.length >= 4);
+  }
+  assert.equal(beauty100.parseBeauty100Credential('not json').ok, false);
+});
+
+test('Beauty100：分類與文章網址', () => {
+  assert.equal(
+    beauty100.beauty100CategoryForSection({ external_id: 'facial-care' }),
+    'facial-care',
+  );
+  assert.equal(
+    beauty100.beauty100CategoryForSection({ external_id: 'nope' }),
+    'trending-topics',
+  );
+  assert.equal(
+    beauty100.beauty100CategoryForSection({ external_id: 'topics' }),
+    'trending-topics',
+  );
+  assert.equal(
+    beauty100.beauty100ArticleUrl('https://www.beauty100-magazine.com/', 'trending-topics', 'abc'),
+    'https://www.beauty100-magazine.com/topics/abc',
+  );
+  assert.equal(
+    beauty100.beauty100ArticleUrl('https://www.beauty100-magazine.com', 'body-shaping', 'abc'),
+    'https://www.beauty100-magazine.com/topics/abc',
+  );
+  assert.equal(beauty100.beauty100ArticleUrl(null, 'trending-topics', 'abc'), null);
+});
+
+test('Beauty100：requireCover 與前端常數一致', () => {
+  assert.equal(adapters.beauty100Adapter.requiresCover, true);
+  assert.equal(state.ADAPTER_REQUIRES_COVER.beauty100, true);
+  assert.equal(adapters.getContentAdapter('beauty100').name, 'beauty100');
+});
+
+test('發佈狀態：排隊中／延遲／發佈中', () => {
+  const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const queued = state.publishStage({
+    status: 'scheduled',
+    deleted_at: null,
+    checks: {},
+    scheduled_publish_at: future,
+  });
+  assert.equal(queued.stage, 'queued');
+  assert.equal(queued.label, '排隊中');
+
+  const past = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  const late = state.publishStage({
+    status: 'scheduled',
+    deleted_at: null,
+    checks: {},
+    scheduled_publish_at: past,
+  });
+  assert.equal(late.stage, 'queued');
+  assert.match(late.label, /延遲/);
+
+  const publishing = state.publishStage({
+    status: 'publishing',
+    deleted_at: null,
+    checks: {},
+    scheduled_publish_at: null,
+  });
+  assert.equal(publishing.stage, 'publishing');
+});
+
+test('發佈狀態：已發佈／驗證中／失敗／已下架', () => {
+  const published = state.publishStage({
+    status: 'published',
+    deleted_at: null,
+    checks: { verify: { ok: true, httpStatus: 200, checkedAt: '', items: [] } },
+    scheduled_publish_at: null,
+  });
+  assert.equal(published.stage, 'published');
+  assert.match(published.label, /成功/);
+
+  const pending = state.publishStage({
+    status: 'published',
+    deleted_at: null,
+    checks: {},
+    scheduled_publish_at: null,
+  });
+  assert.equal(pending.stage, 'verify_pending');
+
+  const failed = state.publishStage({
+    status: 'publish_failed',
+    deleted_at: null,
+    checks: {},
+    scheduled_publish_at: null,
+  });
+  assert.equal(failed.stage, 'failed');
+
+  const deleted = state.publishStage({
+    status: 'cancelled',
+    deleted_at: new Date().toISOString(),
+    checks: {},
+    scheduled_publish_at: null,
+  });
+  assert.equal(deleted.stage, 'deleted');
+});
+
+test('發佈狀態：manual 站與未批准狀態', () => {
+  const manual = state.publishStage(
+    { status: 'scheduled', deleted_at: null, checks: {}, scheduled_publish_at: null },
+    { manual: true },
+  );
+  assert.equal(manual.stage, 'manual');
+
+  const blocked = state.publishStage({
+    status: 'pending_review',
+    deleted_at: null,
+    checks: {},
+    scheduled_publish_at: null,
+  });
+  assert.equal(blocked.stage, 'blocked');
+  assert.match(String(blocked.hint), /不會發佈/);
+});
+
+test('批准閘門：必須有 reviewer_id 與 approved_at', () => {
+  assert.equal(state.isApprovedForPublish({ reviewer_id: null, approved_at: null }), false);
+  assert.equal(state.isApprovedForPublish({ reviewer_id: 'u1', approved_at: null }), false);
+  assert.equal(
+    state.isApprovedForPublish({ reviewer_id: null, approved_at: '2026-01-01T00:00:00Z' }),
+    false,
+  );
+  assert.equal(
+    state.isApprovedForPublish({ reviewer_id: 'u1', approved_at: '2026-01-01T00:00:00Z' }),
+    true,
+  );
+});
+
+test('狀態機：自動發佈必須先 publishing 才能 published（避免 scheduled 直跳）', () => {
+  assert.equal(state.canTransition('article', 'scheduled', 'published'), false);
+  assert.equal(state.canTransition('article', 'scheduled', 'publishing'), true);
+  assert.equal(state.canTransition('article', 'publishing', 'published'), true);
+});
 
 report();

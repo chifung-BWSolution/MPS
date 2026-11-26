@@ -319,3 +319,17 @@ PostgREST 回 400 → 程式忽略錯誤 → 角色回落成 `staff` → 後端 
 - UI：站點清單「Beauty100 自動發佈」標籤；站點詳情「Beauty100 自動發佈」連接卡；憑證 JSON textarea＋範本；文章佇列「發佈」欄；工作室發佈狀態帶；回執頁 `delete` 動作；Confirm 顯示分類／網址並擋無封面。
 - 測試：`node scripts/content-adapter-contract.mjs`（23 項）、`node scripts/beauty100-selftest.mjs`（8 項）、`node scripts/content-selftest.mjs`（80 項）、`vite build` 通過；真實環境需 `node scripts/beauty100-smoke.mjs --full`（會寫入 Beauty100，執行前需同意）。
 - 部署順序：套 migration → 部署 `content-sites`／`content-publish`／`content-worker`（`--use-api`）→ 前端 build → 站點設 `adapter=beauty100`、`publish_mode=direct`、欄目 `external_id=trending-topics` → 貼 credential JSON → 測試連線 → 驗收。
+
+### 2026-11-26 追加：社媒內容去重（一個事件一篇稿）
+
+> 詳見 `docs/content-dedupe.md`。
+
+- **根因**：`generateForEvent` 舊邏輯「每個品牌組一篇」，兩個組＝兩篇幾乎一樣的稿；同一帳號同時在多組時還收到兩份文案。看板 172 篇稿只對應 86 個事件。
+- 新 migration `20261127170000_content_social_dedupe.sql`：
+  - 清理既有重複：同事件多稿 → 保留一篇（狀態 > grok > 導流數 > 建立時間），搬走導流後刪除多餘稿；`group_id` 清空（一篇稿服務所有組）。
+  - 新約束／欄位：`content_social_posts.event_id` 唯一索引、`content_social_posts.content_fingerprint`、`content_hot_events.duplicate_of`。
+  - 實測：172 → 86 篇稿、516 → 344 條導流、同事件多稿 = 0。
+- `content-social`：一事件只呼叫一次模型、只寫一篇稿；產稿前對最近 14 天做「標題＋摘要」召回＋四關係判斷（≥0.66 直接合併、0.32–0.66 問 Grok、信心 <0.9 再覆核）；`create_event`／`generate_now`／`import_events` 都會先比對；新增 service action `dedupe_cleanup`（預設只回報告，`apply:true` 才寫入）。
+- `content-sources`：抓取端聚簇改用「標題＋摘要」前 3 候選與四關係判斷；合併事件時同步收斂稿件（搬導流→刪重複稿），不再只改 `event_id`。
+- 前端：`generateNow` 回傳 `{created, duplicate}`（重複時顯示「已併入既有事件」而不是錯誤）；稿件卡片未綁定單一組時顯示「全品牌組」。
+- 部署：migration → `content-social`／`content-sources`（`--use-api`）。驗證：自測 83/83、`dedupe_cleanup` 200（0 待清）、重複匯入 skipped=1、新建事件 1 篇稿 × 4 導流。

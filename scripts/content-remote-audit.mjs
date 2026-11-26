@@ -139,6 +139,10 @@ const EXPECTED = [
   '20261126110000',
   '20261126120000',
   '20261126130000',
+  '20261126140000',
+  '20261127092000',
+  '20261127100000',
+  '20261127110000',
 ];
 const pendingVersions = pending.map((item) => item.version);
 const expectedApplied = EXPECTED.filter((version) => remote.has(version));

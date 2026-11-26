@@ -17,6 +17,16 @@ import { ContentMetricBar, type ContentMetricItem } from './shell/ContentMetricB
 import { ContentZoneTabs } from './shell/ContentZoneTabs';
 import { useContentInbox } from '@/hooks/useContentInbox';
 import { SocialDeskView } from './social/SocialDeskView';
+import { SocialAccountsView } from './social/accounts/SocialAccountsView';
+import { RadarView } from './social/RadarView';
+import { QueueView } from './social/QueueView';
+import { StudioView } from './social/StudioView';
+import { CalendarView } from './social/CalendarView';
+import { LibraryView } from './social/LibraryView';
+import { SocialSubNav } from './social/SocialSubNav';
+import { SocialHealthBanner } from './social/SocialHealthBanner';
+import { SocialAutopilotSwitch } from './social/SocialAutopilotSwitch';
+import { useContentHealth } from '@/hooks/useContentHealth';
 import { SiteListView } from './seo/SiteListView';
 import { SiteWizard } from './seo/SiteWizard';
 import { SiteDetailView } from './seo/SiteDetailView';
@@ -97,6 +107,7 @@ export function ContentAutomationCenter() {
   );
 
   const inbox = useContentInbox(schema === 'ready' && route.zone === 'seo');
+  const health = useContentHealth(schema === 'ready' && route.zone === 'social');
 
   const metricItems = useMemo<ContentMetricItem[]>(
     () => [
@@ -175,7 +186,22 @@ export function ContentAutomationCenter() {
     }
 
     if (route.zone === 'social') {
-      return <SocialDeskView route={route} navigate={navigate} />;
+      switch (route.page) {
+        case 'accounts':
+          return <SocialAccountsView route={route} navigate={navigate} />;
+        case 'radar':
+          return <RadarView route={route} navigate={navigate} />;
+        case 'queue':
+          return <QueueView route={route} navigate={navigate} />;
+        case 'studio':
+          return <StudioView route={route} navigate={navigate} />;
+        case 'calendar':
+          return <CalendarView route={route} navigate={navigate} />;
+        case 'library':
+          return <LibraryView route={route} navigate={navigate} />;
+        default:
+          return <SocialDeskView route={route} navigate={navigate} />;
+      }
     }
 
     switch (route.page) {
@@ -243,7 +269,23 @@ export function ContentAutomationCenter() {
             }
           />
         )}
+        {route.zone === 'social' && schema === 'ready' && <SocialAutopilotSwitch />}
       </div>
+
+      {route.zone === 'social' && schema === 'ready' && (
+        <div className="space-y-3">
+          <SocialSubNav
+            page={route.page}
+            hasStudioPost={Boolean(route.id)}
+            onNavigate={(page) => navigate('social', page, page === 'studio' ? route.id : null)}
+          />
+          <SocialHealthBanner
+            alerts={health.alerts}
+            loading={health.loading}
+            onRefresh={() => void health.refresh()}
+          />
+        </div>
+      )}
 
       <ContentErrorBoundary resetKey={routeKey(route)}>{renderBody()}</ContentErrorBoundary>
     </div>

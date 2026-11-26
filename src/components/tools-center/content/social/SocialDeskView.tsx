@@ -29,6 +29,7 @@ import {
   RefreshCw,
   Send,
   Sparkles,
+  Users,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -530,6 +531,19 @@ function PostCard({
 
       {/* 動作 */}
       <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-[rgba(13,26,45,0.06)] pt-2.5">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 gap-1 px-2 text-[11px]"
+          onClick={() =>
+            window.open(`/social-delivery/${post.id}`, '_blank', 'noopener,noreferrer')
+          }
+          title="手機交付頁：複製文案、開平台、標記已發"
+        >
+          <ExternalLink size={11} strokeWidth={2.2} />
+          交付頁
+        </Button>
         {approvable ? (
           <>
             <Button
@@ -613,7 +627,6 @@ function PostCard({
 export function SocialDeskView({ route, navigate }: ContentViewProps) {
   // 今日工作固定是 overview，不在頁內切換子頁；route／navigate 由外殼注入以符合頁面契約。
   void route;
-  void navigate;
 
   const {
     data,
@@ -893,7 +906,7 @@ export function SocialDeskView({ route, navigate }: ContentViewProps) {
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
           {/* ---- 左：熱點雷達 ---- */}
           <DeskCard
             icon={Radar}
@@ -1048,6 +1061,16 @@ export function SocialDeskView({ route, navigate }: ContentViewProps) {
             <Button
               size="sm"
               variant="outline"
+              onClick={() => navigate('social', 'accounts')}
+              className="gap-1.5"
+              title="管理品牌組與社群帳號"
+            >
+              <Users size={13} />
+              品牌與帳號
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               onClick={() => void handleRefresh()}
               disabled={refreshing}
               className="gap-1.5"
@@ -1084,7 +1107,7 @@ export function SocialDeskView({ route, navigate }: ContentViewProps) {
               貼上熱點
             </DialogTitle>
             <DialogDescription className="text-[12px] leading-relaxed">
-              標題必填。加入後系統立即產出 1 篇長文，並為每個品牌組的每個帳號產一條導流。
+              標題必填。加入後系統立即產出 1 篇長文，並為每個帳號產一條導流；同一則新聞只會有一篇稿。
             </DialogDescription>
           </DialogHeader>
 

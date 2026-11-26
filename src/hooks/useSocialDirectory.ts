@@ -15,19 +15,30 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { contentErrorMessage } from '@/lib/contentApi.ts';
 import {
   addSocialGroupMembers,
+  clearSocialAccountCredential,
+  completeSocialOAuth,
   createSocialAccounts,
   createSocialGroup,
+  diagnoseSocialAccountCredentials,
   fetchSocialDirectory,
+  fetchSocialOAuthProviders,
   isSocialSchemaMissingError,
   removeSocialGroupMember,
+  saveSocialAccountCredential,
   setSocialGroupArchived,
   socialApiErrorMessage,
+  startSocialOAuth,
   syncSocialAccountGroups,
   updateSocialAccount,
   updateSocialGroup,
   type CreateSocialAccountInput,
   type CreateSocialAccountsResult,
+  type SocialCredentialDiagnoseResult,
+  type SocialCredentialKind,
+  type SocialCredentialMeta,
+  type SocialOAuthStartResult,
 } from '@/lib/contentSocialApi.ts';
+import type { SocialOAuthProviderStatus } from '@/lib/contentSocialOAuth.ts';
 import type {
   SocialAccountRow,
   SocialDirectory,
@@ -60,6 +71,23 @@ export interface UseSocialDirectoryResult {
   ) => Promise<SocialAccountRow>;
   syncAccountGroups: (accountId: string, groupIds: readonly string[]) => Promise<void>;
   setAccountArchived: (accountId: string, archived: boolean) => Promise<void>;
+  /** 儲存登入憑證（加密後才離開瀏覽器） */
+  saveCredential: (input: {
+    accountId: string;
+    secret: string;
+    expiresAt?: string | null;
+    kind?: SocialCredentialKind;
+  }) => Promise<SocialCredentialMeta>;
+  clearCredential: (accountId: string) => Promise<void>;
+  /** 批次檢測（不呼叫平台 API）：解密自檢 + 到期日判斷 */
+  diagnoseCredentials: (accountId?: string | null) => Promise<SocialCredentialDiagnoseResult>;
+  /** 各平台 OAuth 是否已設定（缺哪些 secrets） */
+  oauthProviders: SocialOAuthProviderStatus[];
+  startOAuth: (accountId: string) => Promise<SocialOAuthStartResult>;
+  completeOAuth: (
+    code: string,
+    state: string,
+  ) => Promise<SocialCredentialMeta & { provider: string; provider_label: string; account_id: string }>;
 }
 
 export function useSocialDirectory(): UseSocialDirectoryResult {
@@ -68,6 +96,7 @@ export function useSocialDirectory(): UseSocialDirectoryResult {
   const [error, setError] = useState<string | null>(null);
   const [missingSchema, setMissingSchema] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
+  const [oauthProviders, setOauthProviders] = useState<SocialOAuthProviderStatus[]>([]);
 
   const mountedRef = useRef(true);
   const inFlightRef = useRef(false);
@@ -81,9 +110,14 @@ export function useSocialDirectory(): UseSocialDirectoryResult {
 
   const load = useCallback(async () => {
     try {
-      const next = await fetchSocialDirectory();
+      const [next, providers] = await Promise.all([
+        fetchSocialDirectory(),
+        // OAuth provider 設定只讀環境變數，資料表未建也應能顯示「未設定」
+        fetchSocialOAuthProviders().catch(() => [] as SocialOAuthProviderStatus[]),
+      ]);
       if (!mountedRef.current) return;
       setDirectory(next);
+      setOauthProviders(providers);
       setError(null);
       setMissingSchema(false);
     } catch (loadError) {
@@ -201,12 +235,51 @@ export function useSocialDirectory(): UseSocialDirectoryResult {
     [runMutation],
   );
 
+  const saveCredential = useCallback(
+    (input: {
+      accountId: string;
+      secret: string;
+      expiresAt?: string | null;
+      kind?: SocialCredentialKind;
+    }) => runMutation(`credential:${input.accountId}`, () => saveSocialAccountCredential(input)),
+    [runMutation],
+  );
+
+  const clearCredential = useCallback(
+    (accountId: string) =>
+      runMutation(`credential:${accountId}`, () => clearSocialAccountCredential(accountId)),
+    [runMutation],
+  );
+
+  const diagnoseCredentials = useCallback(
+    (accountId?: string | null) =>
+      runMutation('diagnose_credentials', () => diagnoseSocialAccountCredentials(accountId)),
+    [runMutation],
+  );
+
+  /** 發起 OAuth：只需要授權 URL，不刷新目錄 */
+  const startOAuth = useCallback(async (accountId: string): Promise<SocialOAuthStartResult> => {
+    setActing(`oauth_start:${accountId}`);
+    try {
+      return await startSocialOAuth(accountId);
+    } finally {
+      if (mountedRef.current) setActing(null);
+    }
+  }, []);
+
+  const completeOAuth = useCallback(
+    (code: string, state: string) =>
+      runMutation('oauth_callback', () => completeSocialOAuth(code, state)),
+    [runMutation],
+  );
+
   return {
     directory,
     loading,
     error,
     missingSchema,
     acting,
+    oauthProviders,
     refresh,
     createGroup,
     updateGroup,
@@ -217,5 +290,10 @@ export function useSocialDirectory(): UseSocialDirectoryResult {
     updateAccount,
     syncAccountGroups,
     setAccountArchived,
+    saveCredential,
+    clearCredential,
+    diagnoseCredentials,
+    startOAuth,
+    completeOAuth,
   };
 }

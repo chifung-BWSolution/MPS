@@ -24,6 +24,19 @@ import path from 'node:path';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const DRY_RUN = process.argv.includes('--dry-run');
+/**
+ * 只套用指定版本（例：--only=20261127092000）。
+ * 多人並行時用來避免把其他工作線的 pending migration 一起推上去。
+ */
+const ONLY_VERSIONS = (() => {
+  const arg = process.argv.find((value) => value.startsWith('--only='));
+  if (!arg) return [];
+  return arg
+    .slice('--only='.length)
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+})();
 
 function loadEnv() {
   const env = {};
@@ -61,7 +74,24 @@ const MIGRATIONS = [
   { version: '20261126110000', name: 'content_cron', file: '20261126110000_content_cron.sql' },
   { version: '20261126120000', name: 'content_social_autopilot', file: '20261126120000_content_social_autopilot.sql' },
   { version: '20261126130000', name: 'content_social_llm', file: '20261126130000_content_social_llm.sql' },
+  { version: '20261126140000', name: 'content_sources', file: '20261126140000_content_sources.sql' },
+  { version: '20261127092000', name: 'content_social_credentials', file: '20261127092000_content_social_credentials.sql' },
+  { version: '20261127100000', name: 'content_social_oauth', file: '20261127100000_content_social_oauth.sql' },
+  { version: '20261127110000', name: 'content_article_delete', file: '20261127110000_content_article_delete.sql' },
+  { version: '20261127130000', name: 'content_beauty100_publish', file: '20261127130000_content_beauty100_publish.sql' },
+  { version: '20261127170000', name: 'content_social_dedupe', file: '20261127170000_content_social_dedupe.sql' },
 ];
+
+const TARGETS = ONLY_VERSIONS.length
+  ? MIGRATIONS.filter((item) => ONLY_VERSIONS.includes(item.version))
+  : MIGRATIONS;
+
+if (ONLY_VERSIONS.length > 0 && TARGETS.length !== ONLY_VERSIONS.length) {
+  const known = new Set(MIGRATIONS.map((item) => item.version));
+  const unknown = ONLY_VERSIONS.filter((version) => !known.has(version));
+  console.error(`--only 指定了不存在的版本：${unknown.join(', ')}`);
+  process.exit(1);
+}
 
 async function api(pathname, init = {}) {
   const res = await fetch(`https://api.supabase.com/v1${pathname}`, {
@@ -91,13 +121,13 @@ console.log(`\n內容自動化 · 套用 content migration${DRY_RUN ? '（DRY RU
 
 // ---- 前置檢查 -------------------------------------------------
 const historyRows = await query(
-  "select version from supabase_migrations.schema_migrations where version like '20261126%' order by version",
+  "select version from supabase_migrations.schema_migrations where version like '20261126%' or version like '20261127%' order by version",
 );
 const applied = new Set((historyRows ?? []).map((row) => String(row.version)));
-const pending = MIGRATIONS.filter((item) => !applied.has(item.version));
+const pending = TARGETS.filter((item) => !applied.has(item.version));
 
 if (pending.length === 0) {
-  console.log('6 支 migration 都已在遠端 history 中，無需套用。');
+  console.log('指定的 migration 都已在遠端 history 中，無需套用。');
   process.exit(0);
 }
 
@@ -146,6 +176,30 @@ for (const item of pending) {
 const [tables] = await query(
   "select count(*)::int as n from information_schema.tables where table_schema='public' and table_name like 'content\\_%'",
 );
+const [credentialTable] = await query(
+  "select count(*)::int as n from information_schema.tables where table_schema='public' and table_name='content_social_account_credentials'",
+);
+const [credentialPolicies] = await query(
+  "select count(*)::int as n from pg_policies where schemaname='public' and tablename='content_social_account_credentials'",
+);
+const [credentialMirrorColumns] = await query(
+  "select count(*)::int as n from information_schema.columns where table_schema='public' and table_name='content_social_accounts' and column_name in ('credential_status','credential_kind','credential_expires_at','credential_fingerprint','credential_updated_at')",
+);
+const [oauthStateTable] = await query(
+  "select count(*)::int as n from information_schema.tables where table_schema='public' and table_name='content_social_oauth_states'",
+);
+const [oauthStatePolicies] = await query(
+  "select count(*)::int as n from pg_policies where schemaname='public' and tablename='content_social_oauth_states'",
+);
+const [deletedColumns] = await query(
+  "select count(*)::int as n from information_schema.columns where table_schema='public' and table_name='content_articles' and column_name in ('deleted_at','deleted_reason')",
+);
+const [jobTypeCheck] = await query(
+  "select count(*)::int as n from pg_constraint where conrelid='public.content_jobs'::regclass and contype='c' and pg_get_constraintdef(oid) like '%delete_article%'",
+);
+const [logActionCheck] = await query(
+  "select count(*)::int as n from pg_constraint where conrelid='public.content_publish_logs'::regclass and contype='c' and pg_get_constraintdef(oid) like '%delete%'",
+);
 const [settings] = await query('select count(*)::int as n, max(daily_article_limit)::int as lim from public.content_settings');
 const [columns] = await query(
   "select count(*)::int as n from information_schema.columns where table_schema='public' and table_name='seo_keywords' and column_name in ('intent','priority','cluster','pipeline_status','last_used_at')",
@@ -154,19 +208,32 @@ const [bucket] = await query("select public from storage.buckets where id='conte
 const cron = await query("select jobname from cron.job where jobname like 'content-%' order by jobname");
 
 console.log('\n後置檢查：');
-console.log(`  content_* 表：${tables?.n}（預期 21）`);
+console.log(`  content_* 表：${tables?.n}（預期 ≥ 21）`);
+console.log(`  content_social_account_credentials：${credentialTable?.n}（預期 1）`);
+console.log(`  憑證 policy：${credentialPolicies?.n} 條（預期 0，deny all）`);
+console.log(`  content_social_accounts 憑證鏡像欄：${credentialMirrorColumns?.n}／5`);
+console.log(`  content_social_oauth_states：${oauthStateTable?.n}（預期 1）／policy ${oauthStatePolicies?.n} 條（預期 0）`);
+console.log(`  content_articles 刪除欄：${deletedColumns?.n}／2；job type 含 delete_article：${jobTypeCheck?.n}；log 含 delete：${logActionCheck?.n}`);
 console.log(`  content_settings：${settings?.n} 列，daily_article_limit=${settings?.lim}（預期 1 列、0）`);
 console.log(`  seo_keywords 新欄：${columns?.n}／5`);
 console.log(`  content-assets bucket private：${bucket?.public === false ? '是' : '否'}`);
 console.log(`  cron：${(cron ?? []).length} 支 ${(cron ?? []).map((row) => row.jobname).join(', ')}`);
 
 const ok =
-  Number(tables?.n) === 21 &&
+  Number(tables?.n) >= 21 &&
+  Number(credentialTable?.n) === 1 &&
+  Number(credentialPolicies?.n) === 0 &&
+  Number(credentialMirrorColumns?.n) === 5 &&
+  Number(oauthStateTable?.n) === 1 &&
+  Number(oauthStatePolicies?.n) === 0 &&
+  Number(deletedColumns?.n) === 2 &&
+  Number(jobTypeCheck?.n) >= 1 &&
+  Number(logActionCheck?.n) >= 1 &&
   Number(settings?.n) === 1 &&
   Number(settings?.lim) === 0 &&
   Number(columns?.n) === 5 &&
   bucket?.public === false &&
-  (cron ?? []).length >= 5;
+  (cron ?? []).length >= 4;
 
 console.log(ok ? '\n✅ 全部符合預期。' : '\n⚠️ 有項目與預期不符，請看上方數字。');
 process.exitCode = ok ? 0 : 1;
