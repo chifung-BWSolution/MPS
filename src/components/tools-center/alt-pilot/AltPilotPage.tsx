@@ -498,6 +498,10 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
   );
 
   const handleAnalyze = () => {
+    if (schemaMissing) {
+      toast.info('ALT Pilot 尚未啟用，請先執行 migration。');
+      return;
+    }
     if (settings && !settings.enabled) {
       toast.info('ALT Pilot 目前已停用，請先由管理員開啟 alt_settings.enabled。');
       return;
@@ -967,7 +971,7 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
             setHistoryOpen(true);
             void refreshRuns();
           }}
-          disabled={Boolean(settings && !settings.enabled)}
+          disabled={Boolean(schemaMissing || (settings && !settings.enabled))}
         />
 
         {error ? (
