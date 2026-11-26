@@ -64,7 +64,7 @@ export const CONTENT_PAGE_META: Record<string, ContentPageMeta> = {
   overview: { page: 'overview', zone: 'social', label: '今日工作', description: '今天要你決定的事、節奏與頻道健康' },
   queue: { page: 'queue', zone: 'social', label: '進度看板', description: '話題 → 草稿 → 待批 → 排期 → 已發佈' },
   studio: { page: 'studio', zone: 'social', label: '審核工作室', description: '一篇長文 + 每帳號導流，批次審核' },
-  radar: { page: 'radar', zone: 'social', label: '熱點雷達', description: '手動貼熱點或 CSV 匯入，累積靈感' },
+  radar: { page: 'radar', zone: 'social', label: '內容熱點', description: '手動貼熱點或 CSV 匯入，累積靈感' },
   calendar: { page: 'calendar', zone: 'social', label: '發佈日曆', description: '七日泳道，拖動改期' },
   library: { page: 'library', zone: 'social', label: '素材庫', description: '上傳、標籤、以標籤換圖' },
   accounts: { page: 'accounts', zone: 'social', label: '品牌與帳號', description: '一帳號多組、登入狀態檢測' },

@@ -22,7 +22,8 @@
     "content:beauty100-smoke": "node scripts/beauty100-smoke.mjs",
     "content:beauty100-selftest": "node scripts/beauty100-selftest.mjs",
     "content:run-sql": "node scripts/content-run-sql.mjs",
-    "radar:test": "node scripts/run-seo-radar-test.ts"
+    "radar:test": "node scripts/run-seo-radar-test.ts",
+    "hotspot:test": "node scripts/run-hotspot-radar-test.ts"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",

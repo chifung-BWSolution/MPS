@@ -230,6 +230,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'social-automation', label: '社媒自動化營運' },
       { id: 'readdy-framer', label: 'Readdy → Framer 轉換' },
       { id: 'seo-radar', label: 'SEO 雷達' },
+      { id: 'hotspot-radar', label: '熱點雷達' },
       { id: 'crosspost', label: 'AI跨平台一稿多發' },
       { id: 'ai-keyword', label: 'AI 關鍵字生成器' },
       { id: 'ai-title', label: 'AI SEO標題生成器' },

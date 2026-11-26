@@ -7,6 +7,7 @@ import { PromptLibrary } from './PromptLibrary';
 import { ReaddyFramerWorkbench } from './readdy-framer/ReaddyFramerWorkbench';
 import { ContentAutomationCenter } from './content/ContentAutomationCenter';
 import { SeoRadarTool } from './seo-radar/SeoRadarTool';
+import { HotspotRadarTool } from './hotspot-radar/HotspotRadarTool';
 import { CopyStudioTool } from './copy-studio/CopyStudioTool';
 
 export function ToolsCenterModule({ subModule }: { subModule?: string }) {
@@ -26,9 +27,14 @@ export function ToolsCenterModule({ subModule }: { subModule?: string }) {
     return <SeoRadarTool />;
   }
 
+  if (subModule === 'hotspot-radar') {
+    return <HotspotRadarTool />;
+  }
+
   const getTitle = () => {
     switch (subModule) {
       case 'seo-radar': return { title: 'SEO 雷達', subtitle: '抓取真實熱門關鍵詞：GSC 28 天曝光＋Google 搜尋建議，勾選後採納進關鍵字庫。' };
+      case 'hotspot-radar': return { title: '熱點雷達', subtitle: '抓取對標帳號、Hashtag 與競品廣告的近期熱門內容，用互動量與相對熱度排序，收藏成靈感庫。' };
       case 'ai-keyword': return { title: 'AI 關鍵字生成器', subtitle: '一鍵生成 SEO 關鍵字並自動分級。' };
       case 'ai-title': return { title: 'AI SEO標題生成器', subtitle: '根據關鍵字生成優化的 SEO 標題。' };
       case 'crosspost': return { title: 'AI跨平台一稿多發', subtitle: '一次輸入活動／產品核心資訊、目標受眾與 CTA，同步產出 IG、FB、Threads、小紅書與 eDM 五個版本，自動標示字數上限與 Hashtag 建議。' };

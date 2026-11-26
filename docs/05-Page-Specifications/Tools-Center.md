@@ -6,6 +6,7 @@
 | Path | Label | Description |
 |------|-------|-------------|
 | `/tools-center/seo-radar` | SEO 雷達 | GSC 28 天曝光＋Google 搜尋建議，抓 100 個熱門詞並採納進關鍵字庫 |
+| `/tools-center/hotspot-radar` | 熱點雷達 | 抓對標 IG 帳號／Hashtag／Meta 廣告的近期熱門內容，雙軌熱度排序，收藏成靈感庫 |
 | `/tools-center/crosspost` | AI跨平台一稿多發 | 活動／產品核心資訊＋受眾＋CTA，一次出 IG／FB／Threads／小紅書／eDM 五版，自動帶字數上限與 Hashtag |
 | `/tools-center/alt-pilot` | ALT Pilot | 單頁 URL → 整頁文案＋圖片 vision＋站點關鍵字 → 逐張審批 → Framer 半自動填入 |
 | `/tools-center/ai-keyword` | AI 關鍵字生成器 | OpenAI 關鍵字建議 |
@@ -114,6 +115,99 @@ SeoRadarTool.tsx
 ├── AdoptDialog.tsx     // 採納確認 + 「加入自動生成佇列」勾選（預設不勾）
 ├── DeleteDialog.tsx    // 刪除確認（不可復原提示；下一次抓取可能重新出現）
 └── ConfirmActionDialog.tsx // 全站抓取／每日開關的二次確認（非技術語言）
+```
+
+---
+
+## 熱點雷達 (/hotspot-radar)
+
+### 流程
+
+```
+Step 1: 監測目標（管理層限定）
+  ┌──────────────────────────────────────────────────────────────┐
+  │ 類型[對標帳號▼] 內容[@brand_hk] 顯示名[競品 A] [驗證] [新增]  │
+  │ @brand_hk      最後抓取 11/26 03:00  ☑啟用  [刪除]            │
+  │ #網頁設計      從未抓取              ☑啟用  [刪除]            │
+  └──────────────────────────────────────────────────────────────┘
+
+Step 2: 立即抓取 → 第三方 API（IG 帳號／Hashtag／Meta 廣告庫）
+  ┌──────────────────────────────────────────────────────────────┐
+  │ [監測目標 3] [設定] [⏸ 每日自動抓取] [↻ 立即抓取]             │
+  │ 上次抓取 2 小時前            本月 US$7.20 / US$40             │
+  └──────────────────────────────────────────────────────────────┘
+
+Step 3: 熱門池（雙軌熱度）
+  [全部 1240][對標帳號 480][Hashtag 560][廣告 200][⭐靈感庫 18]
+  平台[全部] 時間[30 天] 媒體[全部] 互動[300] □只看爆款 □只看未收藏 排序[綜合▼]
+
+  ┌ 縮圖 ┬ @brand_hk · 3.2× 中位數 · 🔥爆款 · Reel · 2 天前
+  │ 9:16 │ 前 3 秒用對比畫面抓注意力…
+  │      └ ❤1,840 💬96  [⭐收藏][✓已用][✕不用][備註] [↗]
+  └──────────────────────────────────────────────────────────────┘
+
+Step 4: 收藏 → 標記待參考／已用／不用＋備註（團隊共享）
+```
+
+### 資料來源（第三方抓取 API，可換供應商）
+
+| 來源 | 抓什麼 | 熱度訊號 |
+|---|---|---|
+| 對標帳號 | 公開商業／創作者帳號的近期貼文與 Reels（每次 12 則） | 讚＋留言；相對熱度＝互動 ÷ 該帳號 30 天中位數 |
+| Hashtag | top／recent 貼文（每次 20 則） | 讚＋留言 |
+| 廣告關鍵字 | Meta Ad Library 以關鍵字／Page 搜尋（每次 20 條） | **投放天數**（廣告庫沒有讚／留言） |
+
+> 廣告不吃「互動 ≥ 門檻」的過濾，否則廣告會被全部濾掉（見 PRD §6.7）。
+
+### 排序（五種，全部為全序）
+
+`綜合`（預設）：相對熱度分層 ≥3／≥2／≥1.5／其他 → 層內自然內容先於廣告 → 自然比互動、廣告比投放天數 → 最新 → id。
+另有 `絕對互動`、`相對熱度`（NULL 最後）、`最新`、`廣告投放天數`。
+
+### Edge Function
+
+`POST /functions/v1/hotspot-radar`（`verify_jwt = false`，函數自行驗 JWT；權限在伺服器重算）
+
+| action | 權限 | 用途 |
+|---|---|---|
+| `scan` / `scan_all` | write | 手動抓取（指定目標／全部候選，≤40 目標、90 秒預算） |
+| `test_target` | write | 新增目標前試抓 5 筆（**也計入月花費**） |
+| `favorite` / `unfavorite` | write | 收藏／改狀態＋備註（≤500 字） |
+| `settings` | view | 讀設定＋本月用量＋每日開關狀態 |
+| `update_settings` / `set_daily` | manage_settings | 預算／門檻／筆數；cron job 開關 |
+| `create_target` / `update_target` / `delete_target` | manage_settings | 目標 CRUD（`kind`／`value` 不可改） |
+| `cron_scan`（無 action + service_role） | service_role | 每日抓取＋120 天保留清理 |
+
+錯誤碼：`budget_blocked`(402)、`scan_in_progress`(409)、`provider_not_configured`(503)、`provider_auth_failed`(502)、`provider_rate_limited`(429)、`target_exists`(409)、`schema_missing`(500)、`forbidden`(403)。
+
+### 成本護欄
+
+- 月上限預設 **US$40**；80% 黃色、100% 紅色並停抓。
+- 抓取前逐個目標累加估算成本，超出剩餘預算就裁剪（不是抓爆才發現）。
+- 單價按類型（IG US$1.75／廣告 US$0.70 每 1,000 筆，可用 secrets 覆寫）。
+- 預設負載 540 筆/日 ≈ US$25.2/月（63%）。
+
+### 狀態
+
+| 狀態 | 呈現 |
+|---|---|
+| 資料表未建立（42P01／PGRST205） | 「功能尚未啟用」+ migration 指引，不白屏 |
+| 未設供應商 token | 黃色橫幅＋secrets 設定指引；舊資料仍可看 |
+| 本月達上限 | 紅色橫幅，抓取按鈕 disabled |
+| 非 writer 角色 | 抓取／收藏 disabled；直接打 API 回 403 |
+| 抓取中 | 按鈕 spinner「抓取中…」 |
+| 篩選後為空 | 空狀態＋「重設篩選」 |
+
+### 元件
+
+```
+HotspotRadarTool.tsx
+├── HotspotFilterBar.tsx      // 5 分頁、6 篩選、5 排序
+├── HotspotCard.tsx           // 縮圖、相對熱度、爆款、廣告投放天數、收藏三狀態、備註
+├── HotspotTargetsPanel.tsx   // 目標 CRUD＋test_target 驗證
+├── HotspotSettingsDialog.tsx // 預算／門檻／每日開關＋用量
+├── HotspotBudgetBanner.tsx   // 80%／100% 橫幅＋供應商設定指引
+└── HotspotEmptyState.tsx     // 空狀態與停用態
 ```
 
 ---
