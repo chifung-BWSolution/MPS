@@ -10,5 +10,6 @@ export function isAltQuotaExceeded(calls: number, limit: number): boolean {
 }
 
 export function formatAltQuota(today: number, limit: number): string {
-  return limit > 0 ? `${today}/${limit}` : `${today}／不限`;
+  // 沒有設上限時只顯示今日次數，不顯示「/不限」。
+  return limit > 0 ? `${today}/${limit}` : `${today}`;
 }
