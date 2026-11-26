@@ -50,9 +50,13 @@ export function AltPilotHeader({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-white px-2.5 py-1 text-[11px] font-medium text-teal-700">
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-white px-2.5 py-1 text-[11px] font-medium text-teal-700"
+            title={usage ? `AI 生成 ${formatAltQuota(usage.today, usage.limit)}` : undefined}
+          >
             <Activity size={12} />
-            今日 {usage ? formatAltQuota(usage.today, usage.limit) : '—'}
+            今日已分析 {usage ? (usage.analyses ?? usage.today) : '—'}
+            {usage && usage.limit > 0 ? ` · ${formatAltQuota(usage.today, usage.limit)}` : ''}
           </span>
           {settings ? (
             <span className="hidden rounded-full border border-border bg-white px-2.5 py-1 text-[11px] text-muted-foreground sm:inline-flex">

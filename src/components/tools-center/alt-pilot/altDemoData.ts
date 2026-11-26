@@ -340,14 +340,14 @@ export const DEMO_SETTINGS: AltSettingsRow = {
   enabled: true,
   model: 'demo-preview',
   fallback_model: 'demo-preview',
-  daily_call_limit: 300,
+  daily_call_limit: 0,
   max_images_per_run: 40,
   max_images_per_call: 6,
   created_at: new Date(0).toISOString(),
   updated_at: new Date(0).toISOString(),
 };
 
-export const DEMO_USAGE: AltUsageSummary = { today: 3, limit: 300 };
+export const DEMO_USAGE: AltUsageSummary = { today: 3, limit: 0, analyses: 3 };
 
 export const DEMO_HISTORY: AltRunRow[] = [
   DEMO_RUN,

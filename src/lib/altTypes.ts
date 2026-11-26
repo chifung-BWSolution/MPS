@@ -156,6 +156,8 @@ export interface AltKeywordOption {
 export interface AltUsageSummary {
   today: number;
   limit: number;
+  /** 今日建立的 alt_runs 數量（頁面分析次數）。 */
+  analyses?: number;
 }
 
 export interface AltVerifyResult {

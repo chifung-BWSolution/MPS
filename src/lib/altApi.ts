@@ -283,12 +283,24 @@ export function hongKongDayStartIso(now = new Date()): string {
 }
 
 export async function fetchAltUsageToday(limit: number): Promise<AltUsageSummary> {
-  const { count, error } = await supabase
-    .from('alt_llm_usage')
-    .select('id', { count: 'exact', head: true })
-    .gte('created_at', hongKongDayStartIso());
-  if (error) throw toAltApiError(error);
-  return { today: count ?? 0, limit };
+  const start = hongKongDayStartIso();
+  const [usageResult, runResult] = await Promise.all([
+    supabase
+      .from('alt_llm_usage')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', start),
+    supabase
+      .from('alt_runs')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', start),
+  ]);
+  if (usageResult.error) throw toAltApiError(usageResult.error);
+  if (runResult.error) throw toAltApiError(runResult.error);
+  return {
+    today: usageResult.count ?? 0,
+    limit,
+    analyses: runResult.count ?? 0,
+  };
 }
 
 export async function listAltRuns(limit = 30): Promise<AltRunRow[]> {

@@ -159,13 +159,28 @@ async function loadSettings(admin: DbClient): Promise<AltSettingsRow> {
   return { ...DEFAULT_ALT_SETTINGS };
 }
 
-async function usageSummary(admin: DbClient, settings: AltSettingsRow): Promise<{ today: number; limit: number }> {
-  const { count, error } = await admin
-    .from("alt_llm_usage")
-    .select("id", { count: "exact", head: true })
-    .gte("created_at", hongKongDayStartIso());
-  if (error) throw error;
-  return { today: count ?? 0, limit: settings.daily_call_limit };
+async function usageSummary(
+  admin: DbClient,
+  settings: AltSettingsRow,
+): Promise<{ today: number; limit: number; analyses: number }> {
+  const start = hongKongDayStartIso();
+  const [usageResult, runResult] = await Promise.all([
+    admin
+      .from("alt_llm_usage")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", start),
+    admin
+      .from("alt_runs")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", start),
+  ]);
+  if (usageResult.error) throw usageResult.error;
+  if (runResult.error) throw runResult.error;
+  return {
+    today: usageResult.count ?? 0,
+    limit: settings.daily_call_limit,
+    analyses: runResult.count ?? 0,
+  };
 }
 
 async function resolveAppUserId(
