@@ -356,6 +356,7 @@ export function AltBatchPage({
     setGeneratingBatch(true);
     setGenerateProgress({ done: 0, total });
     let done = 0;
+    let generated = 0;
     let stop = false;
 
     for (const item of plan) {
@@ -373,6 +374,7 @@ export function AltBatchPage({
               .map((suggestion) => suggestion.image_url),
           );
           const successCount = successUrls.size;
+          generated += successCount;
           setResults((previous) => {
             const current = previous[item.url];
             if (!current) return previous;
@@ -408,7 +410,7 @@ export function AltBatchPage({
 
     setGeneratingBatch(false);
     setGenerateProgress(null);
-    if (!stop) toast.success(`批次生成完成：${done} 張（待你逐頁審批）`);
+    if (!stop) toast.success(`批次生成完成：實際產生 ${generated} 張（待你逐頁審批）`);
   };
 
   return (
