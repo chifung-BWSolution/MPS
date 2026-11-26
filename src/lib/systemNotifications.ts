@@ -146,8 +146,8 @@ export function buildSystemNotificationCatalog(): SystemNotificationDoc[] {
       name: 'Readdy → Framer 轉換結果',
       kind: 'manual',
       subject: '【MPS】{網站名稱}(Readdy-{編號})轉換結果 {日期}',
-      purpose: '一鍵轉換在後台跑完後，把每個頁面的成功或失敗結果寄出，方便同事不用守在工作台前也能知道有沒有寫進 Framer。',
-      trigger: '同事在 Readdy → Framer 轉換工作台按「一鍵轉換」後，後台任務結束時寄出。全部頁面成功寄成功結果；有頁面失敗、任務中止或中途出錯寄失敗結果。',
+      purpose: '一鍵轉換在後台跑完後，把每個頁面的成功或失敗結果寄出，方便同事不用守在工作台前也能知道有沒有寫進 Framer。工作台開啟「自動 Publish」時，全部頁面處理完會再 Publish 一次，信裡多一行 Publish 結果。',
+      trigger: '同事在 Readdy → Framer 轉換工作台按「一鍵轉換」後，伺服器佇列跑完時寄出。佇列函式尚未部署時，改由瀏覽器在任務結束時寄出。全部頁面成功寄成功結果；有頁面失敗、任務中止或中途出錯寄失敗結果。自動 Publish 開啟時，成功寫入的頁面會在結束時 Publish，結果寫在同一封信。',
       frequency: '無固定排程。由同事手動開始轉換，任務結束時寄出。',
       to: {
         addresses: [READDY_CONVERSION_RESULT_TO],
@@ -381,6 +381,7 @@ function buildReaddyConversionPreview(): { html: string; subject: string } {
       { path: '/', title: '首頁', status: 'migrated', sectionCount: 6 },
       { path: '/services', title: '服務', status: 'migrated', sectionCount: 4 },
     ],
+    publishNote: '已 Publish 到正式站 https://example.com',
   });
   return { html: email.html, subject: email.subject };
 }

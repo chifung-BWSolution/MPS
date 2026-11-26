@@ -104,7 +104,7 @@ const {
   normalizeIrPayload,
 } = mod.exports as {
   extractJsxElementTexts: (code: string, tagNames: string[]) => string[];
-  detectSectionKind: (hint: string, tag: string, idx: number, total: number) => string;
+  detectSectionKind: (hint: string, tag: string) => string;
   detectInteractivePlaceholders: (chunk: string, hint?: string) => string[];
   filterInteractivePlaceholders: (list: string[], sectionName: string, chunkHasForm: boolean) => string[];
   deterministicParseCode: (
@@ -119,7 +119,14 @@ const {
       sectionKind: string;
       framerType: string;
       columns: number;
-      elements: { heading?: string; subheading?: string; buttons?: Array<{ label: string }>; cards?: Array<{ title: string; description: string }> };
+      elements: {
+        heading?: string;
+        subheading?: string;
+        paragraphs?: string[];
+        backgroundImage?: string;
+        buttons?: Array<{ label: string; href?: string }>;
+        cards?: Array<{ title: string; description: string; imageUrl?: string }>;
+      };
       interactivePlaceholders: string[];
     }>;
   };
@@ -172,7 +179,7 @@ assert.deepEqual(
 );
 
 // 2b. Section kind at idx === total - 2 (right before Footer) must be content, not cta
-assert.equal(detectSectionKind('FaqSection', 'section', 10, 12), 'content');
+assert.equal(detectSectionKind('FaqSection', 'section'), 'content');
 
 // 2c. Real form vs stateful FAQ
 assert.deepEqual(detectInteractivePlaceholders(faqSnippet, 'FaqSection'), []);
@@ -237,6 +244,115 @@ assert.deepEqual(
   filterInteractivePlaceholders(['Form / Stateful Interaction → Framer Component Variant'], 'Contact', false),
   [],
 );
+
+const officePage = [
+  '/* === COMPONENT: Navbar === */\n<header><nav><a href="/">主頁</a></nav></header>',
+  `/* === COMPONENT: DesignCenter Body (src/pages/design-center/page.tsx) === */
+<section>
+  <h1>Design Center</h1>
+  <p>KEYWORDS</p>
+  <p>OFFICE DESIGN/SPACE PLANNING</p>
+  <PageBanner />
+</section>`,
+  `/* === COMPONENT: Page Banner === */
+<section className="relative min-h-[640px]">
+  <img src="https://cdn.example/hero.jpg" className="absolute inset-0 w-full h-full object-cover" />
+  <div className="absolute inset-0 bg-gradient-to-b from-black/50"></div>
+  <h1>HK Office Design</h1>
+  <a href="/quote">免費報價</a>
+</section>`,
+  `/* === COMPONENT: Page Banner === */
+<section className="bg-white py-16">
+  <h2>頁面說明</h2>
+  <p>這一段沒有全幅圖片。</p>
+</section>`,
+  `/* === COMPONENT: Latest Office === */
+<section className="grid grid-cols-4">
+  <img src="https://cdn.example/a.jpg" alt="" />
+  <img src="https://cdn.example/b.jpg" alt="" />
+  <img src="https://cdn.example/c.jpg" alt="" />
+  <img src="https://cdn.example/d.jpg" alt="" />
+</section>`,
+].join('\n\n');
+
+const office = deterministicParseCode(officePage, grid, {});
+const officeBody = office.sections.find((s) => s.name.includes('DesignCenter Body'));
+const officeHero = office.sections.find((s) => s.elements.heading === 'HK Office Design');
+const officeNote = office.sections.find((s) => s.elements.heading === '頁面說明');
+const officeGallery = office.sections.find((s) => s.name === 'Latest Office');
+assert.ok(officeBody, 'page shell is still a section');
+assert.equal(officeBody.sectionKind, 'content', 'keyword shell is not turned into a hero just because it is the first block');
+assert.equal(officeBody.elements.buttons, undefined, 'no invented Learn More button');
+assert.ok(
+  !(officeBody.elements.paragraphs || []).some((line) => /KEYWORDS|OFFICE DESIGN/i.test(line)) &&
+    !/KEYWORDS|OFFICE DESIGN/i.test(officeBody.elements.subheading || ''),
+  'SEO keyword lines are not rendered as copy',
+);
+assert.equal(officeHero?.sectionKind, 'hero');
+assert.equal(officeHero?.elements.backgroundImage, 'https://cdn.example/hero.jpg');
+assert.equal(officeHero?.elements.buttons?.[0]?.label, '免費報價');
+assert.equal(officeHero?.elements.buttons?.[0]?.href, '/quote');
+assert.equal(officeNote?.sectionKind, 'content', 'a block named Page Banner without a full-bleed image stays content');
+assert.equal(officeGallery?.sectionKind, 'features');
+assert.equal(officeGallery?.elements.cards?.length, 4);
+assert.equal(officeGallery?.elements.cards?.[0]?.imageUrl, 'https://cdn.example/a.jpg');
+assert.equal(officeGallery?.elements.cards?.[3]?.imageUrl, 'https://cdn.example/d.jpg');
+
+const heroWithDuplicateCopy = `/* === COMPONENT: Navbar === */
+<header><nav><a href="/">主頁</a></nav></header>
+
+/* === COMPONENT: HeroSection === */
+<section className="relative min-h-[720px]">
+  <img src="https://cdn.example/band.jpg" className="absolute inset-0 object-cover" />
+  <div className="absolute inset-0 bg-gradient-to-b from-black/50"></div>
+  <p className="sr-only">一首剛剛好的進場歌，這段是給搜尋引擎的，不該出現在主視覺。</p>
+  <p>這段在標題前面，不是主視覺文案。</p>
+  <h1>讓現場音樂，成為賓客記得住的部分</h1>
+  <p>婚禮、企業晚宴、VIP 接待、餐廳、商場和節日活動的現場音樂統籌。</p>
+  <p>婚禮、企業晚宴、VIP 接待、餐廳、商場和節日活動的現場音樂統籌。</p>
+  <a href="https://www.emailmeform.com/builder/form/69aam00sCW063">立即網上報價</a>
+  <Link to="/services/">查看服務一覽</Link>
+</section>`;
+const heroParsed = deterministicParseCode(heroWithDuplicateCopy, grid, {});
+const heroCopy = heroParsed.sections.find((s) => s.sectionKind === 'hero');
+assert.equal(heroCopy?.elements.heading, '讓現場音樂，成為賓客記得住的部分');
+assert.equal(
+  heroCopy?.elements.subheading,
+  '婚禮、企業晚宴、VIP 接待、餐廳、商場和節日活動的現場音樂統籌。',
+);
+assert.equal(heroCopy?.elements.paragraphs, undefined, 'a single hero paragraph is not also stored as a paragraph list');
+assert.deepEqual(
+  heroCopy?.elements.buttons?.map((button) => button.label),
+  ['立即網上報價', '查看服務一覽'],
+);
+assert.equal(heroCopy?.elements.buttons?.[1]?.href, '/services/');
+const heroTwice = deterministicParseCode(
+  heroWithDuplicateCopy.replace(
+    '/* === COMPONENT: HeroSection === */',
+    '/* === COMPONENT: HeroSection === */',
+  ) + '\n\n' + heroWithDuplicateCopy.slice(heroWithDuplicateCopy.indexOf('/* === COMPONENT: HeroSection === */')),
+  grid,
+  {},
+);
+assert.equal(heroTwice.sections.filter((section) => section.sectionKind === 'hero').length, 1);
+
+const officeLayout = normalizeIrPayload(
+  {
+    sections: office.sections.map((section, index) => ({
+      sectionKind: index === 1 ? 'hero' : section.sectionKind,
+      name: `Renamed ${index}`,
+      elements: { heading: '模型改寫的標題' },
+    })),
+  },
+  office,
+  grid,
+  {},
+  undefined,
+  true,
+);
+assert.equal(officeLayout.sections[1].sectionKind, 'content', 'model cannot mark a block with no image as hero');
+assert.equal(officeLayout.sections[1].elements.heading, 'Design Center', 'model cannot replace source copy');
+assert.equal(officeLayout.sections[2].elements.heading, 'HK Office Design');
 
 // 3. Load buildSectionOps from supabase/functions/framer-mcp-sync/index.ts and verify navbar ops
 const syncTs = readFileSync(new URL('../supabase/functions/framer-mcp-sync/index.ts', import.meta.url), 'utf8');
@@ -332,7 +448,7 @@ const secondaryBtnTextOp = homeNavBuilt.ops.find(
   (o) => o.op === 'text' && o.parent === buttonFrameOps[1]?.id,
 );
 
-assert.equal(rootOp.attrs.fill, '#17120E', 'Transparent home navbar falls back to dark solid fill on Framer canvas');
+assert.equal(rootOp.attrs.fill, '#1A1A1A', 'Transparent home navbar falls back to a neutral dark fill when no surface token is set');
 assert.equal(rootOp.attrs.overflow, 'visible', 'Navbar does not clip the trailing contact button');
 assert.equal(innerOp.attrs.stackAlignment, 'center', 'Navbar container vertically centers children');
 assert.equal(innerOp.attrs.gap, '8px', 'Dense navbar keeps brand, links, and buttons on one row');
@@ -426,6 +542,36 @@ assert.equal(heroRoot.attrs.minHeight, '720px');
 assert.equal(heroRoot.attrs.stackDistribution, 'center');
 assert.equal(heroRoot.responsive?.phone?.minHeight, '560px');
 assert.equal(heroHeading?.attrs.textAlignment, 'center');
+assert.equal((heroHeading as { appear?: { delay: number } } | undefined)?.appear?.delay, 0);
+
+const duplicatedHero = buildSectionOps(
+  {
+    id: 'hero-dup',
+    step: 2,
+    name: 'Hero Section',
+    sectionKind: 'hero',
+    framerType: 'Stack',
+    direction: 'vertical',
+    gridSpan: '12 Cols',
+    columns: 1,
+    gap: 16,
+    padding: '64px 32px',
+    background: '#17120E',
+    textColor: '#F9F4EE',
+    accentColor: '#B37900',
+    elements: {
+      heading: '讓現場音樂，成為賓客記得住的部分',
+      subheading: '一首剛剛好的進場歌。\nBW Event Music 為婚禮統籌現場音樂。',
+      paragraphs: ['一首剛剛好的進場歌。', 'BW Event Music 為婚禮統籌現場音樂。', '一首剛剛好的進場歌。'],
+      buttons: [{ label: '立即網上報價', variant: 'primary' }],
+    },
+  },
+  grid,
+);
+const heroBodyCopy = duplicatedHero.ops
+  .filter((op) => op.op === 'text' && (op.attrs.name === 'Paragraph' || op.attrs.name === 'Subheading'))
+  .map((op) => String(op.attrs.text));
+assert.deepEqual(heroBodyCopy, ['一首剛剛好的進場歌。', 'BW Event Music 為婚禮統籌現場音樂。']);
 assert.equal(heroBuilt.ops[1].attrs.width, '720px', 'Hero copy stays in a 720px column');
 assert.equal(heroBuilt.ops[1].attrs.maxWidth, '100%');
 assert.equal(heroHeading?.attrs.width, '100%', 'Hero title fills the column instead of shrinking to one character');
@@ -539,5 +685,76 @@ assert.match(syncTs, /createVariant/);
 assert.match(syncTs, /name: "Tablet"/);
 assert.match(syncTs, /name: "Phone"/);
 assert.match(syncTs, /patchReplica/);
+
+const footerBuilt = buildSectionOps(
+  {
+    id: 'sec-footer',
+    step: 12,
+    name: 'Footer',
+    sectionKind: 'footer',
+    framerType: 'Stack',
+    direction: 'vertical',
+    gridSpan: '12 Cols',
+    columns: 1,
+    gap: 24,
+    padding: '40px 32px',
+    background: '#F3EEE4',
+    textColor: '#1F0000',
+    accentColor: '#B37900',
+    elements: {
+      heading: 'BW Event Music',
+      subheading: '© 2026 BW Event Music. 保留所有權利.',
+      buttons: [
+        { label: '立即網上報價', variant: 'primary', href: 'https://www.emailmeform.com/builder/form/69aam00sCW063' },
+        { label: '聯絡我們', variant: 'secondary', href: '/contact/' },
+      ],
+      footerLead: {
+        tagline: '香港音樂娛樂活動統籌中心',
+        contactTitle: '聯絡我們',
+        contactLines: [{ label: '(+852) 2185 7377', href: 'tel:+85221857377' }],
+        quickTitle: '快速連結',
+        quickLinks: [{ label: '服務一覽', href: '/services/' }],
+        company: 'BW Solution Ltd.',
+      },
+      footerColumns: [
+        { title: '服務分類', links: [{ label: '音響工程', href: '/sound-engineering/' }] },
+        { title: '婚宴及晚宴方案', links: [{ label: '公司晚宴', href: '/annual-dinner/corporate-dinner/' }] },
+        { title: '服務詳情', links: [{ label: '樂手名單', href: '/services/musicians/' }] },
+        { title: '駐場及主題活動', links: [{ label: 'CEO Dinner', href: '/vip-reception/ceo-dinner/' }] },
+        { title: '音樂資訊', links: [{ label: '音樂資訊總覽', href: '/music-insights/' }] },
+      ],
+    },
+  },
+  grid,
+  'Noto Serif HK',
+  'Noto Sans HK',
+);
+const footerGrid = footerBuilt.ops.find((op) => op.attrs.name === 'FooterColumns');
+assert.equal(footerGrid?.attrs.gridColumnCount, 5, 'Footer link groups stay on one row of five');
+assert.equal(footerBuilt.ops.find((op) => op.attrs.name === 'FooterBrand')?.attrs.width, '3fr');
+assert.equal(footerBuilt.ops.find((op) => op.attrs.maxWidth === '448px')?.attrs.text, '香港音樂娛樂活動統籌中心');
+assert.ok(footerBuilt.ops.some((op) => op.attrs.width === '2fr' && op.attrs.name === '聯絡我們'));
+assert.ok(footerBuilt.ops.some((op) => op.attrs.width === '1fr' && op.attrs.name === '快速連結'));
+const quote = footerBuilt.ops.find((op) => op.attrs.link === 'https://www.emailmeform.com/builder/form/69aam00sCW063');
+assert.ok(quote, 'Footer quote button keeps its URL');
+assert.equal(quote?.attrs.htmlTag, 'a');
+const phone = footerBuilt.ops.find((op) => op.attrs.link === 'tel:+85221857377');
+assert.equal(phone?.attrs.tag, 'a');
+assert.equal(phone?.attrs.text, '(+852) 2185 7377');
+
+const spanOps = buildNodeOps({
+  id: 'footer',
+  type: 'grid',
+  htmlTag: 'footer',
+  layout: { columns: 12, gap: '32px' },
+  children: [
+    { id: 'brand', type: 'stack', layout: { columnSpan: 6 }, children: [{ id: 'name', type: 'text', text: 'BW Event Music' }] },
+    { id: 'contact', type: 'stack', layout: { columnSpan: 4 }, children: [{ id: 'phone', type: 'text', text: '(+852) 2185 7377' }] },
+    { id: 'quick', type: 'stack', layout: { columnSpan: 2 }, children: [{ id: 'quick', type: 'text', text: '快速連結' }] },
+  ],
+}, 'footer');
+const spanFrames = spanOps.ops.filter((op) => op.parent !== '$bp' && typeof op.attrs.width === 'string' && String(op.attrs.width).endsWith('%'));
+assert.deepEqual(spanFrames.map((op) => op.attrs.width), ['50%', '33.3%', '16.7%'], 'Footer 12-column spans become proportional widths');
+assert.equal(spanOps.ops.some((op) => op.attrs.gridColumnCount === 12), false, 'Spanned footer row is not written as 12 equal columns');
 
 console.log('ALL READDY FAQ & PROGRESS TESTS PASSED');

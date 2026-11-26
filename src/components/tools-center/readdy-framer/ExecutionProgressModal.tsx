@@ -24,18 +24,34 @@ interface ExecutionProgressModalProps {
   logs: WorkbenchLogEntry[];
 }
 
-function averageProgress(stages: ExecutionStageState[]): number {
-  if (stages.length === 0) return 0;
-  const sum = stages.reduce((acc, stage) => acc + stage.progress, 0);
-  return Math.round(sum / stages.length);
+type ParsePhase = 'idle' | 'running' | 'done' | 'error';
+
+function parsePhase(stages: ExecutionStageState[]): ParsePhase {
+  if (stages.some((stage) => stage.status === 'error')) return 'error';
+  if (stages.some((stage) => stage.status === 'running')) return 'running';
+  if (stages.length > 0 && stages.every((stage) => stage.status === 'done')) return 'done';
+  return 'idle';
 }
 
-function stageFillClass(stage: ExecutionStageState): string {
-  if (stage.status === 'error') return 'bg-rose-500';
-  if (stage.status === 'running') {
-    return 'bg-gradient-to-r from-[#0BB59B] via-[#34E4C8] to-[#0BB59B] animate-rf-shimmer';
-  }
-  return 'bg-[#0BB59B]';
+function parsePhaseLabel(phase: ParsePhase): string {
+  if (phase === 'running') return '解析中';
+  if (phase === 'done') return '已完成';
+  if (phase === 'error') return '解析失敗';
+  return '等待解析';
+}
+
+function stageStatusLabel(status: ExecutionStageState['status']): string {
+  if (status === 'running') return '進行中';
+  if (status === 'done') return '完成';
+  if (status === 'error') return '失敗';
+  return '等待';
+}
+
+function sharedErrorDetail(stages: ExecutionStageState[]): string | null {
+  const errors = stages.filter((stage) => stage.status === 'error' && stage.detail);
+  if (errors.length < 2) return null;
+  const first = errors[0].detail;
+  return errors.every((stage) => stage.detail === first) ? first : null;
 }
 
 function LogPanel({
@@ -111,7 +127,8 @@ export function ExecutionProgressModal({
 }: ExecutionProgressModalProps) {
   const compileStages = stages.filter((stage) => stage.key !== 'mcp');
   const mcpStage = stages.find((stage) => stage.key === 'mcp');
-  const compilePct = averageProgress(compileStages);
+  const phase = parsePhase(compileStages);
+  const repeatedError = sharedErrorDetail(compileStages);
   const mcpPct = mcpStage?.progress ?? 0;
   const compileLogs = logs.filter((entry) => entry.stage !== 'mcp');
   const mcpLogs = logs.filter((entry) => entry.stage === 'mcp');
@@ -143,55 +160,86 @@ export function ExecutionProgressModal({
         <div className="space-y-4">
           {focus === 'parse' && (
           <>
-          <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 space-y-2.5">
-            <div className="flex items-center justify-between text-[11px] text-slate-500">
-              <span>全局流水線進度</span>
-              <span className="font-mono tabular-nums text-[13px] font-bold text-[#0BB59B]">
-                {compilePct}%
+          <div
+            className={cn(
+              'rounded-lg border p-3 space-y-3',
+              phase === 'error' ? 'border-rose-200 bg-rose-50/40' : 'border-slate-200 bg-slate-50/60',
+            )}
+          >
+            <div className="flex items-center justify-between gap-3 text-[11px]">
+              <span className="text-slate-500">解析狀態</span>
+              <span
+                className={cn(
+                  'font-semibold',
+                  phase === 'error' ? 'text-rose-600' : phase === 'idle' ? 'text-slate-400' : 'text-[#08967F]',
+                )}
+              >
+                {parsePhaseLabel(phase)}
               </span>
             </div>
-            <div className="flex h-3 gap-1">
-              {compileStages.map((stage) => (
-                <div
-                  key={stage.key}
-                  className="relative h-full flex-1 overflow-hidden rounded-full border border-slate-200/70 bg-slate-100"
-                  title={`${stage.code}. ${stage.label} ${stage.progress}%`}
-                >
-                  <div
-                    className={cn('h-full transition-all duration-300', stageFillClass(stage))}
-                    style={{ width: `${Math.min(100, Math.max(0, stage.progress))}%` }}
-                  />
-                </div>
-              ))}
-            </div>
             <div
-              className="grid gap-2"
-              style={{ gridTemplateColumns: `repeat(${Math.max(compileStages.length, 1)}, minmax(0, 1fr))` }}
+              role="progressbar"
+              aria-label="解析狀態"
+              aria-busy={phase === 'running'}
+              aria-valuenow={phase === 'done' ? 100 : phase === 'idle' ? 0 : undefined}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              className="h-1.5 overflow-hidden rounded-full bg-slate-200/80"
             >
-              {compileStages.map((stage) => (
-                <div key={stage.key} className="min-w-0 space-y-0.5">
-                  <div className="flex items-center gap-1 text-[11px] font-bold text-[#101B2D]">
-                    {stage.status === 'done' && (
-                      <CheckCircle2 size={12} className="shrink-0 text-[#0BB59B]" />
+              <div
+                className={cn(
+                  'h-full rounded-full transition-all duration-300',
+                  phase === 'running' && 'animate-rf-indeterminate bg-[#0BB59B]',
+                  phase === 'done' && 'w-full bg-[#0BB59B]',
+                  phase === 'error' && 'w-full bg-rose-500',
+                  phase === 'idle' && 'w-0',
+                )}
+              />
+            </div>
+            {repeatedError && (
+              <p className="text-[11px] leading-snug text-rose-600 break-words">{repeatedError}</p>
+            )}
+            <div className="divide-y divide-slate-200/80">
+              {compileStages.map((stage) => {
+                const detail = stage.detail && stage.detail !== repeatedError ? stage.detail : '';
+                return (
+                  <div key={stage.key} className="min-w-0 space-y-0.5 py-2 first:pt-0 last:pb-0">
+                    <div className="flex items-start gap-1.5 text-[12px] font-semibold leading-snug text-[#101B2D]">
+                      <span className="mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                        {stage.status === 'done' && (
+                          <CheckCircle2 size={14} className="text-[#0BB59B]" />
+                        )}
+                        {stage.status === 'running' && (
+                          <Loader2 size={14} className="text-[#0BB59B] animate-spin" />
+                        )}
+                        {stage.status === 'error' && (
+                          <AlertCircle size={14} className="text-rose-500" />
+                        )}
+                      </span>
+                      <span className="min-w-0 flex-1 break-words">
+                        {stage.code}. {stage.label}
+                      </span>
+                      <span
+                        className={cn(
+                          'shrink-0 text-[10px] font-semibold',
+                          stage.status === 'error'
+                            ? 'text-rose-600'
+                            : stage.status === 'idle'
+                              ? 'text-slate-400'
+                              : 'text-[#08967F]',
+                        )}
+                      >
+                        {stageStatusLabel(stage.status)}
+                      </span>
+                    </div>
+                    {detail && (
+                      <p className="pl-5 text-[11px] leading-snug text-slate-500 break-words">
+                        {detail}
+                      </p>
                     )}
-                    {stage.status === 'running' && (
-                      <Loader2 size={12} className="shrink-0 text-[#0BB59B] animate-spin" />
-                    )}
-                    {stage.status === 'error' && (
-                      <AlertCircle size={12} className="shrink-0 text-rose-500" />
-                    )}
-                    <span className="truncate">
-                      {stage.code}. {stage.label}
-                    </span>
-                    <span className="ml-auto shrink-0 font-mono tabular-nums text-slate-500">
-                      {stage.progress}%
-                    </span>
                   </div>
-                  <p className="text-[10px] text-slate-500 truncate">
-                    {stage.detail || '等待前置步驟'}
-                  </p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -216,32 +264,61 @@ export function ExecutionProgressModal({
             )}
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="inline-flex items-center gap-1.5 text-[12px] font-bold text-[#101B2D]">
+              <span className="inline-flex min-w-0 items-center gap-1.5 text-[12px] font-bold text-[#101B2D]">
                 {mcpStage?.status === 'done' && (
-                  <CheckCircle2 size={14} className="text-[#0BB59B]" />
+                  <CheckCircle2 size={14} className="shrink-0 text-[#0BB59B]" />
                 )}
                 {mcpStage?.status === 'running' && (
-                  <Loader2 size={14} className="text-[#0BB59B] animate-spin" />
+                  <Loader2 size={14} className="shrink-0 text-[#0BB59B] animate-spin" />
                 )}
                 {mcpStage?.status === 'error' && (
-                  <AlertCircle size={14} className="text-rose-500" />
+                  <AlertCircle size={14} className="shrink-0 text-rose-500" />
                 )}
-                {mcpStage ? `${mcpStage.code}. ${mcpStage.label}` : '04. MCP 畫布寫入'}
+                <span className="min-w-0 break-words">
+                  {mcpStage ? `${mcpStage.code}. ${mcpStage.label}` : '04. MCP 畫布寫入'}
+                </span>
               </span>
-              <span className="font-mono tabular-nums text-[13px] font-bold text-[#0BB59B]">
-                {mcpPct}%
+              <span
+                className={cn(
+                  'shrink-0 text-[12px] font-semibold',
+                  mcpStage?.status === 'error' ? 'text-rose-600' : 'text-[#08967F]',
+                )}
+              >
+                {mcpStage?.status === 'running'
+                  ? '寫入中'
+                  : mcpStage?.status === 'error'
+                    ? '失敗'
+                    : mcpStage?.status === 'done'
+                      ? '完成'
+                      : mcpPct > 0
+                        ? `${mcpPct}%`
+                        : '等待'}
               </span>
             </div>
-            <div className="h-3 rounded-full bg-slate-100 overflow-hidden border border-slate-200/70">
+            <div
+              role="progressbar"
+              aria-label="MCP 畫布寫入"
+              aria-busy={mcpStage?.status === 'running'}
+              aria-valuenow={mcpStage?.status === 'running' ? undefined : Math.min(100, Math.max(0, mcpPct))}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              className="h-1.5 overflow-hidden rounded-full bg-slate-200/80"
+            >
               <div
                 className={cn(
                   'h-full rounded-full transition-all duration-300',
-                  mcpStage ? stageFillClass(mcpStage) : 'bg-[#0BB59B]',
+                  mcpStage?.status === 'running' && 'animate-rf-indeterminate bg-[#0BB59B]',
+                  mcpStage?.status === 'error' && 'w-full bg-rose-500',
+                  mcpStage?.status !== 'running' && mcpStage?.status !== 'error' && 'bg-[#0BB59B]',
                 )}
-                style={{ width: `${Math.min(100, Math.max(0, mcpPct))}%` }}
+                style={
+                  mcpStage?.status === 'running' || mcpStage?.status === 'error'
+                    ? undefined
+                    : { width: `${Math.min(100, Math.max(0, mcpPct))}%` }
+                }
               />
             </div>
-            <p className="text-[11px] text-slate-500 truncate">
+            <p className="text-[11px] leading-snug text-slate-500 break-words">
               {mcpStage?.detail || '等待 Framer 同步'}
             </p>
           </div>

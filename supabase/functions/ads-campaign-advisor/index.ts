@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const DEFAULT_GROK_MODEL = "grok-4.5";
+const DEFAULT_GROK_MODEL = "grok-4.7";
 const DEFAULT_GEMINI_MODEL = "gemini-2.0-flash";
 const MAX_MESSAGES = 12;
 const MAX_TOOL_ROUNDS = 6;
@@ -226,6 +226,7 @@ async function callGrok(
       body: JSON.stringify({
         model,
         temperature: 0.3,
+        reasoning_effort: "low",
         messages: grokMessages,
         ...(allowTools ? { tools: ADVISOR_TOOL_DEFINITIONS, tool_choice: "auto" } : {}),
       }),

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronsUpDown, FolderKanban, KeyRound, Loader2, Plus, RefreshCw } from 'lucide-react';
+import { Check, ChevronsUpDown, FolderKanban, KeyRound, Loader2, LogOut, PlugZap, Plus, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -68,6 +68,9 @@ interface FramerProjectFieldProps {
   mcpConnected: boolean;
   oauthConnecting: boolean;
   onConnectFramer: () => void;
+  onDisconnectFramer: () => void;
+  tokenPreview?: string;
+  connectedAt?: string | null;
   projects: FramerProjectSummary[];
   workspaces: FramerWorkspaceSummary[];
   loading: boolean;
@@ -83,6 +86,9 @@ export function FramerProjectField({
   mcpConnected,
   oauthConnecting,
   onConnectFramer,
+  onDisconnectFramer,
+  tokenPreview,
+  connectedAt,
   projects,
   workspaces,
   loading,
@@ -92,6 +98,7 @@ export function FramerProjectField({
   onCreate,
 }: FramerProjectFieldProps) {
   const [open, setOpen] = useState(false);
+  const [connectionMenuOpen, setConnectionMenuOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState('');
   const [createWorkspaceId, setCreateWorkspaceId] = useState('');
@@ -134,20 +141,55 @@ export function FramerProjectField({
           <div className="flex items-center gap-2 min-w-0">
             <label className="text-[12px] font-medium text-slate-600">Framer 專案</label>
             {mcpConnected ? (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#08967F]">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#0BB59B]" />
-                已連線
-              </span>
+              <Popover open={connectionMenuOpen} onOpenChange={setConnectionMenuOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-[#08967F] hover:text-[#067864]"
+                    title="管理 Framer 連線"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#0BB59B]" />
+                    已連線
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="z-[120] w-72 space-y-2.5 p-3" align="start">
+                  <div className="text-[12px] font-semibold text-[#101B2D]">團隊共用 Framer 已連線</div>
+                  <div className="space-y-1 rounded bg-slate-50 p-2 font-mono text-[11px] text-slate-500">
+                    <div>Token: {tokenPreview || '—'}</div>
+                    <div>連線時間: {connectedAt ? new Date(connectedAt).toLocaleString() : '—'}</div>
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConnectionMenuOpen(false);
+                        onConnectFramer();
+                      }}
+                      disabled={oauthConnecting}
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded bg-[#101B2D] px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-[#192842] disabled:opacity-50"
+                    >
+                      <KeyRound size={12} />
+                      重新授權
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConnectionMenuOpen(false);
+                        onDisconnectFramer();
+                      }}
+                      className="inline-flex items-center justify-center gap-1 rounded border border-rose-200 px-2.5 py-1.5 text-[11px] font-medium text-rose-600 hover:bg-rose-50"
+                    >
+                      <LogOut size={12} />
+                      中斷
+                    </button>
+                  </div>
+                </PopoverContent>
+              </Popover>
             ) : (
-              <button
-                type="button"
-                onClick={onConnectFramer}
-                disabled={oauthConnecting}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 hover:text-amber-700"
-              >
-                <KeyRound size={11} />
-                {oauthConnecting ? '開啟授權中…' : '未授權，點此連線 Framer'}
-              </button>
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                未連線
+              </span>
             )}
           </div>
           <button
@@ -161,8 +203,8 @@ export function FramerProjectField({
             <RefreshCw size={11} className={cn(loading && 'animate-spin text-[#0BB59B]')} />
           </button>
         </div>
-        <div className="flex items-stretch gap-2">
-        <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-[140px] flex-1">
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
             <button
@@ -235,11 +277,26 @@ export function FramerProjectField({
           </PopoverContent>
         </Popover>
         </div>
+        {!mcpConnected && (
+          <button
+            type="button"
+            onClick={onConnectFramer}
+            disabled={oauthConnecting}
+            className="inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-lg bg-[#101B2D] px-3 py-2 text-[12px] font-semibold text-white hover:bg-[#192842] disabled:opacity-60"
+          >
+            {oauthConnecting ? (
+              <Loader2 size={13} className="animate-spin text-[#0BB59B]" />
+            ) : (
+              <PlugZap size={13} className="text-[#0BB59B]" />
+            )}
+            一鍵授權 Framer
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setCreateOpen(true)}
           disabled={!mcpConnected}
-          className="shrink-0 inline-flex items-center justify-center gap-1 px-3 rounded-lg border border-[#0BB59B]/40 bg-[#E7F6F2] text-[12px] font-semibold text-[#067864] hover:bg-[#d8f3ec] disabled:opacity-50 whitespace-nowrap"
+          className="shrink-0 inline-flex items-center justify-center gap-1 px-3 py-2 rounded-lg border border-[#0BB59B]/40 bg-[#E7F6F2] text-[12px] font-semibold text-[#067864] hover:bg-[#d8f3ec] disabled:opacity-50 whitespace-nowrap"
         >
           <Plus size={13} />
           新建 Framer 專案

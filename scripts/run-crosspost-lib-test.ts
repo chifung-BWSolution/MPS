@@ -63,7 +63,7 @@ test('平台上限與 Hashtag 規則', () => {
 });
 
 test('默認模型常數', () => {
-  assert.equal(DEFAULT_GROK_MODEL, 'grok-4.5');
+  assert.equal(DEFAULT_GROK_MODEL, 'grok-4.3');
   assert.equal(DEFAULT_GEMINI_MODEL, 'gemini-2.5-flash');
 });
 

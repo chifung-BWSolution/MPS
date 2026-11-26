@@ -118,17 +118,17 @@
     margin: 0 !important;
   }
 
-  .animate-rf-shimmer {
-    background-size: 200% 100%;
-    animation: rf-shimmer 1.6s linear infinite;
+  .animate-rf-indeterminate {
+    width: 28%;
+    animation: rf-indeterminate 1.4s ease-in-out infinite;
   }
 }
 
-@keyframes rf-shimmer {
+@keyframes rf-indeterminate {
   0% {
-    background-position: 200% 0;
+    transform: translateX(-120%);
   }
   100% {
-    background-position: -200% 0;
+    transform: translateX(280%);
   }
 }

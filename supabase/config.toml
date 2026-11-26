@@ -87,6 +87,11 @@ verify_jwt = false
 [functions.framer-mcp-sync]
 verify_jwt = false
 
+# One-click conversion queue. User JWTs are ES256 and the cron call uses the
+# service role, so the function checks the bearer itself.
+[functions.readdy-conversion-worker]
+verify_jwt = false
+
 # Content automation (B100 -> MPS tools center)
 # content-sites / content-keywords / content-publish / content-digest are called
 # from the SPA: user access tokens are ES256 while the gateway still checks the

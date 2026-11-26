@@ -196,6 +196,10 @@ async function runTests() {
   const convSrc = readFileSync(new URL('../src/lib/readdyConversionRun.ts', import.meta.url), 'utf8')
     .replace(/import\s+\{[\s\S]*?\}\s+from\s+'@\/lib\/readdyProjectAnalyzer';\s*/g, '')
     .replace(/import\s+\{[\s\S]*?\}\s+from\s+'@\/lib\/readdyFramerApi';\s*/g, `${limitFnMatch[0]}\n`)
+    .replace(
+      'export const FRAMER_SESSION_LIMIT_RETRY_MS = 360_000;',
+      'const FRAMER_SESSION_LIMIT_RETRY_MS = 0;',
+    )
     .replace(/import\s+type\s+\{[\s\S]*?\}\s+from\s+'@\/lib\/readdyConversionMail';\s*/g, '')
     .replace(/import\s+type\s+\{[\s\S]*?\}\s+from\s+'@\/types\/readdyFramer';\s*/g, '');
 
@@ -211,6 +215,9 @@ async function runTests() {
     const ctx = vm.createContext({
       exports: mod.exports,
       module: mod,
+      setTimeout,
+      clearTimeout,
+      Date,
       assembleReaddyPageCode: (page: { path: string }) => ({
         code: `export default function Page() { return <div>${page.path}</div>; }`,
         includedFiles: ['Page.tsx'],
@@ -228,6 +235,7 @@ async function runTests() {
           ],
         },
       }),
+      syncFramerPage: syncMock,
       syncFramerStep: syncMock,
     });
     vm.runInContext(convJs, ctx, { filename: 'readdyConversionRun.ts' });
@@ -276,6 +284,7 @@ async function runTests() {
     page_path: string;
     session_slot: number;
     mcp_session: unknown;
+    sync_page?: unknown;
   }> = [];
   const forward = compileRunConversion(async (params) => {
     seenSyncCalls.push({
@@ -283,6 +292,7 @@ async function runTests() {
       page_path: String(params.page_path),
       session_slot: Number(params.session_slot),
       mcp_session: params.mcp_session ?? null,
+      sync_page: params.sync_page,
     });
     return {
       ok: true,
@@ -302,9 +312,10 @@ async function runTests() {
     project_session: 'proj-sess-shared',
   };
   const okRes = await forward.run(baseInput(['/', '/about']), () => {}, () => false);
+  assert.equal(forward.concurrency, 6);
   assert.equal(okRes.kind, 'success');
   assert.equal(okRes.pages.length, 2);
-  assert.equal(seenSyncCalls.length, 6);
+  assert.equal(seenSyncCalls.length, 2);
   const byPage = new Map<string, typeof seenSyncCalls>();
   for (const call of seenSyncCalls) {
     const list = byPage.get(call.page_path) ?? [];
@@ -314,41 +325,30 @@ async function runTests() {
   assert.equal(byPage.size, 2);
   const usedSlots = new Set<number>();
   for (const calls of byPage.values()) {
-    assert.equal(calls.length, 3);
-    assert.equal(calls[0].step_index, 0);
+    assert.equal(calls.length, 1);
     assert.equal(calls[0].mcp_session, null);
-    for (let i = 1; i < calls.length; i++) {
-      assert.deepEqual(calls[i].mcp_session, sharedSession);
-      assert.equal(calls[i].session_slot, calls[0].session_slot);
-    }
     usedSlots.add(calls[0].session_slot);
+    assert.notEqual(calls[0].session_slot, 0);
   }
   assert.equal(usedSlots.size, 2);
 
-  // 4b: A session-limit error stops that worker. Pages not yet claimed stay unstarted.
+  // 4b: A session-limit error returns the page to the queue and retries once.
   const attemptedPages: string[] = [];
   const abort = compileRunConversion(async (params) => {
-    attemptedPages.push(`${params.page_path}#${params.step_index}`);
-    if (Number(params.step_index) === 1) {
-      throw new Error(formatFramerSessionLimitError('active session limit (ref 1f57ec)'));
-    }
-    return {
-      ok: true,
-      step_index: params.step_index,
-      framer_page_node_id: 'node-1',
-      mcp_session: { project_id: 'proj123', mcp_session_id: 'm1', project_session: 'p1' },
-    };
+    attemptedPages.push(String(params.page_path));
+    throw new Error(formatFramerSessionLimitError('active session limit (ref 1f57ec)'));
   });
 
   const limitPaths = Array.from({ length: abort.concurrency + 2 }, (_, index) => `/p${index}`);
-  const untouched = limitPaths[limitPaths.length - 1];
   const abortRes = await abort.run(baseInput(limitPaths), () => {}, () => false);
-  const started = Math.min(abort.concurrency, limitPaths.length);
   assert.equal(abortRes.kind, 'failed');
-  assert.equal(abortRes.pages.length, started);
-  assert.equal(abortRes.unstarted, limitPaths.length - started);
-  assert.equal(attemptedPages.some((item) => item.startsWith(untouched)), false);
-  assert.equal(attemptedPages.length, started * 2);
+  assert.equal(abortRes.pages.length, limitPaths.length);
+  assert.equal(abortRes.unstarted, 0);
+  assert.equal(abortRes.pages.every((page) => page.status === 'failed'), true);
+  for (const path of limitPaths) {
+    const calls = attemptedPages.filter((item) => item === path);
+    assert.equal(calls.length, 2, `${path} should be tried twice`);
+  }
 
   console.log('All Framer MCP session reuse & limit guard tests passed!');
 }

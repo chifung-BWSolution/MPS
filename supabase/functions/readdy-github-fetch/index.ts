@@ -1,8 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
   corsHeaders,
-  extractBearerToken,
   jsonResponse,
+  requireUser,
   loadFramerConnection,
   supabaseAdmin,
 } from "../_shared/framer-mcp.ts";
@@ -121,19 +121,123 @@ function isCandidateComponent(path: string): boolean {
 
 function formatGitHubError(status: number, hasToken: boolean, detail: string): string {
   if (status === 401) {
-    return "GitHub Token 無效或已過期，請在「Private / Token 設定」更新有效的 PAT。";
+    return "團隊 GitHub 連線已失效。";
   }
   if (status === 403) {
     return hasToken
-      ? `GitHub API 拒絕存取（403），請確認 PAT 具備該私有倉庫的 Contents Read 權限。${detail}`
-      : `GitHub API 速率限制或私有倉庫拒絕存取（403），請先設定團隊 GitHub PAT。`;
+      ? `團隊 GitHub 帳戶無法讀取這個倉庫（403）。${detail}`
+      : `GitHub 拒絕存取或已達請求上限（403）。`;
   }
   if (status === 404) {
     return hasToken
-      ? "找不到該倉庫、分支或檔案（404），請確認路徑與 Token 倉庫授權範圍。"
-      : "找不到倉庫（404）。若為 Private 私有倉庫，請先點擊「Private / Token 設定」填入 GitHub PAT。";
+      ? "找不到該倉庫、分支或檔案（404），請確認路徑及團隊帳戶的存取權限。"
+      : "找不到可存取的 GitHub 倉庫（404）。";
   }
   return `GitHub API 錯誤 (${status})：${detail}`;
+}
+
+function quotedLiterals(code: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const re = /(['"])([^'"\\\n]{4,180})\1/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(code)) !== null) {
+    const text = match[2].trim();
+    if (!text || seen.has(text) || /^[a-z0-9:/._-]+$/i.test(text)) continue;
+    seen.add(text);
+    out.push(text);
+  }
+  return out;
+}
+
+function acceptInterpretedPage(text: string, pageSource: string, sources: string, metaLine: string): string | null {
+  let code = text
+    .trim()
+    .replace(/^```(?:tsx|jsx|ts|js|html)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+  if (!/\/\*\s*===\s*COMPONENT:/.test(code) || code.length < 120) return null;
+  if (!/\/\*\s*===\s*PAGE META:/.test(code)) {
+    code = `${metaLine}\n\n${code}`;
+  }
+  const literals = quotedLiterals(pageSource);
+  if (literals.length > 0) {
+    const hits = literals.filter((item) => code.includes(item)).length;
+    if (hits < Math.max(1, Math.ceil(literals.length * 0.6))) return null;
+  }
+  const inventedCopy = (code.match(/[\u4e00-\u9fff]{6,}/g) || []).some((run) => !sources.includes(run));
+  if (inventedCopy) return null;
+  const inventedUrl = (code.match(/https?:\/\/[^"'\\\s)]+/g) || []).some((url) => !sources.includes(url));
+  if (inventedUrl) return null;
+  return code;
+}
+
+function pageSourceBundle(pageFile: string, pageSource: string, fileMap: Record<string, string>): string {
+  const chunks = [`/* FILE: ${pageFile} */\n${pageSource.slice(0, 24000)}`];
+  let used = chunks[0].length;
+  for (const [path, code] of Object.entries(fileMap)) {
+    if (path === pageFile || !code.trim()) continue;
+    const piece = `/* FILE: ${path} */\n${code.slice(0, 12000)}`;
+    if (used + piece.length > 64000) break;
+    chunks.push(piece);
+    used += piece.length;
+  }
+  return chunks.join("\n\n");
+}
+
+async function interpretPageSourcesWithGemini(input: {
+  pagePath: string;
+  pageTitle: string;
+  locale: string;
+  pageFile: string;
+  pageSource: string;
+  fileMap: Record<string, string>;
+}): Promise<string | null> {
+  const apiKey = (Deno.env.get("GEMINI_API_KEY") || "").trim();
+  if (!apiKey || !input.pageSource.trim()) return null;
+  const model = (Deno.env.get("GEMINI_MODEL") || "gemini-4-hydrogen").trim();
+  const sources = pageSourceBundle(input.pageFile, input.pageSource, input.fileMap);
+  const metaLine = `/* === PAGE META: path="${input.pagePath}" title="${input.pageTitle}" locale="${input.locale}" === */`;
+  const prompt = `You read a Readdy page before any assembler runs. The first FILE is the page component. Later FILE blocks are the components and data it imports. Produce the rendered page.
+
+Rules:
+- First line must be exactly: ${metaLine}
+- Read the page component's return JSX first. That call site is the page. Do not replace it with a layout shell, modal provider, or a component that only renders {children} or <Outlet />.
+- Emit one /* === COMPONENT: Name === */ block per visible section, in the same order as the page return.
+- Substitute props from the page JSX into each component. {title}, {image}, {subtitleEn} and similar bindings must become the literal values passed by the page.
+- Locale is ${input.locale}. For zh or cn, L(first, second) or t(first, second) renders the first string. For en, render the second string. Keep the characters exactly.
+- Keep image URLs, hrefs, and visible copy that appear in the FILE blocks. Do not invent text, links, buttons, or sections.
+- Omit a component whose render returns null.
+- Keep className values that describe layout, color, and images.
+- Output only the assembled code. No markdown fence and no explanation.
+
+${sources}`;
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(45000),
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 32768,
+          thinkingConfig: { thinkingLevel: "low" },
+        },
+      }),
+    },
+  );
+  if (!res.ok) return null;
+  const json = await res.json();
+  if (json?.candidates?.[0]?.finishReason === "MAX_TOKENS") return null;
+  const parts = json?.candidates?.[0]?.content?.parts;
+  const texts = Array.isArray(parts)
+    ? parts.map((part: { text?: string }) => String(part?.text || "").trim()).filter(Boolean)
+    : [];
+  const text = texts.find((item) => item.includes("COMPONENT:")) || texts[texts.length - 1] || "";
+  return acceptInterpretedPage(text, input.pageSource, sources, metaLine);
 }
 
 Deno.serve(async (req: Request) => {
@@ -143,9 +247,8 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return jsonResponse({ error: "Method not allowed" }, 405);
   }
-  if (!extractBearerToken(req)) {
-    return jsonResponse({ error: "未登入或缺少授權標頭" }, 401);
-  }
+  const auth = await requireUser(req);
+  if ("response" in auth) return auth.response;
 
   try {
     const body = (await req.json()) as {
@@ -167,7 +270,7 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({
           configured: false,
           repos: [],
-          message: "尚未設定 GitHub Token，請先點擊右上角「Private Token」設定團隊 PAT。",
+          message: "團隊 GitHub 尚未連線。",
         });
       }
 
@@ -351,6 +454,7 @@ Deno.serve(async (req: Request) => {
         (p) =>
           p === "package.json" ||
           p === "index.html" ||
+          p === "public/sitemap.xml" || p === "sitemap.xml" ||
           /^tailwind\.config\.(ts|js|mjs|cjs)$/i.test(p) ||
           /^src\/(index|App)\.css$/i.test(p) ||
           /^src\/router\/(config|index)\.(tsx|ts)$/i.test(p) ||
@@ -480,7 +584,21 @@ Deno.serve(async (req: Request) => {
         );
       }
 
+      const pageSource = fileMap[page.sourceFile] || "";
+      const interpretedPromise = interpretPageSourcesWithGemini({
+        pagePath: page.path,
+        pageTitle: page.title,
+        locale: page.locale || "zh",
+        pageFile: page.sourceFile,
+        pageSource,
+        fileMap,
+      }).catch(() => null);
       const assembled = assembleReaddyPageCode(page, fileMap, sharedFiles);
+      const interpreted = await interpretedPromise;
+      const assembledCode = interpreted || assembled.code;
+      const assembledSummary = interpreted
+        ? `${assembled.summary} · Gemini 已先讀頁面原文`
+        : assembled.summary;
       const commitRes = await fetch(
         `https://api.github.com/repos/${owner}/${repo}/commits/${encodeURIComponent(activeBranch)}`,
         { headers },
@@ -492,9 +610,9 @@ Deno.serve(async (req: Request) => {
       }
 
       return jsonResponse({
-        code: assembled.code,
+        code: assembledCode,
         included_files: assembled.includedFiles,
-        summary: assembled.summary,
+        summary: assembledSummary,
         commit_sha: commitSha,
         repo_meta: {
           repo: `${owner}/${repo}`,

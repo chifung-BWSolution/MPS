@@ -11,7 +11,7 @@ import {
   Lock,
   RefreshCw,
   ScanSearch,
-  ShieldCheck,
+  Github,
   Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -26,9 +26,11 @@ import {
 } from '@/components/ui/command';
 import { CollapsePane } from './CollapsePane';
 import { findFramerProject, FramerProjectField } from './FramerProjectField';
+import { SiteHistoryMenu } from './SiteHistoryMenu';
 import type {
   FramerOAuthStatus,
   FramerProjectSummary,
+  FramerSiteSnapshot,
   FramerWorkspaceSummary,
   GitHubRepoSummary,
   ReaddyProjectAnalysis,
@@ -60,6 +62,10 @@ interface SourceConfigPanelProps {
   oauthStatus: FramerOAuthStatus | null;
   oauthConnecting: boolean;
   onConnectFramer: () => void;
+  onDisconnectFramer: () => void;
+  siteSnapshots: FramerSiteSnapshot[];
+  activeSiteId: string | null;
+  onSelectSite: (site: FramerSiteSnapshot) => void;
 
   sourceType: SourceType;
   onSourceTypeChange: (mode: SourceType) => void;
@@ -77,7 +83,6 @@ interface SourceConfigPanelProps {
   githubBranchesLoading: boolean;
   githubLoading: boolean;
   onAnalyzeGitHubProject: () => void;
-  onSaveTeamGitHubToken: (token: string) => Promise<void>;
 
   // Upload state
   uploadLoading: boolean;
@@ -90,6 +95,7 @@ interface SourceConfigPanelProps {
 
   // Current project summary
   analysis: ReaddyProjectAnalysis | null;
+  onSourceOriginChange: (value: string) => void;
   compact?: boolean;
   /** Bump to collapse this step. Used when a saved site is loaded from 網站記錄. */
   collapseNonce?: number;
@@ -108,6 +114,10 @@ export function SourceConfigPanel({
   oauthStatus,
   oauthConnecting,
   onConnectFramer,
+  onDisconnectFramer,
+  siteSnapshots,
+  activeSiteId,
+  onSelectSite,
   sourceType,
   onSourceTypeChange,
   githubRepoUrl,
@@ -122,21 +132,18 @@ export function SourceConfigPanel({
   githubBranchesLoading,
   githubLoading,
   onAnalyzeGitHubProject,
-  onSaveTeamGitHubToken,
   uploadLoading,
   onUploadFile,
   pasteCode,
   onPasteCodeChange,
   onAnalyzePasteCode,
   analysis,
+  onSourceOriginChange,
   compact = false,
   collapseNonce = 0,
 }: SourceConfigPanelProps) {
-  const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
   const [repoPopoverOpen, setRepoPopoverOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [patInput, setPatInput] = useState('');
-  const [savingPat, setSavingPat] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const seenCollapseNonce = useRef(0);
@@ -148,28 +155,20 @@ export function SourceConfigPanel({
   }, [collapseNonce]);
 
   const mcpConnected = Boolean(oauthStatus?.connected);
+  const githubLabel = oauthStatus?.github_login
+    ? `Github（${oauthStatus.github_login}）`
+    : 'Github';
+  const siteHistoryMenu = (
+    <SiteHistoryMenu
+      siteSnapshots={siteSnapshots}
+      activeSiteId={activeSiteId}
+      onSelectSite={onSelectSite}
+    />
+  );
   const selectedFramerProject = findFramerProject(framerProjectUrl, framerProjects);
 
   const branchOptions = githubBranches.length > 0 ? githubBranches : [githubBranch || 'main'];
   const selectedRepo = githubRepos.find((r) => r.html_url === githubRepoUrl) || null;
-
-  const modeBadgeLabel =
-    sourceType === 'upload'
-      ? 'ZIP / Project'
-      : sourceType === 'github'
-        ? 'GitHub Analyzer'
-        : 'Single Paste';
-
-  const handleSavePat = async () => {
-    setSavingPat(true);
-    try {
-      await onSaveTeamGitHubToken(patInput);
-      setPatInput('');
-      setTokenPanelOpen(false);
-    } finally {
-      setSavingPat(false);
-    }
-  };
 
   return (
     <section className="p-4 space-y-3">
@@ -184,9 +183,6 @@ export function SourceConfigPanel({
           </h2>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="px-2.5 py-0.5 rounded-full bg-teal-50 border border-teal-200/70 text-[#08967F] text-[11px] font-medium">
-            {modeBadgeLabel}
-          </span>
           <button
             type="button"
             onClick={() => setCollapsed((v) => !v)}
@@ -292,6 +288,9 @@ export function SourceConfigPanel({
           mcpConnected={mcpConnected}
           oauthConnecting={oauthConnecting}
           onConnectFramer={onConnectFramer}
+          onDisconnectFramer={onDisconnectFramer}
+          tokenPreview={oauthStatus?.token_preview}
+          connectedAt={oauthStatus?.connected_at}
           projects={framerProjects}
           workspaces={framerWorkspaces}
           loading={framerCatalogLoading}
@@ -300,6 +299,19 @@ export function SourceConfigPanel({
           onRefresh={onRefreshFramerCatalog}
           onCreate={onCreateFramerProject}
         />
+
+      {analysis && (
+        <label className="block text-[12px] font-medium text-slate-700">
+          來源網站網址
+          <input
+            type="url"
+            placeholder="https://example.com"
+            value={analysis.sourceOrigin || ''}
+            onChange={(event) => onSourceOriginChange(event.target.value)}
+            className="mt-1 block w-full rounded-md border border-slate-200 px-2.5 py-1.5 text-[12px]"
+          />
+        </label>
+      )}
 
       {/* 3-Mode Source Tabs */}
       <div className="grid grid-cols-3 gap-1 p-1 rounded-lg bg-slate-100 border border-slate-200/70">
@@ -425,6 +437,7 @@ export function SourceConfigPanel({
               )}
             </div>
           )}
+          <div className="flex justify-end">{siteHistoryMenu}</div>
         </div>
       )}
 
@@ -446,71 +459,20 @@ export function SourceConfigPanel({
               >
                 <RefreshCw size={11} className={cn(githubReposLoading && 'animate-spin text-[#0BB59B]')} />
               </button>
-              <button
-                type="button"
-                onClick={() => setTokenPanelOpen((v) => !v)}
-                title={
-                  oauthStatus?.github_configured
-                    ? `Token (${oauthStatus.github_token_preview})`
-                    : 'Private Token'
-                }
-                aria-label={
-                  oauthStatus?.github_configured
-                    ? `Token ${oauthStatus.github_token_preview}`
-                    : 'Private Token'
-                }
+              <span
+                title={oauthStatus?.github_configured ? githubLabel : 'GitHub 尚未連線'}
                 className={cn(
-                  'inline-flex shrink-0 items-center justify-center gap-1 rounded border text-[11px] font-medium transition-colors',
-                  compact ? 'p-1' : 'px-2 py-0.5',
+                  'inline-flex max-w-40 min-w-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium',
                   oauthStatus?.github_configured
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                    : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100',
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : 'border-slate-200 bg-white text-slate-500',
                 )}
               >
-                <Lock size={compact ? 12 : 10} />
-                {!compact && (
-                  <span className="whitespace-nowrap">
-                    {oauthStatus?.github_configured
-                      ? `Token (${oauthStatus.github_token_preview})`
-                      : 'Private Token'}
-                  </span>
-                )}
-              </button>
+                <Github size={11} className="shrink-0" />
+                <span className="truncate">{githubLabel}</span>
+              </span>
             </div>
           </div>
-
-          <CollapsePane open={tokenPanelOpen} className={cn(!tokenPanelOpen && '!-mb-3')}>
-            <div className="rounded-lg bg-white border border-slate-200 p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-[#101B2D] flex items-center gap-1.5">
-                  <ShieldCheck size={13} className="text-[#0BB59B]" />
-                  團隊共用 GitHub PAT（私有倉庫用）
-                </span>
-                <span className="text-[10px] text-slate-400">Contents: Read</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="password"
-                  value={patInput}
-                  onChange={(e) => setPatInput(e.target.value)}
-                  placeholder={
-                    oauthStatus?.github_configured
-                      ? `已儲存 ${oauthStatus.github_token_preview}（輸入覆蓋或留空清除）`
-                      : '貼上 github_pat_... 或 ghp_...'
-                  }
-                  className="flex-1 px-2.5 py-1.5 rounded border border-slate-200 text-[12px] font-mono outline-none focus:border-[#0BB59B]"
-                />
-                <button
-                  type="button"
-                  disabled={savingPat}
-                  onClick={() => void handleSavePat()}
-                  className="px-3 py-1.5 rounded bg-[#101B2D] text-white text-[11px] font-semibold hover:bg-[#1a2b46] disabled:opacity-50"
-                >
-                  {savingPat ? '驗證中…' : '儲存'}
-                </button>
-              </div>
-            </div>
-          </CollapsePane>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {oauthStatus?.github_configured ? (
@@ -601,14 +563,9 @@ export function SourceConfigPanel({
                 </PopoverContent>
               </Popover>
             ) : (
-              <button
-                type="button"
-                onClick={() => setTokenPanelOpen(true)}
-                className="sm:col-span-2 w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-white hover:border-amber-300 text-[12px] text-slate-400 outline-none transition-colors text-left min-w-0"
-              >
-                <span className="truncate">請先設定 GitHub Token</span>
-                <ChevronsUpDown size={13} className="text-slate-300 shrink-0" />
-              </button>
+              <div className="sm:col-span-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] text-slate-500">
+                GitHub 尚未連線
+              </div>
             )}
             <select
               value={githubBranch}
@@ -635,13 +592,9 @@ export function SourceConfigPanel({
                 重試
               </button>
             </div>
-          ) : !oauthStatus?.github_configured ? (
-            <p className="text-[11px] text-slate-500">
-              僅顯示名稱含 Readdy 的倉庫；請先點擊上方 Private Token 設定團隊 GitHub PAT
-            </p>
-          ) : !githubReposLoading && githubRepos.length === 0 ? (
+          ) : oauthStatus?.github_configured && !githubReposLoading && githubRepos.length === 0 ? (
             <p className="text-[11px] text-amber-700">
-              找不到名稱含 Readdy 的倉庫；若為私有倉庫，請確認 GitHub PAT 已開放「All repositories」與「Contents: Read」權限。
+              找不到可存取且名稱含 Readdy 的倉庫。
             </p>
           ) : selectedRepo ? (
             <div className="flex items-center justify-between gap-2 text-[10.5px] font-mono text-slate-500">
@@ -659,22 +612,25 @@ export function SourceConfigPanel({
             </div>
           ) : null}
 
-          <button
-            type="button"
-            disabled={githubLoading || githubReposLoading || !githubRepoUrl.trim()}
-            onClick={() => {
-              setCollapsed(true);
-              onAnalyzeGitHubProject();
-            }}
-            className="w-full py-2 px-4 rounded-lg bg-[#101B2D] hover:bg-[#192842] text-white text-[12px] font-semibold flex items-center justify-center gap-2 transition-colors disabled:opacity-60"
-          >
-            {githubLoading ? (
-              <Loader2 size={14} className="animate-spin text-[#0BB59B]" />
-            ) : (
-              <ScanSearch size={14} className="text-[#0BB59B]" />
-            )}
-            <span>{githubLoading ? '正在分析倉庫結構…' : '分析倉庫與所有頁面'}</span>
-          </button>
+          <div className="flex items-stretch gap-2">
+            <button
+              type="button"
+              disabled={githubLoading || githubReposLoading || !githubRepoUrl.trim()}
+              onClick={() => {
+                setCollapsed(true);
+                onAnalyzeGitHubProject();
+              }}
+              className="min-w-0 flex-1 py-2 px-4 rounded-lg bg-[#101B2D] hover:bg-[#192842] text-white text-[12px] font-semibold flex items-center justify-center gap-2 transition-colors disabled:opacity-60"
+            >
+              {githubLoading ? (
+                <Loader2 size={14} className="animate-spin text-[#0BB59B] shrink-0" />
+              ) : (
+                <ScanSearch size={14} className="text-[#0BB59B] shrink-0" />
+              )}
+              <span className="truncate">{githubLoading ? '正在分析倉庫結構…' : '分析倉庫與所有頁面'}</span>
+            </button>
+            {siteHistoryMenu}
+          </div>
         </div>
       )}
 
@@ -689,17 +645,20 @@ export function SourceConfigPanel({
             placeholder="貼上 Readdy 單頁 TSX / HTML 代碼…"
             className="w-full p-2.5 rounded-lg border border-slate-200 bg-white text-[11.5px] leading-relaxed font-mono text-[#101B2D] outline-none focus:border-[#0BB59B] resize-y"
           />
-          <button
-            type="button"
-            onClick={() => {
-              if (pasteCode.trim()) setCollapsed(true);
-              onAnalyzePasteCode();
-            }}
-            className="w-full py-2 px-4 rounded-lg bg-[#101B2D] hover:bg-[#192842] text-white text-[12px] font-semibold flex items-center justify-center gap-2 transition-colors"
-          >
-            <ScanSearch size={14} className="text-[#0BB59B]" />
-            <span>分析此段代碼</span>
-          </button>
+          <div className="flex items-stretch gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (pasteCode.trim()) setCollapsed(true);
+                onAnalyzePasteCode();
+              }}
+              className="min-w-0 flex-1 py-2 px-4 rounded-lg bg-[#101B2D] hover:bg-[#192842] text-white text-[12px] font-semibold flex items-center justify-center gap-2 transition-colors"
+            >
+              <ScanSearch size={14} className="text-[#0BB59B] shrink-0" />
+              <span className="truncate">分析此段代碼</span>
+            </button>
+            {siteHistoryMenu}
+          </div>
         </div>
       )}
         </div>

@@ -220,14 +220,14 @@ export function PageInventoryPanel({
               )}
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {localeOptions.length > 1 && (
-                <div className="flex flex-wrap items-center gap-1">
+                <div className="flex items-center gap-1 overflow-x-auto">
                   <button
                     type="button"
                     onClick={() => setLocaleFilter('all')}
                     className={cn(
-                      'px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition-colors',
+                      'shrink-0 px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition-colors whitespace-nowrap',
                       localeFilter === 'all'
                         ? 'bg-[#101B2D] text-white border-[#101B2D]'
                         : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300',
@@ -241,7 +241,7 @@ export function PageInventoryPanel({
                       type="button"
                       onClick={() => setLocaleFilter(loc)}
                       className={cn(
-                        'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition-colors',
+                        'inline-flex shrink-0 items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition-colors whitespace-nowrap',
                         localeFilter === loc
                           ? 'bg-[#0BB59B] text-[#081018] border-[#0BB59B] font-semibold'
                           : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300',
@@ -255,8 +255,8 @@ export function PageInventoryPanel({
                 </div>
               )}
 
-              <div className="flex flex-wrap items-center justify-between gap-1.5">
-                <div className="flex flex-wrap items-center gap-1">
+              <div className="flex items-center gap-1">
+                <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
                   {[
                     { id: 'all', label: '全類型' },
                     { id: 'core', label: '核心頁面' },
@@ -268,7 +268,7 @@ export function PageInventoryPanel({
                       type="button"
                       onClick={() => setKindFilter(tab.id)}
                       className={cn(
-                        'px-2 py-0.5 rounded text-[10.5px] font-medium transition-colors',
+                        'shrink-0 px-2 py-0.5 rounded text-[10.5px] font-medium transition-colors whitespace-nowrap',
                         kindFilter === tab.id
                           ? 'bg-teal-50 text-[#08967F] border border-teal-200 font-semibold'
                           : 'text-slate-500 hover:text-[#101B2D] border border-transparent',
@@ -279,7 +279,7 @@ export function PageInventoryPanel({
                   ))}
                 </div>
 
-                <label className="inline-flex items-center gap-1 text-[10.5px] text-slate-500 cursor-pointer select-none">
+                <label className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[10.5px] text-slate-500 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={hideDone}

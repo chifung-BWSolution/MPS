@@ -8,8 +8,8 @@ import {
   FramerMcpClient,
   SUPABASE_SERVICE_ROLE_KEY,
   corsHeaders,
-  extractBearerToken,
   getFramerOAuthRedirectUri,
+  requireUser,
   jsonResponse,
   loadFramerConnection,
   maskSecret,
@@ -309,6 +309,36 @@ async function handleOAuthCallback(reqUrl: URL): Promise<Response> {
   );
 }
 
+function fetchGitHubAccount(token: string) {
+  return fetch("https://api.github.com/user", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "MPS-Readdy-Framer-Workbench",
+    },
+    signal: AbortSignal.timeout(3500),
+  });
+}
+
+let githubIdentity: { token: string; expiresAt: number; login: Promise<string | null> } | undefined;
+
+function getGitHubLogin(token: string): Promise<string | null> {
+  if (!token) return Promise.resolve(null);
+  if (githubIdentity?.token === token && githubIdentity.expiresAt > Date.now()) return githubIdentity.login;
+
+  const login = fetchGitHubAccount(token).then(async (response) => {
+    if (!response.ok) return null;
+    const user = await response.json() as { login?: string };
+    return user.login || null;
+  }).catch(() => null);
+  const entry = { token, expiresAt: Date.now() + 15_000, login };
+  githubIdentity = entry;
+  void login.then((value) => {
+    if (value) entry.expiresAt = Date.now() + 5 * 60_000;
+  });
+  return login;
+}
+
 async function buildStatusResponse() {
   const supabase = supabaseAdmin();
   const row = await loadFramerConnection(supabase);
@@ -330,8 +360,10 @@ async function buildStatusResponse() {
     redirect_uri: getFramerOAuthRedirectUri(),
     client_id: row?.client_id || null,
     github_configured: githubConfigured,
+    github_login: await getGitHubLogin(dbGithub || envGithub),
     github_token_preview: githubPreview,
     github_source: dbGithub ? "stored" : envGithub ? "env" : null,
+    auto_publish: row?.auto_publish === true,
   };
 }
 
@@ -364,13 +396,12 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "Method not allowed" }, 405);
   }
 
-  if (!extractBearerToken(req)) {
-    return jsonResponse({ error: "未提供授權標頭" }, 401);
-  }
+  const auth = await requireUser(req);
+  if ("response" in auth) return auth.response;
 
-  let body: { action?: string; token?: string; return_origin?: string } = {};
+  let body: { action?: string; token?: string; return_origin?: string; enabled?: boolean } = {};
   try {
-    body = (await req.json()) as { action?: string; token?: string; return_origin?: string };
+    body = (await req.json()) as { action?: string; token?: string; return_origin?: string; enabled?: boolean };
   } catch {
     body = {};
   }
@@ -379,6 +410,12 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (action === "status") {
+      return jsonResponse(await buildStatusResponse());
+    }
+
+    if (action === "set_auto_publish") {
+      const supabase = supabaseAdmin();
+      await upsertFramerConnection(supabase, { auto_publish: body.enabled === true });
       return jsonResponse(await buildStatusResponse());
     }
 
@@ -421,17 +458,12 @@ Deno.serve(async (req: Request) => {
           github_token: null,
           github_token_preview: null,
         });
-        return jsonResponse({ ok: true, github_login: null, ...(await buildStatusResponse()) });
+        githubIdentity = undefined;
+        return jsonResponse({ ok: true, ...(await buildStatusResponse()) });
       }
 
       // Verify token with GitHub API so user gets immediate feedback on typos/expiry
-      const ghRes = await fetch("https://api.github.com/user", {
-        headers: {
-          Authorization: `Bearer ${rawToken}`,
-          Accept: "application/vnd.github+json",
-          "User-Agent": "MPS-Readdy-Framer-Workbench",
-        },
-      });
+      const ghRes = await fetchGitHubAccount(rawToken);
       if (!ghRes.ok) {
         const ghText = await ghRes.text().catch(() => "");
         return jsonResponse(
@@ -447,10 +479,10 @@ Deno.serve(async (req: Request) => {
         github_token: rawToken,
         github_token_preview: maskSecret(rawToken),
       });
+      githubIdentity = { token: rawToken, expiresAt: Date.now() + 5 * 60_000, login: Promise.resolve(ghUser.login || null) };
 
       return jsonResponse({
         ok: true,
-        github_login: ghUser.login || null,
         ...(await buildStatusResponse()),
       });
     }

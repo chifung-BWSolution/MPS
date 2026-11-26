@@ -1,10 +1,12 @@
 import JSZip from 'jszip';
+import { mergeFramerSiteSnapshots } from '@/lib/readdyFramerProgress';
 import type { SceneNode } from '@/lib/readdySceneGraph';
 import { supabase } from '@/lib/supabase';
 import {
   analyzeReaddyFileMap,
   normalizeProjectFileMap,
 } from '@/lib/readdyProjectAnalyzer';
+import type { FramerPublishResult } from '@/lib/framerPublish';
 import type {
   FramerIrPageMeta,
   FramerIrPayload,
@@ -27,6 +29,7 @@ import type {
 
 export const FRAMER_OAUTH_MESSAGE = 'mps-framer-oauth';
 const ASSETS_BUCKET = 'readdy-framer-assets';
+const BUNDLES_BUCKET = 'readdy-framer-bundles';
 
 async function getEdgeHeaders(): Promise<{
   supabaseUrl: string;
@@ -35,9 +38,12 @@ async function getEdgeHeaders(): Promise<{
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
   const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData.session?.access_token || supabaseAnonKey;
-  if (!supabaseUrl || !token) {
+  const token = sessionData.session?.access_token || '';
+  if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error('缺少 Supabase 環境設定，無法呼叫雲端服務。');
+  }
+  if (!token) {
+    throw new Error('請先登入後再使用 Readdy / Framer 功能。');
   }
   return {
     supabaseUrl: supabaseUrl.replace(/\/+$/, ''),
@@ -108,13 +114,11 @@ export async function disconnectFramerOAuth(): Promise<FramerOAuthStatus> {
   });
 }
 
-export async function saveTeamGitHubToken(
-  token: string,
-): Promise<FramerOAuthStatus & { ok: boolean; github_login?: string | null }> {
-  return invokeEdgeJson<FramerOAuthStatus & { ok: boolean; github_login?: string | null }>(
-    'framer-oauth',
-    { action: 'save_github_token', token },
-  );
+export async function setFramerAutoPublish(enabled: boolean): Promise<FramerOAuthStatus> {
+  return invokeEdgeJson<FramerOAuthStatus>('framer-oauth', {
+    action: 'set_auto_publish',
+    enabled,
+  });
 }
 
 export async function listGitHubRepos(params?: {
@@ -214,14 +218,25 @@ export async function parseReaddyToIr(params: {
   page_meta?: FramerIrPageMeta;
   css_tokens?: ReaddyCssTokens;
   project_name?: string;
+  source_origin?: string;
 }): Promise<{
   job_id: string;
   created_at: string;
-  parser_engine: 'gemini' | 'grok' | 'ast-fallback';
+  parser_engine: 'gemini' | 'grok' | 'ast-fallback' | 'rendered-dom';
   ir_payload: FramerIrPayload;
   logs: WorkbenchLogEntry[];
 }> {
   return invokeEdgeJson('readdy-parse-ir', params);
+}
+
+export async function captureFramerPreview(jobId: string, origin: string): Promise<{
+  url: string;
+  images: Record<'desktop' | 'tablet' | 'phone', string>;
+  layoutReview: import('../../supabase/functions/_shared/readdy-layout-score').LayoutReview;
+}> {
+  return invokeEdgeJson('readdy-parse-ir', {
+    action: 'capture_framer_preview', job_id: jobId, framer_preview_origin: origin,
+  });
 }
 
 export async function listFramerCatalog(): Promise<{
@@ -250,9 +265,57 @@ export interface FramerMcpSessionHint {
 }
 
 export function isFramerSessionLimitError(message: string): boolean {
-  return /active session limit|do not retry now|同時開啟工作階段上限|等待至少\s*360\s*秒|等待至少\s*6\s*分鐘/i.test(
+  return /active session limit|do not retry now|too many active sessions|同時開啟工作階段上限|等待至少\s*360\s*秒|等待至少\s*6\s*分鐘/i.test(
     String(message || ''),
   );
+}
+
+export async function enqueueReaddyConversion(input: unknown): Promise<{ ok: boolean; run_id: string }> {
+  return invokeEdgeJson('readdy-conversion-worker', { action: 'enqueue', input });
+}
+
+export async function cancelReaddyConversionRun(runId: string): Promise<{ ok: boolean }> {
+  return invokeEdgeJson('readdy-conversion-worker', { action: 'cancel', run_id: runId });
+}
+
+export function conversionWorkerIsMissing(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /404|not found|failed to fetch|readdy-conversion-worker|framer_conversion_runs|does not exist/i.test(message);
+}
+
+export async function syncFramerPage(params: {
+  job_id: string;
+  framer_project_url?: string;
+  page_path?: string;
+  page_title?: string;
+  session_slot?: number;
+  mcp_session?: FramerMcpSessionHint | null;
+  /** False skips Publish for this write. Omit to follow the saved switch. */
+  publish?: boolean;
+}): Promise<{
+  ok: boolean;
+  step_index: number;
+  page_path?: string;
+  framer_page_node_id?: string | null;
+  duration_ms: number;
+  mcp_session?: FramerMcpSessionHint | null;
+  logs: WorkbenchLogEntry[];
+  publish?: FramerPublishResult;
+  job_status: string;
+}> {
+  return invokeEdgeJson('framer-mcp-sync', { ...params, sync_page: true });
+}
+
+export async function publishFramerProject(params: {
+  framer_project_url: string;
+  session_slot?: number;
+  mcp_session?: FramerMcpSessionHint | null;
+}): Promise<{
+  ok: boolean;
+  publish: FramerPublishResult;
+  mcp_session?: FramerMcpSessionHint | null;
+}> {
+  return invokeEdgeJson('framer-mcp-sync', { action: 'publish_project', ...params });
 }
 
 export async function syncFramerStep(params: {
@@ -264,6 +327,7 @@ export async function syncFramerStep(params: {
   session_slot?: number;
   mcp_session?: FramerMcpSessionHint | null;
   scene?: SceneNode;
+  publish?: boolean;
 }): Promise<{
   ok: boolean;
   step_index: number;
@@ -276,6 +340,7 @@ export async function syncFramerStep(params: {
   mcp_session?: FramerMcpSessionHint | null;
   session_reused?: boolean;
   logs: WorkbenchLogEntry[];
+  publish?: FramerPublishResult;
   job_status: string;
 }> {
   return invokeEdgeJson('framer-mcp-sync', params);
@@ -390,23 +455,25 @@ function normalizeSiteSnapshot(row: unknown): FramerSiteSnapshot | null {
 }
 
 export async function listFramerSiteSnapshots(limit = 20): Promise<FramerSiteSnapshot[]> {
-  const local = readLocalSiteSnapshots();
-  const { data, error } = await supabase
-    .from('framer_site_snapshots')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(limit);
-  if (error) return local.slice(0, limit);
-  const remote = (data || [])
-    .map((row) => normalizeSiteSnapshot(row))
-    .filter((row): row is FramerSiteSnapshot => Boolean(row));
-  const seen = new Set(remote.map((row) => row.id));
-  const merged = [...remote];
-  for (const row of local) {
-    if (!seen.has(row.id)) merged.push(row);
+  if (limit <= 0) return [];
+  let merged = mergeFramerSiteSnapshots(readLocalSiteSnapshots(), limit);
+  for (let offset = 0; ; offset += limit) {
+    const { data, error } = await supabase
+      .from('framer_site_snapshots')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (error || !data?.length) return merged;
+
+    const rows = data.map(normalizeSiteSnapshot).filter((row): row is FramerSiteSnapshot => Boolean(row));
+    merged = mergeFramerSiteSnapshots([...rows, ...merged], limit);
+    if (data.length < limit) return merged;
+
+    // A local fallback record may be older than the next remote page.
+    const oldestInWindow = Date.parse(String(data[data.length - 1].created_at));
+    if (merged.length >= limit && oldestInWindow <= Date.parse(merged[limit - 1].created_at)) return merged;
   }
-  merged.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-  return merged.slice(0, limit);
 }
 
 export async function saveFramerSiteSnapshot(input: {
@@ -461,7 +528,7 @@ export async function saveFramerSiteSnapshot(input: {
   });
 
   if (error) {
-    const local = [snapshot, ...readLocalSiteSnapshots().filter((row) => row.id !== snapshot.id)];
+    const local = mergeFramerSiteSnapshots([snapshot, ...readLocalSiteSnapshots()], LOCAL_SITE_LIMIT);
     writeLocalSiteSnapshots(local);
   }
   return snapshot;
@@ -477,7 +544,8 @@ function shouldSkipZipEntry(lowerPath: string): boolean {
 }
 
 function isZipCodeEntry(lowerPath: string): boolean {
-  return /\.(tsx|ts|jsx|js|css|html|json)$/i.test(lowerPath) && !lowerPath.endsWith('.d.ts');
+  return ((/\.(tsx|ts|jsx|js|css|html|json)$/i.test(lowerPath) && !lowerPath.endsWith('.d.ts'))
+    || /(?:^|\/)sitemap\.xml$/i.test(lowerPath));
 }
 
 async function readZipCodeFileMap(zip: JSZip): Promise<Record<string, string>> {
@@ -496,7 +564,12 @@ export async function loadUploadedReaddyFileMap(
   storagePath: string,
 ): Promise<Record<string, string> | null> {
   try {
-    const { data, error } = await supabase.storage.from(ASSETS_BUCKET).download(storagePath);
+    const bundles = await supabase.storage.from(BUNDLES_BUCKET).download(storagePath);
+    const fallback = bundles.error || !bundles.data
+      ? await supabase.storage.from(ASSETS_BUCKET).download(storagePath)
+      : bundles;
+    const data = fallback.data;
+    const error = fallback.error;
     if (error || !data) return null;
     const zip = await JSZip.loadAsync(data);
     const fileMap = await readZipCodeFileMap(zip);
@@ -555,7 +628,7 @@ export async function processUploadedReaddyFile(
   let uploadedBundlePath: string | null = null;
   try {
     const { error: bundleErr } = await supabase.storage
-      .from(ASSETS_BUCKET)
+      .from(BUNDLES_BUCKET)
       .upload(bundleStoragePath, file, {
         contentType: 'application/zip',
         upsert: true,

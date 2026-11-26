@@ -41,12 +41,36 @@ const fixtureMap = normalizeProjectFileMap({
     ];
   `,
   'demo/src/pages/home/page.tsx': `
+    import Navbar from '@/components/layout/Navbar';
+    import Footer from '@/components/layout/Footer';
     import Hero from './sections/Hero';
     import FaqSection from './sections/FaqSection';
-    export default function Home() { return <main><Hero /><FaqSection /></main>; }
+    export default function Home() { return <main><Navbar /><Hero /><FaqSection /><Footer /></main>; }
+  `,
+  'demo/src/components/layout/Navbar.tsx': `
+    const mainNavItems = [
+      { zh: { label: '主頁', path: '/' }, en: { label: 'Home', path: '/en' } },
+      { zh: { label: '關於', path: '/about/' }, en: { label: 'About', path: '/en/about/' } },
+    ];
+    const ctaItems = [
+      { zh: { label: '報價', path: 'https://example.com/quote' }, en: { label: 'Quote', path: 'https://example.com/quote' } },
+    ];
+    export default function Navbar() { return null; }
+  `,
+  'demo/src/components/layout/Footer.tsx': `
+    const groups = {
+      zh: [{ heading: '服務', links: [{ label: '關於我們', path: '/about/' }] }],
+      en: [{ heading: 'Services', links: [{ label: 'About', path: '/en/about/' }] }],
+    };
+    export default function Footer() { return null; }
   `,
   'demo/src/pages/home/sections/Hero.tsx': `
-    export default function Hero() { return <section><h1>Demo Hero</h1></section>; }
+    import Card from './Card';
+    export default function Hero() { return <section><h1>Demo Hero</h1><Card /></section>; }
+  `,
+  'demo/src/pages/home/sections/Card.tsx': `
+    const services = [{ name: '嵌套卡片', occasions: '子組件內容', path: '/about/' }];
+    export default function Card() { return <article><h3>嵌套卡片</h3><p>子組件內容</p><a href="/about/">了解更多</a></article>; }
   `,
   'demo/src/pages/home/sections/FaqSection.tsx': `
     import { FAQ_ITEMS } from '@/lib/seo';
@@ -62,8 +86,26 @@ const fixtureMap = normalizeProjectFileMap({
   `,
   'demo/src/pages/about/page.tsx': `
     import PageLayout from '@/components/layout/PageLayout';
+    const subPages = [
+      { label: '公司晚宴', path: '/annual-dinner/corporate-dinner/' },
+    ];
+    const elements = ['嘉賓迎賓音樂', '開場秀'];
     export default function About() {
-      return <PageLayout title="關於我們" subtitle="簡介"><h2>故事</h2></PageLayout>;
+      return (
+        <PageLayout title="關於我們" subtitle="簡介" ctaText="報價" ctaLink="https://example.com/quote" ctaSecondaryText="聯絡" ctaSecondaryLink="/contact/">
+          <div><h2>故事</h2><p>頁面正文</p></div>
+          <div>
+            {elements.map((el) => (
+              <span key={el}>{el}</span>
+            ))}
+          </div>
+          <div>
+            {subPages.map((page) => (
+              <Link key={page.path} to={page.path}>{page.label}</Link>
+            ))}
+          </div>
+        </PageLayout>
+      );
     }
   `,
   'demo/src/components/layout/PageLayout.tsx': 'export default function PageLayout() { return null; }',
@@ -83,6 +125,122 @@ assert.ok(
     fixtureHomeBundle.code.includes('第一個問題？') &&
     fixtureHomeBundle.code.includes('第二個回答。'),
   'Home bundle inlines imported FAQ_ITEMS constant array into FaqSection',
+);
+assert.ok(fixtureHomeBundle.code.includes('<a href="/">主頁</a>'), 'Navbar keeps the home path');
+assert.ok(fixtureHomeBundle.code.includes('<a href="/about/">關於</a>'), 'Navbar keeps section paths');
+assert.ok(
+  fixtureHomeBundle.code.includes('<a href="https://example.com/quote">報價</a>'),
+  'Navbar CTA keeps its external URL',
+);
+assert.ok(fixtureHomeBundle.code.includes('<a href="/about/">關於我們</a>'), 'Footer keeps link paths');
+assert.ok(fixtureHomeBundle.code.includes('嵌套卡片'), 'Nested section components are inlined');
+assert.ok(!fixtureHomeBundle.code.includes('<a href="#">'), 'Assembled links are not emptied to hash');
+const fixtureAboutBundle = assembleReaddyPageCode(fixtureAnalysis.pages[1], fixtureMap, fixtureAnalysis);
+assert.ok(fixtureAboutBundle.code.includes('頁面正文'), 'PageLayout children stay in the assembled page');
+assert.ok(fixtureAboutBundle.code.includes('嘉賓迎賓音樂'), 'String lists inside the page are expanded');
+assert.ok(
+  fixtureAboutBundle.code.includes('<Link key="0" to="/annual-dinner/corporate-dinner/">公司晚宴</Link>') ||
+    fixtureAboutBundle.code.includes('to="/annual-dinner/corporate-dinner/"'),
+  'Mapped page links keep their paths',
+);
+assert.ok(fixtureAboutBundle.code.includes('href="https://example.com/quote"'), 'PageLayout CTA keeps its URL');
+assert.ok(fixtureAboutBundle.code.includes('href="/contact/"'), 'Secondary CTA keeps its path');
+
+const partialSrcMap = {
+  'src/pages/design-center/page.tsx': 'export default function Page() { return <h1>Design Center</h1>; }',
+  'src/components/Navbar.tsx': 'export default function Navbar() { return null; }',
+};
+const partialPage = {
+  ...fixtureAnalysis.pages[0],
+  path: '/design-center/',
+  title: 'Design Center',
+  sourceFile: 'src/pages/design-center/page.tsx',
+  componentName: 'Page',
+};
+const partialBundle = assembleReaddyPageCode(partialPage, partialSrcMap, {
+  ...fixtureAnalysis,
+  sharedFiles: { navbar: 'src/components/Navbar.tsx' },
+});
+assert.ok(
+  !partialBundle.summary.includes('找不到源檔'),
+  'A src/-only fetch must not be unwrapped away from the page file',
+);
+assert.ok(partialBundle.code.includes('Design Center'), 'Partial src map still assembles the page');
+assert.ok(!partialBundle.code.includes('<p>src/pages/design-center/page.tsx</p>'), 'Missing-file skeleton is not used');
+
+const layoutRouteMap = {
+  'office/src/router/config.tsx': `
+    import { lazy } from "react";
+    const SiteLayout = lazy(() => import("@/components/feature/SiteLayout"));
+    const Home = lazy(() => import("@/pages/home/page"));
+    const SpacePlanning = lazy(() => import("@/pages/space-planning/page"));
+    export default [
+      {
+        path: "/",
+        element: <SiteLayout />,
+        children: [
+          { index: true, element: <Home /> },
+          { path: "space-planning", element: <SpacePlanning /> },
+        ],
+      },
+    ];
+  `,
+  'office/src/components/feature/SiteLayout.tsx': `
+    export default function SiteLayout() { return <div><Outlet /></div>; }
+  `,
+  'office/src/pages/home/page.tsx': `
+    export default function Home() { return <main><h1>Office Home</h1></main>; }
+  `,
+  'office/src/pages/space-planning/page.tsx': `
+    export default function SpacePlanning() { return <main><h1>Space Planning</h1></main>; }
+  `,
+};
+const layoutAnalysis = analyzeReaddyFileMap(layoutRouteMap, {
+  sourceType: 'upload',
+  projectName: 'office',
+});
+const layoutHome = layoutAnalysis.pages.find((page) => page.path === '/');
+assert.ok(layoutHome, 'Index child is the home page');
+assert.equal(layoutHome.sourceFile, 'src/pages/home/page.tsx', 'Home path uses the index page, not the layout shell');
+assert.equal(layoutHome.wrapperComponent, 'SiteLayout');
+const layoutSpace = layoutAnalysis.pages.find((page) => page.path === '/space-planning/');
+assert.equal(layoutSpace?.sourceFile, 'src/pages/space-planning/page.tsx');
+
+const sharedChildRoutes = {
+  'office/src/router/config.tsx': `
+    import { lazy } from "react";
+    import SiteLayout from "@/components/feature/SiteLayout";
+    const Home = lazy(() => import("@/pages/home/page"));
+    const DesignCenter = lazy(() => import("@/pages/design-center/page"));
+    const pageRoutes = [
+      { index: true, element: <Home /> },
+      { path: "design-center", element: <DesignCenter /> },
+    ];
+    const routes = [
+      { path: "/", element: <SiteLayout />, children: pageRoutes },
+      { path: "/en", element: <SiteLayout />, children: pageRoutes },
+    ];
+    export default routes;
+  `,
+  'office/src/components/feature/SiteLayout.tsx': 'export default function SiteLayout() { return <Outlet />; }',
+  'office/src/pages/home/page.tsx': 'export default function Home() { return <h1>Office Home</h1>; }',
+  'office/src/pages/design-center/page.tsx': 'export default function DesignCenter() { return <h1>Design Center</h1>; }',
+};
+const sharedChildAnalysis = analyzeReaddyFileMap(sharedChildRoutes, {
+  sourceType: 'upload',
+  projectName: 'shared-routes',
+});
+assert.equal(
+  sharedChildAnalysis.pages.find((page) => page.path === '/')?.sourceFile,
+  'src/pages/home/page.tsx',
+);
+assert.equal(
+  sharedChildAnalysis.pages.find((page) => page.path === '/en/')?.sourceFile,
+  'src/pages/home/page.tsx',
+);
+assert.equal(
+  sharedChildAnalysis.pages.find((page) => page.path === '/design-center/')?.sourceFile,
+  'src/pages/design-center/page.tsx',
 );
 
 // 3. Real uploaded Readdy ZIP verification (if present on local machine)
@@ -132,6 +290,14 @@ if (existsSync(realZipPath)) {
   const homeImgUrls = homeBundle.code.match(/https:\/\/readdy\.ai\/api\/search-image[^'"\s]+/g) || [];
   assert.equal(homeImgUrls.length, 12, `Expected all 12 Home images (1 Hero + 6 Services + 1 Approach + 4 Gallery), got ${homeImgUrls.length}`);
   assert.ok(homeBundle.code.includes('bg-transparent'), 'Home Navbar uses transparent background over Hero');
+  assert.ok(homeBundle.code.includes('<!-- footer-groups -->'), 'Footer keeps its link groups');
+  assert.ok(homeBundle.code.includes('<h3>服務分類</h3>'), 'Footer keeps the service column');
+  assert.ok(homeBundle.code.includes('<a href="/sound-engineering/">音響工程</a>'), 'Footer keeps every service link');
+  assert.ok(homeBundle.code.includes('href="tel:+85221857377"'), 'Footer keeps the phone link');
+  assert.ok(
+    homeBundle.code.includes('href="https://www.emailmeform.com/builder/form/69aam00sCW063"'),
+    'Footer quote button keeps the form URL',
+  );
   assert.ok(homeBundle.code.includes('服務一覽') && homeBundle.code.includes('音樂資訊'), 'Navbar includes top-level links');
   assert.ok(!homeBundle.code.includes('<a href="#">樂手名單</a>'), 'Navbar does not leak nested submenu items');
   assert.ok(homeBundle.code.includes('網上報價') && homeBundle.code.includes('聯絡我們'), 'Navbar includes dual CTAs');
@@ -155,6 +321,16 @@ if (existsSync(realZipPath)) {
   assert.equal(annualDinner.pageKind, 'layout-page');
   const annualBundle = assembleReaddyPageCode(annualDinner, fileMap, realAnalysis);
   assert.ok(annualBundle.code.includes('/* === COMPONENT: PageLayout Hero === */'), 'PageLayout Hero synthesized');
+  assert.ok(annualBundle.code.includes('活動可包括的元素'), 'Layout page keeps its own sections');
+  assert.ok(annualBundle.code.includes('嘉賓迎賓音樂'), 'Layout page expands repeated items');
+  assert.ok(
+    annualBundle.code.includes('to="/annual-dinner/corporate-dinner/"'),
+    'Layout page keeps links that were rendered from data',
+  );
+  assert.ok(
+    annualBundle.code.includes('https://www.emailmeform.com/builder/form/69aam00sCW063'),
+    'Online quote CTA keeps the real form URL',
+  );
 
   const articlePage = realAnalysis.pages.find((p) => p.path === '/music-insights/wedding-band-vs-dj-guide/');
   assert.ok(articlePage, 'Article route discovered');

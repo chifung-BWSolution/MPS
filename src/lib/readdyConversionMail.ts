@@ -22,6 +22,8 @@ export type ReaddyConversionMailInput = {
   error?: string;
   /** Extra line for the one-off template test. Omitted on real sends. */
   notice?: string;
+  /** Present when this run tried to Publish. Omitted when auto Publish is off. */
+  publishNote?: string;
 };
 
 export function hongKongDateLabel(now = new Date()): string {
@@ -86,6 +88,7 @@ export function buildReaddyConversionResultEmail(input: ReaddyConversionMailInpu
     `Framer：${input.framerProjectUrl || '—'}`,
     `完成 ${migrated.length} 頁，失敗 ${failed.length} 頁，未開始 ${input.unstarted} 頁。`,
   ];
+  if (input.publishNote) textLines.push(input.publishNote);
   if (input.notice) textLines.push('', input.notice);
   if (input.cancelled) textLines.push('', '這次轉換已中止，其餘頁面沒有繼續。');
   if (input.error) textLines.push('', `原因：${input.error}`);
@@ -138,6 +141,7 @@ export function buildReaddyConversionResultEmail(input: ReaddyConversionMailInpu
       Framer：${escapeHtml(input.framerProjectUrl || '—')}
     </p>
     <p style="margin:12px 0 0;color:#0d1a2d;">完成 ${migrated.length} 頁，失敗 ${failed.length} 頁，未開始 ${input.unstarted} 頁。</p>
+    ${input.publishNote ? `<p style="margin:12px 0 0;color:#0d1a2d;">${escapeHtml(input.publishNote)}</p>` : ''}
     ${cancelled}
     ${reason}
     ${rows}

@@ -143,7 +143,7 @@ export function platformLabel(platform: CopyPlatform): string {
   return PLATFORM_RULES[platform]?.label ?? platform;
 }
 
-export const DEFAULT_GROK_MODEL = 'grok-4.5';
+export const DEFAULT_GROK_MODEL = 'grok-4.3';
 export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 
 // ============================================================

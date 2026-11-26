@@ -3,7 +3,7 @@ import { useAuth } from '@/context/AuthContext';
 import { canAccessSettings } from '@/lib/permissions';
 import { Search, Bell, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { AppLink } from '@/components/AppLink';
 import {
   LayoutDashboard,
@@ -49,7 +49,11 @@ export function TopNav() {
   const [searchFocused, setSearchFocused] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [edges, setEdges] = useState({ left: false, right: false });
   const navRef = useRef<HTMLElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
 
   const handleSignOut = async () => {
     if (signingOut) return;
@@ -93,6 +97,76 @@ export function TopNav() {
     }
   }, [currentModule]);
 
+  useEffect(() => {
+    const el = navRef.current;
+    const track = trackRef.current;
+    if (!el || !track) return;
+    const measure = () => {
+      const max = el.scrollWidth - el.clientWidth;
+      setEdges({
+        left: el.scrollLeft > 1,
+        right: max - el.scrollLeft > 1,
+      });
+    };
+    measure();
+    el.addEventListener('scroll', measure, { passive: true });
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    observer.observe(track);
+    return () => {
+      el.removeEventListener('scroll', measure);
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => () => dragCleanupRef.current?.(), []);
+
+  const canPan = edges.left || edges.right;
+
+  const onNavPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0 || event.pointerType === 'touch') return;
+    const el = navRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth + 1) return;
+    dragCleanupRef.current?.();
+    const startX = event.clientX;
+    const startScroll = el.scrollLeft;
+    const pointerId = event.pointerId;
+    let moved = false;
+
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      const dx = ev.clientX - startX;
+      if (!moved && Math.abs(dx) < 5) return;
+      if (!moved) {
+        moved = true;
+        setDragging(true);
+      }
+      el.scrollLeft = startScroll - dx;
+    };
+    const cleanup = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      if (dragCleanupRef.current === cleanup) dragCleanupRef.current = null;
+    };
+    const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      cleanup();
+      setDragging(false);
+      if (!moved) return;
+      const blockClick = (click: MouseEvent) => {
+        click.preventDefault();
+        click.stopPropagation();
+      };
+      window.addEventListener('click', blockClick, { capture: true });
+      window.setTimeout(() => window.removeEventListener('click', blockClick, { capture: true }), 0);
+    };
+    dragCleanupRef.current = cleanup;
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
+
   const visibleMenuItems = mainMenuItems.filter(
     m => m.id !== 'settings' || canAccessSettings(systemUser?.role)
   );
@@ -110,35 +184,51 @@ export function TopNav() {
       </div>
 
       {/* Main Navigation */}
-      <nav
-        ref={navRef}
-        className="flex-1 min-w-0 flex items-center h-full px-1 overflow-x-auto overscroll-x-contain"
-      >
-        {visibleMenuItems.map((menuItem) => {
-          const Icon = moduleIcons[menuItem.id] || LayoutDashboard;
-          const isActive = currentModule === menuItem.id;
+      <div className="relative h-[48px] min-w-0 flex-1 self-stretch">
+        {edges.left && (
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-[#0d1a2d] to-transparent" />
+        )}
+        <nav
+          ref={navRef}
+          onPointerDown={onNavPointerDown}
+          onDragStart={(event) => event.preventDefault()}
+          className={cn(
+            'h-[48px] w-full touch-pan-x select-none overflow-x-auto overflow-y-hidden overscroll-x-contain px-1 scrollbar-hide',
+            canPan && 'cursor-grab [&_a]:cursor-grab',
+            dragging && 'cursor-grabbing [&_a]:cursor-grabbing'
+          )}
+        >
+          <div ref={trackRef} className="flex h-[48px] w-max items-stretch">
+            {visibleMenuItems.map((menuItem) => {
+              const Icon = moduleIcons[menuItem.id] || LayoutDashboard;
+              const isActive = currentModule === menuItem.id;
 
-          return (
-            <AppLink
-              key={menuItem.id}
-              module={menuItem.id}
-              data-nav-active={isActive ? 'true' : undefined}
-              className={cn(
-                'h-full px-3 text-[14px] font-medium whitespace-nowrap transition-all duration-200 relative flex items-center gap-1.5 shrink-0 no-underline',
-                isActive
-                  ? 'text-white'
-                  : 'text-white/55 hover:text-white/90'
-              )}
-            >
-              <Icon size={16} className="shrink-0" />
-              <span>{menuItem.label}</span>
-              {isActive && (
-                <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-teal-500 rounded-t-full" />
-              )}
-            </AppLink>
-          );
-        })}
-      </nav>
+              return (
+                <AppLink
+                  key={menuItem.id}
+                  module={menuItem.id}
+                  data-nav-active={isActive ? 'true' : undefined}
+                  className={cn(
+                    'relative flex h-[48px] shrink-0 items-center gap-1.5 whitespace-nowrap px-3 text-[14px] font-medium no-underline transition-colors duration-200',
+                    isActive
+                      ? 'text-white'
+                      : 'text-white/55 hover:text-white/90'
+                  )}
+                >
+                  <Icon size={16} className="shrink-0" />
+                  <span>{menuItem.label}</span>
+                  {isActive && (
+                    <span className="absolute inset-x-2 bottom-0 h-[2px] rounded-t-full bg-teal-500" />
+                  )}
+                </AppLink>
+              );
+            })}
+          </div>
+        </nav>
+        {edges.right && (
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[#0d1a2d] to-transparent" />
+        )}
+      </div>
 
       {/* Right Actions */}
       <div className="flex items-center gap-2 px-4 h-full border-l border-white/10 shrink-0">

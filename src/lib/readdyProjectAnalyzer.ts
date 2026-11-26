@@ -155,6 +155,29 @@ export function normalizeProjectFileMap(
   return Object.fromEntries(cleanedEntries);
 }
 
+function cleanProjectFileKeys(rawFiles: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(rawFiles)
+      .map(([k, v]) => [k.replace(/^\.?\/+/, '').replace(/\\/g, '/'), v] as const)
+      .filter(([k]) => Boolean(k)),
+  );
+}
+
+/** Keep the map that still contains the page file. A partial fetch of only src/ files must not be unwrapped. */
+function fileMapForAssembly(
+  rawFiles: Record<string, string>,
+  sourceFile: string | undefined,
+  sharedFiles: { navbar?: string; footer?: string; pageLayout?: string },
+): Record<string, string> {
+  const cleaned = cleanProjectFileKeys(rawFiles);
+  const unwrapped = normalizeProjectFileMap(rawFiles);
+  const needed = [sourceFile, sharedFiles.navbar, sharedFiles.footer, sharedFiles.pageLayout].filter(
+    (key): key is string => Boolean(key),
+  );
+  const hits = (map: Record<string, string>) => needed.filter((key) => map[key] !== undefined).length;
+  return hits(cleaned) >= hits(unwrapped) ? cleaned : unwrapped;
+}
+
 export function normalizeRoutePath(p: string): string {
   const trimmed = (p || '').trim();
   if (!trimmed || trimmed === '*') return trimmed || '/';
@@ -316,7 +339,75 @@ function parseRoutesFromRouter(routerCode: string): RawRouteEntry[] {
     }
   }
 
+  preferNestedIndexPages(routerCode, entries);
+  expandNamedChildRoutes(routerCode, entries);
   return entries;
+}
+
+function elementComponentTags(expr: string): string[] {
+  return Array.from(expr.matchAll(/<([A-Z][A-Za-z0-9_$]*)\b/g)).map((tag) => tag[1]);
+}
+
+/** A parent route whose element is only the layout should use its index child as the page. */
+function preferNestedIndexPages(routerCode: string, entries: RawRouteEntry[]) {
+  const re = /path\s*:\s*(['"])([^'"]+)\1/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(routerCode)) !== null) {
+    const parentPath = match[2];
+    const window = routerCode.slice(match.index, match.index + 6000);
+    const childrenAt = window.search(/\bchildren\s*:\s*\[/);
+    if (childrenAt < 0) continue;
+    const bracketAt = match.index + window.indexOf('[', childrenAt);
+    const childrenBlock = sliceBalanced(routerCode, bracketAt, '[', ']');
+    const indexAt = childrenBlock.search(/\bindex\s*:\s*true\b/);
+    if (indexAt < 0) continue;
+    const elementMatch = childrenBlock.slice(indexAt).match(/\belement\s*:\s*([\s\S]*?)\s*(?:,|\})/);
+    if (!elementMatch) continue;
+    const tags = elementComponentTags(elementMatch[1]);
+    if (tags.length === 0) continue;
+    const componentName = tags[tags.length - 1];
+    const parent = entries.find((entry) => entry.path === parentPath);
+    if (!parent || parent.componentName === componentName) continue;
+    parent.wrapperComponent = parent.wrapperComponent || parent.componentName;
+    parent.componentName = componentName;
+  }
+}
+
+function expandNamedChildRoutes(routerCode: string, entries: RawRouteEntry[]) {
+  const arrays = new Map<string, string>();
+  const declRe = /(?:const|let)\s+([A-Za-z_$][\w$]*)\b[^=;]{0,80}=\s*\[/g;
+  let decl: RegExpExecArray | null;
+  while ((decl = declRe.exec(routerCode)) !== null) {
+    const bracketAt = routerCode.indexOf('[', decl.index);
+    if (bracketAt < 0) continue;
+    arrays.set(decl[1], sliceBalanced(routerCode, bracketAt, '[', ']'));
+  }
+
+  const childRefRe = /children\s*:\s*([A-Za-z_$][\w$]*)/g;
+  let childRef: RegExpExecArray | null;
+  while ((childRef = childRefRe.exec(routerCode)) !== null) {
+    const block = arrays.get(childRef[1]);
+    if (!block) continue;
+    const objectStart = routerCode.lastIndexOf('{', childRef.index);
+    const before = routerCode.slice(objectStart, childRef.index);
+    const pathMatches = [...before.matchAll(/path\s*:\s*(['"])([^'"]+)\1/g)];
+    const parentPath = pathMatches[pathMatches.length - 1]?.[2];
+    if (!parentPath) continue;
+    const layoutExpr = before.match(/element\s*:\s*([\s\S]*)$/)?.[1] || '';
+    const indexAt = block.search(/\bindex\s*:\s*true\b/);
+    if (indexAt < 0) continue;
+    const elementMatch = block.slice(indexAt).match(/\belement\s*:\s*([\s\S]*?)\s*(?:,|\})/);
+    if (!elementMatch) continue;
+    const tags = elementComponentTags(elementMatch[1]);
+    if (tags.length === 0) continue;
+    const componentName = tags[tags.length - 1];
+    const layoutTags = elementComponentTags(layoutExpr);
+    const layoutName = layoutTags[layoutTags.length - 1];
+    const entry = entries.find((item) => item.path === parentPath);
+    if (!entry || entry.componentName === componentName) continue;
+    entry.wrapperComponent = entry.wrapperComponent || layoutName || entry.componentName;
+    entry.componentName = componentName;
+  }
 }
 
 interface SeoLookupEntry {
@@ -616,6 +707,8 @@ function extractPageLayoutProps(code: string): {
   heroAlt?: string;
   ctaText?: string;
   ctaSecondaryText?: string;
+  ctaLink?: string;
+  ctaSecondaryLink?: string;
 } | null {
   const start = code.indexOf('<PageLayout');
   if (start < 0) return null;
@@ -654,10 +747,12 @@ function extractPageLayoutProps(code: string): {
     heroAlt: readAttr('heroAlt'),
     ctaText: readAttr('ctaText'),
     ctaSecondaryText: readAttr('ctaSecondaryText'),
+    ctaLink: readAttr('ctaLink'),
+    ctaSecondaryLink: readAttr('ctaSecondaryLink'),
   };
 }
 
-function extractLocalSectionImports(
+export function extractLocalSectionImports(
   code: string,
   pagePath: string,
   allPaths: Set<string>,
@@ -761,7 +856,7 @@ function extractExportedConstArray(
       depth--;
       if (depth === 0) {
         const arraySlice = moduleCode.slice(openBracket, i + 1);
-        if (arraySlice.length <= 25000) {
+        if (arraySlice.length <= 100000) {
           return `const ${localName} = ${arraySlice};`;
         }
         return null;
@@ -776,7 +871,11 @@ function prepareComponentCode(
   compPath: string,
   fileMap: Record<string, string>,
   allPaths: Set<string>,
+  depth = 0,
+  seenPaths: Set<string> = new Set(),
 ): string {
+  if (seenPaths.has(compPath) || depth > 2) return stripTsImportsAndTypes(compCode);
+  seenPaths.add(compPath);
   const dataImports = extractLocalNamedDataImports(compCode, compPath, allPaths);
   const inlined: string[] = [];
   const seenLocals = new Set<string>();
@@ -791,7 +890,20 @@ function prepareComponentCode(
     }
   }
   const stripped = stripTsImportsAndTypes(compCode);
-  return inlined.length > 0 ? `${inlined.join('\n')}\n\n${stripped}` : stripped;
+  const nested: string[] = [];
+  if (depth < 2) {
+    for (const child of extractLocalSectionImports(compCode, compPath, allPaths)) {
+      if (/^(Navbar|Footer|PageLayout)$/i.test(child.localName)) continue;
+      if (seenPaths.has(child.resolvedPath)) continue;
+      if (!new RegExp(`<${child.localName}\\b`).test(compCode)) continue;
+      const childCode = fileMap[child.resolvedPath];
+      if (!childCode || childCode.length > 60000) continue;
+      nested.push(
+        `/* --- nested ${child.localName} (${child.resolvedPath}) --- */\n${prepareComponentCode(childCode, child.resolvedPath, fileMap, allPaths, depth + 1, seenPaths)}`,
+      );
+    }
+  }
+  return [...inlined, ...nested, stripped].filter(Boolean).join('\n\n');
 }
 
 function humanizeRouteTitle(routePath: string): string {
@@ -857,6 +969,10 @@ export function analyzeReaddyFileMap(
     'Readdy Project';
 
   const hasChineseProject = /[\u4e00-\u9fff]/.test(indexHtml + (fileMap['src/lib/pageSeoData.ts'] || ''));
+  const canonicalTag = indexHtml.match(/<link\b[^>]*\brel=["']canonical["'][^>]*>/i)?.[0];
+  const sourceUrl = canonicalTag?.match(/\bhref=["'](https:\/\/[^"']+)/i)?.[1]
+    || (fileMap['public/sitemap.xml'] || fileMap['sitemap.xml'])?.match(/<loc>\s*(https:\/\/[^<\s]+)/i)?.[1];
+  const sourceOrigin = sourceUrl?.match(/^https:\/\/[^/?#]+/i)?.[0];
 
   const indexCssPath =
     ['src/index.css', 'src/App.css', 'src/styles/globals.css'].find((p) => p in fileMap) ||
@@ -1039,6 +1155,7 @@ export function analyzeReaddyFileMap(
   return {
     projectKey,
     projectName,
+    sourceOrigin,
     sourceType: options.sourceType,
     framework: routerFile ? 'React + Vite + React Router' : 'React / HTML',
     routerFile,
@@ -1109,6 +1226,469 @@ function stripBracketProperty(source: string, propName: string): string {
   return out;
 }
 
+type LabeledHref = { label: string; href: string };
+
+function escapeHtmlText(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function escapeHtmlAttr(value: string): string {
+  return escapeHtmlText(value).replace(/"/g, '&quot;');
+}
+
+function anchorTag(link: LabeledHref): string {
+  return `<a href="${escapeHtmlAttr(link.href)}">${escapeHtmlText(link.label)}</a>`;
+}
+
+function sliceBalanced(code: string, openIndex: number, openChar: string, closeChar: string): string {
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let inBacktick = false;
+  let escaped = false;
+  for (let i = openIndex; i < code.length; i++) {
+    const ch = code[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (!inDouble && !inBacktick && ch === "'") {
+      inSingle = !inSingle;
+      continue;
+    }
+    if (!inSingle && !inBacktick && ch === '"') {
+      inDouble = !inDouble;
+      continue;
+    }
+    if (!inSingle && !inDouble && ch === '`') {
+      inBacktick = !inBacktick;
+      continue;
+    }
+    if (inSingle || inDouble || inBacktick) continue;
+    if (ch === openChar) depth++;
+    else if (ch === closeChar) {
+      depth--;
+      if (depth === 0) return code.slice(openIndex, i + 1);
+    }
+  }
+  return code.slice(openIndex);
+}
+
+type MapItem = { text?: string; fields: Record<string, string> };
+
+function findQuoteUrl(fileMap: Record<string, string>): string | undefined {
+  for (const content of Object.values(fileMap)) {
+    const match = content.match(/const\s+QUOTE_URL\s*=\s*['"]([^'"]+)['"]/);
+    if (match) return match[1];
+  }
+  return undefined;
+}
+
+function resolveCtaHref(href: string | undefined, quoteUrl: string | undefined): string | undefined {
+  const raw = (href || '').trim();
+  if (!raw || raw === '#' || raw === '/online-quotation/') return quoteUrl;
+  return raw;
+}
+
+function readJsxElementEnd(code: string, start: number): number {
+  if (code[start] !== '<') return -1;
+  const nameMatch = /^<([A-Za-z][\w.]*)/.exec(code.slice(start));
+  if (!nameMatch) return -1;
+  const tag = nameMatch[1];
+  let i = start + nameMatch[0].length;
+  let braceDepth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let inBacktick = false;
+  let escaped = false;
+  let selfClosing = false;
+  for (; i < code.length; i++) {
+    const ch = code[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (!inDouble && !inBacktick && ch === "'") inSingle = !inSingle;
+    else if (!inSingle && !inBacktick && ch === '"') inDouble = !inDouble;
+    else if (!inSingle && !inDouble && ch === '`') inBacktick = !inBacktick;
+    else if (!inSingle && !inDouble && !inBacktick) {
+      if (ch === '{') braceDepth++;
+      else if (ch === '}') braceDepth--;
+      else if (ch === '>' && braceDepth === 0) {
+        selfClosing = code[i - 1] === '/';
+        i++;
+        break;
+      }
+    }
+  }
+  if (selfClosing || /^(img|br|hr|input)$/i.test(tag)) return i;
+  const close = `</${tag}>`;
+  let depth = 1;
+  while (i < code.length && depth > 0) {
+    const nextOpen = code.indexOf(`<${tag}`, i);
+    const nextClose = code.indexOf(close, i);
+    if (nextClose < 0) return -1;
+    const boundary = nextOpen >= 0 && nextOpen < nextClose ? code[nextOpen + tag.length + 1] : '';
+    const isTag = boundary === '>' || boundary === '/' || boundary === ' ' || boundary === '\n' || boundary === '\t' || boundary === '\r';
+    if (nextOpen >= 0 && nextOpen < nextClose && isTag) {
+      depth++;
+      i = nextOpen + tag.length + 1;
+      continue;
+    }
+    if (nextOpen >= 0 && nextOpen < nextClose) {
+      i = nextOpen + tag.length + 1;
+      continue;
+    }
+    depth--;
+    i = nextClose + close.length;
+  }
+  return i;
+}
+
+function splitTopLevelJsx(source: string): string[] {
+  const blocks: string[] = [];
+  let i = 0;
+  while (i < source.length) {
+    while (i < source.length && /\s/.test(source[i])) i++;
+    if (source.startsWith('{/*', i)) {
+      const end = source.indexOf('*/}', i + 3);
+      i = end < 0 ? source.length : end + 3;
+      continue;
+    }
+    if (source[i] !== '<') {
+      const next = source.indexOf('<', i + 1);
+      i = next < 0 ? source.length : next;
+      continue;
+    }
+    const end = readJsxElementEnd(source, i);
+    if (end < 0 || end <= i) break;
+    const text = source.slice(i, end).trim();
+    if (text) blocks.push(text);
+    i = end;
+  }
+  return blocks;
+}
+
+function extractPageLayoutChildren(code: string): string {
+  const start = code.indexOf('<PageLayout');
+  if (start < 0) return '';
+  const end = readJsxElementEnd(code, start);
+  if (end < 0) return '';
+  const element = code.slice(start, end);
+  if (element.endsWith('/>')) return '';
+  let openEnd = -1;
+  let braceDepth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let inBacktick = false;
+  let escaped = false;
+  for (let i = 0; i < element.length; i++) {
+    const ch = element[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (!inDouble && !inBacktick && ch === "'") inSingle = !inSingle;
+    else if (!inSingle && !inBacktick && ch === '"') inDouble = !inDouble;
+    else if (!inSingle && !inDouble && ch === '`') inBacktick = !inBacktick;
+    else if (!inSingle && !inDouble && !inBacktick) {
+      if (ch === '{') braceDepth++;
+      else if (ch === '}') braceDepth--;
+      else if (ch === '>' && braceDepth === 0) {
+        openEnd = i;
+        break;
+      }
+    }
+  }
+  const close = '</PageLayout>';
+  if (openEnd < 0 || !element.endsWith(close)) return '';
+  return element.slice(openEnd + 1, element.length - close.length);
+}
+
+function collectLocalDeclarations(code: string): Array<{ name: string; code: string }> {
+  const exportAt = code.search(/\bexport\s+default\b/);
+  const head = exportAt >= 0 ? code.slice(0, exportAt) : code;
+  const decls: Array<{ name: string; code: string }> = [];
+  const re = /(^|\n)([ \t]*)(?:const|function)\s+([A-Za-z_$][\w$]*)/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(head)) !== null) {
+    const start = match.index + match[1].length;
+    const name = match[3];
+    if (/^\s*function\b/.test(head.slice(start))) {
+      const brace = head.indexOf('{', start);
+      if (brace < 0) continue;
+      const body = sliceBalanced(head, brace, '{', '}');
+      decls.push({ name, code: head.slice(start, brace + body.length).trim() });
+      re.lastIndex = brace + body.length;
+    } else {
+      const eq = head.indexOf('=', start);
+      if (eq < 0) continue;
+      let j = eq + 1;
+      while (j < head.length && /\s/.test(head[j])) j++;
+      let end = j;
+      if (head[j] === '[' || head[j] === '{') {
+        const balanced = sliceBalanced(head, j, head[j], head[j] === '[' ? ']' : '}');
+        end = j + balanced.length;
+        if (head[end] === ';') end++;
+      } else {
+        while (end < head.length && head[end] !== ';' && head[end] !== '\n') end++;
+        if (head[end] === ';') end++;
+      }
+      decls.push({ name, code: head.slice(start, end).trim() });
+      re.lastIndex = end;
+    }
+  }
+  return decls;
+}
+
+function attachReferencedDeclarations(block: string, decls: Array<{ name: string; code: string }>): string {
+  const included = new Set<string>();
+  const pending = [block];
+  const chunks: string[] = [];
+  while (pending.length > 0) {
+    const text = pending.pop() || '';
+    for (const decl of decls) {
+      if (included.has(decl.name)) continue;
+      if (new RegExp(`\\b${decl.name}\\b`).test(text)) {
+        included.add(decl.name);
+        chunks.push(decl.code);
+        pending.push(decl.code);
+      }
+    }
+  }
+  return [...chunks, block].join('\n\n');
+}
+
+function parseConstArrayItems(declCode: string): MapItem[] | null {
+  const bracket = declCode.indexOf('[');
+  if (bracket < 0) return null;
+  const arrayCode = sliceBalanced(declCode, bracket, '[', ']');
+  const inner = arrayCode.slice(1, arrayCode.endsWith(']') ? -1 : arrayCode.length);
+  const items: MapItem[] = [];
+  let i = 0;
+  while (i < inner.length && items.length < 40) {
+    while (i < inner.length && /[\s,]/.test(inner[i])) i++;
+    if (i >= inner.length) break;
+    const quote = inner[i];
+    if (quote === "'" || quote === '"') {
+      let j = i + 1;
+      let text = '';
+      while (j < inner.length) {
+        if (inner[j] === '\\') {
+          text += inner[j + 1] || '';
+          j += 2;
+          continue;
+        }
+        if (inner[j] === quote) break;
+        text += inner[j];
+        j++;
+      }
+      items.push({ text, fields: {} });
+      i = j + 1;
+      continue;
+    }
+    if (inner[i] === '{') {
+      const obj = sliceBalanced(inner, i, '{', '}');
+      const fields: Record<string, string> = {};
+      const fieldRe = /\b([A-Za-z_$][\w$]*)\s*:\s*(['"])([\s\S]*?)\2/g;
+      let fieldMatch: RegExpExecArray | null;
+      while ((fieldMatch = fieldRe.exec(obj)) !== null) {
+        fields[fieldMatch[1]] = fieldMatch[3].replace(/\\'/g, "'").replace(/\\"/g, '"');
+      }
+      if (Object.keys(fields).length > 0) items.push({ fields });
+      i += obj.length;
+      continue;
+    }
+    break;
+  }
+  return items.length > 0 ? items : null;
+}
+
+function fillMapTemplate(template: string, param: string, item: MapItem, index: number): string {
+  let out = template.replace(/\bkey=\{[^}]+\}/g, `key="${index}"`);
+  if (item.text !== undefined) {
+    return out.replace(new RegExp(`\\{${param}\\}`, 'g'), escapeHtmlText(item.text));
+  }
+  for (const [key, value] of Object.entries(item.fields)) {
+    out = out.replace(
+      new RegExp(`\\b(to|href|src)=\\{${param}\\.${key}\\}`, 'g'),
+      (_, attr: string) => `${attr}="${escapeHtmlAttr(value)}"`,
+    );
+    out = out.replace(new RegExp(`\\{${param}\\.${key}\\}`, 'g'), escapeHtmlText(value));
+  }
+  return out;
+}
+
+function expandMappedArray(code: string, arrayCode: string, callParen: number): { rendered: string; end: number } | null {
+  const items = parseConstArrayItems(`const items = ${arrayCode}`);
+  if (!items) return null;
+  const args = sliceBalanced(code, callParen, '(', ')');
+  const arrow = args.match(/\(\s*([A-Za-z_$][\w$]*)\s*(?:,\s*[A-Za-z_$][\w$]*)?\s*\)\s*=>\s*\(/);
+  if (!arrow) return null;
+  const parenAt = args.indexOf('(', args.indexOf('=>'));
+  if (parenAt < 0) return null;
+  const inner = sliceBalanced(args, parenAt, '(', ')');
+  const template = inner.slice(1, -1);
+  const rendered = items
+    .slice(0, 24)
+    .map((item, index) => fillMapTemplate(template, arrow[1], item, index))
+    .join('\n');
+  let end = callParen + args.length;
+  while (end < code.length && /\s/.test(code[end])) end++;
+  if (code[end] !== '}') return null;
+  return { rendered, end: end + 1 };
+}
+
+function expandArrayMaps(code: string): string {
+  const arrays = new Map<string, string>();
+  for (const decl of collectLocalDeclarations(code)) {
+    if (decl.code.startsWith('const') && decl.code.includes('[')) arrays.set(decl.name, decl.code);
+  }
+  let out = '';
+  let cursor = 0;
+  const namedRe = /\{(\s*)([A-Za-z_$][\w$]*)\.map\s*\(/g;
+  let match: RegExpExecArray | null;
+  while ((match = namedRe.exec(code)) !== null) {
+    const declCode = arrays.get(match[2]);
+    if (!declCode) continue;
+    const callParen = match.index + match[0].length - 1;
+    const expanded = expandMappedArray(code, declCode.slice(declCode.indexOf('[')), callParen);
+    if (!expanded) continue;
+    out += code.slice(cursor, match.index) + expanded.rendered;
+    cursor = expanded.end;
+    namedRe.lastIndex = expanded.end;
+  }
+  out += code.slice(cursor);
+  let inlineOut = '';
+  let i = 0;
+  while (i < out.length) {
+    const brace = out.indexOf('{', i);
+    if (brace < 0) {
+      inlineOut += out.slice(i);
+      break;
+    }
+    let j = brace + 1;
+    while (j < out.length && /\s/.test(out[j])) j++;
+    if (out[j] !== '[') {
+      inlineOut += out.slice(i, brace + 1);
+      i = brace + 1;
+      continue;
+    }
+    const arrayCode = sliceBalanced(out, j, '[', ']');
+    const after = j + arrayCode.length;
+    const mapMatch = /^\s*\.map\s*\(/.exec(out.slice(after));
+    if (!mapMatch) {
+      inlineOut += out.slice(i, brace + 1);
+      i = brace + 1;
+      continue;
+    }
+    const callParen = after + mapMatch[0].length - 1;
+    const expanded = expandMappedArray(out, arrayCode, callParen);
+    if (!expanded) {
+      inlineOut += out.slice(i, brace + 1);
+      i = brace + 1;
+      continue;
+    }
+    inlineOut += out.slice(i, brace) + expanded.rendered;
+    i = expanded.end;
+  }
+  return inlineOut;
+}
+
+function sectionNameFromJsx(jsx: string, index: number): string {
+  const heading = jsx.match(/<h[12]\b[^>]*>([\s\S]*?)<\/h[12]>/i);
+  const text = heading ? heading[1].replace(/<[^>]+>/g, ' ').replace(/\{[^}]*\}/g, ' ').replace(/\s+/g, ' ').trim() : '';
+  if (text) return text.slice(0, 48);
+  const component = jsx.match(/<([A-Z][A-Za-z0-9]*)\b/);
+  if (component) return component[1];
+  return `頁面內容 ${index + 1}`;
+}
+
+function buildPageLayoutBodyBlocks(pageCode: string): Array<{ name: string; code: string }> {
+  const children = extractPageLayoutChildren(pageCode);
+  if (!children.trim()) return [];
+  const decls = collectLocalDeclarations(pageCode);
+  return splitTopLevelJsx(children).map((part, index) => {
+    const code = expandArrayMaps(attachReferencedDeclarations(part, decls));
+    const name = sectionNameFromJsx(code, index).replace(/\*/g, '').trim() || `頁面內容 ${index + 1}`;
+    return { name, code };
+  });
+}
+
+function localeArraySlice(code: string, locale: string): string {
+  const key = locale === 'en' ? 'en' : 'zh';
+  const match = new RegExp(`\\b${key}\\s*:\\s*\\[`).exec(code);
+  if (!match || match.index === undefined) return '';
+  return sliceBalanced(code, match.index + match[0].length - 1, '[', ']');
+}
+
+function extractLabeledHrefs(code: string, limit: number): LabeledHref[] {
+  const re = /label:\s*['"]([^'"]+)['"]\s*,\s*path:\s*['"]([^'"]+)['"]/g;
+  const out: LabeledHref[] = [];
+  const seen = new Set<string>();
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(code)) !== null && out.length < limit) {
+    const label = match[1].trim();
+    const href = match[2].trim();
+    const key = `${label}|${href}`;
+    if (!label || !href || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ label, href });
+  }
+  return out;
+}
+
+function extractLocaleLabelPaths(code: string, locale: string, limit: number): LabeledHref[] {
+  const key = locale === 'en' ? 'en' : 'zh';
+  const re = new RegExp(
+    `${key}\\s*:\\s*\\{\\s*label\\s*:\\s*['"]([^'"]+)['"]\\s*,\\s*path\\s*:\\s*['"]([^'"]+)['"]`,
+    'g',
+  );
+  const out: LabeledHref[] = [];
+  const seen = new Set<string>();
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(code)) !== null && out.length < limit) {
+    const label = match[1].trim();
+    const href = match[2].trim();
+    if (!label || !href || seen.has(label)) continue;
+    seen.add(label);
+    out.push({ label, href });
+  }
+  return out;
+}
+
+function extractFooterColumns(
+  code: string,
+  locale: string,
+): Array<{ title: string; links: LabeledHref[] }> {
+  const block = localeArraySlice(code, locale) || code;
+  const headings = [...block.matchAll(/heading:\s*['"]([^'"]+)['"]/g)];
+  if (headings.length === 0) {
+    const links = extractLabeledHrefs(block, 24);
+    return links.length ? [{ title: locale === 'en' ? 'Links' : '連結', links }] : [];
+  }
+  const columns: Array<{ title: string; links: LabeledHref[] }> = [];
+  for (let i = 0; i < headings.length && columns.length < 6; i++) {
+    const start = headings[i].index ?? 0;
+    const end = i + 1 < headings.length ? (headings[i + 1].index ?? block.length) : block.length;
+    const links = extractLabeledHrefs(block.slice(start, end), 14);
+    if (links.length > 0) columns.push({ title: headings[i][1], links });
+  }
+  return columns;
+}
+
 function synthesizeCondensedNavbar(
   navbarCode: string | undefined,
   locale: string,
@@ -1128,26 +1708,11 @@ function synthesizeCondensedNavbar(
         ? navbarCode.slice(mainNavStart, mainNavEnd > mainNavStart ? mainNavEnd : mainNavStart + 9000)
         : navbarCode;
     const topLevelOnly = stripBracketProperty(navSlice, 'children');
-    const re = isEn
-      ? /en:\s*\{\s*label:\s*['"]([^'"]+)['"]/g
-      : /zh:\s*\{\s*label:\s*['"]([^'"]+)['"]/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(topLevelOnly)) !== null) {
-      if (!labels.includes(m[1]) && labels.length < 16) {
-        labels.push(m[1]);
-      }
-    }
+    labels.push(...extractLocaleLabelPaths(topLevelOnly, locale, 16).map((item) => item.label));
 
     if (mainNavEnd >= 0) {
-      const ctaSlice = navbarCode.slice(mainNavEnd, mainNavEnd + 1500);
-      const ctaRe = isEn
-        ? /en:\s*\{\s*label:\s*['"]([^'"]+)['"]/g
-        : /zh:\s*\{\s*label:\s*['"]([^'"]+)['"]/g;
-      while ((m = ctaRe.exec(ctaSlice)) !== null) {
-        if (!ctaLabels.includes(m[1]) && ctaLabels.length < 2) {
-          ctaLabels.push(m[1]);
-        }
-      }
+      const ctaSlice = navbarCode.slice(mainNavEnd, mainNavEnd + 2500);
+      ctaLabels.push(...extractLocaleLabelPaths(ctaSlice, locale, 2).map((item) => item.label));
     }
 
     const brandMatch = navbarCode.match(/>\s*(BW Event Music)\s*</);
@@ -1158,18 +1723,38 @@ function synthesizeCondensedNavbar(
     }
   }
 
+  const sourcedLinks = navbarCode
+    ? extractLocaleLabelPaths(
+        stripBracketProperty(
+          navbarCode.slice(
+            Math.max(0, navbarCode.search(/\bmainNavItems\b/)),
+            navbarCode.search(/\bctaItems\b/) >= 0
+              ? navbarCode.search(/\bctaItems\b/)
+              : navbarCode.search(/\bmainNavItems\b/) + 9000,
+          ),
+          'children',
+        ),
+        locale,
+        16,
+      )
+    : [];
+  const sourcedCtas =
+    navbarCode && navbarCode.search(/\bctaItems\b/) >= 0
+      ? extractLocaleLabelPaths(navbarCode.slice(navbarCode.search(/\bctaItems\b/), navbarCode.search(/\bctaItems\b/) + 2500), locale, 2)
+      : [];
   const finalLinks =
-    labels.length > 0
-      ? labels
-      : isEn
-        ? ['Home', 'Services', 'Weddings', 'Dinner', 'Contact']
-        : ['主頁', '服務一覽', '婚禮演出', '周年晚宴', '聯絡我們'];
+    sourcedLinks.length > 0
+      ? sourcedLinks
+      : (labels.length > 0 ? labels : isEn
+          ? ['Home', 'Services', 'Weddings', 'Dinner', 'Contact']
+          : ['主頁', '服務一覽', '婚禮演出', '周年晚宴', '聯絡我們']
+        ).map((label) => ({ label, href: '#' }));
   const finalCtas =
-    ctaLabels.length > 0
-      ? ctaLabels
-      : isEn
-        ? ['Get a Quote', 'Contact']
-        : ['網上報價', '聯絡我們'];
+    sourcedCtas.length > 0
+      ? sourcedCtas
+      : (ctaLabels.length > 0 ? ctaLabels : isEn ? ['Get a Quote', 'Contact'] : ['網上報價', '聯絡我們']).map(
+          (label) => ({ label, href: '#' }),
+        );
 
   const headerClasses = isHome
     ? 'bg-transparent text-background-50 px-6 py-4 flex items-center justify-between'
@@ -1180,22 +1765,112 @@ function synthesizeCondensedNavbar(
     <span data-brand="true">${brand}</span>
     <small data-brand-subtitle="true">${brandSubtitle}</small>
   </div>
-  <nav>${finalLinks.map((l) => `<a href="#">${l}</a>`).join('\n      ')}</nav>
+  <nav>${finalLinks.map((link) => anchorTag(link)).join('\n      ')}</nav>
   <div data-cta="true">
-    ${finalCtas.map((c) => `<button>${c}</button>`).join('\n    ')}
+    ${finalCtas.map((link) => anchorTag(link)).join('\n    ')}
   </div>
 </header>`;
 }
 
+function sliceAssignedValue(code: string, name: string): string {
+  const match = new RegExp(`(?:const|let)\\s+${name}\\b[^=]*=\\s*([\\[{])`).exec(code);
+  if (!match || match.index === undefined) return '';
+  const open = match[1];
+  return sliceBalanced(code, match.index + match[0].length - 1, open, open === '[' ? ']' : '}');
+}
+
+function readStringField(block: string, field: string): string | undefined {
+  const match = block.match(new RegExp(`\\b${field}\\s*:\\s*(['"])([\\s\\S]*?)\\1`));
+  return match?.[2]?.replace(/\\n/g, ' ').trim() || undefined;
+}
+
+function firstTextAnchor(code: string | undefined, hrefPattern: string): LabeledHref | undefined {
+  if (!code) return undefined;
+  const re = new RegExp(`<a\\b[^>]*href=["'](${hrefPattern})["'][^>]*>([\\s\\S]*?)<\\/a>`, 'gi');
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(code)) !== null) {
+    const label = match[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (label) return { label, href: match[1] };
+  }
+  return undefined;
+}
+
+function localeRecordSlice(block: string, locale: string): string {
+  const key = locale === 'en' ? 'en' : 'zh';
+  const match = new RegExp(`\\b${key}\\s*:\\s*\\{`).exec(block);
+  if (!match || match.index === undefined) return '';
+  return sliceBalanced(block, match.index + match[0].length - 1, '{', '}');
+}
+
 function synthesizeCondensedFooter(footerCode: string | undefined, locale: string): string {
   const isEn = locale === 'en';
-  const links = isEn
-    ? ['Services', 'Weddings', 'Annual Dinner', 'Music Insights', 'Contact']
-    : ['服務一覽', '婚禮演出', '周年晚宴', '音樂資訊', '聯絡我們'];
+  const columns = footerCode ? extractFooterColumns(footerCode, locale) : [];
+  const quoteUrl = footerCode?.match(/const\s+QUOTE_URL\s*=\s*['"]([^'"]+)['"]/)?.[1];
+  const copy = footerCode ? localeRecordSlice(sliceAssignedValue(footerCode, 'copy'), locale) : '';
+  const tagline = readStringField(copy, 'tagline');
+  const quoteCta = readStringField(copy, 'quoteCta');
+  const contactCta = readStringField(copy, 'contactCta');
+  const contactTitle = readStringField(copy, 'contactHeading') || (isEn ? 'Contact Us' : '聯絡我們');
+  const quickTitle = readStringField(copy, 'quickHeading') || (isEn ? 'Quick Links' : '快速連結');
+  const address = readStringField(copy, 'address');
+  const rights = readStringField(copy, 'rights') || (isEn ? 'All rights reserved.' : '保留所有權利.');
+  const contactPath = isEn ? '/en/contact/' : '/contact/';
+  const quickBlock = footerCode ? localeArraySlice(sliceAssignedValue(footerCode, 'quickLinks'), locale) : '';
+  const quickLinks = extractLabeledHrefs(quickBlock, 8);
+  const quoteLabel = quickBlock.match(/label:\s*['"]([^'"]+)['"]\s*,\s*path:\s*QUOTE_URL/)?.[1];
+  if (quoteLabel && quoteUrl && !quickLinks.some((link) => link.label === quoteLabel)) {
+    quickLinks.push({ label: quoteLabel, href: quoteUrl });
+  }
+  const phone = firstTextAnchor(footerCode, 'tel:[^"\']+');
+  const whatsapp = firstTextAnchor(footerCode, 'https:\\/\\/wa\\.me\\/[^"\']+');
+  const email = firstTextAnchor(footerCode, 'mailto:[^"\']+');
+  const contactLines: LabeledHref[] = [phone, whatsapp, email].filter((link): link is LabeledHref => Boolean(link));
+  const fallback: LabeledHref[] = (isEn
+    ? [
+        ['Services', '/services/'],
+        ['Weddings', '/wedding-performance/'],
+        ['Annual Dinner', '/annual-dinner/'],
+        ['Music Insights', '/music-insights/'],
+        ['Contact', '/contact/'],
+      ]
+    : [
+        ['服務一覽', '/services/'],
+        ['婚禮演出', '/wedding-performance/'],
+        ['周年晚宴', '/annual-dinner/'],
+        ['音樂資訊', '/music-insights/'],
+        ['聯絡我們', '/contact/'],
+      ]
+  ).map(([label, href]) => ({ label, href }));
+  const columnHtml =
+    columns.length > 0
+      ? columns
+          .map(
+            (column) =>
+              `<div><h3>${escapeHtmlText(column.title)}</h3>\n  ${column.links.map((link) => anchorTag(link)).join('\n  ')}</div>`,
+          )
+          .join('\n  ')
+      : `<div><h3>${isEn ? 'Links' : '連結'}</h3>\n  ${fallback.map((link) => anchorTag(link)).join('\n  ')}</div>`;
+  const brandActions = [
+    quoteCta && quoteUrl ? anchorTag({ label: quoteCta, href: quoteUrl }) : '',
+    contactCta ? anchorTag({ label: contactCta, href: contactPath }) : '',
+  ].filter(Boolean);
   return `<footer className="bg-background-100 text-foreground-950 px-8 py-10">
+  <!-- footer-brand -->
   <span>BW Event Music</span>
-  <p>${isEn ? '© 2026 BW Event Music. All rights reserved.' : '© 2026 BW Event Music. 版權所有。'}</p>
-  ${links.map((l) => `<a href="#">${l}</a>`).join('\n  ')}
+  ${tagline ? `<p>${escapeHtmlText(tagline)}</p>` : ''}
+  ${brandActions.join('\n  ')}
+  <!-- footer-contact -->
+  <h3>${escapeHtmlText(contactTitle)}</h3>
+  ${contactLines.map((link) => anchorTag(link)).join('\n  ')}
+  ${address ? `<p>${escapeHtmlText(address)}</p>` : ''}
+  <!-- footer-quick -->
+  <h3>${escapeHtmlText(quickTitle)}</h3>
+  ${quickLinks.map((link) => anchorTag(link)).join('\n  ')}
+  <!-- footer-groups -->
+  ${columnHtml}
+  <!-- footer-bar -->
+  <p>© 2026 BW Event Music. ${escapeHtmlText(rights)}</p>
+  <p>BW Solution Ltd.</p>
 </footer>`;
 }
 
@@ -1276,7 +1951,7 @@ export function assembleReaddyPageCode(
   rawFiles: Record<string, string>,
   analysis: ReaddyProjectAnalysis,
 ): { code: string; includedFiles: string[]; summary: string } {
-  const fileMap = normalizeProjectFileMap(rawFiles);
+  const fileMap = fileMapForAssembly(rawFiles, page.sourceFile, analysis.sharedFiles);
   const allPaths = new Set(Object.keys(fileMap));
   const includedFiles: string[] = [];
 
@@ -1350,18 +2025,21 @@ export function assembleReaddyPageCode(
     if (analysis.sharedFiles.navbar) includedFiles.push(analysis.sharedFiles.navbar);
   }
 
-  // If PageLayout-wrapped page, emit explicit Hero block + CTA metadata
+  const quoteUrl = findQuoteUrl(fileMap);
   const layoutProps = usesPageLayout ? extractPageLayoutProps(pageCode) : null;
   if (layoutProps) {
     if (analysis.sharedFiles.pageLayout) includedFiles.push(analysis.sharedFiles.pageLayout);
+    const primaryLabel = layoutProps.ctaText || (page.locale === 'en' ? 'Get Online Quote' : '立即網上報價');
+    const primaryHref = resolveCtaHref(layoutProps.ctaLink, quoteUrl);
+    const secondaryHref = resolveCtaHref(layoutProps.ctaSecondaryLink, quoteUrl);
     blocks.push(`/* === COMPONENT: PageLayout Hero === */
 <section className="bg-background-50 text-foreground-950 py-20 px-8">
-  <h1>${layoutProps.title || page.title}</h1>
-  ${layoutProps.subtitle ? `<p>${layoutProps.subtitle}</p>` : ''}
-  ${layoutProps.description ? `<p>${layoutProps.description}</p>` : ''}
-  ${layoutProps.heroImage ? `<img src="${layoutProps.heroImage}" alt="${layoutProps.heroAlt || layoutProps.title || page.title}" />` : ''}
-  <button>${layoutProps.ctaText || (page.locale === 'en' ? 'Get Online Quote' : '立即網上報價')}</button>
-  ${layoutProps.ctaSecondaryText ? `<button>${layoutProps.ctaSecondaryText}</button>` : ''}
+  <h1>${escapeHtmlText(layoutProps.title || page.title)}</h1>
+  ${layoutProps.subtitle ? `<p>${escapeHtmlText(layoutProps.subtitle)}</p>` : ''}
+  ${layoutProps.description ? `<p>${escapeHtmlText(layoutProps.description)}</p>` : ''}
+  ${layoutProps.heroImage ? `<img src="${escapeHtmlAttr(layoutProps.heroImage)}" alt="${escapeHtmlAttr(layoutProps.heroAlt || layoutProps.title || page.title)}" />` : ''}
+  ${primaryHref ? `<a href="${escapeHtmlAttr(primaryHref)}">${escapeHtmlText(primaryLabel)}</a>` : `<button>${escapeHtmlText(primaryLabel)}</button>`}
+  ${layoutProps.ctaSecondaryText ? (secondaryHref ? `<a href="${escapeHtmlAttr(secondaryHref)}">${escapeHtmlText(layoutProps.ctaSecondaryText)}</a>` : `<button>${escapeHtmlText(layoutProps.ctaSecondaryText)}</button>`) : ''}
 </section>`);
   }
 
@@ -1381,6 +2059,7 @@ export function assembleReaddyPageCode(
   ).length;
   const isSectionComposerPage =
     !usesPageLayout && importedSectionsCount >= 2 && inlineSectionCount <= 2;
+  const layoutBodyBlocks = usesPageLayout ? buildPageLayoutBodyBlocks(pageCode) : [];
 
   if (isSectionComposerPage) {
     // Emit each imported section in exact JSX render order, plus inline ScenarioGallery if used
@@ -1411,6 +2090,20 @@ export function assembleReaddyPageCode(
     }
     if (!galleryInserted && galleryMatch) {
       blocks.push(`/* === COMPONENT: ScenarioGallery === */\n${galleryMatch[0]}`);
+    }
+  } else if (layoutBodyBlocks.length > 0) {
+    for (const block of layoutBodyBlocks) {
+      blocks.push(`/* === COMPONENT: ${block.name} === */\n${block.code}`);
+    }
+    for (const imp of orderedImports) {
+      const usedInBody = layoutBodyBlocks.some((block) => new RegExp(`<${imp.localName}\\b`).test(block.code));
+      if (usedInBody) continue;
+      const compCode = fileMap[imp.resolvedPath];
+      if (!compCode) continue;
+      includedFiles.push(imp.resolvedPath);
+      blocks.push(
+        `/* === COMPONENT: ${imp.localName} (${imp.resolvedPath}) === */\n${prepareComponentCode(compCode, imp.resolvedPath, fileMap, allPaths)}`,
+      );
     }
   } else if (orderedImports.length > 0 && inlineSectionCount === 0) {
     for (const imp of orderedImports) {

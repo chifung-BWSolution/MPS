@@ -55,7 +55,7 @@ export interface SocialLlmInput {
   groupName?: string | null;
   platforms: string[];
   timeoutMs?: number;
-  /** 覆寫模型（預設 GROK_MODEL 或 grok-4.5） */
+  /** 覆寫模型。文案預設 grok-4.3，不跟其他接口的 grok-4.7。 */
   model?: string;
   /** 覆寫輸出上限（推理型模型太大會很慢） */
   maxTokens?: number;

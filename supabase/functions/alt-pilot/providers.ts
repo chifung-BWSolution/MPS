@@ -36,7 +36,7 @@ export interface ProviderResult {
 }
 
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
-const DEFAULT_GROK_MODEL = 'grok-4.5';
+const DEFAULT_GROK_MODEL = 'grok-4.7';
 const MAX_OUTPUT_TOKENS = 700;
 
 const GEMINI_PRICING: Record<string, { input: number; output: number }> = {
@@ -180,6 +180,7 @@ async function callGrok(request: VisionRequest): Promise<ProviderResult> {
       body: JSON.stringify({
         model,
         temperature: 0.3,
+        reasoning_effort: 'low',
         max_tokens: MAX_OUTPUT_TOKENS,
         messages: [
           { role: 'system', content: request.system },
@@ -242,7 +243,7 @@ async function callGrok(request: VisionRequest): Promise<ProviderResult> {
  *   2. 否則看 `alt_settings.model`：grok* → Grok 主；gemini* → Gemini 主
  *   3. 主 provider 失敗才用另一個（有 key 才用）
  *
- * 預設 model 是 grok-4.5，所以會沿用系統現有的 XAI key。
+ * 預設 model 是 grok-4.7，所以會沿用系統現有的 XAI key。
  */
 export async function generateVision(request: VisionRequest): Promise<ProviderResult> {
   const geminiKey = (Deno.env.get('GEMINI_API_KEY') || '').trim();

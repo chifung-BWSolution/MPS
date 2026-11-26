@@ -18,6 +18,8 @@ export type SceneLayout = {
   left?: string;
   zIndex?: number;
   minHeight?: string;
+  /** How many tracks this node occupies inside a parent grid, from `lg:col-span-*`. */
+  columnSpan?: number;
 };
 
 export type SceneStyle = {
@@ -39,6 +41,7 @@ export type SceneNode = {
   text?: string;
   src?: string;
   htmlTag?: string;
+  href?: string;
   layout?: SceneLayout;
   style?: SceneStyle;
   children?: SceneNode[];
@@ -74,6 +77,12 @@ const MAX_WIDTH: Record<string, string> = {
   '7xl': '1280px',
 };
 
+function usableSceneFont(family: string | undefined): string | undefined {
+  const name = String(family || '').split(',')[0].replace(/['"]/g, '').trim();
+  if (!name || /^(sans-serif|serif|monospace|system-ui|inherit|initial|unset)$/i.test(name)) return undefined;
+  return name;
+}
+
 function classTokens(className: string): string[] {
   return className.split(/\s+/).filter(Boolean);
 }
@@ -99,6 +108,15 @@ export function resolveSpacing(className: string, prefix: string): number | unde
     }
   }
   return undefined;
+}
+
+export function columnSpanOf(className: string): number | undefined {
+  const tokens = classTokens(className);
+  const read = (prefix: string) => {
+    const hit = tokens.find((token) => new RegExp(`^${prefix}col-span-\\d+$`).test(token));
+    return hit ? Number(hit.slice(hit.lastIndexOf('-') + 1)) : undefined;
+  };
+  return read('lg:') ?? read('md:') ?? read('sm:') ?? read('');
 }
 
 export function resolveGridColumns(
@@ -220,7 +238,7 @@ function collapse(node: SceneNode): SceneNode {
 }
 
 function capture(element: Element, id: string, depth: number): SceneNode | null {
-  if (!(element instanceof HTMLElement) || depth > 9) return null;
+  if (!(element instanceof HTMLElement) || depth > 16) return null;
   if (element.matches('script, style, link, noscript, svg')) return null;
   const className = typeof element.className === 'string' ? element.className : '';
   const tokens = classTokens(className);
@@ -238,6 +256,8 @@ function capture(element: Element, id: string, depth: number): SceneNode | null 
   if (fixedWidget) return null;
 
   const tag = element.tagName.toLowerCase();
+  const hrefAttr = tag === 'a' ? (element.getAttribute('href') || '').trim() : '';
+  const href = hrefAttr && hrefAttr !== '#' ? hrefAttr : undefined;
   if (tag === 'img') {
     const src = element.getAttribute('src') || '';
     if (!src) return null;
@@ -264,7 +284,8 @@ function capture(element: Element, id: string, depth: number): SceneNode | null 
     }
   }
 
-  const text = ownText(element);
+  const labelled = (element.getAttribute('aria-label') || '').trim();
+  const text = ownText(element) || (children.length === 0 ? labelled : '');
   const color = readableColor(style.color);
   const gradientScrim = tokens.some((token) => token.startsWith('bg-gradient-') || token.startsWith('from-black'));
   const background = gradientScrim
@@ -281,7 +302,7 @@ function capture(element: Element, id: string, depth: number): SceneNode | null 
     color,
     fontSize,
     fontWeight: fontWeight >= 600 ? fontWeight : undefined,
-    fontFamily: style.fontFamily.includes('Noto Serif HK') ? 'Noto Serif HK' : undefined,
+    fontFamily: usableSceneFont(style.fontFamily),
     textAlign,
   };
 
@@ -292,6 +313,7 @@ function capture(element: Element, id: string, depth: number): SceneNode | null 
       name: text.slice(0, 40),
       text,
       htmlTag: tag,
+      href,
       style: textStyle,
     };
   }
@@ -325,6 +347,7 @@ function capture(element: Element, id: string, depth: number): SceneNode | null 
     left: pinned ? '0px' : undefined,
     zIndex: tokens.includes('z-10') ? 1 : undefined,
     minHeight: minHeightOf(className),
+    columnSpan: columnSpanOf(className),
   };
   const nodeChildren = text
     ? [{ id: `${id}-t`, type: 'text' as const, text, name: text.slice(0, 40), style: textStyle }, ...children]
@@ -336,6 +359,7 @@ function capture(element: Element, id: string, depth: number): SceneNode | null 
     type: isGrid ? 'grid' : 'stack',
     name: heading?.text || element.getAttribute('aria-label') || tag,
     htmlTag: sectionTag ? tag : undefined,
+    href,
     layout,
     style: {
       background,
@@ -367,9 +391,19 @@ export function extractScenes(root: ParentNode): SceneNode[] {
 
 export function captureDesktopSceneGraph(): SceneNode[] | null {
   if (typeof document === 'undefined') return null;
-  const root = document.querySelector('.readdy-site');
-  if (!root) return null;
-  return extractScenes(root);
+  const documents: Document[] = [document];
+  for (const frame of document.querySelectorAll('iframe')) {
+    try {
+      if (frame.contentDocument) documents.push(frame.contentDocument);
+    } catch {
+      // Cross-origin frames are not readable.
+    }
+  }
+  for (const doc of documents) {
+    const root = doc.querySelector('.readdy-site');
+    if (root) return extractScenes(root);
+  }
+  return null;
 }
 
 export function matchSceneToSection(

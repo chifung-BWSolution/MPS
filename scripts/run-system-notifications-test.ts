@@ -89,6 +89,8 @@ assert.match(readdy.previewHtml, /lang="zh-Hant"/);
 assert.match(readdy.previewHtml, /轉換成功/);
 assert.match(readdy.previewHtml, /範例現場音樂/);
 assert.match(readdy.previewHtml, /\/services/);
+assert.match(readdy.previewHtml, /已 Publish 到正式站/);
+assert.match(readdy.purpose, /自動 Publish/);
 
 const menu = read('src/context/AppContext.tsx');
 assert.match(menu, /電郵連接[\s\S]*系統通知[\s\S]*登入紀錄/);

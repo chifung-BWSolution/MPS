@@ -48,7 +48,11 @@ export function FaithfulServicesFrame() {
 
 export function faithfulPagePreview(path: string | undefined, rawCode: string): ReactNode {
   const normalized = (path || '').replace(/\/+$/, '') || '/';
-  if ((normalized === '/' || normalized === '/cn') && rawCode.includes('讓現場音樂，成為賓客記得住的部分')) {
+  if (
+    (normalized === '/' || normalized === '/cn') &&
+    rawCode.includes('讓現場音樂，成為賓客記得住的部分') &&
+    rawCode.includes('婚禮、企業晚宴、VIP 接待、餐廳、商場和節日活動的現場音樂統籌。')
+  ) {
     return <FaithfulHomeFrame />;
   }
   if (normalized === '/services' || normalized === '/cn/services') {

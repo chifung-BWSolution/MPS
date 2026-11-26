@@ -52,6 +52,7 @@ export interface ReaddyDiscoveredPage {
 export interface ReaddyProjectAnalysis {
   projectKey: string;
   projectName: string;
+  sourceOrigin?: string;
   sourceType: SourceType;
   framework: string;
   routerFile: string | null;
@@ -156,6 +157,12 @@ export interface FramerIrCard {
   icon?: string;
   imageUrl?: string;
   tagline?: string;
+  href?: string;
+}
+
+export interface FramerIrNavLink {
+  label: string;
+  href?: string;
 }
 
 export interface FramerIrElement {
@@ -165,7 +172,16 @@ export interface FramerIrElement {
   subheading?: string;
   paragraphs?: string[];
   buttons?: FramerIrButton[];
-  navLinks?: string[];
+  navLinks?: Array<string | FramerIrNavLink>;
+  footerColumns?: Array<{ title: string; links: FramerIrNavLink[] }>;
+  footerLead?: {
+    tagline?: string;
+    contactTitle?: string;
+    contactLines?: FramerIrNavLink[];
+    quickTitle?: string;
+    quickLinks?: FramerIrNavLink[];
+    company?: string;
+  };
   logos?: string[];
   cards?: FramerIrCard[];
   stats?: Array<{ label: string; value: string }>;
@@ -179,7 +195,7 @@ export interface FramerIrSection {
   step: number;
   name: string;
   sectionKind: 'navbar' | 'hero' | 'logos' | 'features' | 'content' | 'cta' | 'footer';
-  framerType: 'Stack' | 'Grid';
+  framerType: 'Stack' | 'Grid' | 'Frame';
   direction: 'horizontal' | 'vertical';
   gridSpan: string;
   columns: number;
@@ -222,6 +238,7 @@ export interface FramerIrDesignTokens {
 
 export interface FramerIrPayload {
   version: '1.2';
+  renderedPage?: { url: string; images: Record<'desktop' | 'tablet' | 'phone', string>; limitations: string[] };
   pageMeta?: FramerIrPageMeta;
   sourceSummary: {
     framework: string;
@@ -303,8 +320,11 @@ export interface FramerOAuthStatus {
   redirect_uri: string;
   client_id: string | null;
   github_configured: boolean;
+  github_login?: string | null;
   github_token_preview: string;
   github_source: 'stored' | 'env' | null;
+  /** When omitted by an older server, the workbench treats Publish as on. */
+  auto_publish?: boolean;
 }
 
 export type ExecutionStageKey = 'ast' | 'grid' | 'tokens' | 'mcp';

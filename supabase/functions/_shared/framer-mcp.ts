@@ -69,6 +69,25 @@ export async function getOptionalUserId(req: Request): Promise<string | null> {
   }
 }
 
+/** Reject missing and anon tokens. A logged-in user returns their id. The service role returns userId null so a background worker can call these functions. */
+export async function requireUser(req: Request): Promise<{ userId: string | null } | { response: Response }> {
+  const token = extractBearerToken(req);
+  if (!token) {
+    return { response: jsonResponse({ error: "未登入或缺少授權標頭" }, 401) };
+  }
+  if (token === SUPABASE_SERVICE_ROLE_KEY) {
+    return { userId: null };
+  }
+  if (token === SUPABASE_ANON_KEY) {
+    return { response: jsonResponse({ error: "需要登入後才能使用此功能" }, 401) };
+  }
+  const userId = await getOptionalUserId(req);
+  if (!userId) {
+    return { response: jsonResponse({ error: "登入已失效，請重新登入" }, 401) };
+  }
+  return { userId };
+}
+
 export function getFramerOAuthRedirectUri(): string {
   const override = (Deno.env.get("FRAMER_OAUTH_REDIRECT_URI") || "").trim();
   if (override) return override;
@@ -138,10 +157,12 @@ export type FramerConnectionRow = {
   connected_at: string | null;
   last_used_at: string | null;
   updated_at: string | null;
+  token_refresh_until?: string | null;
+  auto_publish?: boolean | null;
 };
 
 export function isFramerSessionLimitError(message: string): boolean {
-  return /active session limit|do not retry now|too many active sessions|同時開啟工作階段上限|等待至少\s*360\s*秒/i.test(
+  return /active session limit|do not retry now|too many active sessions|同時開啟工作階段上限|等待至少\s*360\s*秒|等待至少\s*6\s*分鐘/i.test(
     String(message || ""),
   );
 }
@@ -244,6 +265,47 @@ export function getFramerSessionOpenBlock(
   return { blocked: true, retryAfterSeconds: Math.max(1, Math.ceil((until - nowMs) / 1000)) };
 }
 
+function splitFramerSessionKey(key: string): { slot: number; projectKey: string } {
+  const match = key.match(/#(\d+)$/);
+  if (!match) return { slot: 0, projectKey: key };
+  return { slot: Number(match[1]), projectKey: key.slice(0, -match[0].length) };
+}
+
+function sessionKeyFromRow(slot: number, projectKey: string): string {
+  return slot === 0 ? projectKey : `${projectKey}#${slot}`;
+}
+
+function isMissingSessionTable(message: string): boolean {
+  return /framer_mcp_sessions|schema cache|does not exist|42P01/i.test(message);
+}
+
+async function upsertFramerMcpSessionRow(
+  supabase: SupabaseClient,
+  key: string,
+  entry: FramerActiveMcpSession,
+): Promise<boolean> {
+  const { slot, projectKey } = splitFramerSessionKey(key);
+  const { error } = await supabase.from("framer_mcp_sessions").upsert(
+    {
+      slot,
+      project_key: projectKey,
+      project_id: entry.project_id,
+      project_url: entry.project_url,
+      mcp_session_id: entry.mcp_session_id,
+      project_session: entry.project_session,
+      opened_at: entry.opened_at,
+      last_used_at: entry.last_used_at,
+      reopen_after: entry.reopen_after ?? null,
+      blocked_until: entry.blocked_until ?? null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "slot,project_key" },
+  );
+  if (!error) return true;
+  if (isMissingSessionTable(error.message)) return false;
+  throw new Error(`儲存 framer_mcp_sessions 失敗: ${error.message}`);
+}
+
 export async function saveCachedFramerSession(
   supabase: SupabaseClient,
   projectId: string,
@@ -251,6 +313,7 @@ export async function saveCachedFramerSession(
 ): Promise<void> {
   const key = String(projectId || "").trim();
   if (!key) return;
+  if (await upsertFramerMcpSessionRow(supabase, key, entry)) return;
   for (let attempt = 0; attempt < 5; attempt++) {
     const latest = await loadFramerConnection(supabase);
     const map = normalizeSessionsMap(latest?.active_mcp_sessions);
@@ -296,6 +359,16 @@ export async function clearCachedFramerSession(
 ): Promise<void> {
   const key = String(projectId || "").trim();
   if (!key) return;
+  const { slot, projectKey } = splitFramerSessionKey(key);
+  const { error } = await supabase
+    .from("framer_mcp_sessions")
+    .delete()
+    .eq("slot", slot)
+    .eq("project_key", projectKey);
+  if (!error) return;
+  if (!isMissingSessionTable(error.message)) {
+    throw new Error(`清除 framer_mcp_sessions 失敗: ${error.message}`);
+  }
   const latest = await loadFramerConnection(supabase);
   const map = normalizeSessionsMap(latest?.active_mcp_sessions);
   if (!(key in map)) return;
@@ -427,12 +500,25 @@ export async function replaceSharedFramerTransport(
   return client;
 }
 
+const FRAMER_TRANSPORT_TOUCH_MS = 60_000;
+
 export async function touchSharedFramerTransport(
   supabase: SupabaseClient,
   sessionId: string | null,
   slot = 0,
 ): Promise<void> {
   if (!sessionId) return;
+  const accountKey = framerAccountSessionKey(slot);
+  const latest = await loadFramerConnection(supabase);
+  const existing = normalizeSessionsMap(latest?.active_mcp_sessions)[accountKey];
+  const lastUsedMs = existing ? Date.parse(existing.last_used_at) : NaN;
+  if (
+    existing?.mcp_session_id === sessionId &&
+    Number.isFinite(lastUsedMs) &&
+    Date.now() - lastUsedMs < FRAMER_TRANSPORT_TOUCH_MS
+  ) {
+    return;
+  }
   await rememberSharedFramerTransport(supabase, sessionId, slot);
 }
 
@@ -445,7 +531,35 @@ export async function loadFramerConnection(
     .eq("id", FRAMER_OAUTH_ROW_ID)
     .maybeSingle();
   if (error) throw new Error(`讀取 framer_oauth_connections 失敗: ${error.message}`);
-  return (data as FramerConnectionRow | null) ?? null;
+  const row = (data as FramerConnectionRow | null) ?? null;
+  if (!row) return null;
+  const { data: sessions, error: sessionError } = await supabase
+    .from("framer_mcp_sessions")
+    .select("slot, project_key, project_id, project_url, mcp_session_id, project_session, opened_at, last_used_at, reopen_after, blocked_until");
+  if (sessionError) {
+    if (isMissingSessionTable(sessionError.message)) return row;
+    throw new Error(`讀取 framer_mcp_sessions 失敗: ${sessionError.message}`);
+  }
+  const map: FramerActiveMcpSessionsMap = {};
+  for (const item of sessions ?? []) {
+    const projectKey = String(item.project_key || "");
+    const slot = Number(item.slot) || 0;
+    const sessionKey = sessionKeyFromRow(slot, projectKey);
+    const stamp = String(item.last_used_at || item.opened_at || "");
+    if (!sessionKey || !stamp) continue;
+    map[sessionKey] = {
+      project_id: String(item.project_id || projectKey),
+      project_url: String(item.project_url || ""),
+      mcp_session_id: item.mcp_session_id ? String(item.mcp_session_id) : null,
+      project_session: String(item.project_session || ""),
+      opened_at: String(item.opened_at || stamp),
+      last_used_at: stamp,
+      reopen_after: item.reopen_after ? String(item.reopen_after) : null,
+      blocked_until: item.blocked_until ? String(item.blocked_until) : null,
+    };
+  }
+  row.active_mcp_sessions = map;
+  return row;
 }
 
 export async function upsertFramerConnection(
@@ -465,20 +579,41 @@ export async function upsertFramerConnection(
   if (error) throw new Error(`儲存 framer_oauth_connections 失敗: ${error.message}`);
 }
 
-export async function getValidFramerAccessToken(
-  supabase: SupabaseClient,
-): Promise<{ accessToken: string; row: FramerConnectionRow }> {
-  const row = await loadFramerConnection(supabase);
-  if (!row || (!row.access_token && !row.refresh_token)) {
-    throw new Error("尚未連接 Framer MCP，請先點擊右上角「mcp.framer.com」完成授權。");
-  }
-
+function framerAccessTokenIsFresh(row: FramerConnectionRow | null): boolean {
+  if (!row?.access_token) return false;
   const expiresMs = row.expires_at ? Date.parse(row.expires_at) : 0;
-  const isFresh = Boolean(row.access_token) && (!expiresMs || expiresMs - Date.now() > 60_000);
-  if (isFresh && row.access_token) {
-    return { accessToken: row.access_token, row };
-  }
+  return !expiresMs || expiresMs - Date.now() > 60_000;
+}
 
+/** null means the claim function is not deployed yet, so the caller refreshes directly. */
+async function claimFramerTokenRefresh(supabase: SupabaseClient): Promise<boolean | null> {
+  const { data, error } = await supabase.rpc("claim_framer_token_refresh", {
+    claim_until: new Date(Date.now() + 20_000).toISOString(),
+  });
+  if (error) {
+    if (/claim_framer_token_refresh|PGRST202|schema cache|does not exist/i.test(error.message)) {
+      return null;
+    }
+    throw new Error(`無法鎖定 Framer Token 續期: ${error.message}`);
+  }
+  return Boolean(data);
+}
+
+async function clearFramerTokenRefreshClaim(supabase: SupabaseClient): Promise<void> {
+  const { error } = await supabase
+    .from("framer_oauth_connections")
+    .update({ token_refresh_until: null, updated_at: new Date().toISOString() })
+    .eq("id", FRAMER_OAUTH_ROW_ID);
+  if (error && !/token_refresh_until|schema cache|PGRST204|does not exist/i.test(error.message)) {
+    throw new Error(`清除 Framer Token 續期鎖失敗: ${error.message}`);
+  }
+}
+
+async function refreshFramerAccessToken(
+  supabase: SupabaseClient,
+  row: FramerConnectionRow,
+  clearClaim: boolean,
+): Promise<{ accessToken: string; row: FramerConnectionRow }> {
   if (!row.refresh_token || !row.client_id) {
     throw new Error("Framer MCP 授權已過期且缺少 refresh_token，請重新點擊「mcp.framer.com」授權。");
   }
@@ -520,6 +655,7 @@ export async function getValidFramerAccessToken(
     scope: payload.scope || row.scope || FRAMER_OAUTH_SCOPE,
     expires_at: nextExpiresAt,
     last_used_at: new Date().toISOString(),
+    ...(clearClaim ? { token_refresh_until: null } : {}),
   });
 
   return {
@@ -529,8 +665,54 @@ export async function getValidFramerAccessToken(
       access_token: payload.access_token,
       refresh_token: payload.refresh_token || row.refresh_token,
       expires_at: nextExpiresAt,
+      token_refresh_until: clearClaim ? null : row.token_refresh_until,
     },
   };
+}
+
+export async function getValidFramerAccessToken(
+  supabase: SupabaseClient,
+): Promise<{ accessToken: string; row: FramerConnectionRow }> {
+  const row = await loadFramerConnection(supabase);
+  if (!row || (!row.access_token && !row.refresh_token)) {
+    throw new Error("尚未連接 Framer MCP，請先點擊右上角「mcp.framer.com」完成授權。");
+  }
+  if (framerAccessTokenIsFresh(row) && row.access_token) {
+    return { accessToken: row.access_token, row };
+  }
+
+  for (let round = 0; round < 8; round++) {
+    const current = round === 0 ? row : await loadFramerConnection(supabase);
+    if (!current || (!current.access_token && !current.refresh_token)) {
+      throw new Error("尚未連接 Framer MCP，請先點擊右上角「mcp.framer.com」完成授權。");
+    }
+    if (framerAccessTokenIsFresh(current) && current.access_token) {
+      return { accessToken: current.access_token, row: current };
+    }
+
+    const claimed = await claimFramerTokenRefresh(supabase);
+    if (claimed === null || claimed) {
+      try {
+        return await refreshFramerAccessToken(supabase, current, claimed === true);
+      } catch (error) {
+        if (claimed) await clearFramerTokenRefreshClaim(supabase).catch(() => undefined);
+        throw error;
+      }
+    }
+
+    const deadline = Date.now() + 20_000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      const latest = await loadFramerConnection(supabase);
+      if (latest && framerAccessTokenIsFresh(latest) && latest.access_token) {
+        return { accessToken: latest.access_token, row: latest };
+      }
+      const until = latest?.token_refresh_until ? Date.parse(latest.token_refresh_until) : 0;
+      if (!until || until <= Date.now()) break;
+    }
+  }
+
+  throw new Error("Framer Token 續期進行中，請稍後再試一次。");
 }
 
 export type McpToolInfo = {

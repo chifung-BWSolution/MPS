@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Activity,
+  Check,
   ChevronLeft,
   ChevronRight,
   Code2,
@@ -10,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatFramerPublishNote, type FramerPublishResult } from '@/lib/framerPublish';
 import {
   DEFAULT_GITHUB_BRANCH,
   DEFAULT_GRID_CONFIG,
@@ -22,6 +25,7 @@ import {
   disconnectFramerOAuth,
   fetchGitHubPageBundle,
   getFramerOAuthStatus,
+  setFramerAutoPublish,
   isValidFramerProjectUrl,
   isFramerSiteRecorded,
   listFramerCatalog,
@@ -34,8 +38,8 @@ import {
   parseReaddyToIr,
   processUploadedReaddyFile,
   saveFramerSiteSnapshot,
-  saveTeamGitHubToken,
   startFramerOAuth,
+  syncFramerPage,
   syncFramerStep,
   type FramerMcpSessionHint,
 } from '@/lib/readdyFramerApi';
@@ -46,6 +50,7 @@ import {
 import { extractReaddyCode } from '@/lib/readdyConversionMail';
 import {
   loadSavedPageProgress,
+  mergeFramerSiteSnapshots,
   normalizeFramerProjectKey,
   savePageProgress,
 } from '@/lib/readdyFramerProgress';
@@ -67,7 +72,6 @@ import type {
   SourceType,
   WorkbenchLogEntry,
 } from '@/types/readdyFramer';
-import { WorkbenchHeader } from './WorkbenchHeader';
 import { PageAnalysisHistoryMenu } from './PageAnalysisHistoryMenu';
 import { SourceConfigPanel } from './SourceConfigPanel';
 import { PageInventoryPanel } from './PageInventoryPanel';
@@ -75,8 +79,6 @@ import { GridAnchorPanel } from './GridAnchorPanel';
 import { LayersPanel } from './LayersPanel';
 import { GridCanvasPreview } from './GridCanvasPreview';
 import { ExecutionProgressModal } from './ExecutionProgressModal';
-import { faithfulPagePreview } from './site/ReaddySitePreview';
-import { captureDesktopSceneGraph, matchSceneToSection } from '@/lib/readdySceneGraph';
 
 function pickLandingPage(pages: ReaddyDiscoveredPage[]): ReaddyDiscoveredPage | undefined {
   return pages.find((page) => page.path === '/') || pages.find((page) => page.pageKind === 'home') || pages[0];
@@ -100,6 +102,11 @@ function createInitialStages(): ExecutionStageState[] {
 export function ReaddyFramerWorkbench() {
   // OAuth & History
   const [oauthStatus, setOauthStatus] = useState<FramerOAuthStatus | null>(null);
+  const [autoPublish, setAutoPublish] = useState(false);
+  const [publishTipAnchor, setPublishTipAnchor] = useState<{ top: number; left: number } | null>(null);
+  const syncButtonRef = useRef<HTMLDivElement>(null);
+  const publishTipTimerRef = useRef<number | null>(null);
+  const [autoPublishSaving, setAutoPublishSaving] = useState(false);
   const [oauthConnecting, setOauthConnecting] = useState(false);
   const [recentJobs, setRecentJobs] = useState<FramerSyncJob[]>([]);
   const [siteSnapshots, setSiteSnapshots] = useState<FramerSiteSnapshot[]>([]);
@@ -200,10 +207,41 @@ export function ReaddyFramerWorkbench() {
     try {
       const status = await getFramerOAuthStatus();
       setOauthStatus(status);
+      setAutoPublish(status.auto_publish === true);
     } catch {
       // ignore initial status fetch failure if offline/unconfigured
     }
   }, []);
+
+  const handleAutoPublishChange = async (enabled: boolean) => {
+    const previous = autoPublish;
+    setAutoPublish(enabled);
+    setAutoPublishSaving(true);
+    try {
+      const status = await setFramerAutoPublish(enabled);
+      setOauthStatus(status);
+      setAutoPublish(status.auto_publish === true);
+    } catch (err) {
+      setAutoPublish(previous);
+      toast.error(err instanceof Error ? err.message : '無法儲存自動 Publish');
+    } finally {
+      setAutoPublishSaving(false);
+    }
+  };
+
+  const toastFramerWrite = (
+    wrote: string,
+    publish: FramerPublishResult | undefined,
+    options?: { action?: { label: string; onClick: () => void } },
+  ) => {
+    const note = formatFramerPublishNote(publish);
+    if (publish && !publish.ok && !publish.skipped) {
+      toast.success(wrote, options);
+      toast.error(note || 'Publish 失敗');
+      return;
+    }
+    toast.success(note ? `${wrote}，${note}` : wrote, options);
+  };
 
   const refreshFramerCatalog = useCallback(async () => {
     setFramerCatalogLoading(true);
@@ -278,7 +316,7 @@ export function ReaddyFramerWorkbench() {
         storage_bundle_path: input.storageBundlePath,
         analysis: input.analysis,
       });
-      setSiteSnapshots((prev) => [saved, ...prev.filter((row) => row.id !== saved.id)].slice(0, 20));
+      setSiteSnapshots((prev) => mergeFramerSiteSnapshots([saved, ...prev], 20));
       setActiveSiteId(saved.id);
     },
     [],
@@ -507,24 +545,6 @@ export function ReaddyFramerWorkbench() {
       setGithubReposError(null);
     }
   }, [sourceType, oauthStatus?.github_configured, oauthStatus, refreshGitHubRepos]);
-
-  const handleSaveTeamGitHubToken = async (token: string) => {
-    const res = await saveTeamGitHubToken(token);
-    setOauthStatus(res);
-    if (token.trim()) {
-      toast.success(
-        `團隊 GitHub Token 已驗證並儲存${res.github_login ? ` (@${res.github_login})` : ''}`,
-      );
-      void refreshGitHubRepos({ silent: false });
-    } else {
-      toast.message('已清除儲存的團隊 GitHub Token');
-      setGithubRepos([]);
-      setGithubRepoUrl('');
-      setGithubReposError(null);
-      setGithubBranches([DEFAULT_GITHUB_BRANCH]);
-      setGithubBranch(DEFAULT_GITHUB_BRANCH);
-    }
-  };
 
   const framerProjectUrlRef = useRef(framerProjectUrl);
   framerProjectUrlRef.current = framerProjectUrl;
@@ -909,7 +929,7 @@ export function ReaddyFramerWorkbench() {
       toast.error('請輸入有效的目標 Framer Project URL。');
       return;
     }
-    if (!rawCode.trim()) {
+    if (!rawCode.trim() && !analysis?.sourceOrigin?.trim()) {
       toast.error('請先選擇要遷移的頁面，或先在 Step 01 分析專案。');
       return;
     }
@@ -934,20 +954,39 @@ export function ReaddyFramerWorkbench() {
       },
     ]);
     setStages([
-      { key: 'ast', code: '01', label: 'AST 結構解析', progress: 45, status: 'running', detail: `解析 ${pageLabel}` },
-      { key: 'grid', code: '02', label: '12列網格對齊', progress: 20, status: 'running', detail: `${gridConfig.desktop_width}px / ${gridConfig.columns} Col` },
-      { key: 'tokens', code: '03', label: 'Token 樣式映射', progress: 10, status: 'running', detail: analysis?.cssTokens.primaryHex || '提取主題色' },
+      { key: 'ast', code: '01', label: analysis?.sourceOrigin?.trim() ? '擷取來源畫面' : '原碼近似解析', progress: 0, status: 'running', detail: `解析 ${pageLabel}` },
+      { key: 'grid', code: '02', label: '12列網格對齊', progress: 0, status: 'running', detail: `${gridConfig.desktop_width}px / ${gridConfig.columns} Col` },
+      { key: 'tokens', code: '03', label: 'Token 樣式映射', progress: 0, status: 'running', detail: analysis?.cssTokens.primaryHex || '提取主題色' },
       { key: 'mcp', code: '04', label: 'MCP 畫布寫入', progress: 0, status: 'idle', detail: '等待解析完成後寫入' },
     ]);
 
     try {
+      let codeForParse = rawCode;
+      let repoMetaForParse = githubRepoMeta;
+      let includedForParse = includedFiles;
+      if (sourceType === 'github' && activePage && analysis?.githubMeta) {
+        const fresh = await fetchGitHubPageBundle({
+          repo_url: githubRepoUrl,
+          branch: analysis.githubMeta.branch || githubBranch,
+          page: activePage,
+          shared_files: analysis.sharedFiles,
+          all_paths: githubAllPaths,
+        });
+        codeForParse = fresh.code;
+        repoMetaForParse = fresh.repo_meta;
+        includedForParse = fresh.included_files;
+        setRawCode(fresh.code);
+        setIncludedFiles(fresh.included_files);
+        setCodeSummary(fresh.summary);
+        setGithubRepoMeta(fresh.repo_meta);
+      }
       const res = await parseReaddyToIr({
         framer_project_url: framerProjectUrl.trim(),
         source_type: sourceType,
-        github_repo_meta: sourceType === 'github' ? githubRepoMeta : null,
+        github_repo_meta: sourceType === 'github' ? repoMetaForParse : null,
         storage_bundle_path: analysis?.storageBundlePath ?? null,
         grid_config: gridConfig,
-        raw_readdy_code: rawCode,
+        raw_readdy_code: codeForParse,
         tailwind_config: analysis?.tailwindConfig ?? null,
         asset_url_map: analysis?.assetUrlMap ?? {},
         page_meta: activePage
@@ -957,11 +996,12 @@ export function ReaddyFramerWorkbench() {
               locale: activePage.locale,
               pageKind: activePage.pageKind,
               sourceFile: activePage.sourceFile,
-              includedFiles,
+              includedFiles: includedForParse,
             }
           : undefined,
         css_tokens: analysis?.cssTokens,
         project_name: analysis?.projectName,
+        source_origin: analysis?.sourceOrigin?.trim(),
       });
 
       setActiveJobId(res.job_id);
@@ -981,7 +1021,7 @@ export function ReaddyFramerWorkbench() {
         {
           key: 'ast',
           code: '01',
-          label: 'AST 結構解析',
+          label: res.ir_payload.renderedPage ? '擷取來源畫面' : '原碼近似解析',
           progress: 100,
           status: 'done',
           detail: `識別 ${res.ir_payload.sections.length} 個區塊 (${res.parser_engine})`,
@@ -1066,8 +1106,6 @@ export function ReaddyFramerWorkbench() {
     );
 
     try {
-      const scenes = captureDesktopSceneGraph();
-      const scene = matchSceneToSection(irPayload.sections[sectionIdx], scenes || []);
       const res = await syncFramerStep({
         job_id: activeJobId,
         step_index: stepIndex,
@@ -1075,7 +1113,7 @@ export function ReaddyFramerWorkbench() {
         page_path: activePage?.path || irPayload.pageMeta?.path,
         page_title: activePage?.title || irPayload.pageMeta?.title,
         mcp_session: activeMcpSessionRef.current,
-        scene,
+        publish: autoPublish,
       });
       activeMcpSessionRef.current = res.mcp_session ?? activeMcpSessionRef.current;
       updateSectionStatus(sectionIdx, 'synced');
@@ -1103,7 +1141,7 @@ export function ReaddyFramerWorkbench() {
             : s,
         ),
       );
-      toast.success(`區塊 ${stepIndex} 已寫入 Framer (${res.duration_ms}ms)`);
+      toastFramerWrite(`區塊 ${stepIndex} 已寫入 Framer (${res.duration_ms}ms)`, res.publish);
       void refreshHistory();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -1143,51 +1181,25 @@ export function ReaddyFramerWorkbench() {
             : s,
         ),
       );
-      const scenes = captureDesktopSceneGraph();
-      if (!scenes?.length) {
-        toast.message('畫面上沒有預覽，這次仍用扁平版型寫入。');
-      }
-      const step0Res = await syncFramerStep({
+      irPayload.sections.forEach((_, index) => updateSectionStatus(index, 'syncing'));
+      setStages((prev) =>
+        prev.map((s) =>
+          s.key === 'mcp'
+            ? { ...s, progress: 20, status: 'running', detail: `一次寫入 ${total} 個區塊…` }
+            : s,
+        ),
+      );
+      const step0Res = await syncFramerPage({
         job_id: activeJobId,
-        step_index: 0,
         framer_project_url: framerProjectUrl.trim(),
         page_path: pagePath,
         page_title: pageTitle,
         mcp_session: activeMcpSessionRef.current,
+        publish: autoPublish,
       });
       activeMcpSessionRef.current = step0Res.mcp_session ?? activeMcpSessionRef.current;
+      irPayload.sections.forEach((_, index) => updateSectionStatus(index, 'synced'));
       if (step0Res.logs?.length) appendLogs(step0Res.logs);
-
-      for (let i = 0; i < total; i++) {
-        const stepNo = i + 1;
-        const sec = irPayload.sections[i];
-        updateSectionStatus(i, 'syncing');
-        setStages((prev) =>
-          prev.map((s) =>
-            s.key === 'mcp'
-              ? {
-                  ...s,
-                  progress: Math.round((i / total) * 100),
-                  status: 'running',
-                  detail: `寫入 (${stepNo}/${total})：${sec.name}`,
-                }
-              : s,
-          ),
-        );
-
-        const res = await syncFramerStep({
-          job_id: activeJobId,
-          step_index: stepNo,
-          framer_project_url: framerProjectUrl.trim(),
-          page_path: pagePath,
-          page_title: pageTitle,
-          mcp_session: activeMcpSessionRef.current,
-          scene: matchSceneToSection(sec, scenes || []),
-        });
-        activeMcpSessionRef.current = res.mcp_session ?? activeMcpSessionRef.current;
-        updateSectionStatus(i, 'synced');
-        if (res.logs?.length) appendLogs(res.logs);
-      }
 
       if (activePage) {
         updatePageState(activePage.id, {
@@ -1204,12 +1216,16 @@ export function ReaddyFramerWorkbench() {
             : s,
         ),
       );
-      toast.success(`頁面 ${pagePath} 已完成搬移（${total} 個區塊）！`, {
-        action: {
-          label: '跳至下一待搬頁',
-          onClick: handleJumpNextPending,
+      toastFramerWrite(
+        autoPublish ? `頁面 ${pagePath} 已寫入 Framer` : `頁面 ${pagePath} 已寫入 Framer，畫面待覆核`,
+        step0Res.publish,
+        {
+          action: {
+            label: '跳至下一待搬頁',
+            onClick: handleJumpNextPending,
+          },
         },
-      });
+      );
       void refreshHistory();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -1370,11 +1386,6 @@ export function ReaddyFramerWorkbench() {
   const sections = irPayload?.sections || [];
   const rightPaneLoading = loadingPageId !== null || parsing;
   const rightPaneLoadingLabel = loadingPageId !== null ? '載入頁面源碼中' : '解析頁面區塊中';
-  const globalProgressPct = useMemo(() => {
-    const sum = stages.reduce((acc, s) => acc + s.progress, 0);
-    return Math.round(sum / stages.length);
-  }, [stages]);
-
   const pageAnalysisJobs = useMemo(() => {
     const url = framerProjectUrl.trim();
     if (!url) return recentJobs;
@@ -1384,24 +1395,6 @@ export function ReaddyFramerWorkbench() {
 
   return (
     <div className="-m-6 min-h-[calc(100vh-48px-var(--app-banner-h))] xl:h-[calc(100vh-48px-var(--app-banner-h))] xl:overflow-hidden bg-[#F4F6F9] p-4 sm:p-5 flex flex-col gap-4">
-      <WorkbenchHeader
-        globalProgressPct={globalProgressPct}
-        isBusy={parsing || syncingAll}
-        oauthStatus={oauthStatus}
-        oauthConnecting={oauthConnecting}
-        siteSnapshots={siteSnapshots}
-        activeSiteId={activeSiteId}
-        onOpenProgressModal={() => {
-          if (syncingAll) setProgressFocus('sync');
-          else if (parsing) setProgressFocus('parse');
-          setProgressModalOpen(true);
-        }}
-        onConnectFramer={() => void handleConnectFramer()}
-        onDisconnectFramer={() => void handleDisconnectFramer()}
-        onSelectSite={(site) => void handleSelectSite(site)}
-        onRefreshStatus={() => void refreshOAuthStatus()}
-      />
-
       {/* Main Split Grid */}
       <div ref={splitRef} className="flex flex-col xl:flex-row gap-4 flex-1 min-h-0">
         {/* Left Column: Integrated Step 01 Project Import + Step 02 Page Inventory */}
@@ -1427,6 +1420,10 @@ export function ReaddyFramerWorkbench() {
                 oauthStatus={oauthStatus}
                 oauthConnecting={oauthConnecting}
                 onConnectFramer={() => void handleConnectFramer()}
+                onDisconnectFramer={() => void handleDisconnectFramer()}
+                siteSnapshots={siteSnapshots}
+                activeSiteId={activeSiteId}
+                onSelectSite={(site) => void handleSelectSite(site)}
                 sourceType={sourceType}
                 onSourceTypeChange={setSourceType}
                 githubRepoUrl={githubRepoUrl}
@@ -1441,7 +1438,6 @@ export function ReaddyFramerWorkbench() {
                 githubBranchesLoading={githubBranchesLoading}
                 githubLoading={githubLoading}
                 onAnalyzeGitHubProject={() => void handleAnalyzeGitHubProject()}
-                onSaveTeamGitHubToken={handleSaveTeamGitHubToken}
                 compact={railCompact}
                 uploadLoading={uploadLoading}
                 onUploadFile={(f) => void handleUploadFile(f)}
@@ -1449,6 +1445,7 @@ export function ReaddyFramerWorkbench() {
                 onPasteCodeChange={setPasteCode}
                 onAnalyzePasteCode={() => void handleAnalyzePasteCode()}
                 analysis={analysis}
+                onSourceOriginChange={(sourceOrigin) => setAnalysis((previous) => previous ? { ...previous, sourceOrigin } : previous)}
                 collapseNonce={step1CollapseNonce}
               />
 
@@ -1465,7 +1462,7 @@ export function ReaddyFramerWorkbench() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  disabled={parsing || !rawCode.trim() || loadingPageId !== null}
+                  disabled={parsing || (!rawCode.trim() && !analysis?.sourceOrigin?.trim()) || loadingPageId !== null}
                   onClick={() => void handleParseCurrentPage()}
                   title={activePage ? `解析 ${activePage.title}` : '先選擇要解析的頁面'}
                   className="inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#101B2D] px-3 py-2 text-[12px] font-semibold text-white transition-colors hover:bg-[#192842] disabled:opacity-45"
@@ -1482,7 +1479,7 @@ export function ReaddyFramerWorkbench() {
                   onClick={handleStartBackgroundConversion}
                   disabled={conversionJob.phase === 'running'}
                   title="把未跳過、尚未搬完的頁面放進後台轉換，完成後寄出結果郵件"
-                  className="inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#0BB59B] px-3 py-2 text-[12px] font-semibold text-[#08151F] transition-colors hover:bg-[#09a78e] disabled:opacity-70"
+                  className="inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#0BB59B] px-3 py-2 text-[12px] font-semibold text-white transition-colors hover:bg-[#09a78e] disabled:opacity-70"
                 >
                   {conversionJob.phase === 'running' ? (
                     <Loader2 size={13} className="shrink-0 animate-spin" />
@@ -1621,21 +1618,89 @@ export function ReaddyFramerWorkbench() {
                   <span>日誌</span>
                 </button>
 
-                <button
-                  type="button"
-                  disabled={sections.length === 0 || syncingAll}
-                  onClick={() => void handleSyncAll()}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#0BB59B] hover:bg-[#099e87] text-white text-[12px] font-bold transition-colors disabled:opacity-45 disabled:cursor-not-allowed shadow-sm"
+                <div
+                  ref={syncButtonRef}
+                  className="relative shrink-0"
+                  onMouseEnter={() => {
+                    if (publishTipTimerRef.current !== null) {
+                      window.clearTimeout(publishTipTimerRef.current);
+                      publishTipTimerRef.current = null;
+                    }
+                    const rect = syncButtonRef.current?.getBoundingClientRect();
+                    if (!rect) return;
+                    setPublishTipAnchor({ top: rect.top, left: rect.left + rect.width / 2 });
+                  }}
+                  onMouseLeave={() => {
+                    if (publishTipTimerRef.current !== null) window.clearTimeout(publishTipTimerRef.current);
+                    publishTipTimerRef.current = window.setTimeout(() => {
+                      setPublishTipAnchor(null);
+                      publishTipTimerRef.current = null;
+                    }, 140);
+                  }}
                 >
-                  {syncingAll ? (
-                    <Loader2 size={13} className="animate-spin" />
-                  ) : (
-                    <Sparkles size={13} />
+                  <button
+                    type="button"
+                    disabled={sections.length === 0 || syncingAll}
+                    onClick={() => void handleSyncAll()}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#0BB59B] hover:bg-[#099e87] text-white text-[12px] font-bold transition-colors disabled:opacity-45 disabled:cursor-not-allowed shadow-sm"
+                  >
+                    {syncingAll ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Sparkles size={13} />
+                    )}
+                    <span>
+                      {syncingAll ? '寫入 Framer 中…' : '同步此頁到 Framer'}
+                    </span>
+                  </button>
+                  {publishTipAnchor && createPortal(
+                    <div
+                      className="fixed z-[80] -translate-x-1/2 -translate-y-full pb-2"
+                      style={{ top: publishTipAnchor.top, left: publishTipAnchor.left }}
+                      onMouseEnter={() => {
+                        if (publishTipTimerRef.current !== null) {
+                          window.clearTimeout(publishTipTimerRef.current);
+                          publishTipTimerRef.current = null;
+                        }
+                      }}
+                      onMouseLeave={() => {
+                        if (publishTipTimerRef.current !== null) window.clearTimeout(publishTipTimerRef.current);
+                        publishTipTimerRef.current = window.setTimeout(() => {
+                          setPublishTipAnchor(null);
+                          publishTipTimerRef.current = null;
+                        }, 140);
+                      }}
+                    >
+                      <div className="relative rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-lg">
+                        <label className="flex cursor-pointer items-center gap-2 whitespace-nowrap text-[12px] font-medium text-[#101B2D]">
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={autoPublish}
+                            disabled={autoPublishSaving}
+                            onChange={(event) => void handleAutoPublishChange(event.target.checked)}
+                          />
+                          <span
+                            aria-hidden
+                            className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border ${
+                              autoPublish
+                                ? 'border-[#0BB59B] bg-[#0BB59B]'
+                                : 'border-slate-300 bg-white'
+                            }`}
+                          >
+                            {autoPublish && <Check size={10} strokeWidth={3} className="text-white" />}
+                          </span>
+                          是否自動Publish到Framer
+                        </label>
+                        <span aria-hidden className="absolute left-1/2 top-full -translate-x-1/2">
+                          <span className="block h-0 w-0 border-x-[7px] border-t-[7px] border-x-transparent border-t-slate-200" />
+                          <span className="absolute left-1/2 top-0 h-0 w-0 -translate-x-1/2 -translate-y-px border-x-[6px] border-t-[6px] border-x-transparent border-t-white" />
+                        </span>
+                      </div>
+                    </div>,
+                    document.body,
                   )}
-                  <span>
-                    {syncingAll ? '寫入 Framer 中…' : '同步此頁到 Framer'}
-                  </span>
-                </button>
+                </div>
               </div>
             </div>
 
@@ -1663,7 +1728,7 @@ export function ReaddyFramerWorkbench() {
               )}
 
               <GridCanvasPreview
-                gridConfig={gridConfig}
+                gridConfig={irPayload?.renderedPage ? irPayload.gridConfig : gridConfig}
                 designTokens={irPayload?.designTokens}
                 sections={sections}
                 showGridOverlay={showGridOverlay}
@@ -1676,7 +1741,8 @@ export function ReaddyFramerWorkbench() {
                 loadingLabel={rightPaneLoadingLabel}
                 onHoverSection={setHoveredSectionId}
                 onSelectSection={setSelectedSectionId}
-                pagePreview={faithfulPagePreview(activePage?.path, rawCode)}
+                renderedPage={irPayload?.renderedPage}
+                comparisonJobId={activeJobId && sections.length > 0 && sections.every((section) => section.syncStatus === 'synced') ? activeJobId : undefined}
               />
             </div>
 
