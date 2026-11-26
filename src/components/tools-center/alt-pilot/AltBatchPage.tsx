@@ -11,6 +11,16 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -32,11 +42,13 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { invokeAltFunction } from '@/lib/altApi.ts';
-import { countChars, normalizeForCompare } from '@/lib/altText.ts';
+import { auditAltImages } from '@/lib/altAudit.ts';
 import { hostOf } from '@/lib/altUrl.ts';
 import type {
   AltAnalyzeResponse,
   AltDiscoverResult,
+  AltGenerateResponse,
+  AltImageCandidate,
   AltSettingsRow,
   AltUsageSummary,
 } from '@/lib/altTypes.ts';
@@ -53,7 +65,12 @@ interface BatchPageResult {
   tooLong?: number;
   decorative?: number;
   error?: string;
+  targets?: AltImageCandidate[];
+  generated?: number;
 }
+
+const MAX_BATCH_TARGETS = 20;
+const GENERATE_CHUNK = 6;
 
 export interface AltBatchPageProps {
   sites: WebsiteProfileFull[];
@@ -86,6 +103,9 @@ export function AltBatchPage({
   const [discovering, setDiscovering] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [generatingBatch, setGeneratingBatch] = useState(false);
+  const [generateProgress, setGenerateProgress] = useState<{ done: number; total: number } | null>(null);
+  const [confirmGenerateOpen, setConfirmGenerateOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
 
@@ -107,11 +127,15 @@ export function AltBatchPage({
           missing: sum.missing + (result.missing || 0),
           duplicates: sum.duplicates + (result.duplicates || 0),
           tooLong: sum.tooLong + (result.tooLong || 0),
+          generated: sum.generated + (result.generated || 0),
+          targets: sum.targets + (result.targets?.length || 0),
         }),
-        { images: 0, missing: 0, duplicates: 0, tooLong: 0 },
+        { images: 0, missing: 0, duplicates: 0, tooLong: 0, generated: 0, targets: 0 },
       ),
     [doneResults],
   );
+
+  const batchTargetCount = Math.min(MAX_BATCH_TARGETS, totals.targets);
 
   const handleSiteChange = (nextSiteId: string) => {
     onSiteIdChange(nextSiteId);
@@ -223,26 +247,20 @@ export function AltBatchPage({
             url,
           });
           const images = data.images || [];
-          const nonEmpty = images
-            .map((image) => normalizeForCompare(image.currentAlt))
-            .filter(Boolean);
-          const counts = new Map<string, number>();
-          for (const alt of nonEmpty) counts.set(alt, (counts.get(alt) || 0) + 1);
-          const duplicates = Array.from(counts.values()).reduce(
-            (sum, count) => sum + Math.max(0, count - 1),
-            0,
-          );
+          const audit = auditAltImages(images);
           setResults((previous) => ({
             ...previous,
             [url]: {
               status: 'done',
               runId: data.run.id,
               title: data.page.title || data.run.page_title,
-              imageCount: images.length,
-              missing: images.filter((image) => !image.decorative && !image.currentAlt.trim()).length,
-              duplicates,
-              tooLong: images.filter((image) => countChars(image.currentAlt) > 125).length,
-              decorative: images.filter((image) => image.decorative).length,
+              imageCount: audit.imageCount,
+              missing: audit.missing,
+              duplicates: audit.duplicates,
+              tooLong: audit.tooLong,
+              decorative: audit.decorative,
+              targets: audit.missingImages,
+              generated: 0,
             },
           }));
         } catch (analyzeError) {
@@ -263,6 +281,86 @@ export function AltBatchPage({
       setAnalyzing(false);
       setProgress(null);
     }
+  };
+
+  const handleGenerateBatch = async () => {
+    setConfirmGenerateOpen(false);
+    if (disabled || analyzing || generatingBatch) return;
+
+    const plan: Array<{ url: string; runId: string; targets: AltImageCandidate[] }> = [];
+    let remaining = MAX_BATCH_TARGETS;
+
+    for (const [url, result] of Object.entries(results)) {
+      if (remaining <= 0) break;
+      if (result.status !== 'done' || !result.runId || !result.targets?.length) continue;
+      const targets = result.targets.slice(0, remaining);
+      if (targets.length === 0) continue;
+      plan.push({ url, runId: result.runId, targets });
+      remaining -= targets.length;
+    }
+
+    if (plan.length === 0) {
+      toast.info('目前沒有缺 ALT 的圖片可批次生成');
+      return;
+    }
+
+    const total = plan.reduce((sum, item) => sum + item.targets.length, 0);
+    setGeneratingBatch(true);
+    setGenerateProgress({ done: 0, total });
+    let done = 0;
+    let stop = false;
+
+    for (const item of plan) {
+      for (let index = 0; index < item.targets.length; index += GENERATE_CHUNK) {
+        if (stop) break;
+        const chunk = item.targets.slice(index, index + GENERATE_CHUNK);
+        try {
+          const data = await invokeAltFunction<AltGenerateResponse>('generate', {
+            run_id: item.runId,
+            images: chunk,
+          });
+          const successUrls = new Set(
+            (data.suggestions || [])
+              .filter((suggestion) => suggestion.status !== 'failed')
+              .map((suggestion) => suggestion.image_url),
+          );
+          const successCount = successUrls.size;
+          setResults((previous) => {
+            const current = previous[item.url];
+            if (!current) return previous;
+            const remainingTargets = (current.targets || []).filter(
+              (target) => !successUrls.has(target.url),
+            );
+            return {
+              ...previous,
+              [item.url]: {
+                ...current,
+                targets: remainingTargets,
+                generated: (current.generated || 0) + successCount,
+                missing: Math.max(0, (current.missing || 0) - successCount),
+              },
+            };
+          });
+          if (data.errors?.length) {
+            toast.warning(`${data.errors.length} 張未成功，詳情請開啟該頁查看。`);
+            if (data.errors.some((itemError) => itemError.code === 'quota_exceeded' || itemError.code === 'disabled')) {
+              stop = true;
+            }
+          }
+        } catch (generateError) {
+          const message = generateError instanceof Error ? generateError.message : String(generateError);
+          toast.error(message);
+          if (message.includes('停用') || message.includes('上限')) stop = true;
+        }
+        done += chunk.length;
+        setGenerateProgress({ done: Math.min(done, total), total });
+      }
+      if (stop) break;
+    }
+
+    setGeneratingBatch(false);
+    setGenerateProgress(null);
+    if (!stop) toast.success(`批次生成完成：${done} 張（待你逐頁審批）`);
   };
 
   return (
@@ -404,16 +502,31 @@ export function AltBatchPage({
                 : '先取得 sitemap，或手動貼上頁面 URL。'}
             </p>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Button
               type="button"
               variant="ghost"
               size="sm"
               className="h-8 text-[12px]"
               onClick={handleToggleAll}
-              disabled={candidates.length === 0 || analyzing}
+              disabled={candidates.length === 0 || analyzing || generatingBatch}
             >
               {selected.size >= Math.min(10, candidates.length) ? '取消全選' : '全選前 10 頁'}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 gap-1.5 bg-[#0D9488] px-3 text-[12px] text-white hover:bg-[#0b8076]"
+              onClick={() => setConfirmGenerateOpen(true)}
+              disabled={
+                disabled ||
+                analyzing ||
+                generatingBatch ||
+                batchTargetCount === 0
+              }
+            >
+              {generatingBatch ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+              批次生成缺 ALT（{batchTargetCount}）
             </Button>
           </div>
         </div>
@@ -541,6 +654,44 @@ export function AltBatchPage({
           <Progress value={(progress.done / Math.max(1, progress.total)) * 100} className="h-1.5" />
         </div>
       ) : null}
+
+      {generatingBatch && generateProgress ? (
+        <div className="rounded-lg border border-teal-200 bg-white px-4 py-3 shadow-card">
+          <div className="mb-1 flex items-center justify-between text-[11px] text-teal-800">
+            <span>正在批次生成缺 ALT（會呼叫 Grok）</span>
+            <span>{generateProgress.done}/{generateProgress.total}</span>
+          </div>
+          <Progress
+            value={(generateProgress.done / Math.max(1, generateProgress.total)) * 100}
+            className="h-1.5 bg-teal-100"
+          />
+        </div>
+      ) : null}
+
+      <AlertDialog open={confirmGenerateOpen} onOpenChange={setConfirmGenerateOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>批次生成缺 ALT？</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2 text-[12px] leading-relaxed">
+              <span className="block">
+                這次會處理最多 <strong>{batchTargetCount}</strong> 張「目前沒有 ALT」的圖片，
+                每張通常呼叫 Grok 1 次；失敗可能重試。生成結果只會寫入建議，不會自動批准或貼上網站。
+              </span>
+              {settings?.daily_call_limit === 0 ? (
+                <span className="block rounded border border-amber-200 bg-amber-50 p-2 text-amber-800">
+                  目前 `daily_call_limit = 0`，代表**沒有每日上限**；請確認真的要批次生成。
+                </span>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void handleGenerateBatch()}>
+              確認生成
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

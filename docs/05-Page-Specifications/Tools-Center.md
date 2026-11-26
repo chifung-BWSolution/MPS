@@ -29,7 +29,7 @@ Step 1: 選站點 + 市場
 
 Step 2: 抓取（GSC 近 28 天前 60 個 + Google 建議詞補至 100）
   ┌──────────────────────────────────────────────────────────────┐
-  │ 抓取詞 100 │ GSC 60 │ 建議詞 40 │ 已採納 12 │ 已忽略 3      │
+  │ 抓取詞 100 │ GSC 60 │ 建議詞 40 │ 已採納 12             │
   └──────────────────────────────────────────────────────────────┘
 
 Step 3: 勾選 → 採納
@@ -47,7 +47,7 @@ Step 3: 勾選 → 採納
 | 來源 | 內容 | 限制 |
 |---|---|---|
 | `gsc_query_daily_metrics` | 近 28 天 query / impressions / clicks / position | 需站點已綁 GSC；本功能全程只讀 |
-| Google suggest（非官方端點） | 以 GSC 前 5 詞 + 站名 + 品牌為種子 | 無搜尋量；timeout 6s、併發 3、整段預算 90s |
+| Google suggest（非官方端點） | 以 GSC 前 5 詞 + 域名 + 站名 + 品牌作為查詢來源（介面顯示為「來源：<查詢詞>」） | 無搜尋量；timeout 6s、併發 3、整段預算 90s |
 
 > 「曝光」不是月搜尋量：本期以 GSC 曝光替代 `search_volume`，與 `aggregateGscMetricsToKeywordRows` 同一口徑。
 
@@ -65,7 +65,10 @@ Step 3: 勾選 → 採納
 { action: 'adopt', website_profile_id: 'text-id', idea_ids: string[], enqueue?: boolean }
 → { adopted, skipped, enqueued, keyword_ids }
 
-// 忽略（帶 website_profile_id 時限定站點，避免跨站誤改）
+// 刪除（真刪除；只刪 status='new'，已採納的不動）
+{ action: 'delete', website_profile_id: string, idea_ids: string[] } → { deleted }
+
+// 忽略（舊版相容，軟隱藏；新 UI 已不用）
 { action: 'ignore', idea_ids: string[], website_profile_id?: string } → { updated }
 
 // cron（service_role，body 不帶 action）
@@ -85,7 +88,7 @@ Step 3: 勾選 → 採納
 |---|---|
 | 資料表未建立（42P01／PGRST205） | 「功能尚未啟用」+ `npm run db:push` 指引，不白屏 |
 | 站點未綁 GSC | 黃色提示，只出建議詞 |
-| 非 writer 角色 | 抓取／採納／忽略 disabled；直接打 API 回 403 |
+| 非 writer 角色 | 抓取／採納／刪除 disabled；直接打 API 回 403 |
 | 抓取中 | 按鈕 spinner「抓取中…」 |
 | 結果為空 | 表格空狀態文案 |
 
@@ -94,7 +97,8 @@ Step 3: 勾選 → 採納
 ```
 SeoRadarTool.tsx
 ├── SeoRadarTable.tsx   // 勾選、排序、20 列/頁、來源 badge、狀態 pill
-└── AdoptDialog.tsx     // 採納確認 + 「加入自動生成佇列」勾選（預設不勾）
+├── AdoptDialog.tsx     // 採納確認 + 「加入自動生成佇列」勾選（預設不勾）
+└── DeleteDialog.tsx    // 刪除確認（不可復原提示；下一次抓取可能重新出現）
 ```
 
 ---
@@ -308,6 +312,7 @@ ALT Pilot 上方 tab：[單頁生成] [站點盤點]。
 - 站點盤點：抓 `/sitemap.xml`（或手動貼 URL）→ 勾選最多 10 頁 → `analyze` 逐頁分析。
 - 顯示每頁：圖片數、缺 ALT、重複、過長、裝飾圖；按「開啟」進入單頁流程。
 - 批次分析**不呼叫 LLM**，沒有 Grok 成本；仍受 `alt_settings.enabled` 控制。
+- 「批次生成缺 ALT」只處理非裝飾、目前空白的 ALT；每批最多 20 張，需確認；結果只寫入建議，不自動批准或寫回。
 
 ### Edge Function
 

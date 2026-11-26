@@ -13,6 +13,7 @@ import {
 } from '../src/lib/altCsv.ts';
 import { hostMatches, normalizePageUrl } from '../src/lib/altUrl.ts';
 import { parseSitemap } from '../src/lib/altSitemap.ts';
+import { auditAltImages } from '../src/lib/altAudit.ts';
 import {
   assertPublicHost,
   bytesToBase64,
@@ -261,6 +262,15 @@ const cdata = parseSitemap(
   'https://example.com/',
 );
 assert.equal(cdata.urls[0], 'https://example.com/cdata');
+
+// ---------------------------------------------------------------------------
+// 5c) Audit summary
+// ---------------------------------------------------------------------------
+const audit = auditAltImages(framer.images);
+assert.equal(audit.imageCount, 6);
+assert.equal(audit.missing, 1);
+assert.equal(audit.decorative, 2);
+assert.equal(audit.duplicates, 0);
 
 // ---------------------------------------------------------------------------
 // 6) Text helper
