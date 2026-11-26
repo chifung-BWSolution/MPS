@@ -61,7 +61,6 @@ export function AltRunHistory({
           <DialogTitle className="text-[16px]">歷史紀錄</DialogTitle>
           <DialogDescription className="text-[12px]">
             最近 30 次頁面分析；點擊可重看建議與匯出。
-            {canDelete ? ' 管理人員可刪除不需要的紀錄。' : ''}
           </DialogDescription>
         </DialogHeader>
 
