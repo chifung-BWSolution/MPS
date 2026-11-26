@@ -97,9 +97,9 @@
 | ☑ | M4-04 | 頁面摘要 | `PageSummaryCard.tsx` | 已寫 |
 | ☑ | M4-05 | 圖片表＋選取＋行內編輯 | `AltImageTable.tsx`、`AltSuggestionRow.tsx` | 已寫 |
 | ☑ | M4-06 | 詳情抽屜 | `AltDetailDrawer.tsx` | 已寫 |
-| ☑ | M4-07 | 批准／略過／批次 | 同上 | 已寫；未實測 |
+| ☑ | M4-07 | 生成／編輯／批次 | 同上 | 已簡化：不顯示批准／略過，生成後可直接匯出 |
 | ☑ | M4-08 | 匯出／複製 | `AltExportBar.tsx`、`altCsv.ts` | 已寫 |
-| ☑ | M4-09 | 歷史與深連結 | `AltRunHistory.tsx`、`AltPilotPage.tsx` | 已寫 |
+| ☑ | M4-09 | 歷史浮層與刪除 | `AltRunHistory.tsx`、`AltPilotPage.tsx`、`altPermissions.ts` | 已改為 Dialog 浮層；管理人員可刪除，經 `delete_run` + service_role |
 | ☑ | M4-10 | Framer 引導＋驗證 | `FramerPasteGuide.tsx` | 已寫 |
 | ☑ | M4-11 | Prompt 資料庫入口 | `PromptLibrary.tsx` | 已加入口卡 |
 | ☑ | M4-12 | 空狀態／錯誤／配額／schema | `AltEmptyState.tsx`、`AltPilotPage.tsx` | 已寫 |

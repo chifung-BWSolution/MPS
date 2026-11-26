@@ -130,6 +130,13 @@ node scripts/alt-pilot-production-smoke.mjs
 - 執行前先把 `alt_settings.enabled=true`；測完立即關閉。
 - 腳本不列印 token；只印 run_id、page、suggestion、usage。
 
+## 4.2 歷史紀錄與刪除
+
+- 歷史紀錄改為浮層；點擊可重看該次分析。
+- 只有管理人員（`users.role_tag` = `management`／`super_admin`／`system_dev` 等）看到刪除按鈕。
+- 刪除經 Edge Function `delete_run`，由 service_role 執行；前端 authenticated 仍然沒有直接 DELETE 權限。
+- 刪除 `alt_runs` 會 cascade 刪除 `alt_suggestions`；`alt_llm_usage` 保留，`run_id` 設 NULL。
+
 ## 5. 前端部署
 
 ```powershell

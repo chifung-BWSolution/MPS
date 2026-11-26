@@ -21,6 +21,13 @@
 ### 流程
 
 ```
+Step 0: 頁首右上（全域動作，不需先選站點）
+  ┌──────────────────────────────────────────────────────────────┐
+  │ [全站抓取]  [⏸ 每日自動抓取]              上次抓取 2 小時前   │
+  │  ↑ 一次性     ↑ 開關（綠底⏸＝已開啟 / 白底▶＝已暫停）        │
+  │  兩者都會先跳二次確認浮層（非技術語言說明）                   │
+  └──────────────────────────────────────────────────────────────┘
+
 Step 1: 選站點 + 市場
   ┌──────────────────────────────────────────────────────────────┐
   │ 站點: [BW Design Centre ● GSC 已連接 ▼]                      │
@@ -68,6 +75,13 @@ Step 3: 勾選 → 採納
 // 刪除（真刪除；只刪 status='new'，已採納的不動）
 { action: 'delete', website_profile_id: string, idea_ids: string[] } → { deleted }
 
+// 手動全站抓取（一次最多 60 站；其餘由每日自動抓取補上）
+{ action: 'scan_all' } → { sites_scanned, sites_remaining, ideas_upserted, skipped }
+
+// 每日自動抓取狀態／開關（set_daily 只限管理層）
+{ action: 'cron_status' } → { enabled, schedule, jobname }
+{ action: 'set_daily', enabled: boolean } → { enabled, schedule, jobname }
+
 // 忽略（舊版相容，軟隱藏；新 UI 已不用）
 { action: 'ignore', idea_ids: string[], website_profile_id?: string } → { updated }
 
@@ -98,7 +112,8 @@ Step 3: 勾選 → 採納
 SeoRadarTool.tsx
 ├── SeoRadarTable.tsx   // 勾選、排序、20 列/頁、來源 badge、狀態 pill
 ├── AdoptDialog.tsx     // 採納確認 + 「加入自動生成佇列」勾選（預設不勾）
-└── DeleteDialog.tsx    // 刪除確認（不可復原提示；下一次抓取可能重新出現）
+├── DeleteDialog.tsx    // 刪除確認（不可復原提示；下一次抓取可能重新出現）
+└── ConfirmActionDialog.tsx // 全站抓取／每日開關的二次確認（非技術語言）
 ```
 
 ---

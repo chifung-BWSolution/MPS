@@ -299,11 +299,13 @@ where id = 'default';
 
 ## 9. 匯出與 Framer 流程
 
-1. 批准 ALT。
-2. 匯出 CSV（UTF-8 BOM）／JSON，或複製已批准（`filename<TAB>alt`）。
+1. 生成／編輯 ALT（不需要批准）。
+2. 匯出 CSV（UTF-8 BOM）／JSON，或按「複製全部」（`filename<TAB>alt`）。
 3. 在 Framer 依檔名／URL／位置找到圖層，貼上 ALT 並 Publish。
 4. 回 ALT Pilot 按「重新分析」→「驗證已填」，比對線上 alt。
 5. 若仍是舊值，檢查是否貼到 asset 而非頁面圖層。
+
+歷史紀錄以浮層顯示；管理人員（management／super_admin／system_dev 等）可刪除紀錄。刪除會移除該次 `alt_runs` 與其 `alt_suggestions`（cascade）；`alt_llm_usage` 保留但 `run_id` 會設為 NULL，作為匿名成本紀錄。
 
 CSV 欄位：`page_url,image_url,filename,location,current_alt,suggested_alt,short_alt,keyword,confidence,risk,status,note`。
 
