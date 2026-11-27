@@ -602,6 +602,18 @@ check('右上角：全站抓取是白底一次性按鈕（無播放圖示）', (
   assert.doesNotMatch(blocks[0], /<Play|<Pause/, '一次性動作不應有播放／暫停圖示');
 });
 
+check('每日自動抓取排程是香港時間 08:00', () => {
+  const cadence = readFileSync(
+    join(root, 'supabase/migrations/20261127190000_seo_radar_cron_0800.sql'),
+    'utf8',
+  );
+  assert.match(cadence, /seo-radar-daily/);
+  assert.match(cadence, /'0 0 \* \* \*'/);
+  assert.doesNotMatch(cadence, /cron\.unschedule/i);
+  assert.match(toolSource, /每天香港時間 08:00/);
+  assert.doesNotMatch(toolSource, /每天深夜/);
+});
+
 check('每日自動抓取是開關：綠底＋暫停圖示／白底＋播放圖示', () => {
   assert.match(toolSource, /每日自動抓取/);
   assert.match(toolSource, /<Pause size=\{13\}/);

@@ -298,7 +298,7 @@ export function SeoRadarTool() {
     if (!result) return;
     toast.success(
       result.enabled
-        ? '已開啟每日自動抓取，每天深夜會自動更新'
+        ? '已開啟每日自動抓取，每天香港時間 08:00 會自動更新'
         : '已暫停每日自動抓取，仍可隨時手動更新',
     );
   }, [dailyStatus?.enabled, setDaily]);
@@ -658,7 +658,7 @@ export function SeoRadarTool() {
         description={
           dailyStatus?.enabled
             ? '暫停後，系統不會再每天自動更新；你隨時可以按「全站抓取」手動更新。'
-            : '開啟後，系統每天深夜會自動幫所有站點更新一次，你早上回來就會看到新的詞。'
+            : '開啟後，系統每天香港時間 08:00 會自動幫所有站點更新一次。'
         }
         confirmLabel={dailyStatus?.enabled ? '暫停' : '開啟'}
         tone={dailyStatus?.enabled ? 'danger' : 'default'}

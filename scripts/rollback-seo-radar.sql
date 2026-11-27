@@ -53,7 +53,7 @@ DROP TABLE IF EXISTS public.seo_radar_runs;
 -- 版本記錄也要一起刪，否則日後 `supabase db push` 會以為這兩支已套用而跳過，
 -- 表就永遠不會被重建。
 DELETE FROM supabase_migrations.schema_migrations
- WHERE version IN ('20261127090000', '20261127091000');
+ WHERE version IN ('20261127090000', '20261127091000', '20261127120000', '20261127190000');
 
 -- rollback_refs 先留著供事後核對；確認無誤後再手動刪：
 -- DROP TABLE IF EXISTS public.seo_radar_rollback_refs;
