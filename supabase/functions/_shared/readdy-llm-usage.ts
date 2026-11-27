@@ -20,7 +20,7 @@ export interface ReaddyUsageDbClient {
   };
 }
 
-const MODEL_PRICING_PER_1M: Record<string, { input: number; output: number }> = {
+export const MODEL_PRICING_PER_1M: Readonly<Record<string, { input: number; output: number }>> = {
   "gemini-2.5-flash": { input: 0.3, output: 2.5 },
   "gemini-2.5-flash-lite": { input: 0.1, output: 0.4 },
   "gemini-2.0-flash": { input: 0.1, output: 0.4 },

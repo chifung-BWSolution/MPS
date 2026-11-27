@@ -1,3 +1,4 @@
+import { fetchWithAiUsage } from "../_shared/ai-usage.ts";
 /**
  * ALT Pilot · LLM provider（Grok 主、DeepSeek 備援、Gemini 最後）
  *
@@ -99,7 +100,7 @@ async function callGemini(request: VisionRequest): Promise<ProviderResult> {
 
   let response: Response;
   try {
-    response = await fetch(endpoint, {
+    response = await fetchWithAiUsage(endpoint, {
       method: 'POST',
       signal: AbortSignal.timeout(60_000),
       headers: { 'Content-Type': 'application/json' },
@@ -120,7 +121,7 @@ async function callGemini(request: VisionRequest): Promise<ProviderResult> {
           responseMimeType: 'application/json',
         },
       }),
-    });
+    }, { feature: "alt-pilot", operation: "alt_generate", provider: "gemini", model });
   } catch (error) {
     throw new AltProviderError(
       'provider_error',
@@ -182,7 +183,7 @@ async function callGrok(request: VisionRequest): Promise<ProviderResult> {
   const model = grokModel(request);
   let response: Response;
   try {
-    response = await fetch('https://api.x.ai/v1/chat/completions', {
+    response = await fetchWithAiUsage('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
       signal: AbortSignal.timeout(60_000),
       headers: {
@@ -210,7 +211,7 @@ async function callGrok(request: VisionRequest): Promise<ProviderResult> {
           },
         ],
       }),
-    });
+    }, { feature: "alt-pilot", operation: "alt_generate", provider: "grok", model });
   } catch (error) {
     throw new AltProviderError(
       'provider_error',
@@ -279,7 +280,7 @@ async function callDeepSeek(request: VisionRequest): Promise<ProviderResult> {
 
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}/chat/completions`, {
+    response = await fetchWithAiUsage(`${baseUrl}/chat/completions`, {
       method: 'POST',
       signal: AbortSignal.timeout(90_000),
       headers: {
@@ -310,7 +311,7 @@ async function callDeepSeek(request: VisionRequest): Promise<ProviderResult> {
           },
         ],
       }),
-    });
+    }, { feature: "alt-pilot", operation: "alt_generate", provider: "deepseek", model });
   } catch (error) {
     throw new AltProviderError(
       'provider_error',

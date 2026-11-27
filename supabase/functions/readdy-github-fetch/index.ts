@@ -1,3 +1,4 @@
+import { fetchWithAiUsage } from "../_shared/ai-usage.ts";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
   corsHeaders,
@@ -215,7 +216,7 @@ Rules:
 
 ${sources}`;
 
-  const res = await fetch(
+  const res = await fetchWithAiUsage(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: "POST",
@@ -230,6 +231,7 @@ ${sources}`;
         },
       }),
     },
+    { feature: "readdy-framer", operation: "github_interpret", provider: "gemini", model },
   );
   if (!res.ok) return null;
   const json = await res.json();

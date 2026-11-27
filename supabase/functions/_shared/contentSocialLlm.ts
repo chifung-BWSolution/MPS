@@ -1,3 +1,4 @@
+import { fetchWithAiUsage } from "./ai-usage.ts";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import type { ComposedLongform } from "../../../src/lib/contentSocialGenerate.ts";
 
@@ -274,7 +275,7 @@ export async function judgeEventRelation(input: {
     .join('\n');
 
   try {
-    const response = await fetch(ENDPOINT, {
+    const response = await fetchWithAiUsage(ENDPOINT, {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -288,7 +289,7 @@ export async function judgeEventRelation(input: {
         ],
       }),
       signal: controller.signal,
-    });
+    }, { feature: "content-automation", operation: review ? "social_dedupe_review" : "social_dedupe", provider: "grok", model });
     const text = await response.text();
     if (!response.ok) return null;
     const payload = JSON.parse(text) as {
@@ -357,7 +358,7 @@ export async function composeWithGrok(input: SocialLlmInput): Promise<SocialLlmR
 
   let response: Response;
   try {
-    response = await fetch(ENDPOINT, {
+    response = await fetchWithAiUsage(ENDPOINT, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${key}`,
@@ -374,7 +375,7 @@ export async function composeWithGrok(input: SocialLlmInput): Promise<SocialLlmR
         ],
       }),
       signal: controller.signal,
-    });
+    }, { feature: "content-automation", operation: "social", provider: "grok", model });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new SocialLlmError("timeout", `Grok 逾時（${input.timeoutMs ?? DEFAULT_TIMEOUT_MS}ms）`);

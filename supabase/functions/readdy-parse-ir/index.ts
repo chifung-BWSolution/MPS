@@ -1,3 +1,4 @@
+import { fetchWithAiUsage } from "../_shared/ai-usage.ts";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { captureRenderedPage, publishCapturedImages, resolveRenderUrl, type RenderedPage } from "../_shared/readdy-render.ts";
 import { CAPTURE_DEVICES, comparePageLayouts, LAYOUT_MEASUREMENT_VERSION } from "../_shared/readdy-layout-score.ts";
@@ -1890,7 +1891,7 @@ async function tryGeminiRoles(
   if (!apiKey) return null;
   const model = (Deno.env.get("GEMINI_MODEL") || "gemini-4-hydrogen").trim();
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  const res = await fetch(url, {
+  const res = await fetchWithAiUsage(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     signal: AbortSignal.timeout(40_000),
@@ -1920,7 +1921,7 @@ async function tryGeminiRoles(
         },
       },
     }),
-  });
+  }, { feature: "readdy-framer", operation: "parse_roles", provider: "gemini", model });
   if (!res.ok) return null;
   const json = await res.json();
   const { tokensIn, tokensOut } = extractGeminiUsage(json);
@@ -1960,7 +1961,7 @@ async function tryGeminiIr(
   const model = (Deno.env.get("GEMINI_MODEL") || "gemini-4-hydrogen").trim();
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-  const res = await fetch(url, {
+  const res = await fetchWithAiUsage(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     signal: AbortSignal.timeout(40_000),
@@ -1972,7 +1973,7 @@ async function tryGeminiIr(
         thinkingConfig: { thinkingLevel: "low" },
       },
     }),
-  });
+  }, { feature: "readdy-framer", operation: "parse_ir", provider: "gemini", model });
   if (!res.ok) return null;
   const json = await res.json();
   const { tokensIn, tokensOut } = extractGeminiUsage(json);
@@ -2012,7 +2013,7 @@ async function tryGrokIr(
   if (!apiKey) return null;
   const model = (Deno.env.get("XAI_MODEL") || "grok-4.7").trim();
 
-  const res = await fetch("https://api.x.ai/v1/chat/completions", {
+  const res = await fetchWithAiUsage("https://api.x.ai/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -2029,7 +2030,7 @@ async function tryGrokIr(
         { role: "user", content: prompt },
       ],
     }),
-  });
+  }, { feature: "readdy-framer", operation: "parse_ir", provider: "grok", model });
   if (!res.ok) return null;
   const json = await res.json();
   const { tokensIn, tokensOut } = extractGrokUsage(json);

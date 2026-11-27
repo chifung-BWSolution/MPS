@@ -1,3 +1,4 @@
+import { fetchWithAiUsage } from "./ai-usage.ts";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
   DEFAULT_CONTENT_MODEL,
@@ -130,7 +131,7 @@ export async function callGeminiJson<T = unknown>(
 
   let response: Response;
   try {
-    response = await fetch(`${ENDPOINT}/${encodeURIComponent(model)}:generateContent`, {
+    response = await fetchWithAiUsage(`${ENDPOINT}/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -147,7 +148,7 @@ export async function callGeminiJson<T = unknown>(
         safetySettings: [],
       }),
       signal: controller.signal,
-    });
+    }, { feature: "content-automation", operation: "generate_article", provider: "gemini", model });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new ContentLlmError("timeout", `Gemini 呼叫逾時（${timeoutMs}ms）`, {

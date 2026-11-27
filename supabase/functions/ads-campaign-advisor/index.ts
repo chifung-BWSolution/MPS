@@ -1,3 +1,4 @@
+import { fetchWithAiUsage } from "../_shared/ai-usage.ts";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { ADVISOR_TOOL_DEFINITIONS } from "./tools.ts";
 import { executeAdvisorTool, type AdvisorDateContext } from "./warehouse.ts";
@@ -217,7 +218,7 @@ async function callGrok(
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const allowTools = round < MAX_TOOL_ROUNDS - 1;
-    const res = await fetch("https://api.x.ai/v1/chat/completions", {
+    const res = await fetchWithAiUsage("https://api.x.ai/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -230,7 +231,7 @@ async function callGrok(
         messages: grokMessages,
         ...(allowTools ? { tools: ADVISOR_TOOL_DEFINITIONS, tool_choice: "auto" } : {}),
       }),
-    });
+    }, { feature: "ads-campaign-advisor", operation: "advise", provider: "grok", model });
     if (!res.ok) {
       const err = await res.text();
       throw new Error(`Grok (${model}) error: ${err}`);
@@ -292,14 +293,14 @@ ${extra}`;
 async function callGeminiOnce(prompt: string, model: string, apiKey: string): Promise<string> {
   const url =
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  const res = await fetch(url, {
+  const res = await fetchWithAiUsage(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { temperature: 0.3, responseMimeType: "application/json" },
     }),
-  });
+  }, { feature: "ads-campaign-advisor", operation: "advise", provider: "gemini", model });
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Gemini (${model}) error: ${err}`);

@@ -1,3 +1,4 @@
+import { fetchWithAiUsage } from "../_shared/ai-usage.ts";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import {
@@ -159,7 +160,7 @@ async function callGrok(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(GROK_ENDPOINT, {
+    const response = await fetchWithAiUsage(GROK_ENDPOINT, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -175,7 +176,7 @@ async function callGrok(
         ],
       }),
       signal: controller.signal,
-    });
+    }, { feature: "ad-creative-writer", operation: "generate_copy", provider: "grok", model });
 
     const rawText = await response.text().catch(() => "");
 
@@ -231,7 +232,7 @@ async function callGemini(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(
+    const response = await fetchWithAiUsage(
       `${GEMINI_ENDPOINT}/${encodeURIComponent(model)}:generateContent`,
       {
         method: "POST",
@@ -250,6 +251,7 @@ async function callGemini(
         }),
         signal: controller.signal,
       },
+      { feature: "ad-creative-writer", operation: "generate_copy", provider: "gemini", model },
     );
 
     const rawText = await response.text().catch(() => "");

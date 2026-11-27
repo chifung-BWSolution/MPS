@@ -273,6 +273,7 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'email-connection', label: '電郵連接' },
       { id: 'system-notifications', label: '系統通知' },
       { id: 'login-logs', label: '登入紀錄' },
+      { id: 'ai-usage', label: 'AI 用量統計', adminOnly: true },
     ],
   },
 ];
