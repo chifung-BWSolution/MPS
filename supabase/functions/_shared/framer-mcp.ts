@@ -69,17 +69,52 @@ export async function getOptionalUserId(req: Request): Promise<string | null> {
   }
 }
 
+function decodeJwtPayload(token: string): { role?: string; ref?: string; exp?: number } | null {
+  const part = token.split(".")[1];
+  if (!part) return null;
+  try {
+    const pad = part.length % 4 === 0 ? "" : "=".repeat(4 - (part.length % 4));
+    return JSON.parse(atob(part.replace(/-/g, "+").replace(/_/g, "/") + pad));
+  } catch {
+    return null;
+  }
+}
+
+async function isServiceRoleJwt(token: string): Promise<boolean> {
+  const payload = decodeJwtPayload(token);
+  if (payload?.role !== "service_role") return false;
+  if (typeof payload.exp === "number" && payload.exp * 1000 <= Date.now()) return false;
+  const ref = String(payload.ref || "");
+  if (ref && SUPABASE_URL && !SUPABASE_URL.includes(ref)) return false;
+  if (!SUPABASE_URL) return false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/framer_conversion_runs?select=id&limit=1`, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY || token,
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    await res.body?.cancel().catch(() => undefined);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Reject missing and anon tokens. A logged-in user returns their id. The service role returns userId null so a background worker can call these functions. */
 export async function requireUser(req: Request): Promise<{ userId: string | null } | { response: Response }> {
   const token = extractBearerToken(req);
   if (!token) {
     return { response: jsonResponse({ error: "未登入或缺少授權標頭" }, 401) };
   }
-  if (token === SUPABASE_SERVICE_ROLE_KEY) {
+  if (SUPABASE_SERVICE_ROLE_KEY && token === SUPABASE_SERVICE_ROLE_KEY) {
     return { userId: null };
   }
   if (token === SUPABASE_ANON_KEY) {
     return { response: jsonResponse({ error: "需要登入後才能使用此功能" }, 401) };
+  }
+  if (await isServiceRoleJwt(token)) {
+    return { userId: null };
   }
   const userId = await getOptionalUserId(req);
   if (!userId) {

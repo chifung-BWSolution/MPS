@@ -19,7 +19,8 @@ import {
 import { formatFramerPublishNote, type FramerPublishResult } from "../../../src/lib/framerPublish.ts";
 
 const PAGES_PER_WAKE = 3;
-const LEASE_MS = 8 * 60 * 1000;
+const MAX_WAKE_MS = 180_000;
+const LEASE_MS = 4 * 60 * 1000;
 const SESSION_RETRY_MS = 360_000;
 
 type PageRecord = ReaddyConversionPageResult & {
@@ -121,12 +122,47 @@ async function loadRun(id: string): Promise<RunRow | null> {
   return (data as RunRow | null) ?? null;
 }
 
-async function saveRun(id: string, patch: Record<string, unknown>) {
-  const { error } = await supabaseAdmin()
+async function saveRun(
+  id: string,
+  patch: Record<string, unknown>,
+  opts?: { onlyIfNotCancelled?: boolean },
+): Promise<boolean> {
+  let query = supabaseAdmin()
     .from("framer_conversion_runs")
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", id);
+  if (opts?.onlyIfNotCancelled) {
+    query = query.in("status", ["queued", "running"]);
+    const { data, error } = await query.select("id");
+    if (error) throw new Error(error.message);
+    return Array.isArray(data) && data.length > 0;
+  }
+  const { error } = await query;
   if (error) throw new Error(error.message);
+  return true;
+}
+
+async function triggerNextWake(id: string, token: string): Promise<boolean> {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/readdy-conversion-worker`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: "continue",
+        run_id: id,
+        lease_token: token,
+      }),
+    });
+    await res.body?.cancel().catch(() => undefined);
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 async function finishRun(row: RunRow, progress: RunProgress, cancelled: boolean) {
@@ -200,7 +236,23 @@ async function finishRun(row: RunRow, progress: RunProgress, cancelled: boolean)
   });
 }
 
+async function saveRunningStep(
+  id: string,
+  fallbackRow: RunRow,
+  patch: Record<string, unknown>,
+  progress: RunProgress,
+): Promise<boolean> {
+  const ok = await saveRun(id, patch, { onlyIfNotCancelled: true });
+  if (ok) return true;
+  const latest = await loadRun(id);
+  if (latest?.status === "cancelled") {
+    await finishRun(latest ?? fallbackRow, progress, true);
+  }
+  return false;
+}
+
 async function processRun(id: string, token?: string) {
+  const wakeStartedAt = Date.now();
   const row = await loadRun(id);
   if (!row || row.status === "success" || row.status === "failed") return;
   if (row.status === "cancelled") {
@@ -215,7 +267,9 @@ async function processRun(id: string, token?: string) {
   progress.leaseToken = nextToken;
   progress.leaseUntil = new Date(Date.now() + LEASE_MS).toISOString();
   progress.total = row.payload.pages.length;
-  await saveRun(id, { status: "running", progress });
+  if (!(await saveRunningStep(id, row, { status: "running", progress }, progress))) {
+    return;
+  }
 
   const pages = progress.pages ?? [];
   progress.pages = pages;
@@ -224,7 +278,11 @@ async function processRun(id: string, token?: string) {
   let processed = 0;
   let index = row.page_index;
 
-  while (processed < PAGES_PER_WAKE && index < row.payload.pages.length) {
+  while (
+    processed < PAGES_PER_WAKE &&
+    index < row.payload.pages.length &&
+    (processed === 0 || Date.now() - wakeStartedAt < MAX_WAKE_MS)
+  ) {
     const latest = await loadRun(id);
     if (!latest || latest.status === "cancelled") {
       await finishRun(latest ?? row, progress, true);
@@ -236,7 +294,9 @@ async function processRun(id: string, token?: string) {
     progress.currentPageId = page.id;
     progress.currentLabel = `正在轉換 ${page.path}（${index + 1}/${row.payload.pages.length}）`;
     progress.leaseUntil = new Date(Date.now() + LEASE_MS).toISOString();
-    await saveRun(id, { status: "running", page_index: index, progress });
+    if (!(await saveRunningStep(id, latest, { status: "running", page_index: index, progress }, progress))) {
+      return;
+    }
 
     try {
       let loaded: { code: string; includedFiles: string[]; repoMeta: Record<string, unknown> | null };
@@ -320,7 +380,9 @@ async function processRun(id: string, token?: string) {
       progress.currentPageId = row.payload.pages[index]?.id ?? null;
       progress.done = pages.filter((item) => item?.status === "migrated" || item?.status === "failed").length;
       progress.currentLabel = `${page.path} 已寫入 Framer`;
-      await saveRun(id, { status: "running", page_index: index, progress });
+      if (!(await saveRunningStep(id, row, { status: "running", page_index: index, progress }, progress))) {
+        return;
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const limited = (err instanceof Error && err.name === "FramerSessionLimit") || isFramerSessionLimitError(message);
@@ -332,7 +394,7 @@ async function processRun(id: string, token?: string) {
         progress.leaseUntil = progress.retryAfter;
         progress.leaseToken = null;
         progress.currentLabel = `${page.path} 已達 Framer 工作階段上限，360 秒後再試`;
-        await saveRun(id, { status: "running", page_index: index, progress });
+        await saveRunningStep(id, row, { status: "running", page_index: index, progress }, progress);
         return;
       }
       pages[index] = {
@@ -348,7 +410,9 @@ async function processRun(id: string, token?: string) {
       progress.currentPageId = row.payload.pages[index]?.id ?? null;
       progress.done = pages.filter((item) => item?.status === "migrated" || item?.status === "failed").length;
       progress.currentLabel = `${page.path} 失敗：${message}`;
-      await saveRun(id, { status: "running", page_index: index, progress });
+      if (!(await saveRunningStep(id, row, { status: "running", page_index: index, progress }, progress))) {
+        return;
+      }
     }
   }
 
@@ -356,7 +420,17 @@ async function processRun(id: string, token?: string) {
     await finishRun({ ...row, page_index: index }, progress, false);
     return;
   }
-  edgeWaitUntil(processRun(id, nextToken));
+  const latest = await loadRun(id);
+  if (!latest || latest.status === "cancelled") {
+    await finishRun(latest ?? row, progress, true);
+    return;
+  }
+  const handedOff = await triggerNextWake(id, nextToken);
+  if (!handedOff) {
+    progress.leaseToken = null;
+    progress.leaseUntil = null;
+    await saveRunningStep(id, latest, { status: "running", page_index: index, progress }, progress);
+  }
 }
 
 async function tick() {
@@ -369,9 +443,14 @@ async function tick() {
     .order("updated_at", { ascending: true })
     .limit(3);
   if (error) return jsonResponse({ error: error.message }, 500);
+  const now = Date.now();
   const due = (data ?? []).filter((row) => {
-    const retryAfter = Date.parse(String((row.progress as RunProgress | null)?.retryAfter || ""));
-    return !Number.isFinite(retryAfter) || retryAfter <= Date.now();
+    const p = (row.progress as RunProgress | null) ?? {};
+    const retryAfter = Date.parse(String(p.retryAfter || ""));
+    if (Number.isFinite(retryAfter) && retryAfter > now) return false;
+    const leaseUntil = Date.parse(String(p.leaseUntil || ""));
+    if (Boolean(p.leaseToken) && Number.isFinite(leaseUntil) && leaseUntil > now) return false;
+    return true;
   });
   for (const row of due) edgeWaitUntil(processRun(String(row.id)));
   return jsonResponse({ ok: true, queued: due.length });
@@ -385,9 +464,22 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (req.method === "GET" || auth.userId === null) {
-      const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
-      if (body && typeof body === "object" && (body as { action?: string }).action === "enqueue") {
+      const body = req.method === "POST"
+        ? await req.json().catch(() => ({})) as {
+            action?: string;
+            run_id?: string;
+            lease_token?: string;
+          }
+        : {};
+      if (body?.action === "enqueue") {
         return jsonResponse({ error: "需要登入後才能開始轉換" }, 401);
+      }
+      if (auth.userId === null && body?.action === "continue") {
+        const runId = typeof body.run_id === "string" ? body.run_id.trim() : "";
+        if (!runId) return jsonResponse({ error: "缺少 run_id" }, 400);
+        const leaseToken = typeof body.lease_token === "string" ? body.lease_token : undefined;
+        edgeWaitUntil(processRun(runId, leaseToken));
+        return jsonResponse({ ok: true, continued: runId });
       }
       return await tick();
     }
