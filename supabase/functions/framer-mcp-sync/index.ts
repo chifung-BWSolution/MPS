@@ -462,6 +462,7 @@ type FramerExecSpec = {
   rendered?: boolean;
   pageGeometry?: Record<"desktop" | "tablet" | "phone", { height: number; background?: string }>;
   expectedMarkers?: string[];
+  redundantPageTitle?: string;
   marker?: string;
   backgroundImage?: string | null;
   ops: FramerWriteOp[];
@@ -749,7 +750,12 @@ function buildRenderedOps(
     Boolean(item && (item.type === "text" || (item.children || []).some(hasTextNode)));
   const isFullWidthNode = (item: SceneNode | undefined): boolean =>
     Boolean(item && item.layout?.width === "100%" && (!item.layout?.left || item.layout.left === "0px"));
-  const attributes = (node: SceneNode | undefined, root: boolean): Record<string, unknown> => {
+  const px = (value?: string) => value?.endsWith("px") ? Number.parseFloat(value) : undefined;
+  const relative = (value: string | undefined, width?: number) => {
+    const number = px(value);
+    return width && number !== undefined ? `${Number((number / width * 100).toFixed(4))}%` : value;
+  };
+  const attributes = (node: SceneNode | undefined, root: boolean, parentWidth?: number): Record<string, unknown> => {
     if (!node) return { visible: false, ...(root ? { height: "0px" } : {}) };
     const style = node.style;
     const layout = node.layout;
@@ -758,11 +764,11 @@ function buildRenderedOps(
     const geometry = {
       visible: true,
       position: absoluteRoots && root && !isFixed ? "absolute" : layout?.position,
-      width: layout?.width,
+      width: node.type === "text" ? layout?.width : relative(layout?.width, parentWidth),
       height: layout?.height,
       zIndex: isFixed ? (layout?.zIndex ?? 50) : layout?.zIndex,
       opacity: style?.opacity,
-      left: absolute ? (isFixed ? layout?.left || "0px" : layout?.left) : undefined,
+      left: absolute ? (isFixed ? layout?.left || "0px" : relative(layout?.left, parentWidth)) : undefined,
       top: absolute ? (isFixed ? layout?.top || "0px" : layout?.top) : undefined,
       right: isFixed && layout?.width === "100%" ? "0px" : undefined,
     };
@@ -793,8 +799,10 @@ function buildRenderedOps(
       htmlTag: link ? "a" : root && /^(nav|header|footer|main|article|section)$/.test(node.htmlTag || "") ? node.htmlTag : undefined,
     });
   };
-  const visit = (variants: Variants, parent: string, root: boolean) => {
-    const node = variants.desktop || variants.tablet || variants.phone;
+  type Widths = Partial<Record<typeof devices[number], number>>;
+  const visit = (variants: Variants, parent: string, root: boolean, parentWidths: Widths = {}) => {
+    const primary = devices.find((device) => variants[device]);
+    const node = primary && variants[primary];
     if (!node) return;
     const id = `render-${section.id}-${ops.length}`;
     const asset = (item?: SceneNode) => {
@@ -804,14 +812,15 @@ function buildRenderedOps(
     const backgroundUrl = asset(node);
     const centerStage = Boolean(root && stageWidths && isFullWidthNode(variants.desktop));
     const attrs: Record<string, unknown> = {
-      ...attributes(variants.desktop || node, root),
+      ...attributes(node, root, parentWidths[primary]),
       ...(!variants.desktop ? attributes(undefined, root) : {}),
       ...(centerStage ? { layout: "stack", stackDirection: "vertical", stackAlignment: "center" } : {}),
       name: (node.name || node.text || node.type).slice(0, 60),
       ...(root ? { elementId: `readdy-${section.id}` } : {}),
     };
-    const replica = (variant: SceneNode | undefined) => {
-      const overrides = attributes(variant, root);
+    const replica = (device: "tablet" | "phone") => {
+      const variant = variants[device];
+      const overrides = attributes(variant, root, parentWidths[device]);
       if (!variant) return overrides;
       if ((attrs.fill || backgroundUrl) && !overrides.fill && !asset(variant)) overrides.fill = "rgba(0, 0, 0, 0)";
       if (attrs.radius && !overrides.radius) overrides.radius = "0px";
@@ -823,8 +832,8 @@ function buildRenderedOps(
       return overrides;
     };
     const responsive = {
-      tablet: replica(variants.tablet),
-      phone: replica(variants.phone),
+      tablet: replica("tablet"),
+      phone: replica("phone"),
     };
     ops.push({
       op: node.type === "text" ? "text" : "frame",
@@ -895,7 +904,8 @@ function buildRenderedOps(
           return compactAttrs({
             visible: true,
             position: "relative",
-            width,
+            width: "100%",
+            maxWidth: width,
             height: variant.layout?.height,
             zIndex: 1,
           });
@@ -910,11 +920,17 @@ function buildRenderedOps(
             phone: stageDevice(variants.phone, stageWidths.phone),
           },
         });
-        for (const child of contentItems) visit(child, stageId, false);
+        const widths = Object.fromEntries(devices.map((device) => [device, px(stageWidths[device])]));
+        for (const child of contentItems) visit(child, stageId, false, widths);
       }
       return;
     }
-    for (const child of children.values()) visit(child, id, false);
+    const widths: Widths = {};
+    for (const device of devices) {
+      const width = variants[device]?.layout?.width;
+      if (parentWidths[device]) widths[device] = width === "100%" ? parentWidths[device] : px(width);
+    }
+    for (const child of children.values()) visit(child, id, false, widths);
   };
   visit(readVariants(scenes), "$bp", true);
   return ops;
@@ -2047,6 +2063,14 @@ if (spec.expectedMarkers) {
       }
     }
     const desiredInParent = desired.filter(child => children.some(item => item.id === child.id));
+    if (spec.redundantPageTitle && parent.id !== breakpoint.id && !breakpoint.$layoutTemplateId) {
+      const contentIndex = bpChildren.findIndex(child => child.id === parent.id);
+      const candidates = bpChildren.slice(0, Math.max(0, contentIndex))
+        .map(child => tree.get(child.id))
+        .filter(node => node?.type === "RichTextNode" && !node.elementId &&
+          normReadBackText(node.text) === normReadBackText(spec.redundantPageTitle));
+      if (candidates.length === 1) tree.remove(candidates[0].id);
+    }
     const first = children.findIndex(managed);
     if (typeof tree.setParent === "function" && first >= 0) {
       for (let i = 0; i < desiredInParent.length; i++) {
@@ -2626,6 +2650,12 @@ Deno.serve(async (req: Request) => {
       }
     };
     const finalizeRenderedPage = async (pageNodeId: string | null, trace = "") => {
+      const headings = irPayload.sections.flatMap((section) => {
+        const heading = section.elements.heading?.trim();
+        return section.sectionKind !== "navbar" && heading ? [heading] : [];
+      });
+      const hasExpandedTitle = headings[0]?.startsWith(pageTitle) &&
+        /^[ ,，:：]/.test(headings[0].slice(pageTitle.length));
       const final = await runFramerProgram({
         stamp: Date.now().toString(36),
         pagePath: normalizeComparablePath(pagePath),
@@ -2636,6 +2666,7 @@ Deno.serve(async (req: Request) => {
         rendered,
         pageGeometry,
         expectedMarkers: irPayload.sections.map((section) => `readdy-${section.id}`),
+        redundantPageTitle: hasExpandedTitle && !headings.includes(pageTitle) ? pageTitle : undefined,
         ops: [],
       });
       recordWarnings(final);

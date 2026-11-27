@@ -493,6 +493,76 @@ async function captureVisiblePage(unwrappedIds: string[] | null = null) {
 }
 
 export const VIEWPORTS = { tablet: 834, phone: 390 } as const;
+
+// Freeze the readable state for fixed headers that change their palette on scroll.
+// This runs after the source screenshot so the comparison still uses the original page.
+async function prepareNavigationForImport() {
+  const headers = Array.from(document.querySelectorAll("header, nav"));
+  const fixedHeaders = headers.filter((header) =>
+    getComputedStyle(header).position === "fixed" && header.getBoundingClientRect().top <= 4
+  );
+  const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 350));
+  if (fixedHeaders.length && window.scrollY === 0) {
+    const backgrounds = fixedHeaders.map((header) => getComputedStyle(header).backgroundColor);
+    window.scrollTo({ top: 96, behavior: "instant" });
+    await settle();
+    const palettes = fixedHeaders.flatMap((header, index) => {
+      const style = getComputedStyle(header);
+      if (style.backgroundColor === backgrounds[index] || style.backgroundColor === "rgba(0, 0, 0, 0)") return [];
+      return [{
+        header,
+        background: style.backgroundColor,
+        shadow: style.boxShadow,
+        colors: [header, ...header.querySelectorAll("*")].map((element) => {
+          const style = getComputedStyle(element);
+          return { element, color: style.color, border: style.borderColor };
+        }),
+      }];
+    });
+    window.scrollTo({ top: 0, behavior: "instant" });
+    if (palettes.length) await settle();
+    for (const { header, background, shadow, colors } of palettes) {
+      (header as HTMLElement).style.setProperty("background-color", background, "important");
+      (header as HTMLElement).style.setProperty("box-shadow", shadow, "important");
+      for (const { element, color, border } of colors) {
+        if (!(element instanceof HTMLElement || element instanceof SVGElement)) continue;
+        element.style.setProperty("transition", "none", "important");
+        element.style.setProperty("color", color, "important");
+        element.style.setProperty("border-color", border, "important");
+      }
+    }
+  }
+
+  for (const header of headers.filter((element) => !headers.some((other) => other !== element && other.contains(element)))) {
+    const triggers = Array.from(header.querySelectorAll<HTMLButtonElement>("button[aria-expanded='false']"))
+      .filter((button) => /language|語言|语言/i.test(button.getAttribute("aria-label") || "") && button.getBoundingClientRect().width > 0);
+    for (const button of triggers) {
+      button.click();
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      const links = Array.from(button.parentElement?.querySelectorAll<HTMLAnchorElement>("a[data-lang-switch][href], a[hreflang][href]") || [])
+        .map((link) => ({
+          href: link.href,
+          label: link.textContent?.trim() || "",
+        }))
+        .filter((link) => /^https?:/i.test(link.href) && link.label && link.label.length <= 32);
+      if (button.getAttribute("aria-expanded") === "true") button.click();
+      if (links.length < 2 || links.length > 5) continue;
+      const wrapper = document.createElement("span");
+      const style = getComputedStyle(button);
+      wrapper.style.cssText = `display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font:${style.font};color:${style.color}`;
+      for (const { href, label } of links) {
+        const anchor = document.createElement("a");
+        anchor.href = href;
+        anchor.setAttribute("aria-label", label);
+        anchor.textContent = ({ "繁體中文": "繁體", "简体中文": "简体", "English": "EN" } as Record<string, string>)[label] || label;
+        anchor.style.cssText = "color:inherit;text-decoration:none;display:inline-block";
+        wrapper.append(anchor);
+      }
+      button.replaceWith(wrapper);
+    }
+  }
+}
+
 export type RenderedPage = {
   url: string;
   images: { desktop: string; tablet: string; phone: string };
@@ -594,6 +664,7 @@ export async function captureRenderedPage(
   const code = `export default async ({ page, context }) => {
     const capture = ${captureVisiblePage.toString()};
     const measure = ${measurePageLayout.toString()};
+    const prepareNavigation = ${prepareNavigationForImport.toString()};
     const images = {}, scenes = {}, geometry = {}, limitations = new Set();
     let unwrappedIds = null;
     await page.setRequestInterception(true);
@@ -669,14 +740,15 @@ export async function captureRenderedPage(
         globalThis.applyPaintedTextCase = ${applyPaintedTextCase.toString()};
       });
       geometry[device] = await page.evaluate(measure, context.measurementVersion);
+      images[device] = await page.screenshot({ type: "jpeg", encoding: "base64", quality: 65, fullPage: true });
       if (!context.screenshotsOnly) {
+        await page.evaluate(prepareNavigation);
         const result = await page.evaluate(capture, unwrappedIds);
         if (!result.scenes.length) throw new Error("No visible sections");
         if (unwrappedIds === null && Array.isArray(result.unwrapped)) unwrappedIds = result.unwrapped;
         scenes[device] = result.scenes;
         result.limitations.forEach(item => limitations.add(item));
       }
-      images[device] = await page.screenshot({ type: "jpeg", encoding: "base64", quality: 65, fullPage: true });
     }
     return { url: page.url(), images, scenes, geometry, limitations: [...limitations] };
   };`;
@@ -713,7 +785,7 @@ export async function captureRenderedPage(
       throw lastError;
     } catch (err) {
       if (err === lastError) throw err;
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg: string = err instanceof Error ? err.message : String(err);
       lastError = new Error(`無法擷取來源畫面（${formatBrowserlessError(msg) || msg}）`);
       if (attempt === 0) {
         await new Promise((resolve) => setTimeout(resolve, retryDelayMs));

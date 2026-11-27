@@ -34,6 +34,7 @@ const phone = {
   children: [{ ...text, layout: { width: '350px' } }, { ...image, src: origin + '/phone.jpg' }, menu],
 };
 const devices = { desktop: 1440, tablet: 834, phone: 390 };
+const navigationCaptures: number[] = [];
 const provider: typeof fetch = async (input, init) => {
   assert.equal(new URL(String(input)).pathname, '/function');
   const { code, context } = JSON.parse(String(init?.body));
@@ -53,6 +54,10 @@ const provider: typeof fetch = async (input, init) => {
       goto: async () => ({ ok: () => true }),
       url: () => url.href,
       evaluate: async (fn: () => unknown) => {
+        if (fn.name === 'prepareNavigationForImport') {
+          navigationCaptures.push(width);
+          return;
+        }
         if (fn.name === 'captureVisiblePage') return { scenes: [width === devices.phone ? phone : root], limitations: [] };
         if (fn.name === 'measurePageLayout') return { version: context.measurementVersion, width, height: 800, regions: [{ key: 'text:' + title, x: 30, y: 40, width: 200, height: 35 }] };
         if (fn.toString().includes('scrollHeight')) return 800;
@@ -67,6 +72,7 @@ assert.equal(capture.images.phone, 'YQ==');
 assert.deepEqual(capture.scenes.phone, [phone]);
 const preview = await captureRenderedPage(url, 1440, 'fixture-token', provider, true);
 assert.deepEqual(preview.scenes, {});
+assert.deepEqual(navigationCaptures, Object.values(devices), 'Prepare navigation for every imported viewport only');
 const iconSource = 'data:image/png;base64,YQ==';
 const iconInHeader = { src: iconSource };
 const iconOnPhone = { src: iconSource };
@@ -175,7 +181,7 @@ const centered = buildRenderedOps({
       ],
     },
   },
-}, true, { desktop: '1440px', tablet: '834px', phone: '390px' });
+}, true, { desktop: '1600px', tablet: '834px', phone: '390px' });
 assert.equal(centered[0].attrs.stackAlignment, 'center');
 assert.equal(centered[1].parent, centered[0].id);
 assert.equal(centered[1].attrs.width, '100%');
@@ -187,12 +193,16 @@ assert.equal(backdropOp.attrs.fill, '#000000');
 const stageOp = centered.find((op: { attrs: { name?: string } }) => op.attrs.name === 'Content Stage');
 assert.ok(stageOp, 'Full-width section creates a centered Content Stage');
 assert.equal(stageOp.parent, centered[0].id);
-assert.equal(stageOp.attrs.width, '1440px');
-assert.equal(stageOp.responsive.phone.width, '390px');
+assert.equal(stageOp.attrs.width, '100%');
+assert.equal(stageOp.attrs.maxWidth, '1600px');
+assert.equal(stageOp.responsive.phone.width, '100%');
+assert.equal(stageOp.responsive.phone.maxWidth, '390px');
 const linkOp = centered.find((op: { attrs: { link?: string } }) => Boolean(op.attrs.link));
 assert.ok(linkOp, 'Rendered anchor keeps its link');
 assert.equal(linkOp.attrs.link, '/office-design');
 assert.equal(linkOp.attrs.htmlTag, 'a');
+assert.equal(linkOp.attrs.width, '5%');
+assert.equal(linkOp.attrs.left, '7.5%');
 const breakpointReset = buildRenderedOps({
   id: 'dom-reset',
   renderedScenes: {
@@ -537,6 +547,9 @@ for (const heading of ['OFFICE DESIGN & BUILD', '讓現場音樂，成為賓客�
   const homePage = { id: 'pg-home', path: '/', type: 'WebPageNode', children: [bpDesktop, bpTablet, bpPhone] };
   const servicesPage = { id: 'pg-services', path: '/services', type: 'WebPageNode', children: [] };
   const localNodes = new Map<string, Record<string, unknown>>([['pg-home', homePage], ['bp-d', bpDesktop]]);
+  bpDesktop.children.push({ id: 'placeholder-title', elementId: '' }, { id: 'other-title', elementId: '' });
+  localNodes.set('placeholder-title', { id: 'placeholder-title', type: 'RichTextNode', text: '學校培訓' });
+  localNodes.set('other-title', { id: 'other-title', type: 'RichTextNode', text: '保留文字' });
   let linkFrameId = '';
   const patchedLinks: Array<{ id: string; attrs: Record<string, unknown> }> = [];
   const localTree = {
@@ -577,9 +590,12 @@ for (const heading of ['OFFICE DESIGN & BUILD', '讓現場音樂，成為賓客�
     pageGeometry: { desktop: { height: 2400 }, tablet: { height: 2600 }, phone: { height: 3000 } },
     sections: [{ marker: 'readdy-dom-nav', ops: fixedNavOps }],
     expectedMarkers: ['readdy-dom-nav'],
+    redundantPageTitle: '學校培訓',
   });
   const fixedRes = await new Function('api', `return (async () => { ${fixedProgram} })();`)({ tree: localTree });
   assert.deepEqual(fixedRes.missingMarkers, []);
+  assert.equal(localNodes.has('placeholder-title'), false);
+  assert.equal(localNodes.has('other-title'), true);
   assert.ok(bpDesktop.children.some((c) => c.elementId === 'readdy-dom-nav'), 'Fixed header must mount directly on Breakpoint');
   assert.ok(linkFrameId);
   assert.deepEqual(localNodes.get(linkFrameId)?.link, { href: '/services' }, 'Framer exposes native links through link.href');
