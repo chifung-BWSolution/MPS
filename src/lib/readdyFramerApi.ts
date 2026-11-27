@@ -193,6 +193,8 @@ export async function fetchGitHubPageBundle(params: {
   shared_files: ReaddyProjectAnalysis['sharedFiles'];
   all_paths?: string[];
   github_token?: string;
+  skip_llm?: boolean;
+  project_name?: string;
 }): Promise<{
   code: string;
   included_files: string[];

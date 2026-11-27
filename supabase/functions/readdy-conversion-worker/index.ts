@@ -299,8 +299,28 @@ async function processRun(id: string, token?: string) {
     }
 
     try {
+      const sourceOrigin = (row.payload.analysis as { sourceOrigin?: string }).sourceOrigin?.trim() || "";
       let loaded: { code: string; includedFiles: string[]; repoMeta: Record<string, unknown> | null };
-      if (row.payload.sourceType === "github" && row.payload.analysis.githubMeta) {
+      if (sourceOrigin) {
+        const ghMeta = row.payload.analysis.githubMeta as
+          | { repo?: string; full_name?: string; branch?: string; is_private?: boolean }
+          | null
+          | undefined;
+        loaded = {
+          code: "",
+          includedFiles: page.sourceFile ? [page.sourceFile] : [],
+          repoMeta:
+            row.payload.sourceType === "github" && ghMeta
+              ? {
+                  repo: ghMeta.full_name || ghMeta.repo || row.payload.githubRepoUrl || "",
+                  branch: ghMeta.branch || "",
+                  file_path: page.sourceFile || "",
+                  commit_sha: "",
+                  is_private: Boolean(ghMeta.is_private),
+                }
+              : null,
+        };
+      } else if (row.payload.sourceType === "github" && row.payload.analysis.githubMeta) {
         const bundle = await callFunction("readdy-github-fetch", {
           action: "fetch_page_bundle",
           repo_url: row.payload.githubRepoUrl,
@@ -308,6 +328,7 @@ async function processRun(id: string, token?: string) {
           page,
           shared_files: row.payload.analysis.sharedFiles,
           all_paths: row.payload.githubAllPaths,
+          project_name: row.payload.siteName,
         });
         loaded = {
           code: String(bundle.code || ""),
@@ -322,7 +343,7 @@ async function processRun(id: string, token?: string) {
         );
         loaded = { code: assembled.code, includedFiles: assembled.includedFiles, repoMeta: null };
       }
-      if (!loaded.code.trim() && !(row.payload.analysis as { sourceOrigin?: string }).sourceOrigin?.trim()) {
+      if (!loaded.code.trim() && !sourceOrigin) {
         throw new Error("這個頁面沒有可解析的代碼");
       }
 
@@ -346,7 +367,7 @@ async function processRun(id: string, token?: string) {
         },
         css_tokens: row.payload.analysis.cssTokens,
         project_name: row.payload.siteName,
-        source_origin: (row.payload.analysis as { sourceOrigin?: string }).sourceOrigin,
+        source_origin: sourceOrigin || undefined,
       });
       const sectionCount = Array.isArray((parsed.ir_payload as { sections?: unknown[] } | undefined)?.sections)
         ? ((parsed.ir_payload as { sections: unknown[] }).sections.length)

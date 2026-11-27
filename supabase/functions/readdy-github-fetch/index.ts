@@ -14,6 +14,7 @@ import {
   extractLocalNamedDataImports,
   extractLocalSectionImports,
 } from "../_shared/readdy-analyzer.ts";
+import { extractGeminiUsage, recordReaddyLlmUsage } from "../_shared/readdy-llm-usage.ts";
 
 type ParsedRepoUrl = {
   owner: string;
@@ -192,6 +193,7 @@ async function interpretPageSourcesWithGemini(input: {
   pageFile: string;
   pageSource: string;
   fileMap: Record<string, string>;
+  projectName?: string;
 }): Promise<string | null> {
   const apiKey = (Deno.env.get("GEMINI_API_KEY") || "").trim();
   if (!apiKey || !input.pageSource.trim()) return null;
@@ -231,13 +233,38 @@ ${sources}`;
   );
   if (!res.ok) return null;
   const json = await res.json();
-  if (json?.candidates?.[0]?.finishReason === "MAX_TOKENS") return null;
+  const { tokensIn, tokensOut } = extractGeminiUsage(json);
+  const finishReason = json?.candidates?.[0]?.finishReason;
+  if (finishReason === "MAX_TOKENS") {
+    await recordReaddyLlmUsage(supabaseAdmin(), {
+      provider: "gemini",
+      model,
+      useCase: "github_interpret",
+      status: "truncated",
+      tokensIn,
+      tokensOut,
+      projectName: input.projectName || "",
+      pagePath: input.pagePath,
+    });
+    return null;
+  }
   const parts = json?.candidates?.[0]?.content?.parts;
   const texts = Array.isArray(parts)
     ? parts.map((part: { text?: string }) => String(part?.text || "").trim()).filter(Boolean)
     : [];
   const text = texts.find((item) => item.includes("COMPONENT:")) || texts[texts.length - 1] || "";
-  return acceptInterpretedPage(text, input.pageSource, sources, metaLine);
+  const accepted = acceptInterpretedPage(text, input.pageSource, sources, metaLine);
+  await recordReaddyLlmUsage(supabaseAdmin(), {
+    provider: "gemini",
+    model,
+    useCase: "github_interpret",
+    status: accepted ? "ok" : "rejected",
+    tokensIn,
+    tokensOut,
+    projectName: input.projectName || "",
+    pagePath: input.pagePath,
+  });
+  return accepted;
 }
 
 Deno.serve(async (req: Request) => {
@@ -260,6 +287,8 @@ Deno.serve(async (req: Request) => {
       page?: EdgeDiscoveredPage;
       shared_files?: EdgeProjectAnalysis["sharedFiles"];
       all_paths?: string[];
+      skip_llm?: boolean;
+      project_name?: string;
     };
 
     const action = String(body.action || "inspect");
@@ -584,15 +613,19 @@ Deno.serve(async (req: Request) => {
         );
       }
 
+      const skipLlm = Boolean(body.skip_llm);
       const pageSource = fileMap[page.sourceFile] || "";
-      const interpretedPromise = interpretPageSourcesWithGemini({
-        pagePath: page.path,
-        pageTitle: page.title,
-        locale: page.locale || "zh",
-        pageFile: page.sourceFile,
-        pageSource,
-        fileMap,
-      }).catch(() => null);
+      const interpretedPromise = skipLlm
+        ? Promise.resolve(null)
+        : interpretPageSourcesWithGemini({
+            pagePath: page.path,
+            pageTitle: page.title,
+            locale: page.locale || "zh",
+            pageFile: page.sourceFile,
+            pageSource,
+            fileMap,
+            projectName: body.project_name || `${owner}/${repo}`,
+          }).catch(() => null);
       const assembled = assembleReaddyPageCode(page, fileMap, sharedFiles);
       const interpreted = await interpretedPromise;
       const assembledCode = interpreted || assembled.code;

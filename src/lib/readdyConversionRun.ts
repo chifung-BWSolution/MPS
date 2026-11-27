@@ -54,6 +54,22 @@ async function loadPageCode(
   input: ReaddyConversionRunInput,
   page: ReaddyDiscoveredPage,
 ): Promise<{ code: string; includedFiles: string[]; repoMeta: GitHubRepoMeta | null }> {
+  if (input.analysis.sourceOrigin?.trim()) {
+    return {
+      code: '',
+      includedFiles: page.sourceFile ? [page.sourceFile] : [],
+      repoMeta:
+        input.sourceType === 'github' && input.analysis.githubMeta
+          ? {
+              repo: input.analysis.githubMeta.full_name || input.analysis.githubMeta.repo,
+              branch: input.analysis.githubMeta.branch,
+              file_path: page.sourceFile || '',
+              commit_sha: '',
+              is_private: input.analysis.githubMeta.is_private,
+            }
+          : null,
+    };
+  }
   if (input.sourceType === 'github' && input.analysis.githubMeta) {
     const res = await fetchGitHubPageBundle({
       repo_url: input.githubRepoUrl,
@@ -61,6 +77,7 @@ async function loadPageCode(
       page,
       shared_files: input.analysis.sharedFiles,
       all_paths: input.githubAllPaths,
+      project_name: input.siteName,
     });
     return { code: res.code, includedFiles: res.included_files, repoMeta: res.repo_meta };
   }

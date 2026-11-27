@@ -7,6 +7,12 @@ import {
   requireUser,
   supabaseAdmin,
 } from "../_shared/framer-mcp.ts";
+import {
+  extractGeminiUsage,
+  extractGrokUsage,
+  recordReaddyLlmUsage,
+  type ReaddyLlmUsageInput,
+} from "../_shared/readdy-llm-usage.ts";
 
 type GridConfig = {
   desktop_width: number;
@@ -1171,113 +1177,6 @@ function buildSectionRolePrompt(fallback: FramerIrPayload): string {
 ${lines.join("\n")}`.slice(0, 2000);
 }
 
-async function tryGeminiRoles(prompt: string): Promise<Partial<FramerIrPayload> | null> {
-  const apiKey = (Deno.env.get("GEMINI_API_KEY") || "").trim();
-  if (!apiKey) return null;
-  const model = (Deno.env.get("GEMINI_MODEL") || "gemini-4-hydrogen").trim();
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(40_000),
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "OBJECT",
-          properties: {
-            sections: {
-              type: "ARRAY",
-              items: {
-                type: "OBJECT",
-                properties: {
-                  sectionKind: {
-                    type: "STRING",
-                    enum: ["navbar", "hero", "logos", "features", "content", "cta", "footer"],
-                  },
-                },
-                required: ["sectionKind"],
-              },
-            },
-          },
-          required: ["sections"],
-        },
-      },
-    }),
-  });
-  if (!res.ok) return null;
-  const json = await res.json();
-  const parts = json?.candidates?.[0]?.content?.parts;
-  const texts = Array.isArray(parts)
-    ? parts.map((part: { text?: string }) => String(part?.text || "").trim()).filter(Boolean)
-    : [];
-  const text = texts.find((item) => item.startsWith("{")) || texts[texts.length - 1] || "";
-  if (!text) return null;
-  return JSON.parse(text) as Partial<FramerIrPayload>;
-}
-
-async function tryGeminiIr(prompt: string): Promise<Partial<FramerIrPayload> | null> {
-  const apiKey = (Deno.env.get("GEMINI_API_KEY") || "").trim();
-  if (!apiKey) return null;
-  const model = (Deno.env.get("GEMINI_MODEL") || "gemini-4-hydrogen").trim();
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(40_000),
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.15,
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingLevel: "low" },
-      },
-    }),
-  });
-  if (!res.ok) return null;
-  const json = await res.json();
-  const parts = json?.candidates?.[0]?.content?.parts;
-  const texts = Array.isArray(parts)
-    ? parts.map((part: { text?: string }) => String(part?.text || "").trim()).filter(Boolean)
-    : [];
-  const text = texts.find((item) => item.startsWith("{") || item.startsWith("[")) || texts[texts.length - 1] || "";
-  if (!text) return null;
-  return JSON.parse(text) as Partial<FramerIrPayload>;
-}
-
-async function tryGrokIr(prompt: string): Promise<Partial<FramerIrPayload> | null> {
-  const apiKey = (Deno.env.get("XAI_API_KEY") || "").trim();
-  if (!apiKey) return null;
-  const model = (Deno.env.get("XAI_MODEL") || "grok-4.7").trim();
-
-  const res = await fetch("https://api.x.ai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    signal: AbortSignal.timeout(40_000),
-    body: JSON.stringify({
-      model,
-      temperature: 0.15,
-      reasoning_effort: "low",
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: "Return strictly valid JSON only." },
-        { role: "user", content: prompt },
-      ],
-    }),
-  });
-  if (!res.ok) return null;
-  const json = await res.json();
-  const text = String(json?.choices?.[0]?.message?.content || "").trim();
-  if (!text) return null;
-  return JSON.parse(text) as Partial<FramerIrPayload>;
-}
-
 function normalizeIrPayload(
   candidate: Partial<FramerIrPayload> | null,
   fallback: FramerIrPayload,
@@ -1633,6 +1532,14 @@ Deno.serve(async (req: Request) => {
   const auth = await requireUser(req);
   if ("response" in auth) return auth.response;
 
+  const llmUsages: ReaddyLlmUsageInput[] = [];
+  const pushUsage = (usage: ReaddyLlmUsageInput) => {
+    llmUsages.push(usage);
+  };
+  let usagesRecorded = false;
+  let usageProjectName = "";
+  let usagePagePath = "";
+
   try {
     const body = (await req.json()) as {
       framer_project_url?: string;
@@ -1705,6 +1612,8 @@ Deno.serve(async (req: Request) => {
       : {};
     const tailwindConfig = body.tailwind_config ? String(body.tailwind_config) : null;
     const pageMeta = body.page_meta;
+    usageProjectName = body.project_name || "";
+    usagePagePath = pageMeta?.path || "";
     const cssTokens = body.css_tokens;
     const logs: Array<{ ts: string; level: string; stage: string; message: string }> = [];
     const pushLog = (level: string, stage: string, message: string) => {
@@ -1819,14 +1728,14 @@ Deno.serve(async (req: Request) => {
         const rolePrompt = buildSectionRolePrompt(fallbackIr);
         pushLog("info", "llm", "組裝頁只詢問區塊角色，略過整頁改寫");
         try {
-          llmCandidate = await tryGeminiRoles(rolePrompt);
+          llmCandidate = await tryGeminiRoles(rolePrompt, pushUsage);
           if (llmCandidate) parserEngine = "gemini";
         } catch {
           llmCandidate = null;
         }
         if (!llmCandidate) {
           try {
-            llmCandidate = await tryGrokIr(rolePrompt);
+            llmCandidate = await tryGrokIr(rolePrompt, pushUsage, "parse_roles");
             if (llmCandidate) parserEngine = "grok";
           } catch {
             llmCandidate = null;
@@ -1835,14 +1744,14 @@ Deno.serve(async (req: Request) => {
       } else {
         const prompt = buildLlmPrompt(rawCode, gridConfig, tailwindConfig, assetUrlMap, cssTokens, pageMeta);
         try {
-          llmCandidate = await tryGeminiIr(prompt);
+          llmCandidate = await tryGeminiIr(prompt, pushUsage);
           if (llmCandidate) parserEngine = "gemini";
         } catch {
           llmCandidate = null;
         }
         if (!llmCandidate) {
           try {
-            llmCandidate = await tryGrokIr(prompt);
+            llmCandidate = await tryGrokIr(prompt, pushUsage, "parse_ir");
             if (llmCandidate) parserEngine = "grok";
           } catch {
             llmCandidate = null;
@@ -1932,6 +1841,20 @@ Deno.serve(async (req: Request) => {
       throw new Error(`寫入 framer_sync_jobs 失敗: ${insertError?.message || "unknown"}`);
     }
 
+    if (llmUsages.length > 0) {
+      await Promise.all(
+        llmUsages.map((u) =>
+          recordReaddyLlmUsage(supabase, {
+            ...u,
+            jobId: jobRow.id,
+            projectName: usageProjectName,
+            pagePath: usagePagePath,
+          })
+        ),
+      );
+      usagesRecorded = true;
+    }
+
     return jsonResponse({
       job_id: jobRow.id,
       created_at: jobRow.created_at,
@@ -1940,9 +1863,195 @@ Deno.serve(async (req: Request) => {
       logs,
     });
   } catch (err) {
+    if (llmUsages.length > 0 && !usagesRecorded) {
+      await Promise.all(
+        llmUsages.map((u) =>
+          recordReaddyLlmUsage(supabaseAdmin(), {
+            ...u,
+            jobId: null,
+            projectName: usageProjectName,
+            pagePath: usagePagePath,
+          })
+        ),
+      );
+    }
     return jsonResponse(
       { error: err instanceof Error ? err.message : String(err) },
       500,
     );
   }
 });
+
+async function tryGeminiRoles(
+  prompt: string,
+  onUsage?: (usage: ReaddyLlmUsageInput) => void,
+): Promise<Partial<FramerIrPayload> | null> {
+  const apiKey = (Deno.env.get("GEMINI_API_KEY") || "").trim();
+  if (!apiKey) return null;
+  const model = (Deno.env.get("GEMINI_MODEL") || "gemini-4-hydrogen").trim();
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(40_000),
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            sections: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  sectionKind: {
+                    type: "STRING",
+                    enum: ["navbar", "hero", "logos", "features", "content", "cta", "footer"],
+                  },
+                },
+                required: ["sectionKind"],
+              },
+            },
+          },
+          required: ["sections"],
+        },
+      },
+    }),
+  });
+  if (!res.ok) return null;
+  const json = await res.json();
+  const { tokensIn, tokensOut } = extractGeminiUsage(json);
+  const truncated = json?.candidates?.[0]?.finishReason === "MAX_TOKENS";
+  try {
+    const parts = json?.candidates?.[0]?.content?.parts;
+    const texts = Array.isArray(parts)
+      ? parts.map((part: { text?: string }) => String(part?.text || "").trim()).filter(Boolean)
+      : [];
+    const text = texts.find((item) => item.startsWith("{")) || texts[texts.length - 1] || "";
+    if (!text || truncated) {
+      onUsage?.({
+        provider: "gemini",
+        model,
+        useCase: "parse_roles",
+        status: truncated ? "truncated" : "rejected",
+        tokensIn,
+        tokensOut,
+      });
+      return null;
+    }
+    const parsed = JSON.parse(text) as Partial<FramerIrPayload>;
+    onUsage?.({ provider: "gemini", model, useCase: "parse_roles", status: "ok", tokensIn, tokensOut });
+    return parsed;
+  } catch (err) {
+    onUsage?.({ provider: "gemini", model, useCase: "parse_roles", status: "rejected", tokensIn, tokensOut });
+    throw err;
+  }
+}
+
+async function tryGeminiIr(
+  prompt: string,
+  onUsage?: (usage: ReaddyLlmUsageInput) => void,
+): Promise<Partial<FramerIrPayload> | null> {
+  const apiKey = (Deno.env.get("GEMINI_API_KEY") || "").trim();
+  if (!apiKey) return null;
+  const model = (Deno.env.get("GEMINI_MODEL") || "gemini-4-hydrogen").trim();
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(40_000),
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.15,
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingLevel: "low" },
+      },
+    }),
+  });
+  if (!res.ok) return null;
+  const json = await res.json();
+  const { tokensIn, tokensOut } = extractGeminiUsage(json);
+  const truncated = json?.candidates?.[0]?.finishReason === "MAX_TOKENS";
+  try {
+    const parts = json?.candidates?.[0]?.content?.parts;
+    const texts = Array.isArray(parts)
+      ? parts.map((part: { text?: string }) => String(part?.text || "").trim()).filter(Boolean)
+      : [];
+    const text = texts.find((item) => item.startsWith("{") || item.startsWith("[")) || texts[texts.length - 1] || "";
+    if (!text || truncated) {
+      onUsage?.({
+        provider: "gemini",
+        model,
+        useCase: "parse_ir",
+        status: truncated ? "truncated" : "rejected",
+        tokensIn,
+        tokensOut,
+      });
+      return null;
+    }
+    const parsed = JSON.parse(text) as Partial<FramerIrPayload>;
+    onUsage?.({ provider: "gemini", model, useCase: "parse_ir", status: "ok", tokensIn, tokensOut });
+    return parsed;
+  } catch (err) {
+    onUsage?.({ provider: "gemini", model, useCase: "parse_ir", status: "rejected", tokensIn, tokensOut });
+    throw err;
+  }
+}
+
+async function tryGrokIr(
+  prompt: string,
+  onUsage?: (usage: ReaddyLlmUsageInput) => void,
+  useCase: "parse_roles" | "parse_ir" = "parse_ir",
+): Promise<Partial<FramerIrPayload> | null> {
+  const apiKey = (Deno.env.get("XAI_API_KEY") || "").trim();
+  if (!apiKey) return null;
+  const model = (Deno.env.get("XAI_MODEL") || "grok-4.7").trim();
+
+  const res = await fetch("https://api.x.ai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    signal: AbortSignal.timeout(40_000),
+    body: JSON.stringify({
+      model,
+      temperature: 0.15,
+      reasoning_effort: "low",
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: "Return strictly valid JSON only." },
+        { role: "user", content: prompt },
+      ],
+    }),
+  });
+  if (!res.ok) return null;
+  const json = await res.json();
+  const { tokensIn, tokensOut } = extractGrokUsage(json);
+  const truncated = json?.choices?.[0]?.finish_reason === "length";
+  try {
+    const text = String(json?.choices?.[0]?.message?.content || "").trim();
+    if (!text || truncated) {
+      onUsage?.({
+        provider: "grok",
+        model,
+        useCase,
+        status: truncated ? "truncated" : "rejected",
+        tokensIn,
+        tokensOut,
+      });
+      return null;
+    }
+    const parsed = JSON.parse(text) as Partial<FramerIrPayload>;
+    onUsage?.({ provider: "grok", model, useCase, status: "ok", tokensIn, tokensOut });
+    return parsed;
+  } catch (err) {
+    onUsage?.({ provider: "grok", model, useCase, status: "rejected", tokensIn, tokensOut });
+    throw err;
+  }
+}

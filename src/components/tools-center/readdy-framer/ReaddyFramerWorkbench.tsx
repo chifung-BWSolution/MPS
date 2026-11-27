@@ -785,6 +785,8 @@ export function ReaddyFramerWorkbench() {
             page,
             shared_files: projAnalysis.sharedFiles,
             all_paths: allPathsForGh,
+            skip_llm: Boolean(projAnalysis.sourceOrigin?.trim()),
+            project_name: projAnalysis.projectName,
           });
           setRawCode(res.code);
           setIncludedFiles(res.included_files);
@@ -1046,13 +1048,14 @@ export function ReaddyFramerWorkbench() {
       let codeForParse = rawCode;
       let repoMetaForParse = githubRepoMeta;
       let includedForParse = includedFiles;
-      if (sourceType === 'github' && activePage && analysis?.githubMeta) {
+      if (sourceType === 'github' && activePage && analysis?.githubMeta && !analysis.sourceOrigin?.trim()) {
         const fresh = await fetchGitHubPageBundle({
           repo_url: githubRepoUrl,
           branch: analysis.githubMeta.branch || githubBranch,
           page: activePage,
           shared_files: analysis.sharedFiles,
           all_paths: githubAllPaths,
+          project_name: analysis.projectName,
         });
         codeForParse = fresh.code;
         repoMetaForParse = fresh.repo_meta;
