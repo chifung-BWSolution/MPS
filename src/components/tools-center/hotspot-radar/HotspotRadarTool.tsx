@@ -257,7 +257,7 @@ export function HotspotRadarTool() {
         <HotspotEmptyState
           tone="warning"
           title="功能尚未啟用"
-          description="熱點雷達的列表還沒準備好（資料表或 hotspot_feed 視圖尚未建立）。請先套用 migration 20261127200000_hotspot_feed.sql 再重新載入；在那之前這個入口不會影響工具中心的其他功能。"
+          description="熱點雷達的列表還沒準備好（資料表或 hotspot_feed 視圖尚未建立）。請先套用 migration 20261127220000_hotspot_feed.sql 再重新載入；在那之前這個入口不會影響工具中心的其他功能。"
           action={
             <Button size="sm" variant="outline" onClick={() => void refresh()}>
               <RefreshCw size={13} />

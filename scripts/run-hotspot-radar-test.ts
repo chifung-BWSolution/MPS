@@ -833,7 +833,7 @@ if (!SKIP_WIRING) {
       'supabase/migrations/20261126151000_hotspot_radar_daily_cron.sql',
       'supabase/migrations/20261126152000_hotspot_radar_controls.sql',
       'supabase/migrations/20261127183000_hotspot_radar_cron_cadence.sql',
-      'supabase/migrations/20261127200000_hotspot_feed.sql',
+      'supabase/migrations/20261127220000_hotspot_feed.sql',
       'src/lib/hotspotFeed.ts',
       'scripts/rollback-hotspot-radar.sql',
     ];
@@ -867,7 +867,7 @@ if (!SKIP_WIRING) {
 
   check('列表第一頁走 hotspot_feed，不等設定接口', () => {
     const hook = read('src/hooks/useHotspotRadar.ts');
-    const feed = read('supabase/migrations/20261127200000_hotspot_feed.sql');
+    const feed = read('supabase/migrations/20261127220000_hotspot_feed.sql');
     assert.ok(hook.includes("from('hotspot_feed')"));
     assert.ok(hook.includes('loadChrome'));
     assert.equal(hook.includes('ITEM_LIMIT'), false);
@@ -948,7 +948,7 @@ if (!SKIP_WIRING) {
       read('supabase/migrations/20261126151000_hotspot_radar_daily_cron.sql'),
       read('supabase/migrations/20261126152000_hotspot_radar_controls.sql'),
       read('supabase/migrations/20261127183000_hotspot_radar_cron_cadence.sql'),
-      read('supabase/migrations/20261127200000_hotspot_feed.sql'),
+      read('supabase/migrations/20261127220000_hotspot_feed.sql'),
     ]) {
       assert.equal(/\bdrop\s+(table|index|function|policy|column)\b/i.test(sql), false);
       assert.equal(/\btruncate\b/i.test(sql), false);
