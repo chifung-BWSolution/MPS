@@ -400,7 +400,7 @@ export function HotspotRadarTool() {
       {/* 內容 */}
       {(loading && items.length === 0) || (!loading && items.length === 0 && !targetsLoaded) ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 xl:grid-cols-6">
-          {[0, 1, 2, 3, 4, 5].map((index) => (
+          {Array.from({ length: 30 }, (_, index) => (
             <div
               key={index}
               className="h-[320px] animate-pulse rounded-lg border border-[rgba(13,26,45,0.08)] bg-white shadow-card"
