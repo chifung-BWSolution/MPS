@@ -544,12 +544,46 @@ export function resolveRenderUrl(origin: string, route: string): URL {
   return url;
 }
 
+export function formatBrowserlessError(raw: string): string {
+  let msg = raw;
+  try {
+    const parsed = JSON.parse(raw) as { error?: unknown; message?: unknown };
+    if (typeof parsed?.error === "string" && parsed.error.trim()) {
+      msg = parsed.error;
+    } else if (typeof parsed?.message === "string" && parsed.message.trim()) {
+      msg = parsed.message;
+    }
+  } catch {
+    // raw is plain text
+  }
+  const firstLine = msg.split(/\r?\n/)[0] || msg;
+  const cleaned = firstLine
+    .replace(/\s+at\s+\S+\s+\(http:\/\/0\.0\.0\.0:3000\/function\/.*$/i, "")
+    .replace(/\s*default\s+\(http:\/\/0\.0\.0\.0:3000\/function\/.*$/i, "")
+    .replace(/\s*\(requestId:\s*[^)]+\)\s*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.slice(0, 200);
+}
+
+function isRetryableCaptureError(status: number, detail: string): boolean {
+  if (status === 408 || status === 429 || status >= 500) return true;
+  if (status === 400) {
+    if (/HTTP 40[134]\b|Source route redirected|Page exceeds capture height|No visible sections/i.test(detail)) {
+      return false;
+    }
+    return /Source page unavailable|timeout|timed out|Target closed|Execution context was destroyed/i.test(detail);
+  }
+  return false;
+}
+
 export async function captureRenderedPage(
   url: URL,
   desktopWidth: number,
   token: string,
   request: typeof fetch = fetch,
   screenshotsOnly = false,
+  retryDelayMs = 1200,
 ): Promise<RenderedPage> {
   const endpoint = new URL("https://production-sfo.browserless.io/function");
   endpoint.searchParams.set("token", token);
@@ -571,8 +605,30 @@ export async function captureRenderedPage(
     });
     for (const [device, width] of Object.entries(context.widths)) {
       await page.setViewport({ width, height: 900, deviceScaleFactor: 1 });
-      const response = await page.goto(context.url, { waitUntil: "networkidle2", timeout: 17000 });
-      if (!response || !response.ok()) throw new Error("Source page unavailable");
+      let response = null;
+      let lastGotoError = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          response = await page.goto(context.url, { waitUntil: "networkidle2", timeout: 17000 });
+          lastGotoError = null;
+        } catch (err) {
+          response = null;
+          lastGotoError = err;
+        }
+        const status = response
+          ? (typeof response.status === "function" ? response.status() : (response.ok() ? 200 : 0))
+          : 0;
+        if (response && response.ok()) break;
+        const retryableStatus = status === 0 || status === 408 || status === 429 || status >= 500;
+        if (attempt < 2 && (lastGotoError || retryableStatus)) {
+          await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1)));
+          continue;
+        }
+        const reason = lastGotoError
+          ? (lastGotoError instanceof Error ? lastGotoError.message : String(lastGotoError))
+          : "HTTP " + (status || "no-response");
+        throw new Error("Source page unavailable (" + device + ": " + reason + ")");
+      }
       const expectedPath = new URL(context.url).pathname.replace(/\\/$/, "");
       if (new URL(page.url()).pathname.replace(/\\/$/, "") !== expectedPath) throw new Error("Source route redirected");
       await page.evaluate(async () => {
@@ -621,15 +677,50 @@ export async function captureRenderedPage(
     }
     return { url: page.url(), images, scenes, geometry, limitations: [...limitations] };
   };`;
-  const res = await request(endpoint, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ code, context: { url: url.href, widths: { desktop: desktopWidth, ...VIEWPORTS }, screenshotsOnly, measurementVersion: LAYOUT_MEASUREMENT_VERSION } }),
-    signal: AbortSignal.timeout(70000),
+  const body = JSON.stringify({
+    code,
+    context: {
+      url: url.href,
+      widths: { desktop: desktopWidth, ...VIEWPORTS },
+      screenshotsOnly,
+      measurementVersion: LAYOUT_MEASUREMENT_VERSION,
+    },
   });
-  if (!res.ok) {
-    const detail = (await res.text().catch(() => "")).replace(/\s+/g, " ").trim().slice(0, 180);
-    throw new Error(`無法擷取來源畫面（HTTP ${res.status}${detail ? `：${detail}` : ""}）`);
+  let res: Response | null = null;
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      res = await request(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+        signal: AbortSignal.timeout(70000),
+      });
+      if (res.ok) {
+        lastError = null;
+        break;
+      }
+      const rawDetail = await res.text().catch(() => "");
+      const cleanDetail = formatBrowserlessError(rawDetail);
+      lastError = new Error(`無法擷取來源畫面（${cleanDetail || `HTTP ${res.status}`}）`);
+      if (attempt === 0 && isRetryableCaptureError(res.status, cleanDetail || rawDetail)) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+        continue;
+      }
+      throw lastError;
+    } catch (err) {
+      if (err === lastError) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      lastError = new Error(`無法擷取來源畫面（${formatBrowserlessError(msg) || msg}）`);
+      if (attempt === 0) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+        continue;
+      }
+      throw lastError;
+    }
+  }
+  if (!res || !res.ok) {
+    throw lastError ?? new Error("無法擷取來源畫面");
   }
   const result = await res.json() as RenderedPage;
   if (!result || !Array.isArray(result.limitations) || !CAPTURE_DEVICES.every((key) => {

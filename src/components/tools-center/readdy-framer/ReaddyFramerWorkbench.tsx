@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from 'react-dom';
 import {
   Activity,
+  AlertCircle,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -595,6 +596,10 @@ export function ReaddyFramerWorkbench() {
             sectionCount: local.sectionCount ?? remote?.ir_payload?.sections?.length,
             framerPageNodeId: local.framerPageNodeId ?? remote?.ir_payload?.pageMeta?.framerPageNodeId,
             lastSyncedAt: local.lastSyncedAt ?? remote?.updated_at ?? null,
+            lastError:
+              migrationStatus === 'failed'
+                ? (local.lastError ?? remote?.error_log ?? null)
+                : null,
           };
         }
         if (remote) {
@@ -613,6 +618,7 @@ export function ReaddyFramerWorkbench() {
             sectionCount: remote.ir_payload?.sections?.length,
             framerPageNodeId: remote.ir_payload?.pageMeta?.framerPageNodeId,
             lastSyncedAt: remote.updated_at ?? remote.created_at,
+            lastError: remoteStatus === 'failed' ? (remote.error_log ?? null) : null,
           };
         }
         return {
@@ -622,6 +628,7 @@ export function ReaddyFramerWorkbench() {
           sectionCount: undefined,
           framerPageNodeId: null,
           lastSyncedAt: null,
+          lastError: null,
         };
       });
 
@@ -697,10 +704,15 @@ export function ReaddyFramerWorkbench() {
         if (!live || (live.migrationStatus !== 'migrated' && live.migrationStatus !== 'failed')) {
           return page;
         }
+        const nextLastError =
+          live.migrationStatus === 'failed'
+            ? (live.lastError ?? page.lastError ?? null)
+            : null;
         if (
           page.migrationStatus === live.migrationStatus &&
           (page.jobId ?? null) === (live.jobId ?? page.jobId ?? null) &&
-          (page.lastSyncedAt ?? null) === (live.lastSyncedAt ?? page.lastSyncedAt ?? null)
+          (page.lastSyncedAt ?? null) === (live.lastSyncedAt ?? page.lastSyncedAt ?? null) &&
+          (page.lastError ?? null) === nextLastError
         ) {
           return page;
         }
@@ -713,6 +725,7 @@ export function ReaddyFramerWorkbench() {
           framerPageNodeId:
             live.framerPageNodeId !== undefined ? live.framerPageNodeId : page.framerPageNodeId,
           lastSyncedAt: live.lastSyncedAt !== undefined ? live.lastSyncedAt : page.lastSyncedAt,
+          lastError: nextLastError,
         };
       });
       if (!changed) return prev;
@@ -1071,6 +1084,7 @@ export function ReaddyFramerWorkbench() {
           migrationStatus: 'parsed',
           jobId: res.job_id,
           sectionCount: res.ir_payload.sections.length,
+          lastError: null,
         });
       }
 
@@ -1113,7 +1127,7 @@ export function ReaddyFramerWorkbench() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       pushLog('error', 'ast', msg);
-      if (activePage) updatePageState(activePage.id, { migrationStatus: 'failed' });
+      if (activePage) updatePageState(activePage.id, { migrationStatus: 'failed', lastError: msg });
       setStages((prev) =>
         prev.map((s) => (s.status === 'running' ? { ...s, status: 'error', detail: msg } : s)),
       );
@@ -1184,6 +1198,7 @@ export function ReaddyFramerWorkbench() {
           migrationStatus: 'migrated',
           framerPageNodeId: res.framer_page_node_id,
           lastSyncedAt: new Date().toISOString(),
+          lastError: null,
         });
       }
       setStages((prev) =>
@@ -1263,6 +1278,7 @@ export function ReaddyFramerWorkbench() {
           migrationStatus: 'migrated',
           framerPageNodeId: step0Res.framer_page_node_id,
           lastSyncedAt: new Date().toISOString(),
+          lastError: null,
         });
       }
 
@@ -1287,7 +1303,7 @@ export function ReaddyFramerWorkbench() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       pushLog('error', 'mcp', msg);
-      if (activePage) updatePageState(activePage.id, { migrationStatus: 'failed' });
+      if (activePage) updatePageState(activePage.id, { migrationStatus: 'failed', lastError: msg });
       setStages((prev) =>
         prev.map((s) => (s.key === 'mcp' ? { ...s, status: 'error', detail: msg } : s)),
       );
@@ -1448,6 +1464,11 @@ export function ReaddyFramerWorkbench() {
       }),
     };
   }, [analysis, conversionJob.pageStates, isBackgroundConversionForCurrentProject]);
+
+  const activeDisplayPage = useMemo(
+    () => inventoryAnalysis?.pages.find((p) => p.id === activePageId) || activePage,
+    [inventoryAnalysis, activePageId, activePage],
+  );
 
   const sections = irPayload?.sections || [];
   const rightPaneLoading = loadingPageId !== null || parsing;
@@ -1770,6 +1791,23 @@ export function ReaddyFramerWorkbench() {
                 </div>
               </div>
             </div>
+
+            {activeDisplayPage?.migrationStatus === 'failed' && (
+              <div className="flex items-start gap-2.5 rounded-lg border border-rose-200 bg-rose-50/90 px-3.5 py-2.5 text-[12px] text-rose-800 shrink-0">
+                <AlertCircle size={15} className="mt-0.5 shrink-0 text-rose-500" />
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <div className="font-semibold text-rose-900">本頁上次轉換失敗</div>
+                  <div className="text-[11.5px] leading-5 text-rose-700 break-words select-text">
+                    {activeDisplayPage.lastError || '未知錯誤（可點擊「解析此頁區塊」重新嘗試）'}
+                  </div>
+                  {sections.length > 0 && (
+                    <div className="text-[10.5px] text-rose-600/85">
+                      下方畫布顯示的是先前成功時的歷史解析快取
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Equal-Height Split: Layers & Grid Canvas Preview */}
             <div className="relative min-h-0 flex-1 overflow-hidden">

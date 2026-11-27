@@ -360,7 +360,9 @@ export function PageInventoryPanel({
                                 : isParsed
                                   ? '已解析區塊，待寫入 Framer'
                                   : isFailed
-                                    ? '上次解析或寫入失敗，可重新解析或同步'
+                                    ? page.lastError
+                                      ? `轉換失敗：${page.lastError}`
+                                      : '上次解析或寫入失敗，可重新解析或同步'
                                     : isSkipped
                                       ? '已略過此頁'
                                       : backgroundConverting
@@ -410,7 +412,14 @@ export function PageInventoryPanel({
                             </span>
                           )}
                           {!isSyncing && isFailed && (
-                            <span className="px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200/70 text-[9.5px] font-semibold shrink-0">
+                            <span
+                              className="px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200/70 text-[9.5px] font-semibold shrink-0"
+                              title={
+                                page.lastError
+                                  ? `轉換失敗：${page.lastError}`
+                                  : '上次解析或寫入失敗，可重新解析或同步'
+                              }
+                            >
                               失敗
                             </span>
                           )}
@@ -418,6 +427,14 @@ export function PageInventoryPanel({
                         <div className="text-[10.5px] font-mono text-slate-400 truncate mt-0.5">
                           {page.path}
                         </div>
+                        {isFailed && page.lastError && (
+                          <div
+                            className="text-[10.5px] leading-4 text-rose-600 line-clamp-2 mt-1 break-words"
+                            title={page.lastError}
+                          >
+                            {page.lastError}
+                          </div>
+                        )}
                         {page.sectionHints && page.sectionHints.length > 0 && (
                           <div className="text-[10px] text-slate-400 truncate mt-0.5 flex items-center gap-1">
                             <FileText size={9.5} className="shrink-0" />

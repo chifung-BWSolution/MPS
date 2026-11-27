@@ -47,6 +47,7 @@ export interface ReaddyDiscoveredPage {
   sectionCount?: number;
   framerPageNodeId?: string | null;
   lastSyncedAt?: string | null;
+  lastError?: string | null;
 }
 
 export interface ReaddyProjectAnalysis {

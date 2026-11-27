@@ -139,6 +139,7 @@ export function ReaddyConversionJobProvider({ children }: { children: ReactNode 
             sectionCount: progress.patch?.sectionCount,
             framerPageNodeId: progress.patch?.framerPageNodeId,
             lastSyncedAt: progress.patch?.lastSyncedAt,
+            lastError: status === 'failed' ? (progress.patch?.lastError ?? null) : null,
           },
           framerProjectUrl,
         );

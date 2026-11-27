@@ -253,6 +253,70 @@ assert.equal(
   'savePageProgress keeps prior durable status instead of writing transient syncing',
 );
 
+// lastError propagation & clearing across server state, overlay, and localStorage
+const errSnap = buildServerRunPageStates({
+  pages: runPages,
+  runStatus: 'running',
+  pageIndex: 2,
+  progressPages: [
+    { pageId: '/', path: '/', status: 'migrated', jobId: 'job-1', sectionCount: 4 },
+    { pageId: '/services', path: '/services', status: 'failed', error: '無法擷取來源畫面（HTTP 503）', sectionCount: 0 },
+  ],
+});
+assert.equal(errSnap.pageStates['/'].lastError, null);
+assert.equal(errSnap.pageStates['/services'].lastError, '無法擷取來源畫面（HTTP 503）');
+
+const overlayWithError = applyBackgroundConversionOverlay(
+  [
+    { ...pageHome, id: '/', path: '/', migrationStatus: 'failed', lastError: '舊失敗原因' },
+    { ...pageHome, id: '/services', path: '/services', migrationStatus: 'migrated', lastError: null },
+    { ...pageHome, id: '/about', path: '/about', migrationStatus: 'pending', lastError: null },
+  ],
+  { active: true, pageStates: errSnap.pageStates },
+);
+assert.equal(overlayWithError[0].lastError, null, 'Migrated overlay clears prior lastError');
+assert.equal(overlayWithError[1].lastError, '無法擷取來源畫面（HTTP 503）');
+assert.equal(overlayWithError[2].lastError, null, 'Syncing page clears lastError');
+
+patchSavedPageProgress(
+  'gh:org/repo:err-guard',
+  '/services',
+  { migrationStatus: 'failed', lastError: '擷取逾時' },
+  projectA,
+);
+assert.equal(
+  loadSavedPageProgress('gh:org/repo:err-guard', projectA)['/services']?.lastError,
+  '擷取逾時',
+);
+patchSavedPageProgress(
+  'gh:org/repo:err-guard',
+  '/services',
+  { migrationStatus: 'migrated', jobId: 'job-ok' },
+  projectA,
+);
+assert.equal(
+  loadSavedPageProgress('gh:org/repo:err-guard', projectA)['/services']?.lastError,
+  null,
+  'patchSavedPageProgress clears lastError when migrated',
+);
+savePageProgress(
+  'gh:org/repo:err-guard',
+  [
+    { ...pageHome, id: '/services', path: '/services', migrationStatus: 'failed', lastError: '同步錯誤' },
+    { ...pageHome, id: '/about', path: '/about', migrationStatus: 'migrated', lastError: '殘留錯誤' },
+  ],
+  projectA,
+);
+assert.equal(
+  loadSavedPageProgress('gh:org/repo:err-guard', projectA)['/services']?.lastError,
+  '同步錯誤',
+);
+assert.equal(
+  loadSavedPageProgress('gh:org/repo:err-guard', projectA)['/about']?.lastError,
+  null,
+  'savePageProgress clears lastError on non-failed pages',
+);
+
 // 2. Load pure parser helpers directly from supabase/functions/readdy-parse-ir/index.ts
 const parseIrTs = readFileSync(new URL('../supabase/functions/readdy-parse-ir/index.ts', import.meta.url), 'utf8');
 const serveIdx = parseIrTs.indexOf('Deno.serve(');

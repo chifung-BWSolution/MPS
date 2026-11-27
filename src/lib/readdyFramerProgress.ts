@@ -8,6 +8,7 @@ export type SavedPageProgress = {
   sectionCount?: number;
   framerPageNodeId?: string | null;
   lastSyncedAt?: string | null;
+  lastError?: string | null;
   updatedAt?: string | null;
 };
 
@@ -17,6 +18,7 @@ export type BackgroundPageState = {
   sectionCount?: number;
   framerPageNodeId?: string | null;
   lastSyncedAt?: string | null;
+  lastError?: string | null;
 };
 
 export type ServerRunPageRecord = {
@@ -27,6 +29,7 @@ export type ServerRunPageRecord = {
   sectionCount?: number;
   framerPageNodeId?: string | null;
   lastSyncedAt?: string | null;
+  error?: string | null;
 };
 
 export function normalizeFramerProjectKey(framerProjectUrl?: string | null): string {
@@ -84,17 +87,20 @@ export function savePageProgress(
         continue;
       }
       if (page.migrationStatus !== 'pending' || page.jobId) {
+        const nextLastError = page.migrationStatus === 'failed' ? (page.lastError ?? null) : null;
         const unchanged =
           prevEntry &&
           prevEntry.migrationStatus === page.migrationStatus &&
           (prevEntry.jobId ?? null) === (page.jobId ?? null) &&
-          (prevEntry.lastSyncedAt ?? null) === (page.lastSyncedAt ?? null);
+          (prevEntry.lastSyncedAt ?? null) === (page.lastSyncedAt ?? null) &&
+          (prevEntry.lastError ?? null) === nextLastError;
         map[page.id] = {
           migrationStatus: page.migrationStatus,
           jobId: page.jobId,
           sectionCount: page.sectionCount,
           framerPageNodeId: page.framerPageNodeId,
           lastSyncedAt: page.lastSyncedAt,
+          lastError: nextLastError,
           updatedAt: unchanged ? prevEntry.updatedAt : now,
         };
       }
@@ -113,9 +119,18 @@ export function patchSavedPageProgress(
 ): void {
   try {
     const map = loadSavedPageProgress(projectKey, framerProjectUrl);
+    const prev = map[pageId];
+    const nextStatus = patch.migrationStatus ?? prev?.migrationStatus ?? 'pending';
+    const nextLastError =
+      nextStatus === 'migrated' || nextStatus === 'parsed'
+        ? null
+        : nextStatus === 'failed'
+          ? (patch.lastError ?? prev?.lastError ?? null)
+          : (patch.lastError ?? null);
     map[pageId] = {
-      ...map[pageId],
+      ...prev,
       ...patch,
+      lastError: nextLastError,
       updatedAt: patch.updatedAt ?? new Date().toISOString(),
     };
     localStorage.setItem(progressStorageKey(projectKey, framerProjectUrl), JSON.stringify(map));
@@ -169,6 +184,7 @@ export function buildServerRunPageStates(params: {
       sectionCount: entry.sectionCount,
       framerPageNodeId: entry.framerPageNodeId,
       lastSyncedAt: entry.lastSyncedAt,
+      lastError: entry.status === 'failed' ? (entry.error || null) : null,
     };
     pageStates[resolvedId] = state;
     finishedEntries.push({ pageId: resolvedId, state });
@@ -229,6 +245,12 @@ export function applyBackgroundConversionOverlay(
       framerPageNodeId:
         live.framerPageNodeId !== undefined ? live.framerPageNodeId : page.framerPageNodeId,
       lastSyncedAt: live.lastSyncedAt !== undefined ? live.lastSyncedAt : page.lastSyncedAt,
+      lastError:
+        live.lastError !== undefined
+          ? live.lastError
+          : live.migrationStatus === 'failed'
+            ? page.lastError
+            : null,
     };
   });
 }

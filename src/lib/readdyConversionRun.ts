@@ -184,6 +184,7 @@ export async function runReaddyConversion(
           migrationStatus: 'parsed',
           jobId: parsed.job_id,
           sectionCount,
+          lastError: null,
         },
       });
 
@@ -230,6 +231,7 @@ export async function runReaddyConversion(
           sectionCount,
           framerPageNodeId,
           lastSyncedAt,
+          lastError: null,
         },
       });
       return {
@@ -262,7 +264,7 @@ export async function runReaddyConversion(
           index,
           total,
           message: `${page.path} 失敗：${message}`,
-          patch: { migrationStatus: 'failed' },
+          patch: { migrationStatus: 'failed', lastError: message },
         });
       }
       return {

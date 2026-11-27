@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Buffer } from 'node:buffer';
 import ts from 'typescript';
-import { captureRenderedPage, captureVisiblePage, publishCapturedImages, resolveRenderUrl } from '../supabase/functions/_shared/readdy-render.ts';
+import { captureRenderedPage, captureVisiblePage, formatBrowserlessError, publishCapturedImages, resolveRenderUrl } from '../supabase/functions/_shared/readdy-render.ts';
 import { fitCapturedImage, splitCssLayers } from '../supabase/functions/_shared/readdy-image-layout.ts';
 import { CAPTURE_DEVICES, comparePageLayouts, LAYOUT_MEASUREMENT_VERSION, type PageLayout } from '../supabase/functions/_shared/readdy-layout-score.ts';
 import { applyPaintedTextCase, mergePaintedText, readPaintedTextLines } from '../supabase/functions/_shared/readdy-text-layout.ts';
@@ -581,6 +581,158 @@ for (const heading of ['OFFICE DESIGN & BUILD', '讓現場音樂，成為賓客�
   assert.ok(linkFrameId);
   assert.deepEqual(localNodes.get(linkFrameId)?.link, { href: '/services' }, 'Framer exposes native links through link.href');
   assert.ok(patchedLinks.some((p) => p.attrs['appearEffect.enter.opacity'] === 0), 'Appear effect should be patched on rendered node');
+}
+
+// Verify Browserless transient retry & clean error diagnostics
+assert.equal(
+  formatBrowserlessError(JSON.stringify({
+    error: 'Source page unavailable (desktop: HTTP 503)\ndefault (http://0.0.0.0:3000/function/browserless-function-abc.js:638:46) (requestId: req-1)',
+  })),
+  'Source page unavailable (desktop: HTTP 503)',
+);
+assert.equal(
+  formatBrowserlessError('Source page unavailable (tablet: net::ERR_RESET) (requestId: req-2)'),
+  'Source page unavailable (tablet: net::ERR_RESET)',
+);
+
+{
+  let capturedCode = '';
+  let capturedCtx: unknown = null;
+  await captureRenderedPage(url, 1440, 'fixture-token', async (_input, init) => {
+    const parsed = JSON.parse(String(init?.body));
+    capturedCode = parsed.code;
+    capturedCtx = parsed.context;
+    return Response.json({
+      url: url.href,
+      images: { desktop: 'YQ==', tablet: 'YQ==', phone: 'YQ==' },
+      scenes: { desktop: [root], tablet: [root], phone: [phone] },
+      geometry: atDevices([region('text:' + title, 85)]),
+      limitations: [],
+    });
+  });
+  const program = (await import('data:text/javascript;base64,' + Buffer.from(capturedCode).toString('base64'))).default;
+  let desktopGotoCalls = 0;
+  const retryRes = await program({
+    context: capturedCtx,
+    page: {
+      setRequestInterception: async () => {},
+      on: () => {},
+      setViewport: async () => {},
+      goto: async () => {
+        desktopGotoCalls += 1;
+        if (desktopGotoCalls === 1) return { ok: () => false, status: () => 503 };
+        return { ok: () => true, status: () => 200 };
+      },
+      url: () => url.href,
+      evaluate: async (fn: () => unknown) => {
+        if (fn.name === 'captureVisiblePage') return { scenes: [root], limitations: [] };
+        if (fn.name === 'measurePageLayout') return { version: LAYOUT_MEASUREMENT_VERSION, width: 1440, height: 800, regions: [{ key: 'text:' + title, x: 30, y: 40, width: 200, height: 35 }] };
+        if (fn.toString().includes('scrollHeight')) return 800;
+      },
+      screenshot: async () => 'YQ==',
+    },
+  });
+  assert.equal(desktopGotoCalls, 4, 'Retries transient 503 once on desktop and completes tablet+phone');
+  assert.equal(retryRes.images.phone, 'YQ==');
+
+  let permCalls = 0;
+  await assert.rejects(
+    () => program({
+      context: capturedCtx,
+      page: {
+        setRequestInterception: async () => {},
+        on: () => {},
+        setViewport: async () => {},
+        goto: async () => {
+          permCalls += 1;
+          return { ok: () => false, status: () => 404 };
+        },
+        url: () => url.href,
+        evaluate: async () => ({}),
+        screenshot: async () => 'YQ==',
+      },
+    }),
+    /Source page unavailable \(desktop: HTTP 404\)/,
+  );
+  assert.equal(permCalls, 1, 'Permanent 404 does not retry');
+}
+
+{
+  let outer502Calls = 0;
+  const res502 = await captureRenderedPage(
+    url,
+    1440,
+    'fixture-token',
+    async () => {
+      outer502Calls += 1;
+      if (outer502Calls === 1) return new Response('Bad Gateway', { status: 502 });
+      return Response.json({
+        url: url.href,
+        images: { desktop: 'YQ==', tablet: 'YQ==', phone: 'YQ==' },
+        scenes: { desktop: [root], tablet: [root], phone: [phone] },
+        geometry: atDevices([region('text:' + title, 85)]),
+        limitations: [],
+      });
+    },
+    false,
+    0,
+  );
+  assert.equal(outer502Calls, 2);
+  assert.equal(res502.images.desktop, 'YQ==');
+
+  let outer400Calls = 0;
+  const res400 = await captureRenderedPage(
+    url,
+    1440,
+    'fixture-token',
+    async () => {
+      outer400Calls += 1;
+      if (outer400Calls === 1) {
+        return new Response(
+          JSON.stringify({
+            error: 'Source page unavailable\ndefault (http://0.0.0.0:3000/function/browserless-function-abc.js:638:46) (requestId: xyz)',
+          }),
+          { status: 400 },
+        );
+      }
+      return Response.json({
+        url: url.href,
+        images: { desktop: 'YQ==', tablet: 'YQ==', phone: 'YQ==' },
+        scenes: { desktop: [root], tablet: [root], phone: [phone] },
+        geometry: atDevices([region('text:' + title, 85)]),
+        limitations: [],
+      });
+    },
+    false,
+    0,
+  );
+  assert.equal(outer400Calls, 2);
+  assert.equal(res400.images.tablet, 'YQ==');
+
+  let permanent400Calls = 0;
+  await assert.rejects(
+    () => captureRenderedPage(
+      url,
+      1440,
+      'fixture-token',
+      async () => {
+        permanent400Calls += 1;
+        return new Response(
+          JSON.stringify({
+            error: 'Source page unavailable (desktop: HTTP 404)\ndefault (http://0.0.0.0:3000/function/browserless-function-abc.js:638:46) (requestId: xyz)',
+          }),
+          { status: 400 },
+        );
+      },
+      false,
+      0,
+    ),
+    (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      return msg.includes('Source page unavailable (desktop: HTTP 404)') && !msg.includes('browserless-function-');
+    },
+  );
+  assert.equal(permanent400Calls, 1, 'Permanent HTTP 404 error from Browserless does not retry');
 }
 
 console.log('Readdy rendered source and Framer breakpoint tests passed');
