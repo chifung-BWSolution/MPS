@@ -34,9 +34,14 @@ export function PageAnalyzeForm({
   analyzing,
   disabled = false,
 }: PageAnalyzeFormProps) {
+  const selected = sites.find((site) => site.id === siteId);
+  const siteLabel = selected
+    ? `${selected.websiteName}${selected.domainUrl ? ` · ${hostOf(selected.domainUrl)}` : ''}`
+    : '';
+
   return (
     <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,260px)_minmax(0,1fr)_auto]">
-      <div className="relative">
+      <div className="relative min-w-0">
         <Building2
           size={14}
           className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-muted-foreground"
@@ -46,7 +51,7 @@ export function PageAnalyzeForm({
           onValueChange={onSiteIdChange}
           disabled={disabled || sitesLoading || sites.length === 0 || analyzing}
         >
-          <SelectTrigger className="h-9 bg-white pl-9" aria-label="選擇站點">
+          <SelectTrigger className="h-9 bg-white pl-9" aria-label="選擇站點" title={siteLabel || undefined}>
             <SelectValue placeholder={sitesLoading ? '載入站點…' : '選擇站點'} />
           </SelectTrigger>
           <SelectContent className="z-[120] max-h-[320px]">

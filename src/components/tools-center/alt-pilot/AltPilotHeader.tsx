@@ -1,9 +1,67 @@
-import { Activity, History, ScanSearch } from 'lucide-react';
+import { Activity, ChevronDown, History, ScanSearch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { rankUsedAltModels, type AltModelUsagePoint } from '@/lib/altModels.ts';
 import type { AltSettingsRow, AltUsageSummary } from '@/lib/altTypes.ts';
 import { formatAltQuota } from '@/lib/altQuota.ts';
 import type { WebsiteProfileFull } from '@/types/app';
 import { PageAnalyzeForm } from './PageAnalyzeForm';
+
+function AltModelPill({
+  enabled,
+  modelUsage,
+}: {
+  enabled: boolean;
+  modelUsage: AltModelUsagePoint[];
+}) {
+  if (!enabled) {
+    return (
+      <span className="hidden rounded-full border border-border bg-white px-2.5 py-1 text-[11px] text-muted-foreground sm:inline-flex">
+        已停用
+      </span>
+    );
+  }
+
+  const ranked = rankUsedAltModels(modelUsage);
+  const label = ranked.lastModel ?? '尚未使用';
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="hidden h-7 max-w-[11rem] min-w-0 items-center gap-1 rounded-full border border-border bg-white px-2.5 text-[11px] text-muted-foreground sm:inline-flex"
+          title={label}
+          aria-label="實際使用的模型"
+        >
+          <span className="min-w-0 truncate">{label}</span>
+          <ChevronDown size={12} className="shrink-0 opacity-60" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="z-[120] w-56">
+        {ranked.models.length === 0 ? (
+          <DropdownMenuItem disabled>尚未有生成紀錄</DropdownMenuItem>
+        ) : (
+          ranked.models.map((item) => (
+            <DropdownMenuItem
+              key={item.model}
+              className="min-w-0 text-[12px]"
+              title={item.model}
+            >
+              <span className="min-w-0 truncate">{item.model}</span>
+              <span className="shrink-0">{item.mark}</span>
+            </DropdownMenuItem>
+          ))
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export interface AltPilotHeaderProps {
   sites: WebsiteProfileFull[];
@@ -16,6 +74,8 @@ export interface AltPilotHeaderProps {
   analyzing: boolean;
   usage: AltUsageSummary | null;
   settings: AltSettingsRow | null;
+  /** 這次（或最近一次）生成實際呼叫過的模型，依時間排序。 */
+  modelUsage?: AltModelUsagePoint[];
   onHistory: () => void;
   disabled?: boolean;
 }
@@ -31,6 +91,7 @@ export function AltPilotHeader({
   analyzing,
   usage,
   settings,
+  modelUsage = [],
   onHistory,
   disabled = false,
 }: AltPilotHeaderProps) {
@@ -57,11 +118,7 @@ export function AltPilotHeader({
             <Activity size={12} />
             今日已分析 {usage ? (usage.analyses ?? usage.today) : '—'}
           </span>
-          {settings ? (
-            <span className="hidden rounded-full border border-border bg-white px-2.5 py-1 text-[11px] text-muted-foreground sm:inline-flex">
-              {settings.enabled ? settings.model : '已停用'}
-            </span>
-          ) : null}
+          {settings ? <AltModelPill enabled={settings.enabled} modelUsage={modelUsage} /> : null}
           <Button
             type="button"
             variant="outline"

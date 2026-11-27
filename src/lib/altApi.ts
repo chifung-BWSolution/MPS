@@ -10,6 +10,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { pickCurrentModelUsage, type AltModelUsagePoint } from '@/lib/altModels.ts';
 import {
   ALT_FUNCTION_NAME,
   ALT_SCHEMA_MISSING_MESSAGE,
@@ -301,6 +302,51 @@ export async function fetchAltUsageToday(limit: number): Promise<AltUsageSummary
     limit,
     analyses: runResult.count ?? 0,
   };
+}
+
+function toModelUsagePoints(
+  rows: Array<{ model?: string | null; created_at?: string | null; run_id?: string | null }> | null,
+): AltModelUsagePoint[] {
+  return (rows || [])
+    .map((row) => ({
+      model: asString(row.model),
+      createdAt: asString(row.created_at),
+      runId: row.run_id ? String(row.run_id) : null,
+    }))
+    .filter((point) => point.model.length > 0 && point.createdAt.length > 0);
+}
+
+async function fetchRunModelUsage(runId: string): Promise<AltModelUsagePoint[]> {
+  const { data, error } = await supabase
+    .from('alt_llm_usage')
+    .select('model, created_at')
+    .eq('run_id', runId)
+    .order('created_at', { ascending: true });
+  if (error) throw toAltApiError(error);
+  return toModelUsagePoints(data as Array<{ model?: string | null; created_at?: string | null }>);
+}
+
+/**
+ * 目前這次分析實際呼叫過的模型。這次還沒生成時，改看最近一次有用量的分析。
+ */
+export async function fetchAltModelUsage(preferredRunId?: string | null): Promise<AltModelUsagePoint[]> {
+  const preferredRows = preferredRunId ? await fetchRunModelUsage(preferredRunId) : [];
+  if (preferredRows.length > 0) return preferredRows;
+
+  const recent = await supabase
+    .from('alt_llm_usage')
+    .select('model, created_at, run_id')
+    .order('created_at', { ascending: false })
+    .limit(80);
+  if (recent.error) throw toAltApiError(recent.error);
+
+  const recentRows = toModelUsagePoints(
+    recent.data as Array<{ model?: string | null; created_at?: string | null; run_id?: string | null }>,
+  );
+  const picked = pickCurrentModelUsage(preferredRunId, preferredRows, recentRows);
+  const runId = (picked[0]?.runId || '').trim();
+  if (runId) return fetchRunModelUsage(runId);
+  return picked;
 }
 
 export async function listAltRuns(limit = 30): Promise<AltRunRow[]> {

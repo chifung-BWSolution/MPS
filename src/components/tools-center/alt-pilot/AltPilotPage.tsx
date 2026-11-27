@@ -9,6 +9,7 @@ import {
   approveAltSuggestions,
   altErrorMessage,
   deleteAltRun,
+  fetchAltModelUsage,
   fetchAltRunBundle,
   fetchAltSettings,
   fetchAltUsageToday,
@@ -32,6 +33,7 @@ import {
   toJson,
   toTsv,
 } from '@/lib/altCsv.ts';
+import type { AltModelUsagePoint } from '@/lib/altModels.ts';
 import { canManageAltPilot } from '@/lib/altPermissions.ts';
 import { truncateText } from '@/lib/altText.ts';
 import { normalizePageUrl, sameHost } from '@/lib/altUrl.ts';
@@ -255,6 +257,7 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
   const [view, setView] = useState<'single' | 'batch'>('single');
   const [settings, setSettings] = useState<AltSettingsRow | null>(null);
   const [usage, setUsage] = useState<AltUsageSummary | null>(null);
+  const [modelUsage, setModelUsage] = useState<AltModelUsagePoint[]>([]);
   const [runs, setRuns] = useState<AltRunRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [schemaMissing, setSchemaMissing] = useState(false);
@@ -373,6 +376,25 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
       setRunLoading(false);
     }
   }, []);
+
+  const modelStamp = suggestions.map((item) => `${item.id}:${item.provider}`).join('|');
+
+  useEffect(() => {
+    if (schemaMissing || !settings?.enabled) return;
+    let cancelled = false;
+    void fetchAltModelUsage(run?.id ?? null)
+      .then((points) => {
+        if (!cancelled) setModelUsage(points);
+      })
+      .catch((modelError) => {
+        if (cancelled) return;
+        if (isAltSchemaMissing(modelError)) setSchemaMissing(true);
+        else setModelUsage([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [schemaMissing, settings?.enabled, run?.id, usage?.today, modelStamp]);
 
   useEffect(() => {
     void loadBootstrap();
@@ -996,6 +1018,7 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
           analyzing={analyzing}
           usage={usage}
           settings={settings}
+          modelUsage={modelUsage}
           onHistory={() => {
             setHistoryOpen(true);
             void refreshRuns();

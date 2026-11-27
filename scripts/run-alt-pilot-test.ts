@@ -23,6 +23,7 @@ import {
 } from '../supabase/functions/alt-pilot/guard.ts';
 import { countWords } from '../src/lib/altText.ts';
 import { formatAltQuota, isAltQuotaExceeded } from '../src/lib/altQuota.ts';
+import { altModelRankMark, pickCurrentModelUsage, rankUsedAltModels } from '../src/lib/altModels.ts';
 import { canManageAltPilot } from '../src/lib/altPermissions.ts';
 import type { AltPageContext, AltSuggestionRow } from '../src/lib/altTypes.ts';
 
@@ -334,5 +335,48 @@ assert.equal(canManageAltPilot('super_admin'), true);
 assert.equal(canManageAltPilot('system_dev'), true);
 assert.equal(canManageAltPilot('designer'), false);
 assert.equal(canManageAltPilot(null), false);
+
+// ---------------------------------------------------------------------------
+// 10) 實際使用的模型：藥丸取最後一次，下拉依首次出現標 ①②③
+// ---------------------------------------------------------------------------
+assert.equal(altModelRankMark(1), '①');
+assert.equal(altModelRankMark(2), '②');
+assert.equal(altModelRankMark(3), '③');
+const ranked = rankUsedAltModels([
+  { model: ' grok-4.7 ', createdAt: '2026-11-27T01:00:00.000Z' },
+  { model: 'grok-4.7', createdAt: '2026-11-27T01:05:00.000Z' },
+  { model: 'deepseek-v4.1-flash', createdAt: '2026-11-27T02:00:00.000Z' },
+  { model: '', createdAt: '2026-11-27T03:00:00.000Z' },
+]);
+assert.equal(ranked.lastModel, 'deepseek-v4.1-flash');
+assert.deepEqual(
+  ranked.models.map((item) => `${item.model} ${item.mark}`),
+  ['grok-4.7 ①', 'deepseek-v4.1-flash ②'],
+);
+assert.equal(rankUsedAltModels([]).lastModel, null);
+
+const older = { model: 'gemini-2.5-flash', createdAt: '2026-11-01T00:00:00.000Z', runId: 'old' };
+const latestGrok = { model: 'grok-4.7', createdAt: '2026-11-27T03:00:00.000Z', runId: 'new' };
+const latestDeepseek = { model: 'deepseek-v4.1-flash', createdAt: '2026-11-27T04:00:00.000Z', runId: 'new' };
+const recent = [latestDeepseek, latestGrok, older];
+assert.deepEqual(
+  pickCurrentModelUsage('empty-run', [], recent).map((item) => item.model),
+  ['deepseek-v4.1-flash', 'grok-4.7'],
+);
+assert.deepEqual(
+  pickCurrentModelUsage('old', [older], recent).map((item) => item.model),
+  ['gemini-2.5-flash'],
+);
+assert.deepEqual(pickCurrentModelUsage(null, [], []), []);
+const backToFirst = rankUsedAltModels([
+  { model: 'grok-4.7', createdAt: '2026-11-27T01:00:00.000Z' },
+  { model: 'deepseek-v4.1-flash', createdAt: '2026-11-27T02:00:00.000Z' },
+  { model: 'grok-4.7', createdAt: '2026-11-27T03:00:00.000Z' },
+]);
+assert.equal(backToFirst.lastModel, 'grok-4.7');
+assert.deepEqual(
+  backToFirst.models.map((item) => item.mark),
+  ['①', '②'],
+);
 
 console.log('alt pilot tests passed');

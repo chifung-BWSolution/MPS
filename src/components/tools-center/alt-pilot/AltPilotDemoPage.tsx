@@ -414,6 +414,7 @@ export function AltPilotDemoPage({ onExit }: AltPilotDemoPageProps) {
           analyzing={false}
           usage={usage}
           settings={DEMO_SETTINGS}
+          modelUsage={[{ model: 'demo-preview', createdAt: '2026-11-27T01:00:00.000Z' }]}
           onHistory={() => setHistoryOpen(true)}
         />
 

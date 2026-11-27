@@ -107,6 +107,10 @@ export function AltBatchPage({
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [generatingBatch, setGeneratingBatch] = useState(false);
+  const selectedSite = sites.find((site) => site.id === siteId);
+  const siteLabel = selectedSite
+    ? `${selectedSite.websiteName}${selectedSite.domainUrl ? ` · ${hostOf(selectedSite.domainUrl)}` : ''}`
+    : '';
   const [generateProgress, setGenerateProgress] = useState<{ done: number; total: number } | null>(null);
   const [confirmGenerateOpen, setConfirmGenerateOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -454,7 +458,7 @@ export function AltBatchPage({
               disabled || analyzing || generatingBatch || sitesLoading || sites.length === 0
             }
           >
-            <SelectTrigger className="h-9 bg-white" aria-label="選擇站點">
+            <SelectTrigger className="h-9 min-w-0 bg-white" aria-label="選擇站點" title={siteLabel || undefined}>
               <SelectValue placeholder={sitesLoading ? '載入站點…' : '選擇站點'} />
             </SelectTrigger>
             <SelectContent className="z-[120] max-h-[320px]">
