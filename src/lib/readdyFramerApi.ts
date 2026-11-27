@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import { mergeFramerSiteSnapshots } from '@/lib/readdyFramerProgress';
+import { mergeFramerSiteSnapshots, pickSiteSnapshotForConversion } from '@/lib/readdyFramerProgress';
 import type { SceneNode } from '@/lib/readdySceneGraph';
 import { supabase } from '@/lib/supabase';
 import {
@@ -454,6 +454,28 @@ function normalizeSiteSnapshot(row: unknown): FramerSiteSnapshot | null {
     page_count: Number(record.page_count || analysis.pages.length || 0),
     created_at: String(record.created_at || new Date().toISOString()),
   };
+}
+
+export async function findFramerSiteSnapshotForConversion(
+  projectKey: string,
+  framerProjectUrl?: string | null,
+): Promise<FramerSiteSnapshot | null> {
+  const key = projectKey.trim();
+  if (!key) return null;
+  const local = readLocalSiteSnapshots().filter(
+    (row) => row.project_key === key || row.analysis?.projectKey === key,
+  );
+  let remote: FramerSiteSnapshot[] = [];
+  const { data, error } = await supabase
+    .from('framer_site_snapshots')
+    .select('*')
+    .eq('project_key', key)
+    .order('created_at', { ascending: false })
+    .limit(8);
+  if (!error && data?.length) {
+    remote = data.map(normalizeSiteSnapshot).filter((row): row is FramerSiteSnapshot => Boolean(row));
+  }
+  return pickSiteSnapshotForConversion([...remote, ...local], key, framerProjectUrl);
 }
 
 export async function listFramerSiteSnapshots(limit = 20): Promise<FramerSiteSnapshot[]> {

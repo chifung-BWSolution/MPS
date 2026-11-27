@@ -1,4 +1,10 @@
-import type { FramerSiteSnapshot, ReaddyDiscoveredPage, ReaddyPageMigrationStatus } from '@/types/readdyFramer';
+import type {
+  FramerSiteSnapshot,
+  ReaddyDiscoveredPage,
+  ReaddyPageMigrationStatus,
+  ReaddyProjectAnalysis,
+  SourceType,
+} from '@/types/readdyFramer';
 
 const STORAGE_PREFIX = 'mps-readdy-framer-progress:';
 
@@ -315,6 +321,73 @@ export function selectPagesForOneClickConversion(
   pages: ReaddyDiscoveredPage[],
 ): ReaddyDiscoveredPage[] {
   return pages.filter((page) => page.migrationStatus !== 'skipped' && !isTemplateRoutePath(page.path));
+}
+
+function isConversionAnalysis(value: unknown): value is ReaddyProjectAnalysis {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as ReaddyProjectAnalysis;
+  return typeof record.projectKey === 'string' && Array.isArray(record.pages);
+}
+
+function conversionSourceType(value: unknown, analysis: ReaddyProjectAnalysis): SourceType {
+  if (value === 'github' || value === 'upload' || value === 'paste') return value;
+  if (analysis.sourceType === 'github' || analysis.sourceType === 'upload' || analysis.sourceType === 'paste') {
+    return analysis.sourceType;
+  }
+  return 'paste';
+}
+
+/** Rebuild the workbench project from the conversion run that is still in progress. */
+export function siteSnapshotFromConversionRun(input: {
+  projectKey: string;
+  siteName?: string;
+  framerProjectUrl?: string;
+  sourceType?: unknown;
+  analysis?: unknown;
+  githubRepoUrl?: string;
+  githubAllPaths?: unknown;
+  createdAt?: string;
+}): FramerSiteSnapshot | null {
+  if (!isConversionAnalysis(input.analysis)) return null;
+  const projectKey = input.projectKey.trim() || input.analysis.projectKey;
+  if (!projectKey) return null;
+  const paths = Array.isArray(input.githubAllPaths) ? input.githubAllPaths.map(String) : [];
+  return {
+    id: '',
+    project_key: projectKey,
+    project_name: input.siteName?.trim() || input.analysis.projectName || '未命名網站',
+    source_type: conversionSourceType(input.sourceType, input.analysis),
+    source_label: input.siteName?.trim() || input.analysis.projectName || null,
+    framer_project_url: input.framerProjectUrl?.trim() || null,
+    github_repo_url: input.githubRepoUrl?.trim() || null,
+    github_branch: input.analysis.githubMeta?.branch || null,
+    github_all_paths: paths,
+    storage_bundle_path: input.analysis.storageBundlePath ?? null,
+    analysis: input.analysis.projectKey ? input.analysis : { ...input.analysis, projectKey },
+    page_count: input.analysis.pages.length,
+    created_at: input.createdAt || new Date(0).toISOString(),
+  };
+}
+
+/** Prefer the saved site whose Framer project is the one this conversion is writing to. */
+export function pickSiteSnapshotForConversion(
+  snapshots: FramerSiteSnapshot[],
+  projectKey: string,
+  framerProjectUrl?: string | null,
+): FramerSiteSnapshot | null {
+  const key = projectKey.trim();
+  if (!key) return null;
+  const matches = snapshots.filter(
+    (row) => row.project_key === key || row.analysis?.projectKey === key,
+  );
+  if (!matches.length) return null;
+  const framerKey = normalizeFramerProjectKey(framerProjectUrl);
+  const sameFramer =
+    framerKey === 'unassigned'
+      ? []
+      : matches.filter((row) => normalizeFramerProjectKey(row.framer_project_url) === framerKey);
+  const pool = sameFramer.length > 0 ? sameFramer : matches;
+  return mergeFramerSiteSnapshots(pool, pool.length)[0] ?? null;
 }
 
 export function mergeFramerSiteSnapshots(rows: FramerSiteSnapshot[], limit: number): FramerSiteSnapshot[] {

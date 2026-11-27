@@ -29,6 +29,7 @@ import {
   setFramerAutoPublish,
   isValidFramerProjectUrl,
   isFramerSiteRecorded,
+  findFramerSiteSnapshotForConversion,
   listFramerCatalog,
   listFramerSiteSnapshots,
   listGitHubBranches,
@@ -114,6 +115,7 @@ export function ReaddyFramerWorkbench() {
   const [autoPublishSaving, setAutoPublishSaving] = useState(false);
   const [oauthConnecting, setOauthConnecting] = useState(false);
   const [recentJobs, setRecentJobs] = useState<FramerSyncJob[]>([]);
+  const [historyReady, setHistoryReady] = useState(false);
   const [siteSnapshots, setSiteSnapshots] = useState<FramerSiteSnapshot[]>([]);
   const [activeSiteId, setActiveSiteId] = useState<string | null>(null);
   const oauthPopupRef = useRef<Window | null>(null);
@@ -290,6 +292,8 @@ export function ReaddyFramerWorkbench() {
       setRecentJobs(jobs);
     } catch {
       // ignore if migration not pushed yet
+    } finally {
+      setHistoryReady(true);
     }
   }, []);
 
@@ -1354,7 +1358,13 @@ export function ReaddyFramerWorkbench() {
     toast.success(`已載入這次頁面分析${matchedPath ? ` (${matchedPath})` : ''}`);
   };
 
-  const handleSelectSite = async (snapshot: FramerSiteSnapshot) => {
+  const autoLoadedRunRef = useRef<string | null>(null);
+  const siteChosenByUserRef = useRef(false);
+  const analysisRef = useRef(analysis);
+  analysisRef.current = analysis;
+
+  const handleSelectSite = async (snapshot: FramerSiteSnapshot, options?: { notify?: boolean }) => {
+    if (options?.notify !== false) siteChosenByUserRef.current = true;
     narrowPageRail();
     setStep1CollapseNonce((n) => n + 1);
     markFramerSiteRecorded(snapshot.analysis.projectKey);
@@ -1416,8 +1426,70 @@ export function ReaddyFramerWorkbench() {
       await selectAndAssemblePage(firstPage, hydrated, fileMap, allPaths, true);
     }
     if (partialNotice) toast.message(partialNotice);
-    toast.success(`已載入網站「${snapshot.project_name}」（${hydrated.pages.length} 頁）`);
+    if (options?.notify !== false) {
+      toast.success(`已載入網站「${snapshot.project_name}」（${hydrated.pages.length} 頁）`);
+    }
   };
+
+  const selectSiteRef = useRef(handleSelectSite);
+  selectSiteRef.current = handleSelectSite;
+  const conversionRestoreRef = useRef(conversionJob.restoreSnapshot);
+  conversionRestoreRef.current = conversionJob.restoreSnapshot;
+
+  useEffect(() => {
+    if (!historyReady) return;
+    if (conversionJob.phase !== 'running' || !conversionJob.projectKey || !conversionJob.runId) return;
+    if (siteChosenByUserRef.current) return;
+    if (autoLoadedRunRef.current === conversionJob.runId) return;
+    const openAnalysis = analysisRef.current;
+    if (
+      openAnalysis?.projectKey === conversionJob.projectKey &&
+      isSameFramerProject(conversionJob.framerProjectUrl, framerProjectUrlRef.current)
+    ) {
+      autoLoadedRunRef.current = conversionJob.runId;
+      return;
+    }
+
+    const runId = conversionJob.runId;
+    const projectKey = conversionJob.projectKey;
+    const framerUrl = conversionJob.framerProjectUrl;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const saved = await findFramerSiteSnapshotForConversion(projectKey, framerUrl);
+        if (cancelled || siteChosenByUserRef.current || autoLoadedRunRef.current === runId) return;
+        const current = analysisRef.current;
+        if (
+          current?.projectKey === projectKey &&
+          isSameFramerProject(framerUrl, framerProjectUrlRef.current)
+        ) {
+          autoLoadedRunRef.current = runId;
+          return;
+        }
+        const snapshot = saved ?? conversionRestoreRef.current;
+        if (!snapshot) return;
+        const sameProject = snapshot.project_key === projectKey || snapshot.analysis.projectKey === projectKey;
+        if (!sameProject) return;
+        autoLoadedRunRef.current = runId;
+        const url = framerUrl.trim();
+        await selectSiteRef.current(
+          url ? { ...snapshot, framer_project_url: url } : snapshot,
+          { notify: false },
+        );
+      } catch {
+        if (!cancelled && autoLoadedRunRef.current === runId) autoLoadedRunRef.current = null;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    conversionJob.framerProjectUrl,
+    conversionJob.phase,
+    conversionJob.projectKey,
+    conversionJob.runId,
+    historyReady,
+  ]);
 
   const handleStartBackgroundConversion = () => {
     if (conversionJob.phase === 'running') {

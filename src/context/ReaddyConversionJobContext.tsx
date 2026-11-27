@@ -27,9 +27,11 @@ import {
   buildServerRunPageStates,
   createInitialBackgroundPageStates,
   patchSavedPageProgress,
+  siteSnapshotFromConversionRun,
   type BackgroundPageState,
   type ServerRunPageRecord,
 } from '@/lib/readdyFramerProgress';
+import type { FramerSiteSnapshot } from '@/types/readdyFramer';
 import { sendEmail } from '@/lib/resendApi';
 import {
   cancelReaddyConversionRun,
@@ -51,6 +53,7 @@ export type ReaddyConversionJobView = {
   emailError?: string;
   pageStates: Record<string, BackgroundPageState>;
   finishedVersion: number;
+  restoreSnapshot: FramerSiteSnapshot | null;
   start: (input: ReaddyConversionRunInput) => void;
   cancel: () => void;
   dismiss: () => void;
@@ -81,6 +84,7 @@ const idleView: {
   total: number;
   pageStates: Record<string, BackgroundPageState>;
   finishedVersion: number;
+  restoreSnapshot: FramerSiteSnapshot | null;
 } = {
   phase: 'idle',
   runId: null,
@@ -93,6 +97,7 @@ const idleView: {
   total: 0,
   pageStates: {},
   finishedVersion: 0,
+  restoreSnapshot: null,
 };
 
 type WatchedRunInput = {
@@ -344,6 +349,10 @@ export function ReaddyConversionJobProvider({ children }: { children: ReactNode 
           siteName?: string;
           readdyCode?: string;
           framerProjectUrl?: string;
+          sourceType?: string;
+          analysis?: unknown;
+          githubRepoUrl?: string;
+          githubAllPaths?: unknown;
           pages?: Array<{ id: string; path: string }>;
         };
         const pages = Array.isArray(payload.pages) ? payload.pages : [];
@@ -388,6 +397,16 @@ export function ReaddyConversionJobProvider({ children }: { children: ReactNode 
           total: pages.length,
           pageStates: snapshot.pageStates,
           finishedVersion: snapshot.finishedEntries.length > 0 ? 1 : 0,
+          restoreSnapshot: siteSnapshotFromConversionRun({
+            projectKey,
+            siteName,
+            framerProjectUrl,
+            sourceType: payload.sourceType,
+            analysis: payload.analysis,
+            githubRepoUrl: payload.githubRepoUrl,
+            githubAllPaths: payload.githubAllPaths,
+            createdAt: typeof activeRow.updated_at === 'string' ? activeRow.updated_at : undefined,
+          }),
         });
 
         watchServerRun(
@@ -428,6 +447,15 @@ export function ReaddyConversionJobProvider({ children }: { children: ReactNode 
       total: input.pages.length,
       pageStates: createInitialBackgroundPageStates(input.pages),
       finishedVersion: 0,
+      restoreSnapshot: siteSnapshotFromConversionRun({
+        projectKey: input.projectKey,
+        siteName: input.siteName,
+        framerProjectUrl: input.framerProjectUrl,
+        sourceType: input.sourceType,
+        analysis: input.analysis,
+        githubRepoUrl: input.githubRepoUrl,
+        githubAllPaths: input.githubAllPaths,
+      }),
     });
     if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
       void Notification.requestPermission().catch(() => undefined);

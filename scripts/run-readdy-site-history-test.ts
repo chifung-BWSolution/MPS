@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
-import { framerSiteSnapshotIdentity, mergeFramerSiteSnapshots } from '../src/lib/readdyFramerProgress.ts';
+import {
+  framerSiteSnapshotIdentity,
+  mergeFramerSiteSnapshots,
+  pickSiteSnapshotForConversion,
+  siteSnapshotFromConversionRun,
+} from '../src/lib/readdyFramerProgress.ts';
 import type { FramerSiteSnapshot } from '../src/types/readdyFramer.ts';
 
 function site(
@@ -130,5 +135,78 @@ const limited = mergeFramerSiteSnapshots(
   1,
 );
 assert.deepEqual(limited.map((row) => row.id), ['b1']);
+
+const musicKey = `gh:${music}:main`;
+const musicFramer = 'https://framer.com/projects/BW-Event-Music--abc123';
+const otherFramer = 'https://framer.com/projects/Other-Site--ffff';
+const musicAnalysis = {
+  ...duplicates[0].analysis,
+  projectKey: musicKey,
+  projectName: 'BW Event Music',
+  sourceType: 'github' as const,
+  pages: [
+    {
+      id: '/',
+      path: '/',
+      title: '首頁',
+      locale: 'zh',
+      pageKind: 'home' as const,
+      componentName: 'Home',
+      sourceFile: 'src/pages/home.tsx',
+      migrationStatus: 'pending' as const,
+    },
+  ],
+  githubMeta: {
+    owner: 'chifung-BWSolution',
+    repo: 'readdy-fc4c1e',
+    full_name: music,
+    branch: 'main',
+    default_branch: 'main',
+    branches: ['main'],
+    is_private: true,
+  },
+};
+const newerOtherTarget = site({
+  id: 'music-other-target',
+  created_at: '2026-11-27T03:00:00.000Z',
+  project_key: musicKey,
+  project_name: 'BW Event Music',
+  framer_project_url: otherFramer,
+  analysis: musicAnalysis,
+});
+const olderMatchingTarget = site({
+  id: 'music-matching-target',
+  created_at: '2026-11-27T01:00:00.000Z',
+  project_key: musicKey,
+  project_name: 'BW Event Music',
+  framer_project_url: musicFramer,
+  analysis: musicAnalysis,
+});
+assert.equal(
+  pickSiteSnapshotForConversion([newerOtherTarget, olderMatchingTarget], musicKey, musicFramer)?.id,
+  'music-matching-target',
+);
+assert.equal(
+  pickSiteSnapshotForConversion([newerOtherTarget, olderMatchingTarget], musicKey, '')?.id,
+  'music-other-target',
+);
+assert.equal(pickSiteSnapshotForConversion([newerOtherTarget], 'gh:missing:main', musicFramer), null);
+
+const restored = siteSnapshotFromConversionRun({
+  projectKey: musicKey,
+  siteName: 'BW Event Music',
+  framerProjectUrl: musicFramer,
+  sourceType: 'github',
+  githubRepoUrl: `https://github.com/${music}`,
+  githubAllPaths: ['src/pages/home.tsx'],
+  analysis: musicAnalysis,
+});
+assert.equal(restored?.project_key, musicKey);
+assert.equal(restored?.project_name, 'BW Event Music');
+assert.equal(restored?.github_branch, 'main');
+assert.equal(restored?.framer_project_url, musicFramer);
+assert.equal(restored?.page_count, 1);
+assert.deepEqual(restored?.github_all_paths, ['src/pages/home.tsx']);
+assert.equal(siteSnapshotFromConversionRun({ projectKey: musicKey }), null);
 
 console.log('ALL READDY SITE HISTORY TESTS PASSED');
