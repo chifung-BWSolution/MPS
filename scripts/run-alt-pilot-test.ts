@@ -24,7 +24,7 @@ import {
 import { countWords } from '../src/lib/altText.ts';
 import { formatAltQuota, isAltQuotaExceeded } from '../src/lib/altQuota.ts';
 import { altModelRankMark, pickCurrentModelUsage, rankUsedAltModels } from '../src/lib/altModels.ts';
-import { TEXT_LLM_ORDER } from '../src/lib/llmProviderOrder.ts';
+import { connectedModelMenu, TEXT_LLM_ORDER } from '../src/lib/llmProviderOrder.ts';
 import { canManageAltPilot } from '../src/lib/altPermissions.ts';
 import type { AltPageContext, AltSuggestionRow } from '../src/lib/altTypes.ts';
 
@@ -379,6 +379,18 @@ assert.equal(backToFirst.lastModel, 'grok-4.7');
 assert.deepEqual(
   backToFirst.models.map((item) => item.mark),
   ['①', '②'],
+);
+const menu = connectedModelMenu([
+  { model: 'grok-4.7', createdAt: '2026-11-27T01:00:00.000Z' },
+  { model: 'gemini-2.5-flash', createdAt: '2026-11-27T02:00:00.000Z' },
+]);
+assert.deepEqual(
+  menu.items.map((item) => `${item.label}:${item.muted ? 'gray' : 'on'}`),
+  ['Grok:gray', 'Gemini:on', 'OpenCode:gray'],
+);
+assert.deepEqual(
+  connectedModelMenu([]).items.map((item) => item.muted),
+  [true, true, true],
 );
 
 console.log('alt pilot tests passed');

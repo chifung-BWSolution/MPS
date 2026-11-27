@@ -6,6 +6,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { rankUsedAltModels, type AltModelUsagePoint } from '@/lib/altModels.ts';
+import { connectedModelMenu } from '@/lib/llmProviderOrder';
+import { cn } from '@/lib/utils';
 
 export function ModelUsagePill({
   modelUsage,
@@ -23,6 +25,7 @@ export function ModelUsagePill({
   }
 
   const ranked = rankUsedAltModels(modelUsage);
+  const menu = connectedModelMenu(modelUsage);
   const label = ranked.lastModel ?? '尚未使用';
 
   return (
@@ -39,19 +42,17 @@ export function ModelUsagePill({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="z-[120] w-max max-w-[90vw]">
-        {ranked.models.length === 0 ? (
-          <DropdownMenuItem disabled className="whitespace-nowrap">尚未有生成紀錄</DropdownMenuItem>
-        ) : (
-          ranked.models.map((item) => (
-            <DropdownMenuItem
-              key={`${item.rank}-${item.model}`}
-              className="w-full justify-between gap-3 whitespace-nowrap text-[12px]"
-            >
-              <span>{item.model}</span>
-              <span className="shrink-0">{item.mark}</span>
-            </DropdownMenuItem>
-          ))
-        )}
+        {menu.items.map((item) => (
+          <DropdownMenuItem
+            key={item.id}
+            className={cn(
+              'whitespace-nowrap text-[12px]',
+              item.muted ? 'text-muted-foreground focus:text-muted-foreground' : 'text-foreground',
+            )}
+          >
+            {item.label}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
