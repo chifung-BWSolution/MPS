@@ -300,7 +300,11 @@ export function HotspotRadarTool() {
               )}
               onClick={() => void handleToggleDaily()}
               disabled={!canManage || saving}
-              title={canManage ? '每日深夜自動抓取' : '只有管理層可以切換每日自動抓取'}
+              title={
+                canManage
+                  ? '香港時間。週一至六：00:00、06:00、09:00、11:00、12:00、13:00、15:00、17:00、18:00。週日：00:00、06:00、12:00、18:00。'
+                  : '只有管理層可以切換每日自動抓取'
+              }
             >
               {saving ? (
                 <Loader2 size={13} className="animate-spin" />

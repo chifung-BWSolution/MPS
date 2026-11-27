@@ -18,6 +18,13 @@
 -- ② 停止每日排程（job 不存在時會拋錯，可先查 cron.job）
 do $$
 begin
+  if exists (select 1 from cron.job where jobname = 'hotspot-radar-daytime') then
+    perform cron.unschedule('hotspot-radar-daytime');
+    raise notice 'hotspot-radar-daytime unscheduled';
+  else
+    raise notice 'hotspot-radar-daytime not found — skipped';
+  end if;
+
   if exists (select 1 from cron.job where jobname = 'hotspot-radar-daily') then
     perform cron.unschedule('hotspot-radar-daily');
     raise notice 'hotspot-radar-daily unscheduled';
@@ -40,7 +47,12 @@ drop table if exists public.hotspot_settings;
 
 -- ⑤ 刪版本記錄，否則日後 db push 會跳過這三支、重建時缺表
 delete from supabase_migrations.schema_migrations
- where version in ('20261126150000', '20261126151000', '20261126152000');
+ where version in (
+   '20261126150000',
+   '20261126151000',
+   '20261126152000',
+   '20261127183000'
+ );
 
 -- ⑥ 前端回滾（手動）：
 --    revert src/context/AppContext.tsx、src/components/tools-center/ToolsCenterModule.tsx、

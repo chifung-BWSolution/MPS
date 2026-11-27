@@ -626,6 +626,7 @@ if (!SKIP_WIRING) {
       'supabase/migrations/20261126150000_hotspot_radar.sql',
       'supabase/migrations/20261126151000_hotspot_radar_daily_cron.sql',
       'supabase/migrations/20261126152000_hotspot_radar_controls.sql',
+      'supabase/migrations/20261127183000_hotspot_radar_cron_cadence.sql',
       'scripts/rollback-hotspot-radar.sql',
     ];
     for (const file of files) {
@@ -721,6 +722,7 @@ if (!SKIP_WIRING) {
       migration,
       read('supabase/migrations/20261126151000_hotspot_radar_daily_cron.sql'),
       read('supabase/migrations/20261126152000_hotspot_radar_controls.sql'),
+      read('supabase/migrations/20261127183000_hotspot_radar_cron_cadence.sql'),
     ]) {
       assert.equal(/\bdrop\s+(table|index|function|policy|column)\b/i.test(sql), false);
       assert.equal(/\btruncate\b/i.test(sql), false);
@@ -735,6 +737,20 @@ if (!SKIP_WIRING) {
     assert.ok(cron.includes("'45 23 * * *'"));
     assert.ok(cron.includes('functions/v1/hotspot-radar'));
     assert.ok(cron.includes('RAISE NOTICE'));
+  });
+
+  check('排程：週一至六香港時間加密、週日每 6 小時，開關同時切兩條 job', () => {
+    const cadence = read('supabase/migrations/20261127183000_hotspot_radar_cron_cadence.sql');
+    assert.ok(cadence.includes("'0 4,10,16,22 * * *'"));
+    assert.ok(cadence.includes("'0 1,3,5,7,9 * * 1-6'"));
+    assert.ok(cadence.includes("'hotspot-radar-daily'"));
+    assert.ok(cadence.includes("'hotspot-radar-daytime'"));
+    assert.equal(/cron\.unschedule/i.test(cadence), false);
+    assert.ok(cadence.includes("j.jobname IN ('hotspot-radar-daily', 'hotspot-radar-daytime')"));
+    const tool = read('src/components/tools-center/hotspot-radar/HotspotRadarTool.tsx');
+    assert.equal(tool.includes('每日深夜'), false);
+    assert.ok(tool.includes('09:00、11:00、12:00、13:00、15:00、17:00、18:00'));
+    assert.ok(tool.includes('週日：00:00、06:00、12:00、18:00'));
   });
 
   check('開關 RPC：SECURITY DEFINER 且只授 service_role', () => {
