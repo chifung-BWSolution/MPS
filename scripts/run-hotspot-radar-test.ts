@@ -751,6 +751,8 @@ if (!SKIP_WIRING) {
     assert.equal(tool.includes('每日深夜'), false);
     assert.ok(tool.includes('09:00、11:00、12:00、13:00、15:00、17:00、18:00'));
     assert.ok(tool.includes('週日：00:00、06:00、12:00、18:00'));
+    assert.ok(tool.includes('上次抓取'));
+    assert.ok(tool.includes('從未抓取'));
   });
 
   check('開關 RPC：SECURITY DEFINER 且只授 service_role', () => {

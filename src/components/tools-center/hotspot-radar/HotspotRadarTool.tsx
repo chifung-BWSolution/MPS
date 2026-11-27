@@ -13,6 +13,7 @@ import {
   Loader2,
   Pause,
   Play,
+  Radar,
   RefreshCw,
   Target,
 } from 'lucide-react';
@@ -32,7 +33,7 @@ import { can } from '@/lib/contentPermissions';
 import { isHotItem, sortHotspotItems } from '@/lib/hotspotRadar';
 import { cn } from '@/lib/utils';
 import { useHotspotRadar } from '@/hooks/useHotspotRadar';
-import type { HotspotFavoriteStatus, HotspotFeedItem } from '@/types/hotspotRadar';
+import type { HotspotFavoriteStatus, HotspotFeedItem, HotspotRunRow } from '@/types/hotspotRadar';
 import { HotspotCard } from './HotspotCard';
 import { HotspotEmptyState } from './HotspotEmptyState';
 import {
@@ -44,6 +45,26 @@ import {
 import { HotspotTargetsPanel } from './HotspotTargetsPanel';
 
 const FILTER_STORAGE_KEY = 'mps.hotspot-radar.filters';
+
+function formatRelative(iso: string | null): string {
+  if (!iso) return '從未抓取';
+  const startedAt = new Date(iso).getTime();
+  if (!Number.isFinite(startedAt)) return '—';
+  const diff = Date.now() - startedAt;
+  if (diff < 60_000) return '剛剛';
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 60) return `${minutes} 分鐘前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小時前`;
+  return `${Math.floor(hours / 24)} 天前`;
+}
+
+function isStaleRunning(run: HotspotRunRow | null): boolean {
+  if (!run || run.status !== 'running') return false;
+  const startedAt = new Date(run.started_at).getTime();
+  if (!Number.isFinite(startedAt)) return true;
+  return Date.now() - startedAt > 10 * 60_000;
+}
 
 function readStoredFilters(): HotspotFilters {
   if (typeof window === 'undefined') return { ...DEFAULT_FILTERS };
@@ -172,6 +193,10 @@ export function HotspotRadarTool() {
   const sorted = useMemo(() => sortHotspotItems(filtered, filters.sort), [filtered, filters.sort]);
 
   const lastRun = useMemo(() => runs.find((run) => run.meta?.kind !== 'test') ?? null, [runs]);
+  const fetchRun = useMemo(
+    () => runs.find((run) => run.meta?.kind !== 'test' && run.meta?.skipped !== 'auto_daily_off') ?? null,
+    [runs],
+  );
   /** 示範模式：最近一次抓取用的是內建樣本供應商（未設定第三方金鑰時的行為） */
   const demoMode = lastRun?.meta?.provider === 'mock';
   const otherError = error;
@@ -328,6 +353,19 @@ export function HotspotRadarTool() {
             </Button>
           </div>
 
+          <div className="text-right text-[12px] text-muted-foreground">
+            <div className="inline-flex items-center gap-1.5">
+              <Radar size={13} className="text-teal-600" />
+              {isStaleRunning(fetchRun)
+                ? '上次抓取未完成'
+                : `上次抓取 ${formatRelative(fetchRun?.started_at ?? null)}`}
+            </div>
+            {fetchRun?.status === 'error' && (
+              <div className="mt-1 max-w-[280px] text-rose-600">
+                {fetchRun.error_message ?? '抓取失敗'}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
