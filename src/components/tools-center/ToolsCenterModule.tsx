@@ -1,5 +1,3 @@
-import { useAuth } from '@/context/AuthContext';
-import { canAccessSettings } from '@/lib/permissions';
 import { ToolsModule } from '@/components/tools/ToolsModule';
 import { TrainingModule } from '@/components/training/TrainingModule';
 import { AiCaptionTool } from './AiCaptionTool';
@@ -13,16 +11,7 @@ import { HotspotRadarTool } from './hotspot-radar/HotspotRadarTool';
 import { CopyStudioTool } from './copy-studio/CopyStudioTool';
 
 export function ToolsCenterModule({ subModule }: { subModule?: string }) {
-  const { systemUser } = useAuth();
-
   if (subModule === 'social-automation') {
-    if (!canAccessSettings(systemUser?.role)) {
-      return (
-        <div className="rounded-md border border-border bg-white px-4 py-8 text-center text-[13px] text-muted-foreground">
-          社媒自動化營運只開放給管理員。
-        </div>
-      );
-    }
     return <ContentAutomationCenter />;
   }
 
