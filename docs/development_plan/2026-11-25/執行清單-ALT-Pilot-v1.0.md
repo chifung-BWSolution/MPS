@@ -79,7 +79,7 @@
 | ☑ | M3-02 | URL allowlist／SSRF | `guard.ts`、`index.ts` | 已寫；未實測 |
 | ☑ | M3-03 | `analyze` | `index.ts` | 已寫；未實測 |
 | ☑ | M3-04 | 圖片下載＋Gemini vision | `guard.ts`、`providers.ts` | 已寫；未實測 |
-| ☑ | M3-05 | Grok 主／Gemini 備援 | `providers.ts` | 已寫；契約測試覆蓋 Grok 主、Grok 429→Gemini、Gemini 429→Grok |
+| ☑ | M3-05 | Grok 主／DeepSeek 備援 | `providers.ts` | 已寫；契約測試覆蓋 Grok 主、Grok 429→DeepSeek、Grok 429→Gemini（無 DeepSeek key 時） |
 | ☑ | M3-06 | 配額＋用量 | `index.ts` | 已寫；未實測 |
 | ☑ | M3-07 | `generate`／`regenerate`／`verify` | `index.ts` | 已寫；未實測 |
 | ☑ | M3-08 | 契約測試 | `scripts/run-alt-pilot-contract-test.ts` | `node scripts/run-alt-pilot-contract-test.ts` → passed（mock fetch／provider，不連網） |
@@ -134,10 +134,10 @@
 | Migration | 先 `begin; … rollback;` dry-run（表不存在殘留），再單支 `db query --linked --file` 套用；未用 `db push` |
 | Migration history | 已寫入 `20261125183000` / `alt_pilot`；`migration list` 顯示 local=remote |
 | 表 | `alt_runs`、`alt_suggestions`、`alt_llm_usage`、`alt_settings` 全部存在 |
-| 設定 | **2026-11-26 已開啟**：`enabled=true`、`daily_call_limit=0`（不限）、`model=grok-4.5`、`fallback_model=gemini-2.5-flash` |
+| 設定 | **2026-11-26 已開啟**：`enabled=true`、`daily_call_limit=0`（不限）、`model=grok-4.7`、`fallback_model=deepseek-v4.1-flash` |
 | 權限 | 8 policy；4 表 RLS；3 trigger；anon REST 401／42501；authenticated DELETE=false |
 | Edge Function | `alt-pilot` 已部署；anon 呼叫 401；OPTIONS 200 |
-| Secrets | `XAI_API_KEY` 已存在；**沒有** `GEMINI_API_KEY`，所以目前只有 Grok 主 provider |
+| Secrets | `XAI_API_KEY` 已存在；`OPENCODE_GO_API_KEY` 已設（DeepSeek V4.1 Flash 1017 備援）；沒有 `GEMINI_API_KEY` |
 | 前端 | commit `f352efc` 已 push `origin/main`；Vercel production 已部署 `assets/index-gRtKYIg1.js`，bundle 已驗證含「ALT Pilot 目前已停用」與 `alt_settings.enabled`，且不含 `/alt-pilot-demo`。 |
 | Git | `main` 已 push；工作區仍有其他 agent 未提交的 content／crosspost 改動，未包含在此 commit。 |
 | 已知 blocker | `db push` 被 remote migration drift 阻擋（`20261125015219`、`20261125092550`）；未用 `migration repair`，避免改壞 production history |

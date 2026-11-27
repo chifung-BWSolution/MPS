@@ -238,7 +238,7 @@ export const DEFAULT_ALT_SETTINGS: AltSettingsRow = {
   id: 'default',
   enabled: false,
   model: 'grok-4.7',
-  fallback_model: 'gemini-2.5-flash',
+  fallback_model: 'deepseek-v4.1-flash',
   daily_call_limit: 0,
   max_images_per_run: 40,
   max_images_per_call: 6,

@@ -96,13 +96,17 @@ Edge Function：
 
 ```powershell
 npx supabase functions deploy alt-pilot
-# XAI_API_KEY 系統已有（Grok 主）；GEMINI_API_KEY 只作備援，可選
+# XAI_API_KEY 系統已有（Grok 主）
+# OPENCODE_GO_API_KEY 是 DeepSeek V4.1 Flash 1017 備援
+# GEMINI_API_KEY 只作最後備援，可選
 npx supabase secrets set XAI_API_KEY=...
+npx supabase secrets set OPENCODE_GO_API_KEY=...
 ```
 
 - `supabase/config.toml` 已設 `[functions.alt-pilot] verify_jwt = false`，函式自行驗 session。
-- `alt_settings.model` 預設 `grok-4.5`，所以會先用系統現有的 XAI key；Grok 失敗才用 Gemini（若已設 `GEMINI_API_KEY`）。
-- 若兩個 key 都沒設，function 會回 `provider_not_configured`。
+- `alt_settings.model` 預設 `grok-4.7`，所以會先用系統現有的 XAI key；Grok 失敗先轉 DeepSeek V4.1 Flash 1017（若已設 `OPENCODE_GO_API_KEY`），最後才 Gemini。
+- `alt_settings.fallback_model` 正式站已設 `deepseek-v4.1-flash`。
+- 若三個 key 都沒設，function 會回 `provider_not_configured`。
 - `ALT_ALLOWED_HOSTS` 選填，用於未登記在 `webandsystem_list` 的網域。
 - `ALT_ALLOW_ANON` 保持 false。
 
