@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
 import { rankUsedAltModels, type AltModelUsagePoint } from '@/lib/altModels.ts';
 import { connectedModelMenu, type TextLlmProvider } from '@/lib/llmProviderOrder';
 import { cn } from '@/lib/utils';
@@ -46,7 +45,6 @@ export function ModelUsagePill({
         aria-label="實際使用的模型"
       >
         <span className="min-w-0 truncate">{label}</span>
-        <ChevronDown size={12} className="shrink-0 opacity-60" />
       </span>
       {open ? (
         <div
