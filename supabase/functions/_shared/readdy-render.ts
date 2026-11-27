@@ -175,6 +175,20 @@ async function captureVisiblePage(unwrappedIds: string[] | null = null) {
     return bounds.width > 0 && bounds.height > 0 && style.visibility === "visible" &&
       bounds.width <= 480 && bounds.height <= 480;
   });
+  const iconFontElements = Array.from(root.querySelectorAll("i,span")).filter((el) => {
+    if (el.children.length > 0 || el.textContent?.trim()) return false;
+    const style = getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return false;
+    const bounds = el.getBoundingClientRect();
+    if (bounds.width < 6 || bounds.height < 6 || bounds.width > 96 || bounds.height > 96) return false;
+    const before = getComputedStyle(el, "::before");
+    const raw = before.content || "";
+    if (!raw || raw === "none" || raw === "normal" || raw === '""' || raw === "''") return false;
+    const glyph = raw.replace(/^["']|["']$/g, "");
+    if (!glyph) return false;
+    const cp = glyph.codePointAt(0) ?? 0;
+    return cp >= 0xE000 || /\b(ri-|fa-|icon|material)/i.test(`${el.className || ""} ${before.fontFamily || ""}`);
+  });
   let rasterBytes = 0;
   async function decodeImage(src: string) {
     const image = new Image();
@@ -224,6 +238,32 @@ async function captureVisiblePage(unwrappedIds: string[] | null = null) {
       limitations.add("部分向量圖示未能保留");
     }
   }));
+  for (const el of iconFontElements.slice(0, 64)) {
+    try {
+      const bounds = el.getBoundingClientRect();
+      const before = getComputedStyle(el, "::before");
+      const glyph = (before.content || "").replace(/^["']|["']$/g, "");
+      if (!glyph) continue;
+      const w = Math.max(12, Math.ceil(bounds.width * 2));
+      const h = Math.max(12, Math.ceil(bounds.height * 2));
+      const iconCanvas = document.createElement("canvas");
+      iconCanvas.width = w;
+      iconCanvas.height = h;
+      const iconCtx = iconCanvas.getContext("2d");
+      if (!iconCtx) continue;
+      const fontSize = Math.max(10, (Number.parseFloat(before.fontSize) || bounds.height) * 2);
+      iconCtx.font = `${before.fontStyle || "normal"} ${before.fontWeight || "400"} ${fontSize}px ${before.fontFamily}`;
+      iconCtx.fillStyle = before.color || getComputedStyle(el).color || "#ffffff";
+      iconCtx.textAlign = "center";
+      iconCtx.textBaseline = "middle";
+      iconCtx.fillText(glyph, w / 2, h / 2);
+      const data = iconCanvas.toDataURL("image/png");
+      if (data.length <= 65536 && rasterBytes + data.length <= 1024 * 1024) {
+        rasterBytes += data.length;
+        rasterized.set(el, data);
+      }
+    } catch { /* Keep icon fallback if font glyph rasterization fails. */ }
+  }
   const cssBackgrounds = Array.from(root.querySelectorAll("*")).slice(0, 2200).flatMap((element) => {
     const css = getComputedStyle(element);
     return !element.matches("img,svg,svg *") && css.backgroundImage !== "none" && css.visibility === "visible"
@@ -331,12 +371,22 @@ async function captureVisiblePage(unwrappedIds: string[] | null = null) {
     const imageUrl = !paintedBackground ? css.backgroundImage.match(/url\(["']?([^"')]+)["']?\)/)?.[1] : undefined;
     const gradient = !paintedBackground && css.backgroundImage.startsWith("linear-gradient(") && !imageUrl
       ? css.backgroundImage : undefined;
+    const borderSide = css.borderTopWidth !== "0px"
+      ? css.borderTop
+      : css.borderBottomWidth !== "0px"
+        ? css.borderBottom
+        : css.borderLeftWidth !== "0px"
+          ? css.borderLeft
+          : css.borderRightWidth !== "0px"
+            ? css.borderRight
+            : undefined;
     const style = {
       background: css.backgroundColor === "rgba(0, 0, 0, 0)" ? undefined : color(css.backgroundColor),
       backgroundImage: imageUrl,
       gradient,
       radius: css.borderRadius === "0px" ? undefined : css.borderRadius,
-      border: css.borderTopWidth === "0px" ? undefined : css.borderTop,
+      border: borderSide,
+      shadow: css.boxShadow && css.boxShadow !== "none" ? css.boxShadow : undefined,
       color: color(css.color),
       fontFamily: css.fontFamily,
       fontSize: css.fontSize,
@@ -346,9 +396,19 @@ async function captureVisiblePage(unwrappedIds: string[] | null = null) {
       opacity: css.opacity === "1" ? undefined : Number(css.opacity),
       textAlign: ["center", "right"].includes(css.textAlign) ? css.textAlign : "left",
     };
+    const appearRaw = el.getAttribute("data-readdy-appear");
+    let appear: { opacity: number; y: string; delay: number } | undefined;
+    if (appearRaw) {
+      try {
+        const parsed = JSON.parse(appearRaw) as { opacity?: number; y?: string; delay?: number };
+        if (typeof parsed.opacity === "number" && typeof parsed.y === "string") {
+          appear = { opacity: parsed.opacity, y: parsed.y, delay: Number(parsed.delay) || 0 };
+        }
+      } catch { /* Ignore malformed appear hint. */ }
+    }
     const href = el.matches("a[href]") ? safeUrl(el.getAttribute("href")) : undefined;
     if (!paintedBackground && css.backgroundImage !== "none") limitations.add("部分背景圖或漸層需要在 Framer 覆核");
-    if (raster) return { id, type: "image", name: el.getAttribute("aria-label") || "SVG", src: raster, layout, style };
+    if (raster) return { id, type: "image", name: el.getAttribute("aria-label") || (el.tagName.toLowerCase() === "svg" ? "SVG" : "Icon"), src: raster, layout, style, ...(appear ? { appear } : {}) };
     if (el instanceof HTMLImageElement) {
       if (!el.naturalWidth && box.width && box.height) limitations.add("部分來源圖片未載入");
       if (!box.width || !box.height || !el.naturalWidth) return null;
@@ -425,7 +485,7 @@ async function captureVisiblePage(unwrappedIds: string[] | null = null) {
     });
     if (!children.length && !style.background && !imageUrl && !gradient && !style.border) return null;
     if (css.display === "contents") limitations.add("display: contents 版面需要人工覆核");
-    return { id, type: parent ? "stack" : "section", name: el.getAttribute("aria-label") || tag, htmlTag: tag, href, layout, style, children };
+    return { id, type: parent ? "stack" : "section", name: el.getAttribute("aria-label") || tag, htmlTag: tag, href, layout, style, ...(appear ? { appear } : {}), children };
   }
   const scenes = (blocks.length ? blocks : [{ element: root, id: "dom-0" }])
     .map(({ element, id }) => visit(element, id, null, 0)).filter(Boolean);
@@ -520,7 +580,24 @@ export async function captureRenderedPage(
         document.querySelectorAll("img[loading=lazy]").forEach(img => { img.loading = "eager"; });
         await Promise.race([Promise.allSettled([...document.images].map(img => img.decode())), new Promise(resolve => setTimeout(resolve, 2500))]);
         document.getAnimations().forEach(animation => {
-          if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) animation.finish();
+          const timing = animation.effect && animation.effect.getComputedTiming ? animation.effect.getComputedTiming() : null;
+          const target = animation.effect && animation.effect.target ? animation.effect.target : null;
+          if (target instanceof Element && !target.hasAttribute("data-readdy-appear") && timing && Number.isFinite(timing.endTime)) {
+            const name = String(animation.animationName || "");
+            if (/fade|rise|slide|up|appear|enter/i.test(name)) {
+              const delaySec = Math.max(0, Math.round((Number(timing.delay || 0) / 1000) * 100) / 100);
+              const y = /up|rise|slide/i.test(name) ? "18px" : "0px";
+              target.setAttribute("data-readdy-appear", JSON.stringify({ opacity: 0, y, delay: delaySec }));
+            }
+          }
+          if (timing && Number.isFinite(timing.endTime)) animation.finish();
+        });
+        document.querySelectorAll("[class*='animate-fade']").forEach(el => {
+          if (el.hasAttribute("data-readdy-appear")) return;
+          const cls = String(el.className || "");
+          const y = /fade-in-up|rise|delay/i.test(cls) ? "18px" : "0px";
+          const delay = /delay-3/.test(cls) ? 0.45 : /delay-2/.test(cls) ? 0.3 : /delay-1/.test(cls) ? 0.15 : 0;
+          el.setAttribute("data-readdy-appear", JSON.stringify({ opacity: 0, y, delay }));
         });
       });
       const height = await page.evaluate(() => document.documentElement.scrollHeight);

@@ -501,6 +501,7 @@ type SceneStyle = {
   backgroundImage?: string;
   color?: string;
   border?: string;
+  shadow?: string;
   radius?: string;
   fontSize?: string;
   fontWeight?: number;
@@ -516,6 +517,7 @@ type SceneNode = {
   src?: string;
   htmlTag?: string;
   href?: string;
+  appear?: AppearSpec;
   layout?: SceneLayout;
   style?: SceneStyle;
   children?: SceneNode[];
@@ -751,16 +753,18 @@ function buildRenderedOps(
     if (!node) return { visible: false, ...(root ? { height: "0px" } : {}) };
     const style = node.style;
     const layout = node.layout;
-    const absolute = absoluteRoots || !root || layout?.position === "fixed";
+    const isFixed = layout?.position === "fixed";
+    const absolute = absoluteRoots || !root || isFixed;
     const geometry = {
       visible: true,
-      position: absoluteRoots && root && layout?.position !== "fixed" ? "absolute" : layout?.position,
+      position: absoluteRoots && root && !isFixed ? "absolute" : layout?.position,
       width: layout?.width,
       height: layout?.height,
-      zIndex: layout?.zIndex,
+      zIndex: isFixed ? (layout?.zIndex ?? 50) : layout?.zIndex,
       opacity: style?.opacity,
-      left: absolute ? layout?.left : undefined,
-      top: absolute ? layout?.top : undefined,
+      left: absolute ? (isFixed ? layout?.left || "0px" : layout?.left) : undefined,
+      top: absolute ? (isFixed ? layout?.top || "0px" : layout?.top) : undefined,
+      right: isFixed && layout?.width === "100%" ? "0px" : undefined,
     };
     if (node.type === "text") {
       const textLink = framerLink(node.href);
@@ -782,6 +786,7 @@ function buildRenderedOps(
       ...geometry,
       fill: style?.background || gradientColors?.[Math.floor(gradientColors.length / 2)],
       border: style?.border,
+      shadow: style?.shadow,
       radius: style?.radius,
       overflow: layout?.clip || node.type === "image" ? "clip" : undefined,
       link,
@@ -811,6 +816,7 @@ function buildRenderedOps(
       if ((attrs.fill || backgroundUrl) && !overrides.fill && !asset(variant)) overrides.fill = "rgba(0, 0, 0, 0)";
       if (attrs.radius && !overrides.radius) overrides.radius = "0px";
       if (attrs.border && !overrides.border) overrides.border = "0px solid rgba(0, 0, 0, 0)";
+      if (attrs.shadow && !overrides.shadow) overrides.shadow = "none";
       if (attrs.overflow === "clip" && !overrides.overflow) overrides.overflow = "visible";
       if (attrs.zIndex !== undefined && overrides.zIndex === undefined) overrides.zIndex = 0;
       if (attrs.opacity !== undefined && overrides.opacity === undefined) overrides.opacity = 1;
@@ -823,6 +829,7 @@ function buildRenderedOps(
     ops.push({
       op: node.type === "text" ? "text" : "frame",
       id, parent, attrs, responsive, backgroundUrl,
+      ...(node.appear ? { appear: node.appear } : {}),
       replicaImages: { tablet: asset(variants.tablet), phone: asset(variants.phone) },
     });
     const children = new Map<string, Variants>();
@@ -1720,6 +1727,30 @@ function patchReplica(replica, nodeId, attrs) {
 }
 const target = normPath(spec.pagePath);
 const pages = tree.getNodesOfTypes("WebPageNode");
+const pageByPath = new Map();
+for (const item of pages) {
+  if (!item || !item.path) continue;
+  const normalized = normPath(item.path);
+  pageByPath.set(normalized, item);
+  pageByPath.set(normalized.toLowerCase(), item);
+}
+function matchPageForLink(rawLink) {
+  if (typeof rawLink !== "string" || !rawLink.startsWith("/") || rawLink.startsWith("//")) return null;
+  const match = /^([^?#]+)([?#][\s\S]*)?$/.exec(rawLink);
+  if (!match) return null;
+  const normalized = normPath(match[1]);
+  const matched = pageByPath.get(normalized) || pageByPath.get(normalized.toLowerCase()) || null;
+  return matched ? normPath(matched.path) + (match[2] || "") : null;
+}
+function normalizeInsertAttrs(opType, attrs) {
+  const next = { ...attrs };
+  if (typeof next.link === "string" && next.link) {
+    next["link.href"] = matchPageForLink(next.link) || next.link;
+    delete next.link;
+    if (opType !== "text" && next.htmlTag === "a") delete next.htmlTag;
+  }
+  return next;
+}
 let page = spec.pageNodeId ? tree.get(spec.pageNodeId) : null;
 if (!page || page.type !== "WebPageNode" || normPath(page.path) !== target) {
   page = pages.find((item) => normPath(item.path) === target) || null;
@@ -1849,14 +1880,30 @@ if (spec.primaryColor) {
   }
 }
 async function writeSection(sectionSpec) {
+  const isFixedRoot = Boolean(
+    !breakpoint.$layoutTemplateId &&
+    sectionSpec.ops &&
+    sectionSpec.ops[0] &&
+    sectionSpec.ops[0].parent === "$bp" &&
+    sectionSpec.ops[0].attrs &&
+    sectionSpec.ops[0].attrs.position === "fixed",
+  );
+  const sectionHost = isFixedRoot ? breakpoint : parent;
   let insertIndex = null;
   let stale = [];
   if (sectionSpec.marker) {
-    const children = tree.get(parent.id)?.children || parent.children || [];
-    for (let i = 0; i < children.length; i++) {
-      if (children[i].elementId === sectionSpec.marker && insertIndex === null) insertIndex = i;
+    const hostChildren = tree.get(sectionHost.id)?.children || sectionHost.children || [];
+    for (let i = 0; i < hostChildren.length; i++) {
+      if (hostChildren[i].elementId === sectionSpec.marker && insertIndex === null) insertIndex = i;
     }
-    stale = children.filter((child) => child.elementId === sectionSpec.marker).map((child) => child.id);
+    const staleIds = new Set();
+    for (const container of sectionHost.id === parent.id ? [parent] : [parent, breakpoint]) {
+      const list = tree.get(container.id)?.children || container.children || [];
+      for (const child of list) {
+        if (child.elementId === sectionSpec.marker) staleIds.add(child.id);
+      }
+    }
+    stale = Array.from(staleIds);
   }
   const assetUrls = [];
   for (const op of sectionSpec.ops || []) {
@@ -1878,7 +1925,7 @@ async function writeSection(sectionSpec) {
     throw new Error("來源圖層的圖片未能載入，請重試：" + sectionSpec.marker);
   }
   if (!spec.rendered) for (const id of stale) tree.remove(id);
-  const ids = { $bp: parent.id };
+  const ids = { $bp: sectionHost.id };
   let sectionId = null;
   const stagedRoots = [];
   try {
@@ -1886,16 +1933,19 @@ async function writeSection(sectionSpec) {
       const parentId = ids[op.parent];
       if (!parentId) throw new Error("缺少父層 " + op.parent);
       const wireId = spec.rendered ? writeNonce + "-" + op.id : op.id;
+      const insertAttrs = normalizeInsertAttrs(op.op, op.attrs || {});
+      const href = insertAttrs["link.href"];
+      delete insertAttrs["link.href"];
       let node;
       if (op.op === "image") {
         const fill = assetFills[op.url];
         if (!fill) continue;
-        node = tree.insert("FrameNode", wireId, { ...op.attrs, parent: parentId, fill });
+        node = tree.insert("FrameNode", wireId, { ...insertAttrs, parent: parentId, fill });
       } else if (op.op === "text") {
-        node = tree.insert("RichTextNode", wireId, { ...op.attrs, parent: parentId });
+        node = tree.insert("RichTextNode", wireId, { ...insertAttrs, parent: parentId });
       } else {
         const fill = assetFills[op.backgroundUrl];
-        node = tree.insert("FrameNode", wireId, { ...op.attrs, parent: parentId, ...(fill ? { fill } : {}) });
+        node = tree.insert("FrameNode", wireId, { ...insertAttrs, parent: parentId, ...(fill ? { fill } : {}) });
       }
       ids[op.id] = node.id;
       if (op.parent === "$bp") stagedRoots.push(node.id);
@@ -1916,13 +1966,21 @@ async function writeSection(sectionSpec) {
           "appearEffect.enter.transition.ease": [0.22, 1, 0.36, 1],
         });
       }
+      if (href) {
+        try {
+          tree.patch(node.id, { "link.href": href });
+        } catch { /* Report unresolved links after reading the node. */ }
+      }
       if (op.responsive) {
         const tabletFill = assetFills[op.replicaImages?.tablet];
         const phoneFill = assetFills[op.replicaImages?.phone];
-        patchReplica(tabletBp, node.id, tabletFill ? { ...op.responsive.tablet, fill: tabletFill } : op.responsive.tablet);
-        patchReplica(phoneBp, node.id, phoneFill ? { ...op.responsive.phone, fill: phoneFill } : op.responsive.phone);
+        const tabletAttrs = op.responsive.tablet ? normalizeInsertAttrs(op.op, op.responsive.tablet) : undefined;
+        const phoneAttrs = op.responsive.phone ? normalizeInsertAttrs(op.op, op.responsive.phone) : undefined;
+        patchReplica(tabletBp, node.id, tabletFill ? { ...tabletAttrs, fill: tabletFill } : tabletAttrs);
+        patchReplica(phoneBp, node.id, phoneFill ? { ...phoneAttrs, fill: phoneFill } : phoneAttrs);
       }
       const readBack = tree.get(node.id);
+      if (href && readBack?.link?.href !== href) warnings.push("連結未能寫入 " + href);
       if (!readBack || (typeof readBack.text === "string" && op.op === "text" && normReadBackText(readBack.text) !== normReadBackText(op.attrs.text))) {
         if (spec.rendered) throw new Error("圖層寫入後讀回不一致：" + op.attrs.name);
         warnings.push("圖層讀回不一致: " + op.attrs.name);
@@ -1945,7 +2003,7 @@ async function writeSection(sectionSpec) {
     }
     if (spec.rendered) {
       if (!sectionId || stagedRoots.length !== 1) throw new Error("區塊沒有有效的根圖層：" + sectionSpec.marker);
-      if (insertIndex !== null && typeof tree.setParent === "function") await tree.setParent(sectionId, parent.id, insertIndex);
+      if (insertIndex !== null && typeof tree.setParent === "function") await tree.setParent(sectionId, sectionHost.id, insertIndex);
     }
   } catch (error) {
     if (spec.rendered) for (const id of stagedRoots) {
@@ -1970,27 +2028,32 @@ let presentMarkers = [];
 if (spec.expectedMarkers) {
   const realized = tree.get(parent.id);
   const children = realized?.children || [];
-  presentMarkers = children.map(child => child.elementId || child.name || child.id);
-  const desired = spec.expectedMarkers.map(marker => children.find(child => child.elementId === marker));
+  const bpChildren = parent.id === breakpoint.id ? [] : (tree.get(breakpoint.id)?.children || []);
+  const allChildren = [...children, ...bpChildren];
+  presentMarkers = allChildren.map(child => child.elementId || child.name || child.id);
+  const desired = spec.expectedMarkers.map(marker => allChildren.find(child => child.elementId === marker));
   spec.expectedMarkers.forEach((marker, index) => { if (!desired[index]) missingMarkers.push(marker); });
   if (missingMarkers.length) {
     warnings.push("頁面讀回缺少區塊，請覆核 Framer 圖層");
   } else {
     const managed = child => /^readdy-(?:sec-[0-9]+|dom(?:-[0-9]+)+)$/.test(child.elementId || "");
-    const first = children.findIndex(managed);
     const keepIds = new Set(desired.map(child => child.id));
     for (const child of children.filter(managed)) {
       if (!keepIds.has(child.id)) tree.remove(child.id);
     }
     if (spec.pageGeometry && parent.id !== breakpoint.id) {
-      for (const previous of (tree.get(breakpoint.id)?.children || []).filter(managed)) tree.remove(previous.id);
+      for (const previous of bpChildren.filter(managed)) {
+        if (!keepIds.has(previous.id)) tree.remove(previous.id);
+      }
     }
-    if (typeof tree.setParent === "function") {
-      for (let i = 0; i < desired.length; i++) {
+    const desiredInParent = desired.filter(child => children.some(item => item.id === child.id));
+    const first = children.findIndex(managed);
+    if (typeof tree.setParent === "function" && first >= 0) {
+      for (let i = 0; i < desiredInParent.length; i++) {
         try {
-          await tree.setParent(desired[i].id, parent.id, first + i);
+          await tree.setParent(desiredInParent[i].id, parent.id, first + i);
         } catch {
-          warnings.push("區塊順序未能還原: " + desired[i].elementId);
+          warnings.push("區塊順序未能還原: " + desiredInParent[i].elementId);
         }
       }
     }

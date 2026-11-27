@@ -504,4 +504,83 @@ for (const heading of ['OFFICE DESIGN & BUILD', '讓現場音樂，成為賓客�
   }
 }
 
+// Verify fixed header mounts directly on Breakpoint (not inside overflow:clip Readdy Content),
+// internal page links resolve to existing WebPageNode without invalid htmlTag="a", and appear/shadow propagate.
+{
+  const fixedNavOps = buildRenderedOps({
+    id: 'dom-nav',
+    renderedScenes: {
+      desktop: {
+        id: 'dom-nav', type: 'section', htmlTag: 'header',
+        layout: { position: 'fixed', width: '100%', height: '80px', left: '0px', top: '0px', zIndex: 50 },
+        style: { shadow: '0px 4px 12px rgba(0, 0, 0, 0.12)' },
+        appear: { opacity: 0, y: '18px', delay: 0.15 },
+        children: [{
+          id: 'nav-lnk', type: 'stack', name: 'a', htmlTag: 'a', href: '/Services/',
+          layout: { position: 'absolute', left: '200px', top: '24px', width: '80px', height: '24px' },
+          children: [{ id: 'nav-t1', type: 'text', text: '服務一覽', layout: { position: 'absolute', left: '0px', top: '0px', width: '80px', height: 'auto' } }],
+        }],
+      },
+    },
+  }, true, { desktop: '1536px', tablet: '834px', phone: '390px' });
+  assert.equal(fixedNavOps[0].attrs.position, 'fixed');
+  assert.equal(fixedNavOps[0].attrs.zIndex, 50);
+  assert.equal(fixedNavOps[0].attrs.shadow, '0px 4px 12px rgba(0, 0, 0, 0.12)');
+  assert.deepEqual(fixedNavOps[0].appear, { opacity: 0, y: '18px', delay: 0.15 });
+
+  const bpDesktop = { id: 'bp-d', name: 'Desktop', type: 'FrameNode', layout: 'stack', width: '1536px', children: [] as Array<{ id: string; elementId: string }> };
+  const bpTablet = { id: 'bp-t', name: 'Tablet', type: 'FrameNode', width: '834px', left: '1616px' };
+  const bpPhone = { id: 'bp-p', name: 'Phone', type: 'FrameNode', width: '390px', left: '2530px' };
+  const homePage = { id: 'pg-home', path: '/', type: 'WebPageNode', children: [bpDesktop, bpTablet, bpPhone] };
+  const servicesPage = { id: 'pg-services', path: '/services', type: 'WebPageNode', children: [] };
+  const localNodes = new Map<string, Record<string, unknown>>([['pg-home', homePage], ['bp-d', bpDesktop]]);
+  let linkFrameId = '';
+  const patchedLinks: Array<{ id: string; attrs: Record<string, unknown> }> = [];
+  const localTree = {
+    get: (id: string) => localNodes.get(id),
+    getNodesOfTypes: (type: string) => (type === 'WebPageNode' ? [homePage, servicesPage] : []),
+    insert: (type: string, id: string, attrs: Record<string, unknown>) => {
+      const node: Record<string, unknown> = { id, type, ...attrs, children: [] };
+      assert.equal(attrs.link, undefined, 'Framer ignores string link attributes');
+      if (attrs.name === 'a') {
+        linkFrameId = id;
+        assert.equal(attrs.htmlTag, undefined, 'Framer supplies the anchor tag for linked frames');
+      }
+      localNodes.set(id, node);
+      const pNode = localNodes.get(String(attrs.parent || '')) as { children?: Array<{ id: string; elementId: string }> } | undefined;
+      if (pNode && Array.isArray(pNode.children)) pNode.children.push({ id, elementId: String(attrs.elementId || '') });
+      return node;
+    },
+    remove: (id: string) => {
+      for (const n of localNodes.values()) {
+        if (Array.isArray(n.children)) n.children = (n.children as Array<{ id: string }>).filter((c) => c.id !== id);
+      }
+      localNodes.delete(id);
+    },
+    setParent: () => {},
+    patch: (id: string, attrs: Record<string, unknown>) => {
+      patchedLinks.push({ id, attrs });
+      const n = localNodes.get(id);
+      if (n) {
+        Object.assign(n, attrs);
+        if ('link.href' in attrs) n.link = { href: attrs['link.href'] };
+      }
+    },
+    assetReference: async (u: string) => ({ url: u }),
+  };
+  const fixedProgram = buildFramerProgram({
+    stamp: 'fixednav', pagePath: '/', pageTitle: 'Home', pageNodeId: 'pg-home',
+    desktopWidth: '1536px', rendered: true,
+    pageGeometry: { desktop: { height: 2400 }, tablet: { height: 2600 }, phone: { height: 3000 } },
+    sections: [{ marker: 'readdy-dom-nav', ops: fixedNavOps }],
+    expectedMarkers: ['readdy-dom-nav'],
+  });
+  const fixedRes = await new Function('api', `return (async () => { ${fixedProgram} })();`)({ tree: localTree });
+  assert.deepEqual(fixedRes.missingMarkers, []);
+  assert.ok(bpDesktop.children.some((c) => c.elementId === 'readdy-dom-nav'), 'Fixed header must mount directly on Breakpoint');
+  assert.ok(linkFrameId);
+  assert.deepEqual(localNodes.get(linkFrameId)?.link, { href: '/services' }, 'Framer exposes native links through link.href');
+  assert.ok(patchedLinks.some((p) => p.attrs['appearEffect.enter.opacity'] === 0), 'Appear effect should be patched on rendered node');
+}
+
 console.log('Readdy rendered source and Framer breakpoint tests passed');
