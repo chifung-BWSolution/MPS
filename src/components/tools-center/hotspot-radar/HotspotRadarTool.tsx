@@ -6,7 +6,7 @@
  * v1 只做「瀏覽 → 收藏 → 標記」，不生成腳本、不推排期。
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   FlaskConical,
@@ -30,7 +30,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/context/AuthContext';
 import { can } from '@/lib/contentPermissions';
-import { isHotItem, sortHotspotItems } from '@/lib/hotspotRadar';
+import { sanitizeHotspotFilters } from '@/lib/hotspotFeed';
 import { cn } from '@/lib/utils';
 import { useHotspotRadar } from '@/hooks/useHotspotRadar';
 import type { HotspotFavoriteStatus, HotspotFeedItem, HotspotRunRow } from '@/types/hotspotRadar';
@@ -40,7 +40,6 @@ import {
   DEFAULT_FILTERS,
   HotspotFilterBar,
   type HotspotFilters,
-  type HotspotSourceTab,
 } from './HotspotFilterBar';
 import { HotspotTargetsPanel } from './HotspotTargetsPanel';
 
@@ -71,8 +70,7 @@ function readStoredFilters(): HotspotFilters {
   try {
     const raw = window.localStorage.getItem(FILTER_STORAGE_KEY);
     if (!raw) return { ...DEFAULT_FILTERS };
-    const parsed = JSON.parse(raw) as Partial<HotspotFilters>;
-    return { ...DEFAULT_FILTERS, ...parsed };
+    return sanitizeHotspotFilters(JSON.parse(raw) as Partial<HotspotFilters>);
   } catch {
     return { ...DEFAULT_FILTERS };
   }
@@ -112,23 +110,30 @@ export function HotspotRadarTool() {
   const { systemUser } = useAuth();
   const canWrite = can({ role: systemUser?.role ?? null }, 'write');
   const canManage = can({ role: systemUser?.role ?? null }, 'manage_settings');
+  const [filters, setFilters] = useState<HotspotFilters>(() => readStoredFilters());
 
   const {
     items,
+    counts,
     targets,
     runs,
     daily,
     loading,
+    loadingMore,
+    hasMore,
+    targetsLoaded,
+    runsLoaded,
+    dailyLoaded,
     error,
     missingSchema,
     scanningAll,
     saving,
     warnings,
     refresh,
+    loadMore,
     actions,
-  } = useHotspotRadar();
+  } = useHotspotRadar(filters);
 
-  const [filters, setFilters] = useState<HotspotFilters>(() => readStoredFilters());
   const [targetsOpen, setTargetsOpen] = useState(false);
   const [noteItem, setNoteItem] = useState<HotspotFeedItem | null>(null);
   const [noteText, setNoteText] = useState('');
@@ -147,50 +152,19 @@ export function HotspotRadarTool() {
     [targets],
   );
 
-  const counts = useMemo<Record<HotspotSourceTab, number>>(() => {
-    const next: Record<HotspotSourceTab, number> = {
-      all: items.length,
-      account: 0,
-      hashtag: 0,
-      ad_keyword: 0,
-      library: 0,
-    };
-    for (const item of items) {
-      next[item.source_kind] += 1;
-      if (item.favorite) next.library += 1;
-    }
-    return next;
-  }, [items]);
-
-  const filtered = useMemo(() => {
-    const now = Date.now();
-    const windowMs = filters.days * 86_400_000;
-
-    return items.filter((item) => {
-      const isLibraryTab = filters.source === 'library';
-      if (isLibraryTab) {
-        if (!item.favorite) return false;
-      } else if (filters.source !== 'all' && item.source_kind !== filters.source) {
-        return false;
-      }
-
-      if (!isLibraryTab && filters.onlyUnfavorited && item.favorite) return false;
-      if (filters.platform !== 'all' && item.platform !== filters.platform) return false;
-      if (filters.media !== 'all' && item.media_type !== filters.media) return false;
-
-      // 已無互動門檻：所有入池內容預設都顯示（使用者要求移除互動數閘門）
-      if (filters.onlyHot && !isHotItem(item)) return false;
-
-      // posted_at 為 NULL 的列不因時間窗被丟掉（PRD §7.2）
-      if (item.posted_at) {
-        const time = Date.parse(item.posted_at);
-        if (Number.isFinite(time) && now - time > windowMs) return false;
-      }
-      return true;
-    });
-  }, [items, filters]);
-
-  const sorted = useMemo(() => sortHotspotItems(filtered, filters.sort), [filtered, filters.sort]);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || !hasMore) return undefined;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) void loadMore();
+      },
+      { rootMargin: '240px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, loadMore, items.length]);
 
   const lastRun = useMemo(() => runs.find((run) => run.meta?.kind !== 'test') ?? null, [runs]);
   const fetchRun = useMemo(
@@ -201,7 +175,18 @@ export function HotspotRadarTool() {
   const demoMode = lastRun?.meta?.provider === 'mock';
   const otherError = error;
 
+  // 同類 warning 合併（例如 6 個 Hashtag＋1 個廣告）：只顯示一行並標示數量
+  const warningGroups = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const code of warnings) counts.set(code, (counts.get(code) ?? 0) + 1);
+    return [...counts.entries()];
+  }, [warnings]);
+
   const handleScan = useCallback(async () => {
+    if (!targetsLoaded) {
+      toast.error('監測目標還在載入');
+      return;
+    }
     if (activeTargetCount === 0) {
       toast.error('請先新增至少一個啟用中的監測目標');
       setTargetsOpen(true);
@@ -209,7 +194,7 @@ export function HotspotRadarTool() {
     }
     const ok = await actions.scanAll();
     if (ok) toast.success('已更新熱門內容');
-  }, [actions, activeTargetCount]);
+  }, [actions, activeTargetCount, targetsLoaded]);
 
   const handleToggleDaily = useCallback(async () => {
     try {
@@ -272,7 +257,7 @@ export function HotspotRadarTool() {
         <HotspotEmptyState
           tone="warning"
           title="功能尚未啟用"
-          description="熱點雷達的資料表還沒建立（Postgres 42P01）。請先套用本次 migration 再重新載入；在那之前這個入口不會影響工具中心的其他功能。"
+          description="熱點雷達的列表還沒準備好（資料表或 hotspot_feed 視圖尚未建立）。請先套用 migration 20261127200000_hotspot_feed.sql 再重新載入；在那之前這個入口不會影響工具中心的其他功能。"
           action={
             <Button size="sm" variant="outline" onClick={() => void refresh()}>
               <RefreshCw size={13} />
@@ -324,7 +309,7 @@ export function HotspotRadarTool() {
                 daily?.enabled && 'bg-teal-600 text-white hover:bg-teal-700',
               )}
               onClick={() => void handleToggleDaily()}
-              disabled={!canManage || saving}
+              disabled={!canManage || saving || !dailyLoaded}
               title={
                 canManage
                   ? '香港時間。週一至六：00:00、06:00、09:00、11:00、12:00、13:00、15:00、17:00、18:00。週日：00:00、06:00、12:00、18:00。'
@@ -356,9 +341,11 @@ export function HotspotRadarTool() {
           <div className="text-right text-[12px] text-muted-foreground">
             <div className="inline-flex items-center gap-1.5">
               <Radar size={13} className="text-teal-600" />
-              {isStaleRunning(fetchRun)
-                ? '上次抓取未完成'
-                : `上次抓取 ${formatRelative(fetchRun?.started_at ?? null)}`}
+              {!runsLoaded
+                ? '上次抓取載入中'
+                : isStaleRunning(fetchRun)
+                  ? '上次抓取未完成'
+                  : `上次抓取 ${formatRelative(fetchRun?.started_at ?? null)}`}
             </div>
             {fetchRun?.status === 'error' && (
               <div className="mt-1 max-w-[280px] text-rose-600">
@@ -399,8 +386,11 @@ export function HotspotRadarTool() {
 
       {warnings.length > 0 && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-relaxed text-amber-800">
-          {warnings.map((code) => (
-            <div key={code}>{describeWarning(code)}</div>
+          {warningGroups.map(([code, count]) => (
+            <div key={code}>
+              {describeWarning(code)}
+              {count > 1 ? `（${count} 個目標）` : ''}
+            </div>
           ))}
         </div>
       )}
@@ -408,7 +398,7 @@ export function HotspotRadarTool() {
       <HotspotFilterBar filters={filters} counts={counts} onChange={updateFilters} />
 
       {/* 內容 */}
-      {loading && items.length === 0 ? (
+      {(loading && items.length === 0) || (!loading && items.length === 0 && !targetsLoaded) ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 xl:grid-cols-6">
           {[0, 1, 2, 3, 4, 5].map((index) => (
             <div
@@ -432,13 +422,15 @@ export function HotspotRadarTool() {
             </Button>
           }
         />
-      ) : sorted.length === 0 ? (
+      ) : items.length === 0 ? (
         <HotspotEmptyState
           title="這個條件下沒有內容"
           description={
-            items.length === 0
-              ? '還沒有抓到任何內容。按「立即抓取」或等每日自動抓取。'
-              : '試試放寬時間窗，或取消「只看爆款」。'
+            counts == null
+              ? '正在確認這個條件下有沒有內容。'
+              : counts.all === 0 && counts.library === 0
+                ? '還沒有抓到任何內容。按「立即抓取」或等每日自動抓取。'
+                : '試試放寬時間窗，或取消「只看爆款」。'
           }
           action={
             <Button size="sm" variant="outline" onClick={() => updateFilters({ ...DEFAULT_FILTERS })}>
@@ -450,7 +442,8 @@ export function HotspotRadarTool() {
         <>
           <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-muted-foreground">
             <span>
-              顯示 {sorted.length} / {items.length} 則
+              已載入 {items.length}
+              {counts ? ` / ${counts[filters.source] ?? 0}` : ''} 則
               {filters.source === 'library' ? '（靈感庫）' : ''}
             </span>
             <button type="button" className="underline" onClick={() => void refresh()} disabled={loading}>
@@ -459,7 +452,7 @@ export function HotspotRadarTool() {
           </div>
 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 xl:grid-cols-6">
-            {sorted.map((item) => (
+            {items.map((item) => (
               <HotspotCard
                 key={item.id}
                 item={item}
@@ -471,6 +464,11 @@ export function HotspotRadarTool() {
               />
             ))}
           </div>
+          {hasMore && (
+            <div ref={sentinelRef} className="flex justify-center py-3 text-[12px] text-muted-foreground">
+              {loadingMore ? '載入更多…' : '繼續捲動以載入'}
+            </div>
+          )}
         </>
       )}
 

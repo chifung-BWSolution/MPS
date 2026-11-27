@@ -38,23 +38,27 @@ $$;
 drop function if exists public.hotspot_radar_set_daily(boolean);
 drop function if exists public.hotspot_radar_daily_status();
 
--- ④ 依 FK 順序刪表（favorites → items → targets → runs → settings）
+-- ④ 列表 view 先於底表
+drop view if exists public.hotspot_feed;
+
+-- ⑤ 依 FK 順序刪表（favorites → items → targets → runs → settings）
 drop table if exists public.hotspot_favorites;
 drop table if exists public.hotspot_items;
 drop table if exists public.hotspot_targets;
 drop table if exists public.hotspot_runs;
 drop table if exists public.hotspot_settings;
 
--- ⑤ 刪版本記錄，否則日後 db push 會跳過這三支、重建時缺表
+-- ⑥ 刪版本記錄，否則日後 db push 會跳過這些 migration、重建時缺表
 delete from supabase_migrations.schema_migrations
  where version in (
    '20261126150000',
    '20261126151000',
    '20261126152000',
-   '20261127183000'
+   '20261127183000',
+   '20261127200000'
  );
 
--- ⑥ 前端回滾（手動）：
+-- ⑦ 前端回滾（手動）：
 --    revert src/context/AppContext.tsx、src/components/tools-center/ToolsCenterModule.tsx、
 --           src/lib/contentNavigation.ts、src/components/tools-center/content/social/SocialSubNav.tsx、
 --           supabase/config.toml、package.json

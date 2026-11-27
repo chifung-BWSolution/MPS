@@ -48,6 +48,14 @@ import {
   type HotspotKind,
   type HotspotSortableItem,
 } from '../src/lib/hotspotRadar.ts';
+import {
+  HOTSPOT_PAGE_SIZE,
+  feedItemVisible,
+  feedOrFilter,
+  hotspotFeedOrder,
+  sanitizeHotspotFilters,
+  sortByFeedRank,
+} from '../src/lib/hotspotFeed.ts';
 
 let passed = 0;
 
@@ -272,6 +280,110 @@ check('sortHotspotItems 不改動原陣列', () => {
 check('HOTSPOT_SORT_KEYS 五種齊全', () => {
   assert.equal(HOTSPOT_SORT_KEYS.length, 5);
   assert.deepEqual([...HOTSPOT_SORT_KEYS], ['composite', 'engagement', 'relative', 'newest', 'ad_days']);
+});
+
+check('資料庫排序鍵與 sortHotspotItems 全序一致', () => {
+  const extra: HotspotSortableItem[] = [
+    ...sortFixtures,
+    { id: 'h', source_kind: 'ad_keyword', engagement: 10, relative_heat: 4, posted_at: '2026-09-01T00:00:00.000Z', ad_active_days: null },
+    { id: 'i', source_kind: 'account', engagement: 70, relative_heat: 1.6, posted_at: null, ad_active_days: null },
+  ];
+  for (const sort of HOTSPOT_SORT_KEYS) {
+    assert.equal(
+      sortByFeedRank(extra, sort).map((item) => item.id).join(','),
+      sortHotspotItems(extra, sort).map((item) => item.id).join(','),
+      sort,
+    );
+  }
+  const tie: HotspotSortableItem[] = [
+    { id: 'z', source_kind: 'hashtag', engagement: 5, relative_heat: null, posted_at: null, ad_active_days: null },
+    { id: 'a', source_kind: 'hashtag', engagement: 5, relative_heat: null, posted_at: null, ad_active_days: null },
+  ];
+  for (const sort of HOTSPOT_SORT_KEYS) {
+    assert.equal(
+      sortByFeedRank(tie, sort).map((item) => item.id).join(','),
+      sortHotspotItems(tie, sort).map((item) => item.id).join(','),
+      sort,
+    );
+  }
+});
+
+check('相對熱度的第二鍵在 NULL 時不比互動', () => {
+  const relative = hotspotFeedOrder('relative').map((order) => order.column);
+  assert.deepEqual(relative, ['relative_heat', 'relative_tie', 'id']);
+  const nullable = hotspotFeedOrder('newest').find((order) => order.column === 'posted_at');
+  assert.equal(nullable?.nullsFirst, false);
+});
+
+check('時間窗保留 posted_at 為空，爆款條件另組 AND', () => {
+  const now = Date.parse('2026-11-27T00:00:00.000Z');
+  const plain = feedOrFilter({ days: 30, onlyHot: false }, now);
+  assert.equal(plain, 'posted_at.is.null,posted_at.gte."2026-10-28T00:00:00.000Z"');
+  const hot = feedOrFilter({ days: 7, onlyHot: true }, now);
+  assert.ok(hot.startsWith('and(or(posted_at.is.null,posted_at.gte."2026-11-20T00:00:00.000Z"),or('));
+  assert.ok(hot.includes('source_kind.eq.ad_keyword,ad_active_days.gte.21'));
+  assert.ok(hot.includes('source_kind.neq.ad_keyword,relative_heat.gte.2'));
+});
+
+check('列表可見性：NULL 時間留下、過期丟掉、靈感庫忽略未收藏閘門', () => {
+  const now = Date.parse('2026-11-27T00:00:00.000Z');
+  const filters = sanitizeHotspotFilters({ days: 30, source: 'all' });
+  assert.equal(
+    feedItemVisible(
+      { source_kind: 'account', platform: 'instagram', media_type: 'reel', posted_at: null, favorite: null },
+      filters,
+      now,
+    ),
+    true,
+  );
+  assert.equal(
+    feedItemVisible(
+      {
+        source_kind: 'account',
+        platform: 'instagram',
+        media_type: 'reel',
+        posted_at: '2026-10-27T23:59:59.999Z',
+        favorite: null,
+      },
+      filters,
+      now,
+    ),
+    false,
+  );
+  assert.equal(
+    feedItemVisible(
+      {
+        source_kind: 'account',
+        platform: 'instagram',
+        media_type: 'reel',
+        posted_at: '2026-10-28T00:00:00.000Z',
+        favorite: null,
+      },
+      filters,
+      now,
+    ),
+    true,
+  );
+  const library = sanitizeHotspotFilters({ source: 'library', onlyUnfavorited: true });
+  assert.equal(
+    feedItemVisible(
+      { source_kind: 'account', platform: 'instagram', media_type: 'reel', posted_at: null, favorite: { id: 'f' } },
+      library,
+      now,
+    ),
+    true,
+  );
+  assert.equal(
+    feedItemVisible(
+      { source_kind: 'account', platform: 'instagram', media_type: 'reel', posted_at: null, favorite: null },
+      library,
+      now,
+    ),
+    false,
+  );
+  assert.equal(sanitizeHotspotFilters({ days: 15 as 7, sort: 'nope' as 'newest' }).days, 30);
+  assert.equal(sanitizeHotspotFilters({ days: 15 as 7, sort: 'nope' as 'newest' }).sort, 'composite');
+  assert.equal(HOTSPOT_PAGE_SIZE, 30);
 });
 
 // ============================================================
@@ -721,6 +833,8 @@ if (!SKIP_WIRING) {
       'supabase/migrations/20261126151000_hotspot_radar_daily_cron.sql',
       'supabase/migrations/20261126152000_hotspot_radar_controls.sql',
       'supabase/migrations/20261127183000_hotspot_radar_cron_cadence.sql',
+      'supabase/migrations/20261127200000_hotspot_feed.sql',
+      'src/lib/hotspotFeed.ts',
       'scripts/rollback-hotspot-radar.sql',
     ];
     for (const file of files) {
@@ -749,6 +863,23 @@ if (!SKIP_WIRING) {
     assert.equal(hook.includes('fetch('), false);
     assert.equal(hook.includes('SERVICE_ROLE'), false);
     assert.ok(hook.includes('invokeContentFunction'));
+  });
+
+  check('列表第一頁走 hotspot_feed，不等設定接口', () => {
+    const hook = read('src/hooks/useHotspotRadar.ts');
+    const feed = read('supabase/migrations/20261127200000_hotspot_feed.sql');
+    assert.ok(hook.includes("from('hotspot_feed')"));
+    assert.ok(hook.includes('loadChrome'));
+    assert.equal(hook.includes('ITEM_LIMIT'), false);
+    assert.equal(hook.includes('.limit(500)'), false);
+    assert.equal(HOTSPOT_PAGE_SIZE, 30);
+    assert.ok(feed.includes('security_invoker = true'));
+    assert.ok(feed.includes('WHEN i.relative_heat >= 3 THEN 0'));
+    assert.ok(feed.includes('WHEN i.relative_heat >= 2 THEN 1'));
+    assert.ok(feed.includes('WHEN i.relative_heat >= 1.5 THEN 2'));
+    assert.ok(feed.includes("WHEN i.source_kind = 'ad_keyword' THEN COALESCE(i.ad_active_days, 0)"));
+    assert.ok(feed.includes('WHEN i.relative_heat IS NULL THEN 0'));
+    assert.ok(feed.includes('GRANT SELECT ON public.hotspot_feed TO authenticated, service_role'));
   });
 
   check('Edge Function 自行驗 JWT，不信任前端權限', () => {
@@ -817,6 +948,7 @@ if (!SKIP_WIRING) {
       read('supabase/migrations/20261126151000_hotspot_radar_daily_cron.sql'),
       read('supabase/migrations/20261126152000_hotspot_radar_controls.sql'),
       read('supabase/migrations/20261127183000_hotspot_radar_cron_cadence.sql'),
+      read('supabase/migrations/20261127200000_hotspot_feed.sql'),
     ]) {
       assert.equal(/\bdrop\s+(table|index|function|policy|column)\b/i.test(sql), false);
       assert.equal(/\btruncate\b/i.test(sql), false);

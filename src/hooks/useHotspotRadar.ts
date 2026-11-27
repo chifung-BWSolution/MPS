@@ -1,12 +1,11 @@
 ﻿/**
  * 熱點雷達 · 前端資料 hook（PRD §8）
  *
- * 兩條通道：
- *   1. supabase-js 直連（RLS 只有 SELECT）→ 讀 items / favorites / targets / runs
- *   2. Edge Function `hotspot-radar` → 抓取、收藏、設定、目標 CRUD（需要重算權限）
+ * 卡片的關鍵路徑只有 `hotspot_feed` 的第一頁（30 筆，排序在資料庫完成）。
+ * 收藏列已左連在 view 裡，不必再等另一張表。
+ * 設定、抓取紀錄、監測目標、頁籤計數並行載入，不擋住卡片。
  *
- * 資料表未建立（42P01／PGRST205）時 `missingSchema = true`，頁面顯示
- * 「功能尚未啟用」，不拋錯、不白屏。
+ * 資料表或 view 未建立（42P01／PGRST205）時 `missingSchema = true`。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -17,6 +16,16 @@ import {
   isContentApiError,
   isContentSchemaMissing,
 } from '@/lib/contentApi';
+import {
+  feedItemVisible,
+  feedOrFilter,
+  hotspotFeedOrder,
+  HOTSPOT_PAGE_SIZE,
+  sanitizeHotspotFilters,
+  type HotspotFeedCounts,
+  type HotspotFilters,
+  type HotspotSourceTab,
+} from '@/lib/hotspotFeed';
 import { toFiniteNumber } from '@/lib/hotspotRadar';
 import type {
   HotspotDailyStatus,
@@ -37,17 +46,79 @@ import type {
 
 export const ITEM_COLUMNS =
   'id,platform,source_kind,target_id,external_id,url,media_type,caption,thumbnail_url,author_handle,author_name,author_followers,posted_at,likes,comments,plays,engagement,account_median_engagement,relative_heat,sample_size,low_sample,ad_started_at,ad_active_days,ad_status,first_seen_at,last_seen_at,captured_at,raw';
+const FEED_COLUMNS =
+  `${ITEM_COLUMNS},favorite_id,favorite_status,favorite_note,favorite_created_by,favorite_created_at,favorite_updated_at`;
 export const TARGET_COLUMNS =
   'id,kind,platform,value,value_normalized,label,brand_id,active,notes,last_fetched_at,last_error,created_by,created_at,updated_at';
-export const FAVORITE_COLUMNS =
-  'id,item_id,status,note,created_by,created_at,updated_at';
 export const RUN_COLUMNS =
   'id,trigger,status,targets_fetched,items_new,items_upserted,api_calls,cost_usd,error_message,meta,started_at,finished_at';
 
-/** 一次最多讀幾則（每次抓取累積，保留近期 500 則在記憶體已經足夠） */
-const ITEM_LIMIT = 500;
-const FAVORITE_LIMIT = 500;
-const RUN_LIMIT = 30;
+const COUNT_TABS: readonly HotspotSourceTab[] = ['all', 'account', 'hashtag', 'ad_keyword', 'library'];
+
+interface FeedFilterBuilder {
+  eq(column: string, value: string): FeedFilterBuilder;
+  is(column: string, value: null): FeedFilterBuilder;
+  not(column: string, operator: 'is', value: null): FeedFilterBuilder;
+  or(filters: string): FeedFilterBuilder;
+  order(column: string, options: { ascending?: boolean; nullsFirst?: boolean }): FeedFilterBuilder;
+  range(from: number, to: number): FeedFilterBuilder;
+  then<TResult1 = { data: unknown[] | null; error: { code?: string; message?: string } | null; count: number | null }, TResult2 = never>(
+    onfulfilled?: ((value: { data: unknown[] | null; error: { code?: string; message?: string } | null; count: number | null }) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): PromiseLike<TResult1 | TResult2>;
+}
+
+function applyFeedFilters(query: FeedFilterBuilder, filters: HotspotFilters, now: number): FeedFilterBuilder {
+  let next = query;
+  if (filters.source === 'library') {
+    next = next.not('favorite_id', 'is', null);
+  } else if (filters.source !== 'all') {
+    next = next.eq('source_kind', filters.source);
+  }
+  if (filters.source !== 'library' && filters.onlyUnfavorited) {
+    next = next.is('favorite_id', null);
+  }
+  if (filters.platform !== 'all') next = next.eq('platform', filters.platform);
+  if (filters.media !== 'all') next = next.eq('media_type', filters.media);
+  return next.or(feedOrFilter(filters, now));
+}
+
+function orderedFeed(filters: HotspotFilters, now: number): FeedFilterBuilder {
+  let query = applyFeedFilters(
+    supabase.from('hotspot_feed').select(FEED_COLUMNS) as unknown as FeedFilterBuilder,
+    filters,
+    now,
+  );
+  for (const order of hotspotFeedOrder(filters.sort)) {
+    query = query.order(order.column, {
+      ascending: order.ascending,
+      ...(order.nullsFirst === false ? { nullsFirst: false } : {}),
+    });
+  }
+  return query;
+}
+
+async function fetchFeedPage(filters: HotspotFilters, offset: number, now: number): Promise<HotspotFeedItem[]> {
+  const { data, error } = await orderedFeed(filters, now).range(offset, offset + HOTSPOT_PAGE_SIZE - 1);
+  if (error) throw error;
+  return ((data ?? []) as Record<string, unknown>[]).map(mapFeedRow);
+}
+
+async function fetchFeedCounts(filters: HotspotFilters, now: number): Promise<HotspotFeedCounts> {
+  const entries = await Promise.all(
+    COUNT_TABS.map(async (source) => {
+      const query = applyFeedFilters(
+        supabase.from('hotspot_feed').select('id', { count: 'exact', head: true }) as unknown as FeedFilterBuilder,
+        { ...filters, source },
+        now,
+      );
+      const { count, error } = await query;
+      if (error) throw error;
+      return [source, count ?? 0] as const;
+    }),
+  );
+  return Object.fromEntries(entries) as HotspotFeedCounts;
+}
 
 function toNullableNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null;
@@ -103,6 +174,23 @@ function mapFavorite(row: Record<string, unknown>): HotspotFavoriteRow {
   };
 }
 
+function mapFeedRow(row: Record<string, unknown>): HotspotFeedItem {
+  const item = mapItem(row);
+  if (row.favorite_id == null) return { ...item, favorite: null };
+  return {
+    ...item,
+    favorite: mapFavorite({
+      id: row.favorite_id,
+      item_id: item.id,
+      status: row.favorite_status,
+      note: row.favorite_note,
+      created_by: row.favorite_created_by,
+      created_at: row.favorite_created_at,
+      updated_at: row.favorite_updated_at,
+    }),
+  };
+}
+
 function mapTarget(row: Record<string, unknown>): HotspotTargetRow {
   return {
     id: String(row.id),
@@ -141,6 +229,16 @@ function mapRun(row: Record<string, unknown>): HotspotRunRow {
   };
 }
 
+function mapDaily(value: unknown): HotspotDailyStatus | null {
+  if (!value || typeof value !== 'object') return null;
+  const row = value as Record<string, unknown>;
+  return {
+    enabled: row.enabled === true,
+    schedule: row.schedule == null ? null : String(row.schedule),
+    jobname: row.jobname == null ? null : String(row.jobname),
+  };
+}
+
 export interface HotspotActions {
   scan: (targetIds?: string[]) => Promise<boolean>;
   scanAll: () => Promise<boolean>;
@@ -154,14 +252,20 @@ export interface HotspotActions {
   testTarget: (kind: HotspotKind, value: string) => Promise<{ valid: boolean; preview_count: number; cost_usd: number }>;
 }
 
-export function useHotspotRadar(): {
+export function useHotspotRadar(filters: HotspotFilters): {
   items: HotspotFeedItem[];
+  counts: HotspotFeedCounts | null;
   targets: HotspotTargetRow[];
   runs: HotspotRunRow[];
   settings: HotspotSettings | null;
   usage: HotspotUsage | null;
   daily: HotspotDailyStatus | null;
   loading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
+  targetsLoaded: boolean;
+  runsLoaded: boolean;
+  dailyLoaded: boolean;
   error: string | null;
   missingSchema: boolean;
   scanning: boolean;
@@ -169,10 +273,11 @@ export function useHotspotRadar(): {
   saving: boolean;
   warnings: string[];
   refresh: () => Promise<void>;
+  loadMore: () => Promise<void>;
   actions: HotspotActions;
 } {
-  const [rawItems, setRawItems] = useState<HotspotItemRow[]>([]);
-  const [favorites, setFavorites] = useState<HotspotFavoriteRow[]>([]);
+  const [rawItems, setRawItems] = useState<HotspotFeedItem[]>([]);
+  const [counts, setCounts] = useState<HotspotFeedCounts | null>(null);
   const [targets, setTargets] = useState<HotspotTargetRow[]>([]);
   const [runs, setRuns] = useState<HotspotRunRow[]>([]);
   const [settings, setSettings] = useState<HotspotSettings | null>(null);
@@ -180,16 +285,31 @@ export function useHotspotRadar(): {
   const [daily, setDailyStatus] = useState<HotspotDailyStatus | null>(null);
 
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [targetsLoaded, setTargetsLoaded] = useState(false);
+  const [runsLoaded, setRunsLoaded] = useState(false);
+  const [dailyLoaded, setDailyLoaded] = useState(false);
+  const [feedError, setFeedError] = useState<string | null>(null);
+  const [chromeError, setChromeError] = useState<string | null>(null);
   const [missingSchema, setMissingSchema] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanningAll, setScanningAll] = useState(false);
   const [saving, setSaving] = useState(false);
   const [warnings, setWarnings] = useState<string[]>([]);
 
+  const safeFilters = useMemo(() => sanitizeHotspotFilters(filters), [filters]);
   const mountedRef = useRef(true);
-  /** 每次 refresh 遞增；回應回來時若不等于最新序號就丟棄（避免慢請求覆蓋新資料） */
-  const refreshSeqRef = useRef(0);
+  const filtersRef = useRef(safeFilters);
+  filtersRef.current = safeFilters;
+  /** 第一頁序號。篩選一變就遞增，在途的翻頁與計數全部作廢。 */
+  const feedSeqRef = useRef(0);
+  const offsetRef = useRef(0);
+  const hasMoreRef = useRef(false);
+  const loadingMoreRef = useRef(false);
+  const loadTokenRef = useRef(0);
+  /** 同一輪列表（含下拉）共用一個時間窗，避免頁面和計數在邊界上各算一次 now。 */
+  const windowRef = useRef(Date.now());
 
   useEffect(() => {
     mountedRef.current = true;
@@ -198,102 +318,178 @@ export function useHotspotRadar(): {
     };
   }, []);
 
-  const refresh = useCallback(async () => {
-    const seq = refreshSeqRef.current + 1;
-    refreshSeqRef.current = seq;
+  const applyPage = useCallback((rows: HotspotFeedItem[], offset: number, append: boolean) => {
+    offsetRef.current = offset + rows.length;
+    const more = rows.length === HOTSPOT_PAGE_SIZE;
+    hasMoreRef.current = more;
+    setHasMore(more);
+    setRawItems((current) => {
+      if (!append) return rows;
+      const seen = new Set(current.map((item) => item.id));
+      const fresh = rows.filter((item) => !seen.has(item.id));
+      return fresh.length === 0 ? current : [...current, ...fresh];
+    });
+  }, []);
+
+  const loadCounts = useCallback((seq: number, active: HotspotFilters, now: number) => {
+    void fetchFeedCounts(active, now)
+      .then((next) => {
+        if (!mountedRef.current || seq !== feedSeqRef.current) return;
+        setCounts(next);
+      })
+      .catch((thrown: unknown) => {
+        if (!mountedRef.current || seq !== feedSeqRef.current) return;
+        if (isContentSchemaMissing(thrown)) return;
+        setChromeError(contentErrorMessage(thrown));
+      });
+  }, []);
+
+  const loadFirstPage = useCallback(async (keepVisible: boolean) => {
+    const seq = feedSeqRef.current + 1;
+    feedSeqRef.current = seq;
+    loadTokenRef.current += 1;
+    loadingMoreRef.current = false;
+    offsetRef.current = 0;
+    hasMoreRef.current = false;
+    setHasMore(false);
+    setLoadingMore(false);
+    setFeedError(null);
+    if (!keepVisible) {
+      setRawItems([]);
+      setCounts(null);
+    }
     setLoading(true);
+
+    const active = filtersRef.current;
+    const now = Date.now();
+    windowRef.current = now;
+    loadCounts(seq, active, now);
     try {
-      const [itemResult, favoriteResult, targetResult, runResult] = await Promise.all([
-        supabase
-          .from('hotspot_items')
-          .select(ITEM_COLUMNS)
-          .order('posted_at', { ascending: false, nullsFirst: false })
-          .limit(ITEM_LIMIT),
-        supabase.from('hotspot_favorites').select(FAVORITE_COLUMNS).limit(FAVORITE_LIMIT),
-        supabase
-          .from('hotspot_targets')
-          .select(TARGET_COLUMNS)
-          .order('created_at', { ascending: true }),
-        supabase
-          .from('hotspot_runs')
-          .select(RUN_COLUMNS)
-          .order('started_at', { ascending: false })
-          .limit(RUN_LIMIT),
-      ]);
-
-      if (seq !== refreshSeqRef.current) return;
-
-      for (const result of [itemResult, favoriteResult, targetResult, runResult]) {
-        if (result.error) {
-          if (isContentSchemaMissing(result.error)) {
-            if (mountedRef.current) {
-              setMissingSchema(true);
-              setError(null);
-            }
-            return;
-          }
-          throw result.error;
-        }
-      }
-
-      // 設定與用量一定要經 Edge Function（每日開關狀態走 service_role RPC）
-      let settingsPayload: HotspotSettingsResponse | null = null;
-      try {
-        settingsPayload = await invokeContentFunction<HotspotSettingsResponse>('hotspot-radar', {
-          action: 'settings',
-        });
-      } catch (settingsError) {
-        if (seq !== refreshSeqRef.current) return;
-        if (isContentSchemaMissing(settingsError)) {
-          if (mountedRef.current) {
-            setMissingSchema(true);
-            setError(null);
-          }
-          return;
-        }
-        // 設定讀不到不應該讓整個列表消失，記在 error 但仍顯示資料
-        if (mountedRef.current) setError(contentErrorMessage(settingsError));
-      }
-
-      if (!mountedRef.current || seq !== refreshSeqRef.current) return;
-
+      const rows = await fetchFeedPage(active, 0, now);
+      if (!mountedRef.current || seq !== feedSeqRef.current) return;
       setMissingSchema(false);
-      setRawItems(((itemResult.data ?? []) as Record<string, unknown>[]).map(mapItem));
-      setFavorites(((favoriteResult.data ?? []) as Record<string, unknown>[]).map(mapFavorite));
-      setTargets(((targetResult.data ?? []) as Record<string, unknown>[]).map(mapTarget));
-      setRuns(((runResult.data ?? []) as Record<string, unknown>[]).map(mapRun));
-
-      if (settingsPayload) {
-        setSettings(settingsPayload.settings);
-        setUsage(settingsPayload.usage);
-        setDailyStatus(settingsPayload.daily ?? null);
-      }
+      applyPage(rows, 0, false);
     } catch (thrown) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== feedSeqRef.current) return;
       if (isContentSchemaMissing(thrown)) {
         setMissingSchema(true);
-        setError(null);
+        setFeedError(null);
       } else {
-        setError(contentErrorMessage(thrown));
+        setFeedError(contentErrorMessage(thrown));
       }
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && seq === feedSeqRef.current) setLoading(false);
+    }
+  }, [applyPage, loadCounts]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMoreRef.current) return;
+    const seq = feedSeqRef.current;
+    const token = loadTokenRef.current + 1;
+    loadTokenRef.current = token;
+    const offset = offsetRef.current;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const rows = await fetchFeedPage(filtersRef.current, offset, windowRef.current);
+      if (!mountedRef.current || seq !== feedSeqRef.current || token !== loadTokenRef.current) return;
+      applyPage(rows, offset, true);
+    } catch (thrown) {
+      if (!mountedRef.current || seq !== feedSeqRef.current || token !== loadTokenRef.current) return;
+      if (!isContentSchemaMissing(thrown)) setFeedError(contentErrorMessage(thrown));
+    } finally {
+      if (token === loadTokenRef.current) {
+        loadingMoreRef.current = false;
+        if (mountedRef.current) setLoadingMore(false);
+      }
+    }
+  }, [applyPage]);
+
+  const reloadTargets = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('hotspot_targets')
+      .select(TARGET_COLUMNS)
+      .order('created_at', { ascending: true });
+    if (!mountedRef.current) return;
+    if (error) {
+      if (!isContentSchemaMissing(error)) setChromeError(contentErrorMessage(error));
+      setTargetsLoaded(true);
+      return;
+    }
+    setTargets(((data ?? []) as Record<string, unknown>[]).map(mapTarget));
+    setTargetsLoaded(true);
+  }, []);
+
+  const reloadRuns = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('hotspot_runs')
+      .select(RUN_COLUMNS)
+      .order('started_at', { ascending: false })
+      .limit(30);
+    if (!mountedRef.current) return;
+    if (error) {
+      if (!isContentSchemaMissing(error)) setChromeError(contentErrorMessage(error));
+      setRunsLoaded(true);
+      return;
+    }
+    setRuns(((data ?? []) as Record<string, unknown>[]).map(mapRun));
+    setRunsLoaded(true);
+  }, []);
+
+  const reloadSettings = useCallback(async () => {
+    try {
+      const payload = await invokeContentFunction<HotspotSettingsResponse>('hotspot-radar', {
+        action: 'settings',
+      });
+      if (!mountedRef.current) return;
+      setSettings(payload.settings);
+      setUsage(payload.usage);
+      setDailyStatus(payload.daily ?? null);
+      setDailyLoaded(true);
+    } catch (thrown) {
+      if (!mountedRef.current) return;
+      if (isContentSchemaMissing(thrown)) return;
+      setChromeError(contentErrorMessage(thrown));
     }
   }, []);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const loadChrome = useCallback(async () => {
+    setChromeError(null);
+    await Promise.all([reloadTargets(), reloadRuns(), reloadSettings()]);
+  }, [reloadRuns, reloadSettings, reloadTargets]);
 
-  /** 處理 Edge Function 錯誤：把 budget／provider 類錯誤轉成可讀訊息 */
+  useEffect(() => {
+    void loadFirstPage(false);
+  }, [safeFilters, loadFirstPage]);
+
+  useEffect(() => {
+    void loadChrome();
+  }, [loadChrome]);
+
+  const refresh = useCallback(async () => {
+    await Promise.all([loadFirstPage(true), loadChrome()]);
+  }, [loadChrome, loadFirstPage]);
+
   const handleActionError = useCallback((thrown: unknown) => {
-    setError(contentErrorMessage(thrown));
+    setFeedError(contentErrorMessage(thrown));
   }, []);
+
+  const patchFavorite = useCallback((itemId: string, favorite: HotspotFavoriteRow | null) => {
+    const active = filtersRef.current;
+    setRawItems((current) =>
+      current.flatMap((item) => {
+        if (item.id !== itemId) return [item];
+        const next = { ...item, favorite };
+        return feedItemVisible(next, active, windowRef.current) ? [next] : [];
+      }),
+    );
+    loadCounts(feedSeqRef.current, active, windowRef.current);
+  }, [loadCounts]);
 
   const scan = useCallback(
     async (targetIds?: string[]): Promise<boolean> => {
       setScanning(true);
-      setError(null);
+      setFeedError(null);
       setWarnings([]);
       try {
         const response = await invokeContentFunction<{
@@ -306,7 +502,7 @@ export function useHotspotRadar(): {
           ...(targetIds && targetIds.length > 0 ? { target_ids: targetIds } : {}),
         });
         if (mountedRef.current) setWarnings(response.warnings ?? []);
-        await refresh();
+        await Promise.all([loadFirstPage(true), reloadRuns()]);
         return true;
       } catch (thrown) {
         handleActionError(thrown);
@@ -315,19 +511,19 @@ export function useHotspotRadar(): {
         if (mountedRef.current) setScanning(false);
       }
     },
-    [handleActionError, refresh],
+    [handleActionError, loadFirstPage, reloadRuns],
   );
 
   const scanAll = useCallback(async (): Promise<boolean> => {
     setScanningAll(true);
-    setError(null);
+    setFeedError(null);
     setWarnings([]);
     try {
       const response = await invokeContentFunction<{ warnings: string[] }>('hotspot-radar', {
         action: 'scan_all',
       });
       if (mountedRef.current) setWarnings(response.warnings ?? []);
-      await refresh();
+      await Promise.all([loadFirstPage(true), reloadRuns()]);
       return true;
     } catch (thrown) {
       handleActionError(thrown);
@@ -335,19 +531,19 @@ export function useHotspotRadar(): {
     } finally {
       if (mountedRef.current) setScanningAll(false);
     }
-  }, [handleActionError, refresh]);
+  }, [handleActionError, loadFirstPage, reloadRuns]);
 
   const favorite = useCallback(
     async (itemId: string, status: HotspotFavoriteStatus, note?: string | null) => {
       setSaving(true);
       try {
-        await invokeContentFunction('hotspot-radar', {
+        const response = await invokeContentFunction<{ favorite: Record<string, unknown> }>('hotspot-radar', {
           action: 'favorite',
           item_id: itemId,
           status,
           ...(note === undefined ? {} : { note }),
         });
-        await refresh();
+        if (mountedRef.current) patchFavorite(itemId, mapFavorite(response.favorite));
       } catch (thrown) {
         handleActionError(thrown);
         throw thrown;
@@ -355,7 +551,7 @@ export function useHotspotRadar(): {
         if (mountedRef.current) setSaving(false);
       }
     },
-    [handleActionError, refresh],
+    [handleActionError, patchFavorite],
   );
 
   const unfavorite = useCallback(
@@ -363,7 +559,7 @@ export function useHotspotRadar(): {
       setSaving(true);
       try {
         await invokeContentFunction('hotspot-radar', { action: 'unfavorite', item_id: itemId });
-        await refresh();
+        if (mountedRef.current) patchFavorite(itemId, null);
       } catch (thrown) {
         handleActionError(thrown);
         throw thrown;
@@ -371,7 +567,7 @@ export function useHotspotRadar(): {
         if (mountedRef.current) setSaving(false);
       }
     },
-    [handleActionError, refresh],
+    [handleActionError, patchFavorite],
   );
 
   const saveSettings = useCallback(
@@ -390,6 +586,7 @@ export function useHotspotRadar(): {
           setSettings(payload.settings);
           setUsage(payload.usage);
           setDailyStatus(payload.daily ?? null);
+          setDailyLoaded(true);
         }
       } catch (thrown) {
         handleActionError(thrown);
@@ -405,18 +602,26 @@ export function useHotspotRadar(): {
     async (enabled: boolean) => {
       setSaving(true);
       try {
-        // 兩件事要一起做：① 設定頁的開關（cron_scan 會讀它）② cron job 的 active
-        // 若 cron migration 尚未套用，②會回 job_missing；此時①仍然有效，不應讓整個操作失敗。
-        await invokeContentFunction<HotspotSettingsResponse>('hotspot-radar', {
+        const payload = await invokeContentFunction<HotspotSettingsResponse>('hotspot-radar', {
           action: 'update_settings',
           auto_daily: enabled,
         });
+        if (mountedRef.current) {
+          setSettings(payload.settings);
+          setUsage(payload.usage);
+          setDailyStatus(payload.daily ?? null);
+          setDailyLoaded(true);
+        }
         try {
-          await invokeContentFunction('hotspot-radar', { action: 'set_daily', enabled });
+          const toggled = await invokeContentFunction<{ daily: unknown }>('hotspot-radar', {
+            action: 'set_daily',
+            enabled,
+          });
+          const nextDaily = mapDaily(toggled.daily);
+          if (mountedRef.current && nextDaily) setDailyStatus(nextDaily);
         } catch (thrown) {
           if (!isContentApiError(thrown) || thrown.code !== 'job_missing') throw thrown;
         }
-        await refresh();
       } catch (thrown) {
         handleActionError(thrown);
         throw thrown;
@@ -424,7 +629,7 @@ export function useHotspotRadar(): {
         if (mountedRef.current) setSaving(false);
       }
     },
-    [handleActionError, refresh],
+    [handleActionError],
   );
 
   const createTarget = useCallback(
@@ -435,7 +640,7 @@ export function useHotspotRadar(): {
           action: 'create_target',
           ...input,
         });
-        await refresh();
+        await reloadTargets();
       } catch (thrown) {
         handleActionError(thrown);
         throw thrown;
@@ -443,7 +648,7 @@ export function useHotspotRadar(): {
         if (mountedRef.current) setSaving(false);
       }
     },
-    [handleActionError, refresh],
+    [handleActionError, reloadTargets],
   );
 
   const updateTarget = useCallback(
@@ -455,7 +660,7 @@ export function useHotspotRadar(): {
           id,
           ...patch,
         });
-        await refresh();
+        await reloadTargets();
       } catch (thrown) {
         handleActionError(thrown);
         throw thrown;
@@ -463,7 +668,7 @@ export function useHotspotRadar(): {
         if (mountedRef.current) setSaving(false);
       }
     },
-    [handleActionError, refresh],
+    [handleActionError, reloadTargets],
   );
 
   const deleteTarget = useCallback(
@@ -471,7 +676,7 @@ export function useHotspotRadar(): {
       setSaving(true);
       try {
         await invokeContentFunction('hotspot-radar', { action: 'delete_target', id });
-        await refresh();
+        await reloadTargets();
       } catch (thrown) {
         handleActionError(thrown);
         throw thrown;
@@ -479,43 +684,22 @@ export function useHotspotRadar(): {
         if (mountedRef.current) setSaving(false);
       }
     },
-    [handleActionError, refresh],
+    [handleActionError, reloadTargets],
   );
 
   const testTarget = useCallback(
     async (kind: HotspotKind, value: string) => {
-      const response = await invokeContentFunction<{
+      return invokeContentFunction<{
         valid: boolean;
         preview_count: number;
         cost_usd: number;
       }>('hotspot-radar', { action: 'test_target', kind, value });
-      return response;
     },
     [],
   );
 
-  const items = useMemo<HotspotFeedItem[]>(() => {
-    const favoriteByItem = new Map<string, HotspotFavoriteRow>();
-    for (const favorite of favorites) favoriteByItem.set(favorite.item_id, favorite);
-    return rawItems.map((item) => ({ ...item, favorite: favoriteByItem.get(item.id) ?? null }));
-  }, [rawItems, favorites]);
-
-  return {
-    items,
-    targets,
-    runs,
-    settings,
-    usage,
-    daily,
-    loading,
-    error,
-    missingSchema,
-    scanning,
-    scanningAll,
-    saving,
-    warnings,
-    refresh,
-    actions: {
+  const actions = useMemo<HotspotActions>(
+    () => ({
       scan,
       scanAll,
       favorite,
@@ -526,6 +710,32 @@ export function useHotspotRadar(): {
       updateTarget,
       deleteTarget,
       testTarget,
-    },
+    }),
+    [createTarget, deleteTarget, favorite, saveSettings, scan, scanAll, setDaily, testTarget, unfavorite, updateTarget],
+  );
+
+  return {
+    items: rawItems,
+    counts,
+    targets,
+    runs,
+    settings,
+    usage,
+    daily,
+    loading,
+    loadingMore,
+    hasMore,
+    targetsLoaded,
+    runsLoaded,
+    dailyLoaded,
+    error: feedError ?? chromeError,
+    missingSchema,
+    scanning,
+    scanningAll,
+    saving,
+    warnings,
+    refresh,
+    loadMore,
+    actions,
   };
 }

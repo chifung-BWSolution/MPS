@@ -8,29 +8,10 @@ import {
 } from '@/components/ui/select';
 import type { HotspotSortKey } from '@/types/hotspotRadar';
 import { cn } from '@/lib/utils';
+import { type HotspotFilters, type HotspotSourceTab } from '@/lib/hotspotFeed';
 
-export type HotspotSourceTab = 'all' | 'account' | 'hashtag' | 'ad_keyword' | 'library';
-
-export interface HotspotFilters {
-  source: HotspotSourceTab;
-  platform: 'all' | 'instagram' | 'facebook';
-  /** 以 posted_at 為準的回看天數 */
-  days: 7 | 30 | 90;
-  media: 'all' | 'reel' | 'video' | 'image' | 'carousel' | 'ad';
-  onlyHot: boolean;
-  onlyUnfavorited: boolean;
-  sort: HotspotSortKey;
-}
-
-export const DEFAULT_FILTERS: HotspotFilters = {
-  source: 'all',
-  platform: 'all',
-  days: 30,
-  media: 'all',
-  onlyHot: false,
-  onlyUnfavorited: false,
-  sort: 'composite',
-};
+export type { HotspotFilters, HotspotSourceTab } from '@/lib/hotspotFeed';
+export { DEFAULT_FILTERS } from '@/lib/hotspotFeed';
 
 const SOURCE_TABS: { id: HotspotSourceTab; label: string }[] = [
   { id: 'all', label: '全部' },
@@ -54,7 +35,7 @@ export function HotspotFilterBar({
   onChange,
 }: {
   filters: HotspotFilters;
-  counts: Record<HotspotSourceTab, number>;
+  counts: Partial<Record<HotspotSourceTab, number>> | null;
   onChange: (patch: Partial<HotspotFilters>) => void;
 }) {
   return (
@@ -73,7 +54,9 @@ export function HotspotFilterBar({
             )}
           >
             {tab.label}
-            <span className="ml-1 tabular-nums opacity-70">{counts[tab.id] ?? 0}</span>
+            <span className="ml-1 tabular-nums opacity-70">
+              {counts ? (counts[tab.id] ?? 0) : '–'}
+            </span>
           </button>
         ))}
       </div>
