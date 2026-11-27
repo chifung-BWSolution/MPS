@@ -6,12 +6,12 @@ export const TEXT_LLM_ORDER = ['grok', 'gemini', 'opencode'] as const;
 
 export type TextLlmProvider = (typeof TEXT_LLM_ORDER)[number];
 
-/** 下拉固定顯示的已接入模型。OpenCode 的實際模型名是 deepseek-*。 */
-export const CONNECTED_MODEL_LABELS: { id: TextLlmProvider; label: string }[] = [
-  { id: 'grok', label: 'Grok' },
-  { id: 'gemini', label: 'Gemini' },
-  { id: 'opencode', label: 'OpenCode' },
-];
+/** 尚未呼叫過時顯示的具體型號。各工具可再傳入自己的設定值。 */
+export const DEFAULT_CONNECTED_MODELS: Record<TextLlmProvider, string> = {
+  grok: 'grok-4.5',
+  gemini: 'gemini-2.5-flash',
+  opencode: 'deepseek-v4.1-flash',
+};
 
 export function modelProviderId(model: string): TextLlmProvider | null {
   const value = model.trim().toLowerCase();
@@ -26,21 +26,30 @@ export function modelProviderId(model: string): TextLlmProvider | null {
  * 三個已接入模型都列出。只有最近一次成功的那個是正常色，
  * 沒跑過、或最近一次沒走到它，都是灰色。
  */
-export function connectedModelMenu(points: { model: string; createdAt: string }[]): {
+export function connectedModelMenu(
+  points: { model: string; createdAt: string }[],
+  models: Partial<Record<TextLlmProvider, string>> = {},
+): {
   items: { id: TextLlmProvider; label: string; muted: boolean }[];
 } {
   const ordered = points
     .map((point, index) => ({ model: point.model.trim(), createdAt: point.createdAt, index }))
     .filter((point) => point.model.length > 0)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.index - b.index);
+  const seen = new Map<TextLlmProvider, string>();
+  for (const point of ordered) {
+    const id = modelProviderId(point.model);
+    if (id) seen.set(id, point.model);
+  }
   const latest = ordered[ordered.length - 1];
   const active = latest ? modelProviderId(latest.model) : null;
+  const names = { ...DEFAULT_CONNECTED_MODELS, ...models };
 
   return {
-    items: CONNECTED_MODEL_LABELS.map((item) => ({
-      id: item.id,
-      label: item.label,
-      muted: item.id !== active,
+    items: TEXT_LLM_ORDER.map((id) => ({
+      id,
+      label: seen.get(id) || names[id],
+      muted: id !== active,
     })),
   };
 }

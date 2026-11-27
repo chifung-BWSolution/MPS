@@ -64,7 +64,14 @@ export function AltPilotHeader({
           </span>
           {settings ? (
             <span className="hidden sm:inline-flex">
-              <ModelUsagePill enabled={settings.enabled} modelUsage={modelUsage} />
+              <ModelUsagePill
+                enabled={settings.enabled}
+                modelUsage={modelUsage}
+                models={{
+                  ...(settings.model.toLowerCase().startsWith('grok') ? { grok: settings.model } : {}),
+                  ...(settings.fallback_model.trim() ? { opencode: settings.fallback_model } : {}),
+                }}
+              />
             </span>
           ) : null}
           <Button

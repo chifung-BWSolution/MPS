@@ -386,7 +386,7 @@ const menu = connectedModelMenu([
 ]);
 assert.deepEqual(
   menu.items.map((item) => `${item.label}:${item.muted ? 'gray' : 'on'}`),
-  ['Grok:gray', 'Gemini:on', 'OpenCode:gray'],
+  ['grok-4.7:gray', 'gemini-2.5-flash:on', 'deepseek-v4.1-flash:gray'],
 );
 assert.deepEqual(
   connectedModelMenu([]).items.map((item) => item.muted),
