@@ -18,6 +18,7 @@ import {
   budgetPercent,
   budgetState,
   buildItemPayload,
+  classifyInstagramMediaType,
   classifyProviderStatus,
   compareBySort,
   computeItemComputed,
@@ -27,6 +28,7 @@ import {
   engagementOf,
   estimateCostUsd,
   hongKongMonthKey,
+  instagramPermalinkFromOEmbedHtml,
   isHotItem,
   itemsForKind,
   mapProviderItem,
@@ -411,6 +413,88 @@ check('IG 一列：id / likes / 秒級 timestamp / owner / reel', () => {
   assert.equal(draft.source_kind, 'account');
 });
 
+check('IG 媒體類型：官方 /reel/ 優先於影片封面 CDN', () => {
+  const reelHtml =
+    '<blockquote data-instgrm-permalink="https://www.instagram.com/reel/DgNORD7zXEI/?utm_source=ig_embed&amp;utm_campaign=loading"></blockquote>';
+  assert.equal(
+    instagramPermalinkFromOEmbedHtml(reelHtml),
+    'https://www.instagram.com/reel/DgNORD7zXEI/?utm_source=ig_embed&utm_campaign=loading',
+  );
+  assert.equal(
+    classifyInstagramMediaType({
+      permalink: instagramPermalinkFromOEmbedHtml(reelHtml),
+      thumbnailUrl: 'https://cdn.example/v/t51.82787-15/cover.jpg',
+    }),
+    'reel',
+  );
+  assert.equal(
+    classifyInstagramMediaType({
+      permalink: 'https://www.instagram.com/tv/ABCDE12345/',
+      thumbnailUrl: 'https://cdn.example/v/t39.30808-6/cover.jpg',
+    }),
+    'video',
+  );
+});
+
+check('IG 媒體類型：/p/ 加 t51 封面是影片，t39 封面是圖文，沒有訊號也不回 unknown', () => {
+  assert.equal(
+    classifyInstagramMediaType({
+      permalink: 'https://www.instagram.com/p/DgJ1INhkx6j/',
+      thumbnailUrl: 'https://cdn.example/v/t51.82787-15/cover.jpg',
+    }),
+    'video',
+  );
+  assert.equal(
+    classifyInstagramMediaType({
+      permalink: 'https://www.instagram.com/p/DgJ1INhkx6j/',
+      thumbnailUrl: 'https://cdn.example/v/t51.71878-15/cover.jpg',
+    }),
+    'video',
+  );
+  assert.equal(
+    classifyInstagramMediaType({
+      permalink: 'https://www.instagram.com/p/DgOSfOaEuGk/',
+      thumbnailUrl: 'https://cdn.example/v/t39.30808-6/photo.jpg',
+    }),
+    'image',
+  );
+  assert.equal(
+    classifyInstagramMediaType({
+      thumbnailUrl: 'https://cdn.example/v/t51.2885-15/avatar.jpg',
+    }),
+    'image',
+  );
+  assert.equal(classifyInstagramMediaType({}), 'image');
+  assert.equal(instagramPermalinkFromOEmbedHtml(''), '');
+});
+
+check('供應商 productType=feed 不能蓋掉後面的 Image／Video／Sidecar', () => {
+  const image = mapProviderItem(
+    { id: 'abcde12345', productType: 'feed', type: 'Image' },
+    { kind: 'account' },
+  );
+  const video = mapProviderItem(
+    { id: 'abcde12345', productType: 'feed', type: 'Video' },
+    { kind: 'account' },
+  );
+  const reel = mapProviderItem(
+    { id: 'abcde12345', productType: 'clips', type: 'Video' },
+    { kind: 'account' },
+  );
+  const carousel = mapProviderItem(
+    { id: 'abcde12345', productType: 'carousel_container', type: 'Image' },
+    { kind: 'account' },
+  );
+  const igtv = mapProviderItem({ id: 'abcde12345', productType: 'igtv' }, { kind: 'account' });
+  const flagOnly = mapProviderItem({ id: 'abcde12345', is_video: true }, { kind: 'account' });
+  assert.equal(image?.media_type, 'image');
+  assert.equal(video?.media_type, 'video');
+  assert.equal(reel?.media_type, 'reel');
+  assert.equal(carousel?.media_type, 'carousel');
+  assert.equal(igtv?.media_type, 'video');
+  assert.equal(flagOnly?.media_type, 'video');
+});
+
 check('容錯別名：shortcode / like_count / comments_count', () => {
   const draft = mapProviderItem(
     { shortcode: 'xyz789', like_count: 5, comments_count: 2, taken_at: '2026-10-01T00:00:00.000Z' },
@@ -601,6 +685,15 @@ if (!SKIP_WIRING) {
     assert.ok(section.includes('verify_jwt = false'));
   });
 
+  check('IG RSS 寫入前會分類，不再把媒體類型寫死 unknown', () => {
+    const source = read('supabase/functions/hotspot-radar/providers/ig-rss.ts');
+    assert.ok(source.includes('classifyInstagramMediaType'));
+    assert.ok(source.includes('instagramPermalinkFromOEmbedHtml'));
+    assert.ok(source.includes('lookupIgMedia'));
+    assert.equal(source.includes('media_type: "unknown"'), false);
+    assert.equal(source.includes("media_type: 'unknown'"), false);
+  });
+
   check('package.json 有 hotspot:test script', () => {
     const pkg = JSON.parse(read('package.json')) as { scripts?: Record<string, string> };
     assert.equal(pkg.scripts?.['hotspot:test'], 'node scripts/run-hotspot-radar-test.ts');
@@ -621,6 +714,7 @@ if (!SKIP_WIRING) {
       'supabase/functions/hotspot-radar/persist.ts',
       'supabase/functions/hotspot-radar/providers/types.ts',
       'supabase/functions/hotspot-radar/providers/apify.ts',
+      'supabase/functions/hotspot-radar/providers/ig-rss.ts',
       'supabase/functions/hotspot-radar/providers/mock.ts',
       'supabase/functions/hotspot-radar/providers/index.ts',
       'supabase/migrations/20261126150000_hotspot_radar.sql',

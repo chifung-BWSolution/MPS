@@ -639,15 +639,62 @@ function pickDate(source: Record<string, unknown>, keys: readonly string[]): str
   return null;
 }
 
+/** 這些字只表示「在動態裡」，不是 Reel／影片／圖文／輪播。不能拿來當媒體類型。 */
+const NON_MEDIA_TYPE_VALUES = new Set(['feed', 'post', 'story', 'media', 'item', 'graph']);
+
 function normalizeMediaType(raw: string, kind: HotspotKind): HotspotMediaType {
   if (kind === 'ad_keyword') return 'ad';
-  const value = raw.toLowerCase();
-  if (!value) return 'unknown';
+  const value = raw.toLowerCase().trim();
+  if (!value || NON_MEDIA_TYPE_VALUES.has(value)) return 'unknown';
   if (value.includes('reel') || value.includes('clip')) return 'reel';
-  if (value.includes('carousel') || value.includes('sidecar')) return 'carousel';
-  if (value.includes('video')) return 'video';
+  if (value.includes('carousel') || value.includes('sidecar') || value === 'album') return 'carousel';
+  if (value.includes('igtv') || value.includes('video')) return 'video';
   if (value.includes('image') || value.includes('photo') || value.includes('picture')) return 'image';
   return 'unknown';
+}
+
+/**
+ * 依序看每個類型欄位，跳過認不出來的值。
+ *
+ * Apify 常見 `productType: "feed"` 排在真正的 `type: "Image"` 前面；
+ * 只取第一個欄位會把整批貼文寫成 unknown。
+ */
+function mediaTypeFromSource(source: Record<string, unknown>, kind: HotspotKind): HotspotMediaType {
+  if (kind === 'ad_keyword') return 'ad';
+  for (const key of MEDIA_TYPE_KEYS) {
+    const mapped = normalizeMediaType(coerceText(source[key]), kind);
+    if (mapped !== 'unknown') return mapped;
+  }
+  if (source.is_video === true || source.isVideo === true) return 'video';
+  return 'unknown';
+}
+
+/**
+ * IG 官方 oEmbed 的標準網址＋封面 CDN。
+ *
+ * - permalink 含 `/reel/` → Reel（即使封面也在影片 CDN）
+ * - permalink 含 `/tv/`，或封面在影片縮圖桶 `t51.*`（排除頭像桶 `t51.2885`）→ 影片
+ * - 其餘帳號貼文 → 圖文
+ *
+ * RSS 本身沒有媒體類型。帳號貼文不回 unknown：沒有訊號時圖文是這個來源的保底，
+ * 輪播要有多張素材才分得出來，這個來源沒有。
+ */
+export function classifyInstagramMediaType(input: {
+  permalink?: string | null;
+  thumbnailUrl?: string | null;
+}): 'reel' | 'video' | 'image' {
+  const permalink = String(input.permalink ?? '').replace(/&amp;/g, '&');
+  if (/instagram\.com\/reel\//i.test(permalink)) return 'reel';
+  if (/instagram\.com\/tv\//i.test(permalink)) return 'video';
+  const thumb = String(input.thumbnailUrl ?? '');
+  if (/\/t51\.(?!2885\b)/i.test(thumb)) return 'video';
+  return 'image';
+}
+
+/** 從 oEmbed HTML 取出標準網址（含 `/reel/` 或 `/p/`）。 */
+export function instagramPermalinkFromOEmbedHtml(html: string): string {
+  const match = String(html ?? '').match(/data-instgrm-permalink=["']([^"']+)["']/i);
+  return match?.[1]?.replace(/&amp;/g, '&').trim() ?? '';
 }
 
 function normalizeAdStatus(raw: unknown): string | null {
@@ -732,7 +779,7 @@ export function mapProviderItem(
       source_kind: kind,
       external_id: externalId,
       url,
-      media_type: normalizeMediaType(pickText(source, MEDIA_TYPE_KEYS), kind),
+      media_type: mediaTypeFromSource(source, kind),
       caption: caption || null,
       thumbnail_url: thumbnail || null,
       author_handle: pickText(source, AUTHOR_HANDLE_KEYS) || null,

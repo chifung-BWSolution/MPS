@@ -1,5 +1,9 @@
-﻿import type { HotspotItemDraft, HotspotKind } from '../../../../src/lib/hotspotRadar.ts';
-import { HOTSPOT_ACCOUNT_ITEMS } from '../../../../src/lib/hotspotRadar.ts';
+import type { HotspotItemDraft, HotspotKind } from '../../../../src/lib/hotspotRadar.ts';
+import {
+  HOTSPOT_ACCOUNT_ITEMS,
+  classifyInstagramMediaType,
+  instagramPermalinkFromOEmbedHtml,
+} from '../../../../src/lib/hotspotRadar.ts';
 import { HotspotProviderError, type HotspotProvider } from './types.ts';
 
 /**
@@ -16,10 +20,14 @@ import { HotspotProviderError, type HotspotProvider } from './types.ts';
  */
 
 const DEFAULT_BASE = "https://rsshub.liumingye.cn";
-const FEED_TIMEOUT_MS = 20_000;
-// 只嘗試一次：慢帳號（大品牌）可能吃滿 20 秒，重試會令多目標 run 逼近函數牆鐘上限；
-// 失敗會把該目標標記失敗，下一輪再試即可。
-const MAX_RETRY = 0;
+const FEED_TIMEOUT_MS = 12_000;
+const MEDIA_LOOKUP_TIMEOUT_MS = 5_000;
+const MEDIA_LOOKUP_CONCURRENCY = 4;
+const IG_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+// 12 秒 timeout + 1 次重試（最壞 24 秒/帳號）；配合 maxConcurrency=4，
+// 6 個帳號最壞約 2 輪（~48 秒），不會再逐個 timeout 疊加耗盡 90 秒預算。
+const MAX_RETRY = 1;
 
 function baseUrl(): string {
   return (Deno.env.get("HOTSPOT_IG_RSS_BASE") || DEFAULT_BASE).replace(/\/+$/, "");
@@ -103,8 +111,7 @@ async function fetchFeed(handle: string): Promise<string> {
     try {
       const res = await fetch(url, {
         headers: {
-          "user-agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+          "user-agent": IG_USER_AGENT,
           accept: "application/rss+xml,application/xml,text/xml",
         },
         redirect: "follow",
@@ -151,7 +158,80 @@ async function fetchFeed(handle: string): Promise<string> {
   throw new HotspotProviderError("provider_unavailable", `抓取 @${handle} RSS 失敗：${message}`, 502, true);
 }
 
-function toDraft(handle: string, post: ParsedPost): HotspotItemDraft {
+interface IgMediaClass {
+  media_type: 'reel' | 'video' | 'image';
+  signal: 'oembed' | 'cdn' | 'default';
+}
+
+async function mapLimited<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await fn(items[index]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+/**
+ * RSS 沒有媒體類型。用官方 oEmbed 的標準網址分辨 Reel，
+ * 再用封面 CDN 分辨影片和圖文。單則失敗不拖垮整批。
+ */
+async function lookupIgMedia(shortcode: string): Promise<IgMediaClass> {
+  const page = `https://www.instagram.com/p/${shortcode}/`;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const res = await fetch(
+        `https://www.instagram.com/api/v1/oembed/?url=${encodeURIComponent(page)}`,
+        {
+          headers: { 'user-agent': IG_USER_AGENT, accept: 'application/json' },
+          signal: AbortSignal.timeout(MEDIA_LOOKUP_TIMEOUT_MS),
+        },
+      );
+      if (!res.ok) continue;
+      const json = await res.json() as { html?: unknown; thumbnail_url?: unknown };
+      const permalink = instagramPermalinkFromOEmbedHtml(String(json.html ?? ''));
+      const thumbnail = typeof json.thumbnail_url === 'string' ? json.thumbnail_url : '';
+      if (permalink || thumbnail) {
+        return {
+          media_type: classifyInstagramMediaType({ permalink, thumbnailUrl: thumbnail }),
+          signal: 'oembed',
+        };
+      }
+    } catch {
+      // 重試一次；第二次仍失敗就改看封面 CDN
+    }
+  }
+
+  try {
+    const res = await fetch(`${page}media/?size=l`, {
+      headers: { 'user-agent': IG_USER_AGENT },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(MEDIA_LOOKUP_TIMEOUT_MS),
+    });
+    const location = res.headers.get('location') ?? '';
+    if (location) {
+      return {
+        media_type: classifyInstagramMediaType({ thumbnailUrl: location }),
+        signal: 'cdn',
+      };
+    }
+  } catch {
+    // 保底圖文，避免再寫入 unknown
+  }
+
+  return { media_type: 'image', signal: 'default' };
+}
+
+function toDraft(handle: string, post: ParsedPost, media: IgMediaClass): HotspotItemDraft {
   // RSS 內的 CDN 圖片 URL 被 HTML 轉義成 &amp;（簽名會失效 → 403）；
   // 而且 CDN 簽名會過期。因此縮圖一律用 IG 的穩定 media 端點（免登入、不需存檔）：
   //   https://www.instagram.com/p/{shortcode}/media/?size=m
@@ -164,8 +244,7 @@ function toDraft(handle: string, post: ParsedPost): HotspotItemDraft {
     source_kind: "account",
     external_id: post.shortcode,
     url: post.url,
-    // RSS 沒有可靠 media type；保留 unknown 交由 UI 顯示「內容」
-    media_type: "unknown",
+    media_type: media.media_type,
     caption: post.caption || null,
     thumbnail_url: `https://www.instagram.com/p/${post.shortcode}/media/?size=m`,
     author_handle: handle,
@@ -187,6 +266,7 @@ function toDraft(handle: string, post: ParsedPost): HotspotItemDraft {
       cdn_image: cdnImage,
       // 明確標記：這個來源沒有讚／留言，前端不可用互動門檻篩走
       engagement_available: false,
+      media_type_signal: media.signal,
     },
   };
 }
@@ -194,6 +274,8 @@ function toDraft(handle: string, post: ParsedPost): HotspotItemDraft {
 export function createIgRssProvider(): HotspotProvider {
   return {
     name: "ig_rss",
+    // 免費 RSS 渠道可並行；4 路避免同時打爆實例又被限流
+    maxConcurrency: 4,
 
     supports(kind: HotspotKind): boolean {
       // RSSHub 的 IG tag 路由需要 cookie → 免費模式下只支援帳號
@@ -204,7 +286,8 @@ export function createIgRssProvider(): HotspotProvider {
       const effectiveLimit = Math.min(limit > 0 ? limit : HOTSPOT_ACCOUNT_ITEMS, 50);
       const xml = await fetchFeed(handle);
       const posts = parseFeed(xml, effectiveLimit);
-      return posts.map((post) => toDraft(handle, post));
+      const media = await mapLimited(posts, MEDIA_LOOKUP_CONCURRENCY, (post) => lookupIgMedia(post.shortcode));
+      return posts.map((post, index) => toDraft(handle, post, media[index]));
     },
 
     async fetchHashtag(): Promise<HotspotItemDraft[]> {
