@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS public.alt_settings (
   id                   text PRIMARY KEY DEFAULT 'default',
   enabled              boolean NOT NULL DEFAULT false,
   model                text NOT NULL DEFAULT 'grok-4.5',
-  fallback_model       text NOT NULL DEFAULT 'gemini-2.5-flash',
+  fallback_model       text NOT NULL DEFAULT 'deepseek-v4.1-flash',
   daily_call_limit     integer NOT NULL DEFAULT 0 CHECK (daily_call_limit >= 0),
   max_images_per_run   integer NOT NULL DEFAULT 40 CHECK (max_images_per_run BETWEEN 1 AND 200),
   max_images_per_call  integer NOT NULL DEFAULT 6 CHECK (max_images_per_call BETWEEN 1 AND 12),

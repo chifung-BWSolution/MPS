@@ -198,7 +198,7 @@ ALT Pilot 上方有兩個 tab：
 | 回應 | `{ ok:true, data }` / `{ ok:false, code, error }` |
 | 抓頁 | `text/html`、≤2MB、10s timeout、≤2 redirect |
 | 抓圖 | `image/jpeg|png|webp`、≤6MB、≤2 redirect |
-| Provider | **Grok 4.5 主（`alt_settings.model`）**；失敗轉 Gemini；JSON parse 失敗重試一次 |
+| Provider | **Grok 4.7 主（`alt_settings.model`）**；失敗轉 **DeepSeek V4.1 Flash 1017**（`OPENCODE_GO_API_KEY`），最後才 Gemini；JSON parse 失敗重試一次 |
 | 配額 | `alt_settings.daily_call_limit`（HKT 當日）；**0 = 不限**，預設 0 |
 
 ### 7.2 SSRF 與 allowlist

@@ -1,7 +1,7 @@
 /**
- * ALT Pilot · LLM provider（Gemini 主、Grok 備援）
+ * ALT Pilot · LLM provider（Grok 主、DeepSeek 備援、Gemini 最後）
  *
- * 兩者都收圖片 base64，回傳純文字 JSON。Provider 只負責呼叫與用量，
+ * 三者都收圖片 base64，回傳純文字 JSON。Provider 只負責呼叫與用量，
  * JSON 解析與品質規則在 index.ts / altPrompt.ts。
  */
 
@@ -28,7 +28,7 @@ export interface VisionRequest {
 
 export interface ProviderResult {
   text: string;
-  provider: 'gemini' | 'grok';
+  provider: 'gemini' | 'grok' | 'deepseek';
   model: string;
   tokensIn: number;
   tokensOut: number;
@@ -37,7 +37,11 @@ export interface ProviderResult {
 
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 const DEFAULT_GROK_MODEL = 'grok-4.7';
+const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4.1-flash';
+const DEFAULT_OPENCODE_GO_BASE_URL = 'https://opencode.ai/inference/go/v1';
 const MAX_OUTPUT_TOKENS = 700;
+// DeepSeek 會先產生 reasoning_content；max_tokens 太小會讓 content 為空。
+const DEEPSEEK_MAX_OUTPUT_TOKENS = 2000;
 
 const GEMINI_PRICING: Record<string, { input: number; output: number }> = {
   'gemini-2.5-flash': { input: 0.3, output: 2.5 },
@@ -56,7 +60,7 @@ function estimateGeminiCost(model: string, tokensIn: number, tokensOut: number):
 }
 
 function pickProviderModel(
-  prefix: 'gemini' | 'grok',
+  prefix: 'gemini' | 'grok' | 'deepseek',
   requested: string,
   fallback: string,
   defaultModel: string,
@@ -75,6 +79,14 @@ function geminiModel(request: VisionRequest): string {
 function grokModel(request: VisionRequest): string {
   const envModel = (Deno.env.get('GROK_MODEL') || '').trim();
   return envModel || pickProviderModel('grok', request.model, request.fallbackModel, DEFAULT_GROK_MODEL);
+}
+
+function deepseekModel(request: VisionRequest): string {
+  const envModel = (Deno.env.get('OPENCODE_GO_MODEL') || '').trim();
+  return (
+    envModel ||
+    pickProviderModel('deepseek', request.model, request.fallbackModel, DEFAULT_DEEPSEEK_MODEL)
+  );
 }
 
 async function callGemini(request: VisionRequest): Promise<ProviderResult> {
@@ -237,22 +249,145 @@ async function callGrok(request: VisionRequest): Promise<ProviderResult> {
   };
 }
 
+function estimateDeepSeekCost(model: string, tokensIn: number, tokensOut: number): number {
+  // OpenCode Go 的 DeepSeek V4.1 Flash 1017 價格（USD / 1M tokens）。
+  const pricing =
+    model === 'deepseek-v4.1-flash'
+      ? { input: 0.15, output: 0.6 }
+      : { input: 0.15, output: 0.6 };
+  return (tokensIn / 1_000_000) * pricing.input + (tokensOut / 1_000_000) * pricing.output;
+}
+
+async function callDeepSeek(request: VisionRequest): Promise<ProviderResult> {
+  const apiKey = (
+    Deno.env.get('OPENCODE_GO_API_KEY') ||
+    Deno.env.get('OPENCODE_API_KEY') ||
+    ''
+  ).trim();
+  if (!apiKey) {
+    throw new AltProviderError(
+      'provider_not_configured',
+      'OPENCODE_GO_API_KEY 未設定，無法使用 DeepSeek 備援',
+      503,
+    );
+  }
+
+  const model = deepseekModel(request);
+  const baseUrl = (
+    Deno.env.get('OPENCODE_GO_BASE_URL') || DEFAULT_OPENCODE_GO_BASE_URL
+  ).replace(/\/+$/, '');
+
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(90_000),
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        // OpenCode Go 需要 session header 才能路由；每次呼叫一個新 session。
+        'x-opencode-session': crypto.randomUUID(),
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.3,
+        reasoning_effort: 'low',
+        max_tokens: DEEPSEEK_MAX_OUTPUT_TOKENS,
+        stream: false,
+        messages: [
+          { role: 'system', content: request.system },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: request.user },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:${request.mimeType};base64,${request.base64}`,
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    });
+  } catch (error) {
+    throw new AltProviderError(
+      'provider_error',
+      `DeepSeek 連線失敗：${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new AltProviderError(
+      'provider_error',
+      `DeepSeek (${model}) HTTP ${response.status}${detail ? `：${detail.slice(0, 200)}` : ''}`,
+      response.status,
+    );
+  }
+
+  const payload = (await response.json().catch(() => null)) as {
+    choices?: Array<{
+      finish_reason?: string;
+      message?: { content?: string | Array<{ text?: string }>; reasoning_content?: string };
+    }>;
+    usage?: {
+      prompt_tokens?: number;
+      completion_tokens?: number;
+      opencode?: { list_cost?: number };
+    };
+  } | null;
+
+  const rawContent = payload?.choices?.[0]?.message?.content;
+  const text = Array.isArray(rawContent)
+    ? rawContent.map((part) => part.text || '').join('').trim()
+    : String(rawContent || '').trim();
+
+  if (!text) {
+    const finish = payload?.choices?.[0]?.finish_reason || 'unknown';
+    throw new AltProviderError(
+      'provider_empty',
+      `DeepSeek (${model}) 回傳空白（finish_reason=${finish}）`,
+    );
+  }
+
+  const tokensIn = asNumber(payload?.usage?.prompt_tokens);
+  const tokensOut = asNumber(payload?.usage?.completion_tokens);
+  const listedCost = asNumber(payload?.usage?.opencode?.list_cost);
+
+  return {
+    text,
+    provider: 'deepseek',
+    model,
+    tokensIn,
+    tokensOut,
+    costUsd: listedCost > 0 ? listedCost : estimateDeepSeekCost(model, tokensIn, tokensOut),
+  };
+}
+
 /**
  * Provider 順序：
  *   1. `ALT_PROVIDER=grok|gemini` 明確指定時，依指定順序
  *   2. 否則看 `alt_settings.model`：grok* → Grok 主；gemini* → Gemini 主
  *   3. 主 provider 失敗才用另一個（有 key 才用）
  *
- * 預設 model 是 grok-4.7，所以會沿用系統現有的 XAI key。
+ * 預設 model 是 grok-4.7，所以會沿用系統現有的 XAI key；
+ * Grok 失敗時若設了 OPENCODE_GO_API_KEY，會先走 DeepSeek V4.1 Flash 1017。
  */
 export async function generateVision(request: VisionRequest): Promise<ProviderResult> {
   const geminiKey = (Deno.env.get('GEMINI_API_KEY') || '').trim();
   const grokKey = (Deno.env.get('XAI_API_KEY') || Deno.env.get('GROK_API_KEY') || '').trim();
+  const deepseekKey = (
+    Deno.env.get('OPENCODE_GO_API_KEY') ||
+    Deno.env.get('OPENCODE_API_KEY') ||
+    ''
+  ).trim();
 
-  if (!geminiKey && !grokKey) {
+  if (!geminiKey && !grokKey && !deepseekKey) {
     throw new AltProviderError(
       'provider_not_configured',
-      '未設定 XAI_API_KEY（Grok）或 GEMINI_API_KEY（備援），無法生成 ALT。',
+      '未設定 XAI_API_KEY（Grok）、OPENCODE_GO_API_KEY（DeepSeek）或 GEMINI_API_KEY（備援），無法生成 ALT。',
       503,
     );
   }
@@ -261,21 +396,24 @@ export async function generateVision(request: VisionRequest): Promise<ProviderRe
   const preferGrok =
     preferred === 'grok' ||
     (preferred !== 'gemini' && /^grok/i.test(request.model.trim()));
-  const order: Array<'grok' | 'gemini'> = preferGrok ? ['grok', 'gemini'] : ['gemini', 'grok'];
+  // Grok 主 → DeepSeek V4.1 Flash 1017 備援 → Gemini 最後。
+  const order: Array<'grok' | 'deepseek' | 'gemini'> = preferGrok
+    ? ['grok', 'deepseek', 'gemini']
+    : ['gemini', 'grok', 'deepseek'];
 
   const errors: string[] = [];
   for (const provider of order) {
     if (provider === 'grok' && !grokKey) continue;
+    if (provider === 'deepseek' && !deepseekKey) continue;
     if (provider === 'gemini' && !geminiKey) continue;
 
     try {
-      return provider === 'grok' ? await callGrok(request) : await callGemini(request);
+      if (provider === 'grok') return await callGrok(request);
+      if (provider === 'deepseek') return await callDeepSeek(request);
+      return await callGemini(request);
     } catch (error) {
-      errors.push(
-        `${provider === 'grok' ? 'Grok' : 'Gemini'} 失敗：${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
+      const label = provider === 'grok' ? 'Grok' : provider === 'deepseek' ? 'DeepSeek' : 'Gemini';
+      errors.push(`${label} 失敗：${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

@@ -4,7 +4,8 @@
  * 覆蓋：
  *   - fetchPageHtml：正常 HTML、host allowlist、redirect 到非白名單、過大頁面
  *   - fetchImageBytes：PNG、SVG 拒絕、private IP 拒絕
- *   - generateVision：Gemini 成功、Gemini 429 → Grok fallback、無 key
+ *   - generateVision：Gemini 成功、Gemini 429 → Grok fallback、
+ *     Grok 429 → DeepSeek fallback、無 key
  *
  * 執行：node scripts/run-alt-pilot-contract-test.ts
  */
@@ -292,6 +293,63 @@ try {
   assert.equal(grokFallback.provider, 'gemini');
   assert.equal(grokFallback.text, '{"alt":"gemini fallback"}');
   assert.equal(fallbackSeen.length, 2);
+
+  // -------------------------------------------------------------------------
+  // 9d) Grok 429 → DeepSeek V4.1 Flash 1017 備援
+  // -------------------------------------------------------------------------
+  installEnv({
+    XAI_API_KEY: 'xai-test-key',
+    GROK_MODEL: 'grok-test-model',
+    OPENCODE_GO_API_KEY: 'opencode-test-key',
+    OPENCODE_GO_MODEL: 'deepseek-v4.1-flash',
+  });
+
+  const deepseekSeen: Array<{ url: string; init?: RequestInit }> = [];
+  installFetch(async (url, init) => {
+    deepseekSeen.push({ url, init });
+    if (url.includes('api.x.ai')) {
+      return jsonResponse({ error: 'grok rate limited' }, 429);
+    }
+    if (url.includes('opencode.ai/inference/go/v1/chat/completions')) {
+      return jsonResponse({
+        choices: [{ message: { content: '{"alt":"deepseek fallback"}' } }],
+        usage: {
+          prompt_tokens: 210,
+          completion_tokens: 40,
+          opencode: { list_cost: 0.0000555 },
+        },
+      });
+    }
+    throw new Error(`unexpected URL: ${url}`);
+  });
+
+  const deepseekFallback = await generateVision({
+    system: 'system',
+    user: 'user',
+    mimeType: 'image/png',
+    base64: 'AA==',
+    model: 'grok-4.7',
+    fallbackModel: 'deepseek-v4.1-flash',
+  });
+  assert.equal(deepseekFallback.provider, 'deepseek');
+  assert.equal(deepseekFallback.model, 'deepseek-v4.1-flash');
+  assert.equal(deepseekFallback.text, '{"alt":"deepseek fallback"}');
+  assert.equal(deepseekFallback.tokensIn, 210);
+  assert.equal(deepseekFallback.tokensOut, 40);
+  assert.equal(deepseekFallback.costUsd, 0.0000555);
+  assert.equal(deepseekSeen.length, 2);
+  const deepseekInit = deepseekSeen[1].init;
+  assert.match(deepseekSeen[1].url, /opencode\.ai\/inference\/go\/v1\/chat\/completions/);
+  const headers = deepseekInit?.headers as Record<string, string>;
+  assert.equal(headers['x-opencode-session']?.length, 36);
+  const body = JSON.parse(String(deepseekInit?.body)) as {
+    model: string;
+    max_tokens: number;
+    messages: Array<{ content: unknown }>;
+  };
+  assert.equal(body.model, 'deepseek-v4.1-flash');
+  assert.equal(body.max_tokens, 2000);
+  assert.match(JSON.stringify(body.messages), /image_url/);
 
   // -------------------------------------------------------------------------
   // 10) 無 key

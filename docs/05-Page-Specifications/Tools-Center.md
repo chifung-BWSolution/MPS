@@ -452,7 +452,7 @@ ALT Pilot 上方 tab：[單頁生成] [站點盤點]。
 
 - 頁面 host 必須屬於 `webandsystem_list.domain_url` 或 `ALT_ALLOWED_HOSTS`；拒絕 private IP、IP 字面值、單一標籤主機。
 - 頁面 ≤2MB、10s timeout、≤2 redirect；圖片 ≤6MB，只收 jpeg/png/webp。
-- Grok 4.5 主（沿用現有 `XAI_API_KEY`）、Gemini 備援；JSON parse 失敗重試一次。
+- Grok 4.7 主（沿用現有 `XAI_API_KEY`）→ DeepSeek V4.1 Flash 1017 備援（`OPENCODE_GO_API_KEY`）→ Gemini 最後（`GEMINI_API_KEY`）；JSON parse 失敗重試一次。
 - 錯誤碼：`invalid_url`、`host_not_allowed`、`fetch_forbidden`、`fetch_rate_limited`、`fetch_timeout`、`no_images`、`quota_exceeded`、`provider_error`、`schema_missing`。
 
 ### 資料表
