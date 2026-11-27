@@ -60,13 +60,13 @@ import { ContentPageHeader } from '../shell/ContentPageHeader';
 // ============================================================
 
 const MODEL_OPTIONS: { value: string; label: string }[] = [
-  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash（建議）' },
+  { value: 'gemini-4-hydrogen', label: 'Gemini 4 Hydrogen（建議）' },
   { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite（最省）' },
   { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash（舊版穩定）' },
 ];
 
 const MODEL_DESCRIPTION: Record<string, string> = {
-  'gemini-2.5-flash': '品質最好，適合 800–1500 字長文；單價較高。',
+  'gemini-4-hydrogen': 'Gemini 4 的日常型號，速度和成本適合文章生成。',
   'gemini-2.5-flash-lite': '速度最快、成本最低，適合大量短篇或初稿。',
   'gemini-2.0-flash': '上一代模型，穩定但長文的 SEO 細節較弱。',
 };

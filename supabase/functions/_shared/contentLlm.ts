@@ -15,7 +15,7 @@ import type {
   ContentGeneratedArticle,
   ContentLlmResult,
 } from "../../../src/lib/contentTypes.ts";
-import { TEXT_LLM_ORDER } from "../../../src/lib/llmProviderOrder.ts";
+import { resolveGeminiModel, TEXT_LLM_ORDER } from "../../../src/lib/llmProviderOrder.ts";
 
 /**
  * Gemini 封裝（PRD §7.4、M2-02）
@@ -65,7 +65,7 @@ export function llmConfigured(): boolean {
 }
 
 export function defaultModel(): string {
-  return (Deno.env.get("GEMINI_MODEL") || "").trim() || DEFAULT_CONTENT_MODEL;
+  return resolveGeminiModel((Deno.env.get("GEMINI_MODEL") || "").trim() || DEFAULT_CONTENT_MODEL);
 }
 
 export interface GeminiJsonOptions {
@@ -302,7 +302,7 @@ export async function generateArticleWithLlm(
   const budgetMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const startedAt = Date.now();
   const errors: string[] = [];
-  const geminiModel = options.model || defaultModel();
+  const geminiModel = resolveGeminiModel(options.model || defaultModel());
 
   const steps = TEXT_LLM_ORDER.filter((provider) => {
     if (provider === "grok") return Boolean(grokApiKey());

@@ -6,11 +6,21 @@ export const TEXT_LLM_ORDER = ['grok', 'gemini'] as const;
 
 export type TextLlmProvider = (typeof TEXT_LLM_ORDER)[number];
 
+/** Gemini 4 裡取代 Flash 的型號。API 沒有名為 gemini-4 的代號。 */
+export const GEMINI_4_MODEL = 'gemini-4-hydrogen';
+
 /** 尚未呼叫過時顯示的具體型號。各工具可再傳入自己的設定值。 */
 export const DEFAULT_CONNECTED_MODELS: Record<TextLlmProvider, string> = {
   grok: 'grok-4.5',
-  gemini: 'gemini-2.5-flash',
+  gemini: GEMINI_4_MODEL,
 };
+
+/** 舊的 gemini-2.5-flash 一律改走 Gemini 4 Hydrogen。其他型號保持原樣。 */
+export function resolveGeminiModel(model: string | null | undefined): string {
+  const value = (model || '').trim();
+  if (!value || value === 'gemini-2.5-flash') return GEMINI_4_MODEL;
+  return value;
+}
 
 export function modelProviderId(model: string): TextLlmProvider | null {
   const value = model.trim().toLowerCase();

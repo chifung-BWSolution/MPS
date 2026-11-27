@@ -1,4 +1,5 @@
 import { fetchWithAiUsage } from "../_shared/ai-usage.ts";
+import { resolveGeminiModel } from "../../../src/lib/llmProviderOrder.ts";
 /**
  * ALT Pilot · LLM provider（Grok → Gemini）
  *
@@ -36,7 +37,7 @@ export interface ProviderResult {
   costUsd: number;
 }
 
-const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+const DEFAULT_GEMINI_MODEL = 'gemini-4-hydrogen';
 const DEFAULT_GROK_MODEL = 'grok-4.7';
 const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4.1-flash';
 const DEFAULT_OPENCODE_GO_BASE_URL = 'https://opencode.ai/inference/go/v1';
@@ -45,6 +46,7 @@ const MAX_OUTPUT_TOKENS = 700;
 const DEEPSEEK_MAX_OUTPUT_TOKENS = 2000;
 
 const GEMINI_PRICING: Record<string, { input: number; output: number }> = {
+  'gemini-4-hydrogen': { input: 1.5, output: 7.5 },
   'gemini-2.5-flash': { input: 0.3, output: 2.5 },
   'gemini-2.5-flash-lite': { input: 0.1, output: 0.4 },
   'gemini-2.0-flash': { input: 0.1, output: 0.4 },
@@ -74,7 +76,9 @@ function pickProviderModel(
 
 function geminiModel(request: VisionRequest): string {
   const envModel = (Deno.env.get('GEMINI_MODEL') || '').trim();
-  return envModel || pickProviderModel('gemini', request.model, request.fallbackModel, DEFAULT_GEMINI_MODEL);
+  return resolveGeminiModel(
+    envModel || pickProviderModel('gemini', request.model, request.fallbackModel, DEFAULT_GEMINI_MODEL),
+  );
 }
 
 function grokModel(request: VisionRequest): string {

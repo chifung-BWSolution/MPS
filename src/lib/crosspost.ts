@@ -144,7 +144,7 @@ export function platformLabel(platform: CopyPlatform): string {
 }
 
 export const DEFAULT_GROK_MODEL = 'grok-4.3';
-export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+export const DEFAULT_GEMINI_MODEL = 'gemini-4-hydrogen';
 
 // ============================================================
 // 型別

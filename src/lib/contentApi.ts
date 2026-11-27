@@ -174,7 +174,7 @@ export async function fetchContentSettings(): Promise<ContentSettings> {
 
 export const FALLBACK_SETTINGS: ContentSettings = {
   id: 'default',
-  model: 'gemini-2.5-flash',
+  model: 'gemini-4-hydrogen',
   daily_article_limit: 0,
   daily_llm_call_limit: 30,
   digest_time: '09:00',

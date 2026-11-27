@@ -56,7 +56,7 @@ export const DEFAULT_BRAND_VOICE: ContentBrandVoice = {
   allowAiImages: true,
 };
 
-export const DEFAULT_CONTENT_MODEL = 'gemini-2.5-flash';
+export const DEFAULT_CONTENT_MODEL = 'gemini-4-hydrogen';
 
 /** 免費層建議上限（PRD A5）：設定頁以「建議值」呈現，不寫死流程 */
 export const RECOMMENDED_DAILY_ARTICLE_LIMIT = 8;
@@ -64,6 +64,7 @@ export const RECOMMENDED_DAILY_LLM_CALL_LIMIT = 30;
 
 /** 公開牌價（USD / 1M tokens）；只用於估算看板，結帳以供應商帳單為準 */
 export const LLM_PRICING: Record<string, { input: number; output: number }> = {
+  'gemini-4-hydrogen': { input: 1.5, output: 7.5 },
   'gemini-2.5-flash': { input: 0.3, output: 2.5 },
   'gemini-2.5-flash-lite': { input: 0.1, output: 0.4 },
   'gemini-2.0-flash': { input: 0.1, output: 0.4 },

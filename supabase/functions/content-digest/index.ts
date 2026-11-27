@@ -135,7 +135,7 @@ async function loadSettings(supabase: Db): Promise<ContentSettings> {
   const row = (data ?? {}) as Partial<ContentSettings>;
   return {
     id: "default",
-    model: row.model || "gemini-2.5-flash",
+    model: row.model && row.model !== "gemini-2.5-flash" ? row.model : "gemini-4-hydrogen",
     daily_article_limit: Number(row.daily_article_limit ?? 0),
     daily_llm_call_limit: Number(row.daily_llm_call_limit ?? 30),
     digest_time: row.digest_time || "09:00",

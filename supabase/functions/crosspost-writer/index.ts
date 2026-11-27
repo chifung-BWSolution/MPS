@@ -14,7 +14,7 @@ import {
   type CopyPlatform,
   type CopyVariant,
 } from "../../../src/lib/crosspost.ts";
-import { TEXT_LLM_ORDER } from "../../../src/lib/llmProviderOrder.ts";
+import { resolveGeminiModel, TEXT_LLM_ORDER } from "../../../src/lib/llmProviderOrder.ts";
 
 /**
  * 跨平台一稿多發 · 生成 Edge Function
@@ -457,7 +457,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const grokModel = (Deno.env.get("GROK_MODEL") || "").trim() || DEFAULT_GROK_MODEL;
-  const geminiModel = (Deno.env.get("GEMINI_MODEL") || "").trim() || DEFAULT_GEMINI_MODEL;
+  const geminiModel = resolveGeminiModel((Deno.env.get("GEMINI_MODEL") || "").trim() || DEFAULT_GEMINI_MODEL);
 
   const keyed: Record<Provider, { model: string; apiKey: string }> = {
     grok: { model: grokModel, apiKey: grokKey },

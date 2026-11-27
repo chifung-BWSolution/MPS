@@ -12,7 +12,7 @@ import {
   type AdBrief,
   type AdCreativeResult,
 } from "../../../src/lib/adCreative.ts";
-import { TEXT_LLM_ORDER } from "../../../src/lib/llmProviderOrder.ts";
+import { resolveGeminiModel, TEXT_LLM_ORDER } from "../../../src/lib/llmProviderOrder.ts";
 
 /**
  * 文案工坊 · 廣告切角與 A/B 文案矩陣 · 生成 Edge Function
@@ -40,7 +40,7 @@ const MAX_RETRY_MS = 25_000;
 const MAX_OUTPUT_TOKENS = 8_192;
 
 const DEFAULT_GROK_MODEL = "grok-4.5";
-const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+const DEFAULT_GEMINI_MODEL = "gemini-4-hydrogen";
 
 const GROK_ENDPOINT = "https://api.x.ai/v1/chat/completions";
 const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -431,7 +431,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const grokModel = (Deno.env.get("GROK_MODEL") || "").trim() || DEFAULT_GROK_MODEL;
-  const geminiModel = (Deno.env.get("GEMINI_MODEL") || "").trim() || DEFAULT_GEMINI_MODEL;
+  const geminiModel = resolveGeminiModel((Deno.env.get("GEMINI_MODEL") || "").trim() || DEFAULT_GEMINI_MODEL);
 
   const startedAt = Date.now();
   const deadline = startedAt + TOTAL_BUDGET_MS;
