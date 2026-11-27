@@ -16,7 +16,6 @@ import type {
   ContentLlmResult,
 } from "../../../src/lib/contentTypes.ts";
 import { TEXT_LLM_ORDER } from "../../../src/lib/llmProviderOrder.ts";
-import { callOpencodeChat, opencodeApiKey, opencodeModel, OpencodeError } from "./opencode.ts";
 
 /**
  * Gemini 封裝（PRD §7.4、M2-02）
@@ -62,7 +61,7 @@ function grokApiKey(): string {
 }
 
 export function llmConfigured(): boolean {
-  return Boolean(grokApiKey() || opencodeApiKey() || (Deno.env.get(ENV_API_KEY) || "").trim());
+  return Boolean(grokApiKey() || (Deno.env.get(ENV_API_KEY) || "").trim());
 }
 
 export function defaultModel(): string {
@@ -295,49 +294,7 @@ async function callGrokJson(
   }
 }
 
-async function callOpencodeJson(
-  prompt: string,
-  timeoutMs: number,
-): Promise<ContentLlmResult<Record<string, unknown>>> {
-  const model = opencodeModel();
-  const startedAt = Date.now();
-  try {
-    const text = await callOpencodeChat({
-      system: "只輸出合法 JSON，不要 Markdown。",
-      prompt,
-      model,
-      apiKey: opencodeApiKey(),
-      timeoutMs,
-      temperature: 0.65,
-      usage: { feature: "content-automation", operation: "generate_article" },
-    });
-    return {
-      data: parseJsonResponse(text) as Record<string, unknown>,
-      usage: {
-        model,
-        tokens_in: 0,
-        tokens_out: 0,
-        cost_usd: 0,
-      },
-      latencyMs: Date.now() - startedAt,
-    };
-  } catch (error) {
-    if (error instanceof OpencodeError) {
-      throw new ContentLlmError(
-        error.kind === "timeout"
-          ? "timeout"
-          : error.kind === "rate_limited" || error.status === 402
-          ? "rate_limited"
-          : "upstream_error",
-        error.message,
-        { retryable: true },
-      );
-    }
-    throw error;
-  }
-}
-
-/** 生成文章：Grok → Gemini → OpenCode。前一個失敗（含欠費）就試下一個。 */
+/** 生成文章：Grok → Gemini。前一個失敗（含欠費）就試下一個。 */
 export async function generateArticleWithLlm(
   options: GenerateArticleLlmOptions,
 ): Promise<GenerateArticleLlmResult> {
@@ -349,12 +306,11 @@ export async function generateArticleWithLlm(
 
   const steps = TEXT_LLM_ORDER.filter((provider) => {
     if (provider === "grok") return Boolean(grokApiKey());
-    if (provider === "gemini") return Boolean((Deno.env.get(ENV_API_KEY) || "").trim());
-    return Boolean(opencodeApiKey());
+    return Boolean((Deno.env.get(ENV_API_KEY) || "").trim());
   });
 
   if (steps.length === 0) {
-    throw new ContentLlmError("llm_not_configured", "未設定 Grok、Gemini 或 OpenCode", {
+    throw new ContentLlmError("llm_not_configured", "未設定 Grok 或 Gemini", {
       retryable: false,
     });
   }
@@ -365,21 +321,19 @@ export async function generateArticleWithLlm(
       tried += 1;
       const remaining = budgetMs - (Date.now() - startedAt);
       if (remaining < 8_000) break;
-      // 欠費的 Grok／OpenCode 盡快失敗，把剩餘時間留給下一個模型。
+      // 欠費的 Grok 盡快失敗，把剩餘時間留給 Gemini。
       const timeoutMs = provider === "gemini"
         ? Math.min(45_000, remaining)
         : Math.min(8_000, remaining);
       try {
         const result = provider === "grok"
           ? await callGrokJson(prompt, timeoutMs)
-          : provider === "gemini"
-          ? await callGeminiJson<Record<string, unknown>>({
+          : await callGeminiJson<Record<string, unknown>>({
             prompt,
             model: geminiModel,
             timeoutMs,
             temperature: 0.65,
-          })
-          : await callOpencodeJson(prompt, timeoutMs);
+          });
         const generated = parseGeneratedArticle(result.data, options.parseOptions);
         if (!isValidGeneratedArticle(generated)) {
           throw new ContentLlmError("bad_json", `${provider} 內容不足`, { retryable: true });

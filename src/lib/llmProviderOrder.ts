@@ -1,8 +1,8 @@
 /**
  * 文字模型順序。前一個失敗（包含帳戶欠費）就試下一個。
- * Grok → Gemini → OpenCode。
+ * Grok → Gemini。
  */
-export const TEXT_LLM_ORDER = ['grok', 'gemini', 'opencode'] as const;
+export const TEXT_LLM_ORDER = ['grok', 'gemini'] as const;
 
 export type TextLlmProvider = (typeof TEXT_LLM_ORDER)[number];
 
@@ -10,7 +10,6 @@ export type TextLlmProvider = (typeof TEXT_LLM_ORDER)[number];
 export const DEFAULT_CONNECTED_MODELS: Record<TextLlmProvider, string> = {
   grok: 'grok-4.5',
   gemini: 'gemini-2.5-flash',
-  opencode: 'deepseek-v4.1-flash',
 };
 
 export function modelProviderId(model: string): TextLlmProvider | null {
@@ -18,12 +17,11 @@ export function modelProviderId(model: string): TextLlmProvider | null {
   if (!value) return null;
   if (value.startsWith('grok')) return 'grok';
   if (value.startsWith('gemini')) return 'gemini';
-  if (value.startsWith('deepseek') || value.includes('opencode')) return 'opencode';
   return null;
 }
 
 /**
- * 三個已接入模型都列出。只有最近一次成功的那個是正常色，
+ * 已接入模型都列出。只有最近一次成功的那個是正常色，
  * 沒跑過、或最近一次沒走到它，都是灰色。
  */
 export function connectedModelMenu(

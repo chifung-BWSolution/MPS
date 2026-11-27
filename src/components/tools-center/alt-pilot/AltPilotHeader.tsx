@@ -69,7 +69,6 @@ export function AltPilotHeader({
                 modelUsage={modelUsage}
                 models={{
                   ...(settings.model.toLowerCase().startsWith('grok') ? { grok: settings.model } : {}),
-                  ...(settings.fallback_model.trim() ? { opencode: settings.fallback_model } : {}),
                 }}
               />
             </span>

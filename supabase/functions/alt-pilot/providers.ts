@@ -1,6 +1,6 @@
 import { fetchWithAiUsage } from "../_shared/ai-usage.ts";
 /**
- * ALT Pilot · LLM provider（Grok → Gemini → OpenCode）
+ * ALT Pilot · LLM provider（Grok → Gemini）
  *
  * 三者都收圖片 base64，回傳純文字 JSON。Provider 只負責呼叫與用量，
  * JSON 解析與品質規則在 index.ts / altPrompt.ts。
@@ -368,22 +368,17 @@ async function callDeepSeek(request: VisionRequest): Promise<ProviderResult> {
 }
 
 /**
- * 預設 Grok → Gemini → OpenCode。帳戶欠費或呼叫失敗就試下一個。
+ * 預設 Grok → Gemini。帳戶欠費或呼叫失敗就試下一個。
  * `ALT_PROVIDER=gemini` 或設定模型以 gemini 開頭時，才把 Gemini 放在 Grok 前面。
  */
 export async function generateVision(request: VisionRequest): Promise<ProviderResult> {
   const geminiKey = (Deno.env.get('GEMINI_API_KEY') || '').trim();
   const grokKey = (Deno.env.get('XAI_API_KEY') || Deno.env.get('GROK_API_KEY') || '').trim();
-  const deepseekKey = (
-    Deno.env.get('OPENCODE_GO_API_KEY') ||
-    Deno.env.get('OPENCODE_API_KEY') ||
-    ''
-  ).trim();
 
-  if (!geminiKey && !grokKey && !deepseekKey) {
+  if (!geminiKey && !grokKey) {
     throw new AltProviderError(
       'provider_not_configured',
-      '未設定 XAI_API_KEY（Grok）、OPENCODE_GO_API_KEY（DeepSeek）或 GEMINI_API_KEY（備援），無法生成 ALT。',
+      '未設定 XAI_API_KEY（Grok）或 GEMINI_API_KEY，無法生成 ALT。',
       503,
     );
   }
@@ -392,23 +387,20 @@ export async function generateVision(request: VisionRequest): Promise<ProviderRe
   const preferGrok =
     preferred === 'grok' ||
     (preferred !== 'gemini' && /^grok/i.test(request.model.trim()));
-  // 預設 Grok → Gemini → OpenCode。明示 ALT_PROVIDER=gemini 時才把 Gemini 放前面。
-  const order: Array<'grok' | 'gemini' | 'deepseek'> = preferGrok
-    ? ['grok', 'gemini', 'deepseek']
-    : ['gemini', 'grok', 'deepseek'];
+  const order: Array<'grok' | 'gemini'> = preferGrok
+    ? ['grok', 'gemini']
+    : ['gemini', 'grok'];
 
   const errors: string[] = [];
   for (const provider of order) {
     if (provider === 'grok' && !grokKey) continue;
-    if (provider === 'deepseek' && !deepseekKey) continue;
     if (provider === 'gemini' && !geminiKey) continue;
 
     try {
       if (provider === 'grok') return await callGrok(request);
-      if (provider === 'deepseek') return await callDeepSeek(request);
       return await callGemini(request);
     } catch (error) {
-      const label = provider === 'grok' ? 'Grok' : provider === 'deepseek' ? 'DeepSeek' : 'Gemini';
+      const label = provider === 'grok' ? 'Grok' : 'Gemini';
       errors.push(`${label} 失敗：${error instanceof Error ? error.message : String(error)}`);
     }
   }

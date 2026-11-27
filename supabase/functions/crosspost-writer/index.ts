@@ -15,12 +15,6 @@ import {
   type CopyVariant,
 } from "../../../src/lib/crosspost.ts";
 import { TEXT_LLM_ORDER } from "../../../src/lib/llmProviderOrder.ts";
-import {
-  callOpencodeChat,
-  opencodeApiKey,
-  opencodeModel,
-  OpencodeError,
-} from "../_shared/opencode.ts";
 
 /**
  * 跨平台一稿多發 · 生成 Edge Function
@@ -30,7 +24,7 @@ import {
  *   → { ok: true, data: { variants, provider, model, latencyMs, missingPlatforms } }
  *   → { ok: false, code, error }
  *
- * 供應商順序：Grok → Gemini → OpenCode。前一個失敗（含帳戶欠費）就試下一個。
+ * 供應商順序：Grok → Gemini。前一個失敗（含帳戶欠費）就試下一個。
  * 全部失敗時回 429 / 504 / 502 / 503，**不生成假文案**。
  */
 
@@ -74,7 +68,7 @@ async function validateSession(token: string): Promise<boolean> {
   }
 }
 
-type Provider = "grok" | "gemini" | "opencode";
+type Provider = "grok" | "gemini";
 type LlmCode =
   | "not_configured"
   | "rate_limited"
@@ -329,37 +323,6 @@ interface AttemptOptions {
 const CROSSPOST_SYSTEM_PROMPT =
   "你是資深跨平台社媒文案編輯。只輸出合法 JSON，不要 Markdown 圍欄或解釋。";
 
-async function callOpencode(
-  prompt: string,
-  model: string,
-  apiKey: string,
-  timeoutMs: number,
-): Promise<string> {
-  try {
-    return await callOpencodeChat({
-      system: CROSSPOST_SYSTEM_PROMPT,
-      prompt,
-      model,
-      apiKey,
-      timeoutMs,
-      maxTokens: 8_192,
-      temperature: 0.7,
-      usage: { feature: "crosspost-writer", operation: "rewrite_copy" },
-    });
-  } catch (error) {
-    if (error instanceof OpencodeError) {
-      if (error.kind === "rate_limited") {
-        throw new LlmError("rate_limited", error.message, error.status);
-      }
-      if (error.kind === "timeout") {
-        throw new LlmError("timeout", error.message, 504);
-      }
-      throw new LlmError("upstream_error", error.message, 502);
-    }
-    throw error;
-  }
-}
-
 async function callProvider(
   provider: Provider,
   prompt: string,
@@ -368,8 +331,7 @@ async function callProvider(
   timeoutMs: number,
 ): Promise<string> {
   if (provider === "grok") return callGrok(prompt, model, apiKey, timeoutMs);
-  if (provider === "gemini") return callGemini(prompt, model, apiKey, timeoutMs);
-  return callOpencode(prompt, model, apiKey, timeoutMs);
+  return callGemini(prompt, model, apiKey, timeoutMs);
 }
 
 async function attemptProvider(options: AttemptOptions): Promise<ProviderResult> {
@@ -488,10 +450,9 @@ Deno.serve(async (req: Request) => {
   }
 
   const grokKey = (Deno.env.get("XAI_API_KEY") || Deno.env.get("GROK_API_KEY") || "").trim();
-  const opencodeKey = opencodeApiKey();
   const geminiKey = (Deno.env.get("GEMINI_API_KEY") || "").trim();
 
-  if (!grokKey && !opencodeKey && !geminiKey) {
+  if (!grokKey && !geminiKey) {
     return failJson(503, "llm_not_configured", "系統未設定 AI，請聯絡管理員");
   }
 
@@ -501,7 +462,6 @@ Deno.serve(async (req: Request) => {
   const keyed: Record<Provider, { model: string; apiKey: string }> = {
     grok: { model: grokModel, apiKey: grokKey },
     gemini: { model: geminiModel, apiKey: geminiKey },
-    opencode: { model: opencodeModel(), apiKey: opencodeKey },
   };
   const providers = TEXT_LLM_ORDER
     .map((provider) => ({ provider, ...keyed[provider] }))

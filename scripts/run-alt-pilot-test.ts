@@ -340,7 +340,7 @@ assert.equal(canManageAltPilot(null), false);
 // ---------------------------------------------------------------------------
 // 10) 實際使用的模型：藥丸取最後一次，下拉依首次出現標 ①②③
 // ---------------------------------------------------------------------------
-assert.deepEqual([...TEXT_LLM_ORDER], ['grok', 'gemini', 'opencode']);
+assert.deepEqual([...TEXT_LLM_ORDER], ['grok', 'gemini']);
 assert.equal(altModelRankMark(1), '①');
 assert.equal(altModelRankMark(2), '②');
 assert.equal(altModelRankMark(3), '③');
@@ -386,11 +386,11 @@ const menu = connectedModelMenu([
 ]);
 assert.deepEqual(
   menu.items.map((item) => `${item.label}:${item.muted ? 'gray' : 'on'}`),
-  ['grok-4.7:gray', 'gemini-2.5-flash:on', 'deepseek-v4.1-flash:gray'],
+  ['grok-4.7:gray', 'gemini-2.5-flash:on'],
 );
 assert.deepEqual(
   connectedModelMenu([]).items.map((item) => item.muted),
-  [true, true, true],
+  [true, true],
 );
 
 console.log('alt pilot tests passed');
