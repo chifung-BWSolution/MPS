@@ -36,7 +36,7 @@ import {
 import type { AltModelUsagePoint } from '@/lib/altModels.ts';
 import { canManageAltPilot } from '@/lib/altPermissions.ts';
 import { truncateText } from '@/lib/altText.ts';
-import { normalizePageUrl, sameHost } from '@/lib/altUrl.ts';
+import { hostMatches, hostOf, normalizePageUrl, sameHost } from '@/lib/altUrl.ts';
 import type {
   AltAnalyzeResponse,
   AltGenerateResponse,
@@ -68,6 +68,16 @@ import {
 import { AltRunHistory } from './AltRunHistory';
 import { FramerPasteGuide } from './FramerPasteGuide';
 import { PageSummaryCard } from './PageSummaryCard';
+
+function runMatchesSite(
+  run: Pick<AltRunRow, 'site_id' | 'page_host' | 'page_url'>,
+  site: { id: string; domainUrl?: string },
+): boolean {
+  if (run.site_id && run.site_id === site.id) return true;
+  if (!site.domainUrl) return false;
+  const host = run.page_host || hostOf(run.page_url);
+  return hostMatches(host, hostOf(site.domainUrl));
+}
 
 function readRunIdFromHash(): string | null {
   const raw = window.location.hash.replace(/^#/, '');
@@ -431,22 +441,30 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
     replaceRunHash(null);
   }, []);
 
+  const latestRequestRef = useRef(0);
+
   const showLatestRunForSite = useCallback(
     async (targetSiteId: string) => {
+      const site = sites.find((item) => item.id === targetSiteId);
+      if (!site) return;
+      const requestId = ++latestRequestRef.current;
       try {
-        const rows = await listAltRuns(1, targetSiteId);
-        const latest = rows[0];
+        const rows = await listAltRuns(100);
+        if (requestId !== latestRequestRef.current) return;
+        const latest = rows.find((row) => runMatchesSite(row, site));
         if (latest) {
           if (latest.id !== runIdRef.current) await loadRun(latest.id);
           return;
         }
+        if (requestId !== latestRequestRef.current) return;
         clearDisplayedRun();
       } catch (latestError) {
+        if (requestId !== latestRequestRef.current) return;
         if (isAltSchemaMissing(latestError)) setSchemaMissing(true);
         else setError(altErrorMessage(latestError));
       }
     },
-    [clearDisplayedRun, loadRun],
+    [sites, clearDisplayedRun, loadRun],
   );
 
   useEffect(() => {
@@ -965,7 +983,10 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
       const remaining = runs.filter((item) => item.id !== runId);
       setRuns(remaining);
       if (run?.id === runId) {
-        const nextRun = remaining.find((item) => item.site_id === (run.site_id || siteId));
+        const currentSite = sites.find((item) => item.id === (run.site_id || siteId));
+        const nextRun = remaining.find((item) =>
+          currentSite ? runMatchesSite(item, currentSite) : item.site_id === run.site_id,
+        );
         if (nextRun) {
           void loadRun(nextRun.id);
         } else {
