@@ -372,7 +372,7 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
       const bundle = await fetchAltRunBundle(runId);
       setRun(bundle.run);
       runIdRef.current = bundle.run.id;
-      setSiteId(bundle.run.site_id || '');
+      setSiteId((current) => bundle.run.site_id || current);
       setUrl(bundle.run.page_url);
       setKeyword(bundle.run.keyword || '');
       setPage(pageFromRunRow(bundle.run));
@@ -451,7 +451,8 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
       try {
         const rows = await listAltRuns(100);
         if (requestId !== latestRequestRef.current) return;
-        const latest = rows.find((row) => runMatchesSite(row, site));
+        const matched = rows.filter((row) => runMatchesSite(row, site));
+        const latest = matched.find((row) => row.generated_count > 0) || matched[0];
         if (latest) {
           if (latest.id !== runIdRef.current) await loadRun(latest.id);
           return;
