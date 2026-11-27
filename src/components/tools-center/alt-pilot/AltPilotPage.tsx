@@ -290,6 +290,7 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
   const canManage = canManageAltPilot(user.role);
 
   const runIdRef = useRef<string | null>(null);
+  const openedForSiteRef = useRef(false);
 
   const sites = useMemo(() => {
     const websites = profiles.filter((profile) => profile.profileType === 'website');
@@ -403,7 +404,7 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
     void (async () => {
       const nextRuns = await loadBootstrap();
       if (cancelled || !nextRuns) return;
-      const target = readRunIdFromHash() || nextRuns[0]?.id || null;
+      const target = readRunIdFromHash();
       if (target && target !== runIdRef.current) await loadRun(target);
     })();
 
@@ -418,8 +419,49 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
     };
   }, [loadBootstrap, loadRun]);
 
+  const clearDisplayedRun = useCallback(() => {
+    setRun(null);
+    runIdRef.current = null;
+    setPage(null);
+    setImages([]);
+    setSuggestions([]);
+    setSelected(new Set());
+    setDrafts({});
+    setVerifyResult(null);
+    replaceRunHash(null);
+  }, []);
+
+  const showLatestRunForSite = useCallback(
+    async (targetSiteId: string) => {
+      try {
+        const rows = await listAltRuns(1, targetSiteId);
+        const latest = rows[0];
+        if (latest) {
+          if (latest.id !== runIdRef.current) await loadRun(latest.id);
+          return;
+        }
+        clearDisplayedRun();
+      } catch (latestError) {
+        if (isAltSchemaMissing(latestError)) setSchemaMissing(true);
+        else setError(altErrorMessage(latestError));
+      }
+    },
+    [clearDisplayedRun, loadRun],
+  );
+
   useEffect(() => {
-    if (siteId || sites.length === 0) return;
+    if (bootstrapLoading || sitesLoading || schemaMissing) return;
+    if (readRunIdFromHash() || openedForSiteRef.current) return;
+    const first = sites.find((site) => site.domainUrl) || sites[0];
+    if (!first) return;
+    openedForSiteRef.current = true;
+    setSiteId(first.id);
+    if (first.domainUrl) setUrl(first.domainUrl);
+    void showLatestRunForSite(first.id);
+  }, [bootstrapLoading, sitesLoading, schemaMissing, sites, showLatestRunForSite]);
+
+  useEffect(() => {
+    if (siteId || sites.length === 0 || openedForSiteRef.current || readRunIdFromHash()) return;
     const first = sites.find((site) => site.domainUrl) || sites[0];
     if (!first) return;
     setSiteId(first.id);
@@ -485,6 +527,7 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
     if (next?.domainUrl && (!url.trim() || (previous?.domainUrl && sameHost(url, previous.domainUrl)))) {
       setUrl(next.domainUrl);
     }
+    void showLatestRunForSite(nextSiteId);
   };
 
   const analyzeUrl = useCallback(
@@ -922,7 +965,7 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
       const remaining = runs.filter((item) => item.id !== runId);
       setRuns(remaining);
       if (run?.id === runId) {
-        const nextRun = remaining[0];
+        const nextRun = remaining.find((item) => item.site_id === (run.site_id || siteId));
         if (nextRun) {
           void loadRun(nextRun.id);
         } else {

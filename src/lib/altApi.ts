@@ -349,12 +349,15 @@ export async function fetchAltModelUsage(preferredRunId?: string | null): Promis
   return picked;
 }
 
-export async function listAltRuns(limit = 30): Promise<AltRunRow[]> {
-  const { data, error } = await supabase
+export async function listAltRuns(limit = 30, siteId?: string | null): Promise<AltRunRow[]> {
+  let query = supabase
     .from('alt_runs')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(Math.max(1, Math.min(100, limit)));
+  const scopedSiteId = (siteId || '').trim();
+  if (scopedSiteId) query = query.eq('site_id', scopedSiteId);
+  const { data, error } = await query;
   if (error) throw toAltApiError(error);
   return (data || []).map((row) => normalizeAltRun(row as Partial<AltRunRow>));
 }
