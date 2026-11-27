@@ -16,6 +16,8 @@ export interface SubMenuItem {
   linkTo?: { module: string; subModule: string };
   /** Same visibility as 系統設定: 管理層 or above. */
   adminOnly?: boolean;
+  /** Super Admin only. Check users.role_tag, not the collapsed systemUser.role. */
+  superAdminOnly?: boolean;
 }
 
 export function resolveSubModule(module: string, sub?: string): string {
@@ -159,7 +161,8 @@ export const mainMenuItems: MainMenuItem[] = [
       { id: 'traffic', label: '網站流量' },
       { id: 'gsc', label: 'Search Console' },
       { id: 'analytics-connections', label: '分析工具連接' },
-      { id: 'asana-inquiries', label: 'Asana 查詢', adminOnly: true },
+      { id: 'form-settings', label: '表格設定' },
+      { id: 'asana-inquiries', label: 'Asana 查詢', superAdminOnly: true },
     ],
   },
   {

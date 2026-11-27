@@ -3,7 +3,7 @@ import { ChevronRight, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { canAccessSettings } from '@/lib/permissions';
+import { isSuperAdmin } from '@/lib/permissions';
 import { BwAsanaMailSettings } from '@/components/settings/BwAsanaMailSettings';
 import { FccAsanaMailSettings } from '@/components/settings/FccAsanaMailSettings';
 import { FccAsanaDigestSettings } from '@/components/settings/FccAsanaDigestSettings';
@@ -460,15 +460,15 @@ function UnmatchedLog({ ruleCode, functionName }: { ruleCode: 'bw' | 'fcc'; func
 }
 
 export function AsanaInquiryPage() {
-  const { systemUser } = useAuth();
+  const { userInfo, systemUser } = useAuth();
   const [dept, setDept] = useState<Dept>('bw');
   const [section, setSection] = useState<Section>('records');
 
-  if (!canAccessSettings(systemUser?.role)) {
+  if (!isSuperAdmin(userInfo?.role_tag, systemUser?.position)) {
     return (
       <div className="space-y-4">
         <h1 className="text-[32px] font-bold tracking-tight">Asana 查詢</h1>
-        <p className="text-[14px] text-muted-foreground">此頁面僅限管理層或以上身份存取。</p>
+        <p className="text-[14px] text-muted-foreground">此頁面只限 Super Admin 查看。</p>
       </div>
     );
   }

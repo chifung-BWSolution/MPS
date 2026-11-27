@@ -63,6 +63,9 @@ verify_jwt = false
 [functions.send-email]
 verify_jwt = true
 
+[functions.submit-inquiry-form]
+verify_jwt = false
+
 [functions.receivables-alert]
 verify_jwt = true
 

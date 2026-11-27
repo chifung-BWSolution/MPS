@@ -17,11 +17,13 @@ assert.deepEqual(docs.map((doc) => doc.id), [
   'receivables-alert',
   'fcc-asana-digest',
   'asana-inquiry-unmatched',
+  'inquiry-form-submission',
+  'inquiry-form-autoresponder',
   'ads-email-alert',
   'readdy-framer-conversion',
 ]);
 assert.equal(docs.filter((doc) => doc.kind === 'scheduled').length, 3);
-assert.equal(docs.filter((doc) => doc.kind === 'manual').length, 3);
+assert.equal(docs.filter((doc) => doc.kind === 'manual').length, 5);
 
 const annual = byId.get('annual-fees-reminder');
 assert.ok(annual);
@@ -66,6 +68,29 @@ assert.match(fccDigest.previewHtml, /lang="zh-Hant"/);
 assert.match(fccDigest.previewHtml, /範例客人/);
 assert.match(fccDigest.previewHtml, /已完成/);
 assert.match(fccDigest.previewHtml, /app\.asana\.com/);
+
+const inquirySubmission = byId.get('inquiry-form-submission');
+assert.ok(inquirySubmission);
+assert.equal(inquirySubmission.kind, 'manual');
+assert.match(inquirySubmission.frequency, /無固定排程/);
+assert.match(inquirySubmission.previewSubject, /新表格回覆 — 辦公室工程查詢/);
+assert.match(inquirySubmission.previewHtml, /陳大文/);
+assert.match(inquirySubmission.previewHtml, /Office Design/);
+assert.match(inquirySubmission.previewHtml, /下載 office-plan\.pdf/);
+assert.match(inquirySubmission.to.note, /有效 7 日/);
+assert.deepEqual(inquirySubmission.cc, []);
+assert.deepEqual(inquirySubmission.bcc, []);
+
+const inquiryAutoresponder = byId.get('inquiry-form-autoresponder');
+assert.ok(inquiryAutoresponder);
+assert.equal(inquiryAutoresponder.kind, 'manual');
+assert.match(inquiryAutoresponder.previewSubject, /已收到你的 辦公室工程查詢/);
+assert.match(inquiryAutoresponder.previewHtml, /我們已收到資料/);
+assert.match(inquiryAutoresponder.previewHtml, /你送出的資料/);
+assert.match(inquiryAutoresponder.previewHtml, /下載 office-plan\.pdf/);
+assert.match(inquiryAutoresponder.to.note, /有效 7 日/);
+assert.deepEqual(inquiryAutoresponder.cc, []);
+assert.deepEqual(inquiryAutoresponder.bcc, []);
 
 const ads = byId.get('ads-email-alert');
 assert.ok(ads);

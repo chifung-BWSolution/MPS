@@ -1,6 +1,6 @@
 import { useApp, mainMenuItems } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
-import { canAccessSettings } from '@/lib/permissions';
+import { canAccessSettings, isSuperAdmin } from '@/lib/permissions';
 import {
   LayoutDashboard,
   FileText,
@@ -61,8 +61,9 @@ function getRoleLabel(role: string) {
 
 export function Sidebar() {
   const { user, currentModule, currentSubModule, sidebarCollapsed, setSidebarCollapsed } = useApp();
-  const { systemUser } = useAuth();
+  const { systemUser, userInfo } = useAuth();
   const canSeeAdmin = canAccessSettings(systemUser?.role);
+  const canSeeSuperAdmin = isSuperAdmin(userInfo?.role_tag, systemUser?.position);
 
   // Get the current module's menu item
   const currentMenuData = mainMenuItems.find(m => m.id === currentModule);
@@ -111,7 +112,7 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-3 px-2">
         {hasSubMenus ? (
           <ul className="space-y-0.5">
-            {currentMenuData.subMenus.filter((subItem) => !subItem.hidden && (!subItem.adminOnly || canSeeAdmin)).map((subItem, index, visibleItems) => {
+            {currentMenuData.subMenus.filter((subItem) => !subItem.hidden && (!subItem.adminOnly || canSeeAdmin) && (!subItem.superAdminOnly || canSeeSuperAdmin)).map((subItem, index, visibleItems) => {
               const isSubActive = !subItem.linkTo && currentSubModule === subItem.id;
               const prevSection = index > 0 ? visibleItems[index - 1]?.section : undefined;
               const showSection =

@@ -24,3 +24,18 @@ export function canAccessSettings(role: string | null | undefined): boolean {
   const normalized = role.toLowerCase().replace(/[\s-]/g, '_');
   return SETTINGS_ROLES.has(normalized);
 }
+
+/** Super Admin only. Use users.role_tag; position covers the approved bypass profile. */
+export function isSuperAdmin(
+  roleTag: string | null | undefined,
+  position?: string | null,
+): boolean {
+  const normalize = (value: string | null | undefined) =>
+    String(value || '').toLowerCase().replace(/[\s-]/g, '_');
+  const normalizedRole = normalize(roleTag);
+  const normalizedPosition = normalize(position);
+  return normalizedRole === 'super_admin' ||
+    normalizedRole === 'superadmin' ||
+    normalizedPosition === 'super_admin' ||
+    normalizedPosition === 'superadmin';
+}

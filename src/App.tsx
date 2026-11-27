@@ -12,6 +12,7 @@ import { FramerOAuthCallbackPage } from "./components/tools-center/readdy-framer
 import { SocialOAuthCallbackPage } from "./components/tools-center/content/social/accounts/SocialOAuthCallbackPage";
 import { SocialDeliveryPage } from "./components/tools-center/content/social/accounts/SocialDeliveryPage";
 import { AltPilotDemoPage } from "./components/tools-center/alt-pilot/AltPilotDemoPage";
+import { InquiryPublicPage } from "./components/website/InquiryPublicPage";
 import { VersionUpdateBar } from "./components/layout/VersionUpdateBar";
 
 const SHOW_ALT_PILOT_DEMO = import.meta.env.VITE_ALT_PILOT_DEMO === "1";
@@ -57,6 +58,8 @@ function App() {
             <Route path="/talent/invite/:token" element={<TalentInvitePublicPage />} />
             {/* Public volunteer recruitment form — shared campaign link, no auth */}
             <Route path="/volunteer/apply/:slug" element={<VolunteerApplyPublicPage />} />
+            {/* Public inquiry form built in 表格設定 — no auth */}
+            <Route path="/inquiry/:linkId" element={<InquiryPublicPage />} />
             {/* Framer MCP OAuth popup callback — renders in app origin so Supabase text/plain override is bypassed */}
             <Route path="/framer-oauth-callback" element={<FramerOAuthCallbackPage />} />
             {/* 社群平台 OAuth popup callback：需要登入 session 才能把 token 加密落庫 */}

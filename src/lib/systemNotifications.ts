@@ -24,6 +24,11 @@ import {
   READDY_CONVERSION_RESULT_TO,
   buildReaddyConversionResultEmail,
 } from './readdyConversionMail.ts';
+import {
+  buildInquiryAutoresponderEmail,
+  buildInquirySubmissionEmail,
+  type InquiryEmailAnswer,
+} from './inquiryFormEmail.ts';
 import { CANONICAL_SITE_URL } from './siteUrl.ts';
 import type { AdsClickTrendMetric } from '../types/adsCostTrend.ts';
 
@@ -61,6 +66,8 @@ export function buildSystemNotificationCatalog(): SystemNotificationDoc[] {
   const receivablesPreview = buildReceivablesPreview();
   const fccDigestPreview = buildFccDigestPreview();
   const unmatchedPreview = buildUnmatchedPreview();
+  const inquirySubmissionPreview = buildInquirySubmissionPreview();
+  const inquiryAutoresponderPreview = buildInquiryAutoresponderPreview();
   const adsPreview = buildAdsPreview();
   const readdyPreview = buildReaddyConversionPreview();
 
@@ -141,6 +148,42 @@ export function buildSystemNotificationCatalog(): SystemNotificationDoc[] {
       bcc: [],
       previewHtml: unmatchedPreview.html,
       previewSubject: unmatchedPreview.subject,
+    },
+    {
+      id: 'inquiry-form-submission',
+      name: '自訂表格新回覆通知',
+      kind: 'manual',
+      subject: '新表格回覆 — {表格名稱}',
+      purpose: '客人送出由「表格設定」建立的自訂表格後，把欄位答案及上載檔案的限時下載連結寄給該表格設定的同事。',
+      trigger: '客人成功送出公開表格，而且該表格已開啟「新回覆通知」及最少有一個收件人時寄出。同一份回覆重試不會重複寄。',
+      frequency: '無固定排程。客人成功送出表格時寄出。',
+      to: {
+        addresses: [],
+        summary: '每份表格「通知與回覆」內設定的收件人',
+        note: '每份表格有自己的 To 名單。Reply-to 可選用該表格其中一個電郵欄位。沒有 Cc、Bcc。主旨和是否包括空白欄位、來源頁面、訪客 IP 都由該表格設定。上載檔案以有效 7 日的私人下載連結附上。',
+      },
+      cc: [],
+      bcc: [],
+      previewHtml: inquirySubmissionPreview.html,
+      previewSubject: inquirySubmissionPreview.subject,
+    },
+    {
+      id: 'inquiry-form-autoresponder',
+      name: '自訂表格自動回覆',
+      kind: 'manual',
+      subject: '已收到你的 {表格名稱}',
+      purpose: '客人送出自訂表格後，向表格內指定的電郵欄位寄出確認信和資料副本；副本內的上載檔案使用限時下載連結。',
+      trigger: '客人成功送出公開表格，而且該表格已開啟「自動回覆客人」及選好有效電郵欄位時寄出。同一份回覆重試不會重複寄。',
+      frequency: '無固定排程。客人成功送出表格時寄出。',
+      to: {
+        addresses: [],
+        summary: '表格內指定的客人電郵欄位',
+        note: '沒有固定收件人。每份表格可選擇一個電郵欄位作 To，並設定寄件人顯示名稱、Reply-to、主旨、內容及是否附上回覆副本。沒有 Cc、Bcc。副本內的檔案下載連結有效 7 日。',
+      },
+      cc: [],
+      bcc: [],
+      previewHtml: inquiryAutoresponderPreview.html,
+      previewSubject: inquiryAutoresponderPreview.subject,
     },
     {
       id: 'ads-email-alert',
@@ -279,7 +322,7 @@ function buildAnnualFeePreview(): { html: string; subject: string } {
       },
     ],
   });
-  const email = built.emails.find((item) => item.email === 'pm@example.com') ?? built.emails[0];
+  const email = built.emails.find((item) => item.to === 'pm@example.com') ?? built.emails[0];
   return { html: email?.html ?? '', subject: email?.subject ?? ANNUAL_FEES_REMINDER_SUBJECT };
 }
 
@@ -374,6 +417,39 @@ function buildUnmatchedPreview(): { html: string; subject: string } {
     receivedOn: '2026-11-26',
   });
   return { html: email.html, subject: email.subject };
+}
+
+const SAMPLE_INQUIRY_ANSWERS: InquiryEmailAnswer[] = [
+  { label: '姓名', value: '陳大文' },
+  { label: '電郵', value: 'customer@example.com' },
+  { label: '查詢項目', value: ['報價', '參觀'] },
+  { label: '其他資料', value: '希望下星期安排電話跟進。' },
+  {
+    label: '參考檔案',
+    value: [],
+    files: [{ name: 'office-plan.pdf', url: 'https://example.com/sample-signed-download' }],
+  },
+];
+
+function buildInquirySubmissionPreview(): { html: string; subject: string } {
+  return buildInquirySubmissionEmail({
+    formName: '辦公室工程查詢',
+    websiteName: 'Office Design 辦公室設計工程',
+    answers: SAMPLE_INQUIRY_ANSWERS,
+    submittedAt: '2026/11/27 14:30:00',
+    referrer: 'https://hkofficedesign.com/contact',
+  });
+}
+
+function buildInquiryAutoresponderPreview(): { html: string; subject: string } {
+  return buildInquiryAutoresponderEmail({
+    formName: '辦公室工程查詢',
+    websiteName: 'Office Design 辦公室設計工程',
+    answers: SAMPLE_INQUIRY_ANSWERS,
+    senderName: 'Office Design',
+    messageTemplate: '陳大文你好，多謝你的查詢。我們已收到資料，會盡快跟進。',
+    includeCopy: true,
+  });
 }
 
 function buildAdsPreview(): { html: string; subject: string } {
