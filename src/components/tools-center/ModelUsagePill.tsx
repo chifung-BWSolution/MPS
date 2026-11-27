@@ -38,13 +38,16 @@ export function ModelUsagePill({
           <ChevronDown size={12} className="shrink-0 opacity-60" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="z-[120] w-56">
+      <DropdownMenuContent align="end" className="z-[120] w-max max-w-[90vw]">
         {ranked.models.length === 0 ? (
-          <DropdownMenuItem disabled>尚未有生成紀錄</DropdownMenuItem>
+          <DropdownMenuItem disabled className="whitespace-nowrap">尚未有生成紀錄</DropdownMenuItem>
         ) : (
           ranked.models.map((item) => (
-            <DropdownMenuItem key={`${item.rank}-${item.model}`} className="min-w-0 text-[12px]" title={item.model}>
-              <span className="min-w-0 truncate">{item.model}</span>
+            <DropdownMenuItem
+              key={`${item.rank}-${item.model}`}
+              className="w-full justify-between gap-3 whitespace-nowrap text-[12px]"
+            >
+              <span>{item.model}</span>
               <span className="shrink-0">{item.mark}</span>
             </DropdownMenuItem>
           ))
