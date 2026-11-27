@@ -3,6 +3,7 @@ import {
   Ban,
   CheckCircle2,
   Circle,
+  Clock,
   FileText,
   Globe2,
   Layers,
@@ -25,6 +26,7 @@ interface PageInventoryPanelProps {
   analysis: ReaddyProjectAnalysis | null;
   activePageId: string | null;
   loadingPageId: string | null;
+  backgroundConverting?: boolean;
   onSelectPage: (page: ReaddyDiscoveredPage) => void;
   onToggleSkipPage: (pageId: string) => void;
 }
@@ -51,6 +53,7 @@ export function PageInventoryPanel({
   analysis,
   activePageId,
   loadingPageId,
+  backgroundConverting = false,
   onSelectPage,
   onToggleSkipPage,
 }: PageInventoryPanelProps) {
@@ -65,14 +68,20 @@ export function PageInventoryPanel({
     let migrated = 0;
     let skipped = 0;
     let parsed = 0;
+    let syncing = 0;
+    let failed = 0;
+    let pending = 0;
     for (const p of pages) {
       if (p.migrationStatus === 'migrated') migrated += 1;
       else if (p.migrationStatus === 'skipped') skipped += 1;
       else if (p.migrationStatus === 'parsed') parsed += 1;
+      else if (p.migrationStatus === 'syncing') syncing += 1;
+      else if (p.migrationStatus === 'failed') failed += 1;
+      else pending += 1;
     }
     const activeTotal = Math.max(0, pages.length - skipped);
     const pct = activeTotal > 0 ? Math.round((migrated / activeTotal) * 100) : 0;
-    return { total: pages.length, migrated, skipped, parsed, activeTotal, pct };
+    return { total: pages.length, migrated, skipped, parsed, syncing, failed, pending, activeTotal, pct };
   }, [pages]);
 
   const localeOptions = useMemo(() => {
@@ -169,6 +178,22 @@ export function PageInventoryPanel({
                 style={{ width: `${stats.pct}%` }}
               />
             </div>
+
+            {backgroundConverting && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-teal-50/70 px-2.5 py-1.5 text-[10.5px] font-medium text-[#08967F]">
+                <span className="inline-flex items-center gap-1 font-semibold">
+                  <Loader2 size={11} className="animate-spin shrink-0" />
+                  <span>後台轉換中</span>
+                </span>
+                {stats.syncing > 0 && (
+                  <span className="tabular-nums">進行中 {stats.syncing}</span>
+                )}
+                <span className="text-slate-600 tabular-nums">待轉換 {stats.pending}</span>
+                {stats.failed > 0 && (
+                  <span className="text-rose-600 tabular-nums">失敗 {stats.failed}</span>
+                )}
+              </div>
+            )}
 
             {/* Extracted OKLCH Theme Swatches + Fonts */}
             {(colorSwatches.length > 0 || (!compact && analysis.cssTokens.fontHeading)) && (
@@ -302,6 +327,7 @@ export function PageInventoryPanel({
               filteredPages.map((page) => {
                 const isActive = activePageId === page.id;
                 const isLoading = loadingPageId === page.id;
+                const isSyncing = page.migrationStatus === 'syncing';
                 const isMigrated = page.migrationStatus === 'migrated';
                 const isParsed = page.migrationStatus === 'parsed';
                 const isFailed = page.migrationStatus === 'failed';
@@ -315,7 +341,9 @@ export function PageInventoryPanel({
                       'px-3 py-2.5 flex items-start justify-between gap-2 cursor-pointer transition-colors group',
                       isActive
                         ? 'bg-teal-50/75 border-l-2 border-l-[#0BB59B]'
-                        : 'hover:bg-slate-50',
+                        : isSyncing
+                          ? 'bg-teal-50/45 border-l-2 border-l-[#0BB59B]/70'
+                          : 'hover:bg-slate-50',
                       isSkipped && 'opacity-55',
                     )}
                   >
@@ -325,18 +353,22 @@ export function PageInventoryPanel({
                         title={
                           isLoading
                             ? '載入頁面源碼中…'
-                            : isMigrated
-                              ? '已寫入 Framer'
-                              : isParsed
-                                ? '已解析區塊，待寫入 Framer'
-                                : isFailed
-                                  ? '上次解析或寫入失敗，可重新解析或同步'
-                                  : isSkipped
-                                    ? '已略過此頁'
-                                    : '待解析'
+                            : isSyncing
+                              ? '正在轉換並寫入 Framer…'
+                              : isMigrated
+                                ? '已寫入 Framer'
+                                : isParsed
+                                  ? '已解析區塊，待寫入 Framer'
+                                  : isFailed
+                                    ? '上次解析或寫入失敗，可重新解析或同步'
+                                    : isSkipped
+                                      ? '已略過此頁'
+                                      : backgroundConverting
+                                        ? '排隊等待後台轉換'
+                                        : '待解析'
                         }
                       >
-                        {isLoading ? (
+                        {isLoading || isSyncing ? (
                           <Loader2 size={14} className="animate-spin text-[#0BB59B]" />
                         ) : isMigrated ? (
                           <CheckCircle2 size={14} className="text-[#0BB59B]" />
@@ -346,6 +378,8 @@ export function PageInventoryPanel({
                           <XCircle size={14} className="text-rose-500" />
                         ) : isSkipped ? (
                           <Ban size={14} className="text-slate-400" />
+                        ) : backgroundConverting ? (
+                          <Clock size={14} className="text-slate-400" />
                         ) : (
                           <Circle size={14} className="text-slate-300 group-hover:text-slate-400" />
                         )}
@@ -370,6 +404,16 @@ export function PageInventoryPanel({
                           >
                             {KIND_LABELS[page.pageKind] || page.pageKind}
                           </span>
+                          {isSyncing && (
+                            <span className="px-1.5 py-0.2 rounded bg-[#0BB59B]/15 text-[#08967F] text-[9.5px] font-semibold shrink-0">
+                              轉換中
+                            </span>
+                          )}
+                          {!isSyncing && isFailed && (
+                            <span className="px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 border border-rose-200/70 text-[9.5px] font-semibold shrink-0">
+                              失敗
+                            </span>
+                          )}
                         </div>
                         <div className="text-[10.5px] font-mono text-slate-400 truncate mt-0.5">
                           {page.path}
@@ -387,12 +431,19 @@ export function PageInventoryPanel({
 
                     <button
                       type="button"
+                      disabled={backgroundConverting}
                       onClick={(e) => {
                         e.stopPropagation();
                         onToggleSkipPage(page.id);
                       }}
-                      title={isSkipped ? '恢復此頁到遷移隊列' : '標記略過此頁'}
-                      className="opacity-0 group-hover:opacity-100 px-1.5 py-0.5 rounded text-[10px] text-slate-400 hover:text-[#101B2D] hover:bg-slate-200/60 transition-opacity shrink-0"
+                      title={
+                        backgroundConverting
+                          ? '後台轉換進行中，暫時無法切換略過'
+                          : isSkipped
+                            ? '恢復此頁到遷移隊列'
+                            : '標記略過此頁'
+                      }
+                      className="opacity-0 group-hover:opacity-100 px-1.5 py-0.5 rounded text-[10px] text-slate-400 hover:text-[#101B2D] hover:bg-slate-200/60 transition-opacity shrink-0 disabled:pointer-events-none disabled:opacity-0"
                     >
                       {isSkipped ? (
                         <RotateCcw size={11} />

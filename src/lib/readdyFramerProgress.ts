@@ -8,6 +8,25 @@ export type SavedPageProgress = {
   sectionCount?: number;
   framerPageNodeId?: string | null;
   lastSyncedAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export type BackgroundPageState = {
+  migrationStatus: ReaddyPageMigrationStatus;
+  jobId?: string | null;
+  sectionCount?: number;
+  framerPageNodeId?: string | null;
+  lastSyncedAt?: string | null;
+};
+
+export type ServerRunPageRecord = {
+  pageId?: string;
+  path?: string;
+  status?: 'migrated' | 'failed' | string;
+  jobId?: string | null;
+  sectionCount?: number;
+  framerPageNodeId?: string | null;
+  lastSyncedAt?: string | null;
 };
 
 export function normalizeFramerProjectKey(framerProjectUrl?: string | null): string {
@@ -53,15 +72,30 @@ export function savePageProgress(
   framerProjectUrl?: string | null,
 ): void {
   try {
+    const prev = loadSavedPageProgress(projectKey, framerProjectUrl);
+    const now = new Date().toISOString();
     const map: Record<string, SavedPageProgress> = {};
     for (const page of pages) {
+      const prevEntry = prev[page.id];
+      if (page.migrationStatus === 'syncing') {
+        if (prevEntry) {
+          map[page.id] = prevEntry;
+        }
+        continue;
+      }
       if (page.migrationStatus !== 'pending' || page.jobId) {
+        const unchanged =
+          prevEntry &&
+          prevEntry.migrationStatus === page.migrationStatus &&
+          (prevEntry.jobId ?? null) === (page.jobId ?? null) &&
+          (prevEntry.lastSyncedAt ?? null) === (page.lastSyncedAt ?? null);
         map[page.id] = {
           migrationStatus: page.migrationStatus,
           jobId: page.jobId,
           sectionCount: page.sectionCount,
           framerPageNodeId: page.framerPageNodeId,
           lastSyncedAt: page.lastSyncedAt,
+          updatedAt: unchanged ? prevEntry.updatedAt : now,
         };
       }
     }
@@ -79,11 +113,135 @@ export function patchSavedPageProgress(
 ): void {
   try {
     const map = loadSavedPageProgress(projectKey, framerProjectUrl);
-    map[pageId] = { ...map[pageId], ...patch };
+    map[pageId] = {
+      ...map[pageId],
+      ...patch,
+      updatedAt: patch.updatedAt ?? new Date().toISOString(),
+    };
     localStorage.setItem(progressStorageKey(projectKey, framerProjectUrl), JSON.stringify(map));
   } catch {
     // ignore quota errors
   }
+}
+
+export function createInitialBackgroundPageStates(
+  pages: Array<{ id: string }>,
+): Record<string, BackgroundPageState> {
+  const states: Record<string, BackgroundPageState> = {};
+  for (const page of pages) {
+    states[page.id] = { migrationStatus: 'pending' };
+  }
+  return states;
+}
+
+export function buildServerRunPageStates(params: {
+  pages: Array<{ id: string; path: string }>;
+  runStatus: string;
+  pageIndex?: number | null;
+  currentPageId?: string | null;
+  progressPages?: Array<ServerRunPageRecord | null | undefined>;
+}): {
+  pageStates: Record<string, BackgroundPageState>;
+  done: number;
+  finishedEntries: Array<{ pageId: string; state: BackgroundPageState }>;
+} {
+  const pageStates = createInitialBackgroundPageStates(params.pages);
+  const validIds = new Set(params.pages.map((p) => p.id));
+  const idByPath = new Map<string, string>();
+  for (const p of params.pages) {
+    if (!idByPath.has(p.path)) idByPath.set(p.path, p.id);
+  }
+
+  const finishedEntries: Array<{ pageId: string; state: BackgroundPageState }> = [];
+  for (const entry of params.progressPages ?? []) {
+    if (!entry) continue;
+    if (entry.status !== 'migrated' && entry.status !== 'failed') continue;
+    const resolvedId =
+      entry.pageId && validIds.has(entry.pageId)
+        ? entry.pageId
+        : entry.path
+          ? idByPath.get(entry.path)
+          : undefined;
+    if (!resolvedId) continue;
+    const state: BackgroundPageState = {
+      migrationStatus: entry.status === 'migrated' ? 'migrated' : 'failed',
+      jobId: entry.jobId,
+      sectionCount: entry.sectionCount,
+      framerPageNodeId: entry.framerPageNodeId,
+      lastSyncedAt: entry.lastSyncedAt,
+    };
+    pageStates[resolvedId] = state;
+    finishedEntries.push({ pageId: resolvedId, state });
+  }
+
+  const terminal =
+    params.runStatus === 'success' ||
+    params.runStatus === 'failed' ||
+    params.runStatus === 'cancelled';
+
+  if (!terminal && (params.runStatus === 'running' || Boolean(params.currentPageId))) {
+    let activePageId: string | undefined;
+    if (
+      params.currentPageId &&
+      validIds.has(params.currentPageId) &&
+      pageStates[params.currentPageId]?.migrationStatus === 'pending'
+    ) {
+      activePageId = params.currentPageId;
+    } else if (
+      typeof params.pageIndex === 'number' &&
+      Number.isInteger(params.pageIndex) &&
+      params.pageIndex >= 0 &&
+      params.pageIndex < params.pages.length
+    ) {
+      activePageId = params.pages[params.pageIndex].id;
+    }
+    if (activePageId && pageStates[activePageId]?.migrationStatus === 'pending') {
+      pageStates[activePageId] = {
+        ...pageStates[activePageId],
+        migrationStatus: 'syncing',
+      };
+    }
+  }
+
+  let done = 0;
+  for (const state of Object.values(pageStates)) {
+    if (state.migrationStatus === 'migrated' || state.migrationStatus === 'failed') {
+      done += 1;
+    }
+  }
+
+  return { pageStates, done, finishedEntries };
+}
+
+export function applyBackgroundConversionOverlay(
+  pages: ReaddyDiscoveredPage[],
+  overlay: { active: boolean; pageStates: Record<string, BackgroundPageState> },
+): ReaddyDiscoveredPage[] {
+  if (!overlay.active) return pages;
+  return pages.map((page) => {
+    const live = overlay.pageStates[page.id];
+    if (!live) return page;
+    return {
+      ...page,
+      migrationStatus: live.migrationStatus,
+      jobId: live.jobId !== undefined ? live.jobId : page.jobId,
+      sectionCount: live.sectionCount !== undefined ? live.sectionCount : page.sectionCount,
+      framerPageNodeId:
+        live.framerPageNodeId !== undefined ? live.framerPageNodeId : page.framerPageNodeId,
+      lastSyncedAt: live.lastSyncedAt !== undefined ? live.lastSyncedAt : page.lastSyncedAt,
+    };
+  });
+}
+
+export function isRemoteJobNewerThanLocal(
+  local: SavedPageProgress,
+  remoteTimestamp?: string | null,
+): boolean {
+  const localTs = Date.parse(local.updatedAt || local.lastSyncedAt || '');
+  if (!Number.isFinite(localTs)) return true;
+  const remoteTs = Date.parse(remoteTimestamp || '');
+  if (!Number.isFinite(remoteTs)) return false;
+  return remoteTs > localTs;
 }
 
 /** owner/repo, ignoring branch, commit, and URL spelling. */
@@ -123,6 +281,13 @@ export function framerSiteSnapshotIdentity(site: FramerSiteSnapshot): string {
   const name = site.project_name?.trim().toLowerCase();
   if (name) return `${site.source_type}:${name}`;
   return site.project_key || site.id;
+}
+
+/** One-click conversion always re-parses and syncs every active (non-skipped) page, including already-migrated ones. */
+export function selectPagesForOneClickConversion(
+  pages: ReaddyDiscoveredPage[],
+): ReaddyDiscoveredPage[] {
+  return pages.filter((page) => page.migrationStatus !== 'skipped');
 }
 
 export function mergeFramerSiteSnapshots(rows: FramerSiteSnapshot[], limit: number): FramerSiteSnapshot[] {

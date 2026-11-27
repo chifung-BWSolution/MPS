@@ -144,7 +144,7 @@ export async function runReaddyConversion(
 
     try {
       const loaded = await loadPageCode(input, page);
-      if (!loaded.code.trim()) {
+      if (!loaded.code.trim() && !input.analysis.sourceOrigin?.trim()) {
         throw new Error('這個頁面沒有可解析的代碼');
       }
       if (isCancelled()) {
@@ -200,6 +200,11 @@ export async function runReaddyConversion(
         index,
         total,
         message: `一次寫入 ${page.path} 的 ${sectionCount} 個區塊`,
+        patch: {
+          migrationStatus: 'syncing',
+          jobId: parsed.job_id,
+          sectionCount,
+        },
       });
       const synced = await syncFramerPage({
         job_id: parsed.job_id,
@@ -249,6 +254,7 @@ export async function runReaddyConversion(
           index,
           total,
           message: `${page.path} 已達 Framer 工作階段上限，360 秒後再試`,
+          patch: { migrationStatus: 'pending' },
         });
       } else {
         report({

@@ -49,10 +49,13 @@ import {
 } from '@/lib/readdyProjectAnalyzer';
 import { extractReaddyCode } from '@/lib/readdyConversionMail';
 import {
+  applyBackgroundConversionOverlay,
+  isRemoteJobNewerThanLocal,
   loadSavedPageProgress,
   mergeFramerSiteSnapshots,
   normalizeFramerProjectKey,
   savePageProgress,
+  selectPagesForOneClickConversion,
 } from '@/lib/readdyFramerProgress';
 import { useReaddyConversionJob } from '@/context/ReaddyConversionJobContext';
 import type {
@@ -571,16 +574,19 @@ export function ReaddyFramerWorkbench() {
       const pages = rawAnalysis.pages.map((p) => {
         const local = saved[p.id];
         const remote = jobByPath.get(p.path);
-        if (local) {
+        const remoteTs = remote?.updated_at ?? remote?.created_at;
+        if (local && local.migrationStatus !== 'syncing') {
           let migrationStatus = local.migrationStatus;
-          if (remote?.status === 'completed') {
-            migrationStatus = 'migrated';
-          } else if (
-            local.migrationStatus === 'failed' &&
-            remote?.status === 'parsed' &&
-            remote.id !== local.jobId
-          ) {
-            migrationStatus = 'parsed';
+          if (remote && isRemoteJobNewerThanLocal(local, remoteTs)) {
+            if (remote.status === 'completed') {
+              migrationStatus = 'migrated';
+            } else if (
+              local.migrationStatus === 'failed' &&
+              remote.status === 'parsed' &&
+              remote.id !== local.jobId
+            ) {
+              migrationStatus = 'parsed';
+            }
           }
           return {
             ...p,
@@ -666,16 +672,63 @@ export function ReaddyFramerWorkbench() {
   );
 
   const conversionJob = useReaddyConversionJob();
-  const seenPatchToken = useRef(0);
+  const conversionMatchesCurrentProject = Boolean(
+    analysis &&
+      conversionJob.phase !== 'idle' &&
+      conversionJob.projectKey === analysis.projectKey &&
+      isSameFramerProject(conversionJob.framerProjectUrl, framerProjectUrl),
+  );
+  const isBackgroundConversionForCurrentProject =
+    conversionMatchesCurrentProject && conversionJob.phase === 'running';
+  const syncedFinishedKeyRef = useRef('');
 
   useEffect(() => {
-    const patch = conversionJob.pagePatch;
-    if (!patch || patch.token === seenPatchToken.current) return;
-    if (!analysis || patch.projectKey !== analysis.projectKey) return;
-    seenPatchToken.current = patch.token;
-    updatePageState(patch.pageId, patch.page);
+    if (!conversionMatchesCurrentProject || !analysis) return;
+    if (conversionJob.finishedVersion === 0) return;
+    const batchKey = `${conversionJob.runId ?? ''}::${conversionJob.projectKey}::${conversionJob.finishedVersion}`;
+    if (syncedFinishedKeyRef.current === batchKey) return;
+    syncedFinishedKeyRef.current = batchKey;
+
+    setAnalysis((prev) => {
+      if (!prev || prev.projectKey !== conversionJob.projectKey) return prev;
+      let changed = false;
+      const nextPages = prev.pages.map((page) => {
+        const live = conversionJob.pageStates[page.id];
+        if (!live || (live.migrationStatus !== 'migrated' && live.migrationStatus !== 'failed')) {
+          return page;
+        }
+        if (
+          page.migrationStatus === live.migrationStatus &&
+          (page.jobId ?? null) === (live.jobId ?? page.jobId ?? null) &&
+          (page.lastSyncedAt ?? null) === (live.lastSyncedAt ?? page.lastSyncedAt ?? null)
+        ) {
+          return page;
+        }
+        changed = true;
+        return {
+          ...page,
+          migrationStatus: live.migrationStatus,
+          jobId: live.jobId !== undefined ? live.jobId : page.jobId,
+          sectionCount: live.sectionCount !== undefined ? live.sectionCount : page.sectionCount,
+          framerPageNodeId:
+            live.framerPageNodeId !== undefined ? live.framerPageNodeId : page.framerPageNodeId,
+          lastSyncedAt: live.lastSyncedAt !== undefined ? live.lastSyncedAt : page.lastSyncedAt,
+        };
+      });
+      if (!changed) return prev;
+      savePageProgress(prev.projectKey, nextPages, framerProjectUrlRef.current);
+      return { ...prev, pages: nextPages };
+    });
     void refreshHistory();
-  }, [analysis, conversionJob.pagePatch, refreshHistory, updatePageState]);
+  }, [
+    analysis,
+    conversionJob.finishedVersion,
+    conversionJob.pageStates,
+    conversionJob.projectKey,
+    conversionJob.runId,
+    conversionMatchesCurrentProject,
+    refreshHistory,
+  ]);
 
   const selectAndAssemblePage = useCallback(
     async (
@@ -884,6 +937,10 @@ export function ReaddyFramerWorkbench() {
   };
 
   const handleToggleSkipPage = (pageId: string) => {
+    if (isBackgroundConversionForCurrentProject) {
+      toast.message('後台轉換進行中，暫時無法切換略過狀態');
+      return;
+    }
     const target = analysis?.pages.find((p) => p.id === pageId);
     if (!target) return;
     const nextStatus: ReaddyPageMigrationStatus =
@@ -1355,11 +1412,9 @@ export function ReaddyFramerWorkbench() {
       toast.error('請先分析 Readdy 專案，再一鍵轉換。');
       return;
     }
-    const pages = analysis.pages.filter(
-      (page) => page.migrationStatus !== 'skipped' && page.migrationStatus !== 'migrated',
-    );
+    const pages = selectPagesForOneClickConversion(analysis.pages);
     if (pages.length === 0) {
-      toast.message('沒有待轉換的頁面。已跳過或已搬完的頁面不會重跑。');
+      toast.message('沒有可轉換的頁面。全部頁面目前都已略過。');
       return;
     }
     conversionJob.start({
@@ -1382,6 +1437,17 @@ export function ReaddyFramerWorkbench() {
       pages,
     });
   };
+
+  const inventoryAnalysis = useMemo(() => {
+    if (!analysis || !isBackgroundConversionForCurrentProject) return analysis;
+    return {
+      ...analysis,
+      pages: applyBackgroundConversionOverlay(analysis.pages, {
+        active: true,
+        pageStates: conversionJob.pageStates,
+      }),
+    };
+  }, [analysis, conversionJob.pageStates, isBackgroundConversionForCurrentProject]);
 
   const sections = irPayload?.sections || [];
   const rightPaneLoading = loadingPageId !== null || parsing;
@@ -1451,9 +1517,10 @@ export function ReaddyFramerWorkbench() {
 
               <PageInventoryPanel
                 compact={railCompact}
-                analysis={analysis}
+                analysis={inventoryAnalysis}
                 activePageId={activePageId}
                 loadingPageId={loadingPageId}
+                backgroundConverting={isBackgroundConversionForCurrentProject}
                 onSelectPage={handleSelectPage}
                 onToggleSkipPage={handleToggleSkipPage}
               />
@@ -1478,7 +1545,7 @@ export function ReaddyFramerWorkbench() {
                   type="button"
                   onClick={handleStartBackgroundConversion}
                   disabled={conversionJob.phase === 'running'}
-                  title="把未跳過、尚未搬完的頁面放進後台轉換，完成後寄出結果郵件"
+                  title="將全部未略過頁面重新解析並同步到 Framer，完成後寄出結果郵件"
                   className="inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#0BB59B] px-3 py-2 text-[12px] font-semibold text-white transition-colors hover:bg-[#09a78e] disabled:opacity-70"
                 >
                   {conversionJob.phase === 'running' ? (

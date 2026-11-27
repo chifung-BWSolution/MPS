@@ -4,10 +4,15 @@ import { createRequire } from 'node:module';
 import vm from 'node:vm';
 import ts from 'typescript';
 import {
+  applyBackgroundConversionOverlay,
+  buildServerRunPageStates,
+  createInitialBackgroundPageStates,
+  isRemoteJobNewerThanLocal,
   loadSavedPageProgress,
   normalizeFramerProjectKey,
   patchSavedPageProgress,
   savePageProgress,
+  selectPagesForOneClickConversion,
 } from '../src/lib/readdyFramerProgress.ts';
 import { matchSceneToSection, resolveGridColumns, type SceneNode } from '../src/lib/readdySceneGraph.ts';
 import type { ReaddyDiscoveredPage } from '../src/types/readdyFramer.ts';
@@ -68,6 +73,185 @@ assert.deepEqual(
 patchSavedPageProgress('gh:org/repo:main', '/', { migrationStatus: 'migrated', jobId: 'new-job' }, projectB);
 assert.equal(loadSavedPageProgress('gh:org/repo:main', projectB)['/']?.migrationStatus, 'migrated');
 assert.equal(loadSavedPageProgress('gh:org/repo:main', projectA)['/']?.migrationStatus, 'failed');
+
+const oneClickTargets = selectPagesForOneClickConversion([
+  { ...pageHome, id: '/', path: '/', migrationStatus: 'migrated' },
+  { ...pageHome, id: '/services', path: '/services', migrationStatus: 'parsed' },
+  { ...pageHome, id: '/about', path: '/about', migrationStatus: 'pending' },
+  { ...pageHome, id: '/faq', path: '/faq', migrationStatus: 'failed' },
+  { ...pageHome, id: '/404', path: '/404', migrationStatus: 'skipped' },
+]);
+assert.deepEqual(
+  oneClickTargets.map((p) => p.id),
+  ['/', '/services', '/about', '/faq'],
+  'One-click conversion includes already-migrated, parsed, pending, and failed pages while excluding skipped pages',
+);
+
+// 1b. Background conversion overlay, server poll snapshot, timestamp guard & transient syncing guard
+const overlayInputPages: ReaddyDiscoveredPage[] = [
+  { ...pageHome, id: '/', path: '/', migrationStatus: 'migrated', jobId: 'job-prev-1', sectionCount: 5 },
+  { ...pageHome, id: '/services', path: '/services', migrationStatus: 'migrated', jobId: 'job-prev-2', sectionCount: 3 },
+  { ...pageHome, id: '/about', path: '/about', migrationStatus: 'pending', jobId: null },
+  { ...pageHome, id: '/404', path: '/404', migrationStatus: 'skipped', jobId: null },
+];
+const initialBgStates = createInitialBackgroundPageStates(
+  overlayInputPages.filter((p) => p.migrationStatus !== 'skipped'),
+);
+assert.deepEqual(initialBgStates, {
+  '/': { migrationStatus: 'pending' },
+  '/services': { migrationStatus: 'pending' },
+  '/about': { migrationStatus: 'pending' },
+});
+
+const overlaidActive = applyBackgroundConversionOverlay(overlayInputPages, {
+  active: true,
+  pageStates: {
+    ...initialBgStates,
+    '/': { migrationStatus: 'syncing' },
+  },
+});
+assert.equal(overlaidActive[0].migrationStatus, 'syncing', 'Active page is marked syncing');
+assert.equal(overlaidActive[0].jobId, 'job-prev-1', 'Existing jobId metadata is preserved while syncing');
+assert.equal(overlaidActive[1].migrationStatus, 'pending', 'Previously migrated queued page resets to pending while active');
+assert.equal(overlaidActive[1].jobId, 'job-prev-2', 'Existing jobId metadata is preserved while queued');
+assert.equal(overlaidActive[3].migrationStatus, 'skipped', 'Skipped pages remain skipped');
+
+assert.equal(
+  applyBackgroundConversionOverlay(overlayInputPages, { active: false, pageStates: initialBgStates }),
+  overlayInputPages,
+  'Inactive overlay returns the original pages array reference untouched',
+);
+
+const runPages = [
+  { id: '/', path: '/' },
+  { id: '/services', path: '/services' },
+  { id: '/about', path: '/about' },
+];
+const queuedSnap = buildServerRunPageStates({
+  pages: runPages,
+  runStatus: 'queued',
+  pageIndex: 0,
+  progressPages: [],
+});
+assert.equal(queuedSnap.done, 0);
+assert.equal(queuedSnap.pageStates['/'].migrationStatus, 'pending', 'Queued run keeps pages pending before worker starts');
+
+const runningIndex0Snap = buildServerRunPageStates({
+  pages: runPages,
+  runStatus: 'running',
+  pageIndex: 0,
+  progressPages: [],
+});
+assert.equal(runningIndex0Snap.pageStates['/'].migrationStatus, 'syncing', 'Running with page_index 0 marks page 0 syncing even without currentPageId');
+assert.equal(runningIndex0Snap.pageStates['/services'].migrationStatus, 'pending');
+
+const runningExplicitSnap = buildServerRunPageStates({
+  pages: runPages,
+  runStatus: 'running',
+  pageIndex: 0,
+  currentPageId: '/services',
+  progressPages: [
+    { pageId: '/', path: '/', status: 'migrated', jobId: 'job-1', sectionCount: 4 },
+  ],
+});
+assert.equal(runningExplicitSnap.pageStates['/'].migrationStatus, 'migrated');
+assert.equal(runningExplicitSnap.pageStates['/services'].migrationStatus, 'syncing');
+assert.equal(runningExplicitSnap.done, 1);
+
+const staleCurrentPageSnap = buildServerRunPageStates({
+  pages: runPages,
+  runStatus: 'running',
+  pageIndex: 1,
+  currentPageId: '/',
+  progressPages: [
+    { pageId: '/', path: '/', status: 'migrated', jobId: 'job-1', sectionCount: 4 },
+  ],
+});
+assert.equal(
+  staleCurrentPageSnap.pageStates['/services'].migrationStatus,
+  'syncing',
+  'Falls back to pages[pageIndex] as syncing when currentPageId still points to a just-migrated page',
+);
+
+const multiFinishSnap = buildServerRunPageStates({
+  pages: runPages,
+  runStatus: 'running',
+  pageIndex: 2,
+  progressPages: [
+    { pageId: '/', path: '/', status: 'migrated', jobId: 'job-1', sectionCount: 4 },
+    { path: '/services', status: 'failed', sectionCount: 0 },
+  ],
+});
+assert.equal(multiFinishSnap.done, 2);
+assert.equal(multiFinishSnap.finishedEntries.length, 2);
+assert.equal(multiFinishSnap.pageStates['/'].migrationStatus, 'migrated');
+assert.equal(multiFinishSnap.pageStates['/services'].migrationStatus, 'failed');
+assert.equal(multiFinishSnap.pageStates['/about'].migrationStatus, 'syncing');
+
+const cancelledSnap = buildServerRunPageStates({
+  pages: runPages,
+  runStatus: 'cancelled',
+  pageIndex: 1,
+  currentPageId: '/services',
+  progressPages: [
+    { pageId: '/', path: '/', status: 'migrated', jobId: 'job-1', sectionCount: 4 },
+  ],
+});
+assert.equal(cancelledSnap.pageStates['/services'].migrationStatus, 'pending', 'Cancelled run clears syncing back to pending');
+
+const successSnap = buildServerRunPageStates({
+  pages: runPages,
+  runStatus: 'success',
+  pageIndex: 3,
+  currentPageId: '/about',
+  progressPages: [
+    { pageId: '/', path: '/', status: 'migrated', jobId: 'job-1', sectionCount: 4 },
+    { pageId: '/services', path: '/services', status: 'migrated', jobId: 'job-2', sectionCount: 3 },
+    { pageId: '/about', path: '/about', status: 'migrated', jobId: 'job-3', sectionCount: 2 },
+  ],
+});
+assert.equal(successSnap.done, 3);
+assert.equal(successSnap.pageStates['/about'].migrationStatus, 'migrated');
+
+// Timestamp guard for hydration
+assert.equal(
+  isRemoteJobNewerThanLocal(
+    { migrationStatus: 'failed', updatedAt: '2026-11-27T10:00:00.000Z' },
+    '2026-11-27T09:00:00.000Z',
+  ),
+  false,
+  'Older completed remote job does not overwrite newer local failed status',
+);
+assert.equal(
+  isRemoteJobNewerThanLocal(
+    { migrationStatus: 'failed', updatedAt: '2026-11-27T10:00:00.000Z' },
+    '2026-11-27T11:00:00.000Z',
+  ),
+  true,
+  'Newer completed remote job promotes local failed status',
+);
+assert.equal(
+  isRemoteJobNewerThanLocal({ migrationStatus: 'failed' }, '2026-11-27T09:00:00.000Z'),
+  true,
+  'Legacy local entry without timestamps preserves promotion behavior',
+);
+
+// savePageProgress must never persist transient syncing
+savePageProgress(
+  'gh:org/repo:sync-guard',
+  [{ ...pageHome, id: '/', path: '/', migrationStatus: 'migrated', jobId: 'job-durable' }],
+  projectA,
+);
+savePageProgress(
+  'gh:org/repo:sync-guard',
+  [{ ...pageHome, id: '/', path: '/', migrationStatus: 'syncing', jobId: 'job-durable' }],
+  projectA,
+);
+assert.equal(
+  loadSavedPageProgress('gh:org/repo:sync-guard', projectA)['/']?.migrationStatus,
+  'migrated',
+  'savePageProgress keeps prior durable status instead of writing transient syncing',
+);
 
 // 2. Load pure parser helpers directly from supabase/functions/readdy-parse-ir/index.ts
 const parseIrTs = readFileSync(new URL('../supabase/functions/readdy-parse-ir/index.ts', import.meta.url), 'utf8');

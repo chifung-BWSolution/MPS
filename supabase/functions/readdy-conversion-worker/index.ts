@@ -31,6 +31,7 @@ type PageRecord = ReaddyConversionPageResult & {
 
 type RunProgress = {
   currentLabel?: string;
+  currentPageId?: string | null;
   done?: number;
   total?: number;
   pages?: PageRecord[];
@@ -187,7 +188,15 @@ async function finishRun(row: RunRow, progress: RunProgress, cancelled: boolean)
     status: result.kind === "success" ? "success" : "failed",
     error: result.error ?? null,
     page_index: row.payload.pages.length,
-    progress: { ...progress, emailError, summary, currentLabel: summary, leaseToken: null, leaseUntil: null },
+    progress: {
+      ...progress,
+      emailError,
+      summary,
+      currentLabel: summary,
+      currentPageId: null,
+      leaseToken: null,
+      leaseUntil: null,
+    },
   });
 }
 
@@ -224,6 +233,7 @@ async function processRun(id: string, token?: string) {
     if (progress.retryAfter && Date.parse(progress.retryAfter) > Date.now()) return;
 
     const page = row.payload.pages[index];
+    progress.currentPageId = page.id;
     progress.currentLabel = `正在轉換 ${page.path}（${index + 1}/${row.payload.pages.length}）`;
     progress.leaseUntil = new Date(Date.now() + LEASE_MS).toISOString();
     await saveRun(id, { status: "running", page_index: index, progress });
@@ -252,7 +262,9 @@ async function processRun(id: string, token?: string) {
         );
         loaded = { code: assembled.code, includedFiles: assembled.includedFiles, repoMeta: null };
       }
-      if (!loaded.code.trim()) throw new Error("這個頁面沒有可解析的代碼");
+      if (!loaded.code.trim() && !(row.payload.analysis as { sourceOrigin?: string }).sourceOrigin?.trim()) {
+        throw new Error("這個頁面沒有可解析的代碼");
+      }
 
       const parsed = await callFunction("readdy-parse-ir", {
         user_id: row.user_id,
@@ -305,6 +317,7 @@ async function processRun(id: string, token?: string) {
       };
       index += 1;
       processed += 1;
+      progress.currentPageId = row.payload.pages[index]?.id ?? null;
       progress.done = pages.filter((item) => item?.status === "migrated" || item?.status === "failed").length;
       progress.currentLabel = `${page.path} 已寫入 Framer`;
       await saveRun(id, { status: "running", page_index: index, progress });
@@ -332,6 +345,7 @@ async function processRun(id: string, token?: string) {
       };
       index += 1;
       processed += 1;
+      progress.currentPageId = row.payload.pages[index]?.id ?? null;
       progress.done = pages.filter((item) => item?.status === "migrated" || item?.status === "failed").length;
       progress.currentLabel = `${page.path} 失敗：${message}`;
       await saveRun(id, { status: "running", page_index: index, progress });
@@ -400,7 +414,13 @@ Deno.serve(async (req: Request) => {
         project_key: input.projectKey,
         status: "queued",
         payload: input,
-        progress: { currentLabel: `準備轉換 ${input.pages.length} 個頁面`, done: 0, total: input.pages.length, pages: [] },
+        progress: {
+          currentLabel: `準備重新解析並同步 ${input.pages.length} 個頁面`,
+          currentPageId: null,
+          done: 0,
+          total: input.pages.length,
+          pages: [],
+        },
         page_index: 0,
       })
       .select("id")
