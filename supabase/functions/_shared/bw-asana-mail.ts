@@ -5,6 +5,7 @@ export type BwRouteRule = {
   assigneeEmail: string;
   projectGid: string;
   enabled: boolean;
+  collaboratorGids?: string[];
 };
 
 function escapeReg(value: string): string {

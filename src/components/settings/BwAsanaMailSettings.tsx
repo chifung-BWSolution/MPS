@@ -52,6 +52,7 @@ type Route = {
   project_gid: string;
   enabled: boolean;
   sort_order: number;
+  collaborator_gids: string[];
 };
 
 type AsanaPerson = { gid: string; name: string; email: string };
@@ -310,7 +311,10 @@ export function BwAsanaMailSettings({ panel = 'all' }: { panel?: 'all' | 'rules'
       });
       setSavedEnabled(row.enabled === true);
     }
-    setRoutes((routesRes.data || []) as Route[]);
+    setRoutes(((routesRes.data || []) as Route[]).map((route) => ({
+      ...route,
+      collaborator_gids: (route.collaborator_gids || []).map((gid) => gid.trim()).filter(Boolean),
+    })));
     if (directory.error) {
       setDirectoryError(directory.error);
       setPeople([]);
@@ -415,6 +419,7 @@ export function BwAsanaMailSettings({ panel = 'all' }: { panel?: 'all' | 'rules'
         project_gid: route.project_gid.trim(),
         enabled: route.enabled,
         sort_order: route.sort_order,
+        collaborator_gids: (route.collaborator_gids || []).map((gid) => gid.trim()).filter(Boolean),
         updated_at: new Date().toISOString(),
       };
     });
@@ -520,9 +525,13 @@ export function BwAsanaMailSettings({ panel = 'all' }: { panel?: 'all' | 'rules'
       if (projectFilter === '__none__' && projectKey(route)) return false;
       if (projectFilter && projectFilter !== '__none__' && projectKey(route) !== projectFilter) return false;
       if (!needle) return true;
-      return [route.keyword, route.assignee_email, route.project_name].join(' ').toLowerCase().includes(needle);
+      const extras = (route.collaborator_gids || []).map((gid) => {
+        const person = people.find((item) => item.gid === gid);
+        return person ? personLabel(person) : '';
+      });
+      return [route.keyword, route.assignee_email, route.project_name, ...extras].join(' ').toLowerCase().includes(needle);
     });
-  }, [routes, routeFilter, projectFilter, routeQuery]);
+  }, [routes, routeFilter, projectFilter, routeQuery, people]);
 
   const showRules = panel === 'all' || panel === 'rules';
   const showJobs = panel !== 'rules';
@@ -675,7 +684,7 @@ export function BwAsanaMailSettings({ panel = 'all' }: { panel?: 'all' | 'rules'
       <Section
         step="3"
         title="每封都加的人"
-        hint="這幾個人會加在每一個 task。同下面每一行的負責人電郵是兩件事。"
+        hint="這幾個人會加在每一個 task。下面每一種查詢可以再加自己的人。負責人電郵是另一件事。"
         tone="violet"
       >
         <div className="flex flex-wrap gap-2">
@@ -714,7 +723,7 @@ export function BwAsanaMailSettings({ panel = 'all' }: { panel?: 'all' | 'rules'
       <Section
         step="4"
         title="每種查詢"
-        hint="藍色是收 task 的電郵。綠色是 Asana 專案。琥珀色的卡片是未填完，未填就不會開。"
+        hint="藍色是收 task 的電郵。綠色是 Asana 專案。紫色是這種查詢額外加的人。琥珀色的卡片是未填完，未填就不會開。"
         tone="slate"
       >
         <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -851,6 +860,41 @@ export function BwAsanaMailSettings({ panel = 'all' }: { panel?: 'all' | 'rules'
                     />
                   </div>
                 </div>
+                <div className="mt-3 rounded-md border border-violet-300 bg-violet-50 p-3">
+                  <p className="text-[13px] font-semibold text-violet-950">這種查詢再加的人</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(route.collaborator_gids || []).map((gid) => {
+                      const person = people.find((item) => item.gid === gid);
+                      return (
+                        <span key={gid} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-violet-200 bg-white px-3 text-[14px] text-slate-900">
+                          {person ? personLabel(person) : '未能對上電郵'}
+                          <button
+                            type="button"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 hover:bg-violet-100 hover:text-slate-900"
+                            aria-label="移除這個人"
+                            onClick={() => updateRoute(route.id, { collaborator_gids: route.collaborator_gids.filter((item) => item !== gid) })}
+                          >
+                            <X size={14} />
+                          </button>
+                        </span>
+                      );
+                    })}
+                    {(route.collaborator_gids || []).length === 0 && <p className="text-[14px] text-slate-700">未加額外的人。上面每封都加的人仍然會加。</p>}
+                  </div>
+                  <div className="mt-2 max-w-xl">
+                    <NameSearch
+                      items={people}
+                      labelOf={personLabel}
+                      placeholder="搜尋電郵或姓名，加到這種查詢"
+                      emptyText={directoryError || '找不到這個人'}
+                      onPick={(person) => {
+                        const current = route.collaborator_gids || [];
+                        if (current.includes(person.gid)) return;
+                        updateRoute(route.id, { collaborator_gids: [...current, person.gid] });
+                      }}
+                    />
+                  </div>
+                </div>
                 <label className="mt-3 flex min-h-11 items-center gap-3 text-[14px] text-slate-900">
                   <input
                     type="checkbox"
@@ -875,6 +919,7 @@ export function BwAsanaMailSettings({ panel = 'all' }: { panel?: 'all' | 'rules'
             assignee_email: '',
             project_name: '',
             project_gid: '',
+            collaborator_gids: [],
             enabled: true,
             sort_order: current.length,
           }])}

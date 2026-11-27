@@ -32,6 +32,7 @@ type RouteRow = {
   assignee_email: string;
   project_gid: string;
   enabled: boolean;
+  collaborator_gids: string[] | null;
 };
 
 function json(status: number, body: unknown): Response {
@@ -282,7 +283,7 @@ Deno.serve(async (req) => {
 
   const { data: routeRows, error: routeErr } = await supabase
     .from("bw_asana_mail_routes")
-    .select("keyword, assignee_email, project_gid, enabled")
+    .select("keyword, assignee_email, project_gid, enabled, collaborator_gids")
     .order("sort_order", { ascending: true });
   if (routeErr) return json(500, { error: routeErr.message });
   const routes: BwRouteRule[] = ((routeRows || []) as RouteRow[]).map((route) => ({
@@ -290,6 +291,7 @@ Deno.serve(async (req) => {
     assigneeEmail: route.assignee_email,
     projectGid: route.project_gid,
     enabled: route.enabled,
+    collaboratorGids: (route.collaborator_gids || []).map((gid) => String(gid).trim()).filter(Boolean),
   }));
 
   const { data: tokenRow } = await supabase
@@ -464,7 +466,10 @@ Deno.serve(async (req) => {
           notes: parsed.notes,
           dueOn: received,
           assignee,
-          followers: followers.filter((gid) => gid !== assignee),
+          followers: [...new Set([
+            ...followers,
+            ...(matched.collaboratorGids || []),
+          ].map((gid) => gid.trim()).filter((gid) => gid && gid !== assignee))],
         });
         let imageError: string | null = null;
         try {
