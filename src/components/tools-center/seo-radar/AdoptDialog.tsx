@@ -69,7 +69,7 @@ export function AdoptDialog({ open, count, busy, onClose, onConfirm }: AdoptDial
             <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-[12px] leading-relaxed text-amber-800">
               <AlertTriangle size={14} className="mt-0.5 shrink-0" />
               <span>
-                加入佇列後，排程會用 Gemini 自動生成文章並消耗每日額度。已生成或已發佈的詞會被跳過，不會被覆寫。
+                加入佇列後，排程會依 Grok、Gemini、OpenCode 的順序生成文章。前一個帳戶欠費或失敗時改用下一個。已生成或已發佈的詞會被跳過，不會被覆寫。
               </span>
             </div>
           )}

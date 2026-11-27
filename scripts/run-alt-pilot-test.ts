@@ -24,6 +24,7 @@ import {
 import { countWords } from '../src/lib/altText.ts';
 import { formatAltQuota, isAltQuotaExceeded } from '../src/lib/altQuota.ts';
 import { altModelRankMark, pickCurrentModelUsage, rankUsedAltModels } from '../src/lib/altModels.ts';
+import { TEXT_LLM_ORDER } from '../src/lib/llmProviderOrder.ts';
 import { canManageAltPilot } from '../src/lib/altPermissions.ts';
 import type { AltPageContext, AltSuggestionRow } from '../src/lib/altTypes.ts';
 
@@ -339,6 +340,7 @@ assert.equal(canManageAltPilot(null), false);
 // ---------------------------------------------------------------------------
 // 10) 實際使用的模型：藥丸取最後一次，下拉依首次出現標 ①②③
 // ---------------------------------------------------------------------------
+assert.deepEqual([...TEXT_LLM_ORDER], ['grok', 'gemini', 'opencode']);
 assert.equal(altModelRankMark(1), '①');
 assert.equal(altModelRankMark(2), '②');
 assert.equal(altModelRankMark(3), '③');

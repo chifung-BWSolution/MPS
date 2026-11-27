@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Languages, Megaphone } from 'lucide-react';
 
+import { ModelUsagePill } from '@/components/tools-center/ModelUsagePill';
+import type { AltModelUsagePoint } from '@/lib/altModels.ts';
 import { FeatureTabs, type FeatureTabItem } from '../FeatureTabs';
 import { ToneRewriteTool } from '../tone-rewrite/ToneRewriteTool';
 import { AdCreativePanel } from './ad/AdCreativePanel';
@@ -29,18 +31,29 @@ const TABS: FeatureTabItem<CopyStudioTab>[] = [
  */
 export function CopyStudioTool() {
   const [tab, setTab] = useState<CopyStudioTab>('ad');
+  const [modelUsage, setModelUsage] = useState<AltModelUsagePoint[]>([]);
+  const onModelUsed = useCallback((point: AltModelUsagePoint) => {
+    setModelUsage((previous) => {
+      const last = previous[previous.length - 1];
+      if (last && last.model === point.model && last.createdAt === point.createdAt) return previous;
+      return [...previous, point];
+    });
+  }, []);
 
   return (
     <div className="space-y-4">
-      <FeatureTabs<CopyStudioTab>
-        items={TABS}
-        value={tab}
-        onChange={setTab}
-        ariaLabel="AI文案工坊子功能"
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <FeatureTabs<CopyStudioTab>
+          items={TABS}
+          value={tab}
+          onChange={setTab}
+          ariaLabel="AI文案工坊子功能"
+        />
+        <ModelUsagePill modelUsage={modelUsage} />
+      </div>
 
       <div role="tabpanel" hidden={tab !== 'ad'} aria-label="文案多角度轉寫">
-        <AdCreativePanel active={tab === 'ad'} />
+        <AdCreativePanel active={tab === 'ad'} onModelUsed={onModelUsed} />
       </div>
 
       <div role="tabpanel" hidden={tab !== 'tone'} aria-label="語氣校對改寫">

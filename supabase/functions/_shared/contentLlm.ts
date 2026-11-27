@@ -15,6 +15,8 @@ import type {
   ContentGeneratedArticle,
   ContentLlmResult,
 } from "../../../src/lib/contentTypes.ts";
+import { TEXT_LLM_ORDER } from "../../../src/lib/llmProviderOrder.ts";
+import { callOpencodeChat, opencodeApiKey, opencodeModel, OpencodeError } from "./opencode.ts";
 
 /**
  * Gemini 封裝（PRD §7.4、M2-02）
@@ -55,8 +57,12 @@ export class ContentLlmError extends Error {
   }
 }
 
+function grokApiKey(): string {
+  return (Deno.env.get("XAI_API_KEY") || Deno.env.get("GROK_API_KEY") || "").trim();
+}
+
 export function llmConfigured(): boolean {
-  return Boolean((Deno.env.get(ENV_API_KEY) || "").trim());
+  return Boolean(grokApiKey() || opencodeApiKey() || (Deno.env.get(ENV_API_KEY) || "").trim());
 }
 
 export function defaultModel(): string {
@@ -215,62 +221,186 @@ export interface GenerateArticleLlmResult {
   attempts: number;
 }
 
-/** 生成文章：prompt → JSON → 收斂成 ContentGeneratedArticle，含一次重試 */
+const GROK_ENDPOINT = "https://api.x.ai/v1/chat/completions";
+
+async function callGrokJson(
+  prompt: string,
+  timeoutMs: number,
+): Promise<ContentLlmResult<Record<string, unknown>>> {
+  const apiKey = grokApiKey();
+  const model = (Deno.env.get("GROK_MODEL") || "").trim() || "grok-4.5";
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetchWithAiUsage(GROK_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.65,
+        messages: [
+          { role: "system", content: "只輸出合法 JSON，不要 Markdown。" },
+          { role: "user", content: prompt },
+        ],
+      }),
+      signal: controller.signal,
+    }, {
+      feature: "content-automation",
+      operation: "generate_article",
+      provider: "grok",
+      model,
+    });
+    const raw = await response.text().catch(() => "");
+    if (!response.ok) {
+      throw new ContentLlmError(
+        response.status === 429 || response.status === 402 ? "rate_limited" : "upstream_error",
+        `Grok 回應 ${response.status}：${raw.slice(0, 180)}`,
+        { retryable: response.status === 429 || response.status === 402 || response.status >= 500 },
+      );
+    }
+    const payload = JSON.parse(raw) as {
+      choices?: Array<{ message?: { content?: string } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+    };
+    const text = payload.choices?.[0]?.message?.content?.trim() || "";
+    const data = parseJsonResponse(text) as Record<string, unknown>;
+    const tokensIn = Number(payload.usage?.prompt_tokens) || 0;
+    const tokensOut = Number(payload.usage?.completion_tokens) || 0;
+    return {
+      data,
+      usage: {
+        model,
+        tokens_in: tokensIn,
+        tokens_out: tokensOut,
+        cost_usd: estimateLlmCostUsd(model, tokensIn, tokensOut),
+      },
+      latencyMs: Date.now() - startedAt,
+    };
+  } catch (error) {
+    if (error instanceof ContentLlmError) throw error;
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ContentLlmError("timeout", "Grok 逾時", { retryable: true });
+    }
+    throw new ContentLlmError(
+      "upstream_error",
+      error instanceof Error ? error.message : "Grok 失敗",
+      { retryable: true },
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function callOpencodeJson(
+  prompt: string,
+  timeoutMs: number,
+): Promise<ContentLlmResult<Record<string, unknown>>> {
+  const model = opencodeModel();
+  const startedAt = Date.now();
+  try {
+    const text = await callOpencodeChat({
+      system: "只輸出合法 JSON，不要 Markdown。",
+      prompt,
+      model,
+      apiKey: opencodeApiKey(),
+      timeoutMs,
+      temperature: 0.65,
+      usage: { feature: "content-automation", operation: "generate_article" },
+    });
+    return {
+      data: parseJsonResponse(text) as Record<string, unknown>,
+      usage: {
+        model,
+        tokens_in: 0,
+        tokens_out: 0,
+        cost_usd: 0,
+      },
+      latencyMs: Date.now() - startedAt,
+    };
+  } catch (error) {
+    if (error instanceof OpencodeError) {
+      throw new ContentLlmError(
+        error.kind === "timeout"
+          ? "timeout"
+          : error.kind === "rate_limited" || error.status === 402
+          ? "rate_limited"
+          : "upstream_error",
+        error.message,
+        { retryable: true },
+      );
+    }
+    throw error;
+  }
+}
+
+/** 生成文章：Grok → Gemini → OpenCode。前一個失敗（含欠費）就試下一個。 */
 export async function generateArticleWithLlm(
   options: GenerateArticleLlmOptions,
 ): Promise<GenerateArticleLlmResult> {
-  const attempts = Math.max(1, Math.min(3, options.attempts ?? 2));
   const prompt = buildGenerationPrompt(options.brief);
-  let lastError: unknown = null;
+  const budgetMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const startedAt = Date.now();
-  let usage: GenerateArticleLlmResult["usage"] = {
-    model: options.model || defaultModel(),
-    tokens_in: 0,
-    tokens_out: 0,
-    cost_usd: 0,
-  };
+  const errors: string[] = [];
+  const geminiModel = options.model || defaultModel();
 
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      const result = await callGeminiJson<Record<string, unknown>>({
-        prompt,
-        model: options.model,
-        timeoutMs: options.timeoutMs,
-        temperature: 0.65,
-      });
-      usage = {
-        ...result.usage,
-        tokens_in: usage.tokens_in + result.usage.tokens_in,
-        tokens_out: usage.tokens_out + result.usage.tokens_out,
-        cost_usd: usage.cost_usd + result.usage.cost_usd,
-      };
-      const generated = parseGeneratedArticle(result.data, options.parseOptions);
-      if (!isValidGeneratedArticle(generated)) {
-        throw new ContentLlmError("bad_json", "模型輸出內容不足（標題或正文過短）", {
-          retryable: true,
-        });
+  const steps = TEXT_LLM_ORDER.filter((provider) => {
+    if (provider === "grok") return Boolean(grokApiKey());
+    if (provider === "gemini") return Boolean((Deno.env.get(ENV_API_KEY) || "").trim());
+    return Boolean(opencodeApiKey());
+  });
+
+  if (steps.length === 0) {
+    throw new ContentLlmError("llm_not_configured", "未設定 Grok、Gemini 或 OpenCode", {
+      retryable: false,
+    });
+  }
+
+  for (const provider of steps) {
+    let tried = 0;
+    while (tried < 2) {
+      tried += 1;
+      const remaining = budgetMs - (Date.now() - startedAt);
+      if (remaining < 8_000) break;
+      // 欠費的 Grok／OpenCode 盡快失敗，把剩餘時間留給下一個模型。
+      const timeoutMs = provider === "gemini"
+        ? Math.min(45_000, remaining)
+        : Math.min(8_000, remaining);
+      try {
+        const result = provider === "grok"
+          ? await callGrokJson(prompt, timeoutMs)
+          : provider === "gemini"
+          ? await callGeminiJson<Record<string, unknown>>({
+            prompt,
+            model: geminiModel,
+            timeoutMs,
+            temperature: 0.65,
+          })
+          : await callOpencodeJson(prompt, timeoutMs);
+        const generated = parseGeneratedArticle(result.data, options.parseOptions);
+        if (!isValidGeneratedArticle(generated)) {
+          throw new ContentLlmError("bad_json", `${provider} 內容不足`, { retryable: true });
+        }
+        return {
+          generated,
+          usage: result.usage,
+          latencyMs: Date.now() - startedAt,
+          attempts: tried,
+        };
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : String(error));
+        const badJson = error instanceof ContentLlmError && error.code === "bad_json";
+        if (!badJson) break;
       }
-      return {
-        generated,
-        usage,
-        latencyMs: Date.now() - startedAt,
-        attempts: attempt,
-      };
-    } catch (error) {
-      lastError = error;
-      if (error instanceof ContentLlmError && !error.retryable) break;
-      if (error instanceof ContentLlmError && attempt < attempts) {
-        const waitMs = error.retryAfterMs ?? 2_000 * attempt;
-        await new Promise((resolve) => setTimeout(resolve, Math.min(waitMs, 30_000)));
-        continue;
-      }
-      if (attempt >= attempts) break;
     }
   }
 
-  if (lastError instanceof ContentLlmError) throw lastError;
   throw new ContentLlmError(
     "upstream_error",
-    lastError instanceof Error ? lastError.message : "文章生成失敗",
+    errors.join("；").slice(0, 400) || "文章生成失敗",
+    { retryable: true },
   );
 }

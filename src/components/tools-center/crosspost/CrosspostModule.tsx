@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { History as HistoryIcon, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
@@ -13,6 +13,7 @@ import {
   type SavedCopySet,
 } from '@/lib/crosspostApi';
 import { cn } from '@/lib/utils';
+import { ModelUsagePill } from '@/components/tools-center/ModelUsagePill';
 import { CrosspostComposer } from './CrosspostComposer';
 import { CrosspostHistoryView } from './CrosspostHistoryView';
 import { CrosspostResultView } from './CrosspostResultView';
@@ -259,6 +260,16 @@ export function CrosspostModule() {
     [removeSet, result],
   );
 
+  const modelUsage = useMemo(() => {
+    const points = sets
+      .filter((set) => set.model)
+      .map((set) => ({ model: set.model as string, createdAt: set.createdAt }));
+    if (result?.model) {
+      points.push({ model: result.model, createdAt: new Date().toISOString() });
+    }
+    return points;
+  }, [sets, result]);
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -309,11 +320,14 @@ export function CrosspostModule() {
           </button>
         </div>
 
-        {mode === 'compose' && (
-          <p className="text-[11px] text-muted-foreground">
-            生成後自動存入歷史；字數超標只提示，不會自動裁剪。
-          </p>
-        )}
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {mode === 'compose' && (
+            <p className="text-[11px] text-muted-foreground">
+              生成後自動存入歷史；字數超標只提示，不會自動裁剪。
+            </p>
+          )}
+          <ModelUsagePill modelUsage={modelUsage} />
+        </div>
       </div>
 
       {serviceStatus === 'missing' && (

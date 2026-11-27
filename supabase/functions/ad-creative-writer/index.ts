@@ -12,6 +12,13 @@ import {
   type AdBrief,
   type AdCreativeResult,
 } from "../../../src/lib/adCreative.ts";
+import { TEXT_LLM_ORDER } from "../../../src/lib/llmProviderOrder.ts";
+import {
+  callOpencodeChat,
+  opencodeApiKey,
+  opencodeModel,
+  OpencodeError,
+} from "../_shared/opencode.ts";
 
 /**
  * 文案工坊 · 廣告切角與 A/B 文案矩陣 · 生成 Edge Function
@@ -21,8 +28,8 @@ import {
  *   → { ok: true, data: { angles, provider, model, latencyMs, generatedAt, warnings } }
  *   → { ok: false, code, error }
  *
- * 供應商順序：Grok（XAI_API_KEY / GROK_API_KEY）→ Gemini（GEMINI_API_KEY）。
- * 兩者都失敗時回 429 / 504 / 502 / 503，**不生成假文案**。
+ * 供應商順序：Grok → Gemini → OpenCode。前一個失敗（含帳戶欠費）就試下一個。
+ * 全部失敗時回 429 / 504 / 502 / 503，**不生成假文案**。
  */
 
 const corsHeaders = {
@@ -47,7 +54,7 @@ const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models
 const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") || "").trim();
 const SUPABASE_ANON_KEY = (Deno.env.get("SUPABASE_ANON_KEY") || "").trim();
 
-type Provider = "grok" | "gemini";
+type Provider = "grok" | "gemini" | "opencode";
 type LlmCode =
   | "not_configured"
   | "rate_limited"
@@ -180,8 +187,8 @@ async function callGrok(
 
     const rawText = await response.text().catch(() => "");
 
-    if (response.status === 429) {
-      throw new LlmError("rate_limited", "Grok 額度或速率上限（429）", 429);
+    if (response.status === 429 || response.status === 402) {
+      throw new LlmError("rate_limited", `Grok 額度或速率上限（${response.status}）`, response.status);
     }
     if (!response.ok) {
       throw new LlmError(
@@ -301,6 +308,37 @@ async function callGemini(
   }
 }
 
+async function callOpencode(
+  prompt: string,
+  model: string,
+  apiKey: string,
+  timeoutMs: number,
+): Promise<string> {
+  try {
+    return await callOpencodeChat({
+      system: AD_SYSTEM_PROMPT,
+      prompt,
+      model,
+      apiKey,
+      timeoutMs,
+      maxTokens: MAX_OUTPUT_TOKENS,
+      temperature: 0.8,
+      usage: { feature: "ad-creative-writer", operation: "generate_copy" },
+    });
+  } catch (error) {
+    if (error instanceof OpencodeError) {
+      if (error.kind === "rate_limited") {
+        throw new LlmError("rate_limited", error.message, error.status);
+      }
+      if (error.kind === "timeout") {
+        throw new LlmError("timeout", error.message, 504);
+      }
+      throw new LlmError("upstream_error", error.message, 502);
+    }
+    throw error;
+  }
+}
+
 function callProvider(
   provider: Provider,
   prompt: string,
@@ -308,9 +346,9 @@ function callProvider(
   apiKey: string,
   timeoutMs: number,
 ): Promise<string> {
-  return provider === "grok"
-    ? callGrok(prompt, model, apiKey, timeoutMs)
-    : callGemini(prompt, model, apiKey, timeoutMs);
+  if (provider === "grok") return callGrok(prompt, model, apiKey, timeoutMs);
+  if (provider === "gemini") return callGemini(prompt, model, apiKey, timeoutMs);
+  return callOpencode(prompt, model, apiKey, timeoutMs);
 }
 
 // ============================================================
@@ -346,8 +384,9 @@ async function attemptProvider(options: AttemptOptions): Promise<ProviderResult>
     }
 
     const isRetry = attempt > 0;
+    const firstCallCap = provider === "gemini" ? MAX_CALL_MS : 15_000;
     const timeoutMs = Math.min(
-      isRetry ? MAX_RETRY_MS : MAX_CALL_MS,
+      isRetry ? MAX_RETRY_MS : firstCallCap,
       Math.max(MIN_CALL_MS, remaining - 3_000),
     );
 
@@ -423,9 +462,10 @@ Deno.serve(async (req: Request) => {
   }
 
   const grokKey = (Deno.env.get("XAI_API_KEY") || Deno.env.get("GROK_API_KEY") || "").trim();
+  const opencodeKey = opencodeApiKey();
   const geminiKey = (Deno.env.get("GEMINI_API_KEY") || "").trim();
 
-  if (!grokKey && !geminiKey) {
+  if (!grokKey && !opencodeKey && !geminiKey) {
     return failJson(503, "llm_not_configured", "系統未設定 AI，請聯絡管理員");
   }
 
@@ -436,9 +476,14 @@ Deno.serve(async (req: Request) => {
   const deadline = startedAt + TOTAL_BUDGET_MS;
   const failures: LlmError[] = [];
 
-  const providers: Array<{ provider: Provider; model: string; apiKey: string }> = [];
-  if (grokKey) providers.push({ provider: "grok", model: grokModel, apiKey: grokKey });
-  if (geminiKey) providers.push({ provider: "gemini", model: geminiModel, apiKey: geminiKey });
+  const keyed: Record<Provider, { model: string; apiKey: string }> = {
+    grok: { model: grokModel, apiKey: grokKey },
+    gemini: { model: geminiModel, apiKey: geminiKey },
+    opencode: { model: opencodeModel(), apiKey: opencodeKey },
+  };
+  const providers = TEXT_LLM_ORDER
+    .map((provider) => ({ provider, ...keyed[provider] }))
+    .filter((candidate) => Boolean(candidate.apiKey));
 
   for (const candidate of providers) {
     try {

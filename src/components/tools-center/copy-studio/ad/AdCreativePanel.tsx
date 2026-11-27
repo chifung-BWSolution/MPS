@@ -18,6 +18,7 @@ import { useAdCreative } from './useAdCreative';
 
 export interface AdCreativePanelProps {
   active: boolean;
+  onModelUsed?: (point: { model: string; createdAt: string }) => void;
 }
 
 type AdPhase = 'brief' | 'generating' | 'result';
@@ -28,9 +29,14 @@ type AdPhase = 'brief' | 'generating' | 'result';
  *   2. generating 隱藏所有輸入卡，只留生成中提示卡（有動畫、可取消）
  *   3. result     淡入＋上移過渡到結果頁；可「重新生成」（保留簡報回表單，不自動生成）或「返回首頁」（清空回首頁）
  */
-export function AdCreativePanel({ active }: AdCreativePanelProps) {
+export function AdCreativePanel({ active, onModelUsed }: AdCreativePanelProps) {
   const ad = useAdCreative({ active });
   const result = ad.effectiveResult;
+
+  useEffect(() => {
+    if (!result?.model || !result.generatedAt) return;
+    onModelUsed?.({ model: result.model, createdAt: result.generatedAt });
+  }, [onModelUsed, result?.generatedAt, result?.model]);
 
   const phase: AdPhase = ad.generating && !result ? 'generating' : result ? 'result' : 'brief';
   const sectionRef = useRef<HTMLDivElement | null>(null);

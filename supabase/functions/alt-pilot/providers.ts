@@ -1,6 +1,6 @@
 import { fetchWithAiUsage } from "../_shared/ai-usage.ts";
 /**
- * ALT Pilot · LLM provider（Grok 主、DeepSeek 備援、Gemini 最後）
+ * ALT Pilot · LLM provider（Grok → Gemini → OpenCode）
  *
  * 三者都收圖片 base64，回傳純文字 JSON。Provider 只負責呼叫與用量，
  * JSON 解析與品質規則在 index.ts / altPrompt.ts。
@@ -368,13 +368,8 @@ async function callDeepSeek(request: VisionRequest): Promise<ProviderResult> {
 }
 
 /**
- * Provider 順序：
- *   1. `ALT_PROVIDER=grok|gemini` 明確指定時，依指定順序
- *   2. 否則看 `alt_settings.model`：grok* → Grok 主；gemini* → Gemini 主
- *   3. 主 provider 失敗才用另一個（有 key 才用）
- *
- * 預設 model 是 grok-4.7，所以會沿用系統現有的 XAI key；
- * Grok 失敗時若設了 OPENCODE_GO_API_KEY，會先走 DeepSeek V4.1 Flash 1017。
+ * 預設 Grok → Gemini → OpenCode。帳戶欠費或呼叫失敗就試下一個。
+ * `ALT_PROVIDER=gemini` 或設定模型以 gemini 開頭時，才把 Gemini 放在 Grok 前面。
  */
 export async function generateVision(request: VisionRequest): Promise<ProviderResult> {
   const geminiKey = (Deno.env.get('GEMINI_API_KEY') || '').trim();
@@ -397,9 +392,9 @@ export async function generateVision(request: VisionRequest): Promise<ProviderRe
   const preferGrok =
     preferred === 'grok' ||
     (preferred !== 'gemini' && /^grok/i.test(request.model.trim()));
-  // Grok 主 → DeepSeek V4.1 Flash 1017 備援 → Gemini 最後。
-  const order: Array<'grok' | 'deepseek' | 'gemini'> = preferGrok
-    ? ['grok', 'deepseek', 'gemini']
+  // 預設 Grok → Gemini → OpenCode。明示 ALT_PROVIDER=gemini 時才把 Gemini 放前面。
+  const order: Array<'grok' | 'gemini' | 'deepseek'> = preferGrok
+    ? ['grok', 'gemini', 'deepseek']
     : ['gemini', 'grok', 'deepseek'];
 
   const errors: string[] = [];

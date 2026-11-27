@@ -227,7 +227,7 @@ export const mainMenuItems: MainMenuItem[] = [
     id: 'tools-center',
     label: '工具中心',
     subMenus: [
-      { id: 'social-automation', label: '社媒自動化營運' },
+      { id: 'social-automation', label: '社媒自動化營運', adminOnly: true },
       { id: 'readdy-framer', label: 'Readdy → Framer 轉換' },
       { id: 'seo-radar', label: 'SEO 雷達' },
       { id: 'hotspot-radar', label: '熱點雷達' },

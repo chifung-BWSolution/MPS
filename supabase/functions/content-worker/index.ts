@@ -1381,7 +1381,7 @@ async function generateArticleForKeyword(params: {
   const brandVoice = site.brand_voice || DEFAULT_BRAND_VOICE;
   const section = await resolveSectionForGeneration(supabase, slot.site_id, keyword, seoDefaults);
 
-  // ---- 步驟 3–4：brief → Gemini（JSON、重試、usage 都在 _shared/contentLlm） ----
+  // ---- 步驟 3–4：brief → Grok，失敗再 Gemini，最後 OpenCode ----
   const brief = buildBrief({
     site: { ...profile, timezone: site.timezone, locale: site.locale },
     keyword: keyword.keyword,
