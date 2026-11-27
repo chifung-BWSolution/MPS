@@ -328,7 +328,7 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
     }
   }, []);
 
-  const loadBootstrap = useCallback(async () => {
+  const loadBootstrap = useCallback(async (): Promise<AltRunRow[] | null> => {
     setBootstrapLoading(true);
     setSchemaMissing(false);
     setError(null);
@@ -341,12 +341,14 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
       setSettings(nextSettings);
       setUsage(nextUsage);
       setRuns(nextRuns);
+      return nextRuns;
     } catch (bootstrapError) {
       if (isAltSchemaMissing(bootstrapError)) {
         setSchemaMissing(true);
       } else {
         setError(altErrorMessage(bootstrapError));
       }
+      return null;
     } finally {
       setBootstrapLoading(false);
     }
@@ -397,16 +399,23 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
   }, [schemaMissing, settings?.enabled, run?.id, usage?.today, modelStamp]);
 
   useEffect(() => {
-    void loadBootstrap();
-    const initial = readRunIdFromHash();
-    if (initial) void loadRun(initial);
+    let cancelled = false;
+    void (async () => {
+      const nextRuns = await loadBootstrap();
+      if (cancelled || !nextRuns) return;
+      const target = readRunIdFromHash() || nextRuns[0]?.id || null;
+      if (target && target !== runIdRef.current) await loadRun(target);
+    })();
 
     const onHashChange = () => {
       const next = readRunIdFromHash();
       if (next && next !== runIdRef.current) void loadRun(next);
     };
     window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('hashchange', onHashChange);
+    };
   }, [loadBootstrap, loadRun]);
 
   useEffect(() => {
@@ -910,16 +919,22 @@ function AltPilotRealPage({ onPreviewDemo }: { onPreviewDemo: () => void }) {
     setDeletingRunId(runId);
     try {
       await deleteAltRun(runId);
-      setRuns((previous) => previous.filter((item) => item.id !== runId));
+      const remaining = runs.filter((item) => item.id !== runId);
+      setRuns(remaining);
       if (run?.id === runId) {
-        setRun(null);
-        setPage(null);
-        setImages([]);
-        setSuggestions([]);
-        setSelected(new Set());
-        setDrafts({});
-        setVerifyResult(null);
-        replaceRunHash(null);
+        const nextRun = remaining[0];
+        if (nextRun) {
+          void loadRun(nextRun.id);
+        } else {
+          setRun(null);
+          setPage(null);
+          setImages([]);
+          setSuggestions([]);
+          setSelected(new Set());
+          setDrafts({});
+          setVerifyResult(null);
+          replaceRunHash(null);
+        }
       }
       toast.success('已刪除歷史紀錄');
     } catch (deleteError) {
