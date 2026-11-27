@@ -679,4 +679,37 @@ check('切站時會丟棄過期回應（避免顯示別站的詞）', () => {
   assert.match(hookSrc, /seq !== refreshSeq\.current/);
 });
 
+console.log('\n跳轉與匯入安全');
+
+check('按鈕順序：關鍵字庫 → 採納 → 刪除，且關鍵字庫沒有箭頭圖示', () => {
+  assert.match(
+    toolSource,
+    /onClick=\{openKeywordLibrary\}[\s\S]{0,400}?關鍵字庫[\s\S]{0,400}?採納到關鍵字庫（[\s\S]{0,400}?刪除/,
+  );
+  assert.doesNotMatch(toolSource, /ArrowUpRight/);
+  assert.match(toolSource, /title="會前往「網站內容自動化 → 關鍵字庫」/);
+});
+
+check('關鍵字庫頁有返回入口，資料安全提醒已移除', () => {
+  const library = readFileSync(
+    join(root, 'src/components/tools-center/content/seo/KeywordLibraryView.tsx'),
+    'utf8',
+  );
+  assert.match(library, /返回 SEO 雷達/);
+  assert.doesNotMatch(library, /資料安全提醒/);
+});
+
+check('CSV 匯入預設改為「暫緩」，不再給 backlog 選項', () => {
+  const dialog = readFileSync(
+    join(root, 'src/components/tools-center/content/seo/KeywordImportDialog.tsx'),
+    'utf8',
+  );
+  assert.match(
+    dialog,
+    /DEFAULT_IMPORT_PIPELINE_STATUS: ContentKeywordPipelineStatus = 'parked'/,
+  );
+  assert.doesNotMatch(dialog, /value="backlog"/);
+  assert.match(dialog, /會先標為「暫緩」，不會自動生成文章/);
+});
+
 console.log(`\nSEO 雷達自測：${passed} 項全部通過\n`);

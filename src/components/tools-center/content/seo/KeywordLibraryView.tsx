@@ -791,6 +791,13 @@ export function KeywordLibraryView({ route, navigate }: ContentViewProps) {
       subtitle="管理各站關鍵字與自動生成開關：CSV 匯入、GSC 機會詞、批次啟用（只影響你勾選的詞）"
       actions={
         <>
+          <a
+            href="#tools-center/seo-radar"
+            className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[12px] font-medium text-teal-700 transition-colors hover:bg-teal-50"
+            title="回到 SEO 雷達，繼續挑選熱門關鍵詞"
+          >
+            ← 返回 SEO 雷達
+          </a>
           <SiteSelect
             value={siteId}
             onChange={handleSiteChange}
@@ -959,17 +966,6 @@ export function KeywordLibraryView({ route, navigate }: ContentViewProps) {
         </>
       }
     >
-      <div className="rounded-md border border-blue-200 bg-blue-50/70 px-3 py-2 text-[12px] leading-relaxed text-blue-900">
-        <p className="flex items-center gap-1.5 font-semibold">
-          <ShieldCheck size={13} />
-          資料安全提醒
-        </p>
-        <p className="mt-1">
-          匯入的新詞由匯入函式寫入 pipeline_status；CSV 留空時預設寫入{' '}
-          <span className="font-mono">backlog</span>（＝啟用自動生成）。若只想先放著，請填{' '}
-          <span className="font-mono">parked</span>。
-        </p>
-      </div>
     </ContentEmptyState>
   );
 

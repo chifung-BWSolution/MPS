@@ -489,6 +489,17 @@ DETAIL: Key columns "adopted_keyword_id" and "id" are of incompatible types: uui
 
 > 併發保護只看「10 分鐘內」的 run，崩潰留下的 `running` 不會永久鎖住功能。
 
+### 11.12 2026-11-27：非技術同事的易用性與安全調整
+
+| 項目 | 改動 |
+|---|---|
+| 匯入預設 | CSV 未填 `pipeline_status` 時，由 **backlog（會自動生成文章）** 改為 **parked（暫緩、不啟用）**；匯入對話框移除 backlog／parked 選項，只留一句白話：「匯入的詞會先標為『暫緩』，不會自動生成文章；要生成時再到列表逐個啟用。」 |
+| 資料安全提醒 | 移除關鍵字庫頁那段技術說明（提到 pipeline_status／backlog／parked），因為預設已安全，說明不再需要 |
+| 返回入口 | 關鍵字庫頁新增「← 返回 SEO 雷達」 |
+| 工具列 | 「關鍵字庫」按鈕移除箭頭圖示；順序改為 **關鍵字庫 → 採納 → 刪除**；tooltip 寫明會前往「網站內容自動化 → 關鍵字庫」 |
+
+> 後端 `content-keywords` 的 `DEFAULT_PIPELINE_STATUS` 仍是 `backlog`（只影響非 UI 呼叫者）；目前所有 UI 匯入都會帶明確的 `parked`，不會走到該預設。若要連 API 層也安全，需內容自動化負責人改一行並重新部署該函數。
+
 ---
 
 ## 12. 假設與風險

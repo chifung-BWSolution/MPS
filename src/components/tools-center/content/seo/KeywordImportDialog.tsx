@@ -13,11 +13,13 @@
  *   - 此站已有（只警告，仍會送出，後端會計入 skipped）
  *
  * 資料安全規則（重要）：
- *   匯入是「新詞」唯一會明確寫入 pipeline_status 的地方；且後端對沒有指定
- *   pipeline_status 的列會以 backlog 寫入（＝啟用自動生成）。因此這裡讓使用者
- *   明確選擇「空白 pipeline_status 視為 backlog 或 parked」，並在送出前顯示
- *   實際會寫入的值。歷史詞不會被回填、也不會被 update（後端保證）。
+ *   匯入是「新詞」唯一會明確寫入 pipeline_status 的地方。為了讓非技術同事
+ *   不會誤觸自動生成，CSV 留空時一律寫入 parked（暫緩、不啟用）；使用者真的
+ *   要生成時，再到列表逐個「啟用生成」。歷史詞不會被回填、也不會被 update。
  */
+
+/** CSV 沒寫 pipeline_status 時的安全預設：暫緩，不進自動生成 */
+export const DEFAULT_IMPORT_PIPELINE_STATUS: ContentKeywordPipelineStatus = 'parked';
 
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import {
@@ -317,8 +319,6 @@ export function KeywordImportDialog({
 }: KeywordImportDialogProps) {
   const [draft, setDraft] = useState('');
   const [fileName, setFileName] = useState<string | null>(null);
-  const [defaultPipelineStatus, setDefaultPipelineStatus] =
-    useState<ContentKeywordPipelineStatus>('backlog');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ContentKeywordImportResult | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -335,8 +335,12 @@ export function KeywordImportDialog({
   }, [existingKeywords]);
 
   const parsed = useMemo(
-    () => parseKeywordCsv(draft, { existingPhrases, defaultPipelineStatus }),
-    [defaultPipelineStatus, draft, existingPhrases],
+    () =>
+      parseKeywordCsv(draft, {
+        existingPhrases,
+        defaultPipelineStatus: DEFAULT_IMPORT_PIPELINE_STATUS,
+      }),
+    [draft, existingPhrases],
   );
 
   const invalidEntries = useMemo(
@@ -531,7 +535,7 @@ export function KeywordImportDialog({
                 resetSubmitState();
               }}
               rows={7}
-              placeholder={`${CSV_COLUMNS.join(',')}\n,室內設計公司推薦,commercial,1000,,首頁主打詞,室內設計,backlog`}
+              placeholder={`${CSV_COLUMNS.join(',')}\n,室內設計公司推薦,commercial,1000,,首頁主打詞,室內設計,parked`}
               className="min-h-[132px] font-mono text-[12px] leading-relaxed"
               spellCheck={false}
             />
@@ -543,28 +547,9 @@ export function KeywordImportDialog({
                   {fileName}
                 </span>
               )}
-              <label className="inline-flex items-center gap-2">
-                <span>空白 pipeline_status 視為：</span>
-                <Select
-                  value={defaultPipelineStatus}
-                  onValueChange={(value) => {
-                    setDefaultPipelineStatus(value as ContentKeywordPipelineStatus);
-                    resetSubmitState();
-                  }}
-                >
-                  <SelectTrigger className="h-7 w-[210px] text-[11px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="backlog" className="text-[12px]">
-                      backlog（啟用自動生成）
-                    </SelectItem>
-                    <SelectItem value="parked" className="text-[12px]">
-                      parked（暫緩，不啟用）
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </label>
+              <span className="text-slate-600">
+                匯入的詞會先標為「暫緩」，不會自動生成文章；要生成時再到列表逐個啟用。
+              </span>
               <span>
                 欄位：<span className="font-mono text-slate-500">{CSV_COLUMNS.join(',')}</span>
               </span>

@@ -12,7 +12,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  ArrowUpRight,
   DatabaseZap,
   Loader2,
   Pause,
@@ -576,10 +575,18 @@ export function SeoRadarTool() {
             className="h-8"
             onClick={openKeywordLibrary}
             disabled={!siteId}
-            title="到關鍵字庫查看已採納的詞"
+            title="會前往「網站內容自動化 → 關鍵字庫」，查看已採納的詞"
           >
-            <ArrowUpRight size={13} />
             關鍵字庫
+          </Button>
+          <Button
+            size="sm"
+            className="h-8 bg-teal-600 text-white hover:bg-teal-700"
+            onClick={() => setAdoptOpen(true)}
+            disabled={!canWrite || selectedIdeas.length === 0}
+            title="把勾選的詞加入關鍵字庫（不會自動生成文章）"
+          >
+            採納到關鍵字庫（{selectedIdeas.length}）
           </Button>
           <Button
             size="sm"
@@ -591,14 +598,6 @@ export function SeoRadarTool() {
           >
             <Trash2 size={13} />
             刪除
-          </Button>
-          <Button
-            size="sm"
-            className="h-8 bg-teal-600 text-white hover:bg-teal-700"
-            onClick={() => setAdoptOpen(true)}
-            disabled={!canWrite || selectedIdeas.length === 0}
-          >
-            採納到關鍵字庫（{selectedIdeas.length}）
           </Button>
         </div>
       </div>
