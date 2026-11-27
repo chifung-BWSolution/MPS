@@ -305,11 +305,16 @@ export function framerSiteSnapshotIdentity(site: FramerSiteSnapshot): string {
   return site.project_key || site.id;
 }
 
+/** A router template such as /design-center/:slug is not a page that can be captured. */
+export function isTemplateRoutePath(routePath: string): boolean {
+  return routePath.split('/').some((segment) => segment.startsWith(':') || segment === '*');
+}
+
 /** One-click conversion always re-parses and syncs every active (non-skipped) page, including already-migrated ones. */
 export function selectPagesForOneClickConversion(
   pages: ReaddyDiscoveredPage[],
 ): ReaddyDiscoveredPage[] {
-  return pages.filter((page) => page.migrationStatus !== 'skipped');
+  return pages.filter((page) => page.migrationStatus !== 'skipped' && !isTemplateRoutePath(page.path));
 }
 
 export function mergeFramerSiteSnapshots(rows: FramerSiteSnapshot[], limit: number): FramerSiteSnapshot[] {

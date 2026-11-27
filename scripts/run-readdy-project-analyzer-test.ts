@@ -243,6 +243,93 @@ assert.equal(
   'src/pages/design-center/page.tsx',
 );
 
+const dynamicIdRoutes = {
+  'studio/src/router/config.tsx': `
+    import { lazy } from "react";
+    const DesignCenter = lazy(() => import("@/pages/design-center/page"));
+    const DesignDetail = lazy(() => import("@/pages/design-center/detail/page"));
+    const SpacePlanning = lazy(() => import("@/pages/space-planning/page"));
+    const SpaceDetail = lazy(() => import("@/pages/space-planning/detail/page"));
+    const Missing = lazy(() => import("@/pages/missing/page"));
+    export default [
+      { path: "/design-center", element: <DesignCenter /> },
+      { path: "/design-center/:slug", element: <DesignDetail /> },
+      { path: "/space-planning", element: <SpacePlanning /> },
+      { path: "/space-planning/:slug", element: <SpaceDetail /> },
+      { path: "/missing/:id", element: <Missing /> },
+    ];
+  `,
+  'studio/src/pages/design-center/page.tsx': `
+    import { DESIGN_PROJECTS } from '@/mocks/designProjects';
+    export default function DesignCenter() {
+      return DESIGN_PROJECTS.map((item) => <Link key={item.slug} to={\`/design-center/\${item.slug}\`}>{item.title}</Link>);
+    }
+  `,
+  'studio/src/pages/design-center/detail/page.tsx': `
+    import { useParams } from 'react-router-dom';
+    import { DESIGN_PROJECTS } from '@/mocks/designProjects';
+    export default function DesignDetail() {
+      const { slug } = useParams();
+      const item = DESIGN_PROJECTS.find((project) => project.slug === slug);
+      return <h1>{item?.title}</h1>;
+    }
+  `,
+  'studio/src/mocks/designProjects.ts': `
+    export const DESIGN_PROJECTS = [
+      { slug: 'modern-loft', title: '現代閣樓' },
+      { slug: 'minimal-kitchen', title: '極簡廚房' },
+    ];
+  `,
+  'studio/src/pages/space-planning/page.tsx': `
+    export default function SpacePlanning() {
+      return (
+        <div>
+          <Link to="/space-planning/reception">接待處</Link>
+          <Link to="/space-planning/boss-room/">老闆房</Link>
+        </div>
+      );
+    }
+  `,
+  'studio/src/pages/space-planning/detail/page.tsx': `
+    export default function SpaceDetail() { return <h1>Space</h1>; }
+  `,
+  'studio/src/pages/missing/page.tsx': `
+    export default function Missing() { return <h1>Missing</h1>; }
+  `,
+};
+const dynamicAnalysis = analyzeReaddyFileMap(dynamicIdRoutes, {
+  sourceType: 'upload',
+  projectName: 'dynamic-ids',
+});
+assert.equal(
+  dynamicAnalysis.pages.some((page) => page.path.includes(':slug')),
+  false,
+  'Known ids replace the :slug template',
+);
+assert.equal(
+  dynamicAnalysis.pages.find((page) => page.path === '/design-center/modern-loft/')?.title,
+  '現代閣樓',
+);
+assert.equal(
+  dynamicAnalysis.pages.find((page) => page.path === '/design-center/minimal-kitchen/')?.title,
+  '極簡廚房',
+);
+assert.equal(
+  dynamicAnalysis.pages.find((page) => page.path === '/design-center/modern-loft/')?.sourceFile,
+  'src/pages/design-center/detail/page.tsx',
+);
+assert.equal(
+  dynamicAnalysis.pages.find((page) => page.path === '/space-planning/reception/')?.title,
+  '接待處',
+);
+assert.ok(
+  dynamicAnalysis.pages.some((page) => page.path === '/space-planning/boss-room/'),
+  'Literal detail links become their own pages',
+);
+const missingTemplate = dynamicAnalysis.pages.find((page) => page.path === '/missing/:id/');
+assert.equal(missingTemplate?.migrationStatus, 'skipped');
+assert.match(missingTemplate?.lastError || '', /實際 id/);
+
 // 3. Real uploaded Readdy ZIP verification (if present on local machine)
 const realZipPath =
   'C:/Users/Administrator/.gemini/antigravity/brain/ba096ec1-00e5-4679-8270-b05d3ad4cee8/.user_uploaded/media_1795573074036_f2189662.zip';

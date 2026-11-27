@@ -56,6 +56,7 @@ import {
   mergeFramerSiteSnapshots,
   normalizeFramerProjectKey,
   savePageProgress,
+  isTemplateRoutePath,
   selectPagesForOneClickConversion,
 } from '@/lib/readdyFramerProgress';
 import { useReaddyConversionJob } from '@/context/ReaddyConversionJobContext';
@@ -573,6 +574,13 @@ export function ReaddyFramerWorkbench() {
       }
 
       const pages = rawAnalysis.pages.map((p) => {
+        if (isTemplateRoutePath(p.path)) {
+          return {
+            ...p,
+            migrationStatus: 'skipped' as ReaddyPageMigrationStatus,
+            lastError: p.lastError || '這是帶 id 的模板頁，請重新分析專案，讓每個實際 id 變成獨立頁面後再轉換。',
+          };
+        }
         const local = saved[p.id];
         const remote = jobByPath.get(p.path);
         const remoteTs = remote?.updated_at ?? remote?.created_at;
@@ -1001,6 +1009,10 @@ export function ReaddyFramerWorkbench() {
     }
     if (!rawCode.trim() && !analysis?.sourceOrigin?.trim()) {
       toast.error('請先選擇要遷移的頁面，或先在 Step 01 分析專案。');
+      return;
+    }
+    if (activePage && isTemplateRoutePath(activePage.path)) {
+      toast.error(activePage.lastError || '這是帶 id 的模板頁，請重新分析專案，讓每個實際 id 變成獨立頁面後再轉換。');
       return;
     }
 

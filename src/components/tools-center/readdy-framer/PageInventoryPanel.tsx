@@ -435,6 +435,14 @@ export function PageInventoryPanel({
                             {page.lastError}
                           </div>
                         )}
+                        {isSkipped && page.lastError && (
+                          <div
+                            className="text-[10.5px] leading-4 text-slate-500 line-clamp-2 mt-1 break-words"
+                            title={page.lastError}
+                          >
+                            {page.lastError}
+                          </div>
+                        )}
                         {page.sectionHints && page.sectionHints.length > 0 && (
                           <div className="text-[10px] text-slate-400 truncate mt-0.5 flex items-center gap-1">
                             <FileText size={9.5} className="shrink-0" />

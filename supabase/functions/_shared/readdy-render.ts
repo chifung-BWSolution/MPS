@@ -536,7 +536,10 @@ export function resolveRenderUrl(origin: string, route: string): URL {
     /(?:^|\.)(?:localhost|local|internal|test|invalid)$|^\d+(?:\.\d+){3}$/i.test(base.hostname)) {
     throw new Error("來源網站必須使用公開 HTTPS 網址");
   }
-  if (!route.startsWith("/") || route.startsWith("//") || route.includes("\\") || route.split("/").some((part) => part.startsWith(":") || part === "*")) {
+  if (route.split("/").some((part) => part.startsWith(":") || part === "*")) {
+    throw new Error("這個路徑還帶有動態 id（例如 :slug）。請重新分析專案，每個實際 id 會展開成獨立頁面後再轉換。");
+  }
+  if (!route.startsWith("/") || route.startsWith("//") || route.includes("\\")) {
     throw new Error("請選擇已指定實際路徑的頁面");
   }
   const url = new URL(route, base.origin);

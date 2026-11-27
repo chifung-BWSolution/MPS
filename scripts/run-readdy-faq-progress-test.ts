@@ -80,11 +80,12 @@ const oneClickTargets = selectPagesForOneClickConversion([
   { ...pageHome, id: '/about', path: '/about', migrationStatus: 'pending' },
   { ...pageHome, id: '/faq', path: '/faq', migrationStatus: 'failed' },
   { ...pageHome, id: '/404', path: '/404', migrationStatus: 'skipped' },
+  { ...pageHome, id: '/design-center/:slug/', path: '/design-center/:slug/', migrationStatus: 'pending' },
 ]);
 assert.deepEqual(
   oneClickTargets.map((p) => p.id),
   ['/', '/services', '/about', '/faq'],
-  'One-click conversion includes already-migrated, parsed, pending, and failed pages while excluding skipped pages',
+  'One-click conversion includes already-migrated, parsed, pending, and failed pages while excluding skipped and :slug template pages',
 );
 
 // 1b. Background conversion overlay, server poll snapshot, timestamp guard & transient syncing guard

@@ -14,7 +14,10 @@ const url = resolveRenderUrl(origin, path);
 assert.equal(url.href, origin + path);
 assert.throws(() => resolveRenderUrl('https://127.0.0.1', '/'));
 assert.throws(() => resolveRenderUrl(origin, '//example.com'));
-assert.throws(() => resolveRenderUrl(origin, '/design-center/:slug'));
+assert.throws(
+  () => resolveRenderUrl(origin, '/design-center/:slug'),
+  /動態 id/,
+);
 assert.equal(analyzeReaddyFileMap({
   'index.html': '<title>Office Design</title>',
   'public/sitemap.xml': `<urlset><url><loc>${url.href}</loc></url></urlset>`,

@@ -921,6 +921,403 @@ function humanizeRouteTitle(routePath: string): string {
     .join(' ');
 }
 
+const DYNAMIC_ROUTE_LIMIT = 400;
+
+function isDynamicRoutePath(routePath: string): boolean {
+  return routePath.split('/').some((segment) => segment.startsWith(':') || segment === '*');
+}
+
+function isConcreteSegment(value: string): boolean {
+  const text = value.trim();
+  if (!text || text.length > 120) return false;
+  if (text === 'undefined' || text === 'null' || text === '*' || text.startsWith(':')) return false;
+  return !/[\s/?#:\\]|\./.test(text);
+}
+
+function routeStaticPrefix(routePath: string): string | null {
+  const segments = routePath.split('/').filter(Boolean);
+  const dynamicAt = segments.findIndex((segment) => segment.startsWith(':'));
+  if (dynamicAt <= 0) return null;
+  return `/${segments.slice(0, dynamicAt).join('/')}/`;
+}
+
+function trailingParamName(routePath: string): string | null {
+  const segments = routePath.split('/').filter(Boolean);
+  const dynamic = segments.filter((segment) => segment.startsWith(':'));
+  if (dynamic.length !== 1 || !segments[segments.length - 1]?.startsWith(':')) return null;
+  return segments[segments.length - 1].slice(1).replace(/\?$/, '') || null;
+}
+
+function templatePrefixes(routePath: string): string[] {
+  const prefix = routeStaticPrefix(routePath);
+  if (!prefix) return [];
+  const prefixes = [prefix];
+  const stripped = prefix.match(/^\/(?:en|cn)(\/.+)$/);
+  if (stripped?.[1]) prefixes.push(stripped[1].endsWith('/') ? stripped[1] : `${stripped[1]}/`);
+  return [...new Set(prefixes)];
+}
+
+function concretePathMatches(pattern: string, candidate: string): boolean {
+  const expected = pattern.split('/').filter(Boolean);
+  const actual = normalizeRoutePath(candidate).split('/').filter(Boolean);
+  if (expected.length === 0 || expected.length !== actual.length) return false;
+  for (let index = 0; index < expected.length; index += 1) {
+    if (expected[index].startsWith(':')) {
+      if (!isConcreteSegment(actual[index])) return false;
+    } else if (expected[index] !== actual[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function fillTrailingParam(pattern: string, value: string): string {
+  const segments = pattern.split('/');
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    if (segments[index].startsWith(':')) {
+      segments[index] = value;
+      break;
+    }
+  }
+  return normalizeRoutePath(segments.join('/'));
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isLayoutModule(filePath: string): boolean {
+  return /(?:^|\/)(Navbar|Footer|PageLayout|SiteLayout|Header)\.(tsx|jsx|ts|js)$/i.test(filePath);
+}
+
+function extractConstArray(moduleCode: string, name: string): string | null {
+  const re = new RegExp(
+    `(?:export\\s+)?(?:const|let)\\s+${escapeRegExp(name)}\\b[^=;]{0,160}=\\s*\\[`,
+  );
+  const match = re.exec(moduleCode);
+  if (!match) return null;
+  const open = match.index + match[0].length - 1;
+  const slice = sliceBalanced(moduleCode, open, '[', ']');
+  if (!slice.endsWith(']') || slice.length > 200000) return null;
+  return slice;
+}
+
+function extractDefaultArray(moduleCode: string): string | null {
+  const direct = /export\s+default\s*\[/.exec(moduleCode);
+  if (direct) {
+    const open = direct.index + direct[0].length - 1;
+    const slice = sliceBalanced(moduleCode, open, '[', ']');
+    if (slice.endsWith(']') && slice.length <= 200000) return slice;
+  }
+  const named = moduleCode.match(/export\s+default\s+([A-Za-z_$][\w$]*)\s*;?/);
+  return named ? extractConstArray(moduleCode, named[1]) : null;
+}
+
+function resolveArrayText(
+  arrayName: string,
+  filePath: string,
+  fileMap: Record<string, string>,
+  allPaths: Set<string>,
+): string | null {
+  const content = fileMap[filePath] || '';
+  const local = extractConstArray(content, arrayName);
+  if (local) return local;
+
+  const namedImportRe = /^\s*import\s+(?:type\s+)?\{([^}]+)\}\s+from\s+["']([^"']+)["']/gm;
+  let match: RegExpExecArray | null;
+  while ((match = namedImportRe.exec(content)) !== null) {
+    const resolved = resolveProjectModulePath(match[2], filePath, allPaths);
+    if (!resolved || !fileMap[resolved]) continue;
+    for (const part of match[1].split(',')) {
+      const trimmed = part.trim();
+      if (!trimmed || trimmed.startsWith('type ')) continue;
+      const alias = trimmed.match(/^([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?$/);
+      if (!alias) continue;
+      const localName = alias[2] || alias[1];
+      if (localName !== arrayName) continue;
+      const found = extractConstArray(fileMap[resolved], alias[1]);
+      if (found) return found;
+    }
+  }
+
+  const defaultRe = /^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+)["']/gm;
+  while ((match = defaultRe.exec(content)) !== null) {
+    if (match[1] !== arrayName) continue;
+    const resolved = resolveProjectModulePath(match[2], filePath, allPaths);
+    if (!resolved || !fileMap[resolved]) continue;
+    const found = extractDefaultArray(fileMap[resolved]);
+    if (found) return found;
+  }
+  return null;
+}
+
+function extractFieldRecords(
+  content: string,
+  field: string,
+): Array<{ value: string; title?: string; description?: string }> {
+  const re = new RegExp(
+    `\\b${escapeRegExp(field)}\\s*:\\s*(?:'([^']*)'|"([^"]*)"|(\\d+))`,
+    'g',
+  );
+  const records: Array<{ value: string; title?: string; description?: string }> = [];
+  const seen = new Set<string>();
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(content)) !== null) {
+    const value = (match[1] ?? match[2] ?? match[3] ?? '').trim();
+    if (!isConcreteSegment(value) || seen.has(value)) continue;
+    let openIdx = -1;
+    let depth = 0;
+    for (let index = match.index; index >= 0; index -= 1) {
+      const char = content[index];
+      if (char === '}') depth += 1;
+      else if (char === '{') {
+        if (depth === 0) {
+          openIdx = index;
+          break;
+        }
+        depth -= 1;
+      }
+    }
+    let title: string | undefined;
+    let description: string | undefined;
+    if (openIdx >= 0) {
+      const block = extractBalancedObjectFromIndex(content, openIdx);
+      const occurrences = block.match(new RegExp(`\\b${escapeRegExp(field)}\\s*:`, 'g'))?.length || 0;
+      if (occurrences === 1) {
+        title = extractStringProp(block, 'title')
+          || extractStringProp(block, 'name')
+          || extractStringProp(block, 'label');
+        description = extractStringProp(block, 'description') || extractStringProp(block, 'subtitle');
+      }
+    }
+    seen.add(value);
+    records.push({ value, title, description });
+  }
+  return records;
+}
+
+function arrayNameBeforeMap(before: string): string | null {
+  const mapAt = before.lastIndexOf('.map(');
+  if (mapAt < 0) return null;
+  const head = before.slice(Math.max(0, mapAt - 240), mapAt);
+  const direct = head.match(/([A-Za-z_$][\w$]*)\s*$/);
+  if (direct) return direct[1];
+  return head.match(/([A-Za-z_$][\w$]*)\s*(?:\?\.)?\.filter\(/)?.[1] || null;
+}
+
+interface RouteArrayBinding {
+  arrayName: string;
+  field: string;
+  filePath: string;
+}
+
+function filesWithRouteTemplates(
+  seeds: string[],
+  fileMap: Record<string, string>,
+  allPaths: Set<string>,
+): string[] {
+  const files: string[] = [];
+  const seen = new Set<string>();
+  const queue = seeds.filter(Boolean).map((filePath) => ({ filePath, depth: 0 }));
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || seen.has(current.filePath) || isLayoutModule(current.filePath)) continue;
+    const content = fileMap[current.filePath];
+    if (!content) continue;
+    seen.add(current.filePath);
+    files.push(current.filePath);
+    if (current.depth >= 2) continue;
+    for (const child of extractLocalSectionImports(content, current.filePath, allPaths)) {
+      queue.push({ filePath: child.resolvedPath, depth: current.depth + 1 });
+    }
+  }
+  return files;
+}
+
+function findRouteArrayBindings(
+  files: string[],
+  fileMap: Record<string, string>,
+  pattern: string,
+): RouteArrayBinding[] {
+  const bindings: RouteArrayBinding[] = [];
+  const seen = new Set<string>();
+  const prefixes = templatePrefixes(pattern);
+  const paramName = trailingParamName(pattern);
+  for (const filePath of files) {
+    const content = fileMap[filePath];
+    if (!content || content.length > 400000) continue;
+    for (const prefix of prefixes) {
+      const templateRe = new RegExp(`\`${escapeRegExp(prefix)}\\$\\{([^{}\`]+)\\}`, 'g');
+      let match: RegExpExecArray | null;
+      while ((match = templateRe.exec(content)) !== null) {
+        const expr = match[1].trim();
+        const field = expr.match(/^(?:[A-Za-z_$][\w$]*)\??\.([A-Za-z_$][\w$]*)$/)?.[1];
+        if (!field) continue;
+        const arrayName = arrayNameBeforeMap(content.slice(Math.max(0, match.index - 900), match.index));
+        if (!arrayName) continue;
+        const key = `${filePath}:${arrayName}:${field}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        bindings.push({ arrayName, field, filePath });
+      }
+      const concatRe = new RegExp(
+        `["']${escapeRegExp(prefix)}["']\\s*\\+\\s*([A-Za-z_$][\\w$]*)\\??\\.([A-Za-z_$][\\w$]*)`,
+        'g',
+      );
+      while ((match = concatRe.exec(content)) !== null) {
+        const key = `${filePath}:${match[1]}:${match[2]}`;
+        if (seen.has(key)) continue;
+        const before = content.slice(Math.max(0, match.index - 900), match.index);
+        if (!new RegExp(`${escapeRegExp(match[1])}\\s*\\)?\\s*=>`).test(before) && !before.includes('.map(')) {
+          continue;
+        }
+        const arrayName = arrayNameBeforeMap(before) || match[1];
+        if (!/^[A-Za-z_$][\w$]*$/.test(arrayName) || arrayName === match[1]) continue;
+        seen.add(key);
+        bindings.push({ arrayName, field: match[2], filePath });
+      }
+    }
+    if (!paramName || filePath !== files[0]) continue;
+    const findRe =
+      /([A-Za-z_$][\w$]*)\.find\(\s*\(?\s*([A-Za-z_$][\w$]*)\s*\)?\s*=>\s*\2\??\.([A-Za-z_$][\w$]*)\s*===?\s*(?:[A-Za-z_$][\w$]*\.)?([A-Za-z_$][\w$]*)/g;
+    let found: RegExpExecArray | null;
+    while ((found = findRe.exec(content)) !== null) {
+      if (found[4] !== paramName && found[3] !== paramName) continue;
+      const key = `${filePath}:${found[1]}:${found[3]}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      bindings.push({ arrayName: found[1], field: found[3], filePath });
+    }
+  }
+  return bindings;
+}
+
+interface ConcreteRouteHit {
+  path: string;
+  title?: string;
+  description?: string;
+}
+
+function addConcreteRoute(
+  hits: Map<string, ConcreteRouteHit>,
+  pattern: string,
+  candidate: string,
+  title?: string,
+  description?: string,
+) {
+  if (hits.size >= DYNAMIC_ROUTE_LIMIT) return;
+  const path = normalizeRoutePath(candidate);
+  if (!concretePathMatches(pattern, path)) return;
+  const current = hits.get(path);
+  if (!current) {
+    hits.set(path, { path, title, description });
+    return;
+  }
+  if (!current.title && title) current.title = title;
+  if (!current.description && description) current.description = description;
+}
+
+function discoverConcreteRoutes(
+  page: ReaddyDiscoveredPage,
+  pages: ReaddyDiscoveredPage[],
+  fileMap: Record<string, string>,
+  allPaths: Set<string>,
+  seoMap: Map<string, SeoLookupEntry>,
+): ConcreteRouteHit[] {
+  const hits = new Map<string, ConcreteRouteHit>();
+  const prefix = routeStaticPrefix(page.path);
+  const listing = prefix
+    ? pages.find((item) => item.path === prefix && item.id !== page.id)
+    : undefined;
+  const seeds = [page.sourceFile, listing?.sourceFile].filter(
+    (filePath): filePath is string => Boolean(filePath && fileMap[filePath]),
+  );
+  const relatedFiles = filesWithRouteTemplates(seeds, fileMap, allPaths);
+  for (const binding of findRouteArrayBindings(relatedFiles, fileMap, page.path)) {
+    const arrayText = resolveArrayText(binding.arrayName, binding.filePath, fileMap, allPaths);
+    if (!arrayText) continue;
+    for (const record of extractFieldRecords(arrayText, binding.field)) {
+      addConcreteRoute(
+        hits,
+        page.path,
+        fillTrailingParam(page.path, record.value),
+        record.title,
+        record.description,
+      );
+    }
+  }
+
+  for (const [seoPath, entry] of seoMap) {
+    addConcreteRoute(
+      hits,
+      page.path,
+      seoPath,
+      entry.name || entry.seoTitle?.split(/[｜|]/)[0]?.trim(),
+      entry.description,
+    );
+  }
+
+  const literalRe = /['"](\/(?:[A-Za-z0-9_\-\u0080-\uFFFF]+\/?)+)['"]/g;
+  const absoluteRe = /https?:\/\/[^/\s"'<>]+(\/(?:[A-Za-z0-9_\-\u0080-\uFFFF]+\/?)+)/g;
+  const labelRe = /(?:to|href)=\{?["'](\/[^"'\\]+)["']\}?[^>]*>([^<{][^<]{0,80})</g;
+  for (const content of Object.values(fileMap)) {
+    if (!content || content.length > 400000) continue;
+    for (const expression of [literalRe, absoluteRe, labelRe]) {
+      expression.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = expression.exec(content)) !== null) {
+        const label = match[2]?.replace(/\s+/g, ' ').trim();
+        addConcreteRoute(hits, page.path, match[1], label || undefined);
+      }
+    }
+  }
+  return [...hits.values()];
+}
+
+function expandDynamicRoutePages(
+  pages: ReaddyDiscoveredPage[],
+  fileMap: Record<string, string>,
+  allPaths: Set<string>,
+  seoMap: Map<string, SeoLookupEntry>,
+): ReaddyDiscoveredPage[] {
+  const taken = new Set(pages.filter((page) => !isDynamicRoutePath(page.path)).map((page) => page.path));
+  const expanded: ReaddyDiscoveredPage[] = [];
+  for (const page of pages) {
+    if (!isDynamicRoutePath(page.path)) {
+      expanded.push(page);
+      continue;
+    }
+    const concrete = discoverConcreteRoutes(page, pages, fileMap, allPaths, seoMap);
+    let added = 0;
+    for (const item of concrete) {
+      if (taken.has(item.path)) continue;
+      taken.add(item.path);
+      added += 1;
+      const seo = seoMap.get(item.path);
+      expanded.push({
+        ...page,
+        id: item.path,
+        path: item.path,
+        title: item.title
+          || seo?.name
+          || seo?.seoTitle?.split(/[｜|]/)[0]?.trim()
+          || humanizeRouteTitle(item.path),
+        description: item.description || seo?.description || page.description,
+        migrationStatus: 'pending',
+        lastError: null,
+      });
+    }
+    if (added === 0) {
+      expanded.push({
+        ...page,
+        migrationStatus: 'skipped',
+        lastError: '這是帶 id 的模板頁，原始碼裡找不到可代入的實際 id，所以先略過。',
+      });
+    }
+  }
+  return expanded;
+}
+
 function detectLocaleFromPath(routePath: string, hasChineseProject: boolean): string {
   if (routePath === '/en' || routePath.startsWith('/en/')) return 'en';
   if (routePath === '/cn' || routePath.startsWith('/cn/')) return 'cn';
@@ -1140,9 +1537,11 @@ export function analyzeReaddyFileMap(
     }
   }
 
+  const discoveredPages = expandDynamicRoutePages(pages, fileMap, allPaths, seoMap);
+
   const localeCounts: Record<string, number> = {};
   const kindCounts: Record<string, number> = {};
-  for (const p of pages) {
+  for (const p of discoveredPages) {
     localeCounts[p.locale] = (localeCounts[p.locale] || 0) + 1;
     kindCounts[p.pageKind] = (kindCounts[p.pageKind] || 0) + 1;
   }
@@ -1150,7 +1549,7 @@ export function analyzeReaddyFileMap(
   const projectKey =
     options.githubMeta?.full_name
       ? `gh:${options.githubMeta.full_name}:${options.githubMeta.branch}`
-      : `proj:${projectName}:${pages.length}`;
+      : `proj:${projectName}:${discoveredPages.length}`;
 
   return {
     projectKey,
@@ -1160,7 +1559,7 @@ export function analyzeReaddyFileMap(
     framework: routerFile ? 'React + Vite + React Router' : 'React / HTML',
     routerFile,
     totalFiles: allPaths.size,
-    pages,
+    pages: discoveredPages,
     localeCounts,
     kindCounts,
     sharedFiles,
