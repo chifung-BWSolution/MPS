@@ -310,6 +310,9 @@ export function useHotspotRadar(filters: HotspotFilters): {
   const loadTokenRef = useRef(0);
   /** 同一輪列表（含下拉）共用一個時間窗，避免頁面和計數在邊界上各算一次 now。 */
   const windowRef = useRef(Date.now());
+  const targetsSeqRef = useRef(0);
+  const runsSeqRef = useRef(0);
+  const settingsSeqRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -349,6 +352,8 @@ export function useHotspotRadar(filters: HotspotFilters): {
     feedSeqRef.current = seq;
     loadTokenRef.current += 1;
     loadingMoreRef.current = false;
+    const previousOffset = offsetRef.current;
+    const previousHasMore = hasMoreRef.current;
     offsetRef.current = 0;
     hasMoreRef.current = false;
     setHasMore(false);
@@ -375,6 +380,11 @@ export function useHotspotRadar(filters: HotspotFilters): {
         setMissingSchema(true);
         setFeedError(null);
       } else {
+        if (keepVisible) {
+          offsetRef.current = previousOffset;
+          hasMoreRef.current = previousHasMore;
+          setHasMore(previousHasMore);
+        }
         setFeedError(contentErrorMessage(thrown));
       }
     } finally {
@@ -406,11 +416,13 @@ export function useHotspotRadar(filters: HotspotFilters): {
   }, [applyPage]);
 
   const reloadTargets = useCallback(async () => {
+    const seq = targetsSeqRef.current + 1;
+    targetsSeqRef.current = seq;
     const { data, error } = await supabase
       .from('hotspot_targets')
       .select(TARGET_COLUMNS)
       .order('created_at', { ascending: true });
-    if (!mountedRef.current) return;
+    if (!mountedRef.current || seq !== targetsSeqRef.current) return;
     if (error) {
       if (!isContentSchemaMissing(error)) setChromeError(contentErrorMessage(error));
       setTargetsLoaded(true);
@@ -421,12 +433,14 @@ export function useHotspotRadar(filters: HotspotFilters): {
   }, []);
 
   const reloadRuns = useCallback(async () => {
+    const seq = runsSeqRef.current + 1;
+    runsSeqRef.current = seq;
     const { data, error } = await supabase
       .from('hotspot_runs')
       .select(RUN_COLUMNS)
       .order('started_at', { ascending: false })
       .limit(30);
-    if (!mountedRef.current) return;
+    if (!mountedRef.current || seq !== runsSeqRef.current) return;
     if (error) {
       if (!isContentSchemaMissing(error)) setChromeError(contentErrorMessage(error));
       setRunsLoaded(true);
@@ -437,17 +451,19 @@ export function useHotspotRadar(filters: HotspotFilters): {
   }, []);
 
   const reloadSettings = useCallback(async () => {
+    const seq = settingsSeqRef.current + 1;
+    settingsSeqRef.current = seq;
     try {
       const payload = await invokeContentFunction<HotspotSettingsResponse>('hotspot-radar', {
         action: 'settings',
       });
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== settingsSeqRef.current) return;
       setSettings(payload.settings);
       setUsage(payload.usage);
       setDailyStatus(payload.daily ?? null);
       setDailyLoaded(true);
     } catch (thrown) {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || seq !== settingsSeqRef.current) return;
       if (isContentSchemaMissing(thrown)) return;
       setChromeError(contentErrorMessage(thrown));
     }

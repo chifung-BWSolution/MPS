@@ -428,9 +428,11 @@ export function HotspotRadarTool() {
           description={
             counts == null
               ? '正在確認這個條件下有沒有內容。'
-              : counts.all === 0 && counts.library === 0
-                ? '還沒有抓到任何內容。按「立即抓取」或等每日自動抓取。'
-                : '試試放寬時間窗，或取消「只看爆款」。'
+              : filters.source === 'library' && (counts.library ?? 0) === 0
+                ? '靈感庫是空的。在卡片上按「收藏」就會出現在這裡。'
+                : counts.all === 0 && counts.library === 0
+                  ? '還沒有抓到任何內容。按「立即抓取」或等每日自動抓取。'
+                  : '試試放寬時間窗，或取消「只看爆款」。'
           }
           action={
             <Button size="sm" variant="outline" onClick={() => updateFilters({ ...DEFAULT_FILTERS })}>
